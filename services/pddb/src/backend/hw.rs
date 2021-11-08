@@ -189,7 +189,7 @@ impl PddbOs {
     /// needs to run in a fairly memory-constrained environment, keeping in mind that if the PDDB
     /// structures were to be extended to run on say, an external USB drive with gigabytes of space,
     /// we cannot afford to naively allocate vectors that count every single page.
-    fn collect_fastspace(&self) -> Vec::<PhysPage> {
+    fn collect_fastspace(&mut self) -> Vec::<PhysPage> {
         let mut free_pool = Vec::<usize>::new();
         let max_entries = FASTSPACE_PAGES * PAGE_SIZE / core::mem::size_of::<PhysPage>();
         free_pool.reserve_exact(max_entries);
@@ -197,7 +197,7 @@ impl PddbOs {
         //    WARNING: this could get really big for a very large filesystem. It's capped at ~100k for
         //    Precursor's ~100MiB storage increment.
         let mut page_heap = BinaryHeap::new();
-        for (_, basismap) in self.v2p_map {
+        for (_, basismap) in &self.v2p_map {
             for (_, pp) in basismap {
                 page_heap.push(Reverse(pp.page_number()));
             }
@@ -228,7 +228,8 @@ impl PddbOs {
             } else {
                 // page is free, but we have no space in the pool.
                 // pick a random page from the pool, and replace it with the current page
-                free_pool[self.trng_cache_u32() as usize % free_pool.len()] = page_candidate;
+                let index = self.trng_cache_u32() as usize % free_pool.len();
+                free_pool[index] = page_candidate;
             }
         }
         // 3. shuffle the contents of free_pool. This is important in the case that the
@@ -248,8 +249,15 @@ impl PddbOs {
         let deniable_free_pages = if deniable_free_pages == 0 { 1 } else { deniable_free_pages };
         free_pool.truncate(deniable_free_pages);
 
-        /// TODO: translate the free_pool into a PhysPage vector with the right bitfields attached to it.
-        free_pool
+        /// 5. Take the free_pool and annotate it for writing to disk
+        let mut page_pool = Vec::<PhysPage>::new();
+        for page in free_pool {
+            let mut pp = PhysPage(0);
+            pp.set_page_number(page as PhysAddr);
+            pp.set_space_state(SpaceState::Free);
+            page_pool.push(pp);
+        }
+        page_pool
     }
 
     /// this function is dangerous in that calling it will completely erase all of the previous data

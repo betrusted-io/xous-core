@@ -7,8 +7,9 @@ use crate::*;
 /// entries per page of storage for the free_pool, or 4k * 1000 ~ 4MiB per page, when PhysAddr is a u32
 pub(crate) const FASTSPACE_PAGES: usize = 2;
 
+#[derive(Debug)]
 #[repr(u8)]
-pub(crate) enum SpaceState {
+pub enum SpaceState {
     /// pages that are completely un-spoken for
     Free = 0,
     /// pages that are in the process of being used, but the journal has yet to be committed
@@ -18,6 +19,21 @@ pub(crate) enum SpaceState {
     Used = 2,
     /// pages that are no longer used and need to be erased
     Dirty = 3,
+}
+impl From<u8> for SpaceState {
+    fn from(arg: u8) -> Self {
+        match arg & 0x3 {
+            0 => SpaceState::Free,
+            1 => SpaceState::MaybeUsed,
+            2 => SpaceState::Used,
+            _ => SpaceState::Dirty,
+        }
+    }
+}
+impl From<SpaceState> for u8 {
+    fn from(arg: SpaceState) -> Self {
+        arg as u8
+    }
 }
 
 /// FastSpace tracks a limited set of physical pages

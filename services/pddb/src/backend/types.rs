@@ -2,6 +2,7 @@ use core::num::{NonZeroU32, NonZeroU64};
 use core::convert::TryFrom;
 use core::ops::Add;
 use super::PAGE_SIZE;
+use crate::SpaceState;
 use bitfield::bitfield;
 
 /// We should be able to change this to a u64 and everything should "just work", but
@@ -17,10 +18,11 @@ bitfield! {
     pub struct PhysPage(PhysAddr);
     impl Debug;
     pub page_number, set_page_number: BITFIELD_PAGE_WIDTH - 1, 0;
+    // these flags are used by the live page table; they are ignored by FastSpace
     pub clean, set_clean: BITFIELD_PAGE_WIDTH + 0;
     pub valid, set_valid: BITFIELD_PAGE_WIDTH + 1;
     // these are only used by the FastSpace mechanism; they have no meaning in other contexts
-    pub space_state, set_space_state: BITFIELD_PAGE_WIDTH + 3, BITFIELD_PAGE_WIDTH + 2;
+    pub u8, from into SpaceState, space_state, set_space_state: BITFIELD_PAGE_WIDTH + 3, BITFIELD_PAGE_WIDTH + 2;
 }
 
 
