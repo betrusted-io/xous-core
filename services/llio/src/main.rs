@@ -700,6 +700,7 @@ fn xmain() -> ! {
     //   for now we're going to leave the total server count as "None" (open-ended) but we probably want to rethink this as
     //   the I2C access is in this crate. Perhaps we should split I2C out, so that the RTC can be protected and not grouped
     //   into the same severe security restrictions as the other LLIO items?
+    // - pddb also allocates a connection, but then releases it, to read the DNA field.
     let num_conns = 10;
     let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);

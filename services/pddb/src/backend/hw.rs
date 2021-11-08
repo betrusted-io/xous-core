@@ -1,10 +1,10 @@
 use std::convert::TryInto;
 
 use crate::*;
-use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key};
-use aes_gcm_siv::aead::{NewAead, Aead};
+use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
+use aes_gcm_siv::aead::{Aead, NewAead, Payload};
 use rand_core::{CryptoRng, RngCore};
-use cipher::{BlockCipher, BlockDecrypt};
+use cipher::{BlockCipher, BlockDecrypt, BlockEncrypt};
 use root_keys::api::{AesRootkeyType, Block};
 use core::ops::Deref;
 use core::convert::TryFrom;
@@ -61,6 +61,8 @@ pub(crate) struct PddbOs {
     /// The PDDB eats a lot of entropy. Keep a local pool of entropy, so we're not wasting a lot of
     /// overhead passing messages to the TRNG.
     e_cache: Vec::<u8>,
+    /// a cached copy of the FPGA's DNA ID, used in the AAA records.
+    dna: u64,
 }
 
 impl PddbOs {
@@ -83,6 +85,7 @@ impl PddbOs {
         let mut cache: [u8; 8192] = [0; 8192];
         trng.fill_bytes(&mut cache);
 
+        let llio = llio::Llio::new(&xns).unwrap();
         PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
@@ -96,6 +99,7 @@ impl PddbOs {
             system_basis_key: None,
             v2p_map: HashMap::<BasisRootName, HashMap<VirtAddr, PhysPage>>::new(),
             e_cache: cache.to_vec(),
+            dna: llio.soc_dna().unwrap(),
         }
     }
 
@@ -128,6 +132,8 @@ impl PddbOs {
             self.mbbb_phys_base.as_u32() + offset
         ).expect("couldn't burn mbbb");
     }
+    /// raw patch is provided for 128-bit incremental updates to the FLASH. For FastSpace master record writes,
+    /// see write_fast_space()
     fn patch_fscb(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE * FSCB_PAGES, "fscb patch would go out of bounds");
         self.spinor.patch(
@@ -137,7 +143,85 @@ impl PddbOs {
             self.fscb_phys_base.as_u32() + offset
         ).expect("couldn't burn fscb");
     }
+    /// anytime the fscb is updated, all the partial records are nuked, as well as any existing record.
+    /// then, a _random_ location is picked to place the structure to help with wear levelling.
+    fn write_fast_space(&mut self, fs: &FastSpace) {
+        self.ensure_system_key();
+        if let Some(system_basis_key) = self.system_basis_key {
+            let key = Key::from_slice(&system_basis_key);
+            let cipher = Aes256GcmSiv::new(key);
+            let nonce_array = self.gen_nonce();
+            let nonce = Nonce::from_slice(&nonce_array);
+            let fs_ser: &[u8] = fs.deref();
+            assert!( ((fs_ser.len() + core::mem::size_of::<Nonce>() + core::mem::size_of::<Tag>()) & (PAGE_SIZE - 1)) == 0,
+                "FastSpace record is not page-aligned in size!");
+            // create AAD: name, version number, and FPGA ID.
+            let mut aad = Vec::<u8>::new();
+            aad.extend_from_slice(PDDB_FAST_SPACE_SYSTEM_BASIS.as_bytes());
+            aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
+            aad.extend_from_slice(&self.dna.to_le_bytes());
+            // AAD + data => Payload
+            let payload = Payload {
+                msg: fs_ser,
+                aad: &aad,
+            };
+            let ciphertext = cipher.encrypt(nonce, payload).expect("failed to encrypt FastSpace record");
+            let ct_to_flash = ciphertext.deref();
+            // determine which page we're going to write the ciphertext into
+            let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
+            log::info!("picking a random page out of {} pages for fscb", page_search_limit);
+            let dest_page = self.trng_cache_u32() % page_search_limit as u32;
+            // atomicity of the FreeSpace structure is a bit of a tough topic. It's a fairly hefty structure,
+            // that runs a risk of corruption as it's being written, if power is lost or the system crashes.
+            // However, the guiding principle of this ordering is that it's better to have no FastSpace structure
+            // (and force a re-computation of it by scanning all the open Basis), than it is to have a broken
+            // FastSpace structure + stale SpaceUpdates. In particular a stale SpaceUpdate would lead the system
+            // to conclude that some pages are free when they aren't. Thus, we prefer to completely erase the
+            // FSCB region before committing the updated version.
+            { // this is where we begin the "it would be bad if we lost power about now" code region
+                // erase the entire fscb area
+                let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE];
+                for offset in 0..FSCB_PAGES {
+                    self.patch_fscb(&blank_sector, (offset * PAGE_SIZE) as u32);
+                }
+                // commit the fscb data
+                self.patch_fscb(&[&nonce_array, ct_to_flash].concat(), dest_page * PAGE_SIZE as u32);
+            } // end "it would be bad if we lost power now" region
+        } else {
+            panic!("invalid state!");
+        }
+    }
 
+    /// maps a StaticCryptoData structure into the key area of the PDDB.
+    fn get_static_crypto_data(&self) -> &StaticCryptoData {
+        let scd_ptr = self.key_phys_base.as_usize() as *const StaticCryptoData;
+        let scd: &StaticCryptoData = unsafe{scd_ptr.as_ref().unwrap()};
+        scd
+    }
+    /// takes the key and writes it with zero, using hard pointer math and a compiler fence to ensure
+    /// the wipe isn't optimized out.
+    fn erase_system_key(&mut self) {
+        if let Some(mut key) = self.system_basis_key.take() {
+            let b = key.as_mut_ptr();
+            for i in 0..key.len() {
+                unsafe {
+                    b.add(i).write_volatile(core::mem::zeroed());
+                }
+            }
+            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    fn ensure_system_key(&mut self) {
+        if self.system_basis_key.is_none() {
+            let scd = self.get_static_crypto_data();
+            let mut system_key: [u8; 32] = [0; 32];
+            for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
+                *dst = src;
+            }
+            self.rootkeys.decrypt_block(Block::from_mut_slice(&mut system_key));
+            self.system_basis_key = Some(system_key);
+        }
+    }
     fn ensure_entropy(&mut self, amount: usize) {
         if self.e_cache.len() < amount {
             let mut cache: [u8; 8192] = [0; 8192];
@@ -202,7 +286,9 @@ impl PddbOs {
                 page_heap.push(Reverse(pp.page_number()));
             }
         }
-        let total_free_pages = page_heap.len();
+        let total_used_pages = page_heap.len();
+        let total_free_pages = (PDDB_A_LEN - self.data_phys_base.as_usize()) / PAGE_SIZE;
+        log::info!("page alloc: {} used; {} free", total_used_pages, total_free_pages);
         if total_free_pages == 0 {
             log::warn!("Disk is out of space, no free pages available!");
             // return an empty free_pool vector.
@@ -214,10 +300,11 @@ impl PddbOs {
         // addresses.
         let mut min_used_page = page_heap.pop();
         // consider every page
-        for page_candidate in (0..PDDB_A_LEN / PAGE_SIZE) {
+        for page_candidate in 0..PDDB_A_LEN / PAGE_SIZE {
             // if the page is used, skip it.
             if let Some(Reverse(mp)) = min_used_page {
                 if page_candidate == mp as usize {
+                    log::info!("removing used page from free_pool: {}", mp);
                     min_used_page = page_heap.pop();
                     continue;
                 }
@@ -242,19 +329,22 @@ impl PddbOs {
             // invariant: elements with index > i have been locked in place.
             free_pool.swap(i, self.trng_cache_u32() as usize % (i+1));
         }
+        log::info!("free_pool initial count: {}", free_pool.len());
 
         // 4. ensure that the free pool stays within the defined deniability ratio
         let deniable_free_pages = (total_free_pages as f32 * FSCB_FILL_COEFFICIENT) as usize;
         // we're guarantede to have at least one free page, because we errored out if the pages was 0 above.
         let deniable_free_pages = if deniable_free_pages == 0 { 1 } else { deniable_free_pages };
         free_pool.truncate(deniable_free_pages);
+        log::info!("free_pool after PD trim: {}; max pages allowed: {}", free_pool.len(), deniable_free_pages);
 
-        /// 5. Take the free_pool and annotate it for writing to disk
+        // 5. Take the free_pool and annotate it for writing to disk
         let mut page_pool = Vec::<PhysPage>::new();
         for page in free_pool {
             let mut pp = PhysPage(0);
             pp.set_page_number(page as PhysAddr);
             pp.set_space_state(SpaceState::Free);
+            pp.set_valid(true);
             page_pool.push(pp);
         }
         page_pool
@@ -282,6 +372,47 @@ impl PddbOs {
             ).expect("couldn't erase memory");
         }
 
+        // step 2. create our key material
+        // consider: making ensure_aes_password() a pub-scoped function? let's see how this works in practice.
+        //if !self.rootkeys.ensure_aes_password() {
+        //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
+        //}
+        assert!(core::mem::size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
+        let mut system_basis_key: [u8; 32] = [0; 32];
+        self.trng.fill_bytes(&mut system_basis_key);
+        let mut basis_key_enc: [u8; 32] = system_basis_key.clone();
+        self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
+        log::info!("sanity check: plaintext system basis key: {:x?}", basis_key_enc);
+        self.rootkeys.encrypt_block(Block::from_mut_slice(&mut basis_key_enc));
+        log::info!("sanity check: encrypted system basis key: {:x?}", basis_key_enc);
+        let mut crypto_keys = StaticCryptoData {
+            system_key: [0; 32],
+            salt_base: [0; 2048],
+            reserved: [0; 2016],
+        };
+        // copy the encrypted key into the data structure for commit to Flash
+        for (&src, dst) in basis_key_enc.iter().zip(crypto_keys.system_key.iter_mut()) {
+            *dst = src;
+        }
+        self.trng.fill_bytes(&mut crypto_keys.salt_base);
+        self.trng.fill_bytes(&mut crypto_keys.reserved);
+        self.patch_keys(crypto_keys.deref(), 0);
+        // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
+
+        // step 3. mbbb handling
+        // mbbb should just be blank at this point, and the flash was erased in step 1, so there's nothing to do.
+
+        // step 4. fscb handling
+        // pick a set of random pages from the free pool and assign it to the fscb
+        let free_pool = self.collect_fastspace();
+        let mut fast_space = FastSpace {
+            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+        };
+        for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
+            *dst = src;
+        }
+        self.write_fast_space(&fast_space);
+
         // step 2. create the system basis root structure
         let mut name: [u8; PDDB_MAX_BASIS_NAME_LEN] = [0; PDDB_MAX_BASIS_NAME_LEN];
         for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
@@ -300,32 +431,6 @@ impl PddbOs {
         // extract a slice-u8 that maps onto the basis_root record, allowing us to patch this into a FLASH page
         let br_slice: &[u8] = basis_root.deref();
 
-        // step 3. create our key material
-        // consider: making ensure_aes_password() a pub-scoped function? let's see how this works in practice.
-        //if !self.rootkeys.ensure_aes_password() {
-        //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
-        //}
-        assert!(core::mem::size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
-        let mut system_basis_key: [u8; 32] = [0; 32];
-        self.trng.fill_bytes(&mut system_basis_key);
-        let mut basis_key_enc: [u8; 32] = system_basis_key.clone();
-        self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
-        log::info!("sanity check: plaintext system basis key: {:x?}", basis_key_enc);
-        self.rootkeys.decrypt_block(Block::from_mut_slice(&mut basis_key_enc));
-        log::info!("sanity check: encrypted system basis key: {:x?}", basis_key_enc);
-        let mut crypto_keys = StaticCryptoData {
-            system_key: [0; 32],
-            salt_base: [0; 2048],
-            reserved: [0; 2016],
-        };
-        // copy the encrypted key into the data structure for commit to Flash
-        for (&src, dst) in basis_key_enc.iter().zip(crypto_keys.system_key.iter_mut()) {
-            *dst = src;
-        }
-        self.trng.fill_bytes(&mut crypto_keys.salt_base);
-        self.trng.fill_bytes(&mut crypto_keys.reserved);
-        self.patch_keys(crypto_keys.deref(), 0);
-        // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
         // step 4. Create a hashmap for our reverse PTE, and add it to the Pddb's cache
         // we don't have a fscb yet, and everything is free space, so we will manually place these initial entries.
@@ -341,12 +446,12 @@ impl PddbOs {
         }
         self.v2p_map.insert(basis_root.name, basis_v2p_map);
 
-        // step 5. write the basis to Flash, at the physical locations noted above
+        // step 5. write the System basis to Flash, at the physical locations noted above
         let mut basis_ser = vec![];
         for &b in br_slice {
             basis_ser.push(b)
         }
-        for _ in (0..basis_root.padding_count()) {
+        for _ in 0..basis_root.padding_count() {
             basis_ser.push(0)
         }
         // basis_ser can now be passed to an encryption function
@@ -373,13 +478,6 @@ impl PddbOs {
         } else {
             panic!("invalid state"); // we should never hit this because we created the key earlier in the same routine.
         }
-
-        // step 6. mbbb handling
-        // mbbb should just be blank at this point, so there's nothing to do.
-
-        // step 7. fscb handling
-        // pick a set of random pages from the free pool and assign it to the fscb
-        let page_state = Vec::<u8>::new(); // bools also take up a byte
 
         // step 8. generate & write initial page table entries
         // page table organization:

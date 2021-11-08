@@ -12,14 +12,15 @@ pub type PhysAddr = u32;
 #[cfg(feature = "u64_pa")]
 pub type PhysAddr = u64;
 const BITFIELD_PAGE_WIDTH: usize = (core::mem::size_of::<PhysAddr>() * 8 - 12);
-/// Physical page information, coded as a bitfield, because space is a premium!
+// Physical page information, coded as a bitfield, because space is a premium!
 bitfield! {
     #[derive(Copy, Clone, Hash)]
     pub struct PhysPage(PhysAddr);
     impl Debug;
     pub page_number, set_page_number: BITFIELD_PAGE_WIDTH - 1, 0;
-    // these flags are used by the live page table; they are ignored by FastSpace
+    // this is only used by the page table mechanism
     pub clean, set_clean: BITFIELD_PAGE_WIDTH + 0;
+    // valid is used by both FastSpace and the page table mechanism. Note that we rely upon the mapping of 0->not valid.
     pub valid, set_valid: BITFIELD_PAGE_WIDTH + 1;
     // these are only used by the FastSpace mechanism; they have no meaning in other contexts
     pub u8, from into SpaceState, space_state, set_space_state: BITFIELD_PAGE_WIDTH + 3, BITFIELD_PAGE_WIDTH + 2;
@@ -122,5 +123,21 @@ mod tests {
     /// PAGE_SIZE is required to be a power of two. 0x1000 -> 0x1000 - 1 = 0xFFF, which forms the bitmasks.
     fn test_page_size() {
         assert!(PAGE_SIZE & !(PAGE_SIZE - 1) == 0, "PAGE_SIZE is not a power of two!");
+    }
+    /// This test exists because nothing in the bitfield spec explicitly requires that a true maps to a 1.
+    /// In fact a lot of code would work just fine if you mapped true to 0 and false to 1: if you're just using
+    /// the generated getter and setter, it woudln't matter.
+    /// However, in our application, we fully expect a true to be a 1. This test exists to ensure this seemingly
+    /// obvious but not explicitly stated fact always remains true.
+    fn test_bitfield_bool() {
+        bitfield! {
+            pub struct Test(u8);
+            impl Debug;
+            pub test, set_test: 1;
+        }
+        let mut t = Test(0);
+        t.set_test(true);
+        assert!(t.0 == 0x2, "polarity of boolean bit is not as expected");
+        assert!(t.test() == true, "bool getter did not work as expected");
     }
 }

@@ -5,7 +5,7 @@ pub(crate) const PDDB_MAX_BASIS_NAME_LEN: usize = 64;
 pub(crate) const PDDB_MAX_DICT_NAME_LEN: usize = 64;
 pub(crate) const PDDB_MAX_KEY_NAME_LEN: usize = 128;
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
-pub(crate) const PDDB_VERSION: u16 = 0;
+pub(crate) const PDDB_VERSION: u16 = 0x00_00;
 /// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing
 pub(crate) const PDDB_A_LEN: usize = 16 * 1024 * 1024;
 
