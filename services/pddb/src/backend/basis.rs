@@ -4,6 +4,8 @@ use super::*;
 use core::num::NonZeroU64;
 use core::ops::{Deref, DerefMut};
 use core::{mem, slice};
+use core::mem::size_of;
+use aes_gcm_siv::Nonce;
 
 pub(crate) const FREE_CACHE_SIZE: usize = 16;
 pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
@@ -19,10 +21,10 @@ pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
 /// As a directory structure, the basis root is designed to be read into RAM in a contiguous block.
 /// it'll typically be less than a page in length, but a pathological number of dictionaries can make it
 /// much longer.
-#[repr(C, packed)]
+#[repr(C)]
 pub(crate) struct BasisRoot {
     /// this is stored as plaintext and generated fresh every time the block is re-encrypted
-    pub(crate) p_nonce: [u8; 12],
+    pub(crate) p_nonce: [u8; size_of::<Nonce>()],
     // everything below here is encrypted using AES-GCM-SIV
     pub(crate) magic: [u8; 4],
     pub(crate) version: u16,
@@ -111,7 +113,7 @@ pub(crate) struct FreeSpace {
 /// Typically individual dictionaries start out life having their own 4k-page, but they
 /// can be compacted together if they seem to be static/non-changing and we need more space.
 pub(crate) struct Dictionary {
-    p_nonce: [u8; 12],
+    p_nonce: [u8; size_of::<Nonce>()],
     journal_rev: u32,
     num_keys: u32,
     age: u32, // increment every time the dictionary definition itself is modified

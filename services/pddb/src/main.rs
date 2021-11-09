@@ -25,6 +25,17 @@ use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 /// Open Basis - A Basis that is decryptable and known to the system.
 /// Closed Basis - A Basis that is not decryptable. It's unknown to the system and potentially treated
 ///   identically to free disk space, e.g., it could be partially overwritten.
+/// FSCB - Free Space Commit Buffer. A few pages allocated to tracking a subset of free space,
+///   meant to accelerate PDDB operations. Creates a side-channel that can reveal that some activity
+///   has happened, but without disclosing what and why. Contains FastSpace and SpaceUpdate records.
+///   Frequently updated, so the buffer is slightly oversized, and which sector is "hot" is randomized
+///   for wear-levelling.
+/// MBBB - Make Before Break Buffer. A set of randomly allocated pages that are a shadow copy
+///   of a page table page. If any data exists, its contents override those of a corrupted page table.
+/// FastSpace - a collection of random pages that are known to be empty. The number of pages in FastSpace
+///   is reduced from the absolute amount of free space available by at least a factor of FSCB_FILL_COEFFICIENT.
+/// SpaceUpdate - encrypted patches to the FastSpace table. The FastSpace table is "heavyweight", and would
+///   be too expensive to update on every page allocation, so SpaceUpdate is used to patch the FastSpace table.
 ///
 /// A `Path` like the following is deconstructed as follows by the PDDB:
 ///

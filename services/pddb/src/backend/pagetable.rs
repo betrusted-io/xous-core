@@ -1,7 +1,6 @@
 use super::PAGE_SIZE;
-use core::num::NonZeroU8;
-use core::num::NonZeroU32;
-use core::num::NonZeroU64;
+use core::mem::size_of;
+use aes_gcm_siv::{Nonce, Tag};
 
 use bitflags::bitflags;
 
@@ -66,11 +65,11 @@ pub(crate) struct PageTableInFlash {
 /// the actual data being retrieved.
 pub(crate) struct EncryptedPage {
     /// the nonce is not encrypted
-    p_nonce: [u8; 12],
-    /// journal_rev is encrypted and indicates the current journal revision for the block
+    p_nonce: [u8; size_of::<Nonce>()],
+    /// journal_rev is encrypted and indicates the current journal revision for the block (u32 le)
     journal_rev: [u8; 4],
     /// data is encrypted and holds the good stuff
-    data: [u8; (PAGE_SIZE - 12 - 16 - 4)],
+    data: [u8; (PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<u32>())],
     /// tag is the authentication tag. If the page decrypts & authenticates, we know it's a valid data block for us.
-    p_tag: [u8; 16],
+    p_tag: [u8; size_of::<Tag>()],
 }

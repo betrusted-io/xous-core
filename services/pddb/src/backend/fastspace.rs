@@ -1,14 +1,17 @@
 use core::num::NonZeroU32;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
+use core::convert::TryInto;
 
 use super::PAGE_SIZE;
 use crate::*;
+use core::mem::size_of;
+use aes_gcm_siv::{Nonce, Tag};
 
 /// Each free_pool entry takes about 4 bytes, so give-or-take we have about 1000 free_pool
 /// entries per page of storage for the free_pool, or 4k * 1000 ~ 4MiB per page, when PhysAddr is a u32
 pub(crate) const FASTSPACE_PAGES: usize = 2;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 #[repr(u8)]
 pub enum SpaceState {
     /// pages that are completely un-spoken for
@@ -37,7 +40,8 @@ impl From<SpaceState> for u8 {
     }
 }
 
-pub(crate) const FASTSPACE_FREE_POOL_LEN: usize = ((PAGE_SIZE * FASTSPACE_PAGES) - (12 + 16)) / core::mem::size_of::<PhysPage>();
+pub(crate) const FASTSPACE_FREE_POOL_LEN: usize = ((PAGE_SIZE * FASTSPACE_PAGES)
+    - (size_of::<Nonce>() + size_of::<Tag>())) / core::mem::size_of::<PhysPage>();
 /// FastSpace tracks a limited set of physical pages
 /// An optimal implementation of this would fill whole pages with the free_pool array.
 /// This record is meant to be updated rarely, and atomically, in a make-before-break fashion:
@@ -55,7 +59,7 @@ pub(crate) const FASTSPACE_FREE_POOL_LEN: usize = ((PAGE_SIZE * FASTSPACE_PAGES)
 ///   and hopefully nothing else?
 ///   The "rare" property is important especially as the disk size scales up; if we wanted to keep
 ///   100MiB of "fast space" on hand, this structure would span 25 pages.
-#[repr(C, packed)]
+#[repr(C)]
 pub (crate) struct FastSpace {
     /// Not sure if there is a "better" way to compute things, but we want the number of entries in the
     /// free_pool array to "round out" the FastSpace record to be equal to exactly one page
@@ -71,13 +75,12 @@ impl Deref for FastSpace {
     }
 }
 
-/// this structure is created just to confirm that the overall size is exactly one page, and should only
-/// be used by the test included in this file.
+/// this structure confirms that the overall size of the FastSpace structure as stored in Flash.
 #[repr(C, packed)]
-struct FastSpaceInFlash {
-    p_nonce: [u8; 12],
+pub(crate) struct FastSpaceInFlash {
+    p_nonce: [u8; size_of::<Nonce>()],
     ram_rep: FastSpace,
-    p_tag: [u8; 16],
+    p_tag: [u8; size_of::<Tag>()],
 }
 
 /// a 128-bit record that stores an encrypted update to the FastSpace pool, facilitating the "rarely" update property of the structure.
@@ -85,7 +88,7 @@ struct FastSpaceInFlash {
 #[cfg(not(feature = "u64_pa"))]
 pub (crate) struct SpaceUpdate {
     nonce: u64,
-    page_number: PhysAddr,
+    page_number: PhysPage,
     // this checksum is "weak" but we are protecting against two scenarios:
     // 1. partially written SpaceUpdate record (so the last bytes or so are FF)
     // 2. a malicious attacker
@@ -96,15 +99,59 @@ pub (crate) struct SpaceUpdate {
     // being treated as free space and getting erased (data loss, not disclosure).
     checksum: [u8; 4],
 }
+#[cfg(not(feature = "u64_pa"))]
+impl SpaceUpdate {
+    pub fn try_into_phys_page(slice: &[u8]) -> Option<PhysPage> {
+        let computed_sum = murmur3_32(&slice[..12], u32::from_be_bytes(slice[4..8].try_into().unwrap()));
+        if u32::from_le_bytes(slice[12..].try_into().unwrap()) == computed_sum {
+            let pp = u32::from_le_bytes(slice[8..12].try_into().unwrap());
+            Some(PhysPage(pp))
+        } else {
+            None
+        }
+    }
+    pub fn new(nonce: u64, page_number: PhysPage) -> Self {
+        let mut hashbuf: [u8; 12] = [0; 12];
+        for (&src, dst) in nonce.to_le_bytes().iter().zip(hashbuf[..8].iter_mut()) {
+            *dst = src;
+        }
+        for (&src, dst) in page_number.0.to_le_bytes().iter().zip(hashbuf[8..12].iter_mut()) {
+            *dst = src;
+        }
+        let computed_sum = murmur3_32(&hashbuf[..12], u32::from_be_bytes(hashbuf[4..8].try_into().unwrap()));
+        SpaceUpdate {
+            nonce,
+            page_number,
+            checksum: computed_sum.to_le_bytes(),
+        }
+    }
+}
+
 #[cfg(feature = "u64_pa")]
 pub (crate) struct SpaceUpdate {
     nonce: u64,
-    page_number: PhysAddr,
+    page_number: PhysPage,
     // consider: using the top 12 bits of the PhysAddr as a checksum
 }
-impl SpaceUpdate {
-    // add accessors, decryptors, and constructors so we don't shoot ourselves in the foot so much.
+
+impl Deref for SpaceUpdate {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const SpaceUpdate as *const u8, core::mem::size_of::<SpaceUpdate>())
+                as &[u8]
+        }
+    }
 }
+impl DerefMut for SpaceUpdate {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut SpaceUpdate as *mut u8, core::mem::size_of::<SpaceUpdate>())
+                as &mut [u8]
+        }
+    }
+}
+
 
 mod tests {
     use super::*;
