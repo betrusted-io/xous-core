@@ -10,6 +10,7 @@ use core::mem::size_of;
 use std::convert::TryInto;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce};
 use aes_gcm_siv::aead::{Aead, Payload};
+use std::iter::IntoIterator;
 
 
 pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
@@ -26,7 +27,7 @@ pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
 /// PAGE_SIZE; request for blocks beyond the length of the Basis pre-alloc
 /// region will return None.
 #[repr(C)]
-pub(crate) struct BasisEncrypter<'a> {
+pub(crate) struct BasisEncryptor<'a> {
     root: &'a BasisRoot,
     dicts: &'a [DictPointer],
     cipher: Aes256GcmSiv,
@@ -35,14 +36,14 @@ pub(crate) struct BasisEncrypter<'a> {
     journal_rev: JournalType,
     entropy: Rc<RefCell<TrngPool>>,
 }
-impl<'a> BasisEncrypter<'a> {
-    pub fn new(root: &'a BasisRoot, dicts: &'a [DictPointer], dna: u64, cipher: Aes256GcmSiv, rev: JournalType, entropy: Rc<RefCell<TrngPool>>) -> Self {
+impl<'a> BasisEncryptor<'a> {
+    pub(crate) fn new(root: &'a BasisRoot, dicts: &'a [DictPointer], dna: u64, cipher: Aes256GcmSiv, rev: JournalType, entropy: Rc<RefCell<TrngPool>>) -> Self {
         let mut aad = Vec::<u8>::new();
         aad.extend_from_slice(&root.name);
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         aad.extend_from_slice(&dna.to_le_bytes());
 
-        BasisEncrypter {
+        BasisEncryptor {
             root,
             dicts,
             cur_vpage: 0,
@@ -53,35 +54,66 @@ impl<'a> BasisEncrypter<'a> {
         }
     }
 }
-impl<'a> Iterator for BasisEncrypter<'a> {
+
+pub(crate) struct BasisEncryptorIter<'a> {
+    basis_data: BasisEncryptor<'a>,
+    // the virtual address of the currently requested iteration
+    vaddr: usize,
+}
+impl<'a> IntoIterator for BasisEncryptor<'a> {
+    type Item=[u8; PAGE_SIZE];
+    type IntoIter=BasisEncryptorIter<'a>;
+    fn into_iter(self) -> BasisEncryptorIter<'a> {
+        let journal_bytes = self.journal_rev.to_le_bytes();
+        BasisEncryptorIter {
+            basis_data: self,
+            vaddr: 0,
+        }
+    }
+}
+impl<'a> Iterator for BasisEncryptorIter<'a> {
     type Item = [u8; PAGE_SIZE];
 
     fn next<'s>(&'s mut self) -> Option<Self::Item> {
-        if self.cur_vpage == 0 {
+        if self.vaddr < self.basis_data.root.prealloc_open_end.as_usize() {
             let mut block = [0 as u8; VPAGE_SIZE];
-            for (&src, dst) in self.journal_rev.to_le_bytes().iter().zip(block.iter_mut()) {
+            let mut block_iter = block.iter_mut();
+
+            let journal_bytes = self.basis_data.journal_rev.to_le_bytes();
+            let mut slice_iter =
+            journal_bytes.iter() // journal rev
+                .chain(self.basis_data.root.deref().iter() // basis
+                    // .chain(self.dicts.as_slice()  // dictionary
+            ).skip(self.vaddr);
+
+            // note that in the case that we've already serialized the journal, basis, and dictionary, this will produce nothing
+            let mut written = 0;
+            for(&src, dst) in slice_iter.zip(block_iter) {
                 *dst = src;
+                written += 1;
             }
-            for (&src, dst) in self.root.deref().iter().zip(block[size_of::<JournalType>()..].iter_mut()) {
-                *dst = src;
+            // which allows this to correctly pad out the rest of the prealloc region with 0's.
+            while written < block.len() {
+                block[written] = 0;
+                written += 1;
             }
-            let nonce_array = self.entropy.borrow_mut().get_nonce();
+
+            let nonce_array = self.basis_data.entropy.borrow_mut().get_nonce();
             let nonce = Nonce::from_slice(&nonce_array);
-            let ciphertext = self.cipher.encrypt(
+            let ciphertext = self.basis_data.cipher.encrypt(
                 &nonce,
                 Payload {
-                    aad: &self.aad,
+                    aad: &self.basis_data.aad,
                     msg: &block,
                 }
             ).unwrap();
-            self.cur_vpage += 1;
+            self.vaddr += VPAGE_SIZE;
             Some([&nonce_array, ciphertext.deref()].concat().try_into().unwrap())
         } else {
             None
         }
     }
 }
-
 /// In basis space, the BasisRoot is located at VPAGE #1 (VPAGE #0 is always invalid).
 /// The first 4GiB is reserved for the Basis Root + Dictionary slice.
 /// Key storage begin at 4GiB.
@@ -159,7 +191,7 @@ impl DerefMut for BasisRoot {
 }
 
 
-
+#[repr(C)]
 pub(crate) struct DictPointer {
     name: [u8; PDDB_MAX_DICT_NAME_LEN],
     age: u32,  // increment every time the dictionary pointer is modified. Used to guide memory compaction.

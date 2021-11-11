@@ -769,11 +769,10 @@ impl PddbOs {
         }
 
         // step 8. write the System basis to Flash, at the physical locations noted above
-        // extract a slice-u8 that maps onto the basis_root record, allowing us to patch this into a FLASH page
         if let Some(syskey) = self.system_basis_key {
             let key = Key::from_slice(&system_basis_key);
             let cipher = Aes256GcmSiv::new(key);
-            let basis_encrypter = BasisEncrypter::new(
+            let basis_encryptor = BasisEncryptor::new(
                 &basis_root,
                 &[],
                 self.dna,
@@ -781,47 +780,29 @@ impl PddbOs {
                 0,
                 Rc::clone(&self.entropy),
             );
-            for ppage in basis_encrypter.into_iter() {
-                self.patch_data(&ppage, 0);
+            if let Some(basis_v2p_map) = self.v2p_map.get(&basis_root.name) {
+                for (vpage_no, ppage_data) in basis_encryptor.into_iter().enumerate() {
+                    let vaddr = VirtAddr::new( ((vpage_no + 1) * VPAGE_SIZE) as u64 ).unwrap();
+                    match basis_v2p_map.get(&vaddr) {
+                        Some(pp) => {
+                            self.patch_data(&ppage_data, pp.page_number() * PAGE_SIZE as u32);
+                        }
+                        None => {
+                            log::error!("Previously allocated page was not found in our map!");
+                            panic!("Inconsistent internal state");
+                        }
+                    }
+                }
+            } else {
+                log::error!("Couldn't find the system basis!");
+                panic!("Inconsistent internal state");
             }
         } else {
+            log::error!("System key was not found, but it should be present!");
             panic!("Inconsistent internal state");
         }
 
-        /*
-        let br_slice: &[u8] = basis_root.deref();
-        // copy the basis contents
-        let mut basis_ser = vec![];
-        for &b in br_slice {
-            basis_ser.push(b)
-        }
-        // fill out any padding based on the pre-alloc space
-        for _ in 0..basis_root.padding_count() {
-            basis_ser.push(0)
-        }
-
-        let basis = Basis::new(basis_root.deref(), &[]);
-        for vpage in basis {
-            log::info!("vpage: {:?}", vpage);
-        }
-
-        // basis_ser can now be passed to an encryption function
-        if let Some(system_basis_key) = self.system_basis_key {
-            let key = Key::from_slice(&system_basis_key);
-            let cipher = Aes256GcmSiv::new(key);
-            let nonce_array = self.entropy.borrow_mut().get_nonce();
-            let nonce = Nonce::from_slice(&nonce_array);
-            let ciphertext = cipher.encrypt(nonce, &basis_ser[size_of::<Nonce>()..]);
-
-            let ct_to_flash: &[u8] = ciphertext.as_ref().unwrap(); // this now contains the encrypted basis + 16-byte tag at the very end
-            // FIX THIS assert!( ( ct_to_flash.len() + basis_root.p_nonce.len()) & (PAGE_SIZE - 1) == 0, "Padding failure during basis serialization!");
-            // we're now ready to write the encrypted basis to Flash.
-            self.patch_data(&[&nonce_array, ct_to_flash].concat(), 0);
-        } else {
-            panic!("invalid state"); // we should never hit this because we created the key earlier in the same routine.
-        }*/
-
-        // step 8. generate & write initial page table entries
+        // step 9. generate & write initial page table entries
         // page table organization:
         //
         //   offset from |
