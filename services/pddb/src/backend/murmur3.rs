@@ -68,11 +68,11 @@ mod tests {
     fn test_static_slices() {
         let tests = [
             Result {
-                slice: &[0x34333231], //"1234",
+                slice: &[0x31, 0x32, 0x33, 0x34], //"1234",
                 hash_32: 0x721c5dc3,
             },
             Result {
-                slice: &[0x34333231, 0x38373635], // "12345678",
+                slice: &[0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38], // "12345678",
                 hash_32: 0x91b313ce,
             },
             Result {

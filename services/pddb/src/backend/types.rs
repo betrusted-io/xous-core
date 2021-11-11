@@ -1,7 +1,7 @@
 use core::num::{NonZeroU32, NonZeroU64};
 use core::convert::TryFrom;
 use core::ops::Add;
-use super::PAGE_SIZE;
+use super::{PAGE_SIZE, VPAGE_SIZE};
 use crate::SpaceState;
 use bitfield::bitfield;
 use std::hash::{Hash, Hasher};
@@ -54,56 +54,72 @@ impl PartialEq for PhysPage {
     }
 }
 
+/// Storage for journal revisions.
+pub type JournalType = u32;
 
-pub type VirtAddr = u64;
+/// A Virtual Address is 48 bits long. The top 16 bits are required to be blank
+/// so that they may be used as flags in the on-disk storage format.
+/// Virtual pages are shorter than physical pages, due to the overhead of
+/// the nonce + tag + journal entry used to store data on disk.
+/// We make the VirtAddr a NonZeroU64 so that we can apply a None option to it "for free"
+/// in packed disk representations.
+pub type VirtAddr = NonZeroU64;
 
 #[derive(Copy, Clone)]
 pub(crate) struct PageAlignedVa(VirtAddr);
 impl PageAlignedVa {
     pub(crate) fn as_u32(&self) -> u32 {
-        if self.0 <= u32::MAX as VirtAddr {
-            self.0 as u32
+        if self.0 <= VirtAddr::new(u32::MAX as u64).unwrap() {
+            self.0.get() as u32
         } else {
-            panic!("This PageAlignedVa would not fit into a PageAlignedPa");
+            panic!("PageAlignedVa would not fit into a u32");
         }
     }
-    pub(crate) fn as_u64(&self) -> u64 {self.0 as u64}
-    pub(crate) fn as_usize(&self) -> usize {self.0 as usize}
+    pub(crate) fn as_u64(&self) -> u64 {self.0.get()}
+    pub(crate) fn as_usize(&self) -> usize {self.0.get() as usize}
+    /// This will turn a PageAlignedVa into a page number
+    pub(crate) fn as_vpage_num(&self) -> usize {
+        // we're page-aligned, so we don't have to deal with remainders. This should divide cleanly.
+        self.0.get() as usize / VPAGE_SIZE
+    }
 }
 impl From<u64> for PageAlignedVa {
     fn from(arg: u64) -> Self {
-        if arg & (PAGE_SIZE as u64 - 1) == 0 {
-            PageAlignedVa(arg & !(PAGE_SIZE as VirtAddr - 1))
+        if arg % VPAGE_SIZE as u64 == 0 {
+            PageAlignedVa(VirtAddr::new(arg / VPAGE_SIZE as u64).unwrap())
         } else {
-            PageAlignedVa((arg & !(PAGE_SIZE as VirtAddr - 1)) + PAGE_SIZE as VirtAddr)
+            PageAlignedVa(VirtAddr::new(arg / VPAGE_SIZE as u64 + VPAGE_SIZE as u64).unwrap())
         }
     }
 }
+/* This is a bad idea -- because really, it needs to be a page table walk. It's not this simple.
 impl From<PageAlignedPa> for PageAlignedVa {
     fn from(arg: PageAlignedPa) -> Self { PageAlignedVa(arg.0 as VirtAddr) } // already aligned, and it fits.
-}
+}*/
 impl From<u32> for PageAlignedVa {
     fn from(arg: u32) -> Self {
-        if arg & (PAGE_SIZE as u32 - 1) == 0 {
-            PageAlignedVa(arg as VirtAddr & !(PAGE_SIZE as VirtAddr - 1))
+        if arg as usize % VPAGE_SIZE == 0 {
+            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64).unwrap())
         } else {
-            PageAlignedVa((arg as VirtAddr & !(PAGE_SIZE as VirtAddr - 1)) + PAGE_SIZE as VirtAddr)
+            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64 + VPAGE_SIZE as u64).unwrap())
         }
     }
 }
 impl From<usize> for PageAlignedVa {
     fn from(arg: usize) -> Self {
-        if arg & (PAGE_SIZE - 1) == 0 {
-            PageAlignedVa(arg as VirtAddr & !(PAGE_SIZE as VirtAddr - 1))
+        if arg % VPAGE_SIZE == 0 {
+            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64).unwrap())
         } else {
-            PageAlignedVa((arg as VirtAddr & !(PAGE_SIZE as VirtAddr - 1)) + PAGE_SIZE as VirtAddr)
+            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64 + VPAGE_SIZE as u64).unwrap())
         }
     }
 }
 impl Add for PageAlignedVa {
     type Output = PageAlignedVa;
     fn add(self, other: PageAlignedVa) -> PageAlignedVa {
-        PageAlignedVa(self.0 + other.0)
+        let a = self.0.get();
+        let b = other.0.get();
+        PageAlignedVa(VirtAddr::new(a.saturating_add(b)).unwrap())
     }
 }
 

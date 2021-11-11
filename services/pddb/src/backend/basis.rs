@@ -1,17 +1,90 @@
 use crate::api::*;
 use super::*;
 
+use core::cell::RefCell;
+use std::rc::Rc;
 use core::num::NonZeroU64;
 use core::ops::{Deref, DerefMut};
 use core::{mem, slice};
 use core::mem::size_of;
-use aes_gcm_siv::Nonce;
+use std::convert::TryInto;
+use aes_gcm_siv::{Aes256GcmSiv, Nonce};
+use aes_gcm_siv::aead::{Aead, Payload};
 
-pub(crate) const FREE_CACHE_SIZE: usize = 16;
+
 pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
-/// In basis space, the BasisRoot is located at 0
-/// The first 4GiB is reserved for the Basis Root.
-/// Keys begin at the next 4GiB.
+
+/// Takes in the constituents of the Basis area, and encrypts them into
+/// PAGE_SIZE blocks. Can be called as an iterator, or as a single-shot
+/// for a given offset. Requires a cipher that is pre-keyed with the encryption
+/// key, and the DNA code from the FPGA as a `u64`. This function generates
+/// the AAD based off of the DNA code + version of PDDB + Basis Name.
+///
+/// The iteration step is in VPAGE units within the virtual space, but
+/// it always returns a full PAGE_SIZE block. This object will handle
+/// padding of the very last block so the encrypted data fills up a full
+/// PAGE_SIZE; request for blocks beyond the length of the Basis pre-alloc
+/// region will return None.
+#[repr(C)]
+pub(crate) struct BasisEncrypter<'a> {
+    root: &'a BasisRoot,
+    dicts: &'a [DictPointer],
+    cipher: Aes256GcmSiv,
+    cur_vpage: usize,
+    aad: Vec::<u8>,
+    journal_rev: JournalType,
+    entropy: Rc<RefCell<TrngPool>>,
+}
+impl<'a> BasisEncrypter<'a> {
+    pub fn new(root: &'a BasisRoot, dicts: &'a [DictPointer], dna: u64, cipher: Aes256GcmSiv, rev: JournalType, entropy: Rc<RefCell<TrngPool>>) -> Self {
+        let mut aad = Vec::<u8>::new();
+        aad.extend_from_slice(&root.name);
+        aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
+        aad.extend_from_slice(&dna.to_le_bytes());
+
+        BasisEncrypter {
+            root,
+            dicts,
+            cur_vpage: 0,
+            aad,
+            cipher,
+            journal_rev: rev,
+            entropy,
+        }
+    }
+}
+impl<'a> Iterator for BasisEncrypter<'a> {
+    type Item = [u8; PAGE_SIZE];
+
+    fn next<'s>(&'s mut self) -> Option<Self::Item> {
+        if self.cur_vpage == 0 {
+            let mut block = [0 as u8; VPAGE_SIZE];
+            for (&src, dst) in self.journal_rev.to_le_bytes().iter().zip(block.iter_mut()) {
+                *dst = src;
+            }
+            for (&src, dst) in self.root.deref().iter().zip(block[size_of::<JournalType>()..].iter_mut()) {
+                *dst = src;
+            }
+            let nonce_array = self.entropy.borrow_mut().get_nonce();
+            let nonce = Nonce::from_slice(&nonce_array);
+            let ciphertext = self.cipher.encrypt(
+                &nonce,
+                Payload {
+                    aad: &self.aad,
+                    msg: &block,
+                }
+            ).unwrap();
+            self.cur_vpage += 1;
+            Some([&nonce_array, ciphertext.deref()].concat().try_into().unwrap())
+        } else {
+            None
+        }
+    }
+}
+
+/// In basis space, the BasisRoot is located at VPAGE #1 (VPAGE #0 is always invalid).
+/// The first 4GiB is reserved for the Basis Root + Dictionary slice.
+/// Key storage begin at 4GiB.
 /// AAD associated with the BasisRoot consist of a bytewise concatenation of:
 ///   - Basis name
 ///   - version number (should match version inside; complicates downgrade attacks)
@@ -23,26 +96,18 @@ pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
 /// much longer.
 #[repr(C)]
 pub(crate) struct BasisRoot {
-    /// this is stored as plaintext and generated fresh every time the block is re-encrypted
-    pub(crate) p_nonce: [u8; size_of::<Nonce>()],
     // everything below here is encrypted using AES-GCM-SIV
     pub(crate) magic: [u8; 4],
     pub(crate) version: u16,
-    pub(crate) journal_rev: u32,
     pub(crate) name: BasisRootName,
     /// increments every time the BasisRoot is modified. This field must saturate, not roll over.
     pub(crate) age: u32,
-    /*
-    /// a cache of up FREE_CACHE_SIZE indicating the location of free space for use by basis
-    /// functions, such as adding growing the size of this structure, adding more dictionaries,
-    /// adding keys to dictionaries, or extending existing keys. This saves from having to do
-    /// frequent free space search/compaction operations on memory during writes and updates.
-    pub(crate) free_cache: [Option<FreeSpace>; FREE_CACHE_SIZE],
-    */
     /// "open end" of the pre-allocated space for the Basis. All Basis data must exist in an extent that is
     /// less than this value. This can be grown and shrunk with allocation and compaction processes.
     pub(crate) prealloc_open_end: PageAlignedVa,
     pub(crate) num_dictionaries: u32,
+    /// virtual address pointer to the start of the dictionary record
+    pub(crate) dict_ptr: Option<VirtAddr>,
     // dict_slice: [DictPointer; num_dictionaries],  // DictPointers + num_dictionaries above can be turned into a dict_slice
     ////// the following records are appended by the Serialization routine
     // pad: [u8],    // padding out to the next 4096-byte block less 16 bytes
@@ -56,21 +121,19 @@ impl BasisRoot {
     /// if you get thousands of Dictionaries. Note that the intent is to have typcially no
     /// more than a couple dozen dictionaries; if you want to store a lot of different records,
     /// you can create thousands of Keys more efficiently, than you can dictionaries.
-    pub(crate) fn len_pages(&self) -> usize {
+    pub(crate) fn len_vpages(&self) -> usize {
         let min_len = core::mem::size_of::<BasisRoot>()
-            + ((self.num_dictionaries as usize)
-            * core::mem::size_of::<DictPointer>())
-            + core::mem::size_of::<aes_gcm_siv::Tag>();
-        if (min_len & (1 - PAGE_SIZE)) == 0 {
-            min_len / PAGE_SIZE
+            + ((self.num_dictionaries as usize) * core::mem::size_of::<DictPointer>());
+        if min_len % VPAGE_SIZE == 0 {
+            min_len / VPAGE_SIZE
         } else {
-            min_len / PAGE_SIZE + 1
+            min_len / VPAGE_SIZE + 1
         }
     }
     /// Number of bytes needed to pad between the length of the BasisRoot structure and the plaintext
     /// tag that will get appended to the end
     pub(crate) fn padding_count(&self) -> usize {
-        self.len_pages() * PAGE_SIZE -
+        self.len_vpages() * VPAGE_SIZE -
         (core::mem::size_of::<BasisRoot>()
          + ((self.num_dictionaries as usize) * core::mem::size_of::<DictPointer>())
         )
@@ -99,7 +162,7 @@ impl DerefMut for BasisRoot {
 
 pub(crate) struct DictPointer {
     name: [u8; PDDB_MAX_DICT_NAME_LEN],
-    age: u32,  // increment every time the dictionary pointer is modified.
+    age: u32,  // increment every time the dictionary pointer is modified. Used to guide memory compaction.
     addr: u64, // the virtual address of the dictionary
 }
 

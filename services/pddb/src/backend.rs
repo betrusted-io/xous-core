@@ -11,6 +11,8 @@ pub use types::*;
 // local to the backend
 mod murmur3;
 pub(crate) use murmur3::*;
+mod trngpool;
+pub(crate) use trngpool::*;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod hw;

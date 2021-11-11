@@ -11,6 +11,8 @@ use backend::*;
 
 use num_traits::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
+use core::cell::RefCell;
+use std::rc::Rc;
 
 /// PDDB - Plausibly Deniable DataBase
 ///
@@ -55,7 +57,6 @@ use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 ///
 ///
 /// Threat model:
-///
 /// The user is forced to divulge "all the Basis passwords" on the device, through
 /// coercion, blackmail, subpoena, customs checkpoint etc. The adversary has physical
 /// access to the device, and is able to take a static disk image; they may even have
@@ -80,9 +81,35 @@ use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 /// a problem handled by the OS, and it is up to the user to not type secret passwords
 /// in areas that may be under camera surveillance.
 ///
+/// Auditor Notices:
+/// There's probably a lot of things the PDDB does wrong. Here's a list of some things
+/// to worry about:
+///  - The device RootKeys shares one salt across all of its keys, instead of a per-key salt.
+///    Currently there are only two keys in the RootKey store sharing the one salt. The concern
+///    is that a migration to an ASIC base design would make eFuse bits scarce, so, the initial
+///    draft of the RootKeys shares one salt to maximize key capacity. The per-key salt is slightly
+///    modified by adding the key index to the salt. This isn't meant to be a robust mitigation:
+///    it just prevents a naive rainbow attack from re-using its table.
+///  - The bcrypt() implementation is vendored in from a Rust bcrypt crate. It hasn't been audited.
+///  - The COST of 7 for bcrypt is relatively low by today's standards (should be 10). However,
+///    we can't raise the cost to 10 because our CPU is slower than most modern x86 devices. There is
+///    an open issue to try to improve this with hardware acceleration. The mitigation is to use
+///    a longer passphrase instead of a 12 or 14-character password.
+///  - The RootKey is used to decrypt a locally stored System Basis key. The key is encrypted using
+///    straight AES-256 with no authentication.
+///  - Secret basis keys are not stored anywhere on the device. They are all derived from a password
+///    using bcrypt. The salt for the password is drawn from a "salt pool", whose index is derived from
+///    a weak hash of the password itself. This means there is a chance that a salt gets re-used. However,
+///    we do not store per-password salts because the existence of the salt would betray the existence of
+///    a password.
+///  - Disk blocks are encrypted & authenticated on a page-by-page basis using AES-GCM-SIV, with a 256-bit key.
+///  - Page table entries and space update entries are salted & hinted using a 64-bit nonce + weak checksum.
+///    There is a fairly high chance of a checksum collision, thus PTE decrypts are regarded as advisory and
+///    not final; the PTE is not accepted as authentic until the AES-GCM-SIV behind it checks out. Free space
+///    entries have no such protection, which means there is a slight chance of data loss due to a checksum
+///    collision on the free space entries.
 ///
 /// General Operation:
-///
 /// The initial Basis is known as the "System" Basis. It's a low-security framework basis
 /// onto which all other Basis overlay. The initial set of Dictionaries, along with their
 /// Key/Value pairs, are available to any and all processes.
@@ -312,7 +339,11 @@ fn xmain() -> ! {
 
     log::trace!("ready to accept requests");
 
-    let pddb_os = PddbOs::new();
+    // shared entropy cache across all process-local services (it's more efficient to request entropy in blocks from the TRNG)
+    let mut entropy = Rc::new(RefCell::new(TrngPool::new()));
+
+    // OS-specific PDDB driver
+    let pddb_os = PddbOs::new(Rc::clone(&entropy));
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");

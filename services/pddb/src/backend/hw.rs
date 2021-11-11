@@ -4,7 +4,6 @@ use crate::*;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
 use aes::Aes256;
-use rand_core::{CryptoRng, RngCore};
 use aes::cipher::{BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
 use root_keys::api::{AesRootkeyType, Block};
 use core::ops::{Deref, DerefMut};
@@ -23,7 +22,10 @@ pub(crate) const MBBB_PAGES: usize = 10;
 pub(crate) const FSCB_PAGES: usize = 16;
 pub(crate) const INITIAL_BASIS_ALLOC: usize = 16;
 
+/// size of a physical page
 pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
+/// size of a virtual page -- after the AES encryption and journaling overhead is subtracted
+pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>();
 
 #[repr(C, packed)] // this can map directly into Flash
 pub(crate) struct StaticCryptoData {
@@ -48,7 +50,6 @@ pub(crate) struct PddbOs {
     spinor: spinor::Spinor,
     rootkeys: root_keys::RootKeys,
     pddb_mr: xous::MemoryRange,
-    trng: trng::Trng,
     /// page table base -- location in FLASH, offset from physical bottom of pddb_mr
     pt_phys_base: PageAlignedPa,
     /// local key store -- one page, to store exactly one key, used for the system basis.
@@ -68,15 +69,14 @@ pub(crate) struct PddbOs {
     fspace_log_addrs: Vec::<PageAlignedPa>,
     /// memoize the current target offset for the next log entry
     fspace_log_next_addr: Option<PhysAddr>,
-    /// The PDDB eats a lot of entropy. Keep a local pool of entropy, so we're not wasting a lot of
-    /// overhead passing messages to the TRNG.
-    e_cache: Vec::<u8>,
     /// a cached copy of the FPGA's DNA ID, used in the AAA records.
     dna: u64,
+    /// reference to a TrngPool object that's shared among all the hardware functions
+    entropy: Rc<RefCell<TrngPool>>,
 }
 
 impl PddbOs {
-    pub fn new() -> PddbOs {
+    pub fn new(trngpool: Rc<RefCell<TrngPool>>) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         let pddb = xous::syscall::map_memory(
             xous::MemoryAddress::new(xous::PDDB_LOC as usize),
@@ -91,16 +91,11 @@ impl PddbOs {
         let mbbb_phys_base = key_phys_base + PageAlignedPa::from(PAGE_SIZE);
         let fscb_phys_base = PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
 
-        let mut trng = trng::Trng::new(&xns).unwrap();
-        let mut cache: [u8; 8192] = [0; 8192];
-        trng.fill_bytes(&mut cache);
-
         let llio = llio::Llio::new(&xns).unwrap();
         PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
             pddb_mr: pddb,
-            trng,
             pt_phys_base: PageAlignedPa::from(0 as u32),
             key_phys_base,
             mbbb_phys_base,
@@ -111,8 +106,8 @@ impl PddbOs {
             fspace_cache: HashSet::<PhysPage>::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
             fspace_log_next_addr: None,
-            e_cache: cache.to_vec(),
             dna: llio.soc_dna().unwrap(),
+            entropy: trngpool,
         }
     }
 
@@ -196,43 +191,6 @@ impl PddbOs {
             self.system_basis_key = Some(system_key);
         }
     }
-    fn ensure_entropy(&mut self, amount: usize) {
-        if self.e_cache.len() < amount {
-            let mut cache: [u8; 8192] = [0; 8192];
-            self.trng.fill_bytes(&mut cache);
-            self.e_cache.extend_from_slice(&cache);
-        }
-    }
-    fn trng_cache_u8(&mut self) -> u8 {
-        self.ensure_entropy(1);
-        self.e_cache.pop().unwrap()
-    }
-    fn trng_cache_u32(&mut self) -> u32 {
-        self.ensure_entropy(4);
-        let ret = u32::from_le_bytes(self.e_cache[self.e_cache.len() - 4..].try_into().unwrap());
-        self.e_cache.truncate(self.e_cache.len() - 4);
-        ret
-    }
-    fn trng_cache_u64(&mut self) -> u64 {
-        self.ensure_entropy(8);
-        let ret = u64::from_le_bytes(self.e_cache[self.e_cache.len() - 8..].try_into().unwrap());
-        self.e_cache.truncate(self.e_cache.len() - 8);
-        ret
-    }
-    fn trng_cache_slice(&mut self, bucket: &mut [u8]) {
-        self.ensure_entropy(bucket.len());
-        for (src, dst) in self.e_cache.drain(
-            (self.e_cache.len() - bucket.len())..
-        ).zip(bucket.iter_mut()) {
-            *dst = src;
-        }
-    }
-    /// generates a 96-bit nonce using the CPRNG
-    pub fn nonce_gen(&mut self) -> [u8; size_of::<Nonce>()] {
-        let mut nonce: [u8; size_of::<Nonce>()] = [0; size_of::<Nonce>()];
-        self.trng_cache_slice(&mut nonce);
-        nonce
-    }
 
     /// Create fast_space AAD: name, version number, and FPGA ID.
     /// This data is "well known", and fixed for every device, but changes
@@ -257,7 +215,7 @@ impl PddbOs {
         if let Some(system_basis_key) = self.system_basis_key {
             let key = Key::from_slice(&system_basis_key);
             let cipher = Aes256GcmSiv::new(key);
-            let nonce_array = self.nonce_gen();
+            let nonce_array = self.entropy.borrow_mut().get_nonce();
             let nonce = Nonce::from_slice(&nonce_array);
             let fs_ser: &[u8] = fs.deref();
             assert!( ((fs_ser.len() + size_of::<Nonce>() + size_of::<Tag>()) & (PAGE_SIZE - 1)) == 0,
@@ -274,7 +232,7 @@ impl PddbOs {
             // determine which page we're going to write the ciphertext into
             let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
             log::info!("picking a random page out of {} pages for fscb", page_search_limit);
-            let dest_page = self.trng_cache_u32() % page_search_limit as u32;
+            let dest_page = self.entropy.borrow_mut().get_u32() % page_search_limit as u32;
             // atomicity of the FreeSpace structure is a bit of a tough topic. It's a fairly hefty structure,
             // that runs a risk of corruption as it's being written, if power is lost or the system crashes.
             // However, the guiding principle of this ordering is that it's better to have no FastSpace structure
@@ -350,7 +308,7 @@ impl PddbOs {
             } else {
                 // page is free, but we have no space in the pool.
                 // pick a random page from the pool, and replace it with the current page
-                let index = self.trng_cache_u32() as usize % free_pool.len();
+                let index = self.entropy.borrow_mut().get_u32() as usize % free_pool.len();
                 free_pool[index] = page_candidate;
             }
         }
@@ -362,7 +320,7 @@ impl PddbOs {
         // https://github.com/rust-random/rand/blob/0f4fc6b4c303696bd5f8765a375162ac7142b1df/src/seq/mod.rs#L586-L592
         for i in (1..free_pool.len()).rev() {
             // invariant: elements with index > i have been locked in place.
-            free_pool.swap(i, self.trng_cache_u32() as usize % (i+1));
+            free_pool.swap(i, self.entropy.borrow_mut().get_u32() as usize % (i+1));
         }
         log::info!("free_pool initial count: {}", free_pool.len());
 
@@ -520,7 +478,7 @@ impl PddbOs {
             if self.fspace_log_next_addr.is_none() {
                 if blank_pages.len() != 0 {
                     // pick a random page out of the blank pool (random for wear levelling)
-                    let random_index = self.trng_cache_u32() as usize % blank_pages.len();
+                    let random_index = self.entropy.borrow_mut().get_u32() as usize % blank_pages.len();
                     // set the next log address at an offset of one AES block in from the top.
                     self.fspace_log_next_addr = Some((blank_pages[random_index] + aes::BLOCK_SIZE) as PhysAddr);
                 } else {
@@ -575,7 +533,7 @@ impl PddbOs {
             // if we got to this point, we couldn't find a partially full page. Pull a random page from the blank page pool.
             if blank_pages.len() != 0 {
                 // pick a random page out of the blank pool (random for wear levelling)
-                let random_index = self.trng_cache_u32() as usize % blank_pages.len();
+                let random_index = self.entropy.borrow_mut().get_u32() as usize % blank_pages.len();
                 // set the next log address at an offset of one AES block in from the top.
                 self.fspace_log_next_addr = Some((blank_pages[random_index] + aes::BLOCK_SIZE) as PhysAddr);
                 true
@@ -607,7 +565,7 @@ impl PddbOs {
                     self.syskey_ensure();
                     if let Some(system_key) = self.system_basis_key {
                         let cipher = Aes256::new(GenericArray::from_slice(&system_key));
-                        let mut update = SpaceUpdate::new(self.trng_cache_u64(), ppc);
+                        let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
                         let mut block = Block::from_mut_slice(update.deref_mut());
                         cipher.encrypt_block(block);
                         let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
@@ -672,7 +630,7 @@ impl PddbOs {
     /// Basis have been unlocked, the function returns `true`. The other option is the user
     /// can decline to unlock all the Basis right now, cancelling out of the process, which will
     /// cause the requesting free space sweep to fail.
-    pub fn basis_request_unlock_all(&self) -> bool {
+    pub(crate) fn basis_request_unlock_all(&self) -> bool {
         // this function is a morass of UX code that has to be written. Let's save it until later,
         // once we've got some core functionality in the PDDB; or for testing, we could just "return true"
         // and YOLO it.
@@ -709,7 +667,7 @@ impl PddbOs {
         // step 2. fill in the page table with junk, which marks it as cryptographically empty
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
         for page in (0..size_of::<PageTableInFlash>()).step_by(PAGE_SIZE) {
-            self.trng_cache_slice(&mut temp);
+            self.entropy.borrow_mut().get_slice(&mut temp);
             self.patch_pagetable(&temp, page as u32);
         }
         if size_of::<PageTableInFlash>() & (PAGE_SIZE - 1) != 0 {
@@ -717,7 +675,7 @@ impl PddbOs {
             log::info!("Page table does not end on a page boundary. Handling trailing page case of {} bytes", remainder_start);
             let mut temp = Vec::<u8>::new();
             for _ in remainder_start..size_of::<PageTableInFlash>() {
-                temp.push(self.trng_cache_u8());
+                temp.push(self.entropy.borrow_mut().get_u8());
             }
             self.patch_pagetable(&temp, remainder_start as u32);
         }
@@ -729,7 +687,7 @@ impl PddbOs {
         //}
         assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
-        self.trng.fill_bytes(&mut system_basis_key);
+        self.entropy.borrow_mut().get_slice(&mut system_basis_key);
         let mut basis_key_enc: [u8; AES_KEYSIZE] = system_basis_key.clone();
         self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
         log::info!("sanity check: plaintext system basis key: {:x?}", basis_key_enc);
@@ -744,8 +702,8 @@ impl PddbOs {
         for (&src, dst) in basis_key_enc.iter().zip(crypto_keys.system_key.iter_mut()) {
             *dst = src;
         }
-        self.trng.fill_bytes(&mut crypto_keys.salt_base);
-        self.trng.fill_bytes(&mut crypto_keys.reserved);
+        self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
+        self.entropy.borrow_mut().get_slice(&mut crypto_keys.reserved);
         self.patch_keys(crypto_keys.deref(), 0);
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
@@ -767,7 +725,7 @@ impl PddbOs {
         // this is coded using "direct disk" offsets...under the assumption that we only ever really want to do this here, and
         // not re-use this routine elsewhere.
         for offset in (self.data_phys_base.as_usize()..PDDB_A_LEN).step_by(PAGE_SIZE) {
-            self.trng_cache_slice(&mut temp);
+            self.entropy.borrow_mut().get_slice(&mut temp);
             if (offset / PAGE_SIZE) % 64 == 0 {
                 log::info!("Crytpographic 'erase': {}/{}", offset, PDDB_A_LEN);
             }
@@ -785,62 +743,83 @@ impl PddbOs {
             *dst = src;
         }
         let mut basis_root = BasisRoot {
-            p_nonce: self.nonce_gen(),
             magic: api::PDDB_MAGIC,
             version: api::PDDB_VERSION,
-            journal_rev: 0,
             name,
             age: 0,
             num_dictionaries: 0,
-            prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * PAGE_SIZE),
+            prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * VPAGE_SIZE),
+            dict_ptr: None,
         };
-        // extract a slice-u8 that maps onto the basis_root record, allowing us to patch this into a FLASH page
-        let br_slice: &[u8] = basis_root.deref();
 
         // step 7. Create a hashmap for our reverse PTE, allocate sectors, and add it to the Pddb's cache
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
 
-        let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
-        for (virt_page, phys_addr) in (
-            self.data_phys_base.as_u32()..self.data_phys_base.as_u32() + basis_root.prealloc_open_end.as_u32()
-        ).step_by(PAGE_SIZE).enumerate() {
-            if let Some(alloc) = self.fast_space_alloc() {
-                let mut rpte = alloc.clone();
-                rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
-                rpte.set_valid(true);
-                basis_v2p_map.insert((virt_page * PAGE_SIZE) as VirtAddr, rpte);
+        { // this bit of code could be the start of an "allocate space for basis" routine, but we need to think about how overwritten pages are handled...
+            let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
+            for virt_page in 1..=basis_root.prealloc_open_end.as_vpage_num() {
+                if let Some(alloc) = self.fast_space_alloc() {
+                    let mut rpte = alloc.clone();
+                    rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
+                    rpte.set_valid(true);
+                    basis_v2p_map.insert(VirtAddr::new((virt_page * VPAGE_SIZE) as u64).unwrap(), rpte);
+                }
             }
+            self.v2p_map.insert(basis_root.name, basis_v2p_map);
         }
-        self.v2p_map.insert(basis_root.name, basis_v2p_map);
 
         // step 8. write the System basis to Flash, at the physical locations noted above
+        // extract a slice-u8 that maps onto the basis_root record, allowing us to patch this into a FLASH page
+        if let Some(syskey) = self.system_basis_key {
+            let key = Key::from_slice(&system_basis_key);
+            let cipher = Aes256GcmSiv::new(key);
+            let basis_encrypter = BasisEncrypter::new(
+                &basis_root,
+                &[],
+                self.dna,
+                cipher,
+                0,
+                Rc::clone(&self.entropy),
+            );
+            for ppage in basis_encrypter.into_iter() {
+                self.patch_data(&ppage, 0);
+            }
+        } else {
+            panic!("Inconsistent internal state");
+        }
 
-
-        //// LEFT OFF HERE -- rethink how this is done. ideally we are using the PTE mechanism to spread the Basis around.
-        /// 
-        /// 
+        /*
+        let br_slice: &[u8] = basis_root.deref();
+        // copy the basis contents
         let mut basis_ser = vec![];
         for &b in br_slice {
             basis_ser.push(b)
         }
+        // fill out any padding based on the pre-alloc space
         for _ in 0..basis_root.padding_count() {
             basis_ser.push(0)
         }
+
+        let basis = Basis::new(basis_root.deref(), &[]);
+        for vpage in basis {
+            log::info!("vpage: {:?}", vpage);
+        }
+
         // basis_ser can now be passed to an encryption function
         if let Some(system_basis_key) = self.system_basis_key {
             let key = Key::from_slice(&system_basis_key);
             let cipher = Aes256GcmSiv::new(key);
-            let nonce_array = self.nonce_gen();
+            let nonce_array = self.entropy.borrow_mut().get_nonce();
             let nonce = Nonce::from_slice(&nonce_array);
             let ciphertext = cipher.encrypt(nonce, &basis_ser[size_of::<Nonce>()..]);
 
             let ct_to_flash: &[u8] = ciphertext.as_ref().unwrap(); // this now contains the encrypted basis + 16-byte tag at the very end
-            assert!( ( ct_to_flash.len() + basis_root.p_nonce.len()) & (PAGE_SIZE - 1) == 0, "Padding failure during basis serialization!");
+            // FIX THIS assert!( ( ct_to_flash.len() + basis_root.p_nonce.len()) & (PAGE_SIZE - 1) == 0, "Padding failure during basis serialization!");
             // we're now ready to write the encrypted basis to Flash.
             self.patch_data(&[&nonce_array, ct_to_flash].concat(), 0);
         } else {
             panic!("invalid state"); // we should never hit this because we created the key earlier in the same routine.
-        }
+        }*/
 
         // step 8. generate & write initial page table entries
         // page table organization:

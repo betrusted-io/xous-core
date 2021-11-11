@@ -19,7 +19,7 @@ impl Default for PtFlags {
     fn default() -> PtFlags {PtFlags::INVALID}
 }
 
-/// A Page Table Entry. Must be equual in length to one AES block size (128 bits).
+/// A Page Table Entry. Must be equal in length to one AES block size (128 bits).
 /// This is stored in the FLASH itself, so size is not as much of a constraint.
 ///
 /// Contains the address map of the corresponding entry,
