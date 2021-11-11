@@ -326,6 +326,27 @@ const PDDB_BACKING_SIZE: usize = 0x4000_0000;
 ///   The special case of long run's of 1's (more than 32 bits in a row) is checked during the page table scan.
 ///   If a long run of 1's is detected, then a suspected corrupted page table update is flagged, and for that page the data
 ///   is pulled from the mbbb record.
+///
+/// Precursor's Implementation-Specific Flash Memory Organization:
+///
+///   offset from |
+///   pt_phys_base|  contents  (example for total PDDB len of 0x6f8_0000 or 111 MiB)
+///   ------------|---------------------------------------------------
+///   0x0000_0000 |  virtual map for page at (0x0000 + data_phys_base)
+///   0x0000_0010 |  virtual map for page at (0x1000 + data_phys_base)
+///   0x0000_0020 |  virtual map for page at (0x2000 + data_phys_base)
+///    ...
+///   0x0006_F7F0 |  virtual map for page at (0x06F7_F000 + data_phys_base)
+///   0x0006_F800 |  unused
+///    ...
+///   0x0007_0000 |  key page
+///    ...
+///   0x0007_1000 |  mbbb start (example of 10 pages)
+///    ...
+///   0x0007_B000 |  fscb start (example of 10 pages)
+///    ...
+///   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
+
 
 #[xous::xous_main]
 fn xmain() -> ! {

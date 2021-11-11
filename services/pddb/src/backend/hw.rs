@@ -803,26 +803,17 @@ impl PddbOs {
         }
 
         // step 9. generate & write initial page table entries
-        // page table organization:
-        //
-        //   offset from |
-        //   pt_phys_base|  contents  (example for total PDDB len of 0x6f8_0000 or 111 MiB)
-        //   ------------|---------------------------------------------------
-        //   0x0000_0000 |  virtual map for page at (0x0000 + data_phys_base)
-        //   0x0000_0010 |  virtual map for page at (0x1000 + data_phys_base)
-        //   0x0000_0020 |  virtual map for page at (0x2000 + data_phys_base)
-        //    ...
-        //   0x0006_F7F0 |  virtual map for page at (0x06F7_F000 + data_phys_base)
-        //   0x0006_F800 |  unused
-        //    ...
-        //   0x0007_0000 |  key page
-        //    ...
-        //   0x0007_1000 |  mbbb start (example of 10 pages)
-        //    ...
-        //   0x0007_B000 |  fscb start (example of 10 pages)
-        //    ...
-        //   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
-
+        if let Some(system_key) = self.system_basis_key {
+            let cipher = Aes256::new(GenericArray::from_slice(&system_key));
+            if let Some(basis_v2p_map) = self.v2p_map.get(&basis_root.name) {
+                for (&virt, &phys) in basis_v2p_map.into_iter() {
+                    let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
+                    let mut block = Block::from_mut_slice(pte.deref_mut());
+                    cipher.encrypt_block(block);
+                    self.patch_pagetable(&block, phys.page_number() * aes::BLOCK_SIZE as u32);
+                }
+            }
+        }
 
         Ok(())
     }

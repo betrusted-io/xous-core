@@ -40,8 +40,9 @@ impl From<SpaceState> for u8 {
     }
 }
 
-pub(crate) const FASTSPACE_FREE_POOL_LEN: usize = ((PAGE_SIZE * FASTSPACE_PAGES)
-    - (size_of::<Nonce>() + size_of::<Tag>())) / core::mem::size_of::<PhysPage>();
+pub(crate) const FASTSPACE_FREE_POOL_LEN: usize =
+   ((PAGE_SIZE * FASTSPACE_PAGES) - (size_of::<Nonce>() + size_of::<Tag>()))
+   / core::mem::size_of::<PhysPage>();
 /// FastSpace tracks a limited set of physical pages
 /// An optimal implementation of this would fill whole pages with the free_pool array.
 /// This record is meant to be updated rarely, and atomically, in a make-before-break fashion:
@@ -157,6 +158,6 @@ mod tests {
     use super::*;
     #[test]
     fn test_fast_space_size() {
-        assert!(core::mem::size_of::<FastSpaceInFlash>() & !(PAGE_SIZE - 1) == 0, "FastSpace is not exactly a multiple of one page in size");
+        assert!(core::mem::size_of::<FastSpaceInFlash>() & (PAGE_SIZE - 1) == 0, "FastSpaceInFlash is not exactly a multiple of one page in size");
     }
 }

@@ -87,7 +87,7 @@ mod tests {
         assert!(core::mem::size_of::<PddbBuf>() == 4096, "PddBuf record has the wrong size");
     }
     fn test_pddb_len() {
-        assert!(PDDB_A_LEN <= xous::PDDB_LEN, "PDDB_A_LEN is larger than the maximum extents available in the hardware");
+        assert!(PDDB_A_LEN <= xous::PDDB_LEN as usize, "PDDB_A_LEN is larger than the maximum extents available in the hardware");
     }
 }
 impl PddbBuf {

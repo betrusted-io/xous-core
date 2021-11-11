@@ -14,8 +14,9 @@ pub(crate) use murmur3::*;
 mod trngpool;
 pub(crate) use trngpool::*;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+//#[cfg(any(target_os = "none", target_os = "xous"))]
 mod hw;
 pub(crate) use hw::*;
+
 
 // TODO: the alternative back-end PddbOs structures for hosted mode.

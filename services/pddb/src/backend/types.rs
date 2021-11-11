@@ -167,7 +167,7 @@ mod tests {
     #[test]
     /// PAGE_SIZE is required to be a power of two. 0x1000 -> 0x1000 - 1 = 0xFFF, which forms the bitmasks.
     fn test_page_size() {
-        assert!(PAGE_SIZE & !(PAGE_SIZE - 1) == 0, "PAGE_SIZE is not a power of two!");
+        assert!(PAGE_SIZE & (PAGE_SIZE - 1) == 0, "PAGE_SIZE is not a power of two!");
     }
     /// This test exists because nothing in the bitfield spec explicitly requires that a true maps to a 1.
     /// In fact a lot of code would work just fine if you mapped true to 0 and false to 1: if you're just using

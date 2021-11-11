@@ -1,6 +1,10 @@
-use super::PAGE_SIZE;
+use super::{PAGE_SIZE, TrngPool, VirtAddr, murmur3_32};
 use core::mem::size_of;
 use aes_gcm_siv::{Nonce, Tag};
+use std::rc::Rc;
+use core::cell::RefCell;
+use core::ops::{Deref, DerefMut};
+use core::convert::TryInto;
 
 use bitflags::bitflags;
 
@@ -46,6 +50,41 @@ pub(crate) struct Pte {
     /// 32-bit "weak" checksum, used only for quick scans of the PTE to determine a coarse "in" or "out" classifier
     /// checksum is computed on all of the bits prior, so checksum(pddb_addr, flags, nonce)
     checksum: [u8; 4],
+}
+impl Pte {
+    pub fn new(va: VirtAddr, flags: PtFlags, entropy: Rc<RefCell<TrngPool>>) -> Self {
+        let nonce_u32 = entropy.borrow_mut().get_u32();
+        let mut pte = Pte {
+            pddb_addr: va.get().to_le_bytes()[..6].try_into().unwrap(),
+            flags,
+            reserved: 0,
+            nonce: nonce_u32.to_le_bytes(),
+            checksum: [0; 4],
+        };
+        let mut pte_data = pte.deref();
+        let checksum = murmur3_32(&pte_data[..12], nonce_u32);
+        pte.checksum = checksum.to_le_bytes();
+
+        pte
+    }
+}
+impl Deref for Pte {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const Pte as *const u8, core::mem::size_of::<Pte>())
+                as &[u8]
+        }
+    }
+}
+
+impl DerefMut for Pte {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut Pte as *mut u8, core::mem::size_of::<Pte>())
+                as &mut [u8]
+        }
+    }
 }
 
 pub const PDDB_SIZE_PAGES: usize = crate::PDDB_A_LEN as usize / PAGE_SIZE;

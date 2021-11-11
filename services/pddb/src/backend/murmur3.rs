@@ -60,7 +60,7 @@ fn calc_k(k: u32) -> u32 {
 mod tests {
     use super::*;
     struct Result {
-        slice: &'static [u32],
+        slice: &'static [u8],
         hash_32: u32,
     }
 
