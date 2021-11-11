@@ -364,7 +364,10 @@ fn xmain() -> ! {
     let mut entropy = Rc::new(RefCell::new(TrngPool::new()));
 
     // OS-specific PDDB driver
-    let pddb_os = PddbOs::new(Rc::clone(&entropy));
+    let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+    log::info!("Initializing disk...");
+    pddb_os.pddb_format().unwrap();
+    log::info!("Done initializing disk");
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
