@@ -4,6 +4,9 @@ use crate::api::*;
 use std::sync::Once;
 use std::mem::MaybeUninit;
 
+use std::fs::File;
+use std::io::prelude::*;
+
 // This is considered bad practice for Rust to use a global singleton.
 // However, this hack puts the burden of emulation on the emulator, while
 // keeping the production code clean (otherwise we'd have large sections
@@ -46,6 +49,20 @@ impl EmuStorage {
     }
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         flashmem().memory.as_mut_slice()
+    }
+    pub fn dump_fs(&self) {
+        let mut f = File::create("../pddb.bin").unwrap();
+        f.write_all(flashmem().memory.as_slice()).unwrap();
+        f.flush().unwrap();
+    }
+    pub fn dump_keys(&self, known_keys: &[[u8; 32]]) {
+        //new().write(true).truncate(true).open
+        let mut f = File::create("../pddb.key").unwrap();
+        f.write_all(&(known_keys.len() as u32).to_le_bytes()).unwrap();
+        for key in known_keys {
+            f.write_all(key).unwrap();
+        }
+        f.flush().unwrap();
     }
 }
 

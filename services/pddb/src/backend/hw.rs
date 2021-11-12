@@ -147,6 +147,18 @@ impl PddbOs {
         ret
     }
 
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pub fn dbg_dump(&self) {
+        self.pddb_mr.dump_fs();
+        if let Some(key) = self.system_basis_key {
+            self.pddb_mr.dump_keys(&[key]);
+        }
+    }
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    pub fn dbg_dump(&self) {
+        // placeholder
+    }
+
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
     fn patch_data(&self, data: &[u8], offset: u32) {

@@ -371,6 +371,9 @@ fn xmain() -> ! {
     pddb_os.pddb_format().unwrap();
     log::info!("Done initializing disk");
 
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pddb_os.dbg_dump();
+
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
     let susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
