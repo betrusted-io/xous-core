@@ -61,7 +61,7 @@ impl Pte {
             nonce: nonce_u32.to_le_bytes(),
             checksum: [0; 4],
         };
-        let mut pte_data = pte.deref();
+        let pte_data = pte.deref();
         let checksum = murmur3_32(&pte_data[..12], nonce_u32);
         pte.checksum = checksum.to_le_bytes();
 

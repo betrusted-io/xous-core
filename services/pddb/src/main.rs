@@ -134,19 +134,7 @@ use std::rc::Rc;
 ///    of closure callback is an additional feature to the typical Rust File interface.
 ///  - If the client attempts to read or write to any keys that span a Basis modification,
 ///    the now-ambiguous key operation will return a `BrokenPipe` error to the caller.
-
-
-/// This constant maps onto a region that's "unused" by Xous, and claimable by user
-/// processes.
-const PDDB_BACKING_BASE: usize = 0x8000_0000;
-/// This designates the largest contiguous extent that we could allocate for a file.
-/// The backing isn't allocated -- it is merely reserved. Accesses to the backing trigger
-/// page faults that are handled by the PDDB, and just the pages actively being dereferenced is
-/// swapped into physical memory on demand. This does put a pretty hard upper limit on file sizes
-/// on a 32-bit system, but PDDB is coded such that we could extend to a 64-bit system and
-/// increase this limit my changing the constants here.
-const PDDB_BACKING_SIZE: usize = 0x4000_0000;
-
+///
 /// General flash->key structure
 ///
 /// The basic unit of memory is a page (4k). Keys shorter than 4k will be packed into a single
@@ -348,10 +336,23 @@ const PDDB_BACKING_SIZE: usize = 0x4000_0000;
 ///   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
 
 
+/*
+/// This constant maps onto a region that's "unused" by Xous, and claimable by user
+/// processes.
+const PDDB_BACKING_BASE: usize = 0x8000_0000;
+/// This designates the largest contiguous extent that we could allocate for a file.
+/// The backing isn't allocated -- it is merely reserved. Accesses to the backing trigger
+/// page faults that are handled by the PDDB, and just the pages actively being dereferenced is
+/// swapped into physical memory on demand. This does put a pretty hard upper limit on file sizes
+/// on a 32-bit system, but PDDB is coded such that we could extend to a 64-bit system and
+/// increase this limit my changing the constants here.
+const PDDB_BACKING_SIZE: usize = 0x4000_0000;
+*/
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -361,9 +362,10 @@ fn xmain() -> ! {
     log::trace!("ready to accept requests");
 
     // shared entropy cache across all process-local services (it's more efficient to request entropy in blocks from the TRNG)
-    let mut entropy = Rc::new(RefCell::new(TrngPool::new()));
+    let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
     // OS-specific PDDB driver
+    log::info!("creating PddbOs structure");
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
     log::info!("Initializing disk...");
     pddb_os.pddb_format().unwrap();
@@ -371,7 +373,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     loop {
         let msg = xous::receive_message(pddb_sid).unwrap();

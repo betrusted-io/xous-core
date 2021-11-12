@@ -59,6 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "oqc-test",
         "net",
         "dns",
+        "pddb",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -113,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "com",
         "susres",
     ];
-    let pddb_dev_pkgs = [
+    let pddb_dev_pkgs = [ // just for checking compilation
         "ticktimer-server",
         "log-server",
         "susres",
@@ -121,6 +122,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "trng",
         "pddb",
         "sha2",
+        /*
+        "llio",
+        "root-keys",
+        "jtag",
+        "rtc",
+        "com",
+        "gam",
+        "graphics-server",
+        "keyboard",
+        "ime-frontend",
+        "ime-plugin-shell",
+        "status",
+        */
     ];
 
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];

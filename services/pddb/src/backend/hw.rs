@@ -3,12 +3,11 @@ use std::convert::TryInto;
 use crate::*;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
-use aes::Aes256;
-use aes::cipher::{BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
-use root_keys::api::{AesRootkeyType, Block};
+use aes::{Aes256, Block};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
+use root_keys::api::AesRootkeyType;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
-use core::convert::TryFrom;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -46,10 +45,22 @@ impl Deref for StaticCryptoData {
     }
 }
 
+// emulated
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+type EmuMemoryRange = EmuStorage;
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+type EmuSpinor = HostedSpinor;
+
+// native hardware
+#[cfg(any(target_os = "none", target_os = "xous"))]
+type EmuMemoryRange = xous::MemoryRange;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+type EmuSpinor = spinor::Spinor;
+
 pub(crate) struct PddbOs {
-    spinor: spinor::Spinor,
+    spinor: EmuSpinor,
     rootkeys: root_keys::RootKeys,
-    pddb_mr: xous::MemoryRange,
+    pddb_mr: EmuMemoryRange,
     /// page table base -- location in FLASH, offset from physical bottom of pddb_mr
     pt_phys_base: PageAlignedPa,
     /// local key store -- one page, to store exactly one key, used for the system basis.
@@ -78,6 +89,7 @@ pub(crate) struct PddbOs {
 impl PddbOs {
     pub fn new(trngpool: Rc<RefCell<TrngPool>>) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
+        #[cfg(any(target_os = "none", target_os = "xous"))]
         let pddb = xous::syscall::map_memory(
             xous::MemoryAddress::new(xous::PDDB_LOC as usize),
             None,
@@ -92,7 +104,9 @@ impl PddbOs {
         let fscb_phys_base = PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
 
         let llio = llio::Llio::new(&xns).unwrap();
-        PddbOs {
+        // native hardware
+        #[cfg(any(target_os = "none", target_os = "xous"))]
+        let ret = PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
             pddb_mr: pddb,
@@ -108,12 +122,35 @@ impl PddbOs {
             fspace_log_next_addr: None,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
-        }
+        };
+        // emulated
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        let ret = {
+            PddbOs {
+                spinor: HostedSpinor::new(),
+                rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
+                pddb_mr: EmuStorage::new(),
+                pt_phys_base: PageAlignedPa::from(0 as u32),
+                key_phys_base,
+                mbbb_phys_base,
+                fscb_phys_base,
+                data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
+                system_basis_key: None,
+                v2p_map: HashMap::<BasisRootName, HashMap<VirtAddr, PhysPage>>::new(),
+                fspace_cache: HashSet::<PhysPage>::new(),
+                fspace_log_addrs: Vec::<PageAlignedPa>::new(),
+                fspace_log_next_addr: None,
+                dna: llio.soc_dna().unwrap(),
+                entropy: trngpool,
+            }
+        };
+        ret
     }
 
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
     fn patch_data(&self, data: &[u8], offset: u32) {
+        log::info!("patch offset: {:x} len: {:x}", offset, data.len());
         assert!(data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(), "attempt to store past disk boundary");
         self.spinor.patch(
             self.pddb_mr.as_slice(),
@@ -128,7 +165,7 @@ impl PddbOs {
             self.pddb_mr.as_slice(),
             xous::PDDB_LOC,
             &data,
-            offset,
+            self.pt_phys_base.as_u32() + offset,
         ).expect("couldn't write to page table");
     }
     fn patch_keys(&self, data: &[u8], offset: u32) {
@@ -169,6 +206,7 @@ impl PddbOs {
     }
     /// takes the key and writes it with zero, using hard pointer math and a compiler fence to ensure
     /// the wipe isn't optimized out.
+    #[allow(dead_code)]
     fn syskey_erase(&mut self) {
         if let Some(mut key) = self.system_basis_key.take() {
             let b = key.as_mut_ptr();
@@ -187,7 +225,9 @@ impl PddbOs {
             for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
                 *dst = src;
             }
-            self.rootkeys.decrypt_block(Block::from_mut_slice(&mut system_key));
+            for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
+                self.rootkeys.decrypt_block(block.try_into().unwrap());
+            }
             self.system_basis_key = Some(system_key);
         }
     }
@@ -293,7 +333,7 @@ impl PddbOs {
         // addresses.
         let mut min_used_page = page_heap.pop();
         // consider every page
-        for page_candidate in 0..PDDB_A_LEN / PAGE_SIZE {
+        for page_candidate in 0..(PDDB_A_LEN - self.data_phys_base.as_usize()) / PAGE_SIZE {
             // if the page is used, skip it.
             if let Some(Reverse(mp)) = min_used_page {
                 if page_candidate == mp as usize {
@@ -390,16 +430,16 @@ impl PddbOs {
                 } else {
                     // this page (and the ones immediately afterward) "should" contain the FastSpace encrypted record
                     if fscb_pages == 0 {
-                        let mut fscb_buf = [0; FSCB_PAGES * PAGE_SIZE - size_of::<Nonce>()];
+                        let mut fscb_buf = [0; FASTSPACE_PAGES * PAGE_SIZE - size_of::<Nonce>()];
                         // copy the encrypted data to the decryption buffer
                         for (&src, dst) in
-                        fscb_slice[page_start + size_of::<Nonce>() .. page_start + size_of::<Nonce>() + FSCB_PAGES * PAGE_SIZE]
+                        fscb_slice[page_start + size_of::<Nonce>() .. page_start + FASTSPACE_PAGES * PAGE_SIZE]
                         .iter().zip(fscb_buf.iter_mut()) {
                             *dst = src;
                         }
                         let mut aad = Vec::<u8>::new();
                         self.fast_space_aad(&mut aad);
-                        let mut payload = Payload {
+                        let payload = Payload {
                             msg: &fscb_buf,
                             aad: &aad,
                         };
@@ -407,6 +447,8 @@ impl PddbOs {
                         let cipher = Aes256GcmSiv::new(key);
                         match cipher.decrypt(Nonce::from_slice(&fscb_slice[page_start..page_start + size_of::<Nonce>()]), payload) {
                             Ok(msg) => {
+                                log::info!("decrypted: {}, FastSpace size: {}", msg.len(), size_of::<FastSpace>());
+                                assert!(msg.len() == size_of::<FastSpace>());
                                 // payload now contains the decrypted data, and the "msg" return field is truncated to the right length
                                 // we now map the FastSpace structure onto the payload using an unsafe operation.
                                 let fs_ptr = (&msg).as_ptr() as *const FastSpace;
@@ -426,7 +468,6 @@ impl PddbOs {
                     fscb_pages += 1;
                 }
             }
-            assert!(fscb_pages == size_of::<FastSpace>());
 
             // 2. visit the update_page_addrs and modify the fspace_cache accordingly.
             let cipher = Aes256::new(GenericArray::from_slice(&system_key));
@@ -567,7 +608,7 @@ impl PddbOs {
                         let cipher = Aes256::new(GenericArray::from_slice(&system_key));
                         let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
                         let mut block = Block::from_mut_slice(update.deref_mut());
-                        cipher.encrypt_block(block);
+                        cipher.encrypt_block(&mut block);
                         let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
                         self.patch_fscb(&block, log_addr);
                         let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
@@ -688,18 +729,18 @@ impl PddbOs {
         assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         self.entropy.borrow_mut().get_slice(&mut system_basis_key);
-        let mut basis_key_enc: [u8; AES_KEYSIZE] = system_basis_key.clone();
+        let mut basis_key_aes: [u8; AES_KEYSIZE] = system_basis_key.clone();
         self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
-        log::info!("sanity check: plaintext system basis key: {:x?}", basis_key_enc);
-        self.rootkeys.encrypt_block(Block::from_mut_slice(&mut basis_key_enc));
-        log::info!("sanity check: encrypted system basis key: {:x?}", basis_key_enc);
+        for block in basis_key_aes.chunks_mut(aes::BLOCK_SIZE) {
+            self.rootkeys.encrypt_block(block.try_into().unwrap());
+        }
         let mut crypto_keys = StaticCryptoData {
             system_key: [0; AES_KEYSIZE],
             salt_base: [0; 2048],
             reserved: [0; 2016],
         };
         // copy the encrypted key into the data structure for commit to Flash
-        for (&src, dst) in basis_key_enc.iter().zip(crypto_keys.system_key.iter_mut()) {
+        for (&src, dst) in basis_key_aes.iter().zip(crypto_keys.system_key.iter_mut()) {
             *dst = src;
         }
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
@@ -742,7 +783,7 @@ impl PddbOs {
         for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
             *dst = src;
         }
-        let mut basis_root = BasisRoot {
+        let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
             version: api::PDDB_VERSION,
             name,
@@ -751,6 +792,8 @@ impl PddbOs {
             prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * VPAGE_SIZE),
             dict_ptr: None,
         };
+        log::info!("prealloc_open_end: {:x?}", basis_root.prealloc_open_end);
+        log::info!("prealloc_open_end as vpage: {:x?}", basis_root.prealloc_open_end.as_vpage_num());
 
         // step 7. Create a hashmap for our reverse PTE, allocate sectors, and add it to the Pddb's cache
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
@@ -762,15 +805,20 @@ impl PddbOs {
                     let mut rpte = alloc.clone();
                     rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
                     rpte.set_valid(true);
-                    basis_v2p_map.insert(VirtAddr::new((virt_page * VPAGE_SIZE) as u64).unwrap(), rpte);
+                    let va = VirtAddr::new((virt_page * VPAGE_SIZE) as u64).unwrap();
+                    log::info!("adding basis va {:x?} with pte {:?}", va, rpte);
+                    basis_v2p_map.insert(va, rpte);
                 }
             }
+            //for (&k, &v) in basis_v2p_map.iter() {
+            //    log::info!("basis_v2p_map va: {:x?} pp: {:x?}", k, v);
+            //}
             self.v2p_map.insert(basis_root.name, basis_v2p_map);
         }
 
         // step 8. write the System basis to Flash, at the physical locations noted above
         if let Some(syskey) = self.system_basis_key {
-            let key = Key::from_slice(&system_basis_key);
+            let key = Key::from_slice(&syskey);
             let cipher = Aes256GcmSiv::new(key);
             let basis_encryptor = BasisEncryptor::new(
                 &basis_root,
@@ -781,6 +829,9 @@ impl PddbOs {
                 Rc::clone(&self.entropy),
             );
             if let Some(basis_v2p_map) = self.v2p_map.get(&basis_root.name) {
+                for (&k, &v) in basis_v2p_map.iter() {
+                    log::info!("basis_v2p_map retrieved va: {:x?} pp: {:x?}", k, v);
+                }
                 for (vpage_no, ppage_data) in basis_encryptor.into_iter().enumerate() {
                     let vaddr = VirtAddr::new( ((vpage_no + 1) * VPAGE_SIZE) as u64 ).unwrap();
                     match basis_v2p_map.get(&vaddr) {
@@ -809,7 +860,7 @@ impl PddbOs {
                 for (&virt, &phys) in basis_v2p_map.into_iter() {
                     let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
                     let mut block = Block::from_mut_slice(pte.deref_mut());
-                    cipher.encrypt_block(block);
+                    cipher.encrypt_block(&mut block);
                     self.patch_pagetable(&block, phys.page_number() * aes::BLOCK_SIZE as u32);
                 }
             }

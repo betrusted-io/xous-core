@@ -1,6 +1,6 @@
 use core::mem::size_of;
 use aes_gcm_siv::Nonce;
-use rand_core::{CryptoRng, RngCore};
+use rand_core::RngCore;
 use std::convert::TryInto;
 
 /// Crate-shared resource for TRNGs.

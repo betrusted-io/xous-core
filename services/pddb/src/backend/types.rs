@@ -24,7 +24,7 @@ pub(crate) const PHYS_PAGE_JOURNAL_MAX: u8 = 15;
 pub type PhysAddr = u32;
 #[cfg(feature = "u64_pa")]
 pub type PhysAddr = u64;
-const BITFIELD_PAGE_WIDTH: usize = (core::mem::size_of::<PhysAddr>() * 8 - 12);
+const BITFIELD_PAGE_WIDTH: usize = core::mem::size_of::<PhysAddr>() * 8 - 12;
 // Physical page information, coded as a bitfield, because space is a premium!
 bitfield! {
     #[derive(Copy, Clone, Eq)]
@@ -65,7 +65,11 @@ pub type JournalType = u32;
 /// in packed disk representations.
 pub type VirtAddr = NonZeroU64;
 
-#[derive(Copy, Clone)]
+/// A PageAlignedVa is guaranteed to be an address that's at least big enough to hold
+/// the constructing address. Thus it will tend to "round up" to the nearest page,
+/// unless the given address happens to be exactly one page in size.
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct PageAlignedVa(VirtAddr);
 impl PageAlignedVa {
     pub(crate) fn as_u32(&self) -> u32 {
@@ -86,9 +90,9 @@ impl PageAlignedVa {
 impl From<u64> for PageAlignedVa {
     fn from(arg: u64) -> Self {
         if arg % VPAGE_SIZE as u64 == 0 {
-            PageAlignedVa(VirtAddr::new(arg / VPAGE_SIZE as u64).unwrap())
+            PageAlignedVa(VirtAddr::new(arg as u64).unwrap())
         } else {
-            PageAlignedVa(VirtAddr::new(arg / VPAGE_SIZE as u64 + VPAGE_SIZE as u64).unwrap())
+            PageAlignedVa(VirtAddr::new((arg as u64 / VPAGE_SIZE as u64 + 1) * VPAGE_SIZE as u64).unwrap())
         }
     }
 }
@@ -99,18 +103,18 @@ impl From<PageAlignedPa> for PageAlignedVa {
 impl From<u32> for PageAlignedVa {
     fn from(arg: u32) -> Self {
         if arg as usize % VPAGE_SIZE == 0 {
-            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64).unwrap())
+            PageAlignedVa(VirtAddr::new(arg as u64).unwrap())
         } else {
-            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64 + VPAGE_SIZE as u64).unwrap())
+            PageAlignedVa(VirtAddr::new((arg as u64 / VPAGE_SIZE as u64 + 1) * VPAGE_SIZE as u64).unwrap())
         }
     }
 }
 impl From<usize> for PageAlignedVa {
     fn from(arg: usize) -> Self {
         if arg % VPAGE_SIZE == 0 {
-            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64).unwrap())
+            PageAlignedVa(VirtAddr::new(arg as u64).unwrap())
         } else {
-            PageAlignedVa(VirtAddr::new(arg as u64 / VPAGE_SIZE as u64 + VPAGE_SIZE as u64).unwrap())
+            PageAlignedVa(VirtAddr::new((arg as u64 / VPAGE_SIZE as u64 + 1) * VPAGE_SIZE as u64).unwrap())
         }
     }
 }
@@ -123,6 +127,7 @@ impl Add for PageAlignedVa {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Copy, Clone)]
 pub(crate) struct PageAlignedPa(PhysAddr);
 impl PageAlignedPa {

@@ -1,12 +1,18 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
+#[allow(dead_code)]
 pub(crate) const PDDB_MAX_BASIS_NAME_LEN: usize = 64;
+#[allow(dead_code)]
 pub(crate) const PDDB_MAX_DICT_NAME_LEN: usize = 64;
+#[allow(dead_code)]
 pub(crate) const PDDB_MAX_KEY_NAME_LEN: usize = 128;
+#[allow(dead_code)]
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
+#[allow(dead_code)]
 pub(crate) const PDDB_VERSION: u16 = 0x00_00;
 /// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing
+#[allow(dead_code)]
 pub(crate) const PDDB_A_LEN: usize = 16 * 1024 * 1024;
 
 /// A number between (0, 1] that defines how many of the "truly free" pages we
@@ -79,6 +85,12 @@ pub(crate) struct PddbBuf {
     pub(crate) reserved: u8,
     pub(crate) data: [u8; 4080],
 }
+impl PddbBuf {
+    pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
+        // this transforms the slice [u8] into a PddbBuf ref.
+        unsafe {core::mem::transmute::<*mut u8, &mut PddbBuf>(slice.as_mut_ptr()) }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,11 +100,5 @@ mod tests {
     }
     fn test_pddb_len() {
         assert!(PDDB_A_LEN <= xous::PDDB_LEN as usize, "PDDB_A_LEN is larger than the maximum extents available in the hardware");
-    }
-}
-impl PddbBuf {
-    pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
-        // this transforms the slice [u8] into a PddbBuf ref.
-        unsafe {core::mem::transmute::<*mut u8, &mut PddbBuf>(slice.as_mut_ptr()) }
     }
 }

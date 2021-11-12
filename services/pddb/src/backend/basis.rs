@@ -64,7 +64,6 @@ impl<'a> IntoIterator for BasisEncryptor<'a> {
     type Item=[u8; PAGE_SIZE];
     type IntoIter=BasisEncryptorIter<'a>;
     fn into_iter(self) -> BasisEncryptorIter<'a> {
-        let journal_bytes = self.journal_rev.to_le_bytes();
         BasisEncryptorIter {
             basis_data: self,
             vaddr: 0,
@@ -76,11 +75,11 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
 
     fn next<'s>(&'s mut self) -> Option<Self::Item> {
         if self.vaddr < self.basis_data.root.prealloc_open_end.as_usize() {
-            let mut block = [0 as u8; VPAGE_SIZE];
-            let mut block_iter = block.iter_mut();
+            let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+            let block_iter = block.iter_mut();
 
             let journal_bytes = self.basis_data.journal_rev.to_le_bytes();
-            let mut slice_iter =
+            let slice_iter =
             journal_bytes.iter() // journal rev
                 .chain(self.basis_data.root.deref().iter() // basis
                     // .chain(self.dicts.as_slice()  // dictionary
@@ -108,6 +107,7 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
                 }
             ).unwrap();
             self.vaddr += VPAGE_SIZE;
+            //log::info!("nonce: {} ct: {} total: {}", nonce_array.len(), ciphertext.deref().len(), nonce_array.len() + ciphertext.deref().len());
             Some([&nonce_array, ciphertext.deref()].concat().try_into().unwrap())
         } else {
             None
@@ -145,6 +145,7 @@ pub(crate) struct BasisRoot {
     // pad: [u8],    // padding out to the next 4096-byte block less 16 bytes
     // p_tag: [u8; 16], // auth tag output of the AES-GCM-SIV
 }
+/* // this computation got supplanted by prealloc_open_end -- basis is always laid out linearly in RAM, so we just allocate a straight section of RAM based off of that.
 impl BasisRoot {
     /// Compute the number of memory pages consumed by the BasisRoot structure itself.
     /// This is the size of BasisRoot, plus the dictionaries allocated within the Basis.
@@ -170,7 +171,7 @@ impl BasisRoot {
          + ((self.num_dictionaries as usize) * core::mem::size_of::<DictPointer>())
         )
     }
-}
+}*/
 impl Deref for BasisRoot {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
@@ -198,12 +199,13 @@ pub(crate) struct DictPointer {
     addr: u64, // the virtual address of the dictionary
 }
 
+/* this is supplanted by the FSCB
 /// FreeSpace address space is in the virtual memory space of the containing Basis
 #[derive(Copy, Clone)]
 pub(crate) struct FreeSpace {
     start: u64,
     len: NonZeroU64,
-}
+}*/
 
 /// Typically individual dictionaries start out life having their own 4k-page, but they
 /// can be compacted together if they seem to be static/non-changing and we need more space.
