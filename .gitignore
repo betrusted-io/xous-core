@@ -12,3 +12,7 @@
 
 # local utility shellscripts
 update-precursors.sh
+
+# pddb debug files
+tools/pddb.bin
+tools/pddb.key

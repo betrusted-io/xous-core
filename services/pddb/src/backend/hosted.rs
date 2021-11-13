@@ -51,13 +51,13 @@ impl EmuStorage {
         flashmem().memory.as_mut_slice()
     }
     pub fn dump_fs(&self) {
-        let mut f = File::create("../pddb.bin").unwrap();
+        let mut f = File::create("../tools/pddb.bin").unwrap();
         f.write_all(flashmem().memory.as_slice()).unwrap();
         f.flush().unwrap();
     }
     pub fn dump_keys(&self, known_keys: &[[u8; 32]]) {
         //new().write(true).truncate(true).open
-        let mut f = File::create("../pddb.key").unwrap();
+        let mut f = File::create("../tools/pddb.key").unwrap();
         f.write_all(&(known_keys.len() as u32).to_le_bytes()).unwrap();
         for key in known_keys {
             f.write_all(key).unwrap();
