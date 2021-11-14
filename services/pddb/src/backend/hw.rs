@@ -150,9 +150,21 @@ impl PddbOs {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn dbg_dump(&self) {
         self.pddb_mr.dump_fs();
+        let mut export = Vec::<KeyExport>::new();
         if let Some(key) = self.system_basis_key {
-            self.pddb_mr.dump_keys(&[key]);
+            log::info!("written key: {:x?}", key);
+            let mut name = [0 as u8; 64];
+            for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
+                *dst = src;
+            }
+            export.push(
+                KeyExport {
+                    basis_name: name,
+                    key,
+                }
+            );
         }
+        self.pddb_mr.dump_keys(&export);
     }
     #[cfg(any(target_os = "none", target_os = "xous"))]
     pub fn dbg_dump(&self) {
@@ -279,7 +291,13 @@ impl PddbOs {
                 msg: fs_ser,
                 aad: &aad,
             };
+            log::info!("key: {:x?}", key);
+            log::info!("nonce: {:x?}", nonce);
+            log::info!("aad: {:x?}", aad);
+            log::info!("payload: {:x?}", fs_ser);
             let ciphertext = cipher.encrypt(nonce, payload).expect("failed to encrypt FastSpace record");
+            log::info!("ct_len: {}", ciphertext.len());
+            log::info!("mac: {:x?}", &ciphertext[ciphertext.len()-16..]);
             let ct_to_flash = ciphertext.deref();
             // determine which page we're going to write the ciphertext into
             let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
@@ -867,13 +885,17 @@ impl PddbOs {
 
         // step 9. generate & write initial page table entries
         if let Some(system_key) = self.system_basis_key {
+            log::info!("encryption key: {:x?}", system_key);
             let cipher = Aes256::new(GenericArray::from_slice(&system_key));
             if let Some(basis_v2p_map) = self.v2p_map.get(&basis_root.name) {
                 for (&virt, &phys) in basis_v2p_map.into_iter() {
                     let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
                     let mut block = Block::from_mut_slice(pte.deref_mut());
+                    log::info!("pte pt: {:x?}", block);
                     cipher.encrypt_block(&mut block);
+                    log::info!("pte ct: {:x?}", block);
                     self.patch_pagetable(&block, phys.page_number() * aes::BLOCK_SIZE as u32);
+                    log::info!("pte ct loc: {:x?}", phys.page_number() * aes::BLOCK_SIZE as u32);
                 }
             }
         }

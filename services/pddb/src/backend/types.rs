@@ -24,7 +24,7 @@ pub(crate) const PHYS_PAGE_JOURNAL_MAX: u8 = 15;
 pub type PhysAddr = u32;
 #[cfg(feature = "u64_pa")]
 pub type PhysAddr = u64;
-const BITFIELD_PAGE_WIDTH: usize = core::mem::size_of::<PhysAddr>() * 8 - 12;
+const BITFIELD_PAGE_WIDTH: usize = core::mem::size_of::<PhysAddr>() * 8 - 12; // "12" should be log2(PAGE_SIZE) but https://github.com/rust-lang/rust/issues/70887
 // Physical page information, coded as a bitfield, because space is a premium!
 bitfield! {
     #[derive(Copy, Clone, Eq)]

@@ -37,6 +37,10 @@ fn flashmem() -> &'static mut FlashSingleton {
     }
 }
 
+pub struct KeyExport {
+    pub basis_name: [u8; 64],
+    pub key: [u8; 32],
+}
 pub struct EmuStorage {
 }
 impl EmuStorage {
@@ -55,12 +59,13 @@ impl EmuStorage {
         f.write_all(flashmem().memory.as_slice()).unwrap();
         f.flush().unwrap();
     }
-    pub fn dump_keys(&self, known_keys: &[[u8; 32]]) {
+    pub fn dump_keys(&self, known_keys: &[KeyExport]) {
         //new().write(true).truncate(true).open
         let mut f = File::create("../tools/pddb.key").unwrap();
         f.write_all(&(known_keys.len() as u32).to_le_bytes()).unwrap();
         for key in known_keys {
-            f.write_all(key).unwrap();
+            f.write_all(&key.basis_name).unwrap();
+            f.write_all(&key.key).unwrap();
         }
         f.flush().unwrap();
     }

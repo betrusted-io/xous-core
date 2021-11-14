@@ -13,7 +13,7 @@ pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 pub(crate) const PDDB_VERSION: u16 = 0x00_00;
 /// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing
 #[allow(dead_code)]
-pub(crate) const PDDB_A_LEN: usize = 16 * 1024 * 1024;
+pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// A number between (0, 1] that defines how many of the "truly free" pages we
 /// should put into the FSCB. A value of 0.0 is not allowed as that leaves no free pages.
