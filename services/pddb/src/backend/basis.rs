@@ -43,6 +43,8 @@ impl<'a> BasisEncryptor<'a> {
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         aad.extend_from_slice(&dna.to_le_bytes());
 
+        log::info!("aad: {:?}", aad);
+
         BasisEncryptor {
             root,
             dicts,

@@ -103,6 +103,7 @@ pub (crate) struct SpaceUpdate {
 #[cfg(not(feature = "u64_pa"))]
 impl SpaceUpdate {
     pub fn try_into_phys_page(slice: &[u8]) -> Option<PhysPage> {
+        // note that the seed uses big-endian re-encoding of a portion of the nonce!
         let computed_sum = murmur3_32(&slice[..12], u32::from_be_bytes(slice[4..8].try_into().unwrap()));
         if u32::from_le_bytes(slice[12..].try_into().unwrap()) == computed_sum {
             let pp = u32::from_le_bytes(slice[8..12].try_into().unwrap());

@@ -174,7 +174,7 @@ impl PddbOs {
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
     fn patch_data(&self, data: &[u8], offset: u32) {
-        log::info!("patch offset: {:x} len: {:x}", offset, data.len());
+        log::trace!("patch offset: {:x} len: {:x}", offset, data.len());
         assert!(data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(), "attempt to store past disk boundary");
         self.spinor.patch(
             self.pddb_mr.as_slice(),
@@ -444,16 +444,19 @@ impl PddbOs {
 
             // 1. scan through the entire space, and look for the FastSpace record. It can be identified by the
             // first 16 (aes::BLOCK_SIZE) bytes not being all 1's.
-            let not_aes: [u8; aes::BLOCK_SIZE] = [0xff; aes::BLOCK_SIZE];
+            let blank: [u8; aes::BLOCK_SIZE] = [0xff; aes::BLOCK_SIZE];
             let mut fscb_pages = 0;
             let mut blank_pages = Vec::new();
             for page_start in (0..fscb_slice.len()).step_by(PAGE_SIZE) {
-                if (fscb_slice[page_start..page_start + aes::BLOCK_SIZE] == not_aes)
-                && (fscb_slice[page_start + aes::BLOCK_SIZE..page_start + aes::BLOCK_SIZE * 2] == not_aes) {
+                if (fscb_slice[page_start..page_start + aes::BLOCK_SIZE] == blank)
+                && (fscb_slice[page_start + aes::BLOCK_SIZE..page_start + aes::BLOCK_SIZE * 2] == blank) {
+                //if fscb_slice[page_start..page_start + aes::BLOCK_SIZE].iter().zip(blank.iter()).all(|(&a,&b)| a==b)
+                //&& fscb_slice[page_start + aes::BLOCK_SIZE..page_start + aes::BLOCK_SIZE * 2].iter().zip(blank.iter()).all(|(&a,&b)| a==b) {
                     // page has met the criteria for being blank, skip to the next page
                     blank_pages.push(page_start);
                     continue
-                } else if fscb_slice[page_start..page_start+aes::BLOCK_SIZE] == not_aes {
+                } else if fscb_slice[page_start..page_start+aes::BLOCK_SIZE] == blank {
+                //} else if fscb_slice[page_start..page_start+aes::BLOCK_SIZE].iter().zip(blank.iter()).all(|(&a,&b)| a==b) {
                     // this page contains update records; stash it for scanning after we've read in the master record
                     self.fspace_log_addrs.push(PageAlignedPa::from(page_start));
                     continue
@@ -502,6 +505,7 @@ impl PddbOs {
             // 2. visit the update_page_addrs and modify the fspace_cache accordingly.
             let cipher = Aes256::new(GenericArray::from_slice(&system_key));
             let mut block = Block::default();
+            log::info!("space_log_addrs len: {}", self.fspace_log_addrs.len());
             for page in &self.fspace_log_addrs {
                 for (index, ct_block) in
                 fscb_slice[page.as_usize() + aes::BLOCK_SIZE .. page.as_usize() + PAGE_SIZE]
@@ -523,6 +527,7 @@ impl PddbOs {
                     }
                     cipher.decrypt_block(&mut block);
                     if let Some(pp) = SpaceUpdate::try_into_phys_page(block.as_slice()) {
+                        log::info!("maybe replacing fspace block: {:x?}", pp);
                         // note: pp.valid() isn't the cryptographic check, the cryptographic check of record validity is in try_into_phys_page()
                         if pp.valid() { // PS: it should always be valid!
                             if let Some(prev_pp) = self.fspace_cache.get(&pp) {
@@ -638,8 +643,10 @@ impl PddbOs {
                         let cipher = Aes256::new(GenericArray::from_slice(&system_key));
                         let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
                         let mut block = Block::from_mut_slice(update.deref_mut());
+                        log::info!("block: {:x?}", block);
                         cipher.encrypt_block(&mut block);
                         let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
+                        log::info!("patch: {:x?}", block);
                         self.patch_fscb(&block, log_addr);
                         let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
                         if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
@@ -818,8 +825,8 @@ impl PddbOs {
             version: api::PDDB_VERSION,
             name,
             age: 0,
-            num_dictionaries: 0,
             prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * VPAGE_SIZE),
+            num_dictionaries: 0,
             dict_ptr: None,
         };
         log::info!("prealloc_open_end: {:x?}", basis_root.prealloc_open_end);
@@ -891,11 +898,11 @@ impl PddbOs {
                 for (&virt, &phys) in basis_v2p_map.into_iter() {
                     let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
                     let mut block = Block::from_mut_slice(pte.deref_mut());
-                    log::info!("pte pt: {:x?}", block);
+                    //log::info!("pte pt: {:x?}", block);
                     cipher.encrypt_block(&mut block);
-                    log::info!("pte ct: {:x?}", block);
+                    //log::info!("pte ct: {:x?}", block);
                     self.patch_pagetable(&block, phys.page_number() * aes::BLOCK_SIZE as u32);
-                    log::info!("pte ct loc: {:x?}", phys.page_number() * aes::BLOCK_SIZE as u32);
+                    //log::info!("pte ct loc: {:x?}", phys.page_number() * aes::BLOCK_SIZE as u32);
                 }
             }
         }
