@@ -16,3 +16,4 @@ update-precursors.sh
 # pddb debug files
 tools/pddb.bin
 tools/pddb.key
+tools/__pycache__
