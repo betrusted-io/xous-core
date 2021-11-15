@@ -13,9 +13,15 @@ use aes_gcm_siv::aead::{Aead, Payload};
 use rkyv::Aligned;
 use rkyv::ser::serializers::BufferSerializer;
 use std::iter::IntoIterator;
+use std::collections::HashMap;
 
-
-pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub struct BasisRootName(pub [u8; PDDB_MAX_BASIS_NAME_LEN]);
+impl Default for BasisRootName {
+    fn default() -> BasisRootName {
+        BasisRootName([0; PDDB_MAX_BASIS_NAME_LEN])
+    }
+}
 
 /// Takes in the constituents of the Basis area, and encrypts them into
 /// PAGE_SIZE blocks. Can be called as an iterator, or as a single-shot
@@ -41,7 +47,7 @@ pub(crate) struct BasisEncryptor<'a> {
 impl<'a> BasisEncryptor<'a> {
     pub(crate) fn new(root: &'a BasisRoot, dicts: &'a [DictPointer], dna: u64, cipher: Aes256GcmSiv, rev: JournalType, entropy: Rc<RefCell<TrngPool>>) -> Self {
         let mut aad = Vec::<u8>::new();
-        aad.extend_from_slice(&root.name);
+        aad.extend_from_slice(&root.name.0);
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         aad.extend_from_slice(&dna.to_le_bytes());
 
@@ -176,7 +182,7 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
 ///    wrapped, we're using a NonZeroU64 format. The compiler knows how to turn that into a 64-bit C-friendly
 ///    structure and serialize/deserialize that into the correct Rust structure. See
 ///    https://doc.rust-lang.org/nomicon/other-reprs.html for a citation on that.
-#[derive(rkyv::Serialize, rkyv::Deserialize, rkyv::Archive, PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 #[repr(C, align(8))]
 pub(crate) struct BasisRoot {
     // everything below here is encrypted using AES-GCM-SIV
@@ -226,8 +232,9 @@ impl BasisRoot {
         )
     }
 }*/
+/*
 use rkyv::ser::Serializer;
-impl BasisRoot { // note: example wraps u8 in "Aligned"...
+impl BasisRoot {
     pub(crate) fn ser(&self) -> (u32, Aligned<[u8; size_of::<rkyv::ser::serializers::BufferSerializer<BasisRoot>>()]>) {
         let mut ser = BufferSerializer::new(Aligned([0u8; size_of::<rkyv::ser::serializers::BufferSerializer<BasisRoot>>()]));
         let pos = match ser.serialize_value(self) {
@@ -236,7 +243,7 @@ impl BasisRoot { // note: example wraps u8 in "Aligned"...
         };
         (pos as u32, ser.into_inner())
     }
-}
+}*/
 impl Deref for BasisRoot {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
@@ -256,6 +263,36 @@ impl DerefMut for BasisRoot {
     }
 }
 
+/// This is the RAM cached copy of a basis as maintained in the PDDB.
+pub(crate) struct BasisCache {
+    /// set if synched to what's on disk
+    pub clean: bool,
+    /// last sync time, in systicks, if any
+    pub last_sync: Option<u64>,
+    /// the basis root record, as read in from disk
+    pub root: BasisRoot,
+    /// dictionary array
+    pub dicts: HashMap::<String, DictCache>,
+    /// the cipher for the basis
+    pub cipher: Aes256GcmSiv,
+    /// the AAD associated with this Basis
+    pub aad: Vec::<u8>,
+}
+
+pub(crate) struct DictCache {
+    pointer: DictPointer,
+    keys: HashMap::<String, HashKey>,
+}
+
+/// used to identify cached/chunked data from a key
+#[derive(Hash)]
+pub(crate) struct KeyChunkId {
+    basis: String,
+    dict: String,
+    key: HashKey,
+    offset: u64,
+    cache_page: [u8; VPAGE_SIZE],
+}
 
 #[repr(C)]
 pub(crate) struct DictPointer {
@@ -286,6 +323,7 @@ pub(crate) struct Dictionary {
 
 /// This defines a key's name, along with a pointer to its location in memory.
 /// HashKeys are packed at the end of a Dictionary.
+#[derive(Hash)]
 pub(crate) struct HashKey {
     name: [u8; PDDB_MAX_KEY_NAME_LEN],
     journal_rev: u32,

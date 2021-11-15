@@ -60,6 +60,7 @@ type EmuSpinor = spinor::Spinor;
 pub(crate) struct PddbOs {
     spinor: EmuSpinor,
     rootkeys: root_keys::RootKeys,
+    tt: ticktimer_server::Ticktimer,
     pddb_mr: EmuMemoryRange,
     /// page table base -- location in FLASH, offset from physical bottom of pddb_mr
     pt_phys_base: PageAlignedPa,
@@ -73,7 +74,7 @@ pub(crate) struct PddbOs {
     data_phys_base: PageAlignedPa,
     system_basis_key: Option<[u8; AES_KEYSIZE]>,
     /// virtual to physical page map. It's the reverse mapping of the physical page table on disk.
-    v2p_map: HashMap<BasisRootName, HashMap<VirtAddr, PhysPage>>,
+    v2p_map: HashMap<String, HashMap<VirtAddr, PhysPage>>,
     /// fast space cache
     fspace_cache: HashSet<PhysPage>,
     /// memoize the location of the fscb log pages
@@ -88,6 +89,12 @@ pub(crate) struct PddbOs {
     /// We don't blend the System basis into this one because we need to refer to the System basis specifically
     /// for decrypting management structures like the FSCB.
     basis_keys: Vec::<[u8; AES_KEYSIZE]>,
+    /// An in-memory "hot cache" of Basis root data that have been unlocked. Right now, we keep all data resident,
+    /// but, keep in mind: even if the data isn't found here, it could have been evicted from the cache due to
+    /// memory pressure. In which case, a direct search through the disk may be necessary to find your data.
+    /// Basis root data should be fairly compact, however -- it's just the directory data to find the keys and
+    /// dictionaries, so unless you create 1k's of dictionaries and keys, it'll probably all fit in RAM.
+    basis_cache: HashMap<String, BasisCache>,
 }
 
 impl PddbOs {
@@ -113,6 +120,7 @@ impl PddbOs {
         let ret = PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
             pddb_mr: pddb,
             pt_phys_base: PageAlignedPa::from(0 as u32),
             key_phys_base,
@@ -120,13 +128,14 @@ impl PddbOs {
             fscb_phys_base,
             data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
-            v2p_map: HashMap::<BasisRootName, HashMap<VirtAddr, PhysPage>>::new(),
+            v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
             fspace_cache: HashSet::<PhysPage>::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
             fspace_log_next_addr: None,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
             basis_keys: Vec::new(),
+            basis_cache: HashMap::<String, BasisCache>::new(),
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -134,6 +143,7 @@ impl PddbOs {
             PddbOs {
                 spinor: HostedSpinor::new(),
                 rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
+                tt: ticktimer_server::Ticktimer::new().unwrap(),
                 pddb_mr: EmuStorage::new(),
                 pt_phys_base: PageAlignedPa::from(0 as u32),
                 key_phys_base,
@@ -141,13 +151,14 @@ impl PddbOs {
                 fscb_phys_base,
                 data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
                 system_basis_key: None,
-                v2p_map: HashMap::<BasisRootName, HashMap<VirtAddr, PhysPage>>::new(),
+                v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
                 fspace_cache: HashSet::<PhysPage>::new(),
                 fspace_log_addrs: Vec::<PageAlignedPa>::new(),
                 fspace_log_next_addr: None,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
                 basis_keys: Vec::new(),
+                basis_cache: HashMap::<String, BasisCache>::new(),
             }
         };
         ret
@@ -282,7 +293,7 @@ impl PddbOs {
     /// This would want to be optimized or cached for a much larger filesystem.
     /// Returns the physical address of the erased slot as an offset from the pt_phys_base()
     fn pt_find_erased_slot(&self) -> Option<PhysAddr> {
-        let pt = &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()];
+        let pt: &[u8] = &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()];
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for (index, page) in pt.chunks(PAGE_SIZE).enumerate() {
             if page[..aes::BLOCK_SIZE] == blank {
@@ -290,6 +301,57 @@ impl PddbOs {
             }
         }
         None
+    }
+    fn pt_as_slice(&self) -> &[u8] {
+        &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()]
+    }
+
+    /// scans the page tables and returns all entries for a given basis
+    /// basis_name is needed to decrypt pages in case of a journal conflict
+    fn pt_scan_key(&self, key: &[u8; AES_KEYSIZE], basis_name: &str) -> Option<HashMap::<VirtAddr, PhysPage>> {
+        let cipher = Aes256::new(&GenericArray::from_slice(key));
+        let pt = self.pt_as_slice();
+        let mut map = HashMap::<VirtAddr, PhysPage>::new();
+        for (index, candidate) in pt.chunks(aes::BLOCK_SIZE).enumerate() {
+            // encryption is in-place, but the candidates are read-only, so we have to copy them to a new location
+            let mut block = Block::clone_from_slice(candidate);
+            cipher.decrypt_block(&mut block);
+            if let Some(pte) = Pte::try_from_slice(block.as_slice()) {
+                let mut pp = PhysPage(0);
+                pp.set_page_number(index as PhysAddr);
+                pp.set_clean(true);
+                // handle conflicting journal versions here
+                if let Some(prev_page) = map.get(&pte.vaddr()) {
+                    let cipher = Aes256GcmSiv::new(Key::from_slice(key));
+                    let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
+                    let prev_data = self.data_decrypt_page(&cipher, &aad, prev_page);
+                    let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
+                    if let Some(new_d) = new_data {
+                        if let Some(prev_d) = prev_data {
+                            let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
+                            let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
+                            if new_j > prev_j {
+                                map.insert(pte.vaddr(), pp);
+                            } else if new_j == prev_j {
+                                log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
+                            }
+                        } else {
+                            // prev data was bogus anyways, replace with the new entry
+                            map.insert(pte.vaddr(), pp);
+                        }
+                    } else {
+                        // new data is bogus, ignore it
+                    }
+                } else {
+                    map.insert(pte.vaddr(), pp);
+                }
+            }
+        }
+        if map.len() > 0 {
+            Some(map)
+        } else {
+            None
+        }
     }
 
     /// maps a StaticCryptoData structure into the key area of the PDDB.
@@ -333,7 +395,7 @@ impl PddbOs {
         // Invariant: MBBB pages should be blank, unless a page is stashed there. So, just check the first
         // AES key size region for "blankness"
         let blank = [0xffu8; aes::BLOCK_SIZE];
-        for (index, page) in self.mbbb_as_slice().chunks(PAGE_SIZE).enumerate() {
+        for page in self.mbbb_as_slice().chunks(PAGE_SIZE) {
             if page[..aes::BLOCK_SIZE] == blank {
                 continue;
             } else {
@@ -664,6 +726,7 @@ impl PddbOs {
         }
     }
     /// returns a count of the number of pages in the fspace cache
+    #[allow(dead_code)]
     pub fn fast_space_len(&self) -> usize {
         self.fspace_cache.len()
     }
@@ -813,8 +876,103 @@ impl PddbOs {
         unimplemented!();
     }
 
-    pub(crate) fn pddb_mount(&mut self) {
+    pub(crate) fn data_aad(&self, name: &str) -> Vec::<u8> {
+        let mut full_name = [0u8; PDDB_MAX_BASIS_NAME_LEN];
+        for (&src, dst) in name.as_bytes().iter().zip(full_name.iter_mut()) {
+            *dst = src;
+        }
+        let mut aad = Vec::<u8>::new();
+        aad.extend_from_slice(&full_name);
+        aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
+        aad.extend_from_slice(&self.dna.to_le_bytes());
+        aad
+    }
+    /// returns a decrypted page that still includes the journal number at the very beginning
+    /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
+    /// just index past it.
+    pub(crate) fn data_decrypt_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
+        let ct_slice = &self.pddb_mr.as_slice()[
+            self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
+            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE];
+        let nonce = &ct_slice[..size_of::<Nonce>()];
+        let ct = &ct_slice[size_of::<Nonce>()..];
+        match cipher.decrypt(
+            Nonce::from_slice(nonce),
+            Payload {
+                aad,
+                msg: ct,
+            }
+        ) {
+            Ok(data) => {
+                assert!(data.len() == VPAGE_SIZE + size_of::<JournalType>(), "authentication successful, but wrong amount of data was recovered");
+                Some(data)
+            },
+            Err(e) => {
+                log::info!("Error decrypting page: {:?}", e);
+                None
+            }
+        }
+    }
 
+    /// Meant to be called on boot. This will read the FastSpace record, and then attempt to load
+    /// in the system basis.
+    pub(crate) fn pddb_mount(&mut self) -> bool {
+        self.fast_space_read();
+        self.syskey_ensure();
+        // this call will nuke whatever hashmap existed before
+        self.v2p_map = HashMap::<String, HashMap<VirtAddr, PhysPage>>::new();
+        if let Some(syskey) = self.system_basis_key {
+            if let Some(sysbasis_map) = self.pt_scan_key(&syskey, PDDB_DEFAULT_SYSTEM_BASIS) {
+                let cipher = Aes256GcmSiv::new(Key::from_slice(&syskey));
+                let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
+                // get the first page, where the basis root is guaranteed to be
+                if let Some(root_page) = sysbasis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
+                    let vpage = match self.data_decrypt_page(&cipher, &aad, root_page) {
+                        Some(data) => data,
+                        None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return false;},
+                    };
+                    // if the below assertion fails, you will need to re-code this to decrypt more than one VPAGE and stripe into a basis root struct
+                    assert!(size_of::<BasisRoot>() <= VPAGE_SIZE, "BasisRoot has grown past a single VPAGE, this routine needs to be re-coded to accommodate the extra bulk");
+                    let mut basis_root = BasisRoot::default();
+                    for (&src, dst) in vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                        *dst = src;
+                    }
+                    if basis_root.magic != PDDB_MAGIC {
+                        log::error!("Basis root did not deserialize correctly, unrecoverable error.");
+                        return false;
+                    }
+                    if basis_root.version != PDDB_VERSION {
+                        log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
+                        return false;
+                    }
+                    let null_index = basis_root.name.0.iter().position(|&c| c == 0).expect("couldn't find null terminator on name");
+                    let basis_name = String::from_utf8(basis_root.name.0[..null_index].to_vec()).expect("Basis name has invalid characters");
+                    if basis_name != String::from(PDDB_DEFAULT_SYSTEM_BASIS) {
+                        log::error!("PDDB system basis name is incorrect: {}; aborting mount operation.", basis_name);
+                        return false;
+                    }
+                    // at this point, we would fill out the cache more, but let's just put in the minimal info so we can do some testing
+                    let bcache = BasisCache {
+                        clean: true,
+                        last_sync: Some(self.tt.elapsed_ms()),
+                        root: basis_root,
+                        dicts: HashMap::<String, DictCache>::new(),
+                        cipher,
+                        aad,
+                    };
+                    log::info!("System BasisRoot record found, saving in cache");
+                    self.basis_cache.insert(basis_name.clone(), bcache);
+                    // save the v2p reverse mapping too.
+                    self.v2p_map.insert(basis_name, sysbasis_map);
+                    return true;
+                } else {
+                    // i guess technically we could try a brute-force search for the page, but meh.
+                    log::error!("System basis did not contain a root page -- unrecoverable error.");
+                    return false;
+                }
+            }
+        }
+        false
     }
 
     /// this function is dangerous in that calling it will completely erase all of the previous data
@@ -925,7 +1083,7 @@ impl PddbOs {
         let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
             version: api::PDDB_VERSION,
-            name,
+            name: BasisRootName(name),
             age: 0,
             prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * VPAGE_SIZE),
             num_dictionaries: 0,
@@ -952,7 +1110,7 @@ impl PddbOs {
             //for (&k, &v) in basis_v2p_map.iter() {
             //    log::info!("basis_v2p_map va: {:x?} pp: {:x?}", k, v);
             //}
-            self.v2p_map.insert(basis_root.name, basis_v2p_map);
+            self.v2p_map.insert(String::from(PDDB_DEFAULT_SYSTEM_BASIS), basis_v2p_map);
         }
 
         // step 8. write the System basis to Flash, at the physical locations noted above
@@ -967,7 +1125,7 @@ impl PddbOs {
                 0,
                 Rc::clone(&self.entropy),
             );
-            if let Some(basis_v2p_map) = self.v2p_map.get(&basis_root.name) {
+            if let Some(basis_v2p_map) = self.v2p_map.get(&String::from(PDDB_DEFAULT_SYSTEM_BASIS)) {
                 for (&k, &v) in basis_v2p_map.iter() {
                     log::info!("basis_v2p_map retrieved va: {:x?} pp: {:x?}", k, v);
                 }
@@ -996,7 +1154,7 @@ impl PddbOs {
         if let Some(system_key) = self.system_basis_key {
             log::info!("encryption key: {:x?}", system_key);
             let cipher = Aes256::new(GenericArray::from_slice(&system_key));
-            if let Some(basis_v2p_map) = self.v2p_map.get(&basis_root.name) {
+            if let Some(basis_v2p_map) = self.v2p_map.get(&String::from(PDDB_DEFAULT_SYSTEM_BASIS)) {
                 for (&virt, &phys) in basis_v2p_map.into_iter() {
                     let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
                     let mut block = Block::from_mut_slice(pte.deref_mut());

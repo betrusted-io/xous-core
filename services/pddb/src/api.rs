@@ -8,7 +8,7 @@ pub(crate) const PDDB_MAX_KEY_NAME_LEN: usize = 128;
 #[allow(dead_code)]
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 #[allow(dead_code)]
-pub(crate) const PDDB_VERSION: u16 = 0x00_00;
+pub(crate) const PDDB_VERSION: u32 = 0x00_00_00_01;
 /// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing
 #[allow(dead_code)]
 pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
@@ -23,9 +23,11 @@ pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 /// to grow a record, you'd have to unlock all your Basis and do a brute force scan, otherwise
 /// you risk overwriting hidden data by mistaking it as free space. The initial setting is
 /// 0.5: with this setting, we won't be more than a factor of 2 off from the ideal setting!
+#[allow(dead_code)]
 pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
 
 pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
+// this isn't an "official" basis, but it is used for the AAD for encrypting the FastSpace structure
 pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

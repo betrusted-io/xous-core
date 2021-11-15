@@ -16,7 +16,10 @@ bitflags! {
         /// set for records that are synced to the copy in Flash. Every valid record
         /// from Flash should have this set; it should only be cleared for blocks in Cache.
         const  CLEAN              = 0b0000_0001;
-
+        /// set for records that are confirmed to be valid through a subsequent decryption op.
+        /// This flag exists because there is a chance that the 32-bit checksum used to protect
+        /// a page table entry experiences a collision.
+        const CHECKED             = 0b0000_0010;
     }
 }
 impl Default for PtFlags {
@@ -66,6 +69,33 @@ impl Pte {
         pte.checksum = checksum.to_le_bytes();
 
         pte
+    }
+    pub fn vaddr(&self) -> VirtAddr {
+        let mut full_addr = [0u8; 8];
+        // LSB encoded, so this loop deposits the partial pddb_addr in the LSBs, and the MSBs are correctly 0 from above initializer
+        for (&src, dst) in self.pddb_addr.iter().zip(full_addr.iter_mut()) {
+            *dst = src;
+        }
+        VirtAddr::new(u64::from_le_bytes(full_addr)).unwrap()
+    }
+    pub fn flags(&self) -> PtFlags {
+        self.flags
+    }
+    pub fn try_from_slice(slice: &[u8]) -> Option<Self> {
+        if slice.len() == size_of::<Pte>() {
+            let mut maybe_pt = Pte::default();
+            for (&src, dst) in slice.iter().zip(maybe_pt.deref_mut().iter_mut()) {
+                *dst = src;
+            }
+            let nonce_u32 = u32::from_le_bytes(maybe_pt.nonce);
+            if u32::from_le_bytes(maybe_pt.checksum) == murmur3_32(&slice[..12], nonce_u32) {
+                Some(maybe_pt)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
 impl Deref for Pte {

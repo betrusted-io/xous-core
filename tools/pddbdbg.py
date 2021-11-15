@@ -233,10 +233,10 @@ class Basis:
         desc += ' DictPtr: {:x}\n'.format(self.dict_ptr)
         return desc
 
-def basis_aad(name, version=0, dna=0):
+def basis_aad(name, version=1, dna=0):
     name_bytes = bytearray(name, 'utf-8')
     name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
-    name_bytes += version.to_bytes(2, 'little')
+    name_bytes += version.to_bytes(4, 'little')
     name_bytes += dna.to_bytes(8, 'little')
 
     return name_bytes
@@ -258,6 +258,10 @@ class Pte:
     def flags(self):
         if self.bytes[6] == 1:
             return 'CLN'
+        elif self.bytes[6] == 2:
+            return 'CHK'
+        elif self.bytes[6] == 3:
+            return 'COK'
         else:
             return 'INV'
     def nonce(self):
@@ -388,8 +392,8 @@ class Fscb:
                 self.free_space[pp.page_number() * 4096] = pp
 
     # this is the "AAD" used to encrypt the FastSpace
-    def aad(version=0, dna=0):
-        return bytearray([46, 70, 97, 115, 116, 83, 112, 97, 99, 101]) + version.to_bytes(2, 'little') + dna.to_bytes(8, 'little')
+    def aad(version=1, dna=0):
+        return bytearray([46, 70, 97, 115, 116, 83, 112, 97, 99, 101]) + version.to_bytes(4, 'little') + dna.to_bytes(8, 'little')
 
 class SpaceUpdate:
     SU_LEN = 16
@@ -437,8 +441,8 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
                 nonce = fscb_enc[:12]
                 print("key: {}, nonce: {}".format(key.hex(), nonce.hex()))
                 cipher = AES_GCM_SIV(key, nonce)
-                #print("aad: {}".format(Fscb.aad().hex()))
-                #print("mac: {}".format(fscb_enc[-16:].hex()))
+                print("aad: {}".format(Fscb.aad().hex()))
+                print("mac: {}".format(fscb_enc[-16:].hex()))
                 #print("data: {}".format(fscb_enc[12:-16].hex()))
                 fscb_dec = cipher.decrypt(fscb_enc[12:], Fscb.aad())
                 fscb = Fscb(fscb_dec)

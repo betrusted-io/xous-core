@@ -72,6 +72,7 @@ pub type VirtAddr = NonZeroU64;
 #[derive(rkyv::Serialize, rkyv::Deserialize, rkyv::Archive, PartialEq, Eq, Copy, Clone, Debug)]
 pub(crate) struct PageAlignedVa(VirtAddr);
 impl PageAlignedVa {
+    #[allow(dead_code)]
     pub(crate) fn as_u32(&self) -> u32 {
         if self.0 <= VirtAddr::new(u32::MAX as u64).unwrap() {
             self.0.get() as u32
@@ -79,13 +80,20 @@ impl PageAlignedVa {
             panic!("PageAlignedVa would not fit into a u32");
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn as_u64(&self) -> u64 {self.0.get()}
+    #[allow(dead_code)]
     pub(crate) fn as_usize(&self) -> usize {self.0.get() as usize}
     /// This will turn a PageAlignedVa into a page number
+    #[allow(dead_code)]
     pub(crate) fn as_vpage_num(&self) -> usize {
         // we're page-aligned, so we don't have to deal with remainders. This should divide cleanly.
         self.0.get() as usize / VPAGE_SIZE
     }
+}
+impl Default for PageAlignedVa {
+    // 0 is not a valid address; the offset at VPAGE_SIZE is the location of BasisRoot, and that is the default value.
+    fn default() -> Self {PageAlignedVa(VirtAddr::new(VPAGE_SIZE as u64).unwrap())}
 }
 impl From<u64> for PageAlignedVa {
     fn from(arg: u64) -> Self {
@@ -131,8 +139,11 @@ impl Add for PageAlignedVa {
 #[derive(Copy, Clone)]
 pub(crate) struct PageAlignedPa(PhysAddr);
 impl PageAlignedPa {
+    #[allow(dead_code)]
     pub(crate) fn as_u32(&self) -> u32 {self.0 as u32}
+    #[allow(dead_code)]
     pub(crate) fn as_u64(&self) -> u64 {self.0 as u64}
+    #[allow(dead_code)]
     pub(crate) fn as_usize(&self) -> usize {self.0 as usize}
     pub(crate) fn as_phys_addr(&self) -> PhysAddr {self.0}
 }
@@ -179,6 +190,7 @@ mod tests {
     /// the generated getter and setter, it woudln't matter.
     /// However, in our application, we fully expect a true to be a 1. This test exists to ensure this seemingly
     /// obvious but not explicitly stated fact always remains true.
+    #[test]
     fn test_bitfield_bool() {
         bitfield! {
             pub struct Test(u8);
@@ -190,6 +202,7 @@ mod tests {
         assert!(t.0 == 0x2, "polarity of boolean bit is not as expected");
         assert!(t.test() == true, "bool getter did not work as expected");
     }
+    #[test]
     fn test_journal_range() {
         let pp = PhysPage(u32::MAX);
         assert!(pp.journal() == PHYS_PAGE_JOURNAL_MAX, "PHYS_PAGE_JOURNAL_MAX is incorrect");
