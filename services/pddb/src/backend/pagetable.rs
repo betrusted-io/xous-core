@@ -37,7 +37,7 @@ impl Default for PtFlags {
 /// however, the sheer bulk of the page table demands a compact representation. Thus,
 /// any routines downstream of the Pte shall be coded to handle potentially a much larger
 /// nonce and checksum structure.
-#[repr(C, packed)]
+#[repr(packed)]
 #[derive(Default)]
 pub(crate) struct Pte {
     /// the virtual address is 48 bits long

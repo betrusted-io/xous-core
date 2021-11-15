@@ -1,5 +1,3 @@
-use rkyv::{Archive, Deserialize, Serialize};
-
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 #[allow(dead_code)]
 pub(crate) const PDDB_MAX_BASIS_NAME_LEN: usize = 64;
@@ -51,7 +49,7 @@ pub(crate) enum Opcode {
 }
 
 /// A structure for requesting a token to access a particular key/value pair
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct PddbKeyRequest {
     pub(crate) dict: xous_ipc::String::</*PDDB_MAX_DICT_NAME_LEN*/ 64>, // pending https://github.com/rust-lang/rust/issues/90195
     pub(crate) key: xous_ipc::String::</*PDDB_MAX_KEY_NAME_LEN*/ 128>, // pending https://github.com/rust-lang/rust/issues/90195

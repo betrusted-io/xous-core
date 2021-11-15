@@ -69,7 +69,7 @@ pub type VirtAddr = NonZeroU64;
 /// the constructing address. Thus it will tend to "round up" to the nearest page,
 /// unless the given address happens to be exactly one page in size.
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(rkyv::Serialize, rkyv::Deserialize, rkyv::Archive, PartialEq, Eq, Copy, Clone, Debug)]
 pub(crate) struct PageAlignedVa(VirtAddr);
 impl PageAlignedVa {
     pub(crate) fn as_u32(&self) -> u32 {

@@ -10,6 +10,8 @@ use core::mem::size_of;
 use std::convert::TryInto;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce};
 use aes_gcm_siv::aead::{Aead, Payload};
+use rkyv::Aligned;
+use rkyv::ser::serializers::BufferSerializer;
 use std::iter::IntoIterator;
 
 
@@ -81,11 +83,14 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
             let block_iter = block.iter_mut();
 
             let journal_bytes = self.basis_data.journal_rev.to_le_bytes();
+            let (ser_pos, ser_basis) = self.basis_data.root.ser();
+            let ser_bytes = ser_pos.to_le_bytes();
             let slice_iter =
             journal_bytes.iter() // journal rev
-                .chain(self.basis_data.root.deref().iter() // basis
+                .chain(ser_bytes.iter()
+                .chain(ser_basis.as_ref().iter() // basis
                     // .chain(self.dicts.as_slice()  // dictionary
-            ).skip(self.vaddr);
+            )).skip(self.vaddr);
 
             // note that in the case that we've already serialized the journal, basis, and dictionary, this will produce nothing
             let mut written = 0;
@@ -128,7 +133,7 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
 /// As a directory structure, the basis root is designed to be read into RAM in a contiguous block.
 /// it'll typically be less than a page in length, but a pathological number of dictionaries can make it
 /// much longer.
-#[repr(C)]
+#[derive(rkyv::Serialize, rkyv::Deserialize, rkyv::Archive, PartialEq, Debug)]
 pub(crate) struct BasisRoot {
     // everything below here is encrypted using AES-GCM-SIV
     pub(crate) magic: [u8; 4],
@@ -174,6 +179,17 @@ impl BasisRoot {
         )
     }
 }*/
+use rkyv::ser::Serializer;
+impl BasisRoot { // note: example wraps u8 in "Aligned"...
+    pub(crate) fn ser(&self) -> (u32, Aligned<[u8; size_of::<rkyv::ser::serializers::BufferSerializer<BasisRoot>>()]>) {
+        let mut ser = BufferSerializer::new(Aligned([0u8; size_of::<rkyv::ser::serializers::BufferSerializer<BasisRoot>>()]));
+        let pos = match ser.serialize_value(self) {
+            Ok(p) => p,
+            Err(e) => {log::error!("serializer error: {:?}", e); panic!("serializer error");}
+        };
+        (pos as u32, ser.into_inner())
+    }
+}
 impl Deref for BasisRoot {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
