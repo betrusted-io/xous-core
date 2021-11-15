@@ -9,6 +9,8 @@ import binascii
 import hashlib
 
 SYSTEM_BASIS = '.System'
+PAGE_SIZE = 4096
+MBBB_PAGES = 10
 
 # from https://github.com/wc-duck/pymmh3/blob/master/pymmh3.py
 def xrange( a, b, c ):
@@ -124,18 +126,19 @@ def main():
     print("Found basis keys:")
     print(keys)
 
-    MBBB_PAGES = 10
+    global MBBB_PAGES
     FSCB_PAGES = 16
     KEY_PAGES = 1
-    PAGE_SIZE = 4096
+    global PAGE_SIZE
 
     with open(imagefile, 'rb') as img_f:
         raw_img = img_f.read()
         pddb_len = len(raw_img)
         pddb_size_pages = pddb_len // PAGE_SIZE
 
+        mbbb_offset = pddb_size_pages * Pte.PTE_LEN + PAGE_SIZE * KEY_PAGES
         img_index = 0
-        tables = decode_pagetable(raw_img, pddb_size_pages, keys)
+        tables = decode_pagetable(raw_img, pddb_size_pages, keys, raw_img[mbbb_offset:mbbb_offset + MBBB_PAGES * PAGE_SIZE])
         img_index += pddb_size_pages * Pte.PTE_LEN
         rawkeys = raw_img[img_index : img_index + PAGE_SIZE * KEY_PAGES]
         img_index += PAGE_SIZE * KEY_PAGES
@@ -161,9 +164,11 @@ def main():
                         cipher = AES_GCM_SIV(key, pp_data[:12])
                         pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
                         basis_data.extend(bytearray(pt_data))
-                    except KeyError:
+                        print("decrypted vpage @ {} ppage @ {:x}".format(vp, v2p_table[vp]))
+                    except ValueError:
                         errors += 1
                         print("couldn't decrypt vpage @ {} ppage @ {:x}".format(vp, v2p_table[vp]))
+
 
                 if errors == 0:
                     print([hex(x) for x in basis_data[:256]])
@@ -271,26 +276,45 @@ class Pte:
         else:
             return 'a_{:012x} | f_{} | n_{:08x} | c_{:08x}'.format(self.addr(), self.flags(), self.nonce(), self.checksum())
 
-def decode_pagetable(img, entries, keys):
+def find_mbbb(mbbb):
+    global MBBB_PAGES
+    pages = [mbbb[i:i+PAGE_SIZE] for i in range(0, MBBB_PAGES * PAGE_SIZE, PAGE_SIZE)]
+    for page in pages:
+        if bytearray(page[:16]) != bytearray([0xff] * 16):
+            return page
+    return None
+
+def decode_pagetable(img, entries, keys, mbbb):
+    global PAGE_SIZE
     key_table = {}
     for name, key in keys.items():
         print("Pages for basis {}".format(name))
         print("key: {}".format(key.hex()))
         cipher = AES.new(key, AES.MODE_ECB)
-        encrypted_ptes = [img[i:i+Pte.PTE_LEN] for i in range(0, entries * Pte.PTE_LEN, Pte.PTE_LEN)]
-        page = 0
+        pages = [img[i:i+PAGE_SIZE] for i in range(0, entries * Pte.PTE_LEN, PAGE_SIZE)]
+        page_num = 0
         v2p_table = {}
         p2v_table = {}
-        for pte in encrypted_ptes:
-            maybe_pte = Pte(cipher.decrypt(pte))
-            if maybe_pte.is_valid():
-                print(maybe_pte.as_str(page))
-                p_addr = page * (4096 // Pte.PTE_LEN)
-                v2p_table[maybe_pte.addr()] = p_addr
-                p2v_table[p_addr] = maybe_pte.addr()
+        for page in pages:
+            if bytearray(page[:16]) == bytearray([0xff] * 16):
+                # decrypt from mbbb
+                print("Found a blank PTE page, falling back to MBBB!")
+                maybe_page = find_mbbb(mbbb)
+                if maybe_page != None:
+                    page = maybe_page
+                else:
+                    print("Blank entry in PTE found, but no corresponding MBBB entry found. Filesystem likely corrupted.")
+            encrypted_ptes = [page[i:i+Pte.PTE_LEN] for i in range(0, PAGE_SIZE, Pte.PTE_LEN)]
+            for pte in encrypted_ptes:
+                maybe_pte = Pte(cipher.decrypt(pte))
+                if maybe_pte.is_valid():
+                    print(maybe_pte.as_str(page_num))
+                    p_addr = page_num * (4096 // Pte.PTE_LEN)
+                    v2p_table[maybe_pte.addr()] = p_addr
+                    p2v_table[p_addr] = maybe_pte.addr()
 
-            page += Pte.PTE_LEN
-        key_table[name] = [v2p_table, p2v_table]
+                page_num += Pte.PTE_LEN
+            key_table[name] = [v2p_table, p2v_table]
     return key_table
 
 class PhysPage:
@@ -399,7 +423,7 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
             if bytearray(page[:32]) == bytearray([0xff] * 32):
                 # page is blank
                 pass
-            elif bytearray(page[:16] == bytearray([0xff] * 16)):
+            elif bytearray(page[:16]) == bytearray([0xff] * 16):
                 space_update.append(page[16:])
             else:
                 if fscb_start == None:

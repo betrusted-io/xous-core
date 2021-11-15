@@ -34,4 +34,8 @@ utralib = { path = "../../utralib"}
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
 u64_pa = []
-default = []
+# selecting mbbb employs a "make before break" update on the page table. This minimizes risk of corruption of
+# the page table when being updated in the case of a power loss, in exchange for more than doubling the time it
+# takes to update the page table.
+mbbb = []
+default = ["mbbb"]

@@ -84,6 +84,10 @@ pub(crate) struct PddbOs {
     dna: u64,
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
+    /// keys to non-system basis that may or may not be mounted
+    /// We don't blend the System basis into this one because we need to refer to the System basis specifically
+    /// for decrypting management structures like the FSCB.
+    basis_keys: Vec::<[u8; AES_KEYSIZE]>,
 }
 
 impl PddbOs {
@@ -122,6 +126,7 @@ impl PddbOs {
             fspace_log_next_addr: None,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
+            basis_keys: Vec::new(),
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -142,6 +147,7 @@ impl PddbOs {
                 fspace_log_next_addr: None,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
+                basis_keys: Vec::new(),
             }
         };
         ret
@@ -184,6 +190,55 @@ impl PddbOs {
         ).expect("couldn't write to data region in the PDDB");
     }
     fn patch_pagetable(&self, data: &[u8], offset: u32) {
+        if cfg!(feature = "mbbb") {
+            assert!(data.len() + offset as usize <= size_of::<PageTableInFlash>(), "attempt to patch past page table end");
+            // 1. Check if there is an MBBB structure existing. If so, copy it into the empty slot in the page table, then erase the mbbb.
+            if let Some(mbbb) = self.mbbb_retrieve() {
+                if let Some(erased_offset) = self.pt_find_erased_slot() {
+                    self.spinor.patch(
+                        self.pddb_mr.as_slice(),
+                        xous::PDDB_LOC,
+                        &mbbb,
+                        self.pt_phys_base.as_u32() + erased_offset,
+                    ).expect("couldn't write to page table");
+                }
+                // if there *isn't* an erased slot, we still want to get rid of the MBBB structure. A lack of an
+                // erased slot would indicate we lost power after we copied the previous MBBB structure but before we could erase
+                // it from storage, so this picks up where we left off.
+                self.mbbb_erase();
+            }
+            // 2. find the page we're patching
+            let base_page = offset as usize & !(PAGE_SIZE - 1);
+            // 3. copy the data to a local buffer
+            let mut mbbb_page = [0u8; PAGE_SIZE];
+            for (&src, dst) in
+            self.pddb_mr.as_slice()[self.pt_phys_base.as_usize() + base_page..self.pt_phys_base.as_usize() + base_page + PAGE_SIZE].iter()
+            .zip(mbbb_page.iter_mut()) {
+                *dst = src;
+            }
+            // 4. patch the local buffer copy
+            let base_offset = offset as usize & (PAGE_SIZE - 1);
+            for (&src, dst) in data.iter()
+            .zip(mbbb_page[base_offset..base_offset + data.len()].iter_mut()) {
+                *dst = src;
+            }
+            // 5. pick a random offset in the MBBB for the target patch, and write the data into the target
+            let offset = (self.entropy.borrow_mut().get_u8() % MBBB_PAGES as u8) as u32 * PAGE_SIZE as u32;
+            self.patch_mbbb(&mbbb_page, offset);
+            // 6. erase the original page area, thus making the MBBB the authorative location
+            let blank = [0xffu8; PAGE_SIZE];
+            self.spinor.patch(
+                self.pddb_mr.as_slice(),
+                xous::PDDB_LOC,
+                &blank,
+                self.pt_phys_base.as_u32() + base_page as u32,
+            ).expect("couldn't write to page table");
+        } else {
+            self.patch_pagetable_raw(data, offset);
+        }
+    }
+    /// Direct write to the page table, without MBBB buffering.
+    fn patch_pagetable_raw(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= size_of::<PageTableInFlash>(), "attempt to patch past page table end");
         self.spinor.patch(
             self.pddb_mr.as_slice(),
@@ -222,6 +277,21 @@ impl PddbOs {
         ).expect("couldn't burn fscb");
     }
 
+    /// Searches the page table for an MBBB slot. This is currently an O(N) search but
+    /// in practice for Precursor there are only 8 pages, so it's quite fast on average.
+    /// This would want to be optimized or cached for a much larger filesystem.
+    /// Returns the physical address of the erased slot as an offset from the pt_phys_base()
+    fn pt_find_erased_slot(&self) -> Option<PhysAddr> {
+        let pt = &self.pddb_mr.as_slice()[self.pt_phys_base.as_usize()..self.pt_phys_base.as_usize() + size_of::<PageTableInFlash>()];
+        let blank = [0xffu8; aes::BLOCK_SIZE];
+        for (index, page) in pt.chunks(PAGE_SIZE).enumerate() {
+            if page[..aes::BLOCK_SIZE] == blank {
+                return Some( (index * PAGE_SIZE) as PhysAddr )
+            }
+        }
+        None
+    }
+
     /// maps a StaticCryptoData structure into the key area of the PDDB.
     fn static_crypto_data_get(&self) -> &StaticCryptoData {
         let scd_ptr = self.key_phys_base.as_usize() as *const StaticCryptoData;
@@ -253,6 +323,34 @@ impl PddbOs {
                 self.rootkeys.decrypt_block(block.try_into().unwrap());
             }
             self.system_basis_key = Some(system_key);
+        }
+    }
+
+    fn mbbb_as_slice(&self) -> &[u8] {
+        &self.pddb_mr.as_slice()[self.mbbb_phys_base.as_usize()..self.mbbb_phys_base.as_usize() + MBBB_PAGES * PAGE_SIZE]
+    }
+    fn mbbb_retrieve(&self) -> Option<&[u8]> {
+        // Invariant: MBBB pages should be blank, unless a page is stashed there. So, just check the first
+        // AES key size region for "blankness"
+        let blank = [0xffu8; aes::BLOCK_SIZE];
+        for (index, page) in self.mbbb_as_slice().chunks(PAGE_SIZE).enumerate() {
+            if page[..aes::BLOCK_SIZE] == blank {
+                continue;
+            } else {
+                return Some(page)
+            }
+        }
+        None
+    }
+    fn mbbb_erase(&self) {
+        let blank = [0xffu8; aes::BLOCK_SIZE];
+        for (index, page) in self.mbbb_as_slice().chunks(PAGE_SIZE).enumerate() {
+            if page[..aes::BLOCK_SIZE] == blank {
+                continue;
+            } else {
+                let blank_page = [0xffu8; PAGE_SIZE];
+                self.patch_mbbb(&blank_page, (index * PAGE_SIZE) as u32);
+            }
         }
     }
 
@@ -715,6 +813,10 @@ impl PddbOs {
         unimplemented!();
     }
 
+    pub(crate) fn pddb_mount(&mut self) {
+
+    }
+
     /// this function is dangerous in that calling it will completely erase all of the previous data
     /// in the PDDB an replace it with a brand-spanking new, blank PDDB.
     /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a reference
@@ -746,7 +848,7 @@ impl PddbOs {
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
         for page in (0..size_of::<PageTableInFlash>()).step_by(PAGE_SIZE) {
             self.entropy.borrow_mut().get_slice(&mut temp);
-            self.patch_pagetable(&temp, page as u32);
+            self.patch_pagetable_raw(&temp, page as u32);
         }
         if size_of::<PageTableInFlash>() & (PAGE_SIZE - 1) != 0 {
             let remainder_start = size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1);
@@ -755,7 +857,7 @@ impl PddbOs {
             for _ in remainder_start..size_of::<PageTableInFlash>() {
                 temp.push(self.entropy.borrow_mut().get_u8());
             }
-            self.patch_pagetable(&temp, remainder_start as u32);
+            self.patch_pagetable_raw(&temp, remainder_start as u32);
         }
 
         // step 3. create our key material
@@ -822,12 +924,12 @@ impl PddbOs {
         }
         let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
-            version: 0x1111_1111, // api::PDDB_VERSION,
+            version: api::PDDB_VERSION,
             name,
-            age: 0x2222_2222,
+            age: 0,
             prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * VPAGE_SIZE),
-            num_dictionaries: 0x3333_3333,
-            dict_ptr: Some(VirtAddr::new(0x4444_4444_4444_4444).unwrap())//None,
+            num_dictionaries: 0,
+            dict_ptr: None,
         };
         log::info!("prealloc_open_end: {:x?}", basis_root.prealloc_open_end);
         log::info!("prealloc_open_end as vpage: {:x?}", basis_root.prealloc_open_end.as_vpage_num());
