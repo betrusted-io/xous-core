@@ -83,6 +83,7 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
             let block_iter = block.iter_mut();
 
             let journal_bytes = self.basis_data.journal_rev.to_le_bytes();
+            /* rkyv serializer
             let (ser_pos, ser_basis) = self.basis_data.root.ser();
             let ser_bytes = ser_pos.to_le_bytes();
             let slice_iter =
@@ -91,6 +92,12 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
                 .chain(ser_basis.as_ref().iter() // basis
                     // .chain(self.dicts.as_slice()  // dictionary
             )).skip(self.vaddr);
+            */
+            let slice_iter =
+            journal_bytes.iter() // journal rev
+                .chain(self.basis_data.root.as_ref().iter()
+                    // .chain(self.dicts.as_slice()  // dictionary
+            ).skip(self.vaddr);
 
             // note that in the case that we've already serialized the journal, basis, and dictionary, this will produce nothing
             let mut written = 0;
@@ -133,18 +140,58 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
 /// As a directory structure, the basis root is designed to be read into RAM in a contiguous block.
 /// it'll typically be less than a page in length, but a pathological number of dictionaries can make it
 /// much longer.
+///
+/// We're using Repr(C) and alignment to 64-bits to create a consistent "FFI" layout; we use an unsafe cast
+/// to [u8] as our method to serialize the structure, which means we could be subject to breakage if the Rust
+/// compiler decides to change its Repr(C) FFI (it's not guaranteed, but I think at this point in the lifecycle
+/// with simple primitive types it's hard to see it changing). This puts some requirements on the ordering of
+/// fields in the struct below. Note that the serialization is all double-checked by the pddbdbg.py script.
+///
+/// In coming to the choice to use Repr(C), I experimented with rkyv and bincode. bincode relies on the serde
+/// crate, which, as of Nov 2021, has troubles taking in const generics, and thus barfs on our fixed-sized
+/// string allocations that are longer than 32 bytes. Version 2.0 of bincode /might/ do this better, but as
+/// of the design of this crate, it's in "alpha" with no official release to crates.io, so we're avoiding it;
+/// but for sure 1.3.3 of bincode (latest stable as of the design) cannot do the job, and there's a few other
+/// users reporting the issue so I'm pretty sure it's not "user error" on my part.
+///
+/// rkyv handles const generics well, and it perhaps very reasonably shuffles around the order of structures
+/// in the struct to improve the packing efficiency. However, this has the property that rkyv ser will never break
+/// rkyv deser, but unfortunately you can't interoperate with anything that isn't rkyv (e.g., describing the data
+/// layout to someone who wants to do a C implementation). There's also a risk that if we are forced to
+/// upgrade rkyv later on we might break compatibility with what's stored on disk, although I'm pretty sure the
+/// maintainer of rkyv tries to avoid that as much as possible.
+///
+/// Repr(C), while also not guaranteed to be stable, has pressure from the CFFI users at least to keep
+/// things as stable as possible, and it is by definition inter-operable with C. Repr(C) is native to Rust,
+/// with no additional dependencies to pull in, which helps reduce the code base size overall.
+/// So, we're using a repr(C) with an align(8), and then carefully checking our structure organization and
+/// elements to keep things "in spec" with what C can natively understand, in an effort to create a disk
+/// storage structure that can persist through future versions of Rust and also other implementations in other
+/// languages.
+///
+/// Known Repr(C) footguns:
+///  - When you start laying in 64-bit types, stuff has to be 64-bit aligned, or else you'll start to get
+///    uninitialized padding data inserted, which can leak stack data in the serialization process.
+///  - Don't use anything that's not native to C. In particular, for primitives that we want to be "Option"
+///    wrapped, we're using a NonZeroU64 format. The compiler knows how to turn that into a 64-bit C-friendly
+///    structure and serialize/deserialize that into the correct Rust structure. See
+///    https://doc.rust-lang.org/nomicon/other-reprs.html for a citation on that.
 #[derive(rkyv::Serialize, rkyv::Deserialize, rkyv::Archive, PartialEq, Debug)]
+#[repr(C, align(8))]
 pub(crate) struct BasisRoot {
     // everything below here is encrypted using AES-GCM-SIV
     pub(crate) magic: [u8; 4],
-    pub(crate) version: u16,
-    pub(crate) name: BasisRootName,
+    pub(crate) version: u32,
     /// increments every time the BasisRoot is modified. This field must saturate, not roll over.
     pub(crate) age: u32,
+    /// number of dictionaries.
+    pub(crate) num_dictionaries: u32,
+    /* at this point, we are aligned to a 64-bit boundary. All data must stay aligned to this boundary from here out! */
+    /// 64-byte name; aligns to 64-bits
+    pub(crate) name: BasisRootName,
     /// "open end" of the pre-allocated space for the Basis. All Basis data must exist in an extent that is
     /// less than this value. This can be grown and shrunk with allocation and compaction processes.
     pub(crate) prealloc_open_end: PageAlignedVa,
-    pub(crate) num_dictionaries: u32,
     /// virtual address pointer to the start of the dictionary record
     pub(crate) dict_ptr: Option<VirtAddr>,
     // dict_slice: [DictPointer; num_dictionaries],  // DictPointers + num_dictionaries above can be turned into a dict_slice

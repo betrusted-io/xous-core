@@ -822,12 +822,12 @@ impl PddbOs {
         }
         let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
-            version: api::PDDB_VERSION,
+            version: 0x1111_1111, // api::PDDB_VERSION,
             name,
-            age: 0,
+            age: 0x2222_2222,
             prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * VPAGE_SIZE),
-            num_dictionaries: 0,
-            dict_ptr: None,
+            num_dictionaries: 0x3333_3333,
+            dict_ptr: Some(VirtAddr::new(0x4444_4444_4444_4444).unwrap())//None,
         };
         log::info!("prealloc_open_end: {:x?}", basis_root.prealloc_open_end);
         log::info!("prealloc_open_end as vpage: {:x?}", basis_root.prealloc_open_end.as_vpage_num());

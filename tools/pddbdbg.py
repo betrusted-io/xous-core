@@ -177,6 +177,24 @@ class Basis:
         i = 0
         self.journal = int.from_bytes(i_bytes[i:i+4], 'little')
         i += 4
+        self.magic = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.version = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.age = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.num_dicts = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.name = i_bytes[i:i+Basis.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+        i += Basis.MAX_NAME_LEN
+        self.prealloc_open_end = int.from_bytes(i_bytes[i:i+8], 'little')
+        i += 8
+        self.dict_ptr = int.from_bytes(i_bytes[i:i+8], 'little')
+        i += 8
+        """ rkyv unpacker
+        i = 0
+        self.journal = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
         self.rkyvpos = int.from_bytes(i_bytes[i:i+4], 'little')
         i += 4
         print("alloc on disk: {}".format(i_bytes[i:i+8].hex()))
@@ -195,11 +213,12 @@ class Basis:
         i += 10 # mysterious padding in the rkyv format!!
         self.dict_ptr = int.from_bytes(i_bytes[i:i+8], 'little')
         i += 8
+        """
 
     def as_str(self):
         desc = ''
         desc += ' Journal rev: {}\n'.format(self.journal)
-        desc += ' Rkyv pos: {}\n'.format(self.rkyvpos)
+        #desc += ' Rkyv pos: {}\n'.format(self.rkyvpos)
         desc += ' Magic: {:x}\n'.format(self.magic)
         desc += ' Version: {:x}\n'.format(self.version)
         desc += ' Age: {:x}\n'.format(self.age)
