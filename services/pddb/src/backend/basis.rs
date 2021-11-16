@@ -115,6 +115,11 @@ use std::collections::HashMap;
 ///    wrapped, we're using a NonZeroU64 format. The compiler knows how to turn that into a 64-bit C-friendly
 ///    structure and serialize/deserialize that into the correct Rust structure. See
 ///    https://doc.rust-lang.org/nomicon/other-reprs.html for a citation on that.
+
+/// The chosen "stride" of a dict/key entry. Drives a lot of key parameters in the database's characteristics.
+/// This is chosen such that 32 of these entries fit evenly into a VPAGE.
+pub(crate) const DK_STRIDE: usize = 127;
+
 #[derive(PartialEq, Debug, Default)]
 #[repr(C, align(8))]
 pub(crate) struct BasisRoot {
@@ -159,6 +164,9 @@ pub(crate) struct BasisCache {
     pub root: BasisRoot,
     /// dictionary array.
     pub dicts: HashMap::<String, DictCache>,
+    /// A cached copy of the absolute offset of the next free dictionary slot,
+    /// expressed as a number that needs to be multiplied by DICT_VSIZE to arrive at a virtual address
+    pub free_dict_offset: Option<u32>,
     /// the cipher for the basis
     pub cipher: Aes256GcmSiv,
     /// the AAD associated with this Basis
@@ -170,28 +178,75 @@ pub(crate) struct BasisCache {
 /// RAM based copy of the dictionary structures on disk.
 pub(crate) struct DictCache {
     /// Use this to compute the virtual address of the dictionary's location
-    index: u32,
+    /// multiply this by DICT_VSIZE to get at the virtual address. This /could/ be a
+    /// NonZeroU32 type as it should never be 0. Maybe that's a thing to fix later on.
+    pub(crate) index: u32,
     /// A cache of the keys within the dictionary. If the key does not exist in
     /// the cache, one should consult the on-disk copy, assuming the record is clean.
-    keys: HashMap::<String, KeyDescriptor>,
-    /// set if synced to disk. This might not actually be used, because I think we actually
-    /// want a write-through policy for the key cache.
-    clean: bool,
+    pub(crate) keys: HashMap::<String, KeyCache>,
+    /// count of total keys in the dictionary -- may be equal to or larger than the number of elements in `keys`
+    pub(crate) key_count: u32,
+    /// set if synced to disk. should be cleared if the dict is modified, and/or if a subordinate key descriptor is modified.
+    pub(crate) clean: bool,
     /// track modification count
-    age: u32,
+    pub(crate) age: u32,
+    /// copy of the flags entry on the Dict on-disk
+    pub(crate) flags: u32,
 }
 
 /// On-disk representation of the dictionary header.
 #[repr(C, align(8))]
 pub(crate) struct Dictionary {
     /// Reserved for flags on the record entry
-    flags: u32,
+    pub(crate) flags: u32,
     /// Access count to the dicitionary
-    age: u32,
+    pub(crate) age: u32,
     /// Number of keys in the dictionary
-    num_keys: u32,
+    pub(crate) num_keys: u32,
     /// Name. Length should pad out the record to exactly 127 bytes.
-    name: [u8; DICT_NAME_LEN],
+    pub(crate) name: [u8; DICT_NAME_LEN],
+}
+impl Deref for Dictionary {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const Dictionary as *const u8, core::mem::size_of::<Dictionary>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for Dictionary {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut Dictionary as *mut u8, core::mem::size_of::<Dictionary>())
+                as &mut [u8]
+        }
+    }
+}
+
+/// This structure "enforces" the 127-byte stride of dict/key vpage entries
+#[derive(Copy, Clone)]
+pub(crate) struct DictKeyEntry {
+    pub(crate) data: [u8; DK_STRIDE],
+}
+impl Default for DictKeyEntry {
+    fn default() -> DictKeyEntry {
+        DictKeyEntry {
+            data: [0; DK_STRIDE]
+        }
+    }
+}
+
+/// This structure helps to bookkeep which slices within a DictKey virtual page need to be updated
+pub(crate) struct DictKeyVpage {
+    pub(crate) elements: [Option<DictKeyEntry>; VPAGE_SIZE / DK_STRIDE],
+}
+impl<'a> Default for DictKeyVpage {
+    fn default() -> DictKeyVpage {
+        DictKeyVpage {
+            elements: [None; VPAGE_SIZE / DK_STRIDE],
+        }
+    }
 }
 
 /// On-disk representation of the Key. Note that the storage on disk is mis-aligned, so
@@ -200,9 +255,9 @@ pub(crate) struct Dictionary {
 pub(crate) struct KeyDescriptor {
     /// virtual address of the key's start
     start: u64,
-    /// length of the key
+    /// length of the key's stored data
     len: u64,
-    /// reserved for allocation bookkeeping
+    /// amount of space reserved for the key. Must be >= len.
     reserved: u64,
     /// Reserved for flags on the record entry
     flags: u32,
@@ -210,6 +265,50 @@ pub(crate) struct KeyDescriptor {
     age: u32,
     /// Name. Length should pad out the record to exactly 127 bytes.
     name: [u8; KEY_NAME_LEN],
+}
+impl Deref for KeyDescriptor {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const KeyDescriptor as *const u8, core::mem::size_of::<KeyDescriptor>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for KeyDescriptor {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut KeyDescriptor as *mut u8, core::mem::size_of::<KeyDescriptor>())
+                as &mut [u8]
+        }
+    }
+}
+
+pub(crate) struct KeyCache {
+    pub(crate) start: u64,
+    pub(crate) len: u64,
+    pub(crate) reserved: u64,
+    pub(crate) flags: u32,
+    pub(crate) age: u32,
+    /// the current on-disk index of the KeyCache item, enumerated as "0" being the first DictKeyEntry
+    /// slot past the first record which is the descriptor of the dictionary.
+    pub(crate) descriptor_index: u32,
+    /// indicates if it's clean
+    pub(crate) clean: bool,
+}
+impl KeyCache {
+    /// Given a base offset of the dictionary containing the key, compute the starting VirtAddr of the key itself.
+    pub(crate) fn descriptor_vaddr(&self, dict_offset: VirtAddr) -> VirtAddr {
+        VirtAddr::new(dict_offset.get() + ((self.descriptor_index as u64 + 1) * DK_STRIDE as u64)).unwrap()
+    }
+    /// Computes the modular position of the KeyDescriptor within a vpage.
+    pub(crate) fn descriptor_modulus(&self) -> usize {
+        (self.descriptor_index as usize + 1) % (VPAGE_SIZE / DK_STRIDE)
+    }
+    /// Computes the vpage offset as measured from the start of the dictionary storage region
+    pub(crate) fn descriptor_vpage_num(&self) -> usize {
+        (self.descriptor_index as usize + 1) / (VPAGE_SIZE / DK_STRIDE)
+    }
 }
 
 /// used to identify cached/chunked data from a key

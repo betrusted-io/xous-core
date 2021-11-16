@@ -382,6 +382,9 @@ fn xmain() -> ! {
     }
     log::info!("size of vpage: {}", VPAGE_SIZE);
 
+    // add a "wifi access points" dictionary to the default basis
+    pddb_os.dict_add("wifi access points", None);
+
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
     let susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
