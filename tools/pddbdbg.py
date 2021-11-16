@@ -192,10 +192,10 @@ class Basis:
         i += 4
         self.name = i_bytes[i:i+Basis.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
         i += Basis.MAX_NAME_LEN
-        self.prealloc_open_end = int.from_bytes(i_bytes[i:i+8], 'little')
-        i += 8
-        self.dict_ptr = int.from_bytes(i_bytes[i:i+8], 'little')
-        i += 8
+        #self.prealloc_open_end = int.from_bytes(i_bytes[i:i+8], 'little')
+        #i += 8
+        #self.dict_ptr = int.from_bytes(i_bytes[i:i+8], 'little')
+        #i += 8
         """ rkyv unpacker
         i = 0
         self.journal = int.from_bytes(i_bytes[i:i+4], 'little')
@@ -228,9 +228,9 @@ class Basis:
         desc += ' Version: {:x}\n'.format(self.version)
         desc += ' Age: {:x}\n'.format(self.age)
         desc += ' Name: {}\n'.format(self.name)
-        desc += ' Alloc: {:x}\n'.format(self.prealloc_open_end)
+        #desc += ' Alloc: {:x}\n'.format(self.prealloc_open_end)
         desc += ' NumDicts: {:x}\n'.format(self.num_dicts)
-        desc += ' DictPtr: {:x}\n'.format(self.dict_ptr)
+        #desc += ' DictPtr: {:x}\n'.format(self.dict_ptr)
         return desc
 
 def basis_aad(name, version=1, dna=0):

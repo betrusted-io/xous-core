@@ -32,10 +32,10 @@ impl<'a> PddbKey<'a> {
         match components.next().unwrap() {
             Component::Prefix(prefix_component) => {
                 if let Some(dictstr) = prefix_component.as_os_str().to_str() {
-                    if dictstr.len() <= PDDB_MAX_DICT_NAME_LEN {
+                    if dictstr.len() <= DICT_NAME_LEN {
                         dict.push_str(dictstr);
                     } else {
-                        return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB dictionary names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
+                        return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB dictionary names must be shorter than {} bytes", DICT_NAME_LEN)));
                     }
                 } else {
                     return Err(Error::new(ErrorKind::InvalidInput, "PDDB dictionary names must valid UTF-8"));
@@ -54,13 +54,13 @@ impl<'a> PddbKey<'a> {
             }
         }
 
-        if key.len() > PDDB_MAX_KEY_NAME_LEN {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB key names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
+        if key.len() > KEY_NAME_LEN {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB key names must be shorter than {} bytes", DICT_NAME_LEN)));
         }
 
         let request = PddbKeyRequest {
-            dict: xous_ipc::String::<PDDB_MAX_DICT_NAME_LEN>::from_str(dict.as_str()),
-            key: xous_ipc::String::<PDDB_MAX_KEY_NAME_LEN>::from_str(key.as_str()),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict.as_str()),
+            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key.as_str()),
             token: None,
         };
         let mut buf = Buffer::into_buf(request)

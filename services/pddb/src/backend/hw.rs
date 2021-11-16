@@ -89,12 +89,12 @@ pub(crate) struct PddbOs {
     /// We don't blend the System basis into this one because we need to refer to the System basis specifically
     /// for decrypting management structures like the FSCB.
     basis_keys: Vec::<[u8; AES_KEYSIZE]>,
-    /// An in-memory "hot cache" of Basis root data that have been unlocked. Right now, we keep all data resident,
-    /// but, keep in mind: even if the data isn't found here, it could have been evicted from the cache due to
-    /// memory pressure. In which case, a direct search through the disk may be necessary to find your data.
-    /// Basis root data should be fairly compact, however -- it's just the directory data to find the keys and
+    /// An in-memory "priority vector" of Basis root data that have been unlocked. Right now, we keep all data resident.
+    /// Basis root data should be fairly compact -- it's just the directory data to find the keys and
     /// dictionaries, so unless you create 1k's of dictionaries and keys, it'll probably all fit in RAM.
-    basis_cache: HashMap<String, BasisCache>,
+    /// When searching for dictionaries and keys, the search always starts with the LAST item added to the
+    /// basis_cache.
+    basis_cache: Vec::<BasisCache>,
 }
 
 impl PddbOs {
@@ -135,7 +135,7 @@ impl PddbOs {
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
             basis_keys: Vec::new(),
-            basis_cache: HashMap::<String, BasisCache>::new(),
+            basis_cache: Vec::<BasisCache>::new(),
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -158,7 +158,7 @@ impl PddbOs {
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
                 basis_keys: Vec::new(),
-                basis_cache: HashMap::<String, BasisCache>::new(),
+                basis_cache: Vec::<BasisCache>::new(),
             }
         };
         ret
@@ -312,38 +312,51 @@ impl PddbOs {
         let cipher = Aes256::new(&GenericArray::from_slice(key));
         let pt = self.pt_as_slice();
         let mut map = HashMap::<VirtAddr, PhysPage>::new();
-        for (index, candidate) in pt.chunks(aes::BLOCK_SIZE).enumerate() {
-            // encryption is in-place, but the candidates are read-only, so we have to copy them to a new location
-            let mut block = Block::clone_from_slice(candidate);
-            cipher.decrypt_block(&mut block);
-            if let Some(pte) = Pte::try_from_slice(block.as_slice()) {
-                let mut pp = PhysPage(0);
-                pp.set_page_number(index as PhysAddr);
-                pp.set_clean(true);
-                // handle conflicting journal versions here
-                if let Some(prev_page) = map.get(&pte.vaddr()) {
-                    let cipher = Aes256GcmSiv::new(Key::from_slice(key));
-                    let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
-                    let prev_data = self.data_decrypt_page(&cipher, &aad, prev_page);
-                    let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
-                    if let Some(new_d) = new_data {
-                        if let Some(prev_d) = prev_data {
-                            let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
-                            let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
-                            if new_j > prev_j {
+        let blank = [0xffu8; aes::BLOCK_SIZE];
+        for (page_index, pt_page) in pt.chunks(PAGE_SIZE).enumerate() {
+            let clean_page = if pt_page[..aes::BLOCK_SIZE] == blank {
+                if let Some(page) = self.mbbb_retrieve() {
+                    page
+                } else {
+                    log::warn!("Blank page in PT found, but no MBBB entry exists. Suspect PT corruption!");
+                    pt_page
+                }
+            } else {
+                pt_page
+            };
+            for (index, candidate) in clean_page.chunks(aes::BLOCK_SIZE).enumerate() {
+                // encryption is in-place, but the candidates are read-only, so we have to copy them to a new location
+                let mut block = Block::clone_from_slice(candidate);
+                cipher.decrypt_block(&mut block);
+                if let Some(pte) = Pte::try_from_slice(block.as_slice()) {
+                    let mut pp = PhysPage(0);
+                    pp.set_page_number(((page_index * PAGE_SIZE / aes::BLOCK_SIZE) + index) as PhysAddr);
+                    pp.set_clean(true);
+                    // handle conflicting journal versions here
+                    if let Some(prev_page) = map.get(&pte.vaddr()) {
+                        let cipher = Aes256GcmSiv::new(Key::from_slice(key));
+                        let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
+                        let prev_data = self.data_decrypt_page(&cipher, &aad, prev_page);
+                        let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
+                        if let Some(new_d) = new_data {
+                            if let Some(prev_d) = prev_data {
+                                let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
+                                let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
+                                if new_j > prev_j {
+                                    map.insert(pte.vaddr(), pp);
+                                } else if new_j == prev_j {
+                                    log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
+                                }
+                            } else {
+                                // prev data was bogus anyways, replace with the new entry
                                 map.insert(pte.vaddr(), pp);
-                            } else if new_j == prev_j {
-                                log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
                             }
                         } else {
-                            // prev data was bogus anyways, replace with the new entry
-                            map.insert(pte.vaddr(), pp);
+                            // new data is bogus, ignore it
                         }
                     } else {
-                        // new data is bogus, ignore it
+                        map.insert(pte.vaddr(), pp);
                     }
-                } else {
-                    map.insert(pte.vaddr(), pp);
                 }
             }
         }
@@ -865,19 +878,9 @@ impl PddbOs {
             }
         }
     }
-    /// This function will prompt the user to unlock all the Basis. If the user asserts all
-    /// Basis have been unlocked, the function returns `true`. The other option is the user
-    /// can decline to unlock all the Basis right now, cancelling out of the process, which will
-    /// cause the requesting free space sweep to fail.
-    pub(crate) fn basis_request_unlock_all(&self) -> bool {
-        // this function is a morass of UX code that has to be written. Let's save it until later,
-        // once we've got some core functionality in the PDDB; or for testing, we could just "return true"
-        // and YOLO it.
-        unimplemented!();
-    }
 
     pub(crate) fn data_aad(&self, name: &str) -> Vec::<u8> {
-        let mut full_name = [0u8; PDDB_MAX_BASIS_NAME_LEN];
+        let mut full_name = [0u8; BASIS_NAME_LEN];
         for (&src, dst) in name.as_bytes().iter().zip(full_name.iter_mut()) {
             *dst = src;
         }
@@ -887,6 +890,7 @@ impl PddbOs {
         aad.extend_from_slice(&self.dna.to_le_bytes());
         aad
     }
+
     /// returns a decrypted page that still includes the journal number at the very beginning
     /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
     /// just index past it.
@@ -953,15 +957,17 @@ impl PddbOs {
                     }
                     // at this point, we would fill out the cache more, but let's just put in the minimal info so we can do some testing
                     let bcache = BasisCache {
+                        name: basis_name.clone(),
                         clean: true,
                         last_sync: Some(self.tt.elapsed_ms()),
                         root: basis_root,
                         dicts: HashMap::<String, DictCache>::new(),
                         cipher,
                         aad,
+                        age: 0,
                     };
                     log::info!("System BasisRoot record found, saving in cache");
-                    self.basis_cache.insert(basis_name.clone(), bcache);
+                    self.basis_cache.push(bcache);
                     // save the v2p reverse mapping too.
                     self.v2p_map.insert(basis_name, sysbasis_map);
                     return true;
@@ -1076,7 +1082,7 @@ impl PddbOs {
         }
 
         // step 6. create the system basis root structure
-        let mut name: [u8; PDDB_MAX_BASIS_NAME_LEN] = [0; PDDB_MAX_BASIS_NAME_LEN];
+        let mut name: [u8; BASIS_NAME_LEN] = [0; BASIS_NAME_LEN];
         for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
             *dst = src;
         }
@@ -1085,33 +1091,23 @@ impl PddbOs {
             version: api::PDDB_VERSION,
             name: BasisRootName(name),
             age: 0,
-            prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * VPAGE_SIZE),
             num_dictionaries: 0,
-            dict_ptr: None,
         };
-        log::info!("prealloc_open_end: {:x?}", basis_root.prealloc_open_end);
-        log::info!("prealloc_open_end as vpage: {:x?}", basis_root.prealloc_open_end.as_vpage_num());
 
         // step 7. Create a hashmap for our reverse PTE, allocate sectors, and add it to the Pddb's cache
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
 
-        { // this bit of code could be the start of an "allocate space for basis" routine, but we need to think about how overwritten pages are handled...
-            let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
-            for virt_page in 1..=basis_root.prealloc_open_end.as_vpage_num() {
-                if let Some(alloc) = self.fast_space_alloc() {
-                    let mut rpte = alloc.clone();
-                    rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
-                    rpte.set_valid(true);
-                    let va = VirtAddr::new((virt_page * VPAGE_SIZE) as u64).unwrap();
-                    log::info!("adding basis va {:x?} with pte {:?}", va, rpte);
-                    basis_v2p_map.insert(va, rpte);
-                }
-            }
-            //for (&k, &v) in basis_v2p_map.iter() {
-            //    log::info!("basis_v2p_map va: {:x?} pp: {:x?}", k, v);
-            //}
-            self.v2p_map.insert(String::from(PDDB_DEFAULT_SYSTEM_BASIS), basis_v2p_map);
+        let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
+        // allocate one page for the basis root
+        if let Some(alloc) = self.fast_space_alloc() {
+            let mut rpte = alloc.clone();
+            rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
+            rpte.set_valid(true);
+            let va = VirtAddr::new((1 * VPAGE_SIZE) as u64).unwrap(); // page 1 is where the root goes, by definition
+            log::info!("adding basis va {:x?} with pte {:?}", va, rpte);
+            basis_v2p_map.insert(va, rpte);
         }
+        self.v2p_map.insert(String::from(PDDB_DEFAULT_SYSTEM_BASIS), basis_v2p_map);
 
         // step 8. write the System basis to Flash, at the physical locations noted above
         if let Some(syskey) = self.system_basis_key {
@@ -1119,7 +1115,6 @@ impl PddbOs {
             let cipher = Aes256GcmSiv::new(key);
             let basis_encryptor = BasisEncryptor::new(
                 &basis_root,
-                &[],
                 self.dna,
                 cipher,
                 0,
@@ -1168,5 +1163,50 @@ impl PddbOs {
         }
 
         Ok(())
+    }
+
+    /// Adds a dictionary with `name` to:
+    ///    - if `basis_name` is None, the most recently opened basis
+    ///    - if `basis_name` is Some, searches for the given basis and adds the dictionary to that.
+    /// If the dictionary already exists, it returns an informative error.
+    pub(crate) fn dict_add(&self, name: &str, basis_name: Option<&str>) -> Result<()> {
+        if self.basis_cache.len() == 0 {
+            return Err(Error::new(ErrorKind::NotConnected, "PDDB is not mounted"));
+        }
+        let maybe_basis = if let Some(n) = basis_name {
+            self.basis_cache.iter_mut().filter(|&bc| bc.name == n).next()
+        } else {
+            self.basis_cache.last_mut()
+        };
+        if let Some(basis) = maybe_basis {
+            if basis.dicts.get(&String::from(name)).is_some() {
+                Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"))
+            } else {
+                basis.clean = false;
+                // need to allocate a page out of our existing BasisCache allocation
+
+            }
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found"))
+        }
+    }
+
+    /// Runs through the dictionary listing in a basis and compacts them. Call when the
+    /// the dictionary space becomes sufficiently fragmented that accesses are becoming
+    /// inefficient.
+    pub(crate) fn dict_compact(&self, basis_name: Option<&str>) -> Result<()> {
+        unimplemented!();
+    }
+
+    /// This function will prompt the user to unlock all the Basis. If the user asserts all
+    /// Basis have been unlocked, the function returns `true`. The other option is the user
+    /// can decline to unlock all the Basis right now, cancelling out of the process, which will
+    /// cause the requesting free space sweep to fail.
+    pub(crate) fn basis_request_unlock_all(&self) -> bool {
+        // this function is a morass of UX code that has to be written. Let's save it until later,
+        // once we've got some core functionality in the PDDB; or for testing, we could just "return true"
+        // and YOLO it.
+        unimplemented!();
     }
 }

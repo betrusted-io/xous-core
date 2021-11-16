@@ -380,6 +380,7 @@ fn xmain() -> ! {
     } else {
         log::info!("PDDB did not mount; did you remember to format the PDDB region?");
     }
+    log::info!("size of vpage: {}", VPAGE_SIZE);
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");

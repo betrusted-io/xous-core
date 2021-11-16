@@ -40,7 +40,7 @@ bitfield! {
     // these are only used by the FastSpace mechanism; they have no meaning in other contexts
     pub u8, from into SpaceState, space_state, set_space_state: BITFIELD_PAGE_WIDTH + 3, BITFIELD_PAGE_WIDTH + 2;
     // 4 bits for a journal revision. Intended for the FastSpace mechanism
-    pub u8, journal, set_journal: BITFIELD_PAGE_WIDTH + 8, BITFIELD_PAGE_WIDTH + 4;
+    pub u8, journal, set_journal: BITFIELD_PAGE_WIDTH + 7, BITFIELD_PAGE_WIDTH + 4;
 }
 // hashes should only key off of the page number, not the metadata
 impl Hash for PhysPage {
@@ -205,6 +205,7 @@ mod tests {
     #[test]
     fn test_journal_range() {
         let pp = PhysPage(u32::MAX);
+        println!("pp.journal(): {}", pp.journal());
         assert!(pp.journal() == PHYS_PAGE_JOURNAL_MAX, "PHYS_PAGE_JOURNAL_MAX is incorrect");
     }
 }
