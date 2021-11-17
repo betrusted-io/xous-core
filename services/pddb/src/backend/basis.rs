@@ -555,34 +555,37 @@ impl BasisCacheEntry {
 
     /// Syncs this cache entry to the hardware.
     pub(crate) fn basis_sync(&mut self, hw: &mut PddbOs) {
-        let basis_root = BasisRoot {
-            magic: PDDB_MAGIC,
-            version: PDDB_VERSION,
-            name: BasisRootName::try_from_str(&self.name).unwrap(),
-            age: self.age,
-            num_dictionaries: self.num_dicts,
-        };
-        let aad = basis_root.aad(hw.dna());
-        let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
-            .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
-        self.journal = self.journal.saturating_add(1);
-        let journal_bytes = self.journal.to_le_bytes();
-        let slice_iter =
-            journal_bytes.iter() // journal rev
-            .chain(basis_root.as_ref().iter());
-        let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
-        for (&src, dst) in slice_iter.zip(block.iter_mut()) {
-            *dst = src;
-        }
-        let nonce = hw.nonce_gen();
-        let ciphertext = self.cipher.encrypt(
-            &nonce,
-            Payload {
-                aad: &aad,
-                msg: &block,
+        if !self.clean {
+            let basis_root = BasisRoot {
+                magic: PDDB_MAGIC,
+                version: PDDB_VERSION,
+                name: BasisRootName::try_from_str(&self.name).unwrap(),
+                age: self.age,
+                num_dictionaries: self.num_dicts,
+            };
+            let aad = basis_root.aad(hw.dna());
+            let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
+                .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
+            self.journal = self.journal.saturating_add(1);
+            let journal_bytes = self.journal.to_le_bytes();
+            let slice_iter =
+                journal_bytes.iter() // journal rev
+                .chain(basis_root.as_ref().iter());
+            let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+            for (&src, dst) in slice_iter.zip(block.iter_mut()) {
+                *dst = src;
             }
-        ).unwrap();
-        hw.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
+            let nonce = hw.nonce_gen();
+            let ciphertext = self.cipher.encrypt(
+                &nonce,
+                Payload {
+                    aad: &aad,
+                    msg: &block,
+                }
+            ).unwrap();
+            hw.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
+            self.clean = true;
+        }
     }
 }
 
