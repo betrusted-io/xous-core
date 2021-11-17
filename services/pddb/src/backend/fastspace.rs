@@ -1,4 +1,3 @@
-use core::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::convert::TryInto;
 
@@ -156,7 +155,6 @@ impl DerefMut for SpaceUpdate {
 
 
 mod tests {
-    use super::*;
     #[test]
     fn test_fast_space_size() {
         assert!(core::mem::size_of::<FastSpaceInFlash>() & (PAGE_SIZE - 1) == 0, "FastSpaceInFlash is not exactly a multiple of one page in size");

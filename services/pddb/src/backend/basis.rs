@@ -3,15 +3,11 @@ use super::*;
 
 use core::cell::RefCell;
 use std::rc::Rc;
-use core::num::NonZeroU64;
 use core::ops::{Deref, DerefMut};
-use core::{mem, slice};
 use core::mem::size_of;
 use std::convert::TryInto;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce};
 use aes_gcm_siv::aead::{Aead, Payload};
-use rkyv::Aligned;
-use rkyv::ser::serializers::BufferSerializer;
 use std::iter::IntoIterator;
 use std::collections::HashMap;
 use std::io::{Result, Error, ErrorKind};
@@ -122,10 +118,10 @@ use std::io::{Result, Error, ErrorKind};
 /// This is chosen such that 32 of these entries fit evenly into a VPAGE.
 pub(crate) const DK_STRIDE: usize = 127;
 
+/// This is the format of the Basis as stored on disk
 #[derive(PartialEq, Debug, Default)]
 #[repr(C, align(8))]
 pub(crate) struct BasisRoot {
-    // everything below here is encrypted using AES-GCM-SIV
     pub(crate) magic: [u8; 4],
     pub(crate) version: u32,
     /// increments every time the BasisRoot is modified. This field must saturate, not roll over.
@@ -135,6 +131,15 @@ pub(crate) struct BasisRoot {
     /* at this point, we are aligned to a 64-bit boundary. All data must stay aligned to this boundary from here out! */
     /// 64-byte name; aligns to 64-bits
     pub(crate) name: BasisRootName,
+}
+impl BasisRoot {
+    pub(crate) fn aad(&self, dna: u64) -> Vec::<u8> {
+        let mut aad = Vec::<u8>::new();
+        aad.extend_from_slice(&self.name.0);
+        aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
+        aad.extend_from_slice(&dna.to_le_bytes());
+        aad
+    }
 }
 impl Deref for BasisRoot {
     type Target = [u8];
@@ -154,6 +159,7 @@ impl DerefMut for BasisRoot {
     }
 }
 
+/// A list of open Basis that we can use to search and operate upon. Sort of the "root" data structure of the PDDB.
 pub(crate) struct BasisCache {
     /// the cache entries themselves
     cache: Vec::<BasisCacheEntry>,
@@ -196,7 +202,7 @@ impl BasisCache {
             } else {
                 // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
                 // doesn't exist. Do a comprehensive search if our cache isn't complete.
-                if basis.root.num_dictionaries as usize != basis.dicts.len() {
+                if basis.num_dicts as usize != basis.dicts.len() {
                     if basis.dict_deep_search(hw, name).is_some() {
                         return Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"));
                     }
@@ -206,7 +212,7 @@ impl BasisCache {
             // allocate a vpage offset for the dictionary
             let dict_index = basis.dict_get_free_offset(hw);
             let dict_offset = VirtAddr::new(dict_index as u64 * DICT_VSIZE).unwrap();
-            let pp = basis.v2p_map.entry(dict_offset).or_insert_with(||
+            basis.v2p_map.entry(dict_offset).or_insert_with(||
                 hw.try_fast_space_alloc().expect("No free space to allocate dict"));
 
             // create the cache entry
@@ -222,9 +228,13 @@ impl BasisCache {
                 flags: 0,
                 key_count: 0,
             };
+            log::info!("adding dictionary {}", name);
             basis.dicts.insert(String::from(name), dict_cache);
+            basis.num_dicts += 1;
             // encrypt and write the dict entry to disk
             basis.dict_sync(hw, name)?;
+            // sync the root basis structure as well, while we're at it...
+            basis.basis_sync(hw);
             Ok(())
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
@@ -240,8 +250,9 @@ pub(crate) struct BasisCacheEntry {
     pub clean: bool,
     /// last sync time, in systicks, if any
     pub last_sync: Option<u64>,
-    /// the basis root record, as read in from disk
-    pub root: BasisRoot,
+    /// Number of dictionaries. This should be greater than or equal to the number of elements in dicts.
+    /// If dicts has less elements than num_dicts, it means there are still dicts on-disk that haven't been cached.
+    pub num_dicts: u32,
     /// dictionary array.
     pub dicts: HashMap::<String, DictCacheEntry>,
     /// A cached copy of the absolute offset of the next free dictionary slot,
@@ -255,6 +266,8 @@ pub(crate) struct BasisCacheEntry {
     pub age: u32,
     /// virtual to physical page map. It's the reverse mapping of the physical page table on disk.
     pub v2p_map: HashMap<VirtAddr, PhysPage>,
+    /// the last journal rev written to disk
+    pub journal: u32,
 }
 impl BasisCacheEntry {
     /*
@@ -333,7 +346,7 @@ impl BasisCacheEntry {
     pub(crate) fn dict_deep_search(&mut self, hw: &mut PddbOs, name: &str) -> Option<(u32, Dictionary)> {
         let mut try_entry = 1;
         let mut dict_count = 0;
-        while try_entry <= DICT_MAXCOUNT && dict_count < self.root.num_dictionaries {
+        while try_entry <= DICT_MAXCOUNT && dict_count < self.num_dicts {
             let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
             if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
                 if let Some(dict) = self.dict_decrypt(hw, &pp) {
@@ -386,6 +399,7 @@ impl BasisCacheEntry {
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
             let dict_offset = VirtAddr::new(dict.index as u64 * DICT_VSIZE).unwrap();
             if !dict.clean {
+                log::info!("syncing dictionary {}", name);
                 let mut dict_name = [0u8; DICT_NAME_LEN];
                 for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
                     *dst = src;
@@ -461,8 +475,10 @@ impl BasisCacheEntry {
 
                     // 3. merge the vpage modifications into the disk
                     let mut page = if let Some(data) = hw.data_decrypt_page(&self.cipher, &self.aad, &pp) {
+                        log::info!("merging dictionary data into existing page");
                         data
                     } else {
+                        log::info!("existing data invalid, creating a new page");
                         // the existing data was invalid (this happens e.g. on the first time a dict is created). Just overwrite the whole page.
                         vec![0u8; VPAGE_SIZE + size_of::<JournalType>()]
                     };
@@ -515,6 +531,38 @@ impl BasisCacheEntry {
     /// inefficient.
     pub(crate) fn dict_compact(&self, basis_name: Option<&str>) -> Result<()> {
         unimplemented!();
+    }
+
+    /// Syncs this cache entry to the hardware.
+    pub(crate) fn basis_sync(&mut self, hw: &mut PddbOs) {
+        let basis_root = BasisRoot {
+            magic: PDDB_MAGIC,
+            version: PDDB_VERSION,
+            name: BasisRootName::try_from_str(&self.name).unwrap(),
+            age: self.age,
+            num_dictionaries: self.num_dicts,
+        };
+        let aad = basis_root.aad(hw.dna());
+        let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
+            .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
+        self.journal = self.journal.saturating_add(1);
+        let journal_bytes = self.journal.to_le_bytes();
+        let slice_iter =
+            journal_bytes.iter() // journal rev
+            .chain(basis_root.as_ref().iter());
+        let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+        for (&src, dst) in slice_iter.zip(block.iter_mut()) {
+            *dst = src;
+        }
+        let nonce = hw.nonce_gen();
+        let ciphertext = self.cipher.encrypt(
+            &nonce,
+            Payload {
+                aad: &aad,
+                msg: &block,
+            }
+        ).unwrap();
+        hw.patch_data(&ciphertext, pp.page_number() * PAGE_SIZE as u32);
     }
 }
 
@@ -687,6 +735,20 @@ pub(crate) struct BasisKey {
 /// Newtype for BasisRootName so we can give it a default initializer.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct BasisRootName(pub [u8; BASIS_NAME_LEN]);
+impl BasisRootName {
+    pub fn try_from_str(name: &str) -> Result<BasisRootName> {
+        let mut alloc = [0u8; BASIS_NAME_LEN];
+        let bytes = name.as_bytes();
+        if bytes.len() > BASIS_NAME_LEN {
+            Err(Error::new(ErrorKind::InvalidInput, "basis name is too long")) // FileNameTooLong is still nightly :-/
+        } else {
+            for (&src, dst) in bytes.iter().zip(alloc.iter_mut()) {
+                *dst = src;
+            }
+            Ok(BasisRootName(alloc))
+        }
+    }
+}
 impl Default for BasisRootName {
     fn default() -> BasisRootName {
         BasisRootName([0; BASIS_NAME_LEN])

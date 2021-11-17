@@ -1,5 +1,4 @@
-use core::num::{NonZeroU32, NonZeroU64};
-use core::convert::TryFrom;
+use core::num::NonZeroU64;
 use core::ops::Add;
 use super::{PAGE_SIZE, VPAGE_SIZE};
 use crate::SpaceState;
@@ -179,7 +178,6 @@ impl Add for PageAlignedPa {
 
 
 mod tests {
-    use super::*;
     #[test]
     /// PAGE_SIZE is required to be a power of two. 0x1000 -> 0x1000 - 1 = 0xFFF, which forms the bitmasks.
     fn test_page_size() {
@@ -192,7 +190,7 @@ mod tests {
     /// obvious but not explicitly stated fact always remains true.
     #[test]
     fn test_bitfield_bool() {
-        bitfield! {
+        super::bitfield! {
             pub struct Test(u8);
             impl Debug;
             pub test, set_test: 1;

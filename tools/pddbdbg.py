@@ -171,7 +171,7 @@ def main():
 
 
                 if errors == 0:
-                    print([hex(x) for x in basis_data[:256]])
+                    # print([hex(x) for x in basis_data[:256]])
                     basis = Basis(basis_data)
                     print(basis.as_str())
 

@@ -371,9 +371,6 @@ fn xmain() -> ! {
     pddb_os.pddb_format().unwrap();
     log::info!("Done initializing disk");
 
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    pddb_os.dbg_dump();
-
     // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
     let mut basis_cache = BasisCache::new();
 
@@ -387,7 +384,11 @@ fn xmain() -> ! {
     log::info!("size of vpage: {}", VPAGE_SIZE);
 
     // add a "system settings" dictionary to the default basis
+    log::info!("adding 'system settings' dictionary");
     basis_cache.dict_add(&mut pddb_os, "system settings", None).expect("couldn't add system settings dictionary");
+
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pddb_os.dbg_dump();
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");

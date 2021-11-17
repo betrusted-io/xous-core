@@ -29,10 +29,13 @@ pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
 /// top-up, to try and mitigate analysis patterns of the amount of free space available based
 /// on a fixed ratio reduction over time. Expressed as the extents of a random +/- offset
 /// from the FILL_COEFFICIENT.
+#[allow(dead_code)]
 pub(crate) const FSCB_FILL_UNCERTAINTY: f32 = 0.1;
 
-pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
+#[allow(dead_code)]
+pub(crate) const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 // this isn't an "official" basis, but it is used for the AAD for encrypting the FastSpace structure
+#[allow(dead_code)]
 pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

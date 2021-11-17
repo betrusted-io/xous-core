@@ -19,7 +19,6 @@ use std::io::{Result, Error, ErrorKind};
 
 pub(crate) const MBBB_PAGES: usize = 10;
 pub(crate) const FSCB_PAGES: usize = 16;
-pub(crate) const INITIAL_BASIS_ALLOC: usize = 16;
 
 /// size of a physical page
 pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
@@ -200,6 +199,7 @@ impl PddbOs {
         let nonce_array = self.entropy.borrow_mut().get_nonce();
         *Nonce::from_slice(&nonce_array)
     }
+    pub(crate) fn dna(&self) -> u64 {self.dna}
 
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
@@ -972,13 +972,14 @@ impl PddbOs {
                         name: basis_name.clone(),
                         clean: true,
                         last_sync: Some(self.tt.elapsed_ms()),
-                        root: basis_root,
+                        num_dicts: basis_root.num_dictionaries,
                         dicts: HashMap::<String, DictCacheEntry>::new(),
                         cipher,
                         aad,
-                        age: 0,
+                        age: basis_root.age,
                         free_dict_offset: None,
                         v2p_map: sysbasis_map,
+                        journal: u32::from_le_bytes(vpage[..size_of::<JournalType>()].try_into().unwrap()),
                     };
                     log::info!("System BasisRoot record found, saving in cache");
                     // save the v2p reverse mapping too.
@@ -1095,14 +1096,10 @@ impl PddbOs {
         }
 
         // step 6. create the system basis root structure
-        let mut name: [u8; BASIS_NAME_LEN] = [0; BASIS_NAME_LEN];
-        for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
-            *dst = src;
-        }
         let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
             version: api::PDDB_VERSION,
-            name: BasisRootName(name),
+            name: BasisRootName::try_from_str(PDDB_DEFAULT_SYSTEM_BASIS).unwrap(),
             age: 0,
             num_dictionaries: 0,
         };
@@ -1169,11 +1166,6 @@ impl PddbOs {
         }
 
         Ok(())
-    }
-
-    /// syncs up the named basis
-    pub(crate) fn basis_sync(&self, name: &str) {
-        ////// TODO HERE
     }
 
     /// This function will prompt the user to unlock all the Basis. If the user asserts all
