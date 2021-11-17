@@ -68,13 +68,39 @@ use std::io::{Result, Error, ErrorKind};
 /// | 0x0000_003F_8000_0000  |  Dictionary[16383]                        |
 /// | 0x0000_003F_80FE_0F00  |  Unused                                   |
 /// | 0x0000_0040_0000_0000  |  Small data pool start  (256GiB)          |
+/// |                        |    - Dict[0] pool = 16MiB (4k vpages)     |
+/// | 0x0000_0040_00FE_0000  |    - Dict[1] pool = 16MiB                 |
+/// | 0x0000_007F_8000_0000  |    - Dict[16383] pool                     |
+/// | 0x0000_007F_80FE_0000  |  Unused                                   |
 /// | 0x0000_0080_0000_0000  |  Medium data pool start (512GiB)          |
+/// |                        |    - Dict[0] pool = 32MiB (8k vpages)     |
+/// | 0x0000_0080_01FC_0000  |    - Dict[1] pool = 32MiB                 |
+/// | 0x0000_00FF_0000_0000  |  Unused                                   |
 /// | 0x0000_0100_0000_0000  |  Large data pool start  (~16mm TiB)       |
+/// |                        |    - Demand-allocated, bump-pointer       |
+/// |                        |      currently no defrag                  |
 ///
 /// Note that each Basis has its own memory section, and you can have "many" orthogonal Basis without
 /// a collision -- the AES keyspace is 128 bits, so you have a decent chance of no collisions
 /// even with a few billion Basis concurrently existing in the filesystem.
 ///
+/// Memory Pools
+///
+/// Key data is split into three categories of sizes: small, medium, and large. The thresholds
+/// are subject to tuning, but roughly speaking, small data are keys < 512 bytes; medium are ~1k;
+/// and large are bigger than 32k.
+///
+/// Large keys are the simplest - each key starts at a VPAGE-aligned address, and allocates
+/// up from there. Any unused amount is wasted, but with a ~32k threshold you'll have no worse
+/// than 12.5% unused space, probably closer to ~7%-ish if all your data hovered around the threshold.
+/// The allocation is a simple pointer that just keeps going up. De-allocated space is never defragmented,
+/// and we just rely on the space being "huge" to save us.
+///
+/// Small keys are kept in VPAGE-sized pools of data, and compacted together in RAM. The initial, naive
+/// implementation simply keeps all small keys in a HashMap in RAM, and when it comes time to sync them
+/// to disk, they are sorted by update count, and written to disk in ascending order.
+///
+/// Medium keys have a TBD implementation, and are currently directed to the large pool for now.
 ///
 /// The Alignment and Serialization Chronicles
 ///
@@ -607,7 +633,34 @@ pub(crate) struct DictCacheEntry {
     /// copy of the flags entry on the Dict on-disk
     pub(crate) flags: u32,
 }
+impl DictCacheEntry {
+    /// Update a key entry. If the key does not already exist, it will create a new one.
+    ///
+    /// `key_update` will write `data` starting at `offset`, and will grow the record if data
+    /// is larger than the current allocation. If `truncate` is false, the existing data past the end of
+    /// the `data` written is preserved; if `truncate` is true, the excess data past the end of the written
+    /// data is removed.
+    ///
+    /// For small records, a `key_update` call would just want to replace the entire record, so it would have
+    /// an `offset` of 0, `truncate` is true, and the data would be the new data. However, the `offset` and
+    /// `truncate` records are particularly useful for updating very large file streams, which can't be
+    /// held entirely in RAM.
+    ///
+    /// Note: it is up to the higher level Basis disambiguation logic to decide the cross-basis update policy: it
+    /// could either be to update only the dictionary in the latest open basis, update all dictionaries, or update a
+    /// specific dictionary in a named basis. In all of these cases, the Basis resolver will have had to find the
+    /// correct DictCacheEntry and issue the `key_update` to it; for multiple updates, then multiple calls to
+    /// multiple DictCacheEntry are required.
+    pub fn key_update(&mut self, name: &str, data: &[u8], offset: usize, truncate: bool) -> Result <()> {
 
+    }
+
+    /// If `paranoid` is true, this function calls `key_update` with 0's for the data. In either case, it
+    /// deletes the key record from the dictionary.
+    pub fn key_erase(&mut self, name: &str, paranoid: bool) {
+
+    }
+}
 #[derive(Debug)]
 /// On-disk representation of the dictionary header.
 #[repr(C, align(8))]
