@@ -776,6 +776,43 @@ impl Default for BasisRootName {
     }
 }
 
+/* this is retired, but kept around because it's a cool idea that could be useful later.
+   the code below is how the encryptor iterator would be called, followed by the iterator itself.
+   The idea is to create a thing that can chain iterators and generate encrypted blocks. Could
+   be useful for e.g. encrypting long keys and stuff...?
+
+   The code was retired only because we decided to simplify the BasisRoot and it always fits in
+   one page, so all this iterator is just baroque and frankly kind of pointless in that context.
+
+        if let Some(syskey) = self.system_basis_key {
+            let key = Key::from_slice(&syskey);
+            let cipher = Aes256GcmSiv::new(key);
+            let basis_encryptor = BasisEncryptor::new(
+                &basis_root,
+                self.dna,
+                cipher,
+                0,
+                Rc::clone(&self.entropy),
+            );
+            for (&k, &v) in basis_v2p_map.iter() {
+                log::info!("basis_v2p_map retrieved va: {:x?} pp: {:x?}", k, v);
+            }
+            for (vpage_no, ppage_data) in basis_encryptor.into_iter().enumerate() {
+                let vaddr = VirtAddr::new( ((vpage_no + 1) * VPAGE_SIZE) as u64 ).unwrap();
+                match basis_v2p_map.get(&vaddr) {
+                    Some(pp) => {
+                        self.patch_data(&ppage_data, pp.page_number() * PAGE_SIZE as u32);
+                    }
+                    None => {
+                        log::error!("Previously allocated page was not found in our map!");
+                        panic!("Inconsistent internal state");
+                    }
+                }
+            }
+        } else {
+            log::error!("System key was not found, but it should be present!");
+            panic!("Inconsistent internal state");
+        }
 /// Takes in the constituents of the Basis area, and encrypts them into
 /// PAGE_SIZE blocks. Can be called as an iterator, or as a single-shot
 /// for a given offset. Requires a cipher that is pre-keyed with the encryption
@@ -877,7 +914,7 @@ impl<'a> Iterator for BasisEncryptorIter<'a> {
         }
     }
 }
-
+*/
 /*
 #[cfg(test)]
 mod tests {

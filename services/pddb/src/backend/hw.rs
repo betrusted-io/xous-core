@@ -1143,36 +1143,32 @@ impl PddbOs {
             basis_v2p_map.insert(va, rpte);
         }
 
-        // step 8. write the System basis to Flash, at the physical locations noted above. The routine is coded to
-        // handle many pages, but currently only one is allocated during formatting.
+        // step 8. write the System basis to Flash, at the physical locations noted above. This is an extract
+        // from the basis_sync() method on a BasisCache entry, but because we haven't created a cache entry,
+        // we're copypasta'ing the code here
+        let aad = basis_root.aad(self.dna);
+        let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
+            .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
+        let journal_bytes = (0 as u32).to_le_bytes();
+        let slice_iter =
+            journal_bytes.iter() // journal rev
+            .chain(basis_root.as_ref().iter());
+        let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+        for (&src, dst) in slice_iter.zip(block.iter_mut()) {
+            *dst = src;
+        }
+        let nonce = self.nonce_gen();
         if let Some(syskey) = self.system_basis_key {
             let key = Key::from_slice(&syskey);
             let cipher = Aes256GcmSiv::new(key);
-            let basis_encryptor = BasisEncryptor::new(
-                &basis_root,
-                self.dna,
-                cipher,
-                0,
-                Rc::clone(&self.entropy),
-            );
-            for (&k, &v) in basis_v2p_map.iter() {
-                log::info!("basis_v2p_map retrieved va: {:x?} pp: {:x?}", k, v);
-            }
-            for (vpage_no, ppage_data) in basis_encryptor.into_iter().enumerate() {
-                let vaddr = VirtAddr::new( ((vpage_no + 1) * VPAGE_SIZE) as u64 ).unwrap();
-                match basis_v2p_map.get(&vaddr) {
-                    Some(pp) => {
-                        self.patch_data(&ppage_data, pp.page_number() * PAGE_SIZE as u32);
-                    }
-                    None => {
-                        log::error!("Previously allocated page was not found in our map!");
-                        panic!("Inconsistent internal state");
-                    }
+            let ciphertext = cipher.encrypt(
+                &nonce,
+                Payload {
+                    aad: &aad,
+                    msg: &block,
                 }
-            }
-        } else {
-            log::error!("System key was not found, but it should be present!");
-            panic!("Inconsistent internal state");
+            ).unwrap();
+            self.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
         }
 
         // step 9. generate & write initial page table entries
