@@ -176,8 +176,9 @@ impl Add for PageAlignedPa {
     }
 }
 
-
+#[cfg(test)]
 mod tests {
+    use super::*;
     #[test]
     /// PAGE_SIZE is required to be a power of two. 0x1000 -> 0x1000 - 1 = 0xFFF, which forms the bitmasks.
     fn test_page_size() {
@@ -190,7 +191,7 @@ mod tests {
     /// obvious but not explicitly stated fact always remains true.
     #[test]
     fn test_bitfield_bool() {
-        super::bitfield! {
+        bitfield! {
             pub struct Test(u8);
             impl Debug;
             pub test, set_test: 1;

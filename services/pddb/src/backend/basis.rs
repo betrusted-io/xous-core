@@ -160,6 +160,10 @@ impl DerefMut for BasisRoot {
 }
 
 /// A list of open Basis that we can use to search and operate upon. Sort of the "root" data structure of the PDDB.
+///
+/// Note to self: it's tempting to integrate the "hw" parameter (the pointer to the PddbOs structure). However, this
+/// results in interior mutability problems. I guess we could wrap it in a Rc or RefCell or something like that; but
+/// the inconvenience of passing the hw structure around doesn't seem too bad so far...
 pub(crate) struct BasisCache {
     /// the cache entries themselves
     cache: Vec::<BasisCacheEntry>,
@@ -224,8 +228,8 @@ impl BasisCache {
                 index: dict_index,
                 keys: HashMap::<String, KeyCacheEntry>::new(),
                 clean: false,
-                age: 0,
-                flags: 0,
+                age: 111,
+                flags: 222,
                 key_count: 0,
             };
             log::info!("adding dictionary {}", name);
@@ -235,6 +239,8 @@ impl BasisCache {
             basis.dict_sync(hw, name)?;
             // sync the root basis structure as well, while we're at it...
             basis.basis_sync(hw);
+            // finally, sync the page tables.
+            basis.pt_sync(hw);
             Ok(())
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
@@ -387,6 +393,17 @@ impl BasisCacheEntry {
         }
     }
 
+    /// Looks for dirty entries in the page table, and flushes them to disk.
+    pub(crate) fn pt_sync(&mut self, hw: &mut PddbOs) {
+        for (&virt, phys) in self.v2p_map.iter_mut() {
+            if !phys.clean() {
+                log::info!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
+                hw.pt_patch_mapping(virt, phys.page_number());
+                phys.set_clean(true);
+            }
+        }
+    }
+
     /// This will sync the named Dictionary header + dirty *key descriptors*. It does not
     /// sync the key data itself. Note this does not mark the surrounding basis structure as clean
     /// when it exits, even if there are no more dirty entries within.
@@ -410,6 +427,8 @@ impl BasisCacheEntry {
                     num_keys: dict.key_count,
                     name: dict_name,
                 };
+                log::info!("syncing dict: {:?}", dict_disk);
+                // log::info!("raw: {:x?}", dict_disk.deref());
                 // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be clean,
                 // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
 
@@ -447,6 +466,7 @@ impl BasisCacheEntry {
                     // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
                     for (key_name, key) in dict.keys.iter_mut() {
+                        log::info!("merging in key {}", key_name);
                         if !key.clean {
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
@@ -501,7 +521,7 @@ impl BasisCacheEntry {
                         aad: &self.aad,
                     };
                     let ciphertext = self.cipher.encrypt(&nonce, payload).expect("failed to encrypt DictKeys");
-                    hw.patch_data(&ciphertext, pp.page_number() * PAGE_SIZE as u32);
+                    hw.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
 
                     // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
                     // exit the loop
@@ -562,7 +582,7 @@ impl BasisCacheEntry {
                 msg: &block,
             }
         ).unwrap();
-        hw.patch_data(&ciphertext, pp.page_number() * PAGE_SIZE as u32);
+        hw.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
     }
 }
 
@@ -585,6 +605,7 @@ pub(crate) struct DictCacheEntry {
     pub(crate) flags: u32,
 }
 
+#[derive(Debug)]
 /// On-disk representation of the dictionary header.
 #[repr(C, align(8))]
 pub(crate) struct Dictionary {

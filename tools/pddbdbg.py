@@ -10,6 +10,7 @@ import hashlib
 
 SYSTEM_BASIS = '.System'
 PAGE_SIZE = 4096
+VPAGE_SIZE = 4064
 MBBB_PAGES = 10
 
 # from https://github.com/wc-duck/pymmh3/blob/master/pymmh3.py
@@ -130,6 +131,7 @@ def main():
     FSCB_PAGES = 16
     KEY_PAGES = 1
     global PAGE_SIZE
+    global VPAGE_SIZE
 
     with open(imagefile, 'rb') as img_f:
         raw_img = img_f.read()
@@ -155,25 +157,67 @@ def main():
                 p2v_table = tables[name][1]
 
                 basis_data = bytearray()
-                errors = 0
-                for vp in sorted(v2p_table):
-                    pp_start = v2p_table[vp]
-                    # print("pp_start: {}, vp: {}".format(pp_start, vp))
-                    pp_data = data[pp_start:pp_start + PAGE_SIZE]
-                    try:
-                        cipher = AES_GCM_SIV(key, pp_data[:12])
-                        pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
-                        basis_data.extend(bytearray(pt_data))
-                        print("decrypted vpage @ {} ppage @ {:x}".format(vp, v2p_table[vp]))
-                    except ValueError:
-                        errors += 1
-                        print("couldn't decrypt vpage @ {} ppage @ {:x}".format(vp, v2p_table[vp]))
-
-
-                if errors == 0:
+                pp_start = v2p_table[VPAGE_SIZE]
+                # print("pp_start: {}, vp: {}".format(pp_start, vp))
+                pp_data = data[pp_start:pp_start + PAGE_SIZE]
+                try:
+                    cipher = AES_GCM_SIV(key, pp_data[:12])
+                    pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                    basis_data.extend(bytearray(pt_data))
+                    print("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
                     # print([hex(x) for x in basis_data[:256]])
                     basis = Basis(basis_data)
                     print(basis.as_str())
+
+                    basis_dicts = {}
+                    for dict_index in range(basis.num_dicts):
+                        bdict = BasisDicts(dict_index, v2p_table, data, key, name)
+                        basis_dicts[bdict.name] = bdict
+
+                    print(" Dictionaries: ")
+                    for bdict in basis_dicts.values():
+                        print(bdict.as_str())
+
+                except ValueError:
+                    print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
+
+
+
+class BasisDicts:
+    DICT_VSTRIDE = 0xFE_0000
+    MAX_NAME_LEN = 115
+    def __init__(self, index, v2p, disk, key, name):
+        global PAGE_SIZE
+        dict_header_vaddr = self.DICT_VSTRIDE * (index + 1)
+        pp = v2p[dict_header_vaddr]
+        try:
+            print('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
+            cipher = AES_GCM_SIV(key, disk[pp:pp+12])
+            pt_data = cipher.decrypt(disk[pp+12:pp+PAGE_SIZE], basis_aad(name))
+            # print('raw pt_data: {}'.format(pt_data[:127].hex()))
+            i = 0
+            self.journal = int.from_bytes(pt_data[i:i+4], 'little')
+            i += 4
+            self.flags = int.from_bytes(pt_data[i:i+4], 'little')
+            i += 4
+            self.age = int.from_bytes(pt_data[i:i+4], 'little')
+            i += 4
+            self.num_keys = int.from_bytes(pt_data[i:i+4], 'little')
+            i += 4
+            self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+            i += BasisDicts.MAX_NAME_LEN
+            print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
+        except ValueError:
+            print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
+
+    def as_str(self):
+        desc = ''
+        desc += '  Name: {}\n'.format(self.name)
+        desc += '  Age: {}\n'.format(self.age)
+        desc += '  Flags: {}\n'.format(self.flags)
+        desc += '  Key count: {}\n'.format(self.num_keys)
+        return desc
+
 
 class Basis:
     MAX_NAME_LEN = 64

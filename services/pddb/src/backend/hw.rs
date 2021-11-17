@@ -77,6 +77,8 @@ pub(crate) struct PddbOs {
     fscb_phys_base: PageAlignedPa,
     data_phys_base: PageAlignedPa,
     system_basis_key: Option<[u8; AES_KEYSIZE]>,
+    /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
+    cipher_ecb: Option<Aes256>,
     /// fast space cache
     fspace_cache: HashSet<PhysPage>,
     /// memoize the location of the fscb log pages
@@ -135,6 +137,7 @@ impl PddbOs {
             fscb_phys_base,
             data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
+            cipher_ecb: None,
             //v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
             fspace_cache: HashSet::<PhysPage>::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
@@ -158,6 +161,7 @@ impl PddbOs {
                 fscb_phys_base,
                 data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
                 system_basis_key: None,
+                cipher_ecb: None,
                 //v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
                 fspace_cache: HashSet::<PhysPage>::new(),
                 fspace_log_addrs: Vec::<PageAlignedPa>::new(),
@@ -301,6 +305,20 @@ impl PddbOs {
         ).expect("couldn't burn fscb");
     }
 
+    /// Public function that "does the right thing" for patching in a page table entry based on a virtual to
+    /// physical mapping. Note that the `va` is an *address* (in units of bytes), and the `phy_page_num` is
+    /// a *page number* (so a physical address divided by the page size). It's a slightly awkward units, but
+    /// it saves a bit of math going back and forth between the native storage formats of the records.
+    pub(crate) fn pt_patch_mapping(&mut self, va: VirtAddr, phys_page_num: u32) {
+        self.syskey_ensure();
+        let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
+        let mut pte = Pte::new(va, PtFlags::CLEAN, Rc::clone(&self.entropy));
+        let mut block = Block::from_mut_slice(pte.deref_mut());
+        //log::info!("pte pt: {:x?}", block);
+        cipher.encrypt_block(&mut block);
+        //log::info!("pte ct: {:x?}", block);
+        self.patch_pagetable(&block, phys_page_num * aes::BLOCK_SIZE as u32);
+    }
     /// Searches the page table for an MBBB slot. This is currently an O(N) search but
     /// in practice for Precursor there are only 8 pages, so it's quite fast on average.
     /// This would want to be optimized or cached for a much larger filesystem.
@@ -344,6 +362,7 @@ impl PddbOs {
                 if let Some(pte) = Pte::try_from_slice(block.as_slice()) {
                     let mut pp = PhysPage(0);
                     pp.set_page_number(((page_index * PAGE_SIZE / aes::BLOCK_SIZE) + index) as PhysAddr);
+                    // the state is clean because this entry is, by definition, synchronized with the disk
                     pp.set_clean(true);
                     // handle conflicting journal versions here
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
@@ -399,6 +418,7 @@ impl PddbOs {
             }
             core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         }
+        self.cipher_ecb = None;
     }
     fn syskey_ensure(&mut self) {
         if self.system_basis_key.is_none() {
@@ -411,6 +431,10 @@ impl PddbOs {
                 self.rootkeys.decrypt_block(block.try_into().unwrap());
             }
             self.system_basis_key = Some(system_key);
+        }
+        if self.cipher_ecb.is_none() {
+            let cipher = Aes256::new(GenericArray::from_slice(&self.system_basis_key.unwrap()));
+            self.cipher_ecb = Some(cipher);
         }
     }
 
@@ -821,6 +845,7 @@ impl PddbOs {
                     // the entry will be reclaimed on the next full-space scan. This is a less-bad outcome than filling up
                     // the log with 2x the number of operations to record MaybeUsed and then Used.
                     ppc.set_space_state(SpaceState::Used);
+                    ppc.set_clean(false); // the allocated page is not clean, because it hasn't been written to disk
                     ppc.set_journal(pp.journal() + 1); // this is guaranteed not to overflow because of a check in the "if" clause above
 
                     // commit the usage to the journal
@@ -924,7 +949,7 @@ impl PddbOs {
                 Some(data)
             },
             Err(e) => {
-                log::info!("Error decrypting page: {:?}", e);
+                log::trace!("Error decrypting page: {:?}", e); // sometimes this is totally "normal", like when we're testing for valid data.
                 None
             }
         }
@@ -1151,18 +1176,10 @@ impl PddbOs {
         }
 
         // step 9. generate & write initial page table entries
-        if let Some(system_key) = self.system_basis_key {
-            log::info!("encryption key: {:x?}", system_key);
-            let cipher = Aes256::new(GenericArray::from_slice(&system_key));
-            for (&virt, &phys) in basis_v2p_map.iter() {
-                let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
-                let mut block = Block::from_mut_slice(pte.deref_mut());
-                //log::info!("pte pt: {:x?}", block);
-                cipher.encrypt_block(&mut block);
-                //log::info!("pte ct: {:x?}", block);
-                self.patch_pagetable(&block, phys.page_number() * aes::BLOCK_SIZE as u32);
-                //log::info!("pte ct loc: {:x?}", phys.page_number() * aes::BLOCK_SIZE as u32);
-            }
+        for (&virt, phys) in basis_v2p_map.iter_mut() {
+            self.pt_patch_mapping(virt, phys.page_number());
+            // mark the entry as clean, as it has been sync'd to disk
+            phys.set_clean(true);
         }
 
         Ok(())
