@@ -78,8 +78,6 @@ pub(crate) struct PddbOs {
     fscb_phys_base: PageAlignedPa,
     data_phys_base: PageAlignedPa,
     system_basis_key: Option<[u8; AES_KEYSIZE]>,
-    /// virtual to physical page map. It's the reverse mapping of the physical page table on disk.
-    v2p_map: HashMap<String, HashMap<VirtAddr, PhysPage>>,
     /// fast space cache
     fspace_cache: HashSet<PhysPage>,
     /// memoize the location of the fscb log pages
@@ -90,6 +88,10 @@ pub(crate) struct PddbOs {
     dna: u64,
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
+
+    /*
+    /// virtual to physical page map. It's the reverse mapping of the physical page table on disk.
+    v2p_map: HashMap<String, HashMap<VirtAddr, PhysPage>>,
     /// keys to non-system basis that may or may not be mounted
     /// We don't blend the System basis into this one because we need to refer to the System basis specifically
     /// for decrypting management structures like the FSCB.
@@ -99,7 +101,8 @@ pub(crate) struct PddbOs {
     /// dictionaries, so unless you create 1k's of dictionaries and keys, it'll probably all fit in RAM.
     /// When searching for dictionaries and keys, the search always starts with the LAST item added to the
     /// basis_cache.
-    basis_cache: Vec::<BasisCache>,
+    basis_cache: Vec::<BasisCacheEntry>,
+    */
 }
 
 impl PddbOs {
@@ -133,14 +136,14 @@ impl PddbOs {
             fscb_phys_base,
             data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
-            v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
+            //v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
             fspace_cache: HashSet::<PhysPage>::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
             fspace_log_next_addr: None,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
-            basis_keys: Vec::new(),
-            basis_cache: Vec::<BasisCache>::new(),
+            //basis_keys: Vec::new(),
+            //basis_cache: Vec::<BasisCacheEntry>::new(),
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -156,14 +159,14 @@ impl PddbOs {
                 fscb_phys_base,
                 data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
                 system_basis_key: None,
-                v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
+                //v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
                 fspace_cache: HashSet::<PhysPage>::new(),
                 fspace_log_addrs: Vec::<PageAlignedPa>::new(),
                 fspace_log_next_addr: None,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
-                basis_keys: Vec::new(),
-                basis_cache: Vec::<BasisCache>::new(),
+                //basis_keys: Vec::new(),
+                //basis_cache: Vec::<BasisCacheEntry>::new(),
             }
         };
         ret
@@ -193,9 +196,14 @@ impl PddbOs {
         // placeholder
     }
 
+    pub(crate) fn nonce_gen(&mut self) -> Nonce {
+        let nonce_array = self.entropy.borrow_mut().get_nonce();
+        *Nonce::from_slice(&nonce_array)
+    }
+
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
-    fn patch_data(&self, data: &[u8], offset: u32) {
+    pub(crate) fn patch_data(&self, data: &[u8], offset: u32) {
         log::trace!("patch offset: {:x} len: {:x}", offset, data.len());
         assert!(data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(), "attempt to store past disk boundary");
         self.spinor.patch(
@@ -340,7 +348,7 @@ impl PddbOs {
                     // handle conflicting journal versions here
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
                         let cipher = Aes256GcmSiv::new(Key::from_slice(key));
-                        let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
+                        let aad = self.data_aad(basis_name);
                         let prev_data = self.data_decrypt_page(&cipher, &aad, prev_page);
                         let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
                         if let Some(new_d) = new_data {
@@ -502,10 +510,7 @@ impl PddbOs {
         }
     }
 
-    /// WARNING: only call this function when all knows Basis have been unlocked, otherwise locked
-    /// Basis will be marked in the freespace sweep for deletion.
-    ///
-    /// Sweeps through the entire set of known data (as loaded in v2p_map) and
+    /// Sweeps through the entire set of known data (as indicated in `page_heap`) and
     /// returns a subset of the total free space in a PhysPage vector that is a list of physical pages,
     /// in random order, that can be used by PDDB operations in the future without worry about
     /// accidentally overwriting Basis data that are locked.
@@ -514,19 +519,12 @@ impl PddbOs {
     /// needs to run in a fairly memory-constrained environment, keeping in mind that if the PDDB
     /// structures were to be extended to run on say, an external USB drive with gigabytes of space,
     /// we cannot afford to naively allocate vectors that count every single page.
-    fn fast_space_generate(&mut self) -> Vec::<PhysPage> {
+    fn fast_space_generate(&mut self, mut page_heap: BinaryHeap<Reverse<u32>>) -> Vec::<PhysPage> {
         let mut free_pool = Vec::<usize>::new();
         let max_entries = FASTSPACE_PAGES * PAGE_SIZE / size_of::<PhysPage>();
         free_pool.reserve_exact(max_entries);
-        // 1. scan through all of the known physical pages, and add them to a binary heap.
-        //    WARNING: this could get really big for a very large filesystem. It's capped at ~100k for
-        //    Precursor's ~100MiB storage increment.
-        let mut page_heap = BinaryHeap::new();
-        for (_, basismap) in &self.v2p_map {
-            for (_, pp) in basismap {
-                page_heap.push(Reverse(pp.page_number()));
-            }
-        }
+
+        // 1. check that the page_heap has enough entries
         let total_used_pages = page_heap.len();
         let total_free_pages = (PDDB_A_LEN - self.data_phys_base.as_usize()) / PAGE_SIZE;
         log::info!("page alloc: {} used; {} free", total_used_pages, total_free_pages);
@@ -572,8 +570,12 @@ impl PddbOs {
         }
         log::info!("free_pool initial count: {}", free_pool.len());
 
-        // 4. ensure that the free pool stays within the defined deniability ratio
-        let deniable_free_pages = (total_free_pages as f32 * FSCB_FILL_COEFFICIENT) as usize;
+        // 4. ensure that the free pool stays within the defined deniability ratio + noise
+        let mut noise = (self.entropy.borrow_mut().get_u32() as f32 / u32::MAX as f32) * FSCB_FILL_UNCERTAINTY;
+        if self.entropy.borrow_mut().get_u8() > 127 {
+            noise = -noise;
+        }
+        let deniable_free_pages = (total_free_pages as f32 * (FSCB_FILL_COEFFICIENT + noise)) as usize;
         // we're guarantede to have at least one free page, because we errored out if the pages was 0 above.
         let deniable_free_pages = if deniable_free_pages == 0 { 1 } else { deniable_free_pages };
         free_pool.truncate(deniable_free_pages);
@@ -744,7 +746,6 @@ impl PddbOs {
         }
     }
     /// returns a count of the number of pages in the fspace cache
-    #[allow(dead_code)]
     pub fn fast_space_len(&self) -> usize {
         self.fspace_cache.len()
     }
@@ -797,8 +798,14 @@ impl PddbOs {
             }
         }
     }
-    /// attempts to allocate a page out of the fspace cache (in RAM)
-    /// If None is returned, try calling fast_space_generate() to create a new pool of FastSpace pages.
+    /// Attempts to allocate a page out of the fspace cache (in RAM). This is the "normal" route for allocating pages.
+    /// This call should be prefixed by a call to ensure_fast_space_alloc() to make sure it doesn't fail.
+    /// We do a two-stage "look before you leap" because trying to dynamically redo the fast space allocation tables
+    /// in the middle of trying to allocate pages causes a borrow checker problem -- because you're already using the
+    /// page maps to figure out you ran out of space, but then you're trying to mutate them to allocate more space.
+    /// This can lead to concurrency issues, so we do a "look before you leap" method instead, where we just check that
+    /// the correct amount of free space is available before doing an allocation, and if not, we mutate the map to populate
+    /// new free space; and if so, we mutate the map to remove the allocated page.
     pub fn try_fast_space_alloc(&mut self) -> Option<PhysPage> {
         // 1. Confirm that the fspace_log_next_addr is valid. If not, regenerate it, or fail.
         if !self.fast_space_ensure_next_log() {
@@ -848,38 +855,38 @@ impl PddbOs {
             maybe_alloc
         }
     }
-    /// This is the "try really hard" version of fast_space alloc. If the easy path doesn't work,
-    /// It will try to rescan the entire system and allocate a new FastSpace cache.
-    ///
-    /// If this returns None, we really are out of free space, *or* the user has cancelled out of the
-    /// "unlock all Basis" request and the system will act like it's out of free space.
-    pub fn fast_space_alloc(&mut self) -> Option<PhysPage> {
-        match self.try_fast_space_alloc() {
-            Some(alloc) => Some(alloc),
-            None => {
-                if self.basis_request_unlock_all() {
-                    let free_pool = self.fast_space_generate();
-                    if free_pool.len() == 0 {
-                        // we're out of free space
-                        None
-                    } else {
-                        let mut fast_space = FastSpace {
-                            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-                        };
-                        for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
-                            *dst = src;
-                        }
-                        // write just commits a new record to disk, but doesn't update our internal data cache
-                        self.fast_space_write(&fast_space);
-                        // this will ensure the data cache is fully in sync
-                        self.fast_space_read();
-
-                        // retry the alloc -- this /should/ return a Some, but if it doesn't...we're out of space!
-                        self.try_fast_space_alloc()
-                    }
+    /// This is a "look before you leap" function that will potentially pause all system operations
+    /// and do a deep scan for space if the required amount is not available.
+    pub fn ensure_fast_space_alloc(&mut self, pages: usize, cache: &Vec::<BasisCacheEntry>) -> bool {
+        if self.fast_space_len() > pages {
+            true
+        } else {
+            if let Some(used_pages) = self.pddb_generate_used_map(cache) {
+                let free_pool = self.fast_space_generate(used_pages);
+                if free_pool.len() == 0 {
+                    // we're out of free space
+                    false
                 } else {
-                    None
+                    let mut fast_space = FastSpace {
+                        free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+                    };
+                    for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
+                        *dst = src;
+                    }
+                    // write just commits a new record to disk, but doesn't update our internal data cache
+                    self.fast_space_write(&fast_space);
+                    // this will ensure the data cache is fully in sync
+                    self.fast_space_read();
+
+                    // check that we have enough space now -- if not, we're just out of disk space!
+                    if self.fast_space_len() > pages {
+                        true
+                    } else {
+                        false
+                    }
                 }
+            } else {
+                false
             }
         }
     }
@@ -927,11 +934,9 @@ impl PddbOs {
 
     /// Meant to be called on boot. This will read the FastSpace record, and then attempt to load
     /// in the system basis.
-    pub(crate) fn pddb_mount(&mut self) -> bool {
+    pub(crate) fn pddb_mount(&mut self) -> Option<BasisCacheEntry> {
         self.fast_space_read();
         self.syskey_ensure();
-        // this call will nuke whatever hashmap existed before
-        self.v2p_map = HashMap::<String, HashMap<VirtAddr, PhysPage>>::new();
         if let Some(syskey) = self.system_basis_key {
             if let Some(sysbasis_map) = self.pt_scan_key(&syskey, PDDB_DEFAULT_SYSTEM_BASIS) {
                 let cipher = Aes256GcmSiv::new(Key::from_slice(&syskey));
@@ -940,7 +945,7 @@ impl PddbOs {
                 if let Some(root_page) = sysbasis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                     let vpage = match self.data_decrypt_page(&cipher, &aad, root_page) {
                         Some(data) => data,
-                        None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return false;},
+                        None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return None;},
                     };
                     // if the below assertion fails, you will need to re-code this to decrypt more than one VPAGE and stripe into a basis root struct
                     assert!(size_of::<BasisRoot>() <= VPAGE_SIZE, "BasisRoot has grown past a single VPAGE, this routine needs to be re-coded to accommodate the extra bulk");
@@ -950,42 +955,42 @@ impl PddbOs {
                     }
                     if basis_root.magic != PDDB_MAGIC {
                         log::error!("Basis root did not deserialize correctly, unrecoverable error.");
-                        return false;
+                        return None;
                     }
                     if basis_root.version != PDDB_VERSION {
                         log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
-                        return false;
+                        return None;
                     }
                     let basis_name = cstr_to_string(&basis_root.name.0);
                     if basis_name != String::from(PDDB_DEFAULT_SYSTEM_BASIS) {
                         log::error!("PDDB system basis name is incorrect: {}; aborting mount operation.", basis_name);
-                        return false;
+                        return None;
                     }
                     // at this point, we would fill out the cache more, but let's just put in the minimal info so we can do some testing
-                    let bcache = BasisCache {
+                    // for example, perhaps we should recurse through the dictionaries and load some keys...
+                    let bcache = BasisCacheEntry {
                         name: basis_name.clone(),
                         clean: true,
                         last_sync: Some(self.tt.elapsed_ms()),
                         root: basis_root,
-                        dicts: HashMap::<String, DictCache>::new(),
+                        dicts: HashMap::<String, DictCacheEntry>::new(),
                         cipher,
                         aad,
                         age: 0,
                         free_dict_offset: None,
+                        v2p_map: sysbasis_map,
                     };
                     log::info!("System BasisRoot record found, saving in cache");
-                    self.basis_cache.push(bcache);
                     // save the v2p reverse mapping too.
-                    self.v2p_map.insert(basis_name, sysbasis_map);
-                    return true;
+                    return Some(bcache);
                 } else {
                     // i guess technically we could try a brute-force search for the page, but meh.
                     log::error!("System basis did not contain a root page -- unrecoverable error.");
-                    return false;
+                    return None;
                 }
             }
         }
-        false
+        None
     }
 
     /// this function is dangerous in that calling it will completely erase all of the previous data
@@ -1063,7 +1068,8 @@ impl PddbOs {
 
         // step 5. fscb handling
         // pick a set of random pages from the free pool and assign it to the fscb
-        let free_pool = self.fast_space_generate();
+        // pass the generator an empty cache - this causes it to treat the entire disk as free space
+        let free_pool = self.fast_space_generate(BinaryHeap::<Reverse<u32>>::new());
         let mut fast_space = FastSpace {
             free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
         };
@@ -1106,7 +1112,7 @@ impl PddbOs {
 
         let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
         // allocate one page for the basis root
-        if let Some(alloc) = self.fast_space_alloc() {
+        if let Some(alloc) = self.try_fast_space_alloc() {
             let mut rpte = alloc.clone();
             rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
             rpte.set_valid(true);
@@ -1114,9 +1120,9 @@ impl PddbOs {
             log::info!("adding basis va {:x?} with pte {:?}", va, rpte);
             basis_v2p_map.insert(va, rpte);
         }
-        self.v2p_map.insert(String::from(PDDB_DEFAULT_SYSTEM_BASIS), basis_v2p_map);
 
-        // step 8. write the System basis to Flash, at the physical locations noted above
+        // step 8. write the System basis to Flash, at the physical locations noted above. The routine is coded to
+        // handle many pages, but currently only one is allocated during formatting.
         if let Some(syskey) = self.system_basis_key {
             let key = Key::from_slice(&syskey);
             let cipher = Aes256GcmSiv::new(key);
@@ -1127,25 +1133,20 @@ impl PddbOs {
                 0,
                 Rc::clone(&self.entropy),
             );
-            if let Some(basis_v2p_map) = self.v2p_map.get(&String::from(PDDB_DEFAULT_SYSTEM_BASIS)) {
-                for (&k, &v) in basis_v2p_map.iter() {
-                    log::info!("basis_v2p_map retrieved va: {:x?} pp: {:x?}", k, v);
-                }
-                for (vpage_no, ppage_data) in basis_encryptor.into_iter().enumerate() {
-                    let vaddr = VirtAddr::new( ((vpage_no + 1) * VPAGE_SIZE) as u64 ).unwrap();
-                    match basis_v2p_map.get(&vaddr) {
-                        Some(pp) => {
-                            self.patch_data(&ppage_data, pp.page_number() * PAGE_SIZE as u32);
-                        }
-                        None => {
-                            log::error!("Previously allocated page was not found in our map!");
-                            panic!("Inconsistent internal state");
-                        }
+            for (&k, &v) in basis_v2p_map.iter() {
+                log::info!("basis_v2p_map retrieved va: {:x?} pp: {:x?}", k, v);
+            }
+            for (vpage_no, ppage_data) in basis_encryptor.into_iter().enumerate() {
+                let vaddr = VirtAddr::new( ((vpage_no + 1) * VPAGE_SIZE) as u64 ).unwrap();
+                match basis_v2p_map.get(&vaddr) {
+                    Some(pp) => {
+                        self.patch_data(&ppage_data, pp.page_number() * PAGE_SIZE as u32);
+                    }
+                    None => {
+                        log::error!("Previously allocated page was not found in our map!");
+                        panic!("Inconsistent internal state");
                     }
                 }
-            } else {
-                log::error!("Couldn't find the system basis!");
-                panic!("Inconsistent internal state");
             }
         } else {
             log::error!("System key was not found, but it should be present!");
@@ -1156,343 +1157,18 @@ impl PddbOs {
         if let Some(system_key) = self.system_basis_key {
             log::info!("encryption key: {:x?}", system_key);
             let cipher = Aes256::new(GenericArray::from_slice(&system_key));
-            if let Some(basis_v2p_map) = self.v2p_map.get(&String::from(PDDB_DEFAULT_SYSTEM_BASIS)) {
-                for (&virt, &phys) in basis_v2p_map.into_iter() {
-                    let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
-                    let mut block = Block::from_mut_slice(pte.deref_mut());
-                    //log::info!("pte pt: {:x?}", block);
-                    cipher.encrypt_block(&mut block);
-                    //log::info!("pte ct: {:x?}", block);
-                    self.patch_pagetable(&block, phys.page_number() * aes::BLOCK_SIZE as u32);
-                    //log::info!("pte ct loc: {:x?}", phys.page_number() * aes::BLOCK_SIZE as u32);
-                }
+            for (&virt, &phys) in basis_v2p_map.iter() {
+                let mut pte = Pte::new(virt, PtFlags::CLEAN, Rc::clone(&self.entropy));
+                let mut block = Block::from_mut_slice(pte.deref_mut());
+                //log::info!("pte pt: {:x?}", block);
+                cipher.encrypt_block(&mut block);
+                //log::info!("pte ct: {:x?}", block);
+                self.patch_pagetable(&block, phys.page_number() * aes::BLOCK_SIZE as u32);
+                //log::info!("pte ct loc: {:x?}", phys.page_number() * aes::BLOCK_SIZE as u32);
             }
         }
 
         Ok(())
-    }
-
-    /// Adds a dictionary with `name` to:
-    ///    - if `basis_name` is None, the most recently opened basis
-    ///    - if `basis_name` is Some, searches for the given basis and adds the dictionary to that.
-    /// If the dictionary already exists, it returns an informative error.
-    pub(crate) fn dict_add(&mut self, name: &str, basis_name: Option<&str>) -> Result<()> {
-        if self.basis_cache.len() == 0 {
-            return Err(Error::new(ErrorKind::NotConnected, "PDDB is not mounted"));
-        }
-        let maybe_basis = if let Some(n) = basis_name {
-            self.basis_cache.iter_mut().filter(|bc| bc.name == n).next()
-        } else {
-            self.basis_cache.last_mut()
-        };
-        if let Some(basis) = maybe_basis {
-            basis.age = basis.age.saturating_add(1);
-            if basis.dicts.get(&String::from(name)).is_some() {
-                // quick exit if we see the dictionary is hot in the cache
-                return Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"));
-            } else {
-                // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
-                // doesn't exist. Do a comprehensive search if our cache isn't complete.
-                if basis.root.num_dictionaries as usize != basis.dicts.len() {
-                    if self.dict_deep_search(&mut basis, name).is_some() {
-                        return Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"));
-                    }
-                }
-            }
-            basis.clean = false;
-            // allocate a vpage offset for the dictionary
-            let dict_index = self.dict_get_free_offset(&mut basis);
-            let dict_offset = VirtAddr::new(dict_index as u64 * DICT_VSIZE).unwrap();
-            let map = self.v2p_map.get_mut(&basis.name).expect("No v2p map despite extant BasisCache record. Shouldn't be possible...");
-            let pp = if let Some(pp) = map.get(&dict_offset) {
-                pp
-            } else {
-                if let Some(pp) = self.fast_space_alloc() {
-                    map.insert(dict_offset, pp.clone());
-                    &pp
-                } else {
-                    return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"))
-                }
-            };
-            // create the cache entry
-            let mut dict_name = [0u8; DICT_NAME_LEN];
-            for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
-                *dst = src;
-            }
-            let dict_cache = DictCache {
-                index: dict_index,
-                keys: HashMap::<String, KeyCache>::new(),
-                clean: false,
-                age: 0,
-                flags: 0,
-                key_count: 0,
-            };
-            basis.dicts.insert(String::from(name), dict_cache);
-            // encrypt and write the dict entry to disk
-            self.dict_sync(basis, name);
-            Ok(())
-        } else {
-            Err(Error::new(ErrorKind::NotFound, "Requested basis not found"))
-        }
-    }
-
-    /// If `paranoid` is true, it recurses through each key and replaces its data with random junk.
-    /// Otherwise, it does a "shallow" delete and just removes the directory entry, which is much
-    /// more performant. Note that the intended "fast" way to secure-erase data is to store sensitive
-    /// data in its own Basis, and then remove the Basis itself. This is much faster than picking
-    /// through compounded data and re-writing partias sectors, and because of this, initially,
-    /// the `paranoid` erase is `unimplemented`.
-    pub(crate) fn dict_delete(&self, name: &str, basis_name: Option<&str>, paranoid: bool) -> Result<()> {
-        if self.basis_cache.len() == 0 {
-            return Err(Error::new(ErrorKind::NotConnected, "PDDB is not mounted"));
-        }
-        let maybe_basis = if let Some(n) = basis_name {
-            self.basis_cache.iter_mut().filter(|&bc| bc.name == n).next()
-        } else {
-            self.basis_cache.last_mut()
-        };
-        if let Some(basis) = maybe_basis {
-            if let Some((index, _dict)) = self.dict_deep_search(&mut basis, name) {
-                let map = self.v2p_map.get_mut(&basis.name).expect("No v2p map despite extant BasisCache record. Shouldn't be possible...");
-                if !paranoid {
-                    // erase the header by writing over with random data. This makes the dictionary unsearchable, but if you
-                    // have the key, you can of course do a hard-scan and try partially re-assemble the dictionary.
-                    if let Some(pp) = map.get(&VirtAddr::new(index as u64 * DICT_VSIZE as u64).unwrap()) {
-                        let mut random = [0u8; PAGE_SIZE];
-                        self.entropy.borrow_mut().get_slice(&mut random);
-                        self.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
-                    } else {
-                        log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
-                    }
-                } else {
-                    unimplemented!("For now store sensitive data in its own Basis, and then delete the Basis.");
-                    // this is a bit of an arduous code path, it involves recursing through all the keys and nuking
-                    // them. Let's write this after we've actually _got keys_ (we're just figuring out how to add a dictionary
-                    // in the first place right now!).
-                }
-
-                // de-allocate all of the dictionary entries
-                Ok(())
-            } else {
-                Err(Error::new(ErrorKind::NotFound, "Dictionary not found"))
-            }
-        } else {
-            Err(Error::new(ErrorKind::NotFound, "Requested basis not found"))
-        }
-    }
-
-    /// this will sync the named Dictionary header + dirty *key descriptors*. It does not
-    /// sync the key data itself. Note this does not mark the surrounding basis structure as clean
-    /// when it exits, even if there are no more dirty entries within.
-    pub(crate) fn dict_sync(&self, basis: &mut BasisCache, name: &str) {
-        let map = self.v2p_map.get(&basis.name).expect("No v2p map despite extant BasisCache record. Shouldn't be possible...");
-        if let Some(dict) = basis.dicts.get_mut(&String::from(name)) {
-            let dict_offset = VirtAddr::new(dict.index as u64 * DICT_VSIZE).unwrap();
-            if !dict.clean {
-                let mut dict_name = [0u8; DICT_NAME_LEN];
-                for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
-                    *dst = src;
-                }
-                let dict_disk = Dictionary {
-                    flags: dict.flags,
-                    age: dict.age,
-                    num_keys: dict.key_count,
-                    name: dict_name,
-                };
-                // observation: all keys to be flushed to disk will be in the KeyCache. Some may be clean,
-                // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
-
-                // this is the virtual page within the dictionary region that we're currently serializing
-                let mut vpage_num = 0;
-                loop {
-                    // 1. resolve the virtual address to a target page
-                    let mut cur_vpage = VirtAddr::new(dict_offset.get() + (vpage_num as u64 * VPAGE_SIZE as u64)).unwrap();
-                    let pp = if let Some(pp) = map.get(&cur_vpage) {
-                        pp
-                    } else {
-                        if let Some(pp) = self.fast_space_alloc() {
-                            map.insert(dict_offset, pp.clone());
-                            &pp
-                        } else {
-                            panic!("No free space to allocate dict");
-                        }
-                    };
-
-                    // 2(a). fill in the target vpage with data: header special case
-                    let mut dk_vpage = DictKeyVpage::default();
-                    // the dict always occupies the first entry of the first vpage in the dictionary region
-                    if vpage_num == 0 {
-                        let mut dk_entry = DictKeyEntry::default();
-                        for (&src, dst) in dict_disk.deref().iter().zip(dk_entry.data.iter_mut()) {
-                            *dst = src;
-                        }
-                        dk_vpage.elements[0] = Some(dk_entry);
-                    }
-
-                    // 2(b). fill in the target vpage with data: general key case
-                    // Scan the DictCache.keys record for dirty keys within the current target vpage's range
-                    // this is not a terribly efficient operation right now, because the DictCache is designed to
-                    // be searched by name, but in this case, we want to check for an index range. There's a lot
-                    // of things we could do to optimize this, depending on the memory/time trade-off we want to
-                    // make, but for now, let's do it with a dumb O(N) scan through the KeyCache, running under
-                    // the assumption that the KeyCache doesn't ever get to a very large N.
-                    let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
-                    for (key_name, key) in dict.keys.iter_mut() {
-                        if !key.clean {
-                            if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
-                            key.descriptor_vaddr(dict_offset) < next_vpage {
-                                // key is within the current page, add it to the target list
-                                let mut dk_entry = DictKeyEntry::default();
-                                let mut kn = [0u8; KEY_NAME_LEN];
-                                for (&src, dst) in key_name.as_bytes().iter().zip(kn.iter_mut()) {
-                                    *dst = src;
-                                }
-                                let key_desc = KeyDescriptor {
-                                    start: key.start,
-                                    len: key.len,
-                                    reserved: key.reserved,
-                                    flags: key.flags,
-                                    age: key.age,
-                                    name: kn,
-                                };
-                                for (&src, dst) in key_desc.deref().iter().zip(dk_entry.data.iter_mut()) {
-                                    *dst = src;
-                                }
-                                dk_vpage.elements[key.descriptor_modulus()] = Some(dk_entry);
-                            }
-                            key.clean = true;
-                        }
-                    }
-
-                    // 3. merge the vpage modifications into the disk
-                    let page = if let Some(data) = self.data_decrypt_page(&basis.cipher, &basis.aad, &pp) {
-                        data
-                    } else {
-                        // the existing data was invalid (this happens e.g. on the first time a dict is created). Just overwrite the whole page.
-                        vec![0u8; VPAGE_SIZE + size_of::<JournalType>()]
-                    };
-                    for (index, stride) in page[size_of::<JournalType>()..].chunks_mut(DK_STRIDE).enumerate() {
-                        if let Some(elem) = dk_vpage.elements[index] {
-                            for (&src, dst) in elem.data.iter().zip(stride.iter_mut()) {
-                                *dst = src;
-                            }
-                        }
-                    }
-                    // bump the journal rev. This means that revs start at "1", because the empty data array as passed has a 0 in it by default.
-                    let newrev = JournalType::from_le_bytes(page[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
-                    for (&src, dst) in newrev.to_le_bytes().iter().zip(page[..size_of::<JournalType>()].iter_mut()) {
-                        *dst = src;
-                    }
-                    // generate nonce and write out
-                    let nonce_array = self.entropy.borrow_mut().get_nonce();
-                    let nonce = Nonce::from_slice(&nonce_array);
-                    let payload = Payload {
-                        msg: &page,
-                        aad: &basis.aad,
-                    };
-                    let ciphertext = basis.cipher.encrypt(nonce, payload).expect("failed to encrypt DictKeys");
-                    self.patch_data(&ciphertext, pp.page_number() * PAGE_SIZE as u32);
-
-                    // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
-                    // exit the loop
-                    let mut found_next = false;
-                    for key in dict.keys.values() {
-                        if !key.clean {
-                            found_next = true;
-                            // note: we don't care *which* vpage we do next -- so we just break after finding the first one
-                            vpage_num = key.descriptor_vpage_num();
-                            break;
-                        }
-                    }
-                    if !found_next {
-                        break;
-                    }
-                }
-                dict.clean = true;
-            }
-        } else {
-            log::warn!("dict_sync() calleld with an invalid dictionary name; ignoring");
-        }
-    }
-
-    pub(crate) fn dict_get_free_offset(&self, basis: &mut BasisCache) -> u32 {
-        let map = self.v2p_map.get(&basis.name).expect("No v2p map despite extant BasisCache record. Shouldn't be possible...");
-        if let Some(offset) = basis.free_dict_offset.take() {
-            return offset;
-        } else {
-            let mut try_entry = 1;
-            while try_entry <= DICT_MAXCOUNT {
-                let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
-                if let Some(pp) = map.get(&dict_vaddr) {
-                    if self.dict_decrypt(&basis, &pp).is_none() {
-                        // mapping exists, but the data is invalid. It's a free entry.
-                        return try_entry as u32
-                    }
-                } else {
-                    // mapping doesn't exist yet, that's a free entry
-                    return try_entry as u32
-                }
-                try_entry += 1;
-            }
-        }
-        // maybe we should handle this better? but, I think this should be super-rare, as we allow 16384 dictionaries per Basis,
-        // so if we got here I'm guessing it's more likely due to a coding error than an actually full Basis.
-        panic!("Basis full, can't allocate dictionary");
-    }
-
-    /// Returns a tuple of "dictionary offset" , "dictionary"; the "dictionary offset" needs to be multiplied by DICT_VSIZE to arrive
-    /// at a fully expanded virtual address.
-    pub(crate) fn dict_deep_search(&mut self, basis: &mut BasisCache, name: &str) -> Option<(u32, Dictionary)> {
-        let map = self.v2p_map.get(&basis.name).expect("No v2p map despite extant BasisCache record. Shouldn't be possible...");
-
-        let mut try_entry = 1;
-        let mut dict_count = 0;
-        while try_entry <= DICT_MAXCOUNT && dict_count < basis.root.num_dictionaries {
-            let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
-            if let Some(pp) = map.get(&dict_vaddr) {
-                if let Some(dict) = self.dict_decrypt(&basis, &pp) {
-                    if cstr_to_string(&dict.name) == name {
-                        return Some((try_entry as u32, dict))
-                    }
-                    dict_count += 1;
-                } else {
-                    // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
-                    if basis.free_dict_offset.is_none() {
-                        basis.free_dict_offset = Some(try_entry as u32);
-                    }
-                }
-            } else {
-                // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
-                if basis.free_dict_offset.is_none() {
-                    basis.free_dict_offset = Some(try_entry as u32);
-                }
-            }
-            try_entry += 1;
-        }
-        None
-    }
-
-    /// The `pp` must be the resolved physical page storing the top of the given
-    /// dictionary index for this to work.
-    pub(crate) fn dict_decrypt(&self, basis: &BasisCache, pp: &PhysPage) -> Option<Dictionary> {
-        if let Some(data) = self.data_decrypt_page(&basis.cipher, &basis.aad, &pp) {
-            let mut dict = Dictionary {
-                flags: 0, age: 0, num_keys: 0, name: [0; DICT_NAME_LEN]
-            };
-            for (&src, dst) in data[size_of::<JournalType>()..].iter().zip(dict.deref_mut().iter_mut()) {
-                *dst = src;
-            }
-            Some(dict)
-        } else {
-            None
-        }
-    }
-
-    /// Runs through the dictionary listing in a basis and compacts them. Call when the
-    /// the dictionary space becomes sufficiently fragmented that accesses are becoming
-    /// inefficient.
-    pub(crate) fn dict_compact(&self, basis_name: Option<&str>) -> Result<()> {
-        unimplemented!();
     }
 
     /// syncs up the named basis
@@ -1504,11 +1180,54 @@ impl PddbOs {
     /// Basis have been unlocked, the function returns `true`. The other option is the user
     /// can decline to unlock all the Basis right now, cancelling out of the process, which will
     /// cause the requesting free space sweep to fail.
-    pub(crate) fn basis_request_unlock_all(&self) -> bool {
-        // this function is a morass of UX code that has to be written. Let's save it until later,
-        // once we've got some core functionality in the PDDB; or for testing, we could just "return true"
-        // and YOLO it.
-        unimplemented!();
+    pub(crate) fn pddb_generate_used_map(&self, cache: &Vec::<BasisCacheEntry>) -> Option<BinaryHeap<Reverse<u32>>> {
+        if let Some(extra_keys) = self.pddb_get_additional_keys(&cache) {
+            let mut page_heap = BinaryHeap::new();
+            // 1. check the extra keys, if any
+            for (key, name) in extra_keys {
+                // scan the extra closed basis
+                if let Some(map) = self.pt_scan_key(&key, &name) {
+                    for pp in map.values() {
+                        page_heap.push(Reverse(pp.page_number()))
+                    }
+                }
+            }
+            // 2. scan through all of the physical pages in our caches, and add them to a binary heap.
+            //    WARNING: this could get really big for a very large filesystem. It's capped at ~100k for
+            //    Precursor's ~100MiB storage increment.
+            for entry in cache {
+                for pp in entry.v2p_map.values() {
+                    page_heap.push(Reverse(pp.page_number()));
+                }
+            }
+            Some(page_heap)
+        } else {
+            None
+        }
+    }
+
+    /// UX function that informs the user of the currently open Basis, and prompts the user to enter passwords
+    /// for other basis that may not currently be open. This function is also responsible for validating
+    /// that the password is correct by doing a quick scan for "any" PTEs that happen to decrypt to something
+    /// valid (it'll scan up and stop as soon as one Pte checks out). Note that it then only returns
+    /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
+    /// at the conclusion of the sweep, but their page use can be accounted for.
+    pub(crate) fn pddb_get_additional_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
+        log::info!("{} basis are open, with the following names:", cache.len());
+        for entry in cache {
+            log::info!(" - {}", entry.name);
+        }
+
+        // 0. allow user to cancel out of the operation -- this will abort everything and cause the current
+        //    alloc operation to fail
+
+        // 1. prompt user to enter any name/password combos for other basis we want to keep
+        // 2. validate the name/password combo
+        // 3. add to the Aes256 return vec
+        // 4. repeat summary print-out
+
+        // for now, do nothing -- just indicate success with a returned empty set
+        Some(Vec::<([u8; AES_KEYSIZE], String)>::new())
     }
 }
 

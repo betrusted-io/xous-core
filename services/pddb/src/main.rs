@@ -374,16 +374,20 @@ fn xmain() -> ! {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pddb_os.dbg_dump();
 
+    // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
+    let mut basis_cache = BasisCache::new();
+
     log::info!("Attempting to mount the PDDB");
-    if pddb_os.pddb_mount() {
+    if let Some(sys_basis) = pddb_os.pddb_mount() {
         log::info!("PDDB mount operation finished successfully");
+        basis_cache.add_basis(sys_basis);
     } else {
         log::info!("PDDB did not mount; did you remember to format the PDDB region?");
     }
     log::info!("size of vpage: {}", VPAGE_SIZE);
 
-    // add a "wifi access points" dictionary to the default basis
-    pddb_os.dict_add("wifi access points", None);
+    // add a "system settings" dictionary to the default basis
+    basis_cache.dict_add(&mut pddb_os, "system settings", None).expect("couldn't add system settings dictionary");
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");

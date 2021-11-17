@@ -25,6 +25,11 @@ pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 /// 0.5: with this setting, we won't be more than a factor of 2 off from the ideal setting!
 #[allow(dead_code)]
 pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
+/// This adds some uncertainty to the fill coeffiecient. This adds "noise" to the free space
+/// top-up, to try and mitigate analysis patterns of the amount of free space available based
+/// on a fixed ratio reduction over time. Expressed as the extents of a random +/- offset
+/// from the FILL_COEFFICIENT.
+pub(crate) const FSCB_FILL_UNCERTAINTY: f32 = 0.1;
 
 pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 // this isn't an "official" basis, but it is used for the AAD for encrypting the FastSpace structure

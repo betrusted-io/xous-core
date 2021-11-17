@@ -14,6 +14,8 @@ use rkyv::Aligned;
 use rkyv::ser::serializers::BufferSerializer;
 use std::iter::IntoIterator;
 use std::collections::HashMap;
+use std::io::{Result, Error, ErrorKind};
+
 
 /// In basis space, the BasisRoot is located at VPAGE #1 (VPAGE #0 is always invalid).
 /// A VPAGE is 0xFE0 (4,064) bytes long, which is equal to a PAGE of 4k minus 32 bytes of encryption+journal
@@ -152,8 +154,86 @@ impl DerefMut for BasisRoot {
     }
 }
 
-/// This is the RAM cached copy of a basis as maintained in the PDDB.
 pub(crate) struct BasisCache {
+    /// the cache entries themselves
+    cache: Vec::<BasisCacheEntry>,
+}
+impl BasisCache {
+    pub(crate) fn new() -> Self {
+        BasisCache { cache: Vec::new() }
+    }
+    pub(crate) fn add_basis(&mut self, basis: BasisCacheEntry) {
+        self.cache.push(basis);
+    }
+    // placeholder reminder: deleting a basis is a bit more complicated, as it requires
+    // syncing its contents.
+
+    fn select_basis(&mut self, basis_name: Option<&str>) -> Option<&mut BasisCacheEntry> {
+        if self.cache.len() == 0 {
+            log::error!("Can't select basis: PDDB is not mounted");
+            return None
+        }
+        if let Some(n) = basis_name {
+            self.cache.iter_mut().filter(|bc| bc.name == n).next()
+        } else {
+            self.cache.last_mut()
+        }
+    }
+
+    /// Adds a dictionary with `name` to:
+    ///    - if `basis_name` is None, the most recently opened basis
+    ///    - if `basis_name` is Some, searches for the given basis and adds the dictionary to that.
+    /// If the dictionary already exists, it returns an informative error.
+    pub(crate) fn dict_add(&mut self, hw: &mut PddbOs, name: &str, basis_name: Option<&str>) -> Result<()> {
+        if !hw.ensure_fast_space_alloc(1, &self.cache) {
+            return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"));
+        }
+        if let Some(basis) = self.select_basis(basis_name) {
+            basis.age = basis.age.saturating_add(1);
+            if basis.dicts.get(&String::from(name)).is_some() {
+                // quick exit if we see the dictionary is hot in the cache
+                return Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"));
+            } else {
+                // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
+                // doesn't exist. Do a comprehensive search if our cache isn't complete.
+                if basis.root.num_dictionaries as usize != basis.dicts.len() {
+                    if basis.dict_deep_search(hw, name).is_some() {
+                        return Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"));
+                    }
+                }
+            }
+            basis.clean = false;
+            // allocate a vpage offset for the dictionary
+            let dict_index = basis.dict_get_free_offset(hw);
+            let dict_offset = VirtAddr::new(dict_index as u64 * DICT_VSIZE).unwrap();
+            let pp = basis.v2p_map.entry(dict_offset).or_insert_with(||
+                hw.try_fast_space_alloc().expect("No free space to allocate dict"));
+
+            // create the cache entry
+            let mut dict_name = [0u8; DICT_NAME_LEN];
+            for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
+                *dst = src;
+            }
+            let dict_cache = DictCacheEntry {
+                index: dict_index,
+                keys: HashMap::<String, KeyCacheEntry>::new(),
+                clean: false,
+                age: 0,
+                flags: 0,
+                key_count: 0,
+            };
+            basis.dicts.insert(String::from(name), dict_cache);
+            // encrypt and write the dict entry to disk
+            basis.dict_sync(hw, name)?;
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+        }
+    }
+}
+
+/// This is the RAM cached copy of a basis as maintained in the PDDB.
+pub(crate) struct BasisCacheEntry {
     /// the name of this basis
     pub name: String,
     /// set if synched to what's on disk
@@ -163,7 +243,7 @@ pub(crate) struct BasisCache {
     /// the basis root record, as read in from disk
     pub root: BasisRoot,
     /// dictionary array.
-    pub dicts: HashMap::<String, DictCache>,
+    pub dicts: HashMap::<String, DictCacheEntry>,
     /// A cached copy of the absolute offset of the next free dictionary slot,
     /// expressed as a number that needs to be multiplied by DICT_VSIZE to arrive at a virtual address
     pub free_dict_offset: Option<u32>,
@@ -173,17 +253,280 @@ pub(crate) struct BasisCache {
     pub aad: Vec::<u8>,
     /// modification count
     pub age: u32,
+    /// virtual to physical page map. It's the reverse mapping of the physical page table on disk.
+    pub v2p_map: HashMap<VirtAddr, PhysPage>,
+}
+impl BasisCacheEntry {
+    /*
+    /// If `paranoid` is true, it recurses through each key and replaces its data with random junk.
+    /// Otherwise, it does a "shallow" delete and just removes the directory entry, which is much
+    /// more performant. Note that the intended "fast" way to secure-erase data is to store sensitive
+    /// data in its own Basis, and then remove the Basis itself. This is much faster than picking
+    /// through compounded data and re-writing partias sectors, and because of this, initially,
+    /// the `paranoid` erase is `unimplemented`.
+    pub(crate) fn dict_delete(&self, name: &str, basis_name: Option<&str>, paranoid: bool) -> Result<()> {
+        if self.basis_cache.len() == 0 {
+            return Err(Error::new(ErrorKind::NotConnected, "PDDB is not mounted"));
+        }
+        let maybe_basis = if let Some(n) = basis_name {
+            self.basis_cache.iter_mut().filter(|&bc| bc.name == n).next()
+        } else {
+            self.basis_cache.last_mut()
+        };
+        if let Some(basis) = maybe_basis {
+            if let Some((index, _dict)) = self.dict_deep_search(&mut basis, name) {
+                let map = self.v2p_map.get_mut(&basis.name).expect("No v2p map despite extant BasisCacheEntry record. Shouldn't be possible...");
+                if !paranoid {
+                    // erase the header by writing over with random data. This makes the dictionary unsearchable, but if you
+                    // have the key, you can of course do a hard-scan and try partially re-assemble the dictionary.
+                    if let Some(pp) = map.get(&VirtAddr::new(index as u64 * DICT_VSIZE as u64).unwrap()) {
+                        let mut random = [0u8; PAGE_SIZE];
+                        self.entropy.borrow_mut().get_slice(&mut random);
+                        self.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
+                    } else {
+                        log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
+                    }
+                } else {
+                    unimplemented!("For now store sensitive data in its own Basis, and then delete the Basis.");
+                    // this is a bit of an arduous code path, it involves recursing through all the keys and nuking
+                    // them. Let's write this after we've actually _got keys_ (we're just figuring out how to add a dictionary
+                    // in the first place right now!).
+                }
+
+                // de-allocate all of the dictionary entries
+                Ok(())
+            } else {
+                Err(Error::new(ErrorKind::NotFound, "Dictionary not found"))
+            }
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found"))
+        }
+    }
+*/
+
+    pub(crate) fn dict_get_free_offset(&mut self, hw: &mut PddbOs) -> u32 {
+        if let Some(offset) = self.free_dict_offset.take() {
+            return offset;
+        } else {
+            let mut try_entry = 1;
+            while try_entry <= DICT_MAXCOUNT {
+                let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
+                if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
+                    if self.dict_decrypt(hw, &pp).is_none() {
+                        // mapping exists, but the data is invalid. It's a free entry.
+                        return try_entry as u32
+                    }
+                } else {
+                    // mapping doesn't exist yet, that's a free entry
+                    return try_entry as u32
+                }
+                try_entry += 1;
+            }
+        }
+        // maybe we should handle this better? but, I think this should be super-rare, as we allow 16384 dictionaries per Basis,
+        // so if we got here I'm guessing it's more likely due to a coding error than an actually full Basis.
+        panic!("Basis full, can't allocate dictionary");
+    }
+
+    /// Returns a tuple of "dictionary offset" , "dictionary"; the "dictionary offset" needs to be multiplied by DICT_VSIZE to arrive
+    /// at a fully expanded virtual address.
+    pub(crate) fn dict_deep_search(&mut self, hw: &mut PddbOs, name: &str) -> Option<(u32, Dictionary)> {
+        let mut try_entry = 1;
+        let mut dict_count = 0;
+        while try_entry <= DICT_MAXCOUNT && dict_count < self.root.num_dictionaries {
+            let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
+            if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
+                if let Some(dict) = self.dict_decrypt(hw, &pp) {
+                    if cstr_to_string(&dict.name) == name {
+                        return Some((try_entry as u32, dict))
+                    }
+                    dict_count += 1;
+                } else {
+                    // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
+                    if self.free_dict_offset.is_none() {
+                        self.free_dict_offset = Some(try_entry as u32);
+                    }
+                }
+            } else {
+                // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
+                if self.free_dict_offset.is_none() {
+                    self.free_dict_offset = Some(try_entry as u32);
+                }
+            }
+            try_entry += 1;
+        }
+        None
+    }
+
+    /// The `pp` must be the resolved physical page storing the top of the given
+    /// dictionary index for this to work.
+    pub(crate) fn dict_decrypt(&self, hw: &mut PddbOs, pp: &PhysPage) -> Option<Dictionary> {
+        if let Some(data) = hw.data_decrypt_page(&self.cipher, &self.aad, &pp) {
+            let mut dict = Dictionary {
+                flags: 0, age: 0, num_keys: 0, name: [0; DICT_NAME_LEN]
+            };
+            for (&src, dst) in data[size_of::<JournalType>()..].iter().zip(dict.deref_mut().iter_mut()) {
+                *dst = src;
+            }
+            Some(dict)
+        } else {
+            None
+        }
+    }
+
+    /// This will sync the named Dictionary header + dirty *key descriptors*. It does not
+    /// sync the key data itself. Note this does not mark the surrounding basis structure as clean
+    /// when it exits, even if there are no more dirty entries within.
+    ///
+    /// Significantly, this routine assumes that every dictionary entry has already had a v2p mapping
+    /// allocated. You can try calling it without pre-allocating the entries, but if the FastSpace structure
+    /// doesn't have enough space, the routine will return an error indicating we're out of memory.
+    /// You could then try to allocate more FastSpace, and re-try the sync operation.
+    pub(crate) fn dict_sync(&mut self, hw: &mut PddbOs, name: &str) -> Result<()> {
+        if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
+            let dict_offset = VirtAddr::new(dict.index as u64 * DICT_VSIZE).unwrap();
+            if !dict.clean {
+                let mut dict_name = [0u8; DICT_NAME_LEN];
+                for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
+                    *dst = src;
+                }
+                let dict_disk = Dictionary {
+                    flags: dict.flags,
+                    age: dict.age,
+                    num_keys: dict.key_count,
+                    name: dict_name,
+                };
+                // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be clean,
+                // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
+
+                // this is the virtual page within the dictionary region that we're currently serializing
+                let mut vpage_num = 0;
+                loop {
+                    // 1. resolve the virtual address to a target page
+                    let cur_vpage = VirtAddr::new(dict_offset.get() + (vpage_num as u64 * VPAGE_SIZE as u64)).unwrap();
+                    if !self.v2p_map.contains_key(&cur_vpage) {
+                        if let Some(pp) = hw.try_fast_space_alloc() {
+                            self.v2p_map.insert(cur_vpage, pp);
+                        } else {
+                            return Err(Error::new(ErrorKind::OutOfMemory, "FastSpace empty"));
+                        }
+                    }
+                    let pp = self.v2p_map.get(&cur_vpage).unwrap();
+
+                    // 2(a). fill in the target vpage with data: header special case
+                    let mut dk_vpage = DictKeyVpage::default();
+                    // the dict always occupies the first entry of the first vpage in the dictionary region
+                    if vpage_num == 0 {
+                        let mut dk_entry = DictKeyEntry::default();
+                        for (&src, dst) in dict_disk.deref().iter().zip(dk_entry.data.iter_mut()) {
+                            *dst = src;
+                        }
+                        dk_vpage.elements[0] = Some(dk_entry);
+                    }
+
+                    // 2(b). fill in the target vpage with data: general key case
+                    // Scan the DictCacheEntry.keys record for dirty keys within the current target vpage's range
+                    // this is not a terribly efficient operation right now, because the DictCacheEntry is designed to
+                    // be searched by name, but in this case, we want to check for an index range. There's a lot
+                    // of things we could do to optimize this, depending on the memory/time trade-off we want to
+                    // make, but for now, let's do it with a dumb O(N) scan through the KeyCacheEntry, running under
+                    // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
+                    let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
+                    for (key_name, key) in dict.keys.iter_mut() {
+                        if !key.clean {
+                            if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
+                            key.descriptor_vaddr(dict_offset) < next_vpage {
+                                // key is within the current page, add it to the target list
+                                let mut dk_entry = DictKeyEntry::default();
+                                let mut kn = [0u8; KEY_NAME_LEN];
+                                for (&src, dst) in key_name.as_bytes().iter().zip(kn.iter_mut()) {
+                                    *dst = src;
+                                }
+                                let key_desc = KeyDescriptor {
+                                    start: key.start,
+                                    len: key.len,
+                                    reserved: key.reserved,
+                                    flags: key.flags,
+                                    age: key.age,
+                                    name: kn,
+                                };
+                                for (&src, dst) in key_desc.deref().iter().zip(dk_entry.data.iter_mut()) {
+                                    *dst = src;
+                                }
+                                dk_vpage.elements[key.descriptor_modulus()] = Some(dk_entry);
+                            }
+                            key.clean = true;
+                        }
+                    }
+
+                    // 3. merge the vpage modifications into the disk
+                    let mut page = if let Some(data) = hw.data_decrypt_page(&self.cipher, &self.aad, &pp) {
+                        data
+                    } else {
+                        // the existing data was invalid (this happens e.g. on the first time a dict is created). Just overwrite the whole page.
+                        vec![0u8; VPAGE_SIZE + size_of::<JournalType>()]
+                    };
+                    for (index, stride) in page[size_of::<JournalType>()..].chunks_mut(DK_STRIDE).enumerate() {
+                        if let Some(elem) = dk_vpage.elements[index] {
+                            for (&src, dst) in elem.data.iter().zip(stride.iter_mut()) {
+                                *dst = src;
+                            }
+                        }
+                    }
+                    // bump the journal rev. This means that revs start at "1", because the empty data array as passed has a 0 in it by default.
+                    let newrev = JournalType::from_le_bytes(page[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
+                    for (&src, dst) in newrev.to_le_bytes().iter().zip(page[..size_of::<JournalType>()].iter_mut()) {
+                        *dst = src;
+                    }
+                    // generate nonce and write out
+                    let nonce = hw.nonce_gen();
+                    let payload = Payload {
+                        msg: &page,
+                        aad: &self.aad,
+                    };
+                    let ciphertext = self.cipher.encrypt(&nonce, payload).expect("failed to encrypt DictKeys");
+                    hw.patch_data(&ciphertext, pp.page_number() * PAGE_SIZE as u32);
+
+                    // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
+                    // exit the loop
+                    let mut found_next = false;
+                    for key in dict.keys.values() {
+                        if !key.clean {
+                            found_next = true;
+                            // note: we don't care *which* vpage we do next -- so we just break after finding the first one
+                            vpage_num = key.descriptor_vpage_num();
+                            break;
+                        }
+                    }
+                    if !found_next {
+                        break;
+                    }
+                }
+                dict.clean = true;
+            }
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "dict_sync called with an invalid dictionary name"))
+        }
+    }
+
+    /// Runs through the dictionary listing in a basis and compacts them. Call when the
+    /// the dictionary space becomes sufficiently fragmented that accesses are becoming
+    /// inefficient.
+    pub(crate) fn dict_compact(&self, basis_name: Option<&str>) -> Result<()> {
+        unimplemented!();
+    }
 }
 
 /// RAM based copy of the dictionary structures on disk.
-pub(crate) struct DictCache {
+pub(crate) struct DictCacheEntry {
     /// Use this to compute the virtual address of the dictionary's location
     /// multiply this by DICT_VSIZE to get at the virtual address. This /could/ be a
     /// NonZeroU32 type as it should never be 0. Maybe that's a thing to fix later on.
     pub(crate) index: u32,
     /// A cache of the keys within the dictionary. If the key does not exist in
     /// the cache, one should consult the on-disk copy, assuming the record is clean.
-    pub(crate) keys: HashMap::<String, KeyCache>,
+    pub(crate) keys: HashMap::<String, KeyCacheEntry>,
     /// count of total keys in the dictionary -- may be equal to or larger than the number of elements in `keys`
     pub(crate) key_count: u32,
     /// set if synced to disk. should be cleared if the dict is modified, and/or if a subordinate key descriptor is modified.
@@ -284,19 +627,19 @@ impl DerefMut for KeyDescriptor {
     }
 }
 
-pub(crate) struct KeyCache {
+pub(crate) struct KeyCacheEntry {
     pub(crate) start: u64,
     pub(crate) len: u64,
     pub(crate) reserved: u64,
     pub(crate) flags: u32,
     pub(crate) age: u32,
-    /// the current on-disk index of the KeyCache item, enumerated as "0" being the first DictKeyEntry
+    /// the current on-disk index of the KeyCacheEntry item, enumerated as "0" being the first DictKeyEntry
     /// slot past the first record which is the descriptor of the dictionary.
     pub(crate) descriptor_index: u32,
     /// indicates if it's clean
     pub(crate) clean: bool,
 }
-impl KeyCache {
+impl KeyCacheEntry {
     /// Given a base offset of the dictionary containing the key, compute the starting VirtAddr of the key itself.
     pub(crate) fn descriptor_vaddr(&self, dict_offset: VirtAddr) -> VirtAddr {
         VirtAddr::new(dict_offset.get() + ((self.descriptor_index as u64 + 1) * DK_STRIDE as u64)).unwrap()
@@ -313,7 +656,7 @@ impl KeyCache {
 
 /// used to identify cached/chunked data from a key
 /// maybe we should detach the cache_page because this is meant to be a key, and cache_page is the payload.
-pub(crate) struct KeyCacheEntry {
+pub(crate) struct KeyCacheEntryEntry {
     basis: String,
     dict: String,
     key: KeyDescriptor,
