@@ -49,6 +49,16 @@ impl Deref for StaticCryptoData {
     }
 }
 
+/// this is the structure of the Basis Key in RAM. The "key" and "iv" are actually never committed to
+/// flash; only the "salt" is written to disk. The final "salt" is computed as the XOR of the salt on disk
+/// and the user-provided "basis name". We never record the "basis name" on disk, so that the existence of
+/// any Basis can be denied.
+pub(crate) struct BasisKey {
+    salt: [u8; 16],
+    key: [u8; 32], // derived from lower 256 bits of sha512(bcrypt(salt, pw))
+    iv: [u8; 16], // an IV derived from the upper 128 bits of the sha512 hash from above, XOR with the salt
+}
+
 // emulated
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 type EmuMemoryRange = EmuStorage;

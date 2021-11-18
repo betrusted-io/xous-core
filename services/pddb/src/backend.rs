@@ -1,5 +1,9 @@
 mod basis;
 pub use basis::*;
+mod dictionary;
+pub use dictionary::*;
+mod key;
+pub use key::*;
 mod pagetable;
 pub use pagetable::*;
 mod fastspace;
