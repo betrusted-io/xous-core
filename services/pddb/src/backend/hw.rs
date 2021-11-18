@@ -25,11 +25,6 @@ pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
 /// size of a virtual page -- after the AES encryption and journaling overhead is subtracted
 pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>();
 
-/// size of a dictionary region in virtual memory
-pub(crate) const DICT_VSIZE: u64 = 0xFE_0000;
-/// maximum number of dictionaries in a system
-pub(crate) const DICT_MAXCOUNT: usize = 16384;
-
 #[repr(C, packed)] // this can map directly into Flash
 pub(crate) struct StaticCryptoData {
     /// aes-256 key of the system basis, encrypted with the User0 root key
@@ -214,6 +209,10 @@ impl PddbOs {
         *Nonce::from_slice(&nonce_array)
     }
     pub(crate) fn dna(&self) -> u64 {self.dna}
+    pub(crate) fn trng_slice(&mut self, slice: &mut [u8]) {
+        self.entropy.borrow_mut().get_slice(slice);
+    }
+    pub(crate) fn timestamp_now(&self) -> u64 {self.tt.elapsed_ms()}
 
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
@@ -349,7 +348,7 @@ impl PddbOs {
 
     /// scans the page tables and returns all entries for a given basis
     /// basis_name is needed to decrypt pages in case of a journal conflict
-    fn pt_scan_key(&self, key: &[u8; AES_KEYSIZE], basis_name: &str) -> Option<HashMap::<VirtAddr, PhysPage>> {
+    pub(crate) fn pt_scan_key(&self, key: &[u8; AES_KEYSIZE], basis_name: &str) -> Option<HashMap::<VirtAddr, PhysPage>> {
         let cipher = Aes256::new(&GenericArray::from_slice(key));
         let pt = self.pt_as_slice();
         let mut map = HashMap::<VirtAddr, PhysPage>::new();
@@ -941,6 +940,8 @@ impl PddbOs {
     /// returns a decrypted page that still includes the journal number at the very beginning
     /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
     /// just index past it.
+    /// NB: we don't have an "encrypt" version of the function, because encryption requires a nonce and journal handling,
+    /// and I think these pull in so much upstream context it's not worth it to create the function here.
     pub(crate) fn data_decrypt_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
         let ct_slice = &self.pddb_mr.as_slice()[
             self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
@@ -964,8 +965,6 @@ impl PddbOs {
             }
         }
     }
-    // NB: we don't have an "encrypt" version of the function, because encryption requires a nonce and journal handling,
-    // and I think these pull in so much upstream context it's not worth it to create the function here.
 
     /// Meant to be called on boot. This will read the FastSpace record, and then attempt to load
     /// in the system basis.
@@ -1001,8 +1000,7 @@ impl PddbOs {
                         log::error!("PDDB system basis name is incorrect: {}; aborting mount operation.", basis_name);
                         return None;
                     }
-                    // at this point, we would fill out the cache more, but let's just put in the minimal info so we can do some testing
-                    // for example, perhaps we should recurse through the dictionaries and load some keys...
+                    /*
                     let bcache = BasisCacheEntry {
                         name: basis_name.clone(),
                         clean: true,
@@ -1015,18 +1013,19 @@ impl PddbOs {
                         free_dict_offset: None,
                         v2p_map: sysbasis_map,
                         journal: u32::from_le_bytes(vpage[..size_of::<JournalType>()].try_into().unwrap()),
-                    };
-                    log::info!("System BasisRoot record found, saving in cache");
-                    // save the v2p reverse mapping too.
-                    return Some(bcache);
+                        large_alloc_ptr: None,
+                    }; */
+                    log::info!("System BasisRoot record found, generating cache entry");
+                    BasisCacheEntry::mount(self, &basis_name, &syskey, false)
                 } else {
                     // i guess technically we could try a brute-force search for the page, but meh.
                     log::error!("System basis did not contain a root page -- unrecoverable error.");
-                    return None;
+                    None
                 }
-            }
+            } else { None }
+        } else {
+            None
         }
-        None
     }
 
     /// this function is dangerous in that calling it will completely erase all of the previous data

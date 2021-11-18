@@ -6,10 +6,10 @@ use std::rc::Rc;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use std::convert::TryInto;
-use aes_gcm_siv::{Aes256GcmSiv, Nonce};
-use aes_gcm_siv::aead::{Aead, Payload};
+use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key};
+use aes_gcm_siv::aead::{Aead, Payload, NewAead};
 use std::iter::IntoIterator;
-use std::collections::HashMap;
+use std::collections::{BinaryHeap, HashMap};
 use std::io::{Result, Error, ErrorKind};
 
 
@@ -36,10 +36,11 @@ use std::io::{Result, Error, ErrorKind};
 ///
 /// The root basis structure takes up the first valid VPAGE in the virtual memory space.
 /// It contains a count of the number of valid dictionaries in the Basis. Dictionaries are found at
-/// fixed offsets starting at 0xFE_0000 and repeating every 0xFE_0000 intervals. A naive linear search
-/// is used to scan for dictionaries, starting at the lowest address, scanning every 0xFE_0000, until
-/// the number of valid dictionaries have been found that matches the valid dictionary count prescribed
-/// in the Basis root. A dictionary can be effectively deleted by just marking its descriptor as invalid.
+/// fixed offsets starting at 0xFE_0000 and repeating every 0xFE_0000 intervals, with up to 16383 dictionaries
+/// allowed. A naive linear search is used to scan for dictionaries, starting at the lowest address,
+/// scanning every 0xFE_0000, until the number of valid dictionaries have been found that matches the valid
+/// dictionary count prescribed in the Basis root. A dictionary can be effectively deleted by just marking its
+/// descriptor as invalid.
 ///
 /// A stride of 0xFE_0000 means that dictionary descriptors can be up to 4096 VPAGEs long. A dictionary
 /// descriptor consists of a `DictDescriptor` header, some bookkeeping data, plus a count of the number
@@ -53,9 +54,6 @@ use std::io::{Result, Error, ErrorKind};
 /// Thus adding a new dictionary always consumes at least one 4k page, but you can have up to 15 keys
 /// in that dictionary with no extra bookkeeping cost once the dictionary is added.
 ///
-/// Key data storage itself pulls from allocation pools that optimize for large (>64k), medium (~4k) and
-/// small (<256 byte) data lengths, using different allocation strategies to reduce fragmentation.
-///
 ///
 /// Basis Virtual Memory Layout
 ///
@@ -64,19 +62,20 @@ use std::io::{Result, Error, ErrorKind};
 /// | 0x0000_0000_0000_0000  |  Invalid -- VPAGE 0 reserved for Option<> |
 /// | 0x0000_0000_0000_0FE0  |  Basis root page                          |
 /// | 0x0000_0000_00FE_0000  |  Dictionary[0]                            |
+/// |                    +0  |    - Dict header (127 bytes)              |
+/// |                   +7F  |    - Maybe key entry (127 bytes)          |
+/// |                   +FE  |    - Maybe key entry (127 bytes)          |
+/// |              +FD_FF02  |    - Last key entry start (128k possible) |
 /// | 0x0000_0000_01FC_0000  |  Dictionary[1]                            |
-/// | 0x0000_003F_8000_0000  |  Dictionary[16383]                        |
-/// | 0x0000_003F_80FE_0F00  |  Unused                                   |
-/// | 0x0000_0040_0000_0000  |  Small data pool start  (256GiB)          |
+/// | 0x0000_003F_7F02_0000  |  Dictionary[16382]                        |
+/// | 0x0000_003F_8000_0000  |  Small data pool start  (~256GiB)         |
 /// |                        |    - Dict[0] pool = 16MiB (4k vpages)     |
-/// | 0x0000_0040_00FE_0000  |    - Dict[1] pool = 16MiB                 |
-/// | 0x0000_007F_8000_0000  |    - Dict[16383] pool                     |
-/// | 0x0000_007F_80FE_0000  |  Unused                                   |
-/// | 0x0000_0080_0000_0000  |  Medium data pool start (512GiB)          |
-/// |                        |    - Dict[0] pool = 32MiB (8k vpages)     |
-/// | 0x0000_0080_01FC_0000  |    - Dict[1] pool = 32MiB                 |
-/// | 0x0000_00FF_0000_0000  |  Unused                                   |
-/// | 0x0000_0100_0000_0000  |  Large data pool start  (~16mm TiB)       |
+/// | 0x0000_003F_80FE_0000  |    - Dict[1] pool = 16MiB                 |
+/// | 0x0000_007E_FE04_0000  |    - Dict[16383] pool                     |
+/// | 0x0000_007E_FF02_0000  |  Unused                                   |
+/// | 0x0000_007F_0000_0000  |  Medium data pool start                   |
+/// |                        |    - TBD                                  |
+/// | 0x0000_FE00_0000_0000  |  Large data pool start  (~16mm TiB)       |
 /// |                        |    - Demand-allocated, bump-pointer       |
 /// |                        |      currently no defrag                  |
 ///
@@ -86,9 +85,9 @@ use std::io::{Result, Error, ErrorKind};
 ///
 /// Memory Pools
 ///
-/// Key data is split into three categories of sizes: small, medium, and large. The thresholds
-/// are subject to tuning, but roughly speaking, small data are keys <2k bytes; medium are ~4k;
-/// and large are bigger than 32k.
+/// Key data is split into three categories of sizes: small, medium, and large; but the implementation
+/// currently only deals with small and large keys. The thresholds are subject to tuning, but
+/// roughly speaking, small data are keys <4k bytes; large keys are everything else.
 ///
 /// Large keys are the simplest - each key starts at a VPAGE-aligned address, and allocates
 /// up from there. Any unused amount is wasted, but with a ~32k threshold you'll have no worse
@@ -140,9 +139,26 @@ use std::io::{Result, Error, ErrorKind};
 ///    structure and serialize/deserialize that into the correct Rust structure. See
 ///    https://doc.rust-lang.org/nomicon/other-reprs.html for a citation on that.
 
+pub(crate) const SMALL_POOL_START: u64 = 0x0000_003F_8000_0000;
+pub(crate) const SMALL_POOL_END: u64 = 0x0000_007E_FF02_0000;
+pub(crate) const SMALL_POOL_STRIDE: u64 = 0xFE_0000;
+/// we don't want this bigger than VPAGE_SIZE, because a key goal of the small pool is to
+/// reduce # of writes to the disk of small data. While we could get some gain in memory efficiency
+/// if we made this larger than a VPAGE_SIZE, we don't get much gain in terms of write reduction,
+/// and it greatly complicates the implementation. So, SMALL_POOL_MAXENTRY should be less than VPAGE_SIZE.
+pub(crate) const SMALL_POOL_MAXENTRY: usize = VPAGE_SIZE;
+pub(crate) const LARGE_POOL_START: u64 = 0x0000_FE00_0000_0000;
+pub(crate) const KEY_MAXCOUNT: usize = 131_071; // 2^17 - 1
+
 /// The chosen "stride" of a dict/key entry. Drives a lot of key parameters in the database's characteristics.
 /// This is chosen such that 32 of these entries fit evenly into a VPAGE.
 pub(crate) const DK_STRIDE: usize = 127;
+//// DK_STRIDES per VPAGE
+pub(crate) const DK_PER_VPAGE: usize = VPAGE_SIZE / DK_STRIDE; // should be 32 - use this for computing modulus on dictionary indices
+/// size of a dictionary region in virtual memory
+pub(crate) const DICT_VSIZE: u64 = 0xFE_0000;
+/// maximum number of dictionaries in a system
+pub(crate) const DICT_MAXCOUNT: usize = 16383;
 
 /// This is the format of the Basis as stored on disk
 #[derive(PartialEq, Debug, Default)]
@@ -196,7 +212,7 @@ pub(crate) struct BasisCache {
 }
 impl BasisCache {
     pub(crate) fn new() -> Self {
-        BasisCache { cache: Vec::new() }
+        BasisCache { cache: Vec::new(), }
     }
     pub(crate) fn add_basis(&mut self, basis: BasisCacheEntry) {
         self.cache.push(basis);
@@ -250,13 +266,23 @@ impl BasisCache {
             for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
                 *dst = src;
             }
+            let mut my_aad = Vec::<u8>::new();
+            for &b in basis.aad.iter() {
+                my_aad.push(b);
+            }
+            let mut init_flags = DictFlags(0);
+            init_flags.set_valid(true);
             let dict_cache = DictCacheEntry {
                 index: dict_index,
                 keys: HashMap::<String, KeyCacheEntry>::new(),
                 clean: false,
-                age: 111,
-                flags: 222,
+                age: 0,
+                flags: init_flags,
                 key_count: 0,
+                free_key_offset: Some(0),
+                small_pool: Vec::<KeySmallPool>::new(),
+                small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
+                aad: my_aad,
             };
             log::info!("adding dictionary {}", name);
             basis.dicts.insert(String::from(name), dict_cache);
@@ -300,54 +326,149 @@ pub(crate) struct BasisCacheEntry {
     pub v2p_map: HashMap<VirtAddr, PhysPage>,
     /// the last journal rev written to disk
     pub journal: u32,
+    /// current allocation pointer for the "large" pool. This just keeps incrementing "forever".
+    pub large_alloc_ptr: Option<PageAlignedVa>,
 }
 impl BasisCacheEntry {
-    /*
+    /// given a pointer to the hardware, name of the basis, and its cryptographic key, try to derive
+    /// the basis. If `lazy` is true, it stops with the minimal amount of effort to respond to a query.
+    /// If it `lazy` is false, it will populate the dictionary cache and key cache entries, as well as
+    /// discover the location of the `large_alloc_ptr`.
+    pub(crate) fn mount(hw: &mut PddbOs, name: &str, key: &[u8; AES_KEYSIZE], lazy: bool) -> Option<BasisCacheEntry> {
+        if let Some(basis_map) = hw.pt_scan_key(key, name) {
+            let cipher = Aes256GcmSiv::new(Key::from_slice(key));
+            let aad = hw.data_aad(name);
+            // get the first page, where the basis root is guaranteed to be
+            if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
+                let vpage = match hw.data_decrypt_page(&cipher, &aad, root_page) {
+                    Some(data) => data,
+                    None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return None;},
+                };
+                // if the below assertion fails, you will need to re-code this to decrypt more than one VPAGE and stripe into a basis root struct
+                assert!(size_of::<BasisRoot>() <= VPAGE_SIZE, "BasisRoot has grown past a single VPAGE, this routine needs to be re-coded to accommodate the extra bulk");
+                let mut basis_root = BasisRoot::default();
+                for (&src, dst) in vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                    *dst = src;
+                }
+                if basis_root.magic != PDDB_MAGIC {
+                    log::error!("Basis root did not deserialize correctly, unrecoverable error.");
+                    return None;
+                }
+                if basis_root.version != PDDB_VERSION {
+                    log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
+                    return None;
+                }
+                let basis_name = cstr_to_string(&basis_root.name.0);
+                if basis_name != String::from(name) {
+                    log::error!("Discovered basis name does not match the requested name: {}; aborting mount operation.", basis_name);
+                    return None;
+                }
+                let mut bcache = BasisCacheEntry {
+                    name: basis_name.clone(),
+                    clean: true,
+                    last_sync: Some(hw.timestamp_now()),
+                    num_dicts: basis_root.num_dictionaries,
+                    dicts: HashMap::<String, DictCacheEntry>::new(),
+                    cipher,
+                    aad,
+                    age: basis_root.age,
+                    free_dict_offset: None,
+                    v2p_map: basis_map,
+                    journal: u32::from_le_bytes(vpage[..size_of::<JournalType>()].try_into().unwrap()),
+                    large_alloc_ptr: None,
+                };
+                if !lazy {
+                    bcache.populate_caches(hw);
+                }
+                log::info!("Basis {} found and reconstructed", name);
+                return Some(bcache);
+            } else {
+                // i guess technically we could try a brute-force search for the page if it went missing, but meh.
+                log::error!("Basis {} did not contain a root page -- unrecoverable error.", name);
+                return None;
+            }
+        } else {
+            log::error!("Basis {} has no page table entries -- maybe a bad password?", name);
+            None
+        }
+    }
+    /// called during the initial basis scan to track where the large allocation pointer end should be.
+    /// basically try to find the maximal extent of already allocated data, and start allocating from there.
+    pub(crate) fn large_pool_update(&mut self, maybe_end: u64) {
+        if maybe_end > self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)).as_u64() {
+            self.large_alloc_ptr = Some(PageAlignedVa::from(maybe_end));
+        }
+    }
+    /// allocate a pointer data in the large pool, of length `amount`. "always" succeeds because...
+    /// there's 16 million terabytes of large pool to allocate before you run out?
+    pub(crate) fn large_pool_alloc(&mut self, amount: u64) -> u64 {
+        let alloc_ptr = self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START));
+        self.large_alloc_ptr = Some(self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)) + PageAlignedVa::from(amount));
+        return alloc_ptr.as_u64()
+    }
+    /// do a deep scan of all the dictionaries and keys and attempt to populate all the caches
+    pub(crate) fn populate_caches(&mut self, hw: &mut PddbOs) {
+        let mut try_entry = 1;
+        let mut dict_count = 0;
+        while try_entry <= DICT_MAXCOUNT && dict_count < self.num_dicts {
+            let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
+            if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
+                if let Some(dict) = self.dict_decrypt(hw, &pp) {
+                    if dict.flags.valid() {
+                        let dict_name = String::from(cstr_to_string(&dict.name));
+                        let mut dcache = DictCacheEntry::new(dict, try_entry, &self.aad);
+                        let max_large_alloc = dcache.fill(hw, &self.v2p_map, &self.cipher);
+                        self.dicts.insert(dict_name, dcache);
+                        self.large_pool_update(max_large_alloc.get());
+                        dict_count += 1;
+                    } else {
+                        // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
+                        if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+                    }
+                } else {
+                    if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+                }
+            } else {
+                if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+            }
+            try_entry += 1;
+        }
+        if try_entry <= DICT_MAXCOUNT {
+            if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+        }
+    }
+
     /// If `paranoid` is true, it recurses through each key and replaces its data with random junk.
     /// Otherwise, it does a "shallow" delete and just removes the directory entry, which is much
     /// more performant. Note that the intended "fast" way to secure-erase data is to store sensitive
     /// data in its own Basis, and then remove the Basis itself. This is much faster than picking
     /// through compounded data and re-writing partias sectors, and because of this, initially,
     /// the `paranoid` erase is `unimplemented`.
-    pub(crate) fn dict_delete(&self, name: &str, basis_name: Option<&str>, paranoid: bool) -> Result<()> {
-        if self.basis_cache.len() == 0 {
-            return Err(Error::new(ErrorKind::NotConnected, "PDDB is not mounted"));
-        }
-        let maybe_basis = if let Some(n) = basis_name {
-            self.basis_cache.iter_mut().filter(|&bc| bc.name == n).next()
-        } else {
-            self.basis_cache.last_mut()
-        };
-        if let Some(basis) = maybe_basis {
-            if let Some((index, _dict)) = self.dict_deep_search(&mut basis, name) {
-                let map = self.v2p_map.get_mut(&basis.name).expect("No v2p map despite extant BasisCacheEntry record. Shouldn't be possible...");
-                if !paranoid {
-                    // erase the header by writing over with random data. This makes the dictionary unsearchable, but if you
-                    // have the key, you can of course do a hard-scan and try partially re-assemble the dictionary.
-                    if let Some(pp) = map.get(&VirtAddr::new(index as u64 * DICT_VSIZE as u64).unwrap()) {
-                        let mut random = [0u8; PAGE_SIZE];
-                        self.entropy.borrow_mut().get_slice(&mut random);
-                        self.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
-                    } else {
-                        log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
-                    }
+    pub(crate) fn dict_delete(&mut self, hw: &mut PddbOs, name: &str, paranoid: bool) -> Result<()> {
+        if let Some((index, _dict)) = self.dict_deep_search(hw, name) {
+            if !paranoid {
+                // erase the header by writing over with random data. This makes the dictionary unsearchable, but if you
+                // have the key, you can of course do a hard-scan and try partially re-assemble the dictionary.
+                if let Some(pp) = self.v2p_map.get(&VirtAddr::new(index as u64 * DICT_VSIZE as u64).unwrap()) {
+                    let mut random = [0u8; PAGE_SIZE];
+                    hw.trng_slice(&mut random);
+                    hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
                 } else {
-                    unimplemented!("For now store sensitive data in its own Basis, and then delete the Basis.");
-                    // this is a bit of an arduous code path, it involves recursing through all the keys and nuking
-                    // them. Let's write this after we've actually _got keys_ (we're just figuring out how to add a dictionary
-                    // in the first place right now!).
+                    log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
                 }
-
-                // de-allocate all of the dictionary entries
-                Ok(())
             } else {
-                Err(Error::new(ErrorKind::NotFound, "Dictionary not found"))
+                unimplemented!("For now store sensitive data in its own Basis, and then delete the Basis.");
+                // this is a bit of an arduous code path, it involves recursing through all the keys and nuking
+                // them. Let's write this after we've actually _got keys_ (we're just figuring out how to add a dictionary
+                // in the first place right now!).
             }
+
+            // de-allocate all of the dictionary entries
+            Ok(())
         } else {
-            Err(Error::new(ErrorKind::NotFound, "Requested basis not found"))
+            Err(Error::new(ErrorKind::NotFound, "Dictionary not found"))
         }
     }
-*/
 
     pub(crate) fn dict_get_free_offset(&mut self, hw: &mut PddbOs) -> u32 {
         if let Some(offset) = self.free_dict_offset.take() {
@@ -407,9 +528,7 @@ impl BasisCacheEntry {
     /// dictionary index for this to work.
     pub(crate) fn dict_decrypt(&self, hw: &mut PddbOs, pp: &PhysPage) -> Option<Dictionary> {
         if let Some(data) = hw.data_decrypt_page(&self.cipher, &self.aad, &pp) {
-            let mut dict = Dictionary {
-                flags: 0, age: 0, num_keys: 0, name: [0; DICT_NAME_LEN]
-            };
+            let mut dict = Dictionary::default();
             for (&src, dst) in data[size_of::<JournalType>()..].iter().zip(dict.deref_mut().iter_mut()) {
                 *dst = src;
             }
