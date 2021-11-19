@@ -19,7 +19,10 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq)]
     pub struct KeyFlags(u32);
     impl Debug;
+    /// set if the entry is valid -- in the cache, an invalid entry means it was previously allocated but then deleted, and needs a sync
     pub valid, set_valid: 0;
+    /// resolved indicates that the "start" address isn't fully resolved yet in the cache
+    pub unresolved, set_unresolved: 1;
 }
 
 /// On-disk representation of the Key. Note that the storage on disk is mis-aligned, so
@@ -76,25 +79,36 @@ pub(crate) struct KeyCacheEntry {
     pub(crate) flags: KeyFlags,
     pub(crate) age: u32,
     /// the current on-disk index of the KeyCacheEntry item, enumerated as "0" being the Dict descriptor and "1" being the first valid key
-    pub(crate) descriptor_index: NonZeroU32,
+    pub(crate) descriptor_index: Option<NonZeroU32>,
     /// indicates if the descriptor cache entry is currently synchronized with what's on disk. Does not imply anything about the data,
     /// but if the `data` field is None then there is nothing to in cache to be dirtied.
     pub(crate) clean: bool,
     /// if Some, contains the keys data contents. if None, you must refer to the disk contents to retrieve it.
+    /// Current rule: "small" keys always have their data "hot"; large keys may often not keep their data around.
     pub(crate) data: Option<KeyCacheData>,
 }
 impl KeyCacheEntry {
     /// Given a base offset of the dictionary containing the key, compute the starting VirtAddr of the key itself.
     pub(crate) fn descriptor_vaddr(&self, dict_offset: VirtAddr) -> VirtAddr {
-        VirtAddr::new(dict_offset.get() + ((self.descriptor_index.get() as u64 + 1) * DK_STRIDE as u64)).unwrap()
+        VirtAddr::new(dict_offset.get() + ((self.descriptor_index.unwrap().get() as u64 + 1) * DK_STRIDE as u64)).unwrap()
     }
     /// Computes the modular position of the KeyDescriptor within a vpage.
     pub(crate) fn descriptor_modulus(&self) -> usize {
-        (self.descriptor_index.get() as usize + 1) % (VPAGE_SIZE / DK_STRIDE)
+        (self.descriptor_index.unwrap().get() as usize + 1) % (VPAGE_SIZE / DK_STRIDE)
     }
     /// Computes the vpage offset as measured from the start of the dictionary storage region
     pub(crate) fn descriptor_vpage_num(&self) -> usize {
-        (self.descriptor_index.get() as usize + 1) / (VPAGE_SIZE / DK_STRIDE)
+        (self.descriptor_index.unwrap().get() as usize + 1) / (VPAGE_SIZE / DK_STRIDE)
+    }
+    /// returns the list of large-pool virtual pages belonging to this entry, if any.
+    pub(crate) fn large_pool_vpages(&self) -> Vec::<VirtAddr> {
+        let mut vpages = Vec::<VirtAddr>::new();
+        if self.start >= LARGE_POOL_START {
+            for vbase in (self.start..self.start + self.reserved).step_by(VPAGE_SIZE) {
+                vpages.push(VirtAddr::new((vbase / VPAGE_SIZE as u64) * VPAGE_SIZE as u64).unwrap());
+            }
+        }
+        vpages
     }
 }
 
@@ -117,7 +131,6 @@ pub(crate) struct KeyLargeData {
     pub(crate) data: Vec::<u8>,
 }
 
-pub(crate) const SMALL_CAPACITY: usize = VPAGE_SIZE;
 /// A storage pool for data that is strictly smaller than one VPAGE. These element are serialized
 /// and stored inside the "small data pool" area.
 pub(crate) struct KeySmallPool {

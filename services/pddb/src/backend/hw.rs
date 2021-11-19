@@ -859,25 +859,20 @@ impl PddbOs {
 
                     // commit the usage to the journal
                     self.syskey_ensure();
-                    if let Some(system_key) = self.system_basis_key {
-                        let cipher = Aes256::new(GenericArray::from_slice(&system_key));
-                        let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
-                        let mut block = Block::from_mut_slice(update.deref_mut());
-                        log::info!("block: {:x?}", block);
-                        cipher.encrypt_block(&mut block);
-                        let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
-                        log::info!("patch: {:x?}", block);
-                        self.patch_fscb(&block, log_addr);
-                        let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
-                        if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
-                            self.fspace_log_next_addr = Some(next_addr as PhysAddr);
-                        } else {
-                            // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
-                            // next journal entry the next time around.
-                        }
-
+                    let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
+                    let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
+                    let mut block = Block::from_mut_slice(update.deref_mut());
+                    log::info!("block: {:x?}", block);
+                    cipher.encrypt_block(&mut block);
+                    let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
+                    log::info!("patch: {:x?}", block);
+                    self.patch_fscb(&block, log_addr);
+                    let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
+                    if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
+                        self.fspace_log_next_addr = Some(next_addr as PhysAddr);
                     } else {
-                        panic!("Inconsistent internal state");
+                        // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
+                        // next journal entry the next time around.
                     }
                     maybe_alloc = Some(ppc);
                     break;
@@ -887,6 +882,32 @@ impl PddbOs {
                 assert!(self.fspace_cache.replace(alloc).is_some(), "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!");
             }
             maybe_alloc
+        }
+    }
+    pub fn fast_space_free(&mut self, mut pp: PhysPage) {
+        self.fast_space_ensure_next_log();
+        // update the fspace cache
+        pp.set_space_state(SpaceState::Dirty);
+        pp.set_journal(pp.journal() + 1);
+        if self.fspace_cache.contains(&pp) {
+            self.fspace_cache.replace(pp.clone());
+        }
+        // commit the free'd block to the journal
+        self.syskey_ensure();
+        let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
+        let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), pp);
+        let mut block = Block::from_mut_slice(update.deref_mut());
+        log::info!("block: {:x?}", block);
+        cipher.encrypt_block(&mut block);
+        let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
+        log::info!("patch: {:x?}", block);
+        self.patch_fscb(&block, log_addr);
+        let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
+        if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
+            self.fspace_log_next_addr = Some(next_addr as PhysAddr);
+        } else {
+            // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
+            // next journal entry the next time around.
         }
     }
     /// This is a "look before you leap" function that will potentially pause all system operations
@@ -940,8 +961,6 @@ impl PddbOs {
     /// returns a decrypted page that still includes the journal number at the very beginning
     /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
     /// just index past it.
-    /// NB: we don't have an "encrypt" version of the function, because encryption requires a nonce and journal handling,
-    /// and I think these pull in so much upstream context it's not worth it to create the function here.
     pub(crate) fn data_decrypt_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
         let ct_slice = &self.pddb_mr.as_slice()[
             self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
@@ -964,6 +983,21 @@ impl PddbOs {
                 None
             }
         }
+    }
+    /// `data` includes the journal entry on top. The data passed in must be exactly one vpage plus the journal entry
+    pub(crate) fn data_encrypt_and_patch_page(&mut self, cipher: &Aes256GcmSiv, aad: &[u8], data: &mut [u8], pp: &PhysPage) {
+        assert!(data.len() == VPAGE_SIZE + size_of::<JournalType>(), "did not get a page-sized region to patch");
+        let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
+        for (&src, dst) in j.to_le_bytes().iter().zip(data[..size_of::<JournalType>()].iter_mut()) { *dst = src; }
+        let nonce = self.nonce_gen();
+        let ciphertext = cipher.encrypt(
+            &nonce,
+            Payload {
+                aad,
+                msg: &data,
+            }
+        ).expect("couldn't encrypt data");
+        self.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
     }
 
     /// Meant to be called on boot. This will read the FastSpace record, and then attempt to load
@@ -1166,19 +1200,8 @@ impl PddbOs {
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
             *dst = src;
         }
-        let nonce = self.nonce_gen();
-        if let Some(syskey) = self.system_basis_key {
-            let key = Key::from_slice(&syskey);
-            let cipher = Aes256GcmSiv::new(key);
-            let ciphertext = cipher.encrypt(
-                &nonce,
-                Payload {
-                    aad: &aad,
-                    msg: &block,
-                }
-            ).unwrap();
-            self.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
-        }
+        let key = Key::from_slice(self.system_basis_key.as_ref().unwrap());
+        self.data_encrypt_and_patch_page(&Aes256GcmSiv::new(key), &aad, &mut block, &pp);
 
         // step 9. generate & write initial page table entries
         for (&virt, phys) in basis_v2p_map.iter_mut() {

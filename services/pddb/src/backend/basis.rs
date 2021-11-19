@@ -70,6 +70,8 @@ use std::io::{Result, Error, ErrorKind};
 /// | 0x0000_003F_7F02_0000  |  Dictionary[16382]                        |
 /// | 0x0000_003F_8000_0000  |  Small data pool start  (~256GiB)         |
 /// |                        |    - Dict[0] pool = 16MiB (4k vpages)     |
+/// |                        |      - SmallPool[0]                       |
+/// |                  +FE0  |      - SmallPool[1]
 /// | 0x0000_003F_80FE_0000  |    - Dict[1] pool = 16MiB                 |
 /// | 0x0000_007E_FE04_0000  |    - Dict[16383] pool                     |
 /// | 0x0000_007E_FF02_0000  |  Unused                                   |
@@ -145,8 +147,8 @@ pub(crate) const SMALL_POOL_STRIDE: u64 = 0xFE_0000;
 /// we don't want this bigger than VPAGE_SIZE, because a key goal of the small pool is to
 /// reduce # of writes to the disk of small data. While we could get some gain in memory efficiency
 /// if we made this larger than a VPAGE_SIZE, we don't get much gain in terms of write reduction,
-/// and it greatly complicates the implementation. So, SMALL_POOL_MAXENTRY should be less than VPAGE_SIZE.
-pub(crate) const SMALL_POOL_MAXENTRY: usize = VPAGE_SIZE;
+/// and it greatly complicates the implementation. So, SMALL_CAPACITY should be less than VPAGE_SIZE.
+pub(crate) const SMALL_CAPACITY: usize = VPAGE_SIZE;
 pub(crate) const LARGE_POOL_START: u64 = 0x0000_FE00_0000_0000;
 pub(crate) const KEY_MAXCOUNT: usize = 131_071; // 2^17 - 1
 
@@ -654,19 +656,8 @@ impl BasisCacheEntry {
                             }
                         }
                     }
-                    // bump the journal rev. This means that revs start at "1", because the empty data array as passed has a 0 in it by default.
-                    let newrev = JournalType::from_le_bytes(page[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
-                    for (&src, dst) in newrev.to_le_bytes().iter().zip(page[..size_of::<JournalType>()].iter_mut()) {
-                        *dst = src;
-                    }
                     // generate nonce and write out
-                    let nonce = hw.nonce_gen();
-                    let payload = Payload {
-                        msg: &page,
-                        aad: &self.aad,
-                    };
-                    let ciphertext = self.cipher.encrypt(&nonce, payload).expect("failed to encrypt DictKeys");
-                    hw.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
+                    hw.data_encrypt_and_patch_page(&self.cipher, &self.aad, &mut page, &pp);
 
                     // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
                     // exit the loop
@@ -711,8 +702,7 @@ impl BasisCacheEntry {
             let aad = basis_root.aad(hw.dna());
             let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
                 .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
-            self.journal = self.journal.saturating_add(1);
-            let journal_bytes = self.journal.to_le_bytes();
+            let journal_bytes = self.journal.to_le_bytes(); // journal gets bumped by the patching function now
             let slice_iter =
                 journal_bytes.iter() // journal rev
                 .chain(basis_root.as_ref().iter());
@@ -720,15 +710,7 @@ impl BasisCacheEntry {
             for (&src, dst) in slice_iter.zip(block.iter_mut()) {
                 *dst = src;
             }
-            let nonce = hw.nonce_gen();
-            let ciphertext = self.cipher.encrypt(
-                &nonce,
-                Payload {
-                    aad: &aad,
-                    msg: &block,
-                }
-            ).unwrap();
-            hw.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
+            hw.data_encrypt_and_patch_page(&self.cipher, &self.aad, &mut block, &pp);
             self.clean = true;
         }
     }
