@@ -284,6 +284,8 @@ impl BasisCache {
                 flags: init_flags,
                 key_count: 0,
                 free_key_offset: Some(0),
+                free_key_offset_hint: None,
+                key_max_free_offset: 1,
                 small_pool: Vec::<KeySmallPool>::new(),
                 small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
                 aad: my_aad,
@@ -298,6 +300,80 @@ impl BasisCache {
             // finally, sync the page tables.
             basis.pt_sync(hw);
             Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+        }
+    }
+
+    pub(crate) fn key_read(&mut self, hw: &mut PddbOs, dict: &str, key: &str, data: &mut [u8],
+        offset: Option<usize>, basis_name:Option<&str>
+    ) -> Result<usize> {
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let basis = &mut self.cache[basis_index];
+            if !basis.dicts.contains_key(dict) {
+                if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
+                    if dict_record.flags.valid() {
+                        let dict_name = String::from(cstr_to_string(&dict_record.name));
+                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
+                        basis.dicts.insert(dict.to_string(), dcache);
+                    }
+                } else {
+                    return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+                }
+            }
+            if let Some(dict_entry) = basis.dicts.get_mut(dict) {
+                if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
+                    let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                    // the key exists, *and* there's sufficient space for the data
+                    if kcache.start < SMALL_POOL_END {
+                        // small pool fetch
+                        // for now, the rule is, if we have a small key, we also have its data in cache.
+                        if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
+                            let mut bytes_read = 0;
+                            for (&src, dst) in cache_data.data[offset.unwrap_or(0)..].iter().zip(data.iter_mut()) {
+                                *dst = src;
+                                bytes_read += 1;
+                            }
+                            if bytes_read != data.len() {
+                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, bytes_read, data.len());
+                            }
+                            return Ok(bytes_read)
+                        } else {
+                            panic!("Key allocated to small area but its cache data was not of the small type");
+                        }
+                    } else {
+                        // large pool fetch
+                        let mut cur_offset = offset.unwrap_or(0) as u64;
+                        let mut first_iter = true;
+                        while cur_offset < data.len() as u64 {
+                            let start_vpage_addr = ((kcache.start + cur_offset) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+                            if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
+                                let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
+                                if !first_iter {
+                                    assert!((cur_offset as usize % VPAGE_SIZE) == 0, "algorithm error in handling offset data");
+                                }
+                                // note: cur_offset % VPAGE_SIZE handles mis-aligned starts; cur_offset will increment until start + cur_offset is
+                                // a multiple of a VPAGE_SIZE, so on later iterations, cur_offset % VPAGE_SIZE should be equal to 0.
+                                for (&src, dst) in
+                                pt_data[size_of::<JournalType>() + cur_offset as usize % VPAGE_SIZE..].iter().zip(data.iter_mut()) {
+                                    *dst = src;
+                                    cur_offset += 1;
+                                }
+                                first_iter = false;
+                            } else {
+                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, cur_offset, data.len());
+                                return Ok(cur_offset as usize)
+                            }
+                        }
+                        return Ok(cur_offset as usize)
+                    }
+
+                } else {
+                    return Err(Error::new(ErrorKind::NotFound, "key not found"));
+                }
+            } else {
+                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+            }
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
         }
@@ -413,6 +489,8 @@ impl BasisCache {
                         basis.dicts.insert(dict.to_string(), dcache);
                         dict_found = true;
                     }
+                } else {
+                    dict_found = true;
                 }
             }
             if !dict_found { // now that we're clear of the deep search, mutate the basis if we are sure it's not there
@@ -430,6 +508,7 @@ impl BasisCache {
                     basis.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START))
                 ).expect("couldn't add key");
                 basis.large_alloc_ptr = Some(updated_ptr);
+
                 dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher);
                 // we don't have large pool caches yet, but this is a placeholder to remember to do "something" at this point,
                 // once we do have them.
@@ -734,14 +813,8 @@ impl BasisCacheEntry {
                 loop {
                     // 1. resolve the virtual address to a target page
                     let cur_vpage = VirtAddr::new(dict_offset.get() + (vpage_num as u64 * VPAGE_SIZE as u64)).unwrap();
-                    if !self.v2p_map.contains_key(&cur_vpage) {
-                        if let Some(pp) = hw.try_fast_space_alloc() {
-                            self.v2p_map.insert(cur_vpage, pp);
-                        } else {
-                            return Err(Error::new(ErrorKind::OutOfMemory, "FastSpace empty"));
-                        }
-                    }
-                    let pp = self.v2p_map.get(&cur_vpage).unwrap();
+                    let pp = self.v2p_map.entry(cur_vpage).or_insert_with(||
+                        hw.try_fast_space_alloc().expect("FastSpace empty")).clone();
 
                     // 2(a). fill in the target vpage with data: header special case
                     let mut dk_vpage = DictKeyVpage::default();
@@ -784,7 +857,41 @@ impl BasisCacheEntry {
                                 for (&src, dst) in key_desc.deref().iter().zip(dk_entry.data.iter_mut()) {
                                     *dst = src;
                                 }
-                                dk_vpage.elements[key.descriptor_modulus()] = Some(dk_entry);
+                                // ensure that we have a free_key offset with a perhaps slow brute-force search of the key space
+                                if dict.free_key_offset.is_none() {
+                                    let mut index_cache = PlaintextCache { data: None, tag: None };
+                                    let mut try_entry = dict.free_key_offset_hint.take().unwrap_or(1) as usize;
+                                    while try_entry < KEY_MAXCOUNT {
+                                        let req_vaddr = dict.index as u64 * DICT_VSIZE + ((try_entry / DK_PER_VPAGE) as u64) * VPAGE_SIZE as u64;
+                                        index_cache.fill(hw, &self.v2p_map, &self.cipher, &dict.aad, VirtAddr::new(req_vaddr).unwrap());
+                                        if index_cache.data.is_none() || index_cache.tag.is_none() {
+                                            dict.free_key_offset = Some(try_entry as u32);
+                                            log::warn!("Dictionary fill op encountered an unallocated page checking entry {} in the dictionary map. Marking it for re-use.", try_entry);
+                                            break;
+                                        } else {
+                                            let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
+                                            let pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
+                                            let mut keydesc = KeyDescriptor::default();
+                                            let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
+                                            for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
+                                                *dst = src;
+                                            }
+                                            if !keydesc.flags.valid() {
+                                                dict.free_key_offset = Some(try_entry as u32);
+                                                break;
+                                            }
+                                            try_entry += 1;
+                                        }
+                                    }
+                                }
+
+                                let dk_index = dict.free_key_offset.take().expect("ensure_key_offset() failed");
+                                dict.free_key_offset_hint = Some(dk_index + 1);
+                                if dk_index + 1 > dict.key_max_free_offset {
+                                    // only reset the free key offset if it so happened that the free key was the last one: sometimes, the key could be in the middle of the array
+                                    dict.key_max_free_offset = dk_index + 2; // set the hint one past the end of the pool
+                                }
+                                dk_vpage.elements[dk_index as usize % DK_PER_VPAGE] = Some(dk_entry);
                             }
                             key.clean = true;
                         }

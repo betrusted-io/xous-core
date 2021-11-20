@@ -72,7 +72,12 @@ pub(crate) struct DictCacheEntry {
     /// count of total keys in the dictionary -- may be equal to or larger than the number of elements in `keys`
     pub(crate) key_count: u32,
     /// a cached copy of the next free key slot, expressed in units of DK_STRIDE, with 0 being the first valid key offset
+    /// when free_key_offset is taken, it's recommended to add 1 to it and store a copy in free_key_offset_hint.
     pub(crate) free_key_offset: Option<u32>,
+    /// optional hint on where to start searching for a free key offset. If None, we start from the beginning.
+    pub(crate) free_key_offset_hint: Option<u32>,
+    /// optimization to terminate key space search if we know there are no more new keys beyond this point
+    pub(crate) key_max_free_offset: u32,
     /// set if synced to disk. should be cleared if the dict is modified, and/or if a subordinate key descriptor is modified.
     pub(crate) clean: bool,
     /// track modification count
@@ -108,6 +113,8 @@ impl DictCacheEntry {
             keys: HashMap::<String, KeyCacheEntry>::new(),
             key_count: dict.num_keys,
             free_key_offset: None,
+            free_key_offset_hint: None,
+            key_max_free_offset: KEY_MAXCOUNT as u32, // start with the largest count, adjust down later
             clean: true,
             age: dict.age,
             flags: dict.flags,
@@ -177,6 +184,8 @@ impl DictCacheEntry {
             }
         }
         if self.free_key_offset.is_none() { self.free_key_offset = Some(try_entry as u32) }
+        // need to stop one past the empty slot
+        self.key_max_free_offset = try_entry as u32 + 1;
 
         // now build the small_pool_free binary heap structure
         self.rebuild_free_pool();
@@ -188,16 +197,17 @@ impl DictCacheEntry {
     /// This shares a lot of code with the fill() routine -- we should condense the common routines
     /// to make this easier to maintain. Returns false if the disk was searched and no key was found; true
     /// if cache is hot or key was found on search.
-    fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
+    pub(crate) fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str) -> bool {
         // only fill if the key isn't in the cache.
         if !self.keys.contains_key(name_str) {
+            log::info!("searching for key {}", name_str);
             let mut data_cache = PlaintextCache { data: None, tag: None };
             let dict_vaddr = VirtAddr::new(self.index as u64 * DICT_VSIZE).unwrap();
             let mut try_entry = 1;
             let mut key_count = 0;
             let mut index_cache = PlaintextCache { data: None, tag: None };
-            while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
+            while try_entry < KEY_MAXCOUNT && key_count < self.key_count && try_entry < self.key_max_free_offset as usize {
                 // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
                 // be a substantial savings in effort.
                 // Determine the absolute virtual address of the requested entry. It's written a little weird because
@@ -236,6 +246,8 @@ impl DictCacheEntry {
                             return true;
                         }
                         key_count += 1;
+                    } else {
+                        if self.free_key_offset.is_none() { self.free_key_offset = Some(try_entry as u32) }
                     }
                     try_entry += 1;
                 }
@@ -314,8 +326,10 @@ impl DictCacheEntry {
     /// multiple DictCacheEntry are required.
     pub fn key_update(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name: &str, data: &[u8], offset: usize, alloc_hint:Option<usize>, truncate: bool, large_alloc_ptr: PageAlignedVa) -> Result <PageAlignedVa> {
+        self.age = self.age.saturating_add(1);
+        self.clean = false;
         if self.ensure_key_entry(hw, v2p_map, cipher, name) {
-            let kcache = self.keys.get_mut(&String::from(name)).expect("Entry was assured, but then not there!");
+            let kcache = self.keys.get_mut(name).expect("Entry was assured, but then not there!");
             // the update isn't going to fit in the reserved space, remove it, and re-insert it with an entirely new entry.
             if kcache.reserved < (data.len() + offset) as u64 {
                 self.key_remove(hw, v2p_map, cipher, name);
@@ -398,6 +412,7 @@ impl DictCacheEntry {
             // key does not exist (or was previously erased) -- create one or replace the erased one.
             // try to fit the key in the small pool first
             if ((data.len() + offset) < SMALL_CAPACITY) && (alloc_hint.unwrap_or(0) < SMALL_CAPACITY) {
+                log::info!("creating small key");
                 // handle the case that we're a brand new dictionary and no small keys have ever been stored before.
                 if self.small_pool.len() == 0 {
                     self.small_pool.push(KeySmallPool::new());
@@ -450,7 +465,9 @@ impl DictCacheEntry {
                     }))
                 };
                 self.keys.insert(name.to_string(), kcache);
+                self.key_count += 1;
             } else {
+                log::info!("creating large key");
                 // it didn't fit in the small pool, stick it in the big pool.
                 let reservation = PageAlignedVa::from(
                     if alloc_hint.unwrap_or(0) > data.len() + offset {
@@ -471,6 +488,7 @@ impl DictCacheEntry {
                     data: None, // no caching implemented yet for large keys
                 };
                 self.keys.insert(name.to_string(), kcache);
+                self.key_count += 1;
                 // 1. allocate all the pages up to the reservation limit
                 for vpage_addr in (large_alloc_ptr.as_u64()..large_alloc_ptr.as_u64() + reservation.as_u64()).step_by(VPAGE_SIZE) {
                     let pp = hw.try_fast_space_alloc().expect("out of disk space");

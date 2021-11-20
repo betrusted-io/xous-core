@@ -181,15 +181,84 @@ def main():
                 except ValueError:
                     print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
 
+class KeyDescriptor:
+    MAX_NAME_LEN = 95
+    def __init__(self, record, v2p, disk, key, name):
+        print(record.hex())
+        i = 0
+        self.start = int.from_bytes(record[i:i+8], 'little')
+        i += 8
+        self.len = int.from_bytes(record[i:i+8], 'little')
+        i += 8
+        self.reserved = int.from_bytes(record[i:i+8], 'little')
+        i += 8
+        self.flags_code = int.from_bytes(record[i:i+4], 'little')
+        i += 4
+        self.age = int.from_bytes(record[i:i+4], 'little')
+        i += 8
+        self.name = record[i:i+KeyDescriptor.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+        if self.flags_code & 1 != 0:
+            self.valid = True
+        else:
+            self.valid = False
+        if self.flags_code & 2 != 0:
+            self.unresolved = True
+        else:
+            self.unresolved = False
+        if self.valid:
+            page_addr = self.start
+            self.data = bytearray()
+            remaining = self.len
+            read_start = self.start % VPAGE_SIZE # reads can start not page-aligned
+            while page_addr < self.start + self.len:
+                data_base = (page_addr // VPAGE_SIZE) * VPAGE_SIZE
+                pp_start = v2p[data_base]
+                pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+                try:
+                    cipher = AES_GCM_SIV(key, pp_data[:12])
+                    pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))[4:] # skip the journal, first 4 bytes
+                    if read_start + remaining > VPAGE_SIZE:
+                        read_end = VPAGE_SIZE
+                    else:
+                        read_end = read_start + remaining
+                    self.data += pt_data[read_start:read_end]
+                    bytes_read = read_end - read_start
+                    remaining -= bytes_read
+                    read_start = (read_start + bytes_read) % VPAGE_SIZE
+                    if remaining > 0:
+                        assert(read_start == 0)
+                except ValueError:
+                    print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(page_addr), pp_start)
+                page_addr += VPAGE_SIZE
+
+
+
+    def as_str(self, indent):
+        desc = ''
+        desc += indent + 'Start: 0x{:x}\n'.format(self.start)
+        desc += indent + 'Len:   {}\n'.format(self.len)
+        desc += indent + 'Resvd: 0x{:x}\n'.format(self.reserved)
+        desc += indent + 'Age:   {}\n'.format(self.age)
+        desc += indent + 'Flags: '
+        if self.valid:
+            desc += 'VALID'
+        if self.unresolved:
+            desc += indent + 'UNRESOLVED'
+        desc += '\n'
+        desc += indent + 'Data (hex): {}\n'.format(self.data.hex())
+        desc += indent + 'Data (txt): {}\n'.format(self.data.decode('utf8', errors='ignore'))
+        return (desc)
 
 
 class BasisDicts:
     DICT_VSTRIDE = 0xFE_0000
+    KV_STRIDE = 127
     MAX_NAME_LEN = 115
     def __init__(self, index, v2p, disk, key, name):
         global PAGE_SIZE
         dict_header_vaddr = self.DICT_VSTRIDE * (index + 1)
         pp = v2p[dict_header_vaddr]
+        self.keys = {}
         try:
             print('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
             cipher = AES_GCM_SIV(key, disk[pp:pp+12])
@@ -210,12 +279,40 @@ class BasisDicts:
         except ValueError:
             print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
 
+        if self.num_keys > 0:
+            keys_found = 0
+            keys_tried = 1
+            while (keys_found < self.num_keys) and keys_tried < 131071:
+                keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
+                pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
+                pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+                try:
+                    cipher = AES_GCM_SIV(key, pp_data[:12])
+                    pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                    key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
+                    print(key_index)
+                    maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
+                    if maybe_key.valid:
+                        self.keys[maybe_key.name] = maybe_key
+                        keys_found += 1
+
+                except ValueError:
+                    print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr), pp_start)
+
+                keys_tried += 1
+
+
     def as_str(self):
         desc = ''
         desc += '  Name: {}\n'.format(self.name)
         desc += '  Age: {}\n'.format(self.age)
         desc += '  Flags: {}\n'.format(self.flags)
         desc += '  Key count: {}\n'.format(self.num_keys)
+        desc += '  Keys:\n'
+        for (name, key) in self.keys.items():
+            desc += '    {}:\n'.format(name)
+            desc += key.as_str('       ')
+
         return desc
 
 

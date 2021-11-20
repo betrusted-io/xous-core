@@ -1200,8 +1200,8 @@ impl PddbOs {
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
             *dst = src;
         }
-        let key = Key::from_slice(self.system_basis_key.as_ref().unwrap());
-        self.data_encrypt_and_patch_page(&Aes256GcmSiv::new(key), &aad, &mut block, &pp);
+        let key = Key::clone_from_slice(self.system_basis_key.as_ref().unwrap());
+        self.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
 
         // step 9. generate & write initial page table entries
         for (&virt, phys) in basis_v2p_map.iter_mut() {
