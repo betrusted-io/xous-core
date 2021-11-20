@@ -543,12 +543,90 @@ impl DictCacheEntry {
     pub fn key_erase(&mut self, name: &str) {
         unimplemented!();
     }
-    /// Synchronize a given small pool key to disk
-    pub(crate) fn key_small_sync(&self, hw: &PddbOs, smallkey: &mut KeySmallPool) {
-        // 1. do a quick scan to see if any key entries are dirty. If all are clean, terminate fast
-        // 2. iterate through all the elements of contents
-        // 3. write the data to a Vec<u8>, while updating the KeyCacheEntry with the new pointers, and marking the entries dirty as necessary
-        // 4. write the data to disk
+    /// estimates the amount of space needed to sync the dict cache. Pass this to ensure_fast_space_alloc() before calling a sync.
+    /// estimate can be inaccurate under pathological allocation conditions.
+    pub(crate) fn alloc_estimate_small(&self) -> usize {
+        let mut data_estimate = 0;
+        let mut index_estimate = 0;
+        for ksp in &self.small_pool {
+            if !ksp.clean {
+                for keyname in &ksp.contents {
+                    let kce = self.keys.get(keyname).expect("data allocated but no index entry");
+                    if kce.descriptor_index.is_none() {
+                        data_estimate += SMALL_CAPACITY - ksp.avail as usize;
+                        index_estimate += 1;
+                    }
+                }
+            }
+        }
+        let index_avail = DK_PER_VPAGE - self.keys.len() % DK_PER_VPAGE;
+        let index_req = if index_estimate > index_avail {
+            ((index_estimate - index_avail) / DK_PER_VPAGE) + 1
+        } else {
+            0
+        };
+        (data_estimate / VPAGE_SIZE) + 1 + index_req
+    }
+    /// Synchronize a given small pool key to disk. Make sure there is adequate space in the fastspace
+    /// pool by using self.alloc_estimate_small + hw.ensure_fast_space_alloc. Following this call,
+    /// one should call `dict_sync` and `pt_sync` as soon as possible to keep everything consistent.
+    ///
+    /// Observation: given the dictionary index and the small key pool index, we know exactly
+    /// the virtual address of the data pool.
+    pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) {
+        for (index, entry) in self.small_pool.iter_mut().enumerate() {
+            if !entry.clean {
+                let pool_vaddr = VirtAddr::new(self.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START).unwrap();
+                let pp= v2p_map.entry(pool_vaddr).or_insert_with(||
+                    hw.try_fast_space_alloc().expect("No free space to allocate small key storage"));
+                pp.set_valid(true);
+
+                // WARNING - we don't read back the journal number before loading data into the page!
+                // we /could/ do that, but it incurs an expensive full-page decryption when we plan to nuke all the data.
+                // I'm a little worried the implementation as-is is going to be too slow, so let's try the abbreviated method
+                // and see how it fares. This incurs a risk that we lose data if we have a power outage or panic just after
+                // the page is erased but before all the PTEs and pointers are synced.
+                //
+                // If it turns out this is an issue, here's how you'd fix it:
+                //   1. decrypt the old page (if it exists) and extract the journal rev
+                //   2. de-allocate the old phys page, returning it to the fastspace pool; it'll likely not be returned on the next step
+                //   3. allocate a new page
+                //   4. write data to the new page (which increments the old journal rev)
+                //   5. sync the page tables
+                // This implementation just skips to step 3.
+                let mut page = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
+                let mut pool_offset = 0;
+                // visit the entries in arbitrary order, but back them in optimally
+                for key_name in &entry.contents {
+                    let kcache = self.keys.get_mut(key_name).expect("data record without index");
+                    kcache.start = pool_vaddr.get() + pool_offset as u64;
+                    kcache.descriptor_index = Some(NonZeroU32::new(index as u32 + 1).unwrap());
+                    kcache.age = kcache.age.saturating_add(1);
+                    kcache.clean = false;
+                    kcache.flags.set_unresolved(false);
+                    kcache.flags.set_valid(true);
+                    if let Some(KeyCacheData::Small(data)) = kcache.data.as_mut() {
+                        data.clean = true;
+                        for (&src, dst) in data.data.iter()
+                        .zip(page[size_of::<JournalType>() + pool_offset..size_of::<JournalType>() + pool_offset + kcache.reserved as usize].iter_mut())
+                        {*dst = src;}
+                    } else {
+                        // we have a rule that all small keys, when cached, also carry their data: there should not be an index without data.
+                        panic!("Incorrect data cache type for small key entry.");
+                    }
+                    pool_offset += kcache.reserved as usize;
+                }
+                // now commit the sector to disk
+                hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut page, &pp);
+                entry.clean = true;
+            }
+        }
+        // we now have a bunch of dirty kcache entries. You should call `dict_sync` shortly after this to synchronize those entries to disk.
+    }
+
+    /// This call currently does nothing, because we haven't implemented caching for large pool data yet.
+    pub(crate) fn sync_large_pool(&self) {
+
     }
 }
 pub(crate) fn small_storage_index_from_key(kcache: &KeyCacheEntry, dict_index: u32) -> Option<usize> {

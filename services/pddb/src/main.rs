@@ -386,6 +386,7 @@ fn xmain() -> ! {
     // add a "system settings" dictionary to the default basis
     log::info!("adding 'system settings' dictionary");
     basis_cache.dict_add(&mut pddb_os, "system settings", None).expect("couldn't add system settings dictionary");
+    basis_cache.key_update(&mut pddb_os, "system settings", "wifi/wpa_keys/Kosagi", "my_wpa_key_here".as_bytes(), None, None, None, false).expect("couldn't add a key");
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pddb_os.dbg_dump();

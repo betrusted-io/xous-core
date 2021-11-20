@@ -222,15 +222,15 @@ impl BasisCache {
     // placeholder reminder: deleting a basis is a bit more complicated, as it requires
     // syncing its contents.
 
-    fn select_basis(&mut self, basis_name: Option<&str>) -> Option<&mut BasisCacheEntry> {
+    fn select_basis(&mut self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
             log::error!("Can't select basis: PDDB is not mounted");
             return None
         }
         if let Some(n) = basis_name {
-            self.cache.iter_mut().filter(|bc| bc.name == n).next()
+            self.cache.iter().position(|bc| bc.name == n)
         } else {
-            self.cache.last_mut()
+            Some(self.cache.len() - 1)
         }
     }
 
@@ -242,7 +242,8 @@ impl BasisCache {
         if !hw.ensure_fast_space_alloc(1, &self.cache) {
             return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"));
         }
-        if let Some(basis) = self.select_basis(basis_name) {
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let basis = &mut self.cache[basis_index];
             basis.age = basis.age.saturating_add(1);
             if basis.dicts.get(&String::from(name)).is_some() {
                 // quick exit if we see the dictionary is hot in the cache
@@ -260,8 +261,9 @@ impl BasisCache {
             // allocate a vpage offset for the dictionary
             let dict_index = basis.dict_get_free_offset(hw);
             let dict_offset = VirtAddr::new(dict_index as u64 * DICT_VSIZE).unwrap();
-            basis.v2p_map.entry(dict_offset).or_insert_with(||
+            let pp = basis.v2p_map.entry(dict_offset).or_insert_with(||
                 hw.try_fast_space_alloc().expect("No free space to allocate dict"));
+            pp.set_valid(true);
 
             // create the cache entry
             let mut dict_name = [0u8; DICT_NAME_LEN];
@@ -295,6 +297,154 @@ impl BasisCache {
             basis.basis_sync(hw);
             // finally, sync the page tables.
             basis.pt_sync(hw);
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+        }
+    }
+
+    /// Updates a key in a dictionary; if it doesn't exist, creates it. User can specify a basis,
+    /// or rely upon the auto-basis select algorithm.
+    pub(crate) fn key_update(&mut self,
+        hw: &mut PddbOs, dict: &str, key: &str, data: &[u8], offset: Option<usize>,
+        alloc_hint: Option<usize>, basis_name: Option<&str>, truncate: bool) -> Result<()> {
+
+        // we have to estimate how many pages are needed *before* we do anything, because we can't
+        // mutate the page table to allocate data while we're accessing the page table. This huge gob of code
+        // computes the pages needed. :-/
+        let mut pages_needed = 0;
+        let reserved = if data.len() + offset.unwrap_or(0) < alloc_hint.unwrap_or(0) {
+            data.len() + offset.unwrap_or(0)
+        } else {
+            alloc_hint.unwrap_or(0)
+        };
+        let reserved_pages = if (reserved % VPAGE_SIZE == 0) {
+            reserved / VPAGE_SIZE
+        } else {
+            (reserved / VPAGE_SIZE) + 1
+        };
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let basis = &mut self.cache[basis_index];
+            if !basis.dicts.contains_key(dict) {
+                if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
+                    if dict_record.flags.valid() {
+                        let dict_name = String::from(cstr_to_string(&dict_record.name));
+                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
+                        basis.dicts.insert(dict.to_string(), dcache);
+                    }
+                } else {
+                    pages_needed += 1;
+                    pages_needed += reserved_pages;
+                }
+            }
+            if let Some(dict_entry) = basis.dicts.get(dict) {
+                // see if we need to make a kcache entry
+                if let Some(kcache) = dict_entry.keys.get(key) {
+                    if kcache.descriptor_index.is_none() {
+                        // index hasn't been allocated yet, if we don't have extra space in an already allocated page, we'll need a new one
+                        if (DK_PER_VPAGE - dict_entry.key_count as usize % DK_PER_VPAGE) == 0 {
+                            pages_needed += 1;
+                        };
+                    }
+                    // now check for data reservations
+                    if reserved < SMALL_CAPACITY {
+                        // it's probably going in the small pool.
+                        // index exists, see if the page exists
+                        let key_index = (((kcache.start - SMALL_POOL_START as u64) - (dict_entry.index as u64 * SMALL_POOL_STRIDE as u64)) / SMALL_CAPACITY as u64) as usize;
+                        if dict_entry.small_pool.len() > key_index {
+                            log::info!("resoved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
+                            // see if the pool's address exists in the page table
+                            let pool_vaddr = VirtAddr::new(dict_entry.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START).unwrap();
+                            if !basis.v2p_map.contains_key(&pool_vaddr) {
+                                pages_needed += 1;
+                            }
+                        } else {
+                            // we're definitely going to need another small pool page
+                            pages_needed += 1;
+                        }
+                    } else {
+                        // it's a large block. see if its address have been mapped
+                        // large pool start addresses should always be vpage aligned
+                        for vpage in (kcache.start..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
+                            if !basis.v2p_map.contains_key(&VirtAddr::new(vpage).unwrap()) {
+                                pages_needed += 1;
+                            }
+                        }
+                    }
+                } else {
+                    // there's no key cache entry. For simplicity, let's just assume this means none of the data
+                    // has been allocated, and ask for it to be available.
+                    //
+                    // At least in v1 of the code, this is the case. Later on maybe you could
+                    // evict a key key cache entry to trim memory usage; if we do this, we'll have to implement a
+                    // routine that is like ensure_key_entry() but doesn't do any allocations - it just does the search
+                    // for the key record and if it doesn't exist reports that we'll need one, but if the key does exist
+                    // and simply wasn't loaded into cache, then don't ask for the reservation.
+                    //
+                    // But this should be a "last resort" move: preferably, if we have memory pressure, we should take
+                    // the data entries in the key cache and turn them into None to reduce data pressure, rather than
+                    // evicting the key indices themselves (because it causes bookkeeping problems like this). I guess
+                    // if someone wanted to allocate thousand and thousands of keys, we'd eventually consume a megabyte of
+                    // RAM, which is relatively precious, but....anyways. Maybe the answer is "don't do that" on a small memory
+                    // machine and expect it to work?
+                    pages_needed += reserved_pages;
+                }
+            }
+        } else {
+            return Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."));
+        }
+        // make the reservation
+        if !hw.ensure_fast_space_alloc(pages_needed, &self.cache) {
+            return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"));
+        }
+        // now actually do the update
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let mut dict_found = false;
+            { // resolve the basis here, potentially mutating things
+                let basis = &mut self.cache[basis_index];
+                basis.age = basis.age.saturating_add(1);
+                basis.clean = false;
+                if !basis.dicts.contains_key(dict) {
+                    // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
+                    // doesn't exist. Do a comprehensive search if our cache isn't complete.
+                    if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
+                        let dict_name = String::from(cstr_to_string(&dict_record.name));
+                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
+                        basis.dicts.insert(dict.to_string(), dcache);
+                        dict_found = true;
+                    }
+                }
+            }
+            if !dict_found { // now that we're clear of the deep search, mutate the basis if we are sure it's not there
+                self.dict_add(hw, dict, basis_name).expect("couldn't add dictionary");
+            }
+            // refetch the basis here to avoid the re-borrow problem, now that all the potential dict cache mutations are done
+            let basis = &mut self.cache[basis_index];
+            // at this point, the dictionary should definitely be in cache
+            if let Some(dict_entry) = basis.dicts.get_mut(dict) {
+                let updated_ptr = dict_entry.key_update(hw, &mut basis.v2p_map,
+                    &basis.cipher, key, data,
+                    offset.unwrap_or(0),
+                    alloc_hint,
+                    truncate,
+                    basis.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START))
+                ).expect("couldn't add key");
+                basis.large_alloc_ptr = Some(updated_ptr);
+                dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher);
+                // we don't have large pool caches yet, but this is a placeholder to remember to do "something" at this point,
+                // once we do have them.
+                dict_entry.sync_large_pool();
+
+                // encrypt and write the dict entry to disk
+                basis.dict_sync(hw, dict)?;
+                // sync the root basis structure as well, while we're at it...
+                basis.basis_sync(hw);
+                // finally, sync the page tables.
+                basis.pt_sync(hw);
+            } else {
+                return Err(Error::new(ErrorKind::NotFound, "Requested dictionary not found, or could not be allocated."));
+            }
+
             Ok(())
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
@@ -689,7 +839,7 @@ impl BasisCacheEntry {
         unimplemented!();
     }
 
-    /// Syncs this cache entry to the hardware.
+    /// Syncs *only* the basis header to disk.
     pub(crate) fn basis_sync(&mut self, hw: &mut PddbOs) {
         if !self.clean {
             let basis_root = BasisRoot {
