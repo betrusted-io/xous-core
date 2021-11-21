@@ -276,16 +276,17 @@ impl BasisCache {
             }
             let mut init_flags = DictFlags(0);
             init_flags.set_valid(true);
+            let mut free_keys = BinaryHeap::<FreeKeyRange>::new();
+            free_keys.push(FreeKeyRange{start: 1, run: KEY_MAXCOUNT as u32 - 1});
             let dict_cache = DictCacheEntry {
                 index: dict_index,
                 keys: HashMap::<String, KeyCacheEntry>::new(),
                 clean: false,
                 age: 0,
+                free_keys: RefCell::new(free_keys),
+                last_disk_key_index: KEY_MAXCOUNT as u32,
                 flags: init_flags,
                 key_count: 0,
-                free_key_offset: Some(0),
-                free_key_offset_hint: None,
-                key_max_free_offset: 1,
                 small_pool: Vec::<KeySmallPool>::new(),
                 small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
                 aad: my_aad,
@@ -838,6 +839,19 @@ impl BasisCacheEntry {
                     for (key_name, key) in dict.keys.iter_mut() {
                         log::info!("merging in key {}", key_name);
                         if !key.clean {
+                            // allocate a key index if one hasn't already been allocated
+                            if key.descriptor_index.is_none() {
+                                if let Some(new_index) = dict.get_free_key_index() {
+                                    key.descriptor_index = Some(new_index);
+                                    // if the new index is outside the currently known set, raise the search extent for the brute-force search
+                                    if new_index.get() > dict.last_disk_key_index {
+                                        dict.last_disk_key_index = new_index.get();
+                                    }
+                                } else {
+                                    log::error!("Dictionary {} ran out of key capacity during sync", name);
+                                    return Err(Error::new(ErrorKind::OutOfMemory, "Dict ran out of key slots"));
+                                }
+                            }
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
                                 // key is within the current page, add it to the target list
@@ -857,41 +871,12 @@ impl BasisCacheEntry {
                                 for (&src, dst) in key_desc.deref().iter().zip(dk_entry.data.iter_mut()) {
                                     *dst = src;
                                 }
-                                // ensure that we have a free_key offset with a perhaps slow brute-force search of the key space
-                                if dict.free_key_offset.is_none() {
-                                    let mut index_cache = PlaintextCache { data: None, tag: None };
-                                    let mut try_entry = dict.free_key_offset_hint.take().unwrap_or(1) as usize;
-                                    while try_entry < KEY_MAXCOUNT {
-                                        let req_vaddr = dict.index as u64 * DICT_VSIZE + ((try_entry / DK_PER_VPAGE) as u64) * VPAGE_SIZE as u64;
-                                        index_cache.fill(hw, &self.v2p_map, &self.cipher, &dict.aad, VirtAddr::new(req_vaddr).unwrap());
-                                        if index_cache.data.is_none() || index_cache.tag.is_none() {
-                                            dict.free_key_offset = Some(try_entry as u32);
-                                            log::warn!("Dictionary fill op encountered an unallocated page checking entry {} in the dictionary map. Marking it for re-use.", try_entry);
-                                            break;
-                                        } else {
-                                            let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
-                                            let pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
-                                            let mut keydesc = KeyDescriptor::default();
-                                            let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
-                                            for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
-                                                *dst = src;
-                                            }
-                                            if !keydesc.flags.valid() {
-                                                dict.free_key_offset = Some(try_entry as u32);
-                                                break;
-                                            }
-                                            try_entry += 1;
-                                        }
-                                    }
+                                if let Some(dk_index) = key.descriptor_index {
+                                    dk_vpage.elements[dk_index.get() as usize % DK_PER_VPAGE] = Some(dk_entry);
+                                } else {
+                                    log::error!("Dictionary {} ran out of key capacity during sync", name);
+                                    return Err(Error::new(ErrorKind::OutOfMemory, "Dict ran out of key slots"));
                                 }
-
-                                let dk_index = dict.free_key_offset.take().expect("ensure_key_offset() failed");
-                                dict.free_key_offset_hint = Some(dk_index + 1);
-                                if dk_index + 1 > dict.key_max_free_offset {
-                                    // only reset the free key offset if it so happened that the free key was the last one: sometimes, the key could be in the middle of the array
-                                    dict.key_max_free_offset = dk_index + 2; // set the hint one past the end of the pool
-                                }
-                                dk_vpage.elements[dk_index as usize % DK_PER_VPAGE] = Some(dk_entry);
                             }
                             key.clean = true;
                         }

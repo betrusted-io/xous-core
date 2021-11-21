@@ -14,12 +14,61 @@ use std::iter::IntoIterator;
 use std::collections::{HashMap, BinaryHeap};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
+use std::cmp::Ordering;
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq)]
     pub struct DictFlags(u32);
     impl Debug;
     pub valid, set_valid: 0;
+}
+
+#[derive(PartialEq, Eq)]
+pub(crate) enum FreeKeyCases {
+    LeftAdjacent,
+    RightAdjacent,
+    Within,
+    LessThan,
+    GreaterThan,
+}
+#[derive(Eq, Copy, Clone)]
+pub(crate) struct FreeKeyRange {
+    /// This index should be free
+    pub(crate) start: u32,
+    /// Additional free keys after the start one. Run = 0 means just the start key is free, and the
+    /// next one should be used. Run = 2 means {start, start+1} are free, etc.
+    pub(crate) run: u32,
+}
+impl FreeKeyRange {
+    pub(crate) fn compare_to(&self, index: u32) -> FreeKeyCases {
+        if self.start > 1 && index < self.start - 1 {
+            FreeKeyCases::LessThan
+        } else if self.start > 0 && index == self.start - 1 {
+            FreeKeyCases::LeftAdjacent
+        } else if index >= self.start && index <= self.start + self.run {
+            FreeKeyCases::Within
+        } else if index == self.start + self.run + 1 {
+            FreeKeyCases::RightAdjacent
+        } else {
+            FreeKeyCases::GreaterThan
+        }
+    }
+}
+impl Ord for FreeKeyRange {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // note the reverse order -- so we can sort as a "min-heap"
+        other.start.cmp(&self.start)
+    }
+}
+impl PartialOrd for FreeKeyRange {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for FreeKeyRange {
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start
+    }
 }
 
 /// stashed copy of a decrypted page. The copy here must always match
@@ -71,13 +120,11 @@ pub(crate) struct DictCacheEntry {
     pub(crate) keys: HashMap::<String, KeyCacheEntry>,
     /// count of total keys in the dictionary -- may be equal to or larger than the number of elements in `keys`
     pub(crate) key_count: u32,
-    /// a cached copy of the next free key slot, expressed in units of DK_STRIDE, with 0 being the first valid key offset
-    /// when free_key_offset is taken, it's recommended to add 1 to it and store a copy in free_key_offset_hint.
-    pub(crate) free_key_offset: Option<u32>,
-    /// optional hint on where to start searching for a free key offset. If None, we start from the beginning.
-    pub(crate) free_key_offset_hint: Option<u32>,
-    /// optimization to terminate key space search if we know there are no more new keys beyond this point
-    pub(crate) key_max_free_offset: u32,
+    /// track the pool of free key indices. Wrapped in a refcell so we can work the index mechanism while updating the keys HashMap
+    pub(crate) free_keys: RefCell<BinaryHeap::<FreeKeyRange>>,
+    /// hint for when to stop doing a brute-force search for the existence of a key in the disk records.
+    /// This field is set to the max count on a new, naive record; and set only upon a sync() or a fill() call.
+    pub(crate) last_disk_key_index: u32,
     /// set if synced to disk. should be cleared if the dict is modified, and/or if a subordinate key descriptor is modified.
     pub(crate) clean: bool,
     /// track modification count
@@ -108,13 +155,14 @@ impl DictCacheEntry {
         for &b in aad.iter() {
             my_aad.push(b);
         }
+        let mut free_keys = BinaryHeap::<FreeKeyRange>::new();
+        free_keys.push(FreeKeyRange{start: 1, run: KEY_MAXCOUNT as u32 - 1});
         DictCacheEntry {
             index: index as u32,
             keys: HashMap::<String, KeyCacheEntry>::new(),
             key_count: dict.num_keys,
-            free_key_offset: None,
-            free_key_offset_hint: None,
-            key_max_free_offset: KEY_MAXCOUNT as u32, // start with the largest count, adjust down later
+            free_keys: RefCell::new(free_keys),
+            last_disk_key_index: KEY_MAXCOUNT as u32,
             clean: true,
             age: dict.age,
             flags: dict.flags,
@@ -144,7 +192,6 @@ impl DictCacheEntry {
 
             if index_cache.data.is_none() || index_cache.tag.is_none() {
                 // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
-                if self.free_key_offset.is_none() { self.free_key_offset = Some(try_entry as u32) }
                 log::warn!("Dictionary fill op encountered an unallocated page checking entry {} in the dictionary map. Marking it for re-use.", try_entry);
                 try_entry += DK_PER_VPAGE;
             } else {
@@ -177,15 +224,12 @@ impl DictCacheEntry {
                     }
                     self.keys.insert(kname, kcache);
                     key_count += 1;
-                } else {
-                    if self.free_key_offset.is_none() { self.free_key_offset = Some(try_entry as u32) }
                 }
                 try_entry += 1;
             }
         }
-        if self.free_key_offset.is_none() { self.free_key_offset = Some(try_entry as u32) }
-        // need to stop one past the empty slot
-        self.key_max_free_offset = try_entry as u32 + 1;
+        // note where the scan left off, so we don't have to brute-force it in the future
+        self.last_disk_key_index = try_entry as u32;
 
         // now build the small_pool_free binary heap structure
         self.rebuild_free_pool();
@@ -207,7 +251,7 @@ impl DictCacheEntry {
             let mut try_entry = 1;
             let mut key_count = 0;
             let mut index_cache = PlaintextCache { data: None, tag: None };
-            while try_entry < KEY_MAXCOUNT && key_count < self.key_count && try_entry < self.key_max_free_offset as usize {
+            while try_entry < KEY_MAXCOUNT && key_count < self.key_count && try_entry <= self.last_disk_key_index as usize {
                 // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
                 // be a substantial savings in effort.
                 // Determine the absolute virtual address of the requested entry. It's written a little weird because
@@ -217,7 +261,6 @@ impl DictCacheEntry {
 
                 if index_cache.data.is_none() || index_cache.tag.is_none() {
                     // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
-                    if self.free_key_offset.is_none() { self.free_key_offset = Some(try_entry as u32) }
                     log::warn!("Dictionary fill op encountered an unallocated page checking entry {} in the dictionary map. Marking it for re-use.", try_entry);
                     try_entry += DK_PER_VPAGE;
                 } else {
@@ -246,8 +289,6 @@ impl DictCacheEntry {
                             return true;
                         }
                         key_count += 1;
-                    } else {
-                        if self.free_key_offset.is_none() { self.free_key_offset = Some(try_entry as u32) }
                     }
                     try_entry += 1;
                 }
@@ -359,44 +400,55 @@ impl DictCacheEntry {
                     unimplemented!("caching is not yet implemented for large data sets");
                 } else {
                     // 1. handle unaligned start offsets
-                    let mut cur_offset = offset as u64;
-                    if ((kcache.start + cur_offset) % VPAGE_SIZE as u64) != 0 {
-                        let start_vpage_addr = ((kcache.start + cur_offset) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+                    let mut written: usize = 0;
+                    if ((kcache.start + offset as u64) % VPAGE_SIZE as u64) != 0 {
+                        let start_vpage_addr = ((kcache.start + offset as u64) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
                         let pp = v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()).expect("large key data allocation missing");
                         let mut pt_data = hw.data_decrypt_page(&cipher, &self.aad, pp).expect("Decryption auth error");
-                        for (&src, dst) in data.iter().zip(pt_data[size_of::<JournalType>() + offset..].iter_mut()) {
+                        for (&src, dst) in data[written..].iter().zip(pt_data[size_of::<JournalType>() + offset..].iter_mut()) {
                             *dst = src;
-                            cur_offset += 1;
+                            written += 1;
                         }
-                        assert!((kcache.start + cur_offset) % VPAGE_SIZE as u64 == 0, "alignment algorithm failed");
+                        assert!((kcache.start + offset as u64 + written as u64) % VPAGE_SIZE as u64 == 0, "alignment algorithm failed");
                         hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut pt_data, &pp);
                     }
                     // 2. do the rest
-                    while (cur_offset - offset as u64) < data.len() as u64 {
-                        // overwrite whole pages without decryption
-                        let vpage_addr = ((kcache.start + cur_offset) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+                    while written < data.len() {
+                        let vpage_addr = ((kcache.start + written as u64 + offset as u64) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
                         let pp = v2p_map.get(&VirtAddr::new(vpage_addr).unwrap()).expect("large key data allocation missing");
-                        if data.len() as u64 - (cur_offset - offset as u64) > VPAGE_SIZE as u64 {
+                        if data.len() - written >= VPAGE_SIZE {
+                            // overwrite whole pages without decryption
                             let mut block = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
-                            for (&src, dst) in data.iter().zip(block[size_of::<JournalType>()..].iter_mut()) {
+                            for (&src, dst) in data[written..].iter().zip(block[size_of::<JournalType>()..].iter_mut()) {
                                 *dst = src;
-                                cur_offset += 1;
+                                written += 1;
                             }
                             hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut block, pp);
                         } else {
-                            let mut pt_data = hw.data_decrypt_page(&cipher, &self.aad, pp).expect("Decryption auth error");
-                            for (&src, dst) in data.iter().zip(pt_data[size_of::<JournalType>()..].iter_mut()) {
-                                *dst = src;
-                                cur_offset += 1;
+                            // handle partial trailing pages
+                            if let Some(pt_data) = hw.data_decrypt_page(&cipher, &self.aad, pp).as_mut() {
+                                for (&src, dst) in data[written..].iter().zip(pt_data[size_of::<JournalType>()..].iter_mut()) {
+                                    *dst = src;
+                                    written += 1;
+                                }
+                                hw.data_encrypt_and_patch_page(cipher, &self.aad, pt_data, pp);
+                            } else {
+                                // page didn't exist, initialize it with 0's and merge the tail end.
+                                let mut pt_data = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
+                                for (&src, dst) in data[written..].iter().zip(pt_data[size_of::<JournalType>()..].iter_mut()) {
+                                    *dst = src;
+                                    written += 1;
+                                }
+                                hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut pt_data, pp);
                             }
-                            hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut pt_data, pp);
                         }
                     }
-                    assert!(cur_offset - offset as u64 == data.len() as u64, "algorithm problem -- didn't write all the data we thought we would");
+                    log::info!("data written: {}, data requested to write: {}", written, data.len());
+                    assert!(written == data.len(), "algorithm problem -- didn't write all the data we thought we would");
                     // 3. truncate.
                     if truncate {
-                        // discard all whole pages after cur_offset, and reset the reserved field to the smaller size.
-                        let vpage_end_offset = PageAlignedVa::from(cur_offset);
+                        // discard all whole pages after written+offset, and reset the reserved field to the smaller size.
+                        let vpage_end_offset = PageAlignedVa::from((written + offset) as u64);
                         if (vpage_end_offset.as_u64() - kcache.start) > kcache.reserved {
                             for vpage in (vpage_end_offset.as_u64()..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
                                 if let Some(pp) = v2p_map.remove(&VirtAddr::new(vpage).unwrap()) {
@@ -546,6 +598,13 @@ impl DictCacheEntry {
                     }
                 }
             }
+            // free up the key index in the dictionary
+            if let Some(index) = kcache.descriptor_index {
+                self.put_free_key_index(index.get());
+            } else {
+                // this should be a rare case; later on we can change this warn to a debug, but print something as a bread crumb to future me...
+                log::warn!("Key cache descriptor was none -- should only happen in the case of a key that was removed before it was synchronized to disk");
+            }
             if need_rebuild {
                 // no stable "retain" api, so we have to clear the heap and rebuild it https://github.com/rust-lang/rust/issues/71503
                 self.rebuild_free_pool();
@@ -618,7 +677,6 @@ impl DictCacheEntry {
                 for key_name in &entry.contents {
                     let kcache = self.keys.get_mut(key_name).expect("data record without index");
                     kcache.start = pool_vaddr.get() + pool_offset as u64;
-                    kcache.descriptor_index = Some(NonZeroU32::new(index as u32 + 1).unwrap());
                     kcache.age = kcache.age.saturating_add(1);
                     kcache.clean = false;
                     kcache.flags.set_unresolved(false);
@@ -642,9 +700,72 @@ impl DictCacheEntry {
         // we now have a bunch of dirty kcache entries. You should call `dict_sync` shortly after this to synchronize those entries to disk.
     }
 
-    /// This call currently does nothing, because we haven't implemented caching for large pool data yet.
+    /// No data cache to flush yet...large pool caches not implemented!
     pub(crate) fn sync_large_pool(&self) {
+    }
 
+    pub(crate) fn get_free_key_index(&self) -> Option<NonZeroU32> {
+        if let Some(free_key) = self.free_keys.borrow_mut().pop() {
+            let index = free_key.start;
+            if free_key.run > 0 {
+                self.free_keys.borrow_mut().push(
+                    FreeKeyRange {
+                        start: index + 1,
+                        run: free_key.run - 1,
+                    }
+                )
+            }
+            NonZeroU32::new(index as u32)
+        } else {
+            log::warn!("Ran out of dict index space");
+            None
+        }
+    }
+    pub(crate) fn put_free_key_index(&self, index: u32) {
+        let free_keys = self.free_keys.replace(BinaryHeap::<FreeKeyRange>::new());
+        let free_key_vec = free_keys.into_sorted_vec();
+        // this is a bit weird because we have three cases:
+        // - the new key is more than 1 away from any element, in which case we insert it as a singleton (start = index, run = 0)
+        // - the new key is adjacent to exactly once element, in which case we put it either on the top or bottom (merge into existing record)
+        // - the new key is adjacent to exactly two elements, in which case we merge the new key and other two elements together, add its length to the new overall run
+        let mut skip = false;
+        for i in 0..free_key_vec.len() {
+            if skip {
+                // this happens when we merged into the /next/ record, and we reduced the total number of items by one
+                skip = false;
+                continue
+            }
+            match free_key_vec[i].compare_to(i as u32) {
+                FreeKeyCases::LessThan => {
+                    self.free_keys.borrow_mut().push(FreeKeyRange{start: index as u32, run: 0});
+                    break;
+                }
+                FreeKeyCases::LeftAdjacent => {
+                    self.free_keys.borrow_mut().push(FreeKeyRange{start: index as u32, run: free_key_vec[i].run + 1});
+                }
+                FreeKeyCases::Within => {
+                    log::error!("Double-free error in free_keys()");
+                    panic!("Double-free error in free_keys()");
+                }
+                FreeKeyCases::RightAdjacent => {
+                    // see if we should merge to the right
+                    if i + 1 < free_key_vec.len() {
+                        if free_key_vec[i+1].compare_to(i as u32) == FreeKeyCases::LeftAdjacent {
+                            self.free_keys.borrow_mut().push(FreeKeyRange{
+                                start: free_key_vec[i].start,
+                                run: free_key_vec[i].run + free_key_vec[i+1].run + 2
+                            });
+                            skip = true
+                        }
+                    } else {
+                        self.free_keys.borrow_mut().push(FreeKeyRange { start: free_key_vec[i].start, run: free_key_vec[i].run + 1 })
+                    }
+                }
+                FreeKeyCases::GreaterThan => {
+                    self.free_keys.borrow_mut().push(free_key_vec[i]);
+                }
+            }
+        }
     }
 }
 pub(crate) fn small_storage_index_from_key(kcache: &KeyCacheEntry, dict_index: u32) -> Option<usize> {
