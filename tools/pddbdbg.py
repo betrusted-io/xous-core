@@ -184,7 +184,7 @@ def main():
 class KeyDescriptor:
     MAX_NAME_LEN = 95
     def __init__(self, record, v2p, disk, key, name):
-        print(record.hex())
+        # print(record.hex())
         i = 0
         self.start = int.from_bytes(record[i:i+8], 'little')
         i += 8
@@ -245,8 +245,14 @@ class KeyDescriptor:
         if self.unresolved:
             desc += indent + 'UNRESOLVED'
         desc += '\n'
-        desc += indent + 'Data (hex): {}\n'.format(self.data.hex())
-        desc += indent + 'Data (txt): {}\n'.format(self.data.decode('utf8', errors='ignore'))
+        if len(self.data) < 256:
+            print_len = len(self.data)
+            extra = ''
+        else:
+            print_len = 256
+            extra = '...'
+        desc += indent + 'Data (hex): {}{}\n'.format(self.data[:print_len].hex(), extra)
+        desc += indent + 'Data (txt): {}{}'.format(self.data[:print_len].decode('utf-8', errors='ignore'), extra).replace('\n', '').replace('\r', '') + '\n'
         return (desc)
 
 
@@ -275,7 +281,7 @@ class BasisDicts:
             i += 4
             self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
             i += BasisDicts.MAX_NAME_LEN
-            print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
+            #print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
         except ValueError:
             print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
 
@@ -290,7 +296,7 @@ class BasisDicts:
                     cipher = AES_GCM_SIV(key, pp_data[:12])
                     pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
                     key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
-                    print(key_index)
+                    # print(key_index)
                     maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
                     if maybe_key.valid:
                         self.keys[maybe_key.name] = maybe_key

@@ -150,26 +150,6 @@ impl KeySmallPool {
             clean: true,
         }
     }
-    /// Tries to fit the key into the current pool. If there isn't enough space, the function returns false.
-    /// If `capacity_hint` is provided, it tries to reserve this amount of capacity for the key, even if the
-    /// data provided is smaller than the hint.
-    pub(crate) fn try_insert_key(&self, data: &KeyCacheEntry, capacity_hint: Option<usize>) -> bool {
-        // 1. check if the key will fit
-        // 2. if so, add its size to the used pool and contents
-        // 3. if not, return false
-        false
-    }
-    /// Tries to update the key in the pool with the new data. If it doesn't fit,
-    /// returns Some(key_name). Else it returns None. Note that the data is immediately
-    /// evicted if it doesn't fit -- the caller must then find a new pool to place the
-    /// evicted key in.
-    pub(crate) fn try_update_key(&self, data: &KeyCacheEntry, capacity_hint: Option<usize>) -> Option<String> {
-        None
-    }
-    pub(crate) fn delete_key(&self, data: &KeyCacheEntry) {
-        // 1. remove the contents string
-        // 2. update the used tracking information
-    }
     /// Returns the amount of space available in the pool
     pub(crate) fn free(&self) -> usize {
         self.avail as usize

@@ -406,8 +406,42 @@ fn xmain() -> ! {
     }
     basis_cache.key_update(&mut pddb_os, "system settings", "big_pool1", &bigdata, None, None, None, false).expect("couldn't add a key");
 
+    basis_cache.dict_add(&mut pddb_os, "test_dict_2", None).expect("couldn't add test dictionary 2");
+    basis_cache.key_update(&mut pddb_os, "test_dict_2", "test key in dict 2", "some data".as_bytes(), None, Some(128), None, false).expect("couldn't add a key to second dict");
+
+    basis_cache.key_update(&mut pddb_os, "system settings", "wifi/wpa_keys/e4200", "ABC".as_bytes(), Some(2), None, None, false).expect("couldn't update e4200 key");
+
+    log::info!("test readback of wifi/wpa_keys/e4200");
+    match basis_cache.key_read(&mut pddb_os, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pddb_os.dbg_dump();
+
+    log::info!("Re-mount the PDDB");
+    if let Some(sys_basis) = pddb_os.pddb_mount() {
+        log::info!("PDDB mount operation finished successfully");
+        basis_cache.add_basis(sys_basis);
+    } else {
+        log::info!("PDDB did not mount; did you remember to format the PDDB region?");
+    }
+    log::info!("test readback of wifi/wpa_keys/e4200");
+    match basis_cache.key_read(&mut pddb_os, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");

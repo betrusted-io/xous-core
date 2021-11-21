@@ -309,7 +309,7 @@ impl DictCacheEntry {
         if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
             // if the key is within the small pool space, create a bookkeeping record for it, and pre-cache its data.
             // generate the index within the small pool based on the address
-            while self.small_pool.len() < pool_index {
+            while self.small_pool.len() < pool_index + 1 {
                 // fill in the pool with blank entries. In general, we should have a low amount of blank entries, but
                 // one situation where we could get a leak is if we allocate a large amount of small data, and then delete
                 // all but the most recently allocated one, leaving an orphan at a high index, which is then subsequently
@@ -322,7 +322,8 @@ impl DictCacheEntry {
             ksp.contents.push(key_name.to_string());
             assert!(kcache.reserved >= kcache.len, "Reserved amount is less than length, this is an error!");
             assert!(kcache.reserved <= VPAGE_SIZE as u64, "Reserved amount is not appropriate for the small pool. Logic error in prior PDDB operation!");
-            assert!((ksp.avail as u64) < kcache.reserved, "Total amount allocated to a small pool chunk is incorrect; suspect logic error in prior PDDB operation!");
+            log::info!("avail: {} reserved: {}", ksp.avail, kcache.reserved);
+            assert!((ksp.avail as u64) >= kcache.reserved, "Total amount allocated to a small pool chunk is incorrect; suspect logic error in prior PDDB operation!");
             ksp.avail -= kcache.reserved as u16;
             // note: small_pool_free is updated only after all the entries have been read in
 
@@ -373,11 +374,12 @@ impl DictCacheEntry {
             let kcache = self.keys.get_mut(name).expect("Entry was assured, but then not there!");
             // the update isn't going to fit in the reserved space, remove it, and re-insert it with an entirely new entry.
             if kcache.reserved < (data.len() + offset) as u64 {
-                self.key_remove(hw, v2p_map, cipher, name);
+                self.key_remove(hw, v2p_map, cipher, name, false);
                 return self.key_update(hw, v2p_map, cipher, name, data, offset, alloc_hint, truncate, large_alloc_ptr);
             }
             // the key exists, *and* there's sufficient space for the data
             if kcache.start < SMALL_POOL_END {
+                log::info!("doing data update");
                 // it's a small key; note that we didn't consult the *size* of the key to determine its pool type:
                 // small-sized keys can still end up in the "large" space if the small pool allocation is exhausted.
                 if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
@@ -393,6 +395,9 @@ impl DictCacheEntry {
                 } else {
                     panic!("Key allocated to small area but its cache data was not of the small type");
                 }
+                // mark the storage pool entry as dirty, too.
+                let pool_index = small_storage_index_from_key(&kcache, self.index).expect("index missing");
+                self.small_pool[pool_index].clean = false;
                 // note: there is no need to update small_pool_free because the reserved size did not change.
             } else {
                 // it's a large key
@@ -456,6 +461,7 @@ impl DictCacheEntry {
                                 }
                             }
                             kcache.reserved = vpage_end_offset.as_u64() - kcache.start;
+                            kcache.clean = false;
                         }
                     }
                 }
@@ -573,16 +579,17 @@ impl DictCacheEntry {
         }
     }
     /// Used to remove a key from the dictionary. If you call it with a non-existent key,
-    /// the routine has no effect, and does not report an error. It will not flush to disk,
-    /// unless the key isn't in the cache, in which case the disk entry is edited.
+    /// the routine has no effect, and does not report an error. Small keys are not immediately
+    /// overwritten in paranoid mode, but large keys are.
     pub fn key_remove(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
-        name_str: &str) {
+        name_str: &str, paranoid: bool) {
         // this call makes sure we have a cache entry to operate on.
         self.ensure_key_entry(hw, v2p_map, cipher, name_str);
         let name = String::from(name_str);
         let mut need_rebuild = false;
         let mut need_free_key: Option<u32> = None;
         if let Some(kcache) = self.keys.get_mut(&name) {
+            self.clean = false;
             if let Some(small_index) = small_storage_index_from_key(kcache, self.index) {
                 // handle the small pool case
                 let ksp = &mut self.small_pool[small_index];
@@ -605,6 +612,11 @@ impl DictCacheEntry {
                 // ...but we remove the virtual pages from the page pool, effectively reclaiming the physical space.
                 for vpage in kcache.large_pool_vpages() {
                     if let Some(pp) = v2p_map.remove(&vpage) {
+                        if paranoid {
+                            let mut noise = [0u8; PAGE_SIZE];
+                            hw.trng_slice(&mut noise);
+                            hw.patch_data(&noise, pp.page_number() * PAGE_SIZE as u32);
+                        }
                         hw.fast_space_free(pp);
                     }
                 }
@@ -627,6 +639,9 @@ impl DictCacheEntry {
         // a call to sync is necessary to completely flush things, but, we don't sync every time we remove because it's inefficient.
     }
     /// used to remove a key from the dictionary, syncing 0's to the disk in the key's place
+    /// sort of less relevant now that the large keys have a paranoid mode; probably this routine should actually
+    /// be a higher-level function that catches the paranoid request and does an "update" of 0's to the key
+    /// then does a disk sync and then calls remove
     pub fn key_erase(&mut self, name: &str) {
         unimplemented!();
     }
@@ -663,7 +678,7 @@ impl DictCacheEntry {
     pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) {
         for (index, entry) in self.small_pool.iter_mut().enumerate() {
             if !entry.clean {
-                let pool_vaddr = VirtAddr::new(self.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START).unwrap();
+                let pool_vaddr = VirtAddr::new(self.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START + index as u64 * SMALL_CAPACITY as u64).unwrap();
                 let pp= v2p_map.entry(pool_vaddr).or_insert_with(||
                     hw.try_fast_space_alloc().expect("No free space to allocate small key storage"));
                 pp.set_valid(true);
