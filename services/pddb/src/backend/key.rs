@@ -79,7 +79,7 @@ pub(crate) struct KeyCacheEntry {
     pub(crate) flags: KeyFlags,
     pub(crate) age: u32,
     /// the current on-disk index of the KeyCacheEntry item, enumerated as "0" being the Dict descriptor and "1" being the first valid key
-    pub(crate) descriptor_index: Option<NonZeroU32>,
+    pub(crate) descriptor_index: NonZeroU32,
     /// indicates if the descriptor cache entry is currently synchronized with what's on disk. Does not imply anything about the data,
     /// but if the `data` field is None then there is nothing to in cache to be dirtied.
     pub(crate) clean: bool,
@@ -90,15 +90,15 @@ pub(crate) struct KeyCacheEntry {
 impl KeyCacheEntry {
     /// Given a base offset of the dictionary containing the key, compute the starting VirtAddr of the key itself.
     pub(crate) fn descriptor_vaddr(&self, dict_offset: VirtAddr) -> VirtAddr {
-        VirtAddr::new(dict_offset.get() + ((self.descriptor_index.unwrap().get() as u64) * DK_STRIDE as u64)).unwrap()
+        VirtAddr::new(dict_offset.get() + ((self.descriptor_index.get() as u64) * DK_STRIDE as u64)).unwrap()
     }
     /// Computes the modular position of the KeyDescriptor within a vpage.
     pub(crate) fn descriptor_modulus(&self) -> usize {
-        (self.descriptor_index.unwrap().get() as usize) % (VPAGE_SIZE / DK_STRIDE)
+        (self.descriptor_index.get() as usize) % (VPAGE_SIZE / DK_STRIDE)
     }
     /// Computes the vpage offset as measured from the start of the dictionary storage region
     pub(crate) fn descriptor_vpage_num(&self) -> usize {
-        (self.descriptor_index.unwrap().get() as usize) / (VPAGE_SIZE / DK_STRIDE)
+        (self.descriptor_index.get() as usize) / (VPAGE_SIZE / DK_STRIDE)
     }
     /// returns the list of large-pool virtual pages belonging to this entry, if any.
     pub(crate) fn large_pool_vpages(&self) -> Vec::<VirtAddr> {

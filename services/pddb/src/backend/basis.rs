@@ -417,12 +417,6 @@ impl BasisCache {
             if let Some(dict_entry) = basis.dicts.get(dict) {
                 // see if we need to make a kcache entry
                 if let Some(kcache) = dict_entry.keys.get(key) {
-                    if kcache.descriptor_index.is_none() {
-                        // index hasn't been allocated yet, if we don't have extra space in an already allocated page, we'll need a new one
-                        if (DK_PER_VPAGE - dict_entry.key_count as usize % DK_PER_VPAGE) == 0 {
-                            pages_needed += 1;
-                        };
-                    }
                     // now check for data reservations
                     if reserved < SMALL_CAPACITY {
                         // it's probably going in the small pool.
@@ -839,19 +833,6 @@ impl BasisCacheEntry {
                     for (key_name, key) in dict.keys.iter_mut() {
                         log::info!("merging in key {}", key_name);
                         if !key.clean {
-                            // allocate a key index if one hasn't already been allocated
-                            if key.descriptor_index.is_none() {
-                                if let Some(new_index) = dict.get_free_key_index() {
-                                    key.descriptor_index = Some(new_index);
-                                    // if the new index is outside the currently known set, raise the search extent for the brute-force search
-                                    if new_index.get() > dict.last_disk_key_index {
-                                        dict.last_disk_key_index = new_index.get();
-                                    }
-                                } else {
-                                    log::error!("Dictionary {} ran out of key capacity during sync", name);
-                                    return Err(Error::new(ErrorKind::OutOfMemory, "Dict ran out of key slots"));
-                                }
-                            }
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
                                 // key is within the current page, add it to the target list
@@ -871,12 +852,7 @@ impl BasisCacheEntry {
                                 for (&src, dst) in key_desc.deref().iter().zip(dk_entry.data.iter_mut()) {
                                     *dst = src;
                                 }
-                                if let Some(dk_index) = key.descriptor_index {
-                                    dk_vpage.elements[dk_index.get() as usize % DK_PER_VPAGE] = Some(dk_entry);
-                                } else {
-                                    log::error!("Dictionary {} ran out of key capacity during sync", name);
-                                    return Err(Error::new(ErrorKind::OutOfMemory, "Dict ran out of key slots"));
-                                }
+                                dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] = Some(dk_entry);
                             }
                             key.clean = true;
                         }

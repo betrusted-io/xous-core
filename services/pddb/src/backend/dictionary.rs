@@ -209,7 +209,7 @@ impl DictCacheEntry {
                         reserved: keydesc.reserved,
                         flags: keydesc.flags,
                         age: keydesc.age,
-                        descriptor_index: Some(NonZeroU32::new(try_entry as u32).unwrap()),
+                        descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
                         clean: true,
                         data: None,
                     };
@@ -280,7 +280,7 @@ impl DictCacheEntry {
                                 reserved: keydesc.reserved,
                                 flags: keydesc.flags,
                                 age: keydesc.age,
-                                descriptor_index: Some(NonZeroU32::new(try_entry as u32).unwrap()),
+                                descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
                                 clean: true,
                                 data: None,
                             };
@@ -503,13 +503,18 @@ impl DictCacheEntry {
                 for &b in data {
                     alloc_data.push(b);
                 }
+                let descriptor_index = if let Some(di) = self.get_free_key_index() {
+                    di
+                } else {
+                    return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of key indices in dictionary"));
+                };
                 let kcache = KeyCacheEntry {
                     start: self.index as u64 * SMALL_POOL_START + SMALL_POOL_START,
                     len: (data.len() + offset) as u64,
                     reserved: reservation as u64,
                     flags: kf,
                     age: 0,
-                    descriptor_index: None,
+                    descriptor_index,
                     clean: false,
                     data: Some(KeyCacheData::Small(KeySmallData{
                         clean: false,
@@ -529,13 +534,18 @@ impl DictCacheEntry {
                     });
                 let mut kf = KeyFlags(0);
                 kf.set_valid(true);
+                let descriptor_index = if let Some(di) = self.get_free_key_index() {
+                    di
+                } else {
+                    return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of key indices in dictionary"));
+                };
                 let kcache = KeyCacheEntry {
                     start: large_alloc_ptr.as_u64(),
                     len: (data.len() + offset) as u64,
                     reserved: reservation.as_u64(),
                     flags: kf,
                     age: 0,
-                    descriptor_index: None,
+                    descriptor_index,
                     clean: false,
                     data: None, // no caching implemented yet for large keys
                 };
@@ -571,6 +581,7 @@ impl DictCacheEntry {
         self.ensure_key_entry(hw, v2p_map, cipher, name_str);
         let name = String::from(name_str);
         let mut need_rebuild = false;
+        let mut need_free_key: Option<u32> = None;
         if let Some(kcache) = self.keys.get_mut(&name) {
             if let Some(small_index) = small_storage_index_from_key(kcache, self.index) {
                 // handle the small pool case
@@ -598,18 +609,17 @@ impl DictCacheEntry {
                     }
                 }
             }
-            // free up the key index in the dictionary
-            if let Some(index) = kcache.descriptor_index {
-                self.put_free_key_index(index.get());
-            } else {
-                // this should be a rare case; later on we can change this warn to a debug, but print something as a bread crumb to future me...
-                log::warn!("Key cache descriptor was none -- should only happen in the case of a key that was removed before it was synchronized to disk");
-            }
-            if need_rebuild {
-                // no stable "retain" api, so we have to clear the heap and rebuild it https://github.com/rust-lang/rust/issues/71503
-                self.rebuild_free_pool();
-            }
+            need_free_key = Some(kcache.descriptor_index.get());
         }
+        // free up the key index in the dictionary, if necessary
+        if let Some(key_to_free) = need_free_key {
+            self.put_free_key_index(key_to_free);
+        }
+        if need_rebuild {
+            // no stable "retain" api, so we have to clear the heap and rebuild it https://github.com/rust-lang/rust/issues/71503
+            self.rebuild_free_pool();
+        }
+
         // we don't remove the cache entry, because it hasn't been synchronized to disk.
         // at this point:
         //   - in-memory representation will return an entry, but with its valid flag set to false.
@@ -629,7 +639,7 @@ impl DictCacheEntry {
             if !ksp.clean {
                 for keyname in &ksp.contents {
                     let kce = self.keys.get(keyname).expect("data allocated but no index entry");
-                    if kce.descriptor_index.is_none() {
+                    if kce.flags.unresolved() {
                         data_estimate += SMALL_CAPACITY - ksp.avail as usize;
                         index_estimate += 1;
                     }
@@ -704,7 +714,7 @@ impl DictCacheEntry {
     pub(crate) fn sync_large_pool(&self) {
     }
 
-    pub(crate) fn get_free_key_index(&self) -> Option<NonZeroU32> {
+    pub(crate) fn get_free_key_index(&mut self) -> Option<NonZeroU32> {
         if let Some(free_key) = self.free_keys.borrow_mut().pop() {
             let index = free_key.start;
             if free_key.run > 0 {
@@ -714,6 +724,10 @@ impl DictCacheEntry {
                         run: free_key.run - 1,
                     }
                 )
+            }
+            if index > self.last_disk_key_index {
+                // if the new index is outside the currently known set, raise the search extent for the brute-force search
+                self.last_disk_key_index = index;
             }
             NonZeroU32::new(index as u32)
         } else {
