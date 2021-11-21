@@ -121,7 +121,7 @@ pub(crate) struct DictCacheEntry {
     /// count of total keys in the dictionary -- may be equal to or larger than the number of elements in `keys`
     pub(crate) key_count: u32,
     /// track the pool of free key indices. Wrapped in a refcell so we can work the index mechanism while updating the keys HashMap
-    pub(crate) free_keys: RefCell<BinaryHeap::<FreeKeyRange>>,
+    pub(crate) free_keys: BinaryHeap::<FreeKeyRange>,
     /// hint for when to stop doing a brute-force search for the existence of a key in the disk records.
     /// This field is set to the max count on a new, naive record; and set only upon a sync() or a fill() call.
     pub(crate) last_disk_key_index: u32,
@@ -161,7 +161,7 @@ impl DictCacheEntry {
             index: index as u32,
             keys: HashMap::<String, KeyCacheEntry>::new(),
             key_count: dict.num_keys,
-            free_keys: RefCell::new(free_keys),
+            free_keys,
             last_disk_key_index: KEY_MAXCOUNT as u32,
             clean: true,
             age: dict.age,
@@ -715,10 +715,10 @@ impl DictCacheEntry {
     }
 
     pub(crate) fn get_free_key_index(&mut self) -> Option<NonZeroU32> {
-        if let Some(free_key) = self.free_keys.borrow_mut().pop() {
+        if let Some(free_key) = self.free_keys.pop() {
             let index = free_key.start;
             if free_key.run > 0 {
-                self.free_keys.borrow_mut().push(
+                self.free_keys.push(
                     FreeKeyRange {
                         start: index + 1,
                         run: free_key.run - 1,
@@ -735,8 +735,8 @@ impl DictCacheEntry {
             None
         }
     }
-    pub(crate) fn put_free_key_index(&self, index: u32) {
-        let free_keys = self.free_keys.replace(BinaryHeap::<FreeKeyRange>::new());
+    pub(crate) fn put_free_key_index(&mut self, index: u32) {
+        let free_keys = std::mem::replace(&mut self.free_keys, BinaryHeap::<FreeKeyRange>::new());
         let free_key_vec = free_keys.into_sorted_vec();
         // this is a bit weird because we have three cases:
         // - the new key is more than 1 away from any element, in which case we insert it as a singleton (start = index, run = 0)
@@ -751,11 +751,11 @@ impl DictCacheEntry {
             }
             match free_key_vec[i].compare_to(i as u32) {
                 FreeKeyCases::LessThan => {
-                    self.free_keys.borrow_mut().push(FreeKeyRange{start: index as u32, run: 0});
+                    self.free_keys.push(FreeKeyRange{start: index as u32, run: 0});
                     break;
                 }
                 FreeKeyCases::LeftAdjacent => {
-                    self.free_keys.borrow_mut().push(FreeKeyRange{start: index as u32, run: free_key_vec[i].run + 1});
+                    self.free_keys.push(FreeKeyRange{start: index as u32, run: free_key_vec[i].run + 1});
                 }
                 FreeKeyCases::Within => {
                     log::error!("Double-free error in free_keys()");
@@ -765,18 +765,18 @@ impl DictCacheEntry {
                     // see if we should merge to the right
                     if i + 1 < free_key_vec.len() {
                         if free_key_vec[i+1].compare_to(i as u32) == FreeKeyCases::LeftAdjacent {
-                            self.free_keys.borrow_mut().push(FreeKeyRange{
+                            self.free_keys.push(FreeKeyRange{
                                 start: free_key_vec[i].start,
                                 run: free_key_vec[i].run + free_key_vec[i+1].run + 2
                             });
                             skip = true
                         }
                     } else {
-                        self.free_keys.borrow_mut().push(FreeKeyRange { start: free_key_vec[i].start, run: free_key_vec[i].run + 1 })
+                        self.free_keys.push(FreeKeyRange { start: free_key_vec[i].start, run: free_key_vec[i].run + 1 })
                     }
                 }
                 FreeKeyCases::GreaterThan => {
-                    self.free_keys.borrow_mut().push(free_key_vec[i]);
+                    self.free_keys.push(free_key_vec[i]);
                 }
             }
         }

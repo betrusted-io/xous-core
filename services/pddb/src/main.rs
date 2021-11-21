@@ -399,14 +399,13 @@ fn xmain() -> ! {
     }
     basis_cache.key_update(&mut pddb_os, "system settings", "wifi/wpa_keys/e4200", "12345678".as_bytes(), None, None, None, false).expect("couldn't add a key");
 
-    /*
     // add a "big" key
     let mut bigdata = [0u8; 5000];
     for (i, d) in bigdata.iter_mut().enumerate() {
         *d = i as u8;
     }
     basis_cache.key_update(&mut pddb_os, "system settings", "big_pool1", &bigdata, None, None, None, false).expect("couldn't add a key");
-*/
+
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pddb_os.dbg_dump();
 

@@ -283,7 +283,7 @@ impl BasisCache {
                 keys: HashMap::<String, KeyCacheEntry>::new(),
                 clean: false,
                 age: 0,
-                free_keys: RefCell::new(free_keys),
+                free_keys,
                 last_disk_key_index: KEY_MAXCOUNT as u32,
                 flags: init_flags,
                 key_count: 0,
