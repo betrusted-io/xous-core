@@ -91,22 +91,17 @@ def mm3_hash( key, seed = 0x0 ):
 def main():
     parser = argparse.ArgumentParser(description="Debug PDDB Images")
     parser.add_argument(
-        "--pddb-image", required=False, help="pddb disk image", type=str, nargs='?', metavar=('pddb image'), const='./pddb.bin'
-    )
-    parser.add_argument(
-        "--pddb-keys", required=False, help="known pddb keys", type=str, nargs='?', metavar=('pddb keys'), const='./pddb.key'
+        "--name", required=False, help="pddb disk image root name", type=str, nargs='?', metavar=('name'), const='./pddb'
     )
     args = parser.parse_args()
 
-    if args.pddb_keys == None:
-        keyfile = './tools/pddb.key'
+    if args.name == None:
+        keyfile = './tools/pddb-images/pddb.key'
+        imagefile = './tools/pddb-images/pddb.bin'
     else:
-        keyfile = args.pddb_keys
+        keyfile = './tools/pddb-images/{}.key'.format(args.name)
+        imagefile = './tools/pddb-images/{}.bin'.format(args.name)
 
-    if args.pddb_image == None:
-        imagefile = './tools/pddb.bin'
-    else:
-        imagefile = args.pddb_image
 
     keys = {}
     with open(keyfile, 'rb') as key_f:
