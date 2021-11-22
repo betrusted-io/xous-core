@@ -282,7 +282,7 @@ impl BasisCache {
                 clean: false,
                 age: 0,
                 free_keys,
-                last_disk_key_index: KEY_MAXCOUNT as u32,
+                last_disk_key_index: 1, // we know we don't have to search past this in a new dictionary
                 flags: init_flags,
                 key_count: 0,
                 small_pool: Vec::<KeySmallPool>::new(),
@@ -919,6 +919,7 @@ impl BasisCacheEntry {
                     flags: dict.flags,
                     age: dict.age,
                     num_keys: dict.key_count,
+                    free_key_index: dict.last_disk_key_index,
                     name: dict_name,
                 };
                 log::info!("syncing dict: {:?}", dict_disk);
@@ -954,8 +955,8 @@ impl BasisCacheEntry {
                     // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
                     for (key_name, key) in dict.keys.iter_mut() {
-                        log::info!("merging in key {}", key_name);
                         if !key.clean {
+                            log::info!("merging in key {}", key_name);
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
                                 // key is within the current page, add it to the target list
@@ -976,8 +977,8 @@ impl BasisCacheEntry {
                                     *dst = src;
                                 }
                                 dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] = Some(dk_entry);
+                                key.clean = true;
                             }
-                            key.clean = true;
                         }
                     }
 

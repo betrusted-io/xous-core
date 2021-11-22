@@ -12,7 +12,7 @@ pub(crate) fn create_testcase(hw: &mut PddbOs,
 
     let num_dicts = maybe_num_dicts.unwrap_or(4);
     let num_keys = maybe_num_keys.unwrap_or(34);
-    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((1000, 9000));
+    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((1, 9000));
 
     // make all the directories first
     for dictnum in 1..=num_dicts {
@@ -25,7 +25,12 @@ pub(crate) fn create_testcase(hw: &mut PddbOs,
     for keynum in 1..=num_keys {
         for dictnum in 1..=num_dicts {
             let dictname = format!("dict{}", dictnum);
-            let keylen = rng.gen_range(key_lower_bound..key_upper_bound);
+            // we want roughly half our keys to be in the small bin, and half in the large bin
+            let keylen = if rng.gen_bool(0.5) {
+                rng.gen_range(key_lower_bound..VPAGE_SIZE)
+            } else {
+                rng.gen_range(VPAGE_SIZE..key_upper_bound)
+            };
             // record the owning dictionary name & length with the key. This isn't mandatory for a key name,
             // but it helps the test checking program check things.
             let keyname = format!("sanitycheck|{}|key{}|len{}", dictname, keynum, keylen);

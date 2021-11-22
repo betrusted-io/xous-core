@@ -150,13 +150,13 @@ impl DictCacheEntry {
             my_aad.push(b);
         }
         let mut free_keys = BinaryHeap::<FreeKeyRange>::new();
-        free_keys.push(FreeKeyRange{start: 1, run: KEY_MAXCOUNT as u32 - 1});
+        free_keys.push(FreeKeyRange{start: dict.free_key_index, run: KEY_MAXCOUNT as u32 - 1});
         DictCacheEntry {
             index: index as u32,
             keys: HashMap::<String, KeyCacheEntry>::new(),
             key_count: dict.num_keys,
             free_keys,
-            last_disk_key_index: KEY_MAXCOUNT as u32,
+            last_disk_key_index: dict.free_key_index,
             clean: true,
             age: dict.age,
             flags: dict.flags,
@@ -254,8 +254,10 @@ impl DictCacheEntry {
                 index_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(req_vaddr).unwrap());
 
                 if index_cache.data.is_none() || index_cache.tag.is_none() {
-                    // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
-                    log::warn!("Dictionary fill op encountered an unallocated page checking entry {} in the dictionary map. Marking it for re-use.", try_entry);
+                    // this case "should not happen" in practice, because the last_disk_key_index would either be correctly set as
+                    // short by a dict_add(), or a mount() operation would have limited the extent of the search.
+                    // if we are hitting this, that means the last_disk_key_index operator was not managed correctly.
+                    log::warn!("expensive search op");
                     try_entry += DK_PER_VPAGE;
                 } else {
                     let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
@@ -746,7 +748,7 @@ impl DictCacheEntry {
             }
             if index > self.last_disk_key_index {
                 // if the new index is outside the currently known set, raise the search extent for the brute-force search
-                self.last_disk_key_index = index;
+                self.last_disk_key_index = index + 1;
             }
             NonZeroU32::new(index as u32)
         } else {
@@ -822,6 +824,9 @@ pub(crate) struct Dictionary {
     pub(crate) age: u32,
     /// Number of keys in the dictionary
     pub(crate) num_keys: u32,
+    /// Free index starting space. While this is a derived parameter, its value is recorded to avoid
+    /// an expensive, long search operation during the creation of a dictionary cache record.
+    pub(crate) free_key_index: u32,
     /// Name. Length should pad out the record to exactly 127 bytes.
     pub(crate) name: [u8; DICT_NAME_LEN],
 }
@@ -829,7 +834,7 @@ impl Default for Dictionary {
     fn default() -> Dictionary {
         let mut flags = DictFlags(0);
         flags.set_valid(true);
-        Dictionary { flags, age: 0, num_keys: 0, name: [0; DICT_NAME_LEN] }
+        Dictionary { flags, age: 0, num_keys: 0, free_key_index: 1, name: [0; DICT_NAME_LEN] }
     }
 }
 impl Deref for Dictionary {

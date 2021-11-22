@@ -2,7 +2,7 @@ pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.
 #[allow(dead_code)]
-pub(crate) const DICT_NAME_LEN: usize = 127 - 4 - 4 - 4; // u32: flags, age, numkeys = 115
+pub(crate) const DICT_NAME_LEN: usize = 127 - 4 - 4 - 4 - 4; // u32: flags, age, free index, numkeys = 111
 #[allow(dead_code)]
 pub(crate) const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4; // u64: vaddr/len/resvd, u32: flags, age = 95
 #[allow(dead_code)]
@@ -61,7 +61,7 @@ pub(crate) enum Opcode {
 /// A structure for requesting a token to access a particular key/value pair
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct PddbKeyRequest {
-    pub(crate) dict: xous_ipc::String::</*DICT_NAME_LEN*/ 115>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub(crate) dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
     pub(crate) key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
     pub(crate) token: Option<[u32; 3]>,
 }

@@ -13,6 +13,19 @@ PAGE_SIZE = 4096
 VPAGE_SIZE = 4064
 MBBB_PAGES = 10
 
+# build a table mapping all non-printable characters to None
+NOPRINT_TRANS_TABLE = {
+    i: None for i in range(0, sys.maxunicode + 1) if not chr(i).isprintable()
+}
+
+def make_printable(s):
+    global NOPRINT_TRANS_TABLE
+    """Replace non-printable characters in a string."""
+
+    # the translate method on str removes characters
+    # that map to None from the string
+    return s.translate(NOPRINT_TRANS_TABLE)
+
 # from https://github.com/wc-duck/pymmh3/blob/master/pymmh3.py
 def xrange( a, b, c ):
     return range( a, b, c )
@@ -173,6 +186,10 @@ def main():
                     for bdict in basis_dicts.values():
                         print(bdict.as_str())
 
+                    print("CI checks:")
+                    for bdict in basis_dicts.values():
+                        bdict.ci_check()
+
                 except ValueError:
                     print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
 
@@ -190,7 +207,7 @@ class KeyDescriptor:
         self.flags_code = int.from_bytes(record[i:i+4], 'little')
         i += 4
         self.age = int.from_bytes(record[i:i+4], 'little')
-        i += 8
+        i += 4
         self.name = record[i:i+KeyDescriptor.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
         if self.flags_code & 1 != 0:
             self.valid = True
@@ -225,38 +242,51 @@ class KeyDescriptor:
                 except ValueError:
                     print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(page_addr), pp_start)
                 page_addr += VPAGE_SIZE
-
+            # CI check -- if it doesn't pass, it doesn't mean we've failed -- could also just be a "normal" record that doesn't have the checksum appended
+            check_data = self.data[:-4]
+            while len(check_data) % 4 != 0:
+                check_data += bytes([0])
+            checksum = mm3_hash(check_data)
+            refcheck = int.from_bytes(self.data[len(self.data)-4:], 'little')
+            if checksum == refcheck:
+                self.ci_ok = True
+            else:
+                self.ci_ok = False
+                print('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
 
 
     def as_str(self, indent):
+        PRINT_LEN = 64
         desc = ''
         desc += indent + 'Start: 0x{:x}\n'.format(self.start)
-        desc += indent + 'Len:   {}\n'.format(self.len)
-        desc += indent + 'Resvd: 0x{:x}\n'.format(self.reserved)
-        desc += indent + 'Age:   {}\n'.format(self.age)
+        desc += indent + 'Len:   {}/0x{:x}\n'.format(self.len, self.reserved)
         desc += indent + 'Flags: '
         if self.valid:
             desc += 'VALID'
         if self.unresolved:
             desc += indent + 'UNRESOLVED'
+
+        desc += ' | Age: {}'.format(self.age)
+        desc += ' | CI OK: {}'.format(self.ci_ok)
         desc += '\n'
-        if len(self.data) < 256:
+        if len(self.data) < 64:
             print_len = len(self.data)
             extra = ''
         else:
-            print_len = 256
+            print_len = 64
             extra = '...'
         desc += indent + 'Data (hex): {}{}\n'.format(self.data[:print_len].hex(), extra)
-        desc += indent + 'Data (txt): {}{}'.format(self.data[:print_len].decode('utf-8', errors='ignore'), extra).replace('\n', '').replace('\r', '') + '\n'
+        desc += indent + 'Data (txt): {}{}'.format(make_printable(self.data[:print_len].decode('utf-8', errors='ignore')), extra) + '\n'
         return (desc)
 
 
 class BasisDicts:
     DICT_VSTRIDE = 0xFE_0000
     KV_STRIDE = 127
-    MAX_NAME_LEN = 115
+    MAX_NAME_LEN = 111
     def __init__(self, index, v2p, disk, key, name):
         global PAGE_SIZE
+        global VPAGE_SIZE
         dict_header_vaddr = self.DICT_VSTRIDE * (index + 1)
         pp = v2p[dict_header_vaddr]
         self.keys = {}
@@ -274,9 +304,11 @@ class BasisDicts:
             i += 4
             self.num_keys = int.from_bytes(pt_data[i:i+4], 'little')
             i += 4
+            self.free_key_index = int.from_bytes(pt_data[i:i+4], 'little')
+            i += 4
             self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
             i += BasisDicts.MAX_NAME_LEN
-            #print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
+            print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
         except ValueError:
             print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
 
@@ -285,23 +317,30 @@ class BasisDicts:
             keys_tried = 1
             while (keys_found < self.num_keys) and keys_tried < 131071:
                 keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
-                pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
-                pp_data = disk[pp_start:pp_start + PAGE_SIZE]
                 try:
-                    cipher = AES_GCM_SIV(key, pp_data[:12])
-                    pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
-                    key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
-                    # print(key_index)
-                    maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
-                    if maybe_key.valid:
-                        self.keys[maybe_key.name] = maybe_key
-                        keys_found += 1
+                    pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
+                    pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+                    try:
+                        cipher = AES_GCM_SIV(key, pp_data[:12])
+                        pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                        key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
+                        # print(key_index)
+                        maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
+                        if maybe_key.valid:
+                            self.keys[maybe_key.name] = maybe_key
+                            keys_found += 1
 
-                except ValueError:
-                    print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr), pp_start)
-
-                keys_tried += 1
-
+                    except ValueError:
+                        print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr), pp_start)
+                    keys_tried += 1
+                except KeyError:
+                    # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
+                    keys_tried += VPAGE_SIZE // self.KV_STRIDE
+            if keys_found < self.num_keys:
+                print("Expected {} keys but only found {}".format(keys_found, self.num_keys))
+                self.found_all_keys = False
+            else:
+                self.found_all_keys = True
 
     def as_str(self):
         desc = ''
@@ -309,12 +348,34 @@ class BasisDicts:
         desc += '  Age: {}\n'.format(self.age)
         desc += '  Flags: {}\n'.format(self.flags)
         desc += '  Key count: {}\n'.format(self.num_keys)
+        desc += '  Free key index: {}\n'.format(self.free_key_index)
         desc += '  Keys:\n'
         for (name, key) in self.keys.items():
             desc += '    {}:\n'.format(name)
             desc += key.as_str('       ')
 
         return desc
+
+    def ci_check(self):
+        check_ok = True
+        for (name, key) in self.keys.items():
+            namecheck = name.split('|')
+            if namecheck[1] != self.name:
+                print(" Key/dict mismatch: {}/{}", key.name, self.name)
+            keylen = int(namecheck[3][3:])
+            if keylen != key.len:
+                print(" Key length mismatch: {}/{}", keylen, key.len)
+            if key.ci_ok == False:
+                print(" CI failed on key:")
+                print(key.as_str())
+                check_ok = False
+        if self.found_all_keys == False:
+            print(' Dictionary was missing keys')
+            check_ok = False
+        if check_ok:
+            print(' Dictionary {} CI check: OK'.format(self.name))
+        else:
+            print(' Dictionary {} CI check: FAIL'.format(self.name))
 
 
 class Basis:

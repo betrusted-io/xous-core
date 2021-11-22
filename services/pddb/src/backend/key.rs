@@ -92,7 +92,7 @@ impl KeyCacheEntry {
     }
     /// Computes the vpage offset as measured from the start of the dictionary storage region
     pub(crate) fn descriptor_vpage_num(&self) -> usize {
-        (self.descriptor_index.get() as usize) / (VPAGE_SIZE / DK_STRIDE)
+        (self.descriptor_index.get() as usize) / DK_PER_VPAGE
     }
     /// returns the list of large-pool virtual pages belonging to this entry, if any.
     pub(crate) fn large_pool_vpages(&self) -> Vec::<VirtAddr> {
