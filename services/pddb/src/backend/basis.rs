@@ -7,7 +7,7 @@ use std::convert::TryInto;
 use aes_gcm_siv::{Aes256GcmSiv, Key};
 use aes_gcm_siv::aead::NewAead;
 use std::iter::IntoIterator;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::io::{Result, Error, ErrorKind};
 
 
@@ -304,32 +304,37 @@ impl BasisCache {
         }
     }
 
+    /// Returns a list of all the known dictionaries, across all the basis. A HashSet is returned
+    /// because you can have the same-named dictionary in multiple basis, and what we're asking for
+    /// is the union of all the dictionary names, without duplicates.
+    pub(crate) fn dict_list(&mut self, hw: &mut PddbOs) -> HashSet::<String> {
+        let mut dict_set = HashSet::<String>::new();
+        for basis in self.cache.iter_mut() {
+            basis.populate_caches(hw);
+            for key in basis.dicts.keys() {
+                dict_set.insert(String::from(key));
+            }
+        }
+        dict_set
+    }
 
+    /// This version of the call only removes one instance of a dictionary from the specified basis.
+    /// Perhaps there also needs to be a `dict_remove_all` call which iterates through every basis
+    /// makes sure the dictionary is removed from all the possible known basis. Anyways, that function
+    /// would be a variant of this targeted version.
     pub(crate) fn dict_remove(&mut self,
         hw: &mut PddbOs, dict: &str, basis_name: Option<&str>, paranoid: bool
     ) -> Result<()> {
         if let Some(basis_index) = self.select_basis(basis_name) {
+            log::info!("deleting dict {}", dict);
             let basis = &mut self.cache[basis_index];
-            // make sure the cache is "hot" before checking it. The rule is we only operate on data in cache, then sync it to disk.
-            if !basis.dicts.contains_key(dict) {
-                if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
-                    if dict_record.flags.valid() {
-                        let dict_name = String::from(cstr_to_string(&dict_record.name));
-                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict_name, dcache);
-                    }
-                } else {
-                    return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
-                }
-            }
-            // now check the cache.
-            if basis.dicts.contains_key(dict) {
-                basis.age = basis.age.saturating_add(1);
-                basis.clean = false;
-                return basis.dict_delete(hw, dict, paranoid)
-            } else {
-                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
-            }
+
+            basis.age = basis.age.saturating_add(1);
+            basis.clean = false;
+            basis.dict_delete(hw, dict, paranoid)?;
+            basis.basis_sync(hw);
+            basis.pt_sync(hw);
+            Ok(())
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
         }
@@ -705,6 +710,7 @@ impl BasisCacheEntry {
             self.large_alloc_ptr = Some(PageAlignedVa::from(maybe_end));
         }
     }
+
     /// allocate a pointer data in the large pool, of length `amount`. "always" succeeds because...
     /// there's 16 million terabytes of large pool to allocate before you run out?
     /*
@@ -717,6 +723,7 @@ impl BasisCacheEntry {
         self.large_alloc_ptr = Some(self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)) + PageAlignedVa::from(amount));
         return alloc_ptr.as_u64()
     }*/
+
     /// do a deep scan of all the dictionaries and keys and attempt to populate all the caches
     pub(crate) fn populate_caches(&mut self, hw: &mut PddbOs) {
         let mut try_entry = 1;
@@ -758,6 +765,7 @@ impl BasisCacheEntry {
     pub(crate) fn dict_delete(&mut self, hw: &mut PddbOs, name: &str, paranoid: bool) -> Result<()> {
         let mut dict_found = false;
         if !self.dicts.contains_key(name) {
+            log::info!("dict delete: key not in cache {}", name);
             // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
             // doesn't exist. Do a comprehensive search if our cache isn't complete.
             if let Some((index, dict_record)) = self.dict_deep_search(hw, name) {
@@ -771,43 +779,52 @@ impl BasisCacheEntry {
         }
         if dict_found {
             let dcache = self.dicts.get_mut(name).expect("entry was ensured, but somehow missing");
+            //log::info!("dcache {} index {}, key_count {}", name, dcache.index, dcache.key_count);
             // ensure all the keys are in RAM
             dcache.fill(hw, &self.v2p_map, &self.cipher);
+            //log::info!("dcache filled");
             // allocate a copy of the key list, to avoid interior mutability problems with the next remove step
             let mut key_list = Vec::<String>::new();
             for key in dcache.keys.keys() {
                 key_list.push(key.to_string());
             }
             for key in key_list {
+                //log::info!("removing {}:{}", name, key);
                 // this will wipe any large pools if paranoid is set
                 dcache.key_remove(hw, &mut self.v2p_map, &self.cipher, &key, paranoid);
             }
             // wipe & de-allocate any small pages
             for index in 0..dcache.small_pool.len() {
                 let pool_vaddr = VirtAddr::new(dcache.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START + index as u64 * SMALL_CAPACITY as u64).unwrap();
-                if let Some(pp) = self.v2p_map.get(&pool_vaddr) {
+                if let Some(pp) = self.v2p_map.remove(&pool_vaddr) {
                     if paranoid {
                         let mut random = [0u8; PAGE_SIZE];
                         hw.trng_slice(&mut random);
                         hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
                     }
-                    hw.fast_space_free(*pp);
+                    hw.fast_space_free(pp);
                 }
             }
-            // erase the header by writing over with random data. This makes the dictionary unsearchable, but if you
-            // have the key, you can of course do a hard-scan and try partially re-assemble the dictionary if you
-            // did not do the delete in paranoid mode.
-            if let Some(pp) = self.v2p_map.get(&VirtAddr::new(dcache.index as u64 * DICT_VSIZE as u64).unwrap()) {
-                let mut random = [0u8; PAGE_SIZE];
-                hw.trng_slice(&mut random);
-                hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
-                hw.fast_space_free(*pp);
-            } else {
-                log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
+            // erase the entire dictionary + key allocation area by writing over with random data. It's important to
+            // do a comprehensive erase, because if the dictionary slot is re-used, the previously allocated key entries
+            // decrypt correctly, are interpreted as valid keys, and thus cause consistency errors.
+            let key_pages = 1 + (dcache.last_disk_key_index + 1) as usize / DK_PER_VPAGE;
+            for page in 0..key_pages {
+                let dk_vaddr = VirtAddr::new(dcache.index as u64 * DICT_VSIZE as u64 + page as u64 * VPAGE_SIZE as u64).unwrap();
+                if let Some(pp) = self.v2p_map.remove(&dk_vaddr) {
+                    log::info!("erasing dk page 0x{:x}/0x{:x}", dk_vaddr, pp.page_number() as usize * PAGE_SIZE);
+                    let mut random = [0u8; PAGE_SIZE];
+                    hw.trng_slice(&mut random);
+                    hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
+                    hw.fast_space_free(pp);
+                } else {
+                    log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
+                }
             }
 
             // mark data for re-use
             self.free_dict_offset = Some(dcache.index);
+            self.num_dicts -= 1;
             // remove the cache entry
             self.dicts.remove(name);
 
@@ -910,7 +927,6 @@ impl BasisCacheEntry {
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
             let dict_offset = VirtAddr::new(dict.index as u64 * DICT_VSIZE).unwrap();
             if !dict.clean {
-                log::info!("syncing dictionary {}", name);
                 let mut dict_name = [0u8; DICT_NAME_LEN];
                 for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
                     *dst = src;
@@ -922,7 +938,7 @@ impl BasisCacheEntry {
                     free_key_index: dict.last_disk_key_index,
                     name: dict_name,
                 };
-                log::info!("syncing dict: {:?}", dict_disk);
+                log::info!("syncing dict {}: {:?}", name, dict_disk);
                 // log::info!("raw: {:x?}", dict_disk.deref());
                 // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be clean,
                 // but definitely all the dirty ones are in there (if they aren't, where else would they be??)

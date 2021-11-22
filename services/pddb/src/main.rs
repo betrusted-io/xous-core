@@ -357,7 +357,7 @@ const PDDB_BACKING_SIZE: usize = 0x4000_0000;
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -375,9 +375,18 @@ fn xmain() -> ! {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     {
         log::info!("Creating `basecase1`");
-        create_testcase(&mut pddb_os, None, None, None);
+        let mut basis_cache = BasisCache::new();
+        create_basis_testcase(&mut pddb_os, &mut basis_cache, None, None, None);
+        log::info!("Saving `basecase1` to local host");
         pddb_os.dbg_dump(Some("basecase1".to_string()));
+
+        log::info!("Doing delete/add consistency");
+        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None, None, None);
+        log::info!("Saving `dacheck` to local host");
+        pddb_os.dbg_dump(Some("dacheck".to_string()));
     }
+    log::info!("CI done");
+    /*
     { // a simple case that could be run directly on the hardware
         log::info!("Running `manual` test case");
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -408,6 +417,7 @@ fn xmain() -> ! {
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
         pddb_os.dbg_dump(Some("manual".to_string()));
     }
+    */
     /* list of test cases:
         genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
         delete/add consistency: general integrity, delete a dictionary, then add a dictionary.

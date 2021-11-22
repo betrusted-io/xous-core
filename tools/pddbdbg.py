@@ -115,7 +115,6 @@ def main():
         keyfile = './tools/pddb-images/{}.key'.format(args.name)
         imagefile = './tools/pddb-images/{}.bin'.format(args.name)
 
-
     keys = {}
     with open(keyfile, 'rb') as key_f:
         raw_key = key_f.read()
@@ -140,6 +139,7 @@ def main():
     KEY_PAGES = 1
     global PAGE_SIZE
     global VPAGE_SIZE
+    MAX_DICTS = 16384
 
     with open(imagefile, 'rb') as img_f:
         raw_img = img_f.read()
@@ -178,9 +178,19 @@ def main():
                     print(basis.as_str())
 
                     basis_dicts = {}
-                    for dict_index in range(basis.num_dicts):
+                    dicts_found = 0
+                    dict_index = 0
+                    while dict_index < MAX_DICTS and dicts_found < basis.num_dicts:
                         bdict = BasisDicts(dict_index, v2p_table, data, key, name)
-                        basis_dicts[bdict.name] = bdict
+                        if bdict.valid:
+                            basis_dicts[bdict.name] = bdict
+                            dicts_found += 1
+                        dict_index += 1
+                    if dicts_found != basis.num_dicts:
+                        print("Expected {} dictionaries, only found {}; searched {}".format(basis.num_dicts, dicts_found, dict_index))
+                        found_all_dicts = False
+                    else:
+                        found_all_dicts = True
 
                     print(" Dictionaries: ")
                     for bdict in basis_dicts.values():
@@ -189,6 +199,10 @@ def main():
                     print("CI checks:")
                     for bdict in basis_dicts.values():
                         bdict.ci_check()
+                    if found_all_dicts:
+                        print("All dicts were found.")
+                    else:
+                        print("Missing dictionaries, something is wrong.")
 
                 except ValueError:
                     print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
@@ -255,7 +269,7 @@ class KeyDescriptor:
                 print('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
 
 
-    def as_str(self, indent):
+    def as_str(self, indent=''):
         PRINT_LEN = 64
         desc = ''
         desc += indent + 'Start: 0x{:x}\n'.format(self.start)
@@ -288,59 +302,63 @@ class BasisDicts:
         global PAGE_SIZE
         global VPAGE_SIZE
         dict_header_vaddr = self.DICT_VSTRIDE * (index + 1)
-        pp = v2p[dict_header_vaddr]
-        self.keys = {}
-        try:
-            print('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
-            cipher = AES_GCM_SIV(key, disk[pp:pp+12])
-            pt_data = cipher.decrypt(disk[pp+12:pp+PAGE_SIZE], basis_aad(name))
-            # print('raw pt_data: {}'.format(pt_data[:127].hex()))
-            i = 0
-            self.journal = int.from_bytes(pt_data[i:i+4], 'little')
-            i += 4
-            self.flags = int.from_bytes(pt_data[i:i+4], 'little')
-            i += 4
-            self.age = int.from_bytes(pt_data[i:i+4], 'little')
-            i += 4
-            self.num_keys = int.from_bytes(pt_data[i:i+4], 'little')
-            i += 4
-            self.free_key_index = int.from_bytes(pt_data[i:i+4], 'little')
-            i += 4
-            self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
-            i += BasisDicts.MAX_NAME_LEN
-            print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
-        except ValueError:
-            print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
+        if dict_header_vaddr in v2p:
+            self.valid = True
+            pp = v2p[dict_header_vaddr]
+            self.keys = {}
+            try:
+                print('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
+                cipher = AES_GCM_SIV(key, disk[pp:pp+12])
+                pt_data = cipher.decrypt(disk[pp+12:pp+PAGE_SIZE], basis_aad(name))
+                # print('raw pt_data: {}'.format(pt_data[:127].hex()))
+                i = 0
+                self.journal = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.flags = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.age = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.num_keys = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.free_key_index = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+                i += BasisDicts.MAX_NAME_LEN
+                print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
+            except ValueError:
+                print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
 
-        if self.num_keys > 0:
-            keys_found = 0
-            keys_tried = 1
-            while (keys_found < self.num_keys) and keys_tried < 131071:
-                keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
-                try:
-                    pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
-                    pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+            if self.num_keys > 0:
+                keys_found = 0
+                keys_tried = 1
+                while (keys_found < self.num_keys) and keys_tried < 131071:
+                    keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
                     try:
-                        cipher = AES_GCM_SIV(key, pp_data[:12])
-                        pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
-                        key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
-                        # print(key_index)
-                        maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
-                        if maybe_key.valid:
-                            self.keys[maybe_key.name] = maybe_key
-                            keys_found += 1
+                        pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
+                        pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+                        try:
+                            cipher = AES_GCM_SIV(key, pp_data[:12])
+                            pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                            key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
+                            # print(key_index)
+                            maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
+                            if maybe_key.valid:
+                                self.keys[maybe_key.name] = maybe_key
+                                keys_found += 1
 
-                    except ValueError:
-                        print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr), pp_start)
-                    keys_tried += 1
-                except KeyError:
-                    # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
-                    keys_tried += VPAGE_SIZE // self.KV_STRIDE
-            if keys_found < self.num_keys:
-                print("Expected {} keys but only found {}".format(keys_found, self.num_keys))
-                self.found_all_keys = False
-            else:
-                self.found_all_keys = True
+                        except ValueError:
+                            print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr), pp_start)
+                        keys_tried += 1
+                    except KeyError:
+                        # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
+                        keys_tried += VPAGE_SIZE // self.KV_STRIDE
+                if keys_found < self.num_keys:
+                    print("Expected {} keys but only found {}".format(self.num_keys, keys_found))
+                    self.found_all_keys = False
+                else:
+                    self.found_all_keys = True
+        else:
+            self.valid = False
 
     def as_str(self):
         desc = ''
@@ -367,7 +385,7 @@ class BasisDicts:
                 print(" Key length mismatch: {}/{}", keylen, key.len)
             if key.ci_ok == False:
                 print(" CI failed on key:")
-                print(key.as_str())
+                print(key.as_str('  '))
                 check_ok = False
         if self.found_all_keys == False:
             print(' Dictionary was missing keys')

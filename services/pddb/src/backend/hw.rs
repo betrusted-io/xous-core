@@ -189,6 +189,7 @@ impl PddbOs {
     pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
     }
+    #[allow(dead_code)]
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
     pub fn test_reset(&mut self) {
@@ -859,10 +860,10 @@ impl PddbOs {
                     let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
                     let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
                     let mut block = Block::from_mut_slice(update.deref_mut());
-                    log::info!("block: {:x?}", block);
+                    log::trace!("block: {:x?}", block);
                     cipher.encrypt_block(&mut block);
                     let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
-                    log::info!("patch: {:x?}", block);
+                    log::trace!("patch: {:x?}", block);
                     self.patch_fscb(&block, log_addr);
                     let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
                     if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
@@ -894,10 +895,10 @@ impl PddbOs {
         let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
         let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), pp);
         let mut block = Block::from_mut_slice(update.deref_mut());
-        log::info!("block: {:x?}", block);
+        log::trace!("block: {:x?}", block);
         cipher.encrypt_block(&mut block);
         let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
-        log::info!("patch: {:x?}", block);
+        log::trace!("patch: {:x?}", block);
         self.patch_fscb(&block, log_addr);
         let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
         if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {

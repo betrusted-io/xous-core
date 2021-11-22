@@ -167,6 +167,7 @@ impl DictCacheEntry {
     }
     /// Populates cache entries, reporting the maximum extent of large alloc data seen so far.
     /// Requires a descriptor for the hardware, and our virtual to physical page mapping.
+    /// Does not overwrite existing cache entries, if they already exist -- only loads in ones that are missing.
     /// Todo: condense routines in common with ensure_key_entry() to make it easier to maintain.
     pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> VirtAddr {
         let mut try_entry = 1;
@@ -209,15 +210,19 @@ impl DictCacheEntry {
                         data: None,
                     };
                     let kname = cstr_to_string(&keydesc.name);
-                    if keydesc.start + keydesc.reserved > alloc_top.get() {
-                        // if the key is within the large pool space, note its allocation for the basis overall
-                        alloc_top = VirtAddr::new(keydesc.start + keydesc.reserved).unwrap();
-                        // nothing else needs to be done -- we don't pre-cache large key data.
+                    if !self.keys.contains_key(&kname) {
+                        if keydesc.start + keydesc.reserved > alloc_top.get() {
+                            // if the key is within the large pool space, note its allocation for the basis overall
+                            alloc_top = VirtAddr::new(keydesc.start + keydesc.reserved).unwrap();
+                            // nothing else needs to be done -- we don't pre-cache large key data.
+                        } else {
+                            // try to fill the small key cache entry details
+                            self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &mut kcache, &kname);
+                        }
+                        self.keys.insert(kname, kcache);
                     } else {
-                        // try to fill the small key cache entry details
-                        self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &mut kcache, &kname);
+                        log::info!("fill: entry already present {}", kname);
                     }
-                    self.keys.insert(kname, kcache);
                     key_count += 1;
                 }
                 try_entry += 1;
