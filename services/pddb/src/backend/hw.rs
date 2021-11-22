@@ -96,18 +96,10 @@ pub(crate) struct PddbOs {
     entropy: Rc<RefCell<TrngPool>>,
 
     /*
-    /// virtual to physical page map. It's the reverse mapping of the physical page table on disk.
-    v2p_map: HashMap<String, HashMap<VirtAddr, PhysPage>>,
     /// keys to non-system basis that may or may not be mounted
     /// We don't blend the System basis into this one because we need to refer to the System basis specifically
     /// for decrypting management structures like the FSCB.
     basis_keys: Vec::<[u8; AES_KEYSIZE]>,
-    /// An in-memory "priority vector" of Basis root data that have been unlocked. Right now, we keep all data resident.
-    /// Basis root data should be fairly compact -- it's just the directory data to find the keys and
-    /// dictionaries, so unless you create 1k's of dictionaries and keys, it'll probably all fit in RAM.
-    /// When searching for dictionaries and keys, the search always starts with the LAST item added to the
-    /// basis_cache.
-    basis_cache: Vec::<BasisCacheEntry>,
     */
 }
 
@@ -143,14 +135,11 @@ impl PddbOs {
             data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
             cipher_ecb: None,
-            //v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
             fspace_cache: HashSet::<PhysPage>::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
             fspace_log_next_addr: None,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
-            //basis_keys: Vec::new(),
-            //basis_cache: Vec::<BasisCacheEntry>::new(),
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -167,14 +156,11 @@ impl PddbOs {
                 data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
                 system_basis_key: None,
                 cipher_ecb: None,
-                //v2p_map: HashMap::<String, HashMap<VirtAddr, PhysPage>>::new(),
                 fspace_cache: HashSet::<PhysPage>::new(),
                 fspace_log_addrs: Vec::<PageAlignedPa>::new(),
                 fspace_log_next_addr: None,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
-                //basis_keys: Vec::new(),
-                //basis_cache: Vec::<BasisCacheEntry>::new(),
             }
         };
         ret
@@ -202,6 +188,16 @@ impl PddbOs {
     #[cfg(any(target_os = "none", target_os = "xous"))]
     pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
+    }
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    /// used to reset the hardware structure for repeated runs of testing within a single invocation
+    pub fn test_reset(&mut self) {
+        self.fspace_cache = HashSet::<PhysPage>::new();
+        self.fspace_log_addrs = Vec::<PageAlignedPa>::new();
+        self.system_basis_key = None;
+        self.cipher_ecb = None;
+        self.fspace_log_next_addr = None;
+        self.pddb_mr.reset();
     }
 
     pub(crate) fn nonce_gen(&mut self) -> Nonce {

@@ -54,6 +54,12 @@ impl EmuStorage {
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         flashmem().memory.as_mut_slice()
     }
+    /// used to reset the storage for repeated test case generation
+    pub fn reset(&mut self) {
+        for b in flashmem().memory.as_mut_slice() {
+            *b = 0xFF;
+        }
+    }
     pub fn dump_fs(&self, name: &Option<String>) {
         let defaultname = String::from("pddb");
         let rootname = name.as_ref().unwrap_or(&defaultname);

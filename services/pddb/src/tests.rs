@@ -50,3 +50,60 @@ pub(crate) fn create_testcase(hw: &mut PddbOs,
         }
     }
 }
+
+pub(crate) fn manual_testcase(hw: &mut PddbOs) {
+    log::info!("Initializing disk...");
+    hw.pddb_format().unwrap();
+    log::info!("Done initializing disk");
+
+    // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
+    let mut basis_cache = BasisCache::new();
+
+    log::info!("Attempting to mount the PDDB");
+    if let Some(sys_basis) = hw.pddb_mount() {
+        log::info!("PDDB mount operation finished successfully");
+        basis_cache.basis_add(sys_basis);
+    } else {
+        log::info!("PDDB did not mount; did you remember to format the PDDB region?");
+    }
+    log::info!("size of vpage: {}", VPAGE_SIZE);
+
+    // add a "system settings" dictionary to the default basis
+    log::info!("adding 'system settings' dictionary");
+    basis_cache.dict_add(hw, "system settings", None).expect("couldn't add system settings dictionary");
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/Kosagi", "my_wpa_key_here".as_bytes(), None, None, None, false).expect("couldn't add a key");
+    let mut readback = [0u8; 15];
+    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/Kosagi", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "12345678".as_bytes(), None, None, None, false).expect("couldn't add a key");
+
+    // add a "big" key
+    let mut bigdata = [0u8; 5000];
+    for (i, d) in bigdata.iter_mut().enumerate() {
+        *d = i as u8;
+    }
+    basis_cache.key_update(hw, "system settings", "big_pool1", &bigdata, None, None, None, false).expect("couldn't add a key");
+
+    basis_cache.dict_add(hw, "test_dict_2", None).expect("couldn't add test dictionary 2");
+    basis_cache.key_update(hw, "test_dict_2", "test key in dict 2", "some data".as_bytes(), None, Some(128), None, false).expect("couldn't add a key to second dict");
+
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "ABC".as_bytes(), Some(2), None, None, false).expect("couldn't update e4200 key");
+
+    log::info!("test readback of wifi/wpa_keys/e4200");
+    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+}
