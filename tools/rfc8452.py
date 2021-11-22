@@ -121,13 +121,15 @@ def b2i(s):
 
 
 def i2b(i):
-    if i == 0:
-        return b'\x00'*16
-    s = b''
-    while i:
-        s += chr(i & 0xff) if six.PY2 else bytes([i & 0xff])
-        i >>= 8
-    return bytes(s)
+    return i.to_bytes(16, 'little')
+    # original implementation below -- if the leading bytes are '00', it will truncate and return a 15-long array, instead of 16-long, which is incorrect.
+    #if i == 0:
+    #    return b'\x00'*16
+    #s = b''
+    #while i:
+    #    s += chr(i & 0xff) if six.PY2 else bytes([i & 0xff])
+    #    i >>= 8
+    #return bytes(s)
 
 
 def s2i(s):
