@@ -340,19 +340,7 @@ use std::rc::Rc;
 ///    ...
 ///   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
 
-
-/*
-/// This constant maps onto a region that's "unused" by Xous, and claimable by user
-/// processes.
-const PDDB_BACKING_BASE: usize = 0x8000_0000;
-/// This designates the largest contiguous extent that we could allocate for a file.
-/// The backing isn't allocated -- it is merely reserved. Accesses to the backing trigger
-/// page faults that are handled by the PDDB, and just the pages actively being dereferenced is
-/// swapped into physical memory on demand. This does put a pretty hard upper limit on file sizes
-/// on a 32-bit system, but PDDB is coded such that we could extend to a 64-bit system and
-/// increase this limit my changing the constants here.
-const PDDB_BACKING_SIZE: usize = 0x4000_0000;
-*/
+// historical note: 389 hours, 11 mins elapsed since the start of the PDDB coding, and the first attempt at a hardware test -- as evidenced by the uptime of the hardware validation unit.
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -384,8 +372,12 @@ fn xmain() -> ! {
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None, None, None);
         log::info!("Saving `dacheck` to local host");
         pddb_os.dbg_dump(Some("dacheck".to_string()));
+
+        log::info!("Doing patch test");
+        patch_test(&mut pddb_os, &mut basis_cache, None, None);
+        pddb_os.dbg_dump(Some("patch".to_string()));
+        log::info!("CI done");
     }
-    log::info!("CI done");
     /*
     { // a simple case that could be run directly on the hardware
         log::info!("Running `manual` test case");
@@ -471,4 +463,62 @@ fn xmain() -> ! {
     xous::destroy_server(pddb_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+#[allow(dead_code)]
+pub(crate) fn manual_testcase(hw: &mut PddbOs) {
+    log::info!("Initializing disk...");
+    hw.pddb_format(true).unwrap();
+    log::info!("Done initializing disk");
+
+    // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
+    let mut basis_cache = BasisCache::new();
+
+    log::info!("Attempting to mount the PDDB");
+    if let Some(sys_basis) = hw.pddb_mount() {
+        log::info!("PDDB mount operation finished successfully");
+        basis_cache.basis_add(sys_basis);
+    } else {
+        log::info!("PDDB did not mount; did you remember to format the PDDB region?");
+    }
+    log::info!("size of vpage: {}", VPAGE_SIZE);
+
+    // add a "system settings" dictionary to the default basis
+    log::info!("adding 'system settings' dictionary");
+    basis_cache.dict_add(hw, "system settings", None).expect("couldn't add system settings dictionary");
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/Kosagi", "my_wpa_key_here".as_bytes(), None, None, None, false).expect("couldn't add a key");
+    let mut readback = [0u8; 15];
+    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/Kosagi", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "12345678".as_bytes(), None, None, None, false).expect("couldn't add a key");
+
+    // add a "big" key
+    let mut bigdata = [0u8; 5000];
+    for (i, d) in bigdata.iter_mut().enumerate() {
+        *d = i as u8;
+    }
+    basis_cache.key_update(hw, "system settings", "big_pool1", &bigdata, None, None, None, false).expect("couldn't add a key");
+
+    basis_cache.dict_add(hw, "test_dict_2", None).expect("couldn't add test dictionary 2");
+    basis_cache.key_update(hw, "test_dict_2", "test key in dict 2", "some data".as_bytes(), None, Some(128), None, false).expect("couldn't add a key to second dict");
+
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "ABC".as_bytes(), Some(2), None, None, false).expect("couldn't update e4200 key");
+
+    log::info!("test readback of wifi/wpa_keys/e4200");
+    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
 }

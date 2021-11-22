@@ -108,7 +108,7 @@ impl PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         #[cfg(any(target_os = "none", target_os = "xous"))]
         let pddb = xous::syscall::map_memory(
-            xous::MemoryAddress::new(xous::PDDB_LOC as usize),
+            xous::MemoryAddress::new(xous::PDDB_LOC as usize + xous::FLASH_PHYS_BASE as usize),
             None,
             PDDB_A_LEN as usize,
             xous::MemoryFlags::R,
@@ -1064,12 +1064,12 @@ impl PddbOs {
     /// in the PDDB an replace it with a brand-spanking new, blank PDDB.
     /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a reference
     /// to the Spinor object allocated to the PDDB implementation for this operation.
-    pub(crate) fn pddb_format(&mut self) -> Result<()> {
+    pub(crate) fn pddb_format(&mut self, fast: bool) -> Result<()> {
         if !self.rootkeys.is_initialized().unwrap() {
             return Err(Error::new(ErrorKind::Unsupported, "Root keys are not initialized; cannot format a PDDB without root keys!"));
         }
         // step 1. Erase the entire PDDB region - leaves the state in all 1's
-        {
+        if !fast {
             log::info!("Erasing the PDDB region");
             let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE];
 
@@ -1148,10 +1148,30 @@ impl PddbOs {
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
         // this is coded using "direct disk" offsets...under the assumption that we only ever really want to do this here, and
         // not re-use this routine elsewhere.
+        let blank = [0xffu8; aes::BLOCK_SIZE];
         for offset in (self.data_phys_base.as_usize()..PDDB_A_LEN).step_by(PAGE_SIZE) {
+            if fast {
+                // we could "skip" pages already encrypted to an old key as a short cut -- because we nuked our
+                // session key, previous data should be undecipherable. You shouldn't do this for a production erase
+                // but this is good for speeding up testing.
+                let mut is_blank = true;
+                let block: &[u8] = &self.pddb_mr.as_slice()[offset + aes::BLOCK_SIZE * 3..offset + aes::BLOCK_SIZE * 4];
+                for (&a, &b) in block.iter().zip(blank.iter()) {
+                    if a != b {
+                        is_blank = false;
+                        break;
+                    }
+                }
+                if !is_blank {
+                    if (offset / PAGE_SIZE) % 16 == 0 {
+                        log::info!("Page at {} is likely to already have cryptographic data, skipping...", offset);
+                    }
+                    continue;
+                }
+            }
             self.entropy.borrow_mut().get_slice(&mut temp);
             if (offset / PAGE_SIZE) % 64 == 0 {
-                log::info!("Crytpographic 'erase': {}/{}", offset, PDDB_A_LEN);
+                log::info!("Cryptographic 'erase': {}/{}", offset, PDDB_A_LEN);
             }
             self.spinor.patch(
                 self.pddb_mr.as_slice(),

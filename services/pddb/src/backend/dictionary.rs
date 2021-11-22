@@ -5,7 +5,7 @@ use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use aes_gcm_siv::Aes256GcmSiv;
-use std::collections::{HashMap, BinaryHeap};
+use std::collections::{HashMap, BinaryHeap, HashSet};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
 use std::cmp::Ordering;
@@ -221,7 +221,7 @@ impl DictCacheEntry {
                         }
                         self.keys.insert(kname, kcache);
                     } else {
-                        log::info!("fill: entry already present {}", kname);
+                        log::trace!("fill: entry already present {}", kname);
                     }
                     key_count += 1;
                 }
@@ -235,6 +235,17 @@ impl DictCacheEntry {
         self.rebuild_free_pool();
 
         alloc_top
+    }
+    /// merges the list of keys in this dict cache entry into a merge_list.
+    /// The `merge_list` is used because keys are presented as a union across all open basis.
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, merge_list: &mut HashSet<String>) {
+        // ensure that the key cache is filled
+        if self.keys.len() < self.key_count as usize {
+            self.fill(hw, v2p_map, cipher);
+        }
+        for key in self.keys.keys() {
+            merge_list.insert(key.to_string());
+        }
     }
     /// Simply ensures we have the description of a key in cache. Only tries to load small key data.
     /// Required by meta-operations on the keys that operate only out of the cache.
@@ -407,6 +418,8 @@ impl DictCacheEntry {
                 if let Some(_kcd) = &kcache.data {
                     unimplemented!("caching is not yet implemented for large data sets");
                 } else {
+                    kcache.age = kcache.age.saturating_add(1);
+                    kcache.clean = false;
                     // 1. handle unaligned start offsets
                     let mut written: usize = 0;
                     if ((kcache.start + offset as u64) % VPAGE_SIZE as u64) != 0 {
@@ -417,7 +430,9 @@ impl DictCacheEntry {
                             *dst = src;
                             written += 1;
                         }
-                        assert!((kcache.start + offset as u64 + written as u64) % VPAGE_SIZE as u64 == 0, "alignment algorithm failed");
+                        if written < data.len() {
+                            assert!((kcache.start + offset as u64 + written as u64) % VPAGE_SIZE as u64 == 0, "alignment algorithm failed");
+                        }
                         hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut pt_data, &pp);
                     }
                     // 2. do the rest

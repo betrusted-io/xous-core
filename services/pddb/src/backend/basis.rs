@@ -317,6 +317,22 @@ impl BasisCache {
         }
         dict_set
     }
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str) -> Result<HashSet::<String>> {
+        let mut merge_list = HashSet::<String>::new();
+        let mut found_dict = false;
+        for basis in self.cache.iter_mut() {
+            basis.populate_caches(hw);
+            if let Some(dcache) = basis.dicts.get_mut(dict) {
+                dcache.key_list(hw, &basis.v2p_map, &basis.cipher, &mut merge_list);
+                found_dict = true;
+            }
+        }
+        if found_dict {
+            Ok(merge_list)
+        } else {
+            return Err(Error::new(ErrorKind::NotFound, "dictionary not found"))
+        }
+    }
 
     /// This version of the call only removes one instance of a dictionary from the specified basis.
     /// Perhaps there also needs to be a `dict_remove_all` call which iterates through every basis
@@ -502,7 +518,7 @@ impl BasisCache {
                         // index exists, see if the page exists
                         let key_index = (((kcache.start - SMALL_POOL_START as u64) - (dict_entry.index as u64 * SMALL_POOL_STRIDE as u64)) / SMALL_CAPACITY as u64) as usize;
                         if dict_entry.small_pool.len() > key_index {
-                            log::info!("resoved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
+                            log::info!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
                             // see if the pool's address exists in the page table
                             let pool_vaddr = VirtAddr::new(dict_entry.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START).unwrap();
                             if !basis.v2p_map.contains_key(&pool_vaddr) {
