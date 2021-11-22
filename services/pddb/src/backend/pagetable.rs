@@ -47,6 +47,7 @@ pub(crate) struct Pte {
     pddb_addr: [u8; 6],
     /// this maps to a u8
     flags: PtFlags,
+    #[allow(dead_code)]
     reserved: u8,
     /// 32-bit strength of a nonce, but can be varied
     nonce: [u8; 4],
@@ -132,6 +133,7 @@ pub(crate) struct PageTableInFlash {
 /// This is the representation of a page of data on disk. Keys that span multiple
 /// pages have to decrypt individual pages, subtracting the nonce, journalrev, and tag, to find
 /// the actual data being retrieved.
+#[allow(dead_code)] // this structure is never explicitly created, but it's helpful to have to document our layout on disk.
 pub(crate) struct EncryptedPage {
     /// the nonce is not encrypted
     p_nonce: [u8; size_of::<Nonce>()],

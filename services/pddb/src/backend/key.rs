@@ -1,17 +1,8 @@
 use crate::api::*;
 use super::*;
 
-use core::cell::RefCell;
 use std::num::NonZeroU32;
-use std::rc::Rc;
 use core::ops::{Deref, DerefMut};
-use core::mem::size_of;
-use std::convert::TryInto;
-use aes_gcm_siv::{Aes256GcmSiv, Nonce};
-use aes_gcm_siv::aead::{Aead, Payload};
-use std::iter::IntoIterator;
-use std::collections::HashMap;
-use std::io::{Result, Error, ErrorKind};
 use std::cmp::Ordering;
 use bitfield::bitfield;
 
@@ -78,7 +69,9 @@ pub(crate) struct KeyCacheEntry {
     pub(crate) reserved: u64,
     pub(crate) flags: KeyFlags,
     pub(crate) age: u32,
-    /// the current on-disk index of the KeyCacheEntry item, enumerated as "0" being the Dict descriptor and "1" being the first valid key
+    /// the current on-disk index of the KeyCacheEntry item, enumerated as "0" being the Dict descriptor and
+    /// "1" being the first valid key. This is used to find the location of the key's metadata as stored on disk;
+    /// it has nothing to do with where the data itself is stored (that's derived from `start`).
     pub(crate) descriptor_index: NonZeroU32,
     /// indicates if the descriptor cache entry is currently synchronized with what's on disk. Does not imply anything about the data,
     /// but if the `data` field is None then there is nothing to in cache to be dirtied.
@@ -93,6 +86,7 @@ impl KeyCacheEntry {
         VirtAddr::new(dict_offset.get() + ((self.descriptor_index.get() as u64) * DK_STRIDE as u64)).unwrap()
     }
     /// Computes the modular position of the KeyDescriptor within a vpage.
+    #[allow(dead_code)] // I feel like we should have been calling this /somewhere/ at some point in time, but I probably just re-wrote the math long-hand.
     pub(crate) fn descriptor_modulus(&self) -> usize {
         (self.descriptor_index.get() as usize) % (VPAGE_SIZE / DK_STRIDE)
     }
@@ -115,6 +109,7 @@ impl KeyCacheEntry {
 pub (crate) enum KeyCacheData {
     Small(KeySmallData),
     // the "Medium" type has a region reserved for it, but we haven't coded a handler for it.
+    #[allow(dead_code)] // Large data caching isn't implemented, so of course, we don't ever create this type
     Large(KeyLargeData),
 }
 /// Small data is optimized for low overhead, and always represent a complete copy of the data.
@@ -125,6 +120,7 @@ pub(crate) struct KeySmallData {
 /// This can hold just a portion of a large key's data. For now, we now essentially manually
 /// encode a sub-slice in parts, but, later on we could get more clever and start to cache
 /// multiple disjoint portions of a large key's data...
+#[allow(dead_code)] // large key caching is not yet implemented
 pub(crate) struct KeyLargeData {
     pub clean: bool,
     pub(crate) start: u64,
@@ -149,10 +145,6 @@ impl KeySmallPool {
             avail: SMALL_CAPACITY as u16,
             clean: true,
         }
-    }
-    /// Returns the amount of space available in the pool
-    pub(crate) fn free(&self) -> usize {
-        self.avail as usize
     }
 }
 /// a bookkeeping structrue to put into a max-heap to figure out who has the most available space

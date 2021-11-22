@@ -9,6 +9,11 @@ use api::*;
 mod backend;
 use backend::*;
 
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+mod tests;
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+use tests::*;
+
 use num_traits::*;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use core::cell::RefCell;
@@ -367,6 +372,14 @@ fn xmain() -> ! {
     // OS-specific PDDB driver
     log::info!("creating PddbOs structure");
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+
+    /*
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    {
+        create_testcase(&mut pddb_os, None, None, None);
+        pddb_os.dbg_dump(Some("basecase1".to_string()));
+    }*/
+
     log::info!("Initializing disk...");
     pddb_os.pddb_format().unwrap();
     log::info!("Done initializing disk");
@@ -377,7 +390,7 @@ fn xmain() -> ! {
     log::info!("Attempting to mount the PDDB");
     if let Some(sys_basis) = pddb_os.pddb_mount() {
         log::info!("PDDB mount operation finished successfully");
-        basis_cache.add_basis(sys_basis);
+        basis_cache.basis_add(sys_basis);
     } else {
         log::info!("PDDB did not mount; did you remember to format the PDDB region?");
     }
@@ -423,12 +436,12 @@ fn xmain() -> ! {
     }
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    pddb_os.dbg_dump();
+    pddb_os.dbg_dump(Some("basic1".to_string()));
 
     log::info!("Re-mount the PDDB");
     if let Some(sys_basis) = pddb_os.pddb_mount() {
         log::info!("PDDB mount operation finished successfully");
-        basis_cache.add_basis(sys_basis);
+        basis_cache.basis_add(sys_basis);
     } else {
         log::info!("PDDB did not mount; did you remember to format the PDDB region?");
     }
@@ -443,9 +456,17 @@ fn xmain() -> ! {
         }
     }
 
+    /* list of test cases:
+        genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
+        delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
+        in-place update consistency: general integrity then patch all keys with a new test pattern
+        extend update consistency: general integrity then patch all keys with a longer test pattern
+        basis search: create basis A, populate with general integrity. create basis B, add test entries.
+           hide basis B, confirm original A; mount basis B, confirm B overlay.
+    */
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
-    let susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let _susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     loop {
         let msg = xous::receive_message(pddb_sid).unwrap();
@@ -453,7 +474,7 @@ fn xmain() -> ! {
             Some(Opcode::KeyRequest) => {
                 // placeholder
             }
-            Some(Opcode::ReadKeyScalar) => msg_blocking_scalar_unpack!(msg, tok0, tok1, tok2, len, {
+            Some(Opcode::ReadKeyScalar) => msg_blocking_scalar_unpack!(msg, _tok0, _tok1, _tok2, _len, {
                 // placeholder
             }),
             Some(Opcode::ReadKeyMem) => {
@@ -462,7 +483,7 @@ fn xmain() -> ! {
             Some(Opcode::WriteKeyScalar1)
             | Some(Opcode::WriteKeyScalar2)
             | Some(Opcode::WriteKeyScalar3)
-            | Some(Opcode::WriteKeyScalar4) => msg_blocking_scalar_unpack!(msg, tok0, tok1, tok2, data, {
+            | Some(Opcode::WriteKeyScalar4) => msg_blocking_scalar_unpack!(msg, _tok0, _tok1, _tok2, _data, {
                 // placeholder
             }),
             Some(Opcode::WriteKeyMem) => {
@@ -471,7 +492,7 @@ fn xmain() -> ! {
             Some(Opcode::WriteKeyFlush) => {
                 // placeholder
             }
-            Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
+            Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, _token, _, _, _, {
                 /* pddb.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 pddb.resume(); */

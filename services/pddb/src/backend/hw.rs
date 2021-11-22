@@ -181,8 +181,8 @@ impl PddbOs {
     }
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    pub fn dbg_dump(&self) {
-        self.pddb_mr.dump_fs();
+    pub fn dbg_dump(&self, name: Option<String>) {
+        self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
         if let Some(key) = self.system_basis_key {
             log::info!("written key: {:x?}", key);
@@ -197,10 +197,10 @@ impl PddbOs {
                 }
             );
         }
-        self.pddb_mr.dump_keys(&export);
+        self.pddb_mr.dump_keys(&export, &name);
     }
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    pub fn dbg_dump(&self) {
+    pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
     }
 
@@ -208,6 +208,7 @@ impl PddbOs {
         let nonce_array = self.entropy.borrow_mut().get_nonce();
         *Nonce::from_slice(&nonce_array)
     }
+    #[allow(dead_code)]
     pub(crate) fn dna(&self) -> u64 {self.dna}
     pub(crate) fn trng_slice(&mut self, slice: &mut [u8]) {
         self.entropy.borrow_mut().get_slice(slice);

@@ -76,6 +76,7 @@ impl Deref for FastSpace {
 }
 
 /// this structure confirms that the overall size of the FastSpace structure as stored in Flash.
+#[allow(dead_code)] // this is only used by test code
 #[repr(C, packed)]
 pub(crate) struct FastSpaceInFlash {
     p_nonce: [u8; size_of::<Nonce>()],

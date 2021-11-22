@@ -1,13 +1,11 @@
 use crate::api::*;
 use super::*;
 
-use core::cell::RefCell;
-use std::rc::Rc;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use std::convert::TryInto;
-use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key};
-use aes_gcm_siv::aead::{Aead, Payload, NewAead};
+use aes_gcm_siv::{Aes256GcmSiv, Key};
+use aes_gcm_siv::aead::NewAead;
 use std::iter::IntoIterator;
 use std::collections::{BinaryHeap, HashMap};
 use std::io::{Result, Error, ErrorKind};
@@ -216,7 +214,7 @@ impl BasisCache {
     pub(crate) fn new() -> Self {
         BasisCache { cache: Vec::new(), }
     }
-    pub(crate) fn add_basis(&mut self, basis: BasisCacheEntry) {
+    pub(crate) fn basis_add(&mut self, basis: BasisCacheEntry) {
         self.cache.push(basis);
     }
     // placeholder reminder: deleting a basis is a bit more complicated, as it requires
@@ -312,18 +310,20 @@ impl BasisCache {
     ) -> Result<()> {
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
+            // make sure the cache is "hot" before checking it. The rule is we only operate on data in cache, then sync it to disk.
             if !basis.dicts.contains_key(dict) {
                 if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
                     if dict_record.flags.valid() {
                         let dict_name = String::from(cstr_to_string(&dict_record.name));
                         let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict.to_string(), dcache);
+                        basis.dicts.insert(dict_name, dcache);
                     }
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
                 }
             }
-            if let Some(dict_entry) = basis.dicts.get_mut(dict) {
+            // now check the cache.
+            if basis.dicts.contains_key(dict) {
                 basis.age = basis.age.saturating_add(1);
                 basis.clean = false;
                 return basis.dict_delete(hw, dict, paranoid)
@@ -345,7 +345,7 @@ impl BasisCache {
                     if dict_record.flags.valid() {
                         let dict_name = String::from(cstr_to_string(&dict_record.name));
                         let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict.to_string(), dcache);
+                        basis.dicts.insert(dict_name, dcache);
                     }
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
@@ -419,7 +419,7 @@ impl BasisCache {
                     if dict_record.flags.valid() {
                         let dict_name = String::from(cstr_to_string(&dict_record.name));
                         let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict.to_string(), dcache);
+                        basis.dicts.insert(dict_name, dcache);
                     }
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
@@ -469,7 +469,7 @@ impl BasisCache {
         } else {
             alloc_hint.unwrap_or(0)
         };
-        let reserved_pages = if (reserved % VPAGE_SIZE == 0) {
+        let reserved_pages = if reserved % VPAGE_SIZE == 0 {
             reserved / VPAGE_SIZE
         } else {
             (reserved / VPAGE_SIZE) + 1
@@ -481,7 +481,7 @@ impl BasisCache {
                     if dict_record.flags.valid() {
                         let dict_name = String::from(cstr_to_string(&dict_record.name));
                         let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict.to_string(), dcache);
+                        basis.dicts.insert(dict_name, dcache);
                     }
                 } else {
                     pages_needed += 1;
@@ -555,7 +555,7 @@ impl BasisCache {
                     if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
                         let dict_name = String::from(cstr_to_string(&dict_record.name));
                         let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict.to_string(), dcache);
+                        basis.dicts.insert(dict_name, dcache);
                         dict_found = true;
                     }
                 } else {
@@ -565,9 +565,15 @@ impl BasisCache {
             if !dict_found { // now that we're clear of the deep search, mutate the basis if we are sure it's not there
                 self.dict_add(hw, dict, basis_name).expect("couldn't add dictionary");
             }
+            // at this point, the dictionary should definitely be in cache
+            // pre-flight & allocatefree space requirements
+            if let Some(dict_entry) = self.cache[basis_index].dicts.get(dict) {
+                hw.ensure_fast_space_alloc(dict_entry.alloc_estimate_small(), &self.cache);
+                // large pools don't have caching implemented, so we don't have to check for free space for them
+            }
             // refetch the basis here to avoid the re-borrow problem, now that all the potential dict cache mutations are done
             let basis = &mut self.cache[basis_index];
-            // at this point, the dictionary should definitely be in cache
+            // now do the sync
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 let updated_ptr = dict_entry.key_update(hw, &mut basis.v2p_map,
                     &basis.cipher, key, data,
@@ -606,7 +612,7 @@ pub(crate) struct BasisCacheEntry {
     pub name: String,
     /// set if synched to what's on disk
     pub clean: bool,
-    /// last sync time, in systicks, if any
+    /// last sync time, in systicks, if any. Updated by any sync of basis, dict, or pt.
     pub last_sync: Option<u64>,
     /// Number of dictionaries. This should be greater than or equal to the number of elements in dicts.
     /// If dicts has less elements than num_dicts, it means there are still dicts on-disk that haven't been cached.
@@ -701,11 +707,16 @@ impl BasisCacheEntry {
     }
     /// allocate a pointer data in the large pool, of length `amount`. "always" succeeds because...
     /// there's 16 million terabytes of large pool to allocate before you run out?
+    /*
+    // this function is actually implemented inside the "key_update()" code - as a large key is allocated,
+    // the pointer is bumped along within the update code. AFAIK, nobody else should be calling this, so, let's
+    // comment it out, and if it becomes necessary for some reason let's take a good hard look at assumptions.
+    // In particular, this function might become necessary if disk caching is implemented for large keys.
     pub(crate) fn large_pool_alloc(&mut self, amount: u64) -> u64 {
         let alloc_ptr = self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START));
         self.large_alloc_ptr = Some(self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)) + PageAlignedVa::from(amount));
         return alloc_ptr.as_u64()
-    }
+    }*/
     /// do a deep scan of all the dictionaries and keys and attempt to populate all the caches
     pub(crate) fn populate_caches(&mut self, hw: &mut PddbOs) {
         let mut try_entry = 1;
@@ -752,7 +763,7 @@ impl BasisCacheEntry {
             if let Some((index, dict_record)) = self.dict_deep_search(hw, name) {
                 let dict_name = String::from(cstr_to_string(&dict_record.name));
                 let dcache = DictCacheEntry::new(dict_record, index as usize, &self.aad);
-                self.dicts.insert(name.to_string(), dcache);
+                self.dicts.insert(dict_name, dcache);
                 dict_found = true;
             }
         } else {
@@ -876,6 +887,7 @@ impl BasisCacheEntry {
 
     /// Looks for dirty entries in the page table, and flushes them to disk.
     pub(crate) fn pt_sync(&mut self, hw: &mut PddbOs) {
+        self.last_sync = Some(hw.timestamp_now());
         for (&virt, phys) in self.v2p_map.iter_mut() {
             if !phys.clean() {
                 log::info!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
@@ -894,6 +906,7 @@ impl BasisCacheEntry {
     /// doesn't have enough space, the routine will return an error indicating we're out of memory.
     /// You could then try to allocate more FastSpace, and re-try the sync operation.
     pub(crate) fn dict_sync(&mut self, hw: &mut PddbOs, name: &str) -> Result<()> {
+        self.last_sync = Some(hw.timestamp_now());
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
             let dict_offset = VirtAddr::new(dict.index as u64 * DICT_VSIZE).unwrap();
             if !dict.clean {
@@ -1013,12 +1026,13 @@ impl BasisCacheEntry {
     /// Runs through the dictionary listing in a basis and compacts them. Call when the
     /// the dictionary space becomes sufficiently fragmented that accesses are becoming
     /// inefficient.
-    pub(crate) fn dict_compact(&self, basis_name: Option<&str>) -> Result<()> {
+    pub(crate) fn dict_compact(&self, _basis_name: Option<&str>) -> Result<()> {
         unimplemented!();
     }
 
     /// Syncs *only* the basis header to disk.
     pub(crate) fn basis_sync(&mut self, hw: &mut PddbOs) {
+        self.last_sync = Some(hw.timestamp_now());
         if !self.clean {
             let basis_root = BasisRoot {
                 magic: PDDB_MAGIC,
@@ -1027,7 +1041,6 @@ impl BasisCacheEntry {
                 age: self.age,
                 num_dictionaries: self.num_dicts,
             };
-            let aad = basis_root.aad(hw.dna());
             let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
                 .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
             let journal_bytes = self.journal.to_le_bytes(); // journal gets bumped by the patching function now

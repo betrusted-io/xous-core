@@ -1,16 +1,10 @@
 use crate::api::*;
 use super::*;
 
-use core::cell::RefCell;
 use std::num::NonZeroU32;
-use std::ptr::NonNull;
-use std::rc::Rc;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
-use std::convert::TryInto;
-use aes_gcm_siv::{Aes256GcmSiv, Nonce};
-use aes_gcm_siv::aead::{Aead, Payload};
-use std::iter::IntoIterator;
+use aes_gcm_siv::Aes256GcmSiv;
 use std::collections::{HashMap, BinaryHeap};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
@@ -175,7 +169,6 @@ impl DictCacheEntry {
     /// Requires a descriptor for the hardware, and our virtual to physical page mapping.
     /// Todo: condense routines in common with ensure_key_entry() to make it easier to maintain.
     pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> VirtAddr {
-        let dict_vaddr = VirtAddr::new(self.index as u64 * DICT_VSIZE).unwrap();
         let mut try_entry = 1;
         let mut key_count = 0;
         let mut alloc_top = VirtAddr::new(LARGE_POOL_START).unwrap();
@@ -195,8 +188,10 @@ impl DictCacheEntry {
                 log::warn!("Dictionary fill op encountered an unallocated page checking entry {} in the dictionary map. Marking it for re-use.", try_entry);
                 try_entry += DK_PER_VPAGE;
             } else {
+                let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
+                let pp = v2p_map.get(&VirtAddr::new(req_vaddr).unwrap()).expect("dictionary PP should be in existence");
+                assert!(cache_pp.page_number() == pp.page_number(), "cache inconsistency error");
                 let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
-                let pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
                 let mut keydesc = KeyDescriptor::default();
                 let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
                 for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
@@ -247,7 +242,6 @@ impl DictCacheEntry {
         if !self.keys.contains_key(name_str) {
             log::info!("searching for key {}", name_str);
             let mut data_cache = PlaintextCache { data: None, tag: None };
-            let dict_vaddr = VirtAddr::new(self.index as u64 * DICT_VSIZE).unwrap();
             let mut try_entry = 1;
             let mut key_count = 0;
             let mut index_cache = PlaintextCache { data: None, tag: None };
@@ -265,7 +259,9 @@ impl DictCacheEntry {
                     try_entry += DK_PER_VPAGE;
                 } else {
                     let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
-                    let pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
+                    let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
+                    let pp = v2p_map.get(&VirtAddr::new(req_vaddr).unwrap()).expect("dictionary PP should be in existence");
+                    assert!(cache_pp.page_number() == pp.page_number(), "cache inconsistency error");
                     let mut keydesc = KeyDescriptor::default();
                     let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
                     for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
@@ -273,7 +269,7 @@ impl DictCacheEntry {
                     }
                     let kname = cstr_to_string(&keydesc.name);
                     if keydesc.flags.valid() {
-                        if (kname == name_str) {
+                        if kname == name_str {
                             let mut kcache = KeyCacheEntry {
                                 start: keydesc.start,
                                 len: keydesc.len,
@@ -401,7 +397,7 @@ impl DictCacheEntry {
                 // note: there is no need to update small_pool_free because the reserved size did not change.
             } else {
                 // it's a large key
-                if let Some(kcd) = &kcache.data {
+                if let Some(_kcd) = &kcache.data {
                     unimplemented!("caching is not yet implemented for large data sets");
                 } else {
                     // 1. handle unaligned start offsets
@@ -483,21 +479,26 @@ impl DictCacheEntry {
                     data.len() + offset
                 };
                 let index = if pool_candidate.avail as usize >= reservation {
+                    // it fits in the current candidate slot, use this as the index
                     let ksp = &mut self.small_pool[pool_candidate.index];
                     ksp.contents.push(name.to_string());
                     ksp.avail -= reservation as u16;
                     ksp.clean = false;
                     self.small_pool_free.push(KeySmallPoolOrd { avail: ksp.avail, index: pool_candidate.index });
-                    pool_candidate.index + 1
+                    pool_candidate.index
                 } else {
                     self.small_pool_free.push(pool_candidate);
-                    // allocate a new index
+                    // allocate a new small pool slot
                     let mut ksp = KeySmallPool::new();
                     ksp.contents.push(name.to_string());
                     ksp.avail -= reservation as u16;
                     ksp.clean = false;
-                    self.small_pool_free.push(KeySmallPoolOrd { avail: ksp.avail, index: self.small_pool.len() - 1 });
-                    self.small_pool.len()
+                    // update the free pool with the current candidate
+                    // we don't subtract 1 from len because we're about to push the ksp onto the end of the small_pool, consuming it
+                    self.small_pool_free.push(KeySmallPoolOrd { avail: ksp.avail, index: self.small_pool.len() });
+                    self.small_pool.push(ksp);
+                    // the actual location is at len-1 now because we have done the push
+                    self.small_pool.len() - 1
                 };
                 let mut kf = KeyFlags(0);
                 kf.set_valid(true);
@@ -515,7 +516,7 @@ impl DictCacheEntry {
                     return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of key indices in dictionary"));
                 };
                 let kcache = KeyCacheEntry {
-                    start: self.index as u64 * SMALL_POOL_START + SMALL_POOL_START,
+                    start: SMALL_POOL_START + self.index as u64 * DICT_VSIZE + index as u64 * SMALL_CAPACITY as u64,
                     len: (data.len() + offset) as u64,
                     reserved: reservation as u64,
                     flags: kf,
@@ -568,6 +569,7 @@ impl DictCacheEntry {
         }
         Ok(large_alloc_ptr)
     }
+    #[allow(dead_code)]
     pub fn key_contains(&mut self, name: &str) -> bool {
         self.keys.contains_key(&String::from(name))
     }
@@ -642,7 +644,7 @@ impl DictCacheEntry {
     /// sort of less relevant now that the large keys have a paranoid mode; probably this routine should actually
     /// be a higher-level function that catches the paranoid request and does an "update" of 0's to the key
     /// then does a disk sync and then calls remove
-    pub fn key_erase(&mut self, name: &str) {
+    pub fn key_erase(&mut self, _name: &str) {
         unimplemented!();
     }
     /// estimates the amount of space needed to sync the dict cache. Pass this to ensure_fast_space_alloc() before calling a sync.
@@ -729,6 +731,8 @@ impl DictCacheEntry {
     pub(crate) fn sync_large_pool(&self) {
     }
 
+    /// Finds the next available slot to store the key metadata (not the data itself). It also
+    /// does bookkeeping to bound brute-force searches for keys within the dictionary's index space.
     pub(crate) fn get_free_key_index(&mut self) -> Option<NonZeroU32> {
         if let Some(free_key) = self.free_keys.pop() {
             let index = free_key.start;
@@ -750,6 +754,7 @@ impl DictCacheEntry {
             None
         }
     }
+    /// Returns a key's metadata storage to the index pool.
     pub(crate) fn put_free_key_index(&mut self, index: u32) {
         let free_keys = std::mem::replace(&mut self.free_keys, BinaryHeap::<FreeKeyRange>::new());
         let free_key_vec = free_keys.into_sorted_vec();
