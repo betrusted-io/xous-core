@@ -34,7 +34,9 @@ fn gen_key(dictname: &str, keynum: usize, lower_size_bound: usize, upper_size_bo
 }
 
 pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCache,
-    maybe_num_dicts: Option<usize>, maybe_num_keys: Option<usize>, maybe_key_sizes: Option<(usize, usize)>) {
+    maybe_num_dicts: Option<usize>, maybe_num_keys: Option<usize>, maybe_key_sizes: Option<(usize, usize)>,
+    maybe_extra_reserved: Option<usize>,
+) {
 
     hw.pddb_format(false).unwrap();
     let sys_basis = hw.pddb_mount().expect("couldn't mount system basis");
@@ -43,6 +45,7 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
     let num_dicts = maybe_num_dicts.unwrap_or(4);
     let num_keys = maybe_num_keys.unwrap_or(34);
     let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((1, UPPER_BOUND - 4)); // 4 bytes for the CI checksum
+    let extra_reserved = maybe_extra_reserved.unwrap_or(0);
 
     // make all the directories first
     for dictnum in 1..=num_dicts {
@@ -57,7 +60,16 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
             let dictname = format!("dict{}", dictnum);
             let (keyname, keydata) = gen_key(&dictname, keynum, key_lower_bound, key_upper_bound);
             // now we're ready to write it out
-            basis_cache.key_update(hw, &dictname, &keyname, &keydata, None, None, None, false).unwrap();
+            if maybe_extra_reserved.is_none() {
+                // we do this slightly funky way instead of just passing Some(0) because we want to test the "None" path explicitly
+                basis_cache.key_update(hw, &dictname, &keyname, &keydata, None,
+                    None,
+                    None, false).unwrap();
+            } else {
+                basis_cache.key_update(hw, &dictname, &keyname, &keydata, None,
+                    Some(keydata.len() + extra_reserved),
+                    None, false).unwrap();
+            }
         }
     }
 }
@@ -94,7 +106,7 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
 
 /// patch data check
 pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
-    maybe_patch_offset: Option<usize>, maybe_patch_data: Option<String>) {
+    maybe_patch_offset: Option<usize>, maybe_patch_data: Option<String>, extend: bool) {
 
     let patch_offset = maybe_patch_offset.unwrap_or(5);
     let patch_data = maybe_patch_data.unwrap_or("patched!".to_string());
@@ -114,19 +126,32 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                 // now fix the CI checksum. structured as two separate patches. not because it's efficient,
                 // but because it exercises the code harder.
                 let readlen = basis_cache.key_read(hw, dict, key, &mut patchbuf, Some(0), None).unwrap();
-                // now extend and compute the checksum
-                let mut checkdata = Vec::<u8>::new();
-                for &b in &patchbuf[..readlen-4] {
-                    checkdata.push(b);
+                if !extend {
+                    // now re-compute the checksum
+                    let mut checkdata = Vec::<u8>::new();
+                    for &b in &patchbuf[..readlen-4] {
+                        checkdata.push(b);
+                    }
+                    log::trace!("checkdata len: {}", checkdata.len());
+                    while checkdata.len() % 4 != 0 {
+                        checkdata.push(0);
+                    }
+                    let checksum = murmur3_32(&checkdata, 0);
+                    basis_cache.key_update(hw, dict, key, &checksum.to_le_bytes(), Some(readlen-4), None, None, false).unwrap();
+                } else {
+                    // this gloms a new checksum onto the existing record, adding 4 new bytes.
+                    let mut checkdata = Vec::<u8>::new();
+                    for &b in &patchbuf {
+                        checkdata.push(b);
+                    }
+                    log::trace!("checkdata len: {}", checkdata.len());
+                    while checkdata.len() % 4 != 0 {
+                        checkdata.push(0);
+                    }
+                    let checksum = murmur3_32(&checkdata, 0);
+                    basis_cache.key_update(hw, dict, key, &checksum.to_le_bytes(), Some(readlen), None, None, false).unwrap();
                 }
-                log::trace!("checkdata len: {}", checkdata.len());
-                while checkdata.len() % 4 != 0 {
-                    checkdata.push(0);
-                }
-                let checksum = murmur3_32(&checkdata, 0);
-                basis_cache.key_update(hw, dict, key, &checksum.to_le_bytes(), Some(readlen-4), None, None, false).unwrap();
             }
         }
-
     }
 }

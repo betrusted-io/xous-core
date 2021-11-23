@@ -531,7 +531,7 @@ impl BasisCache {
                         // index exists, see if the page exists
                         let key_index = (((kcache.start - SMALL_POOL_START as u64) - (dict_entry.index as u64 * SMALL_POOL_STRIDE as u64)) / SMALL_CAPACITY as u64) as usize;
                         if dict_entry.small_pool.len() > key_index {
-                            log::info!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
+                            log::trace!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
                             // see if the pool's address exists in the page table
                             let pool_vaddr = VirtAddr::new(dict_entry.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START).unwrap();
                             if !basis.v2p_map.contains_key(&pool_vaddr) {
@@ -1033,10 +1033,10 @@ impl BasisCacheEntry {
 
                     // 3. merge the vpage modifications into the disk
                     let mut page = if let Some(data) = hw.data_decrypt_page(&self.cipher, &self.aad, &pp) {
-                        log::info!("merging dictionary data into existing page");
+                        log::trace!("merging dictionary data into existing page");
                         data
                     } else {
-                        log::info!("existing data invalid, creating a new page");
+                        log::trace!("existing data invalid, creating a new page");
                         // the existing data was invalid (this happens e.g. on the first time a dict is created). Just overwrite the whole page.
                         vec![0u8; VPAGE_SIZE + size_of::<JournalType>()]
                     };

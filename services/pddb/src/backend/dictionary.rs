@@ -66,7 +66,7 @@ impl DictCacheEntry {
             my_aad.push(b);
         }
         let mut free_keys = BinaryHeap::<FreeKeyRange>::new();
-        free_keys.push(FreeKeyRange{start: dict.free_key_index, run: KEY_MAXCOUNT as u32 - 1});
+        free_keys.push(FreeKeyRange{start: dict.free_key_index, run: KEY_MAXCOUNT as u32 - 1 - dict.free_key_index});
         DictCacheEntry {
             index: index as u32,
             keys: HashMap::<String, KeyCacheEntry>::new(),
@@ -102,7 +102,7 @@ impl DictCacheEntry {
 
             if index_cache.data.is_none() || index_cache.tag.is_none() {
                 // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
-                log::warn!("Dictionary fill op encountered an unallocated page checking entry {} in the dictionary map. Marking it for re-use.", try_entry);
+                log::warn!("Dictionary fill: encountered unallocated page at {} in the dictionary map. {}/{}", try_entry, key_count, self.key_count);
                 try_entry += DK_PER_VPAGE;
             } else {
                 let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
@@ -321,9 +321,14 @@ impl DictCacheEntry {
                     for (&src, dst) in data.iter().zip(cache_data.data[offset..].iter_mut()) {
                         *dst = src;
                     }
-                    // for now, we ignore "truncate" on a small key
                 } else {
                     panic!("Key allocated to small area but its cache data was not of the small type");
+                }
+                // check if we grew the length
+                if kcache.len < (data.len() + offset) as u64 {
+                    kcache.len = (data.len() + offset) as u64;
+                } else if truncate {
+                    kcache.len = (data.len() + offset) as u64;
                 }
                 // mark the storage pool entry as dirty, too.
                 let pool_index = small_storage_index_from_key(&kcache, self.index).expect("index missing");
@@ -396,10 +401,13 @@ impl DictCacheEntry {
                             }
                         }
                     }
-                    log::info!("data written: {}, data requested to write: {}", written, data.len());
+                    log::trace!("data written: {}, data requested to write: {}", written, data.len());
                     assert!(written == data.len(), "algorithm problem -- didn't write all the data we thought we would");
-                    // 3. truncate.
-                    if truncate {
+                    // 3. truncate or extend
+                    // check if we grew the length; extend the length by exactly enough if so.
+                    if kcache.len < (data.len() + offset) as u64 {
+                        kcache.len = (data.len() + offset) as u64;
+                    } else if truncate {
                         // discard all whole pages after written+offset, and reset the reserved field to the smaller size.
                         let vpage_end_offset = PageAlignedVa::from((written + offset) as u64);
                         if (vpage_end_offset.as_u64() - kcache.start) > kcache.reserved {
@@ -410,6 +418,7 @@ impl DictCacheEntry {
                             }
                             kcache.reserved = vpage_end_offset.as_u64() - kcache.start;
                             kcache.clean = false;
+                            kcache.len = (data.len() + offset) as u64;
                         }
                     }
                 }
@@ -461,6 +470,9 @@ impl DictCacheEntry {
                 }
                 for &b in data {
                     alloc_data.push(b);
+                }
+                for fk in self.free_keys.iter() {
+                    log::info!("fk start: {} run: {}", fk.start, fk.run);
                 }
                 let descriptor_index = if let Some(di) = self.get_free_key_index() {
                     di
@@ -715,41 +727,51 @@ impl DictCacheEntry {
         // - the new key is adjacent to exactly once element, in which case we put it either on the top or bottom (merge into existing record)
         // - the new key is adjacent to exactly two elements, in which case we merge the new key and other two elements together, add its length to the new overall run
         let mut skip = false;
+        let mut placed = false;
+        log::info!("inserting free key {}", index);
         for i in 0..free_key_vec.len() {
             if skip {
                 // this happens when we merged into the /next/ record, and we reduced the total number of items by one
                 skip = false;
                 continue
             }
-            match free_key_vec[i].compare_to(i as u32) {
-                FreeKeyCases::LessThan => {
-                    self.free_keys.push(FreeKeyRange{start: index as u32, run: 0});
-                    break;
-                }
-                FreeKeyCases::LeftAdjacent => {
-                    self.free_keys.push(FreeKeyRange{start: index as u32, run: free_key_vec[i].run + 1});
-                }
-                FreeKeyCases::Within => {
-                    log::error!("Double-free error in free_keys()");
-                    panic!("Double-free error in free_keys()");
-                }
-                FreeKeyCases::RightAdjacent => {
-                    // see if we should merge to the right
-                    if i + 1 < free_key_vec.len() {
-                        if free_key_vec[i+1].compare_to(i as u32) == FreeKeyCases::LeftAdjacent {
-                            self.free_keys.push(FreeKeyRange{
-                                start: free_key_vec[i].start,
-                                run: free_key_vec[i].run + free_key_vec[i+1].run + 2
-                            });
-                            skip = true
+            if !placed {
+                match free_key_vec[i].arg_compared_to_self(index) {
+                    FreeKeyCases::LessThan => {
+                        self.free_keys.push(FreeKeyRange{start: index as u32, run: 0});
+                        placed = true;
+                        self.free_keys.push(free_key_vec[i]);
+                    }
+                    FreeKeyCases::LeftAdjacent => {
+                        self.free_keys.push(FreeKeyRange{start: index as u32, run: free_key_vec[i].run + 1});
+                        placed = true;
+                    }
+                    FreeKeyCases::Within => {
+                        log::error!("Double-free error in free_keys()");
+                        panic!("Double-free error in free_keys()");
+                    }
+                    FreeKeyCases::RightAdjacent => {
+                        // see if we should merge to the right
+                        if i + 1 < free_key_vec.len() {
+                            if free_key_vec[i+1].arg_compared_to_self(i as u32) == FreeKeyCases::LeftAdjacent {
+                                self.free_keys.push(FreeKeyRange{
+                                    start: free_key_vec[i].start,
+                                    run: free_key_vec[i].run + free_key_vec[i+1].run + 2
+                                });
+                                skip = true;
+                                placed = true;
+                            }
+                        } else {
+                            self.free_keys.push(FreeKeyRange { start: free_key_vec[i].start, run: free_key_vec[i].run + 1 });
+                            placed = true;
                         }
-                    } else {
-                        self.free_keys.push(FreeKeyRange { start: free_key_vec[i].start, run: free_key_vec[i].run + 1 })
+                    }
+                    FreeKeyCases::GreaterThan => {
+                        self.free_keys.push(free_key_vec[i]);
                     }
                 }
-                FreeKeyCases::GreaterThan => {
-                    self.free_keys.push(free_key_vec[i]);
-                }
+            } else {
+                self.free_keys.push(free_key_vec[i]);
             }
         }
     }
@@ -853,14 +875,16 @@ pub(crate) struct FreeKeyRange {
     pub(crate) run: u32,
 }
 impl FreeKeyRange {
-    pub(crate) fn compare_to(&self, index: u32) -> FreeKeyCases {
-        if self.start > 1 && index < self.start - 1 {
+    /// returns the result of "index compared to self", so,
+    /// if the index is smaller than me, the result is LessThan.
+    pub(crate) fn arg_compared_to_self(&self, index: u32) -> FreeKeyCases {
+        if self.start > 1 && (index < (self.start - 1)) {
             FreeKeyCases::LessThan
-        } else if self.start > 0 && index == self.start - 1 {
+        } else if self.start > 0 && (index == self.start - 1) {
             FreeKeyCases::LeftAdjacent
-        } else if index >= self.start && index <= self.start + self.run {
+        } else if (index >= self.start) && (index <= (self.start + self.run)) {
             FreeKeyCases::Within
-        } else if index == self.start + self.run + 1 {
+        } else if index == (self.start + self.run + 1) {
             FreeKeyCases::RightAdjacent
         } else {
             FreeKeyCases::GreaterThan

@@ -387,10 +387,10 @@ class BasisDicts:
         for (name, key) in self.keys.items():
             namecheck = name.split('|')
             if namecheck[1] != self.name:
-                print(" Key/dict mismatch: {}/{}", key.name, self.name)
+                print(" Key/dict mismatch: {}/{}".format(key.name, self.name))
             keylen = int(namecheck[3][3:])
             if keylen != key.len:
-                print(" Key length mismatch: {}/{}", keylen, key.len)
+                print(" Key named len vs disk len mismatch: {}/{}".format(keylen, key.len))
             if key.ci_ok == False:
                 print(" CI failed on key:")
                 print(key.as_str('  '))

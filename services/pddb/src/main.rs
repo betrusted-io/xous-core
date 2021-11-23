@@ -397,11 +397,13 @@ fn xmain() -> ! {
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+    /*
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     {
         log::info!("Creating `basecase1`");
         let mut basis_cache = BasisCache::new();
-        create_basis_testcase(&mut pddb_os, &mut basis_cache, None, None, None);
+        create_basis_testcase(&mut pddb_os, &mut basis_cache, None,
+            None, None, None);
         log::info!("Saving `basecase1` to local host");
         pddb_os.dbg_dump(Some("basecase1".to_string()));
 
@@ -411,10 +413,30 @@ fn xmain() -> ! {
         pddb_os.dbg_dump(Some("dacheck".to_string()));
 
         log::info!("Doing patch test");
-        patch_test(&mut pddb_os, &mut basis_cache, None, None);
+        patch_test(&mut pddb_os, &mut basis_cache, None, None, false);
         pddb_os.dbg_dump(Some("patch".to_string()));
-        log::info!("CI done");
     }
+    */
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    {
+        pddb_os.test_reset();
+        log::info!("Creating `basecase1e`");
+        let mut basis_cache = BasisCache::new();
+        create_basis_testcase(&mut pddb_os, &mut basis_cache, None,
+            None, None, Some(4));
+        log::info!("Saving `basecase1e` to local host");
+        pddb_os.dbg_dump(Some("basecase1e".to_string()));
+
+        log::info!("Doing delete/add consistency");
+        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None, None, None);
+        log::info!("Saving `dachecke` to local host");
+        pddb_os.dbg_dump(Some("dachecke".to_string()));
+
+        log::info!("Doing patch test");
+        patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
+        pddb_os.dbg_dump(Some("patche".to_string()));
+    }
+    log::info!("CI done");
     /*
     { // a simple case that could be run directly on the hardware
         log::info!("Running `manual` test case");
@@ -450,7 +472,7 @@ fn xmain() -> ! {
     /* list of test cases:
         [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
         [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
-        in-place update consistency: general integrity then patch all keys with a new test pattern
+        [done] in-place update consistency: general integrity then patch all keys with a new test pattern
         extend update consistency: general integrity then patch all keys with a longer test pattern
         key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
         basis search: create basis A, populate with general integrity. create basis B, add test entries.
