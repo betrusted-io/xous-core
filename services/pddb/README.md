@@ -28,5 +28,7 @@ the bindings are "what you expect" (principle of least surprise).
 Howeve, you're probably looking to fix a PDDB bug, audit
 the code, or generally figure out what the hell is going on. This means you want
 to look at the PDDB as a "binary" and not a "library" -- something RustDoc can't
-help you with. As the issue above notes, the fallback is for you to consult the README
-file.
+help you with. As the issue above notes, the fallback is for you to consult this README
+file, and literally, read the source (or rather, the paragraphs of plaintext documentation
+we've embedded in the source files, waiting for the day when the rustdoc issue is fixed
+and these can be turned into something more user-friendly).
