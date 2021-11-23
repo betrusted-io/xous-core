@@ -16,3 +16,8 @@ update-precursors.sh
 # pddb debug files
 tools/pddb-images/
 tools/__pycache__
+
+# don't record weirdnesses dealing with vscode
+.vscode/settings-hw.json
+.vscode/settings-xous.json
+
