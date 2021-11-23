@@ -43,12 +43,10 @@ impl Default for PtFlags {
 #[repr(packed)]
 #[derive(Default)]
 pub(crate) struct Pte {
-    /// the virtual address is 48 bits long
-    pddb_addr: [u8; 6],
+    /// the virtual page number is 52 bits long (52 + 12 = 64). 4 bits are wasted in this representation.
+    pddb_addr: [u8; 7],
     /// this maps to a u8
     flags: PtFlags,
-    #[allow(dead_code)]
-    reserved: u8,
     /// 32-bit strength of a nonce, but can be varied
     nonce: [u8; 4],
     /// 32-bit "weak" checksum, used only for quick scans of the PTE to determine a coarse "in" or "out" classifier
@@ -59,9 +57,8 @@ impl Pte {
     pub fn new(va: VirtAddr, flags: PtFlags, entropy: Rc<RefCell<TrngPool>>) -> Self {
         let nonce_u32 = entropy.borrow_mut().get_u32();
         let mut pte = Pte {
-            pddb_addr: va.get().to_le_bytes()[..6].try_into().unwrap(),
+            pddb_addr: va.get().to_le_bytes()[..7].try_into().unwrap(),
             flags,
-            reserved: 0,
             nonce: nonce_u32.to_le_bytes(),
             checksum: [0; 4],
         };

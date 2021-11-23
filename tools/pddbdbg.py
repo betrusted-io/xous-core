@@ -483,7 +483,7 @@ class Pte:
         return self.bytes
 
     def addr(self):
-        return int.from_bytes(self.bytes[:6], 'little')
+        return int.from_bytes(self.bytes[:7], 'little')
     def flags(self):
         if self.bytes[6] == 1:
             return 'CLN'
