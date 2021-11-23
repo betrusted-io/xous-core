@@ -1,67 +1,86 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-extern crate bitflags;
-extern crate bitfield;
-
-mod api;
-use api::*;
-mod backend;
-use backend::*;
-
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-mod tests;
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-use tests::*;
-
-use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
-use core::cell::RefCell;
-use std::rc::Rc;
-
-/// PDDB - Plausibly Deniable DataBase
+/// # PDDB - Plausibly Deniable DataBase
 ///
-/// Glossary:
-/// Basis - a unionizeable dictionary that can be unlocked with a password-protected key.
-/// Dictionary - similar to a "volume" on a typical filesystem. Contains a group of k/v pairs
+/// ## Glossary:
+/// * Basis - a unionizeable dictionary that can be unlocked with a password-protected key.
+/// * Dictionary - similar to a "volume" on a typical filesystem. Contains a group of k/v pairs
 ///   that share attributes such as access permissions
-/// Key - a unique string that identifies a piece of data in the PDDB
-/// Path - Rust's notion of how to locate a file, except we interpret it as a PDDB key, where
+/// * Key - a unique string that identifies a piece of data in the PDDB
+/// * Path - Rust's notion of how to locate a file, except we interpret it as a PDDB key, where
 ///   the "root" directory is the dictionary, and the remainder is the "key"
-/// Value - the value associated with a key, isomorphic ot a "file" in Rust
-/// Open Basis - A Basis that is decryptable and known to the system.
-/// Closed Basis - A Basis that is not decryptable. It's unknown to the system and potentially treated
+/// * Value - the value associated with a key, isomorphic ot a "file" in Rust
+/// * Open Basis - A Basis that is decryptable and known to the system.
+/// * Closed Basis - A Basis that is not decryptable. It's unknown to the system and potentially treated
 ///   identically to free disk space, e.g., it could be partially overwritten.
-/// FSCB - Free Space Commit Buffer. A few pages allocated to tracking a subset of free space,
+/// * FSCB - Free Space Commit Buffer. A few pages allocated to tracking a subset of free space,
 ///   meant to accelerate PDDB operations. Creates a side-channel that can reveal that some activity
 ///   has happened, but without disclosing what and why. Contains FastSpace and SpaceUpdate records.
 ///   Frequently updated, so the buffer is slightly oversized, and which sector is "hot" is randomized
 ///   for wear-levelling.
-/// MBBB - Make Before Break Buffer. A set of randomly allocated pages that are a shadow copy
+/// * MBBB - Make Before Break Buffer. A set of randomly allocated pages that are a shadow copy
 ///   of a page table page. If any data exists, its contents override those of a corrupted page table.
-/// FastSpace - a collection of random pages that are known to be empty. The number of pages in FastSpace
+/// * FastSpace - a collection of random pages that are known to be empty. The number of pages in FastSpace
 ///   is reduced from the absolute amount of free space available by at least a factor of FSCB_FILL_COEFFICIENT.
-/// SpaceUpdate - encrypted patches to the FastSpace table. The FastSpace table is "heavyweight", and would
+/// * SpaceUpdate - encrypted patches to the FastSpace table. The FastSpace table is "heavyweight", and would
 ///   be too expensive to update on every page allocation, so SpaceUpdate is used to patch the FastSpace table.
 ///
 /// A `Path` like the following is deconstructed as follows by the PDDB:
 ///
+/// ```Text
 ///  Dictionary
 ///    |         Key
 ///    |          |
 ///  --+- --------+---------------------
 ///  logs:matrix/alice/oct30_2021/bob.txt
+/// ```
 ///
-/// It could equally have an arbitrary name like "logs:Matrix - alice to bob Oct 30 2021";
+/// It could equally have an arbitrary name like `logs:Matrix - alice to bob Oct 30 2021`;
 /// as long as the string that identifies a Key is unique, it's stored in the database
 /// all the same. Any valid utf-8 unicode characters are acceptable.
 ///
 /// Likewise, something like this:
-/// settings:wifi/Kosagi.json
-/// Would be deconstructed into the "settings" dictionary with a key of wifi/Kosagi.json.
+/// `settings:wifi/Kosagi.json`
+/// Would be deconstructed into the "settings" dictionary with a key of `wifi/Kosagi.json`.
 ///
+/// ## Code Organization:
+/// Accurate as of Nov 2021. May be subject to charge, ymmv.
 ///
-/// Threat model:
+/// ### `frontend.rs`
+/// Defines a set of modules that plug the PDDB into applications (in particular, they
+/// attemp to provide a Rust-compatible `read`/`write`/`open` abstraction layer,
+/// torturing the notion of `Prefix`, `Path` and `File` in Rust to fit the basis/dict/key
+/// format of the PDDB).
+///
+/// This is the `lib`-facing set of operations.
+///
+/// ### `backend.rs`
+/// Defines a set of modules that implement the PDDB itself. This is the hardware-facing set
+/// of operations.
+///
+/// #### `basis.rs`
+/// The set of known `Basis` are tracked in the `BasisCache` structure. This is the "entry point"
+/// for most operations on the PDDB, and thus most externally-visible API calls will be revealed
+/// on that structure; in fact many calls on that object are just pass-through of lower level calls.
+///
+/// A `BasisCach`e consists of one or more `BasisCacheEntries`. This structure manages one or more
+/// `DictCacheEntry` within a `BasisCacheEntry`'s dictionary cache.
+///
+/// #### `dictionary.rs`
+/// The `DictCacheEntry` is defined in this file, along with the on-disk `Dictionary`
+/// storage stucture. Most of the methods on `DictCacheEntry` are concerned with managing
+/// keys contained within the dictionary cache.
+///
+/// #### `keys.rs`
+/// The `KeyCacheEntry` is defined in this file. It's a bookkeeping record for the
+/// `DictCacheEntry` structure. Keys themselves are split into metadata and data
+/// records. The `KeyDescriptor` is the on-disk format for key metadata. The key
+/// storage is either described in `KeySmallPool` for keys less than one `VPAGE_SIZE`
+/// (just shy of 4kiB), or written directly to disk as fully allocated blocks of
+/// `VPAGE_SIZE` for keys larger than one `VPAGE_SIZE` unit.
+///
+/// ## Threat model:
 /// The user is forced to divulge "all the Basis passwords" on the device, through
 /// coercion, blackmail, subpoena, customs checkpoint etc. The adversary has physical
 /// access to the device, and is able to take a static disk image; they may even have
@@ -86,7 +105,7 @@ use std::rc::Rc;
 /// a problem handled by the OS, and it is up to the user to not type secret passwords
 /// in areas that may be under camera surveillance.
 ///
-/// Auditor Notices:
+/// ## Auditor Notices:
 /// There's probably a lot of things the PDDB does wrong. Here's a list of some things
 /// to worry about:
 ///  - The device RootKeys shares one salt across all of its keys, instead of a per-key salt.
@@ -114,7 +133,7 @@ use std::rc::Rc;
 ///    entries have no such protection, which means there is a slight chance of data loss due to a checksum
 ///    collision on the free space entries.
 ///
-/// General Operation:
+/// ## General Operation:
 /// The initial Basis is known as the "System" Basis. It's a low-security framework basis
 /// onto which all other Basis overlay. The initial set of Dictionaries, along with their
 /// Key/Value pairs, are available to any and all processes.
@@ -140,7 +159,7 @@ use std::rc::Rc;
 ///  - If the client attempts to read or write to any keys that span a Basis modification,
 ///    the now-ambiguous key operation will return a `BrokenPipe` error to the caller.
 ///
-/// General flash->key structure
+/// ## General flash->key structure
 ///
 /// The basic unit of memory is a page (4k). Keys shorter than 4k will be packed into a single
 /// page, but no allocation will ever be smaller than 4k due to the erase block size of the FLASH.
@@ -201,9 +220,7 @@ use std::rc::Rc;
 /// to all 1's) in a circular buffer basis. The state of where the .FastSpace record is in the "clean" pages
 /// disclose nothing other than the fact that the system has been used.
 ///
-///
-///
-/// Basis Deniability
+/// ## Basis Deniability
 ///
 /// The existence of a Basis itself must be confidential; if we stored a list of encrypted Basis passwords
 /// somewhere, a rubber-hose attacker would simply need to count the number of encrypted entries and commence
@@ -258,7 +275,7 @@ use std::rc::Rc;
 /// re-use the names, but hopefully this adds a modicum of robustness against rainbow table attacks.
 ///
 ///
-/// Basis Unlock Procedure
+/// ## Basis Unlock Procedure
 ///
 /// Each Basis has a name and a passcode associated with it. The default Basis name is `.System`.
 /// In addition to that, a `.FastSpace` structure is unlocked along side the default Basis.
@@ -276,7 +293,7 @@ use std::rc::Rc;
 /// and then used as the AES key for the given `(name, password)` Basis.
 ///
 ///
-/// Journaling
+/// ## Journaling
 ///
 /// A major issue with the implementation is that even a small change in a data structure turns into
 /// the mutation of at least an entire sector of data, with a sector being 4k. The reason is that
@@ -320,8 +337,9 @@ use std::rc::Rc;
 ///   If a long run of 1's is detected, then a suspected corrupted page table update is flagged, and for that page the data
 ///   is pulled from the mbbb record.
 ///
-/// Precursor's Implementation-Specific Flash Memory Organization:
+/// ## Precursor's Implementation-Specific Flash Memory Organization:
 ///
+/// ```Text
 ///   offset from |
 ///   pt_phys_base|  contents  (example for total PDDB len of 0x6f8_0000 or 111 MiB)
 ///   ------------|---------------------------------------------------
@@ -339,8 +357,27 @@ use std::rc::Rc;
 ///   0x0007_B000 |  fscb start (example of 10 pages)
 ///    ...
 ///   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
+/// ```
 
 // historical note: 389 hours, 11 mins elapsed since the start of the PDDB coding, and the first attempt at a hardware test -- as evidenced by the uptime of the hardware validation unit.
+
+extern crate bitflags;
+extern crate bitfield;
+
+mod api;
+use api::*;
+mod backend;
+use backend::*;
+
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+mod tests;
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+use tests::*;
+
+use num_traits::*;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
+use core::cell::RefCell;
+use std::rc::Rc;
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -411,10 +448,11 @@ fn xmain() -> ! {
     }
     */
     /* list of test cases:
-        genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
-        delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
+        [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
+        [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
         in-place update consistency: general integrity then patch all keys with a new test pattern
         extend update consistency: general integrity then patch all keys with a longer test pattern
+        key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
         basis search: create basis A, populate with general integrity. create basis B, add test entries.
            hide basis B, confirm original A; mount basis B, confirm B overlay.
     */

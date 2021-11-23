@@ -1,21 +1,11 @@
-use crate::api::*;
-use super::*;
-
-use core::ops::{Deref, DerefMut};
-use core::mem::size_of;
-use std::convert::TryInto;
-use aes_gcm_siv::{Aes256GcmSiv, Key};
-use aes_gcm_siv::aead::NewAead;
-use std::iter::IntoIterator;
-use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::io::{Result, Error, ErrorKind};
-
-
+/// # The Organization of Basis Data
+///
+/// ## Overview
 /// In basis space, the BasisRoot is located at VPAGE #1 (VPAGE #0 is always invalid).
 /// A VPAGE is 0xFE0 (4,064) bytes long, which is equal to a PAGE of 4k minus 32 bytes of encryption+journal
 /// overhead.
 ///
-/// NB: The factors of 4,064 are: 1, 2, 4, 8, 16, 32, 127, 254, 508, 1016, 2032, 4064
+/// *NB: The factors of 4,064 are: 1, 2, 4, 8, 16, 32, 127, 254, 508, 1016, 2032, 4064*
 ///
 /// AAD associated with the BasisRoot consist of a bytewise concatenation of:
 ///   - Basis name
@@ -53,8 +43,8 @@ use std::io::{Result, Error, ErrorKind};
 /// in that dictionary with no extra bookkeeping cost once the dictionary is added.
 ///
 ///
-/// Basis Virtual Memory Layout
-///
+/// ## Basis Virtual Memory Layout
+///```Text
 /// |   Start Address        |                                           |
 /// |------------------------|-------------------------------------------|
 /// | 0x0000_0000_0000_0000  |  Invalid -- VPAGE 0 reserved for Option<> |
@@ -78,12 +68,13 @@ use std::io::{Result, Error, ErrorKind};
 /// | 0x0000_FE00_0000_0000  |  Large data pool start  (~16mm TiB)       |
 /// |                        |    - Demand-allocated, bump-pointer       |
 /// |                        |      currently no defrag                  |
+/// ```
 ///
 /// Note that each Basis has its own memory section, and you can have "many" orthogonal Basis without
 /// a collision -- the AES keyspace is 128 bits, so you have a decent chance of no collisions
 /// even with a few billion Basis concurrently existing in the filesystem.
 ///
-/// Memory Pools
+/// ## Memory Pools
 ///
 /// Key data is split into three categories of sizes: small, medium, and large; but the implementation
 /// currently only deals with small and large keys. The thresholds are subject to tuning, but
@@ -101,7 +92,7 @@ use std::io::{Result, Error, ErrorKind};
 ///
 /// Medium keys have a TBD implementation, and are currently directed to the large pool for now.
 ///
-/// The Alignment and Serialization Chronicles
+/// ## The Alignment and Serialization Chronicles
 ///
 /// We're using Repr(C) and alignment to 64-bits to create a consistent "FFI" layout; we use an unsafe cast
 /// to [u8] as our method to serialize the structure, which means we could be subject to breakage if the Rust
@@ -131,13 +122,25 @@ use std::io::{Result, Error, ErrorKind};
 /// storage structure that can persist through future versions of Rust and also other implementations in other
 /// languages.
 ///
-/// Known Repr(C) footguns:
+/// ## Known Repr(C) footguns:
 ///  - When you start laying in 64-bit types, stuff has to be 64-bit aligned, or else you'll start to get
 ///    uninitialized padding data inserted, which can leak stack data in the serialization process.
 ///  - Don't use anything that's not native to C. In particular, for primitives that we want to be "Option"
 ///    wrapped, we're using a NonZeroU64 format. The compiler knows how to turn that into a 64-bit C-friendly
 ///    structure and serialize/deserialize that into the correct Rust structure. See
 ///    https://doc.rust-lang.org/nomicon/other-reprs.html for a citation on that.
+
+use crate::api::*;
+use super::*;
+
+use core::ops::{Deref, DerefMut};
+use core::mem::size_of;
+use std::convert::TryInto;
+use aes_gcm_siv::{Aes256GcmSiv, Key};
+use aes_gcm_siv::aead::NewAead;
+use std::iter::IntoIterator;
+use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::io::{Result, Error, ErrorKind};
 
 pub(crate) const SMALL_POOL_START: u64 = 0x0000_003F_8000_0000;
 pub(crate) const SMALL_POOL_END: u64 = 0x0000_007E_FF02_0000;
@@ -243,17 +246,9 @@ impl BasisCache {
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
             basis.age = basis.age.saturating_add(1);
-            if basis.dicts.get(&String::from(name)).is_some() {
-                // quick exit if we see the dictionary is hot in the cache
+
+            if basis.ensure_dict_in_cache(hw, name) {
                 return Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"));
-            } else {
-                // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
-                // doesn't exist. Do a comprehensive search if our cache isn't complete.
-                if basis.num_dicts as usize != basis.dicts.len() {
-                    if basis.dict_deep_search(hw, name).is_some() {
-                        return Err(Error::new(ErrorKind::AlreadyExists, "Dictionary already exists"));
-                    }
-                }
             }
             basis.clean = false;
             // allocate a vpage offset for the dictionary
@@ -361,16 +356,8 @@ impl BasisCache {
     ) -> Result<usize> {
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
-            if !basis.dicts.contains_key(dict) {
-                if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
-                    if dict_record.flags.valid() {
-                        let dict_name = String::from(cstr_to_string(&dict_record.name));
-                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict_name, dcache);
-                    }
-                } else {
-                    return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
-                }
+            if !basis.ensure_dict_in_cache(hw, dict) {
+                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
             }
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
@@ -435,16 +422,8 @@ impl BasisCache {
     ) -> Result<()> {
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
-            if !basis.dicts.contains_key(dict) {
-                if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
-                    if dict_record.flags.valid() {
-                        let dict_name = String::from(cstr_to_string(&dict_record.name));
-                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict_name, dcache);
-                    }
-                } else {
-                    return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
-                }
+            if !basis.ensure_dict_in_cache(hw, dict) {
+                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
             }
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 basis.age = basis.age.saturating_add(1);
@@ -497,17 +476,9 @@ impl BasisCache {
         };
         if let Some(basis_index) = self.select_basis(basis_name) {
             let basis = &mut self.cache[basis_index];
-            if !basis.dicts.contains_key(dict) {
-                if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
-                    if dict_record.flags.valid() {
-                        let dict_name = String::from(cstr_to_string(&dict_record.name));
-                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict_name, dcache);
-                    }
-                } else {
-                    pages_needed += 1;
-                    pages_needed += reserved_pages;
-                }
+            if !basis.ensure_dict_in_cache(hw, dict) {
+                pages_needed += 1;
+                pages_needed += reserved_pages;
             }
             if let Some(dict_entry) = basis.dicts.get(dict) {
                 // see if we need to make a kcache entry
@@ -565,24 +536,7 @@ impl BasisCache {
         }
         // now actually do the update
         if let Some(basis_index) = self.select_basis(basis_name) {
-            let mut dict_found = false;
-            { // resolve the basis here, potentially mutating things
-                let basis = &mut self.cache[basis_index];
-                basis.age = basis.age.saturating_add(1);
-                basis.clean = false;
-                if !basis.dicts.contains_key(dict) {
-                    // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
-                    // doesn't exist. Do a comprehensive search if our cache isn't complete.
-                    if let Some((index, dict_record)) = basis.dict_deep_search(hw, dict) {
-                        let dict_name = String::from(cstr_to_string(&dict_record.name));
-                        let dcache = DictCacheEntry::new(dict_record, index as usize, &basis.aad);
-                        basis.dicts.insert(dict_name, dcache);
-                        dict_found = true;
-                    }
-                } else {
-                    dict_found = true;
-                }
-            }
+            let dict_found = (&mut self.cache[basis_index]).ensure_dict_in_cache(hw, dict);
             if !dict_found { // now that we're clear of the deep search, mutate the basis if we are sure it's not there
                 self.dict_add(hw, dict, basis_name).expect("couldn't add dictionary");
             }
@@ -594,6 +548,8 @@ impl BasisCache {
             }
             // refetch the basis here to avoid the re-borrow problem, now that all the potential dict cache mutations are done
             let basis = &mut self.cache[basis_index];
+            basis.age = basis.age.saturating_add(1);
+            basis.clean = false;
             // now do the sync
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 let updated_ptr = dict_entry.key_update(hw, &mut basis.v2p_map,
@@ -727,19 +683,6 @@ impl BasisCacheEntry {
         }
     }
 
-    /// allocate a pointer data in the large pool, of length `amount`. "always" succeeds because...
-    /// there's 16 million terabytes of large pool to allocate before you run out?
-    /*
-    // this function is actually implemented inside the "key_update()" code - as a large key is allocated,
-    // the pointer is bumped along within the update code. AFAIK, nobody else should be calling this, so, let's
-    // comment it out, and if it becomes necessary for some reason let's take a good hard look at assumptions.
-    // In particular, this function might become necessary if disk caching is implemented for large keys.
-    pub(crate) fn large_pool_alloc(&mut self, amount: u64) -> u64 {
-        let alloc_ptr = self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START));
-        self.large_alloc_ptr = Some(self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)) + PageAlignedVa::from(amount));
-        return alloc_ptr.as_u64()
-    }*/
-
     /// do a deep scan of all the dictionaries and keys and attempt to populate all the caches
     pub(crate) fn populate_caches(&mut self, hw: &mut PddbOs) {
         let mut try_entry = 1;
@@ -779,21 +722,7 @@ impl BasisCacheEntry {
     /// through compounded data and re-writing partias sectors, and because of this, initially,
     /// the `paranoid` erase is `unimplemented`.
     pub(crate) fn dict_delete(&mut self, hw: &mut PddbOs, name: &str, paranoid: bool) -> Result<()> {
-        let mut dict_found = false;
-        if !self.dicts.contains_key(name) {
-            log::info!("dict delete: key not in cache {}", name);
-            // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
-            // doesn't exist. Do a comprehensive search if our cache isn't complete.
-            if let Some((index, dict_record)) = self.dict_deep_search(hw, name) {
-                let dict_name = String::from(cstr_to_string(&dict_record.name));
-                let dcache = DictCacheEntry::new(dict_record, index as usize, &self.aad);
-                self.dicts.insert(dict_name, dcache);
-                dict_found = true;
-            }
-        } else {
-            dict_found = true;
-        }
-        if dict_found {
+        if self.ensure_dict_in_cache(hw, name) {
             let dcache = self.dicts.get_mut(name).expect("entry was ensured, but somehow missing");
             //log::info!("dcache {} index {}, key_count {}", name, dcache.index, dcache.key_count);
             // ensure all the keys are in RAM
@@ -850,6 +779,8 @@ impl BasisCacheEntry {
         }
     }
 
+    /// Called to compute the next free index. Normally this will get filled during a disk search for
+    /// cache entries, but it could be None if a new dict entry was allocated and no other entries were loaded.
     pub(crate) fn dict_get_free_offset(&mut self, hw: &mut PddbOs) -> u32 {
         if let Some(offset) = self.free_dict_offset.take() {
             return offset;
@@ -1088,6 +1019,39 @@ impl BasisCacheEntry {
             self.clean = true;
         }
     }
+
+    /// This function ensures a dictionary is in the cache; if not, it will load its entry.
+    pub(crate) fn ensure_dict_in_cache(&mut self, hw: &mut PddbOs, name: &str) -> bool {
+        let mut dict_found = false;
+        if !self.dicts.contains_key(name) {
+            log::info!("dict: key not in cache {}", name);
+            // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
+            // doesn't exist. Do a comprehensive search if our cache isn't complete.
+            if let Some((index, dict_record)) = self.dict_deep_search(hw, name) {
+                let dict_name = String::from(cstr_to_string(&dict_record.name));
+                let dcache = DictCacheEntry::new(dict_record, index as usize, &self.aad);
+                self.dicts.insert(dict_name, dcache);
+                dict_found = true;
+            }
+        } else {
+            dict_found = true;
+        }
+        dict_found
+    }
+
+    // allocate a pointer data in the large pool, of length `amount`. "always" succeeds because...
+    // there's 16 million terabytes of large pool to allocate before you run out?
+    /*
+    // this function is actually implemented inside the "key_update()" code - as a large key is allocated,
+    // the pointer is bumped along within the update code. AFAIK, nobody else should be calling this, so, let's
+    // comment it out, and if it becomes necessary for some reason let's take a good hard look at assumptions.
+    // In particular, this function might become necessary if disk caching is implemented for large keys.
+    pub(crate) fn large_pool_alloc(&mut self, amount: u64) -> u64 {
+        let alloc_ptr = self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START));
+        self.large_alloc_ptr = Some(self.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START)) + PageAlignedVa::from(amount));
+        return alloc_ptr.as_u64()
+    }*/
+
 }
 
 // ****

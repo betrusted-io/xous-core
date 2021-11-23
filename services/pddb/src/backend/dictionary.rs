@@ -17,93 +17,9 @@ bitfield! {
     pub valid, set_valid: 0;
 }
 
-#[derive(PartialEq, Eq)]
-pub(crate) enum FreeKeyCases {
-    LeftAdjacent,
-    RightAdjacent,
-    Within,
-    LessThan,
-    GreaterThan,
-}
-#[derive(Eq, Copy, Clone)]
-pub(crate) struct FreeKeyRange {
-    /// This index should be free
-    pub(crate) start: u32,
-    /// Additional free keys after the start one. Run = 0 means just the start key is free, and the
-    /// next one should be used. Run = 2 means {start, start+1} are free, etc.
-    pub(crate) run: u32,
-}
-impl FreeKeyRange {
-    pub(crate) fn compare_to(&self, index: u32) -> FreeKeyCases {
-        if self.start > 1 && index < self.start - 1 {
-            FreeKeyCases::LessThan
-        } else if self.start > 0 && index == self.start - 1 {
-            FreeKeyCases::LeftAdjacent
-        } else if index >= self.start && index <= self.start + self.run {
-            FreeKeyCases::Within
-        } else if index == self.start + self.run + 1 {
-            FreeKeyCases::RightAdjacent
-        } else {
-            FreeKeyCases::GreaterThan
-        }
-    }
-}
-impl Ord for FreeKeyRange {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // note the reverse order -- so we can sort as a "min-heap"
-        other.start.cmp(&self.start)
-    }
-}
-impl PartialOrd for FreeKeyRange {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for FreeKeyRange {
-    fn eq(&self, other: &Self) -> bool {
-        self.start == other.start
-    }
-}
-
-/// stashed copy of a decrypted page. The copy here must always match
-/// what's actually on disk; do not mutate it and expect it to sync with the disk.
-/// Remember to invalidate this if the data are
-/// This is stored with the journal number on top.
-/// What the four possibilities of cache vs pp mean:
-/// Some(cache) & Some(cache_pp) -> valid cache and pp
-/// None(cache) & Some(cache_pp) -> the page was allocated; but never used, or was erased (it's free for you to use it); alternately, it was corrupted
-/// Some(cache) & None(cache_pp) -> invalid, internal error
-/// None(cache) & None(cache_pp) -> the basis mapping didn't exist: we've never requested this page before.
-pub(crate) struct PlaintextCache {
-    /// a page of data, stored with the Journal rev on top
-    pub(crate) data: Option<Vec::<u8>>,
-    /// the page the cache corresponds to
-    pub(crate) tag: Option<PhysPage>,
-}
-impl PlaintextCache {
-    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, aad: &[u8],
-        req_vaddr: VirtAddr
-    ) {
-        if let Some(pp) = v2p_map.get(&req_vaddr) {
-            let mut fill_needed = false;
-            if let Some(tag) = self.tag {
-                if tag.page_number() != pp.page_number() {
-                    fill_needed = true;
-                }
-            } else if self.tag.is_none() {
-                fill_needed = true;
-            }
-            if fill_needed {
-                self.data = hw.data_decrypt_page(&cipher, &aad, pp);
-                self.tag = Some(*pp);
-            }
-        } else {
-            self.data = None;
-            self.tag = None;
-        }
-    }
-}
-/// RAM based copy of the dictionary structures on disk.
+/// RAM based copy of the dictionary structures on disk. Most of the methods on this function operate on
+/// keys within the Dictionary. Operations on the Dictionary itself originate from the containing Basis
+/// structure.
 pub(crate) struct DictCacheEntry {
     /// Use this to compute the virtual address of the dictionary's location
     /// multiply this by DICT_VSIZE to get at the virtual address. This /could/ be a
@@ -824,6 +740,10 @@ impl DictCacheEntry {
         }
     }
 }
+
+/// Derives the index of a Small Pool storage block given the key cache entry and the dictionary index.
+/// The index maps into the small_pool array, which itself maps 1:1 onto blocks inside the small pool
+/// memory space.
 pub(crate) fn small_storage_index_from_key(kcache: &KeyCacheEntry, dict_index: u32) -> Option<usize> {
     let storage_base = dict_index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START;
     let storage_end = storage_base + SMALL_POOL_STRIDE;
@@ -835,7 +755,8 @@ pub(crate) fn small_storage_index_from_key(kcache: &KeyCacheEntry, dict_index: u
     }
 }
 #[derive(Debug)]
-/// On-disk representation of the dictionary header.
+/// On-disk representation of the dictionary header. This structure is mainly for archival/unarchival
+/// purposes. To "functionalize" a stored disk entry, it needs to be deserialized into a DictionaryCacheEntry.
 #[repr(C, align(8))]
 pub(crate) struct Dictionary {
     /// Reserved for flags on the record entry
@@ -896,6 +817,94 @@ impl<'a> Default for DictKeyVpage {
     fn default() -> DictKeyVpage {
         DictKeyVpage {
             elements: [None; VPAGE_SIZE / DK_STRIDE],
+        }
+    }
+}
+
+
+#[derive(PartialEq, Eq)]
+pub(crate) enum FreeKeyCases {
+    LeftAdjacent,
+    RightAdjacent,
+    Within,
+    LessThan,
+    GreaterThan,
+}
+#[derive(Eq, Copy, Clone)]
+pub(crate) struct FreeKeyRange {
+    /// This index should be free
+    pub(crate) start: u32,
+    /// Additional free keys after the start one. Run = 0 means just the start key is free, and the
+    /// next one should be used. Run = 2 means {start, start+1} are free, etc.
+    pub(crate) run: u32,
+}
+impl FreeKeyRange {
+    pub(crate) fn compare_to(&self, index: u32) -> FreeKeyCases {
+        if self.start > 1 && index < self.start - 1 {
+            FreeKeyCases::LessThan
+        } else if self.start > 0 && index == self.start - 1 {
+            FreeKeyCases::LeftAdjacent
+        } else if index >= self.start && index <= self.start + self.run {
+            FreeKeyCases::Within
+        } else if index == self.start + self.run + 1 {
+            FreeKeyCases::RightAdjacent
+        } else {
+            FreeKeyCases::GreaterThan
+        }
+    }
+}
+impl Ord for FreeKeyRange {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // note the reverse order -- so we can sort as a "min-heap"
+        other.start.cmp(&self.start)
+    }
+}
+impl PartialOrd for FreeKeyRange {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for FreeKeyRange {
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start
+    }
+}
+
+/// stashed copy of a decrypted page. The copy here must always match
+/// what's actually on disk; do not mutate it and expect it to sync with the disk.
+/// Remember to invalidate this if the data are
+/// This is stored with the journal number on top.
+/// What the four possibilities of cache vs pp mean:
+/// Some(cache) & Some(cache_pp) -> valid cache and pp
+/// None(cache) & Some(cache_pp) -> the page was allocated; but never used, or was erased (it's free for you to use it); alternately, it was corrupted
+/// Some(cache) & None(cache_pp) -> invalid, internal error
+/// None(cache) & None(cache_pp) -> the basis mapping didn't exist: we've never requested this page before.
+pub(crate) struct PlaintextCache {
+    /// a page of data, stored with the Journal rev on top
+    pub(crate) data: Option<Vec::<u8>>,
+    /// the page the cache corresponds to
+    pub(crate) tag: Option<PhysPage>,
+}
+impl PlaintextCache {
+    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, aad: &[u8],
+        req_vaddr: VirtAddr
+    ) {
+        if let Some(pp) = v2p_map.get(&req_vaddr) {
+            let mut fill_needed = false;
+            if let Some(tag) = self.tag {
+                if tag.page_number() != pp.page_number() {
+                    fill_needed = true;
+                }
+            } else if self.tag.is_none() {
+                fill_needed = true;
+            }
+            if fill_needed {
+                self.data = hw.data_decrypt_page(&cipher, &aad, pp);
+                self.tag = Some(*pp);
+            }
+        } else {
+            self.data = None;
+            self.tag = None;
         }
     }
 }

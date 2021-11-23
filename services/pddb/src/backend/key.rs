@@ -16,8 +16,9 @@ bitfield! {
     pub unresolved, set_unresolved: 1;
 }
 
-/// On-disk representation of the Key. Note that the storage on disk is mis-aligned, so
-/// any deserialization must essentially come with a copy step to line up the record.
+/// On-disk representation of the Key. Note that the storage on disk is mis-aligned relative
+/// to Rust's expecatation of in-RAM format, so any deserialization must essentially come with
+/// a copy step to re-align the record to meet Rust's placement rules.
 #[repr(C, align(8))]
 pub(crate) struct KeyDescriptor {
     /// virtual address of the key's start
@@ -63,6 +64,11 @@ impl DerefMut for KeyDescriptor {
     }
 }
 
+/// In-RAM representation of a key. This file defines the storage for the KeyCacheEntry; most of the structure
+/// manipulations happen inside `dictionary.rs`, in part because to locate a Key in absolute memory space you need
+/// to know what Dictionary it comes from. This is a point to consider for a refactor: if we pull some info about
+/// the containing Dictionary into the key, we could associate more methods with the data structure. However, this
+/// means duplicating the dictionary index, a field that can then get out of sync.
 pub(crate) struct KeyCacheEntry {
     pub(crate) start: u64,
     pub(crate) len: u64,
