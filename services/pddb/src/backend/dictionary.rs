@@ -404,7 +404,7 @@ impl DictCacheEntry {
                         let vpage_end_offset = PageAlignedVa::from((written + offset) as u64);
                         if (vpage_end_offset.as_u64() - kcache.start) > kcache.reserved {
                             for vpage in (vpage_end_offset.as_u64()..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
-                                if let Some(pp) = v2p_map.remove(&VirtAddr::new(vpage).unwrap()) {
+                                if let Some(pp) = v2p_map.get_mut(&VirtAddr::new(vpage).unwrap()) {
                                     hw.fast_space_free(pp);
                                 }
                             }
@@ -565,7 +565,7 @@ impl DictCacheEntry {
                 kcache.flags.set_valid(false);
                 // ...but we remove the virtual pages from the page pool, effectively reclaiming the physical space.
                 for vpage in kcache.large_pool_vpages() {
-                    if let Some(pp) = v2p_map.remove(&vpage) {
+                    if let Some(pp) = v2p_map.get_mut(&vpage) {
                         if paranoid {
                             let mut noise = [0u8; PAGE_SIZE];
                             hw.trng_slice(&mut noise);

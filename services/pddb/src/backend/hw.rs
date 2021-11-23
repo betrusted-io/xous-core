@@ -326,6 +326,12 @@ impl PddbOs {
         //log::info!("pte ct: {:x?}", block);
         self.patch_pagetable(&block, phys_page_num * aes::BLOCK_SIZE as u32);
     }
+    /// erases a page table entry by overwriting it with garbage
+    pub(crate) fn pt_erase(&mut self, phys_page_num: u32) {
+        let mut eraseblock = [0u8; aes::BLOCK_SIZE];
+        self.trng_slice(&mut eraseblock);
+        self.patch_pagetable(&eraseblock, phys_page_num * aes::BLOCK_SIZE as u32);
+    }
     /// Searches the page table for an MBBB slot. This is currently an O(N) search but
     /// in practice for Precursor there are only 8 pages, so it's quite fast on average.
     /// This would want to be optimized or cached for a much larger filesystem.
@@ -371,6 +377,7 @@ impl PddbOs {
                     pp.set_page_number(((page_index * PAGE_SIZE / aes::BLOCK_SIZE) + index) as PhysAddr);
                     // the state is clean because this entry is, by definition, synchronized with the disk
                     pp.set_clean(true);
+                    pp.set_valid(true);
                     // handle conflicting journal versions here
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
                         let cipher = Aes256GcmSiv::new(Key::from_slice(key));
@@ -853,6 +860,7 @@ impl PddbOs {
                     // the log with 2x the number of operations to record MaybeUsed and then Used.
                     ppc.set_space_state(SpaceState::Used);
                     ppc.set_clean(false); // the allocated page is not clean, because it hasn't been written to disk
+                    ppc.set_valid(true); // the allocated page is now valid, so it should be flushed to disk
                     ppc.set_journal(pp.journal() + 1); // this is guaranteed not to overflow because of a check in the "if" clause above
 
                     // commit the usage to the journal
@@ -882,7 +890,7 @@ impl PddbOs {
             maybe_alloc
         }
     }
-    pub fn fast_space_free(&mut self, mut pp: PhysPage) {
+    pub fn fast_space_free(&mut self, pp: &mut PhysPage) {
         self.fast_space_ensure_next_log();
         // update the fspace cache
         pp.set_space_state(SpaceState::Dirty);
@@ -893,7 +901,7 @@ impl PddbOs {
         // commit the free'd block to the journal
         self.syskey_ensure();
         let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
-        let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), pp);
+        let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), pp.clone());
         let mut block = Block::from_mut_slice(update.deref_mut());
         log::trace!("block: {:x?}", block);
         cipher.encrypt_block(&mut block);
@@ -907,6 +915,8 @@ impl PddbOs {
             // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
             // next journal entry the next time around.
         }
+        // mark the page as invalid, so that it will be deleted on the next PT sync
+        pp.set_valid(false);
     }
     /// This is a "look before you leap" function that will potentially pause all system operations
     /// and do a deep scan for space if the required amount is not available.

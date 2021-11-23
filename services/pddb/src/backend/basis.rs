@@ -808,7 +808,7 @@ impl BasisCacheEntry {
             // wipe & de-allocate any small pages
             for index in 0..dcache.small_pool.len() {
                 let pool_vaddr = VirtAddr::new(dcache.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START + index as u64 * SMALL_CAPACITY as u64).unwrap();
-                if let Some(pp) = self.v2p_map.remove(&pool_vaddr) {
+                if let Some(pp) = self.v2p_map.get_mut(&pool_vaddr) {
                     if paranoid {
                         let mut random = [0u8; PAGE_SIZE];
                         hw.trng_slice(&mut random);
@@ -823,7 +823,7 @@ impl BasisCacheEntry {
             let key_pages = 1 + (dcache.last_disk_key_index + 1) as usize / DK_PER_VPAGE;
             for page in 0..key_pages {
                 let dk_vaddr = VirtAddr::new(dcache.index as u64 * DICT_VSIZE as u64 + page as u64 * VPAGE_SIZE as u64).unwrap();
-                if let Some(pp) = self.v2p_map.remove(&dk_vaddr) {
+                if let Some(pp) = self.v2p_map.get_mut(&dk_vaddr) {
                     log::info!("erasing dk page 0x{:x}/0x{:x}", dk_vaddr, pp.page_number() as usize * PAGE_SIZE);
                     let mut random = [0u8; PAGE_SIZE];
                     hw.trng_slice(&mut random);
@@ -919,11 +919,23 @@ impl BasisCacheEntry {
     /// Looks for dirty entries in the page table, and flushes them to disk.
     pub(crate) fn pt_sync(&mut self, hw: &mut PddbOs) {
         self.last_sync = Some(hw.timestamp_now());
+        let mut kill_list = Vec::<VirtAddr>::new();
         for (&virt, phys) in self.v2p_map.iter_mut() {
-            if !phys.clean() {
+            if !phys.valid() {
+                // erase the entry
+                log::info!("deleting pte va: {:x?} pa: {:x?}", virt, phys);
+                kill_list.push(virt);
+                hw.pt_erase(phys.page_number());
+            } else if !phys.clean() {
                 log::info!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
                 hw.pt_patch_mapping(virt, phys.page_number());
                 phys.set_clean(true);
+            }
+        }
+        // have to do this in a second phase due to interior mutability problems doing it inside the first iterator
+        for kill in kill_list {
+            if self.v2p_map.remove(&kill).is_none() {
+                log::warn!("went to remove PTE from v2p map but it wasn't there: {:x}", kill);
             }
         }
     }
