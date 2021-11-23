@@ -175,3 +175,17 @@ impl PartialEq for KeySmallPoolOrd {
         self.avail == other.avail
     }
 }
+
+/// A structure for passing around key metadata
+pub(crate) struct KeyAttributes {
+    /// actual length of data in the key
+    pub(crate) len: usize,
+    /// pre-reserved storage space for the key (growable to this bound "at no cost")
+    pub(crate) reserved: usize,
+    /// access count
+    pub(crate) age: usize,
+    /// owning dictionary
+    pub(crate) dict: String,
+    /// the specific basis from which this key's metadata was found
+    pub(crate) basis: String,
+}

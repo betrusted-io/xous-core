@@ -1,6 +1,8 @@
 use rand::Rng;
 use crate::*;
 
+const UPPER_BOUND: usize = 9000;
+
 fn gen_key(dictname: &str, keynum: usize, lower_size_bound: usize, upper_size_bound: usize) -> (String, Vec::<u8>) {
     let mut rng = rand::thread_rng();
     // we want roughly half our keys to be in the small bin, and half in the large bin
@@ -40,7 +42,7 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
 
     let num_dicts = maybe_num_dicts.unwrap_or(4);
     let num_keys = maybe_num_keys.unwrap_or(34);
-    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((1, 9000));
+    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((1, UPPER_BOUND - 4)); // 4 bytes for the CI checksum
 
     // make all the directories first
     for dictnum in 1..=num_dicts {
@@ -101,12 +103,28 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     for dict in dict_list.iter() {
         if let Ok(key_list) = basis_cache.key_list(hw, dict) {
             for key in key_list.iter() {
+                let mut patchbuf = [0u8; UPPER_BOUND];
                 // this actually does something a bit more complicated on a multi-basis system than you'd think:
                 // it will get the union of all key names, and then patch the *latest open basis* only with new data.
                 // note: if the key didn't already exist in the latest open basis, it's added, with just that patch data in it.
                 // to override this behavior, you'd want to specify a _specific_ basis, but for testing purposes, we only have one
                 // so we're doing this way that would lead to surprising results if it were copied as template code elsewhere.
                 basis_cache.key_update(hw, dict, key, patch_data.as_bytes(), Some(patch_offset), None, None, false).unwrap();
+
+                // now fix the CI checksum. structured as two separate patches. not because it's efficient,
+                // but because it exercises the code harder.
+                let readlen = basis_cache.key_read(hw, dict, key, &mut patchbuf, Some(0), None).unwrap();
+                // now extend and compute the checksum
+                let mut checkdata = Vec::<u8>::new();
+                for &b in &patchbuf[..readlen-4] {
+                    checkdata.push(b);
+                }
+                log::trace!("checkdata len: {}", checkdata.len());
+                while checkdata.len() % 4 != 0 {
+                    checkdata.push(0);
+                }
+                let checksum = murmur3_32(&checkdata, 0);
+                basis_cache.key_update(hw, dict, key, &checksum.to_le_bytes(), Some(readlen-4), None, None, false).unwrap();
             }
         }
 

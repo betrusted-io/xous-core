@@ -163,6 +163,7 @@ def main():
                 print("Basis {}".format(name))
                 v2p_table = tables[name][0]
                 p2v_table = tables[name][1]
+                # v2p_table[0xfe0fe0] = 0x1200* 0x100
 
                 basis_data = bytearray()
                 pp_start = v2p_table[VPAGE_SIZE]
@@ -207,6 +208,7 @@ def main():
                 except ValueError:
                     print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
 
+PRINTED_FULL = False
 class KeyDescriptor:
     MAX_NAME_LEN = 95
     def __init__(self, record, v2p, disk, key, name):
@@ -271,6 +273,7 @@ class KeyDescriptor:
 
     def as_str(self, indent=''):
         PRINT_LEN = 64
+        global PRINTED_FULL
         desc = ''
         desc += indent + 'Start: 0x{:x}\n'.format(self.start)
         desc += indent + 'Len:   {}/0x{:x}\n'.format(self.len, self.reserved)
@@ -283,12 +286,17 @@ class KeyDescriptor:
         desc += ' | Age: {}'.format(self.age)
         desc += ' | CI OK: {}'.format(self.ci_ok)
         desc += '\n'
-        if len(self.data) < 64:
+        if len(self.data) < PRINT_LEN:
             print_len = len(self.data)
             extra = ''
         else:
-            print_len = 64
-            extra = '...'
+            if (PRINTED_FULL == False) and (self.ci_ok == False):
+                print_len = len(self.data)
+                extra = ''
+                PRINTED_FULL = True
+            else:
+                print_len = PRINT_LEN
+                extra = '...'
         desc += indent + 'Data (hex): {}{}\n'.format(self.data[:print_len].hex(), extra)
         desc += indent + 'Data (txt): {}{}'.format(make_printable(self.data[:print_len].decode('utf-8', errors='ignore')), extra) + '\n'
         return (desc)
@@ -347,7 +355,7 @@ class BasisDicts:
                                 keys_found += 1
 
                         except ValueError:
-                            print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr), pp_start)
+                            print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr, pp_start))
                         keys_tried += 1
                     except KeyError:
                         # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
@@ -504,9 +512,15 @@ class Pte:
 def find_mbbb(mbbb):
     global MBBB_PAGES
     pages = [mbbb[i:i+PAGE_SIZE] for i in range(0, MBBB_PAGES * PAGE_SIZE, PAGE_SIZE)]
+    candidates = []
     for page in pages:
         if bytearray(page[:16]) != bytearray([0xff] * 16):
-            return page
+            candidates.append(page)
+
+    if len(candidates) > 1:
+        print("More than one MBBB found, this is an error!")
+    else:
+        return candidates[0]
     return None
 
 def decode_pagetable(img, entries, keys, mbbb):
@@ -577,7 +591,7 @@ class PhysPage:
         return (self.pp >> 24) & 0xF
 
     def as_str(self):
-        return 'a_{:05x} | c_{} | v_{} | ss_{} | j_{:02}'.format(self.page_number(), self.clean(), self.valid(), self.space_state(), self.journal())
+        return 'pp_{:05x} | c_{} | v_{} | ss_{} | j_{:02}'.format(self.page_number(), self.clean(), self.valid(), self.space_state(), self.journal())
 
 class Fscb:
     def __init__(self, i_bytes):

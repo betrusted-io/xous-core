@@ -368,39 +368,81 @@ impl BasisCache {
                         // for now, the rule is, if we have a small key, we also have its data in cache.
                         if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
                             let mut bytes_read = 0;
-                            for (&src, dst) in cache_data.data[offset.unwrap_or(0)..].iter().zip(data.iter_mut()) {
+                            if offset.unwrap_or(0) as u64 > kcache.len {
+                                return Err(Error::new(ErrorKind::UnexpectedEof, "offest requested is beyond the key length"));
+                            }
+                            for (&src, dst) in cache_data.data[offset.unwrap_or(0)..kcache.len as usize].iter().zip(data.iter_mut()) {
                                 *dst = src;
                                 bytes_read += 1;
                             }
                             if bytes_read != data.len() {
-                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, bytes_read, data.len());
+                                log::debug!("Key shorter than read buffer {}:{} ({}/{})", dict, key, bytes_read, data.len());
                             }
                             return Ok(bytes_read)
                         } else {
                             panic!("Key allocated to small area but its cache data was not of the small type");
                         }
                     } else {
+                        if offset.unwrap_or(0) as u64 > kcache.len {
+                            return Err(Error::new(ErrorKind::UnexpectedEof, "offest requested is beyond the key length"));
+                        }
+                        if data.len() == 0 { // mostly because i don't want to have to think about this case in the later logic.
+                            return Ok(0)
+                        }
                         // large pool fetch
                         let mut cur_offset = offset.unwrap_or(0) as u64;
-                        let mut first_iter = true;
-                        while cur_offset < data.len() as u64 {
+                        let mut blocks_read = 0;
+                        loop {
                             let start_vpage_addr = ((kcache.start + cur_offset) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+                            // handle the case of terminating the last block read nicely:
+                            // we can either end because we hit the end of the key data (so the data readback buffer is too large)
+                            let key_endstop = if (kcache.len - cur_offset) < VPAGE_SIZE as u64 {
+                                (kcache.len - cur_offset) as usize + size_of::<JournalType>()
+                            } else {
+                                VPAGE_SIZE + size_of::<JournalType>()
+                            };
+                            // or we can hit the end because we ran out of datareadback buffer
+                            let data_endstop = if (data.len() as u64 - cur_offset) < VPAGE_SIZE as u64 {
+                                (data.len() as u64 - cur_offset) as usize + size_of::<JournalType>()
+                            } else {
+                                VPAGE_SIZE + size_of::<JournalType>()
+                            };
+                            // of the two possible end criteria, pick the nearest one
+                            let endstop = if key_endstop < data_endstop {
+                                key_endstop
+                            } else {
+                                data_endstop
+                            };
+                            log::trace!("reading offset {}/{}:{}",  cur_offset, endstop, kcache.len);
+                            let mut read_offset = (cur_offset % VPAGE_SIZE as u64) as usize;
                             if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
                                 let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
-                                if !first_iter {
-                                    assert!((cur_offset as usize % VPAGE_SIZE) == 0, "algorithm error in handling offset data");
+                                if blocks_read != 0 {
+                                    assert!(read_offset == 0, "algorithm error in handling offset data");
                                 }
-                                // note: cur_offset % VPAGE_SIZE handles mis-aligned starts; cur_offset will increment until start + cur_offset is
-                                // a multiple of a VPAGE_SIZE, so on later iterations, cur_offset % VPAGE_SIZE should be equal to 0.
                                 for (&src, dst) in
-                                pt_data[size_of::<JournalType>() + cur_offset as usize % VPAGE_SIZE..].iter().zip(data.iter_mut()) {
+                                pt_data[
+                                    size_of::<JournalType>() // always this fixed offset per block
+                                    + read_offset // this should be 0 after the first block
+                                    ..endstop
+                                ].iter().zip(data[cur_offset as usize..].iter_mut()) {
                                     *dst = src;
                                     cur_offset += 1;
+                                    read_offset += 1;
                                 }
-                                first_iter = false;
+                                blocks_read += 1;
                             } else {
                                 log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, cur_offset, data.len());
                                 return Ok(cur_offset as usize)
+                            }
+                            // cur_offset won't hit (start + len) if we're hitting an endstop, so the loop won't exit.
+                            // if we hit an endstop, we should exit the read loop.
+                            if endstop != VPAGE_SIZE + size_of::<JournalType>() {
+                                break;
+                            }
+                            // break if we've hit or exceeded our endstop
+                            if read_offset >= endstop {
+                                break;
                             }
                         }
                         return Ok(cur_offset as usize)
@@ -577,6 +619,31 @@ impl BasisCache {
             }
 
             Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+        }
+    }
+
+    pub(crate) fn key_attributes(&mut self, hw: &mut PddbOs, dict: &str, key: &str, basis_name: Option<&str>) -> Result<KeyAttributes> {
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let basis = &mut self.cache[basis_index];
+            if !basis.ensure_dict_in_cache(hw, dict) {
+                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+            } else {
+                let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
+                if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
+                    let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                    Ok(KeyAttributes {
+                        len: kcache.len as usize,
+                        reserved: kcache.reserved as usize,
+                        age: kcache.age as usize,
+                        dict: dict.to_string(),
+                        basis: (&basis.name).to_string(),
+                    })
+                } else {
+                    return Err(Error::new(ErrorKind::NotFound, "key not found"));
+                }
+            }
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
         }
@@ -892,7 +959,12 @@ impl BasisCacheEntry {
 
                 // this is the virtual page within the dictionary region that we're currently serializing
                 let mut vpage_num = 0;
+                let mut loopcheck= 0;
                 loop {
+                    loopcheck += 1;
+                    if loopcheck == 256 {
+                        log::warn!("potential infinite loop detected sync dict {}", name);
+                    }
                     // 1. resolve the virtual address to a target page
                     let cur_vpage = VirtAddr::new(dict_offset.get() + (vpage_num as u64 * VPAGE_SIZE as u64)).unwrap();
                     let pp = self.v2p_map.entry(cur_vpage).or_insert_with(||
@@ -919,9 +991,9 @@ impl BasisCacheEntry {
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
                     for (key_name, key) in dict.keys.iter_mut() {
                         if !key.clean {
-                            log::info!("merging in key {}", key_name);
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
+                                log::info!("merging in key {}", key_name);
                                 // key is within the current page, add it to the target list
                                 let mut dk_entry = DictKeyEntry::default();
                                 let mut kn = [0u8; KEY_NAME_LEN];
@@ -941,6 +1013,8 @@ impl BasisCacheEntry {
                                 }
                                 dk_vpage.elements[key.descriptor_index.get() as usize % DK_PER_VPAGE] = Some(dk_entry);
                                 key.clean = true;
+                            } else {
+                                log::debug!("proposed key fell outside of our vpage: {} vpage{:x}/vaddr{:x}", key_name, cur_vpage.get(), key.descriptor_vaddr(dict_offset));
                             }
                         }
                     }
@@ -979,6 +1053,7 @@ impl BasisCacheEntry {
                         break;
                     }
                 }
+                log::info!("done syncing dict");
                 dict.clean = true;
             }
             Ok(())

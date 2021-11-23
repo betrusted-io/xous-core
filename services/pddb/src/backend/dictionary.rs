@@ -336,13 +336,27 @@ impl DictCacheEntry {
                 } else {
                     kcache.age = kcache.age.saturating_add(1);
                     kcache.clean = false;
+                    if data.len() == 4 {
+                        use std::convert::TryInto;
+                        log::info!("patching checksum: {:x} at offset {}", u32::from_le_bytes(data.try_into().unwrap()), offset);
+                    }
                     // 1. handle unaligned start offsets
                     let mut written: usize = 0;
-                    if ((kcache.start + offset as u64) % VPAGE_SIZE as u64) != 0 {
+                    if ((kcache.start + offset as u64 + written as u64) % VPAGE_SIZE as u64) != 0 {
                         let start_vpage_addr = ((kcache.start + offset as u64) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
                         let pp = v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()).expect("large key data allocation missing");
-                        let mut pt_data = hw.data_decrypt_page(&cipher, &self.aad, pp).expect("Decryption auth error");
-                        for (&src, dst) in data[written..].iter().zip(pt_data[size_of::<JournalType>() + offset..].iter_mut()) {
+                        let mut pt_data = match hw.data_decrypt_page(&cipher, &self.aad, pp) {
+                            Some(data) => data,
+                            None => {
+                                // perhaps we could just "zero out" previously data, but for now, let's make this undefined behavior
+                                log::warn!("Attempt to patch data outside of the previously initialized length. This is an error.");
+                                return Err(Error::new(ErrorKind::UnexpectedEof, "patching outside of previously written data"));
+                            }
+                        };
+                        if offset > 0 {
+                            log::info!("patching offset {}, total length {}, data length {}", offset % VPAGE_SIZE, kcache.len, data.len());
+                        }
+                        for (&src, dst) in data[written..].iter().zip(pt_data[size_of::<JournalType>() + (offset % VPAGE_SIZE)..].iter_mut()) {
                             *dst = src;
                             written += 1;
                         }
