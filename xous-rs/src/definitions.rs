@@ -27,11 +27,7 @@ pub const LOADER_FONT_LEN: u32 = 0x0045_0000; // length of font region only
 pub const LOADER_TOTAL_LEN: u32 = LOADER_CODE_LEN + LOADER_FONT_LEN; // code + font
 
 pub const KERNEL_LOC: u32 = 0x0098_0000; // kernel start
-pub const KERNEL_LEN: u32 = 0x0038_0000; // max kernel length
-
-pub const PDDB_LOC: u32 = 0x00D0_0000; // PDDB start
-pub const PDDB_LEN: u32 = 0x0530_0000; // this reserves space for testing structures
-                                       // pub const PDDB_LEN:        u32 = 0x0728_0000; // length without testing structure
+pub const KERNEL_LEN: u32 = 0x0068_0000; // max kernel length
 
 pub const EC_REGION_LOC: u32 = 0x07F8_0000; // EC update staging area
 pub const EC_WF200_PKG_LOC: u32 = 0x07F8_0000;
@@ -39,6 +35,9 @@ pub const EC_WF200_PKG_LEN: u32 = 0x0004_E000;
 pub const EC_FW_PKG_LOC: u32 = 0x07FC_E000;
 pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
 pub const EC_REGION_LEN: u32 = 0x0008_0000;
+
+pub const PDDB_LOC: u32 = 0x0100_0000; // PDDB start
+pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC;
 
 pub mod exceptions;
 pub use exceptions::*;

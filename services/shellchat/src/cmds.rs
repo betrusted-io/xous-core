@@ -91,7 +91,7 @@ mod backlight; use backlight::*;
 mod accel;    use accel::*;
 mod sha;      use sha::*;
 mod ecup;     use ecup::*;
-mod aes;      use aes::*;
+mod aes_cmd;  use aes_cmd::*;
 mod trng_cmd; use trng_cmd::*;
 mod engine;   use engine::*;
 mod console;  use console::*;

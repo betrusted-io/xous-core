@@ -2,9 +2,10 @@ use crate::println;
 
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 
-const VERSION_STR: &'static str = "Xous OS Loader v0.9.1\n\r";
+const VERSION_STR: &'static str = "Xous OS Loader v0.9.2\n\r";
 // v0.9.0 -- initial version
 // v0.9.1 -- booting with hw acceleration, and "simplest signature" check on the entire xous.img blob
+// v0.9.2 -- add version and length check between header and signed area
 
 pub const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
 pub const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;
@@ -339,13 +340,28 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
 
         println!("Public key bytes: {:x?}", pubkey.as_bytes());
 
-        if sig.version != 1 {
-            println!("Warning: mismatch on signature record version numbering. Ignoring and moving on...")
-        }
         let signed_len = sig.signed_len;
-        let image: &[u8] = unsafe{core::slice::from_raw_parts((xous_img_offset as usize + SIGBLOCK_SIZE) as *const u8, signed_len as usize)};
-        let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
+        let image: &[u8] = unsafe{core::slice::from_raw_parts(
+            (xous_img_offset as usize + SIGBLOCK_SIZE) as *const u8,
+            signed_len as usize)};
 
+        // extract the version and length from the signed region
+        use core::convert::TryInto;
+        let protected_version = u32::from_le_bytes(image[signed_len as usize - 8 .. signed_len as usize - 4].try_into().unwrap());
+        let protected_len = u32::from_le_bytes(image[signed_len as usize - 4 ..].try_into().unwrap());
+        // check that the signed versions match the version reported in the header
+        if sig.version != 1 || (sig.version != protected_version) {
+            gfx.msg("Check fail: mismatch on signature record version numbering.\n\r", &mut cursor);
+            println!("Check fail: mismatch on signature record version numbering.\n\r");
+            die();
+        }
+        if protected_len != signed_len - 4 {
+            gfx.msg("Check fail: mismatch on header length vs protected length.\n\r", &mut cursor);
+            println!("Check fail: mismatch on header length vs protected length.\n\r");
+            die();
+        }
+
+        let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
         use ed25519_dalek::Verifier;
         if pubkey.verify(image, &ed25519_signature).is_ok() {
             gfx.msg("Signature check passed\n\r", &mut cursor);
@@ -367,25 +383,7 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
                     // we're out of keys, display a message and try to power down
                     gfx.msg("Signature check failed, powering down\n\r", &mut cursor);
                     println!("Signature check failed");
-                    let ticktimer = CSR::new(utra::ticktimer::HW_TICKTIMER_BASE as *mut u32);
-                    let mut power = CSR::new(utra::power::HW_POWER_BASE as *mut u32);
-                    let mut com = CSR::new(utra::com::HW_COM_BASE as *mut u32);
-                    let mut start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
-                    loop {
-                        // every 15 seconds, attempt to send a power down command
-                        // any attempt to re-flash the system must halt the CPU before we time-out to this point!
-                        if ticktimer.rf(utra::ticktimer::TIME0_TIME) - start > 15_000 {
-                            println!("Powering down...");
-                            power.rmwf(utra::power::POWER_STATE, 0);
-                            power.rmwf(utra::power::POWER_SELF, 0);
-
-                            // ship mode is the safest mode -- suitable for long-term storage (~years)
-                            com.wfo(utra::com::TX_TX, com_rs::ComState::POWER_SHIPMODE.verb as u32);
-                            while com.rf(utra::com::STATUS_TIP) == 1 {}
-                            let _ = com.rf(utra::com::RX_RX); // discard the RX result
-                            start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
-                        }
-                    }
+                    die();
                 }
             }
         }
@@ -415,4 +413,26 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
     // into other areas because of this! (but I think it's OK because we just mess around with public keys here)
 
     true
+}
+
+fn die() {
+    let ticktimer = CSR::new(utra::ticktimer::HW_TICKTIMER_BASE as *mut u32);
+    let mut power = CSR::new(utra::power::HW_POWER_BASE as *mut u32);
+    let mut com = CSR::new(utra::com::HW_COM_BASE as *mut u32);
+    let mut start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
+    loop {
+        // every 15 seconds, attempt to send a power down command
+        // any attempt to re-flash the system must halt the CPU before we time-out to this point!
+        if ticktimer.rf(utra::ticktimer::TIME0_TIME) - start > 15_000 {
+            println!("Powering down...");
+            power.rmwf(utra::power::POWER_STATE, 0);
+            power.rmwf(utra::power::POWER_SELF, 0);
+
+            // ship mode is the safest mode -- suitable for long-term storage (~years)
+            com.wfo(utra::com::TX_TX, com_rs::ComState::POWER_SHIPMODE.verb as u32);
+            while com.rf(utra::com::STATUS_TIP) == 1 {}
+            let _ = com.rf(utra::com::RX_RX); // discard the RX result
+            start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
+        }
+    }
 }

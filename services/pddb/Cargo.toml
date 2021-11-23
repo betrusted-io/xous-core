@@ -6,7 +6,9 @@ edition = "2018"
 description = "Plausibly Deniable Database"
 
 [dependencies]
+bitflags = {version = "1"}
 xous = { path = "../../xous-rs" }
+xous-ipc = { path = "../../xous-ipc" }
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
@@ -14,10 +16,29 @@ log = "0.4"
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 susres = {path = "../susres"}
-rkyv = "0.4.3"
+rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
+trng = {path = "../trng"}
+spinor = {path = "../spinor"}
+aes = {path="../aes"}
+rand_core = "0.5"
+root-keys = {path="../root-keys"}
+cipher = "0.3"
+bitfield = "0.13.2"
+aes-gcm-siv = "0.10.3"
+llio = {path="../llio"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
+[target.'cfg(any(windows,unix))'.dependencies]
+rand = "0.8.4"
+
 [features]
-default = []
+# when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
+# 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
+u64_pa = []
+# selecting mbbb employs a "make before break" update on the page table. This minimizes risk of corruption of
+# the page table when being updated in the case of a power loss, in exchange for more than doubling the time it
+# takes to update the page table.
+mbbb = []
+default = ["mbbb"]

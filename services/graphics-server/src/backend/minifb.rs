@@ -271,7 +271,7 @@ impl minifb::InputCallback for XousKeyboardHandler {
             return;
         }
 
-        log::info!("GFX|hosted: sending key {:?}", key);
+        log::debug!("GFX|hosted: sending key {:?}", key);
         let c = self.decode_key(key);
         if c != '\u{0000}' {
             self.kbd.hostmode_inject_key(c);

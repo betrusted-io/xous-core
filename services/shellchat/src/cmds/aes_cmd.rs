@@ -103,7 +103,7 @@ macro_rules! block_cipher_test {
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 
-use aes_xous::*;
+use aes::*;
 use cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher};
 
 use num_traits::*;
@@ -179,14 +179,14 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
                 for _ in 0..TEST_ITERS {
                     if hw_mode {
-                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                        for mut chunk in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE) {
                             let mut block = GenericArray::clone_from_slice(&mut chunk);
                             cipher_hw.encrypt_block(&mut block);
                             for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
                                 *dst = src;
                             }
                         }
-                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                        for mut chunk in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE) {
                             let mut block = GenericArray::clone_from_slice(&mut chunk);
                             cipher_hw.decrypt_block(&mut block);
                             for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
@@ -194,14 +194,14 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                             }
                         }
                     } else {
-                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                        for mut chunk in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE) {
                             let mut block = GenericArray::clone_from_slice(&mut chunk);
                             cipher_sw.encrypt_block(&mut block);
                             for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
                                 *dst = src;
                             }
                         }
-                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                        for mut chunk in dataset_op.chunks_exact_mut(aes::BLOCK_SIZE) {
                             let mut block = GenericArray::clone_from_slice(&mut chunk);
                             cipher_sw.decrypt_block(&mut block);
                             for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
@@ -293,7 +293,7 @@ impl<'a> ShellCmdApi<'a> for Aes {
                     xous::send_message(self.benchmark_cid,
                         xous::Message::new_scalar(BenchOp::StartAesHw.to_usize().unwrap(), 0, 0, 0, 0)
                     ).unwrap();
-                    write!(ret, "Starting Aes hardware benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes_xous::BLOCK_SIZE).unwrap();
+                    write!(ret, "Starting Aes hardware benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes::BLOCK_SIZE).unwrap();
                 }
                 "swbench" => {
                     let start = env.ticktimer.elapsed_ms();
@@ -301,7 +301,7 @@ impl<'a> ShellCmdApi<'a> for Aes {
                     xous::send_message(self.benchmark_cid,
                         xous::Message::new_scalar(BenchOp::StartAesSw.to_usize().unwrap(), 0, 0, 0, 0)
                     ).unwrap();
-                    write!(ret, "Starting Aes software benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes_xous::BLOCK_SIZE).unwrap();
+                    write!(ret, "Starting Aes software benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes::BLOCK_SIZE).unwrap();
                 }
                 "susres" => {
                     let start = env.ticktimer.elapsed_ms();
@@ -331,7 +331,7 @@ impl<'a> ShellCmdApi<'a> for Aes {
 
         xous::msg_scalar_unpack!(msg, pass, hw_mode, keybits, _, {
             let end = env.ticktimer.elapsed_ms();
-            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / (TEST_ITERS as f64 * (TEST_MAX_LEN / aes_xous::BLOCK_SIZE) as f64);
+            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / (TEST_ITERS as f64 * (TEST_MAX_LEN / aes::BLOCK_SIZE) as f64);
             let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
             if pass != 0 {
                 write!(ret, "[{}] passed: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();

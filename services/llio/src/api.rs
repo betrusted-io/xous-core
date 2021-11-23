@@ -76,11 +76,13 @@ pub(crate) enum I2cCallback {
 // and create a "public" version for return values via callbacks. But for now, it's pretty
 // convenient to reach into the state of the I2C machine to debug problems in the callbacks.
 pub (crate) const I2C_MAX_LEN: usize = 33; // note: due to a regression in Rust 1.56, we can't use the I2C_MAX_LEN symbol in the structure below. So you must manually update that if you change it here.
+// pending https://github.com/rust-lang/rust/issues/90195
 #[derive(Debug, Copy, Clone, Archive, Serialize, Deserialize)]
 pub struct I2cTransaction {
     pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
     // NOTE: the number 33 that appears twice below mirrors I2C_MAX_LEN; due to a regression in Rust 1.56 we can't use constants in array types
+    // pending https://github.com/rust-lang/rust/issues/90195
     pub txbuf: Option<[u8; 33]>, // long enough for a 256-byte operation + 2 bytes of "register address"
     pub txlen: u32,
     pub rxbuf: Option<[u8; 33]>,

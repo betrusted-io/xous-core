@@ -1,6 +1,6 @@
 [package]
-name = "aes-xous"
-version = "0.1.0"
+name = "aes"
+version = "0.7.5"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "AES library for Xous"
@@ -13,7 +13,7 @@ cipher = "0.3"
 ctr = { version = "0.7", optional = true }
 opaque-debug = "0.3"
 hex-literal = "0.2"
-zeroize = "1.4.1"
+zeroize = "1"
 
 [features]
 compact = [] # Reduce code size at the cost of slower performance

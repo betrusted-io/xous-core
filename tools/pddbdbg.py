@@ -1,0 +1,689 @@
+#! /usr/bin/env python3
+import argparse
+import sys
+
+from Crypto.Cipher import AES
+from rfc8452 import AES_GCM_SIV
+
+import binascii
+import hashlib
+
+SYSTEM_BASIS = '.System'
+PAGE_SIZE = 4096
+VPAGE_SIZE = 4064
+MBBB_PAGES = 10
+
+# build a table mapping all non-printable characters to None
+NOPRINT_TRANS_TABLE = {
+    i: None for i in range(0, sys.maxunicode + 1) if not chr(i).isprintable()
+}
+
+def make_printable(s):
+    global NOPRINT_TRANS_TABLE
+    """Replace non-printable characters in a string."""
+
+    # the translate method on str removes characters
+    # that map to None from the string
+    return s.translate(NOPRINT_TRANS_TABLE)
+
+# from https://github.com/wc-duck/pymmh3/blob/master/pymmh3.py
+def xrange( a, b, c ):
+    return range( a, b, c )
+def xencode(x):
+    if isinstance(x, bytes) or isinstance(x, bytearray):
+        return x
+    else:
+        return x.encode()
+
+def mm3_hash( key, seed = 0x0 ):
+    ''' Implements 32bit murmur3 hash. '''
+
+    key = bytearray( xencode(key) )
+
+    def fmix( h ):
+        h ^= h >> 16
+        h  = ( h * 0x85ebca6b ) & 0xFFFFFFFF
+        h ^= h >> 13
+        h  = ( h * 0xc2b2ae35 ) & 0xFFFFFFFF
+        h ^= h >> 16
+        return h
+
+    length = len( key )
+    nblocks = int( length / 4 )
+
+    h1 = seed
+
+    c1 = 0xcc9e2d51
+    c2 = 0x1b873593
+
+    # body
+    for block_start in xrange( 0, nblocks * 4, 4 ):
+        # ??? big endian?
+        k1 = key[ block_start + 3 ] << 24 | \
+             key[ block_start + 2 ] << 16 | \
+             key[ block_start + 1 ] <<  8 | \
+             key[ block_start + 0 ]
+
+        k1 = ( c1 * k1 ) & 0xFFFFFFFF
+        k1 = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
+        k1 = ( c2 * k1 ) & 0xFFFFFFFF
+
+        h1 ^= k1
+        h1  = ( h1 << 13 | h1 >> 19 ) & 0xFFFFFFFF # inlined ROTL32
+        h1  = ( h1 * 5 + 0xe6546b64 ) & 0xFFFFFFFF
+
+    # tail
+    tail_index = nblocks * 4
+    k1 = 0
+    tail_size = length & 3
+
+    if tail_size >= 3:
+        k1 ^= key[ tail_index + 2 ] << 16
+    if tail_size >= 2:
+        k1 ^= key[ tail_index + 1 ] << 8
+    if tail_size >= 1:
+        k1 ^= key[ tail_index + 0 ]
+
+    if tail_size > 0:
+        k1  = ( k1 * c1 ) & 0xFFFFFFFF
+        k1  = ( k1 << 15 | k1 >> 17 ) & 0xFFFFFFFF # inlined ROTL32
+        k1  = ( k1 * c2 ) & 0xFFFFFFFF
+        h1 ^= k1
+
+    #finalization
+    return fmix( h1 ^ length )
+
+    # weird, this code breaks things compared to the reference Rust implementation
+    unsigned_val = fmix( h1 ^ length )
+    if unsigned_val & 0x80000000 == 0:
+        return unsigned_val
+    else:
+        return -( (unsigned_val ^ 0xFFFFFFFF) + 1 )
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Debug PDDB Images")
+    parser.add_argument(
+        "--name", required=False, help="pddb disk image root name", type=str, nargs='?', metavar=('name'), const='./pddb'
+    )
+    args = parser.parse_args()
+
+    if args.name == None:
+        keyfile = './tools/pddb-images/pddb.key'
+        imagefile = './tools/pddb-images/pddb.bin'
+    else:
+        keyfile = './tools/pddb-images/{}.key'.format(args.name)
+        imagefile = './tools/pddb-images/{}.bin'.format(args.name)
+
+    keys = {}
+    with open(keyfile, 'rb') as key_f:
+        raw_key = key_f.read()
+        num_keys = int.from_bytes(raw_key[:4], 'little')
+        for i in range(num_keys):
+            name_all = raw_key[4 + i*96 : 4 + i*96 + 64]
+            name_bytes = bytearray(b'')
+            for b in name_all:
+                if b != 0:
+                    name_bytes.append(b)
+                else:
+                    break
+            name = name_bytes.decode('utf8', errors='ignore')
+            key = raw_key[4 + i*96 + 64 : 4 + i*96 + 96]
+            keys[name] = key
+
+    print("Found basis keys:")
+    print(keys)
+
+    global MBBB_PAGES
+    FSCB_PAGES = 16
+    KEY_PAGES = 1
+    global PAGE_SIZE
+    global VPAGE_SIZE
+    MAX_DICTS = 16384
+
+    with open(imagefile, 'rb') as img_f:
+        raw_img = img_f.read()
+        pddb_len = len(raw_img)
+        pddb_size_pages = pddb_len // PAGE_SIZE
+
+        mbbb_offset = pddb_size_pages * Pte.PTE_LEN + PAGE_SIZE * KEY_PAGES
+        img_index = 0
+        tables = decode_pagetable(raw_img, pddb_size_pages, keys, raw_img[mbbb_offset:mbbb_offset + MBBB_PAGES * PAGE_SIZE])
+        img_index += pddb_size_pages * Pte.PTE_LEN
+        rawkeys = raw_img[img_index : img_index + PAGE_SIZE * KEY_PAGES]
+        img_index += PAGE_SIZE * KEY_PAGES
+        mbbb = raw_img[img_index : img_index + PAGE_SIZE * MBBB_PAGES]
+        img_index += PAGE_SIZE * MBBB_PAGES
+        fscb = decode_fscb(raw_img[img_index: img_index + PAGE_SIZE * FSCB_PAGES], keys)
+        img_index += PAGE_SIZE * FSCB_PAGES
+        data = raw_img[img_index:]
+
+        for name, key in keys.items():
+            if name in tables:
+                print("Basis {}".format(name))
+                v2p_table = tables[name][0]
+                p2v_table = tables[name][1]
+
+                basis_data = bytearray()
+                pp_start = v2p_table[VPAGE_SIZE]
+                # print("pp_start: {}, vp: {}".format(pp_start, vp))
+                pp_data = data[pp_start:pp_start + PAGE_SIZE]
+                try:
+                    cipher = AES_GCM_SIV(key, pp_data[:12])
+                    pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                    basis_data.extend(bytearray(pt_data))
+                    print("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
+                    # print([hex(x) for x in basis_data[:256]])
+                    basis = Basis(basis_data)
+                    print(basis.as_str())
+
+                    basis_dicts = {}
+                    dicts_found = 0
+                    dict_index = 0
+                    while dict_index < MAX_DICTS and dicts_found < basis.num_dicts:
+                        bdict = BasisDicts(dict_index, v2p_table, data, key, name)
+                        if bdict.valid:
+                            basis_dicts[bdict.name] = bdict
+                            dicts_found += 1
+                        dict_index += 1
+                    if dicts_found != basis.num_dicts:
+                        print("Expected {} dictionaries, only found {}; searched {}".format(basis.num_dicts, dicts_found, dict_index))
+                        found_all_dicts = False
+                    else:
+                        found_all_dicts = True
+
+                    print(" Dictionaries: ")
+                    for bdict in basis_dicts.values():
+                        print(bdict.as_str())
+
+                    print("CI checks:")
+                    for bdict in basis_dicts.values():
+                        bdict.ci_check()
+                    if found_all_dicts:
+                        print("All dicts were found.")
+                    else:
+                        print("Missing dictionaries, something is wrong.")
+
+                except ValueError:
+                    print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
+
+class KeyDescriptor:
+    MAX_NAME_LEN = 95
+    def __init__(self, record, v2p, disk, key, name):
+        # print(record.hex())
+        i = 0
+        self.start = int.from_bytes(record[i:i+8], 'little')
+        i += 8
+        self.len = int.from_bytes(record[i:i+8], 'little')
+        i += 8
+        self.reserved = int.from_bytes(record[i:i+8], 'little')
+        i += 8
+        self.flags_code = int.from_bytes(record[i:i+4], 'little')
+        i += 4
+        self.age = int.from_bytes(record[i:i+4], 'little')
+        i += 4
+        self.name = record[i:i+KeyDescriptor.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+        if self.flags_code & 1 != 0:
+            self.valid = True
+        else:
+            self.valid = False
+        if self.flags_code & 2 != 0:
+            self.unresolved = True
+        else:
+            self.unresolved = False
+        if self.valid:
+            page_addr = self.start
+            self.data = bytearray()
+            remaining = self.len
+            read_start = self.start % VPAGE_SIZE # reads can start not page-aligned
+            while page_addr < self.start + self.len:
+                data_base = (page_addr // VPAGE_SIZE) * VPAGE_SIZE
+                pp_start = v2p[data_base]
+                pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+                try:
+                    cipher = AES_GCM_SIV(key, pp_data[:12])
+                    pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))[4:] # skip the journal, first 4 bytes
+                    if read_start + remaining > VPAGE_SIZE:
+                        read_end = VPAGE_SIZE
+                    else:
+                        read_end = read_start + remaining
+                    self.data += pt_data[read_start:read_end]
+                    bytes_read = read_end - read_start
+                    remaining -= bytes_read
+                    read_start = (read_start + bytes_read) % VPAGE_SIZE
+                    if remaining > 0:
+                        assert(read_start == 0)
+                except ValueError:
+                    print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(page_addr), pp_start)
+                page_addr += VPAGE_SIZE
+            # CI check -- if it doesn't pass, it doesn't mean we've failed -- could also just be a "normal" record that doesn't have the checksum appended
+            check_data = self.data[:-4]
+            while len(check_data) % 4 != 0:
+                check_data += bytes([0])
+            checksum = mm3_hash(check_data)
+            refcheck = int.from_bytes(self.data[len(self.data)-4:], 'little')
+            if checksum == refcheck:
+                self.ci_ok = True
+            else:
+                self.ci_ok = False
+                print('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
+
+
+    def as_str(self, indent=''):
+        PRINT_LEN = 64
+        desc = ''
+        desc += indent + 'Start: 0x{:x}\n'.format(self.start)
+        desc += indent + 'Len:   {}/0x{:x}\n'.format(self.len, self.reserved)
+        desc += indent + 'Flags: '
+        if self.valid:
+            desc += 'VALID'
+        if self.unresolved:
+            desc += indent + 'UNRESOLVED'
+
+        desc += ' | Age: {}'.format(self.age)
+        desc += ' | CI OK: {}'.format(self.ci_ok)
+        desc += '\n'
+        if len(self.data) < 64:
+            print_len = len(self.data)
+            extra = ''
+        else:
+            print_len = 64
+            extra = '...'
+        desc += indent + 'Data (hex): {}{}\n'.format(self.data[:print_len].hex(), extra)
+        desc += indent + 'Data (txt): {}{}'.format(make_printable(self.data[:print_len].decode('utf-8', errors='ignore')), extra) + '\n'
+        return (desc)
+
+
+class BasisDicts:
+    DICT_VSTRIDE = 0xFE_0000
+    KV_STRIDE = 127
+    MAX_NAME_LEN = 111
+    def __init__(self, index, v2p, disk, key, name):
+        global PAGE_SIZE
+        global VPAGE_SIZE
+        dict_header_vaddr = self.DICT_VSTRIDE * (index + 1)
+        if dict_header_vaddr in v2p:
+            self.valid = True
+            pp = v2p[dict_header_vaddr]
+            self.keys = {}
+            try:
+                print('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
+                cipher = AES_GCM_SIV(key, disk[pp:pp+12])
+                pt_data = cipher.decrypt(disk[pp+12:pp+PAGE_SIZE], basis_aad(name))
+                # print('raw pt_data: {}'.format(pt_data[:127].hex()))
+                i = 0
+                self.journal = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.flags = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.age = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.num_keys = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.free_key_index = int.from_bytes(pt_data[i:i+4], 'little')
+                i += 4
+                self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+                i += BasisDicts.MAX_NAME_LEN
+                print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
+            except ValueError:
+                print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
+
+            if self.num_keys > 0:
+                keys_found = 0
+                keys_tried = 1
+                while (keys_found < self.num_keys) and keys_tried < 131071:
+                    keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
+                    try:
+                        pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
+                        pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+                        try:
+                            cipher = AES_GCM_SIV(key, pp_data[:12])
+                            pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                            key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
+                            # print(key_index)
+                            maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
+                            if maybe_key.valid:
+                                self.keys[maybe_key.name] = maybe_key
+                                keys_found += 1
+
+                        except ValueError:
+                            print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr), pp_start)
+                        keys_tried += 1
+                    except KeyError:
+                        # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
+                        keys_tried += VPAGE_SIZE // self.KV_STRIDE
+                if keys_found < self.num_keys:
+                    print("Expected {} keys but only found {}".format(self.num_keys, keys_found))
+                    self.found_all_keys = False
+                else:
+                    self.found_all_keys = True
+        else:
+            self.valid = False
+
+    def as_str(self):
+        desc = ''
+        desc += '  Name: {}\n'.format(self.name)
+        desc += '  Age: {}\n'.format(self.age)
+        desc += '  Flags: {}\n'.format(self.flags)
+        desc += '  Key count: {}\n'.format(self.num_keys)
+        desc += '  Free key index: {}\n'.format(self.free_key_index)
+        desc += '  Keys:\n'
+        for (name, key) in self.keys.items():
+            desc += '    {}:\n'.format(name)
+            desc += key.as_str('       ')
+
+        return desc
+
+    def ci_check(self):
+        check_ok = True
+        for (name, key) in self.keys.items():
+            namecheck = name.split('|')
+            if namecheck[1] != self.name:
+                print(" Key/dict mismatch: {}/{}", key.name, self.name)
+            keylen = int(namecheck[3][3:])
+            if keylen != key.len:
+                print(" Key length mismatch: {}/{}", keylen, key.len)
+            if key.ci_ok == False:
+                print(" CI failed on key:")
+                print(key.as_str('  '))
+                check_ok = False
+        if self.found_all_keys == False:
+            print(' Dictionary was missing keys')
+            check_ok = False
+        if check_ok:
+            print(' Dictionary {} CI check: OK'.format(self.name))
+        else:
+            print(' Dictionary {} CI check: FAIL'.format(self.name))
+
+
+class Basis:
+    MAX_NAME_LEN = 64
+    def __init__(self, i_bytes):
+        self.bytes = i_bytes
+        i = 0
+        self.journal = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.magic = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.version = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.age = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.num_dicts = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.name = i_bytes[i:i+Basis.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+        i += Basis.MAX_NAME_LEN
+        #self.prealloc_open_end = int.from_bytes(i_bytes[i:i+8], 'little')
+        #i += 8
+        #self.dict_ptr = int.from_bytes(i_bytes[i:i+8], 'little')
+        #i += 8
+        """ rkyv unpacker
+        i = 0
+        self.journal = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.rkyvpos = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        print("alloc on disk: {}".format(i_bytes[i:i+8].hex()))
+        self.prealloc_open_end = int.from_bytes(i_bytes[i:i+8], 'little')
+        i += 8
+        self.age = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.num_dicts = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.version = int.from_bytes(i_bytes[i:i+2], 'little')
+        i += 2
+        self.magic = int.from_bytes(i_bytes[i:i+4], 'little')
+        i += 4
+        self.name = i_bytes[i:i+Basis.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+        i += Basis.MAX_NAME_LEN
+        i += 10 # mysterious padding in the rkyv format!!
+        self.dict_ptr = int.from_bytes(i_bytes[i:i+8], 'little')
+        i += 8
+        """
+
+    def as_str(self):
+        desc = ''
+        desc += ' Journal rev: {}\n'.format(self.journal)
+        #desc += ' Rkyv pos: {}\n'.format(self.rkyvpos)
+        desc += ' Magic: {:x}\n'.format(self.magic)
+        desc += ' Version: {:x}\n'.format(self.version)
+        desc += ' Age: {:x}\n'.format(self.age)
+        desc += ' Name: {}\n'.format(self.name)
+        #desc += ' Alloc: {:x}\n'.format(self.prealloc_open_end)
+        desc += ' NumDicts: {:x}\n'.format(self.num_dicts)
+        #desc += ' DictPtr: {:x}\n'.format(self.dict_ptr)
+        return desc
+
+def basis_aad(name, version=1, dna=0):
+    name_bytes = bytearray(name, 'utf-8')
+    name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
+    name_bytes += version.to_bytes(4, 'little')
+    name_bytes += dna.to_bytes(8, 'little')
+
+    return name_bytes
+
+
+class Pte:
+    PTE_LEN = 16
+    def __init__(self, i_bytes):
+        assert(len(i_bytes) == self.PTE_LEN)
+        self.bytes = i_bytes
+
+    def len_bytes(self):
+        return(self.bytes.len())
+    def as_bytes(self):
+        return self.bytes
+
+    def addr(self):
+        return int.from_bytes(self.bytes[:6], 'little')
+    def flags(self):
+        if self.bytes[6] == 1:
+            return 'CLN'
+        elif self.bytes[6] == 2:
+            return 'CHK'
+        elif self.bytes[6] == 3:
+            return 'COK'
+        else:
+            return 'INV'
+    def nonce(self):
+        return int.from_bytes(self.bytes[8:12], 'little')
+    def checksum(self):
+        return int.from_bytes(self.bytes[12:], 'little')
+
+    # checks the checksum
+    def is_valid(self):
+        return (self.checksum() == mm3_hash(self.bytes[:12], self.nonce()))
+
+    def as_str(self, ppage=None):
+        #print('checksum: {:08x}, hash: {:08x}'.format(self.checksum(), mm3_hash(self.bytes[:12], self.nonce())))
+        if ppage != None:
+            return '{:08x}: a_{:012x} | f_{} | n_{:08x} | c_{:08x}'.format(ppage, self.addr(), self.flags(), self.nonce(), self.checksum())
+        else:
+            return 'a_{:012x} | f_{} | n_{:08x} | c_{:08x}'.format(self.addr(), self.flags(), self.nonce(), self.checksum())
+
+def find_mbbb(mbbb):
+    global MBBB_PAGES
+    pages = [mbbb[i:i+PAGE_SIZE] for i in range(0, MBBB_PAGES * PAGE_SIZE, PAGE_SIZE)]
+    for page in pages:
+        if bytearray(page[:16]) != bytearray([0xff] * 16):
+            return page
+    return None
+
+def decode_pagetable(img, entries, keys, mbbb):
+    global PAGE_SIZE
+    key_table = {}
+    for name, key in keys.items():
+        print("Pages for basis {}".format(name))
+        print("key: {}".format(key.hex()))
+        cipher = AES.new(key, AES.MODE_ECB)
+        pages = [img[i:i+PAGE_SIZE] for i in range(0, entries * Pte.PTE_LEN, PAGE_SIZE)]
+        page_num = 0
+        v2p_table = {}
+        p2v_table = {}
+        for page in pages:
+            if bytearray(page[:16]) == bytearray([0xff] * 16):
+                # decrypt from mbbb
+                print("Found a blank PTE page, falling back to MBBB!")
+                maybe_page = find_mbbb(mbbb)
+                if maybe_page != None:
+                    page = maybe_page
+                else:
+                    print("Blank entry in PTE found, but no corresponding MBBB entry found. Filesystem likely corrupted.")
+            encrypted_ptes = [page[i:i+Pte.PTE_LEN] for i in range(0, PAGE_SIZE, Pte.PTE_LEN)]
+            for pte in encrypted_ptes:
+                maybe_pte = Pte(cipher.decrypt(pte))
+                if maybe_pte.is_valid():
+                    print(maybe_pte.as_str(page_num))
+                    p_addr = page_num * (4096 // Pte.PTE_LEN)
+                    v2p_table[maybe_pte.addr()] = p_addr
+                    p2v_table[p_addr] = maybe_pte.addr()
+
+                page_num += Pte.PTE_LEN
+            key_table[name] = [v2p_table, p2v_table]
+    return key_table
+
+class PhysPage:
+    PP_LEN = 4
+    def __init__(self, i_bytes):
+        self.pp = int.from_bytes(i_bytes[:4], 'little')
+
+    def page_number(self):
+        return self.pp & 0xF_FFFF
+
+    def clean(self):
+        if (self.pp & 0x10_0000) != 0:
+            return True
+        else:
+            return False
+
+    def valid(self):
+        if (self.pp & 0x20_0000) != 0:
+            return True
+        else:
+            return False
+
+    def space_state(self):
+        code = (self.pp >> 22) & 3
+        if code == 0:
+            return 'FREE'
+        elif code == 1:
+            return 'MUSE'
+        elif code == 2:
+            return 'USED'
+        else:
+            return 'DIRT'
+
+    def journal(self):
+        return (self.pp >> 24) & 0xF
+
+    def as_str(self):
+        return 'a_{:05x} | c_{} | v_{} | ss_{} | j_{:02}'.format(self.page_number(), self.clean(), self.valid(), self.space_state(), self.journal())
+
+class Fscb:
+    def __init__(self, i_bytes):
+        FASTSPACE_PAGES = 2
+        NONCE_LEN = 12
+        TAG_LEN = 16
+        PP_LEN = 4
+        FREE_POOL_LEN = ((4096 * FASTSPACE_PAGES) - (NONCE_LEN + TAG_LEN)) // PP_LEN
+        assert(len(i_bytes) == FREE_POOL_LEN * PP_LEN)
+        raw_pps = [i_bytes[i:i+PP_LEN] for i in range(0, FREE_POOL_LEN * PP_LEN, PP_LEN)]
+        self.free_space = {}
+        for raw_pp in raw_pps:
+            pp = PhysPage(raw_pp)
+            if pp.valid():
+                self.free_space[pp.page_number() * 4096] = pp
+
+    def at_phys_addr(self, addr):
+        try:
+            return self.free_pool[addr]
+        except:
+            None
+
+    def print(self):
+        for pagenum, pp in self.free_space.items():
+            print(pp.as_str())
+
+    def try_replace(self, candidate):
+        if candidate.is_valid():
+            pp = candidate.get_pp()
+            cur_pp = self.free_space[pp.page_number() * 4096]
+            if pp.valid() and (cur_pp.journal() < pp.journal()):
+                print("FSCB replace {} /with/ {}".format(cur_pp.as_str(), pp.as_str()))
+                self.free_space[pp.page_number() * 4096] = pp
+
+    # this is the "AAD" used to encrypt the FastSpace
+    def aad(version=1, dna=0):
+        return bytearray([46, 70, 97, 115, 116, 83, 112, 97, 99, 101]) + version.to_bytes(4, 'little') + dna.to_bytes(8, 'little')
+
+class SpaceUpdate:
+    SU_LEN = 16
+    def __init__(self, i_bytes):
+        self.nonce = i_bytes[:8]
+        self.page_number = PhysPage(i_bytes[8:12])
+        self.checksum = int.from_bytes(i_bytes[12:], 'little')
+        hash = mm3_hash(i_bytes[:12], int.from_bytes(i_bytes[4:8], 'big'))
+        if self.checksum == hash:
+            self.valid = True
+        else:
+            self.valid = False
+
+    def is_valid(self):
+        return self.valid
+
+    def get_pp(self):
+        return self.page_number
+
+# img is clipped to just the fscb region of the overall disk image
+def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
+    global SYSTEM_BASIS
+    fscb = None
+    if SYSTEM_BASIS in keys:
+        key = keys[SYSTEM_BASIS]
+        pages = [img[i:i+4096] for i in range(0, len(img), 4096)]
+        space_update = []
+        fscb_start = None
+        pg = 0
+        for page in pages:
+            if bytearray(page[:32]) == bytearray([0xff] * 32):
+                # page is blank
+                pass
+            elif bytearray(page[:16]) == bytearray([0xff] * 16):
+                space_update.append(page[16:])
+            else:
+                if fscb_start == None:
+                    fscb_start = pg
+            pg += 1
+
+        if fscb_start:
+            print("Found FSCB at {:x}".format(fscb_start))
+            fscb_enc = img[fscb_start * 4096 : (fscb_start + FSCB_LEN_PAGES) * 4096]
+            try:
+                nonce = fscb_enc[:12]
+                print("key: {}, nonce: {}".format(key.hex(), nonce.hex()))
+                cipher = AES_GCM_SIV(key, nonce)
+                print("aad: {}".format(Fscb.aad().hex()))
+                print("mac: {}".format(fscb_enc[-16:].hex()))
+                #print("data: {}".format(fscb_enc[12:-16].hex()))
+                fscb_dec = cipher.decrypt(fscb_enc[12:], Fscb.aad())
+                fscb = Fscb(fscb_dec)
+            except KeyError:
+                print("couldn't decrypt")
+                fscb = None
+
+        if fscb != None:
+            print("key: {}".format(key.hex()))
+            cipher = AES.new(key, AES.MODE_ECB)
+            for update in space_update:
+                entries = [update[i:i+SpaceUpdate.SU_LEN] for i in range(0, len(update), SpaceUpdate.SU_LEN)]
+                for entry in entries:
+                    if entry == bytearray([0xff] * 16):
+                        break
+                    else:
+                        fscb.try_replace(SpaceUpdate(cipher.decrypt(entry)))
+
+    return fscb
+
+if __name__ == "__main__":
+    main()
+    exit(0)

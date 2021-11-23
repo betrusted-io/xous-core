@@ -52,21 +52,6 @@ impl RootKeys {
         Opcode::UxSelfSignXous.to_u32().unwrap()
     }
 
-    /// this function takes a boot gateware that has a "null" key (all zeros) and:
-    /// 0. confirms that JTAG is accessible by reading out the ID, and that the eFuse is writeable, and all 0's
-    /// 1. prompts of the update password, and confirms that the existing efuse key decrypts to 0. if not -- we were already fused, abort.
-    /// 2. creates a new eFuse key using the TRNG
-    /// 3. inserts a revised KEYROM into the base image while copying & encrypting with the new key to the staging area
-    /// 4. verifies the xilinx-hmac on the staged image
-    /// 5. copies the staged image into the boot area
-    /// 6. burns the eFuse key using JTAG-local commands
-    /// 7. suspends the device with auto-resume so that the new gateware is in effect
-    /// 8. reads back the eFuse key from the KEYROM to confirm everything went as planned, compares to previously computed result
-    /// 9. clears the eFuse key from RAM.
-    pub fn seal_boot_gateware(&mut self) -> Result<(), xous::Error> {
-        unimplemented!();
-    }
-
     /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
     pub fn try_update_password(&mut self, _which: PasswordType) -> Result<(), xous::Error> {
         unimplemented!();
@@ -169,6 +154,7 @@ impl RootKeys {
         ).expect("couldn't send test message");
         log::info!("test_ux response: {:?}", response);
     }
+
     pub fn bbram_provision(&self) {
         send_message(self.conn,
             Message::new_scalar(Opcode::BbramProvision.to_usize().unwrap(),
