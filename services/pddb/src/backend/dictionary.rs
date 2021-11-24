@@ -8,7 +8,7 @@ use aes_gcm_siv::Aes256GcmSiv;
 use std::collections::{HashMap, BinaryHeap, HashSet};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq)]
@@ -24,14 +24,14 @@ pub(crate) struct DictCacheEntry {
     /// Use this to compute the virtual address of the dictionary's location
     /// multiply this by DICT_VSIZE to get at the virtual address. This /could/ be a
     /// NonZeroU32 type as it should never be 0. Maybe that's a thing to fix later on.
-    pub(crate) index: u32,
+    pub(crate) index: NonZeroU32,
     /// A cache of the keys within the dictionary. If the key does not exist in
     /// the cache, one should consult the on-disk copy, assuming the record is clean.
     pub(crate) keys: HashMap::<String, KeyCacheEntry>,
     /// count of total keys in the dictionary -- may be equal to or larger than the number of elements in `keys`
     pub(crate) key_count: u32,
     /// track the pool of free key indices. Wrapped in a refcell so we can work the index mechanism while updating the keys HashMap
-    pub(crate) free_keys: BinaryHeap::<FreeKeyRange>,
+    pub(crate) free_keys: BinaryHeap::<Reverse<FreeKeyRange>>,
     /// hint for when to stop doing a brute-force search for the existence of a key in the disk records.
     /// This field is set to the max count on a new, naive record; and set only upon a sync() or a fill() call.
     pub(crate) last_disk_key_index: u32,
@@ -65,10 +65,10 @@ impl DictCacheEntry {
         for &b in aad.iter() {
             my_aad.push(b);
         }
-        let mut free_keys = BinaryHeap::<FreeKeyRange>::new();
-        free_keys.push(FreeKeyRange{start: dict.free_key_index, run: KEY_MAXCOUNT as u32 - 1 - dict.free_key_index});
+        let mut free_keys = BinaryHeap::<Reverse<FreeKeyRange>>::new();
+        free_keys.push(Reverse(FreeKeyRange{start: dict.free_key_index, run: KEY_MAXCOUNT as u32 - 1 - dict.free_key_index}));
         DictCacheEntry {
-            index: index as u32,
+            index: NonZeroU32::new(index as u32).unwrap(),
             keys: HashMap::<String, KeyCacheEntry>::new(),
             key_count: dict.num_keys,
             free_keys,
@@ -95,9 +95,7 @@ impl DictCacheEntry {
         while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
             // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
             // be a substantial savings in effort.
-            // Determine the absolute virtual address of the requested entry. It's written a little weird because
-            // DK_PER_VPAGE is 32, which optimizes cleanly and removes an expensive division step
-            let req_vaddr = self.index as u64 * DICT_VSIZE + ((try_entry / DK_PER_VPAGE) as u64) * VPAGE_SIZE as u64;
+            let req_vaddr = dict_indices_to_vaddr(self.index, try_entry);
             index_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(req_vaddr).unwrap());
 
             if index_cache.data.is_none() || index_cache.tag.is_none() {
@@ -182,7 +180,7 @@ impl DictCacheEntry {
                 // be a substantial savings in effort.
                 // Determine the absolute virtual address of the requested entry. It's written a little weird because
                 // DK_PER_VPAGE is 32, which optimizes cleanly and removes an expensive division step
-                let req_vaddr = self.index as u64 * DICT_VSIZE + ((try_entry / DK_PER_VPAGE) as u64) * VPAGE_SIZE as u64;
+                let req_vaddr = dict_indices_to_vaddr(self.index, try_entry);
                 index_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(req_vaddr).unwrap());
 
                 if index_cache.data.is_none() || index_cache.tag.is_none() {
@@ -260,7 +258,7 @@ impl DictCacheEntry {
             // now grab the *data* referred to by this key. Maybe this is a "bad" idea -- this can really eat up RAM fast to hold
             // all the small pool data right away, but let's give it a try and see how it works. Later on we can always skip this.
             // manage a separate small cache for data blocks, under the theory that small keys tend to be packed together
-            let data_vaddr = (kcache.start / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+            let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
             data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
             if let Some(page) = data_cache.data.as_ref() {
                 let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
@@ -341,10 +339,11 @@ impl DictCacheEntry {
                 } else {
                     kcache.age = kcache.age.saturating_add(1);
                     kcache.clean = false;
+                    /* // this was for debugging a patching bug -- OK to remove
                     if data.len() == 4 {
                         use std::convert::TryInto;
                         log::info!("patching checksum: {:x} at offset {}", u32::from_le_bytes(data.try_into().unwrap()), offset);
-                    }
+                    }*/
                     // 1. handle unaligned start offsets
                     let mut written: usize = 0;
                     if ((kcache.start + offset as u64 + written as u64) % VPAGE_SIZE as u64) != 0 {
@@ -353,13 +352,18 @@ impl DictCacheEntry {
                         let mut pt_data = match hw.data_decrypt_page(&cipher, &self.aad, pp) {
                             Some(data) => data,
                             None => {
-                                // perhaps we could just "zero out" previously data, but for now, let's make this undefined behavior
-                                log::warn!("Attempt to patch data outside of the previously initialized length. This is an error.");
-                                return Err(Error::new(ErrorKind::UnexpectedEof, "patching outside of previously written data"));
+                                // this case is triggered by the following circumstance:
+                                //  - we reserved data that includes this current page
+                                //  - up until now, we've only written data into the previous page (so this page is not initialized -- it's garbage)
+                                //  - we just issued an update that causes the data to touch this page for the first time
+                                // in response to this, we allocate a fresh page of 0's.
+                                log::debug!("Reserved and uninitialized page encountered updating large block: {} {:x}..{}->{}; update @{}..{}",
+                                    name, kcache.start, kcache.len, kcache.reserved, offset, data.len());
+                                vec![0u8; VPAGE_SIZE + size_of::<JournalType>()]
                             }
                         };
                         if offset > 0 {
-                            log::info!("patching offset {}, total length {}, data length {}", offset % VPAGE_SIZE, kcache.len, data.len());
+                            log::trace!("patching offset {}, total length {}, data length {}", offset % VPAGE_SIZE, kcache.len, data.len());
                         }
                         for (&src, dst) in data[written..].iter().zip(pt_data[size_of::<JournalType>() + (offset % VPAGE_SIZE)..].iter_mut()) {
                             *dst = src;
@@ -471,16 +475,17 @@ impl DictCacheEntry {
                 for &b in data {
                     alloc_data.push(b);
                 }
+                /*
                 for fk in self.free_keys.iter() {
-                    log::info!("fk start: {} run: {}", fk.start, fk.run);
-                }
+                    log::info!("fk start: {} run: {}", fk.0.start, fk.0.run);
+                }*/
                 let descriptor_index = if let Some(di) = self.get_free_key_index() {
                     di
                 } else {
                     return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of key indices in dictionary"));
                 };
                 let kcache = KeyCacheEntry {
-                    start: SMALL_POOL_START + self.index as u64 * DICT_VSIZE + index as u64 * SMALL_CAPACITY as u64,
+                    start: small_storage_base_vaddr_from_indices(self.index, index),
                     len: (data.len() + offset) as u64,
                     reserved: reservation as u64,
                     flags: kf,
@@ -644,7 +649,7 @@ impl DictCacheEntry {
     pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) {
         for (index, entry) in self.small_pool.iter_mut().enumerate() {
             if !entry.clean {
-                let pool_vaddr = VirtAddr::new(self.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START + index as u64 * SMALL_CAPACITY as u64).unwrap();
+                let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(self.index, index)).unwrap();
                 let pp= v2p_map.entry(pool_vaddr).or_insert_with(||
                     hw.try_fast_space_alloc().expect("No free space to allocate small key storage"));
                 pp.set_valid(true);
@@ -664,9 +669,10 @@ impl DictCacheEntry {
                 // This implementation just skips to step 3.
                 let mut page = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
                 let mut pool_offset = 0;
-                // visit the entries in arbitrary order, but back them in optimally
+                // visit the entries in arbitrary order, but back them in optimally tightly packed
                 for key_name in &entry.contents {
                     let kcache = self.keys.get_mut(key_name).expect("data record without index");
+                    log::info!("sync {}/{}:0x{:x}..{}->{}", key_name, index, kcache.start, kcache.len, kcache.reserved);
                     kcache.start = pool_vaddr.get() + pool_offset as u64;
                     kcache.age = kcache.age.saturating_add(1);
                     kcache.clean = false;
@@ -699,13 +705,13 @@ impl DictCacheEntry {
     /// does bookkeeping to bound brute-force searches for keys within the dictionary's index space.
     pub(crate) fn get_free_key_index(&mut self) -> Option<NonZeroU32> {
         if let Some(free_key) = self.free_keys.pop() {
-            let index = free_key.start;
-            if free_key.run > 0 {
+            let index = free_key.0.start;
+            if free_key.0.run > 0 {
                 self.free_keys.push(
-                    FreeKeyRange {
+                    Reverse(FreeKeyRange {
                         start: index + 1,
-                        run: free_key.run - 1,
-                    }
+                        run: free_key.0.run - 1,
+                    })
                 )
             }
             if index > self.last_disk_key_index {
@@ -720,15 +726,20 @@ impl DictCacheEntry {
     }
     /// Returns a key's metadata storage to the index pool.
     pub(crate) fn put_free_key_index(&mut self, index: u32) {
-        let free_keys = std::mem::replace(&mut self.free_keys, BinaryHeap::<FreeKeyRange>::new());
-        let free_key_vec = free_keys.into_sorted_vec();
+        let free_keys = std::mem::replace(&mut self.free_keys, BinaryHeap::<Reverse<FreeKeyRange>>::new());
+        let mut free_key_vec = free_keys.into_sorted_vec();
+        // I know what you're going to say! It'd be more efficient to have a custom Ord implementation!
+        // I tried! It got really confusing! Some calls were coming out sorted and others weren't. Something subtle was wrong in the Ord implementation.
+        // While this is less efficient, it at least works, and I can reason through it.
+        // You're welcome to fix it. Just be sure to pass the unit tests.
+        free_key_vec.reverse();
         // this is a bit weird because we have three cases:
         // - the new key is more than 1 away from any element, in which case we insert it as a singleton (start = index, run = 0)
         // - the new key is adjacent to exactly once element, in which case we put it either on the top or bottom (merge into existing record)
         // - the new key is adjacent to exactly two elements, in which case we merge the new key and other two elements together, add its length to the new overall run
         let mut skip = false;
         let mut placed = false;
-        log::info!("inserting free key {}", index);
+        log::trace!("inserting free key {}", index);
         for i in 0..free_key_vec.len() {
             if skip {
                 // this happens when we merged into the /next/ record, and we reduced the total number of items by one
@@ -736,14 +747,14 @@ impl DictCacheEntry {
                 continue
             }
             if !placed {
-                match free_key_vec[i].arg_compared_to_self(index) {
+                match free_key_vec[i].0.arg_compared_to_self(index) {
                     FreeKeyCases::LessThan => {
-                        self.free_keys.push(FreeKeyRange{start: index as u32, run: 0});
+                        self.free_keys.push(Reverse(FreeKeyRange{start: index as u32, run: 0}));
                         placed = true;
                         self.free_keys.push(free_key_vec[i]);
                     }
                     FreeKeyCases::LeftAdjacent => {
-                        self.free_keys.push(FreeKeyRange{start: index as u32, run: free_key_vec[i].run + 1});
+                        self.free_keys.push(Reverse(FreeKeyRange{start: index as u32, run: free_key_vec[i].0.run + 1}));
                         placed = true;
                     }
                     FreeKeyCases::Within => {
@@ -753,23 +764,23 @@ impl DictCacheEntry {
                     FreeKeyCases::RightAdjacent => {
                         // see if we should merge to the right
                         if i + 1 < free_key_vec.len() {
-                            println!("middle insert {}: {:?}, {:?}", index, free_key_vec[i], free_key_vec[i+1]);
-                            if free_key_vec[i+1].arg_compared_to_self(index as u32) == FreeKeyCases::LeftAdjacent {
+                            log::trace!("middle insert {}: {:?}, {:?}", index, free_key_vec[i], free_key_vec[i+1]);
+                            if free_key_vec[i+1].0.arg_compared_to_self(index as u32) == FreeKeyCases::LeftAdjacent {
                                 self.free_keys.push(
-                                FreeKeyRange{
-                                        start: free_key_vec[i].start,
-                                        run: free_key_vec[i].run + free_key_vec[i+1].run + 2
-                                    });
+                                Reverse(FreeKeyRange{
+                                        start: free_key_vec[i].0.start,
+                                        run: free_key_vec[i].0.run + free_key_vec[i+1].0.run + 2
+                                    }));
                                 skip = true;
                                 placed = true;
                                 continue;
                             }
                         }
                         self.free_keys.push(
-                        FreeKeyRange {
-                                start: free_key_vec[i].start,
-                                run: free_key_vec[i].run + 1
-                            });
+                        Reverse(FreeKeyRange {
+                                start: free_key_vec[i].0.start,
+                                run: free_key_vec[i].0.run + 1
+                            }));
                         placed = true;
                     }
                     FreeKeyCases::GreaterThan => {
@@ -783,18 +794,31 @@ impl DictCacheEntry {
     }
 }
 
+/// converts a dictionary index -- which is a 1-offset number of dictionaries -- plus a key
+/// metadata index (not the key number; but, the enumerated set of potential key slots, also
+/// 1-offset), and creates a virtual address for the location of this combination
+/// It's written a little weird because DK_PER_VPAGE is 32, which optimizes cleanly and removes
+/// an expensive division step.
+fn dict_indices_to_vaddr(dict_index: NonZeroU32, key_meta_index: usize) -> u64 {
+    assert!(key_meta_index != 0, "key metadata index is 1-offset");
+    dict_index.get() as u64 * DICT_VSIZE + ((key_meta_index / DK_PER_VPAGE) as u64) * VPAGE_SIZE as u64
+}
 /// Derives the index of a Small Pool storage block given the key cache entry and the dictionary index.
 /// The index maps into the small_pool array, which itself maps 1:1 onto blocks inside the small pool
 /// memory space.
-pub(crate) fn small_storage_index_from_key(kcache: &KeyCacheEntry, dict_index: u32) -> Option<usize> {
-    let storage_base = dict_index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START;
+pub(crate) fn small_storage_index_from_key(kcache: &KeyCacheEntry, dict_index: NonZeroU32) -> Option<usize> {
+    let storage_base = (dict_index.get()-1) as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START;
     let storage_end = storage_base + SMALL_POOL_STRIDE;
-    if kcache.start >= storage_base && (kcache.start + kcache.reserved) < storage_end {
+    if (kcache.start >= storage_base) && ((kcache.start + kcache.reserved) < storage_end) {
         let index_base = kcache.start - storage_base;
         Some(index_base as usize / SMALL_CAPACITY)
     } else {
         None
     }
+}
+/// derive the virtual address of a small storage block from the dictionary and the index of the small storage pool
+pub(crate) fn small_storage_base_vaddr_from_indices(dict_index: NonZeroU32, base_index: usize) -> u64 {
+    SMALL_POOL_START + (dict_index.get()-1) as u64 * DICT_VSIZE + base_index as u64 * SMALL_CAPACITY as u64
 }
 #[derive(Debug)]
 /// On-disk representation of the dictionary header. This structure is mainly for archival/unarchival
@@ -899,7 +923,6 @@ impl FreeKeyRange {
 }
 impl Ord for FreeKeyRange {
     fn cmp(&self, other: &Self) -> Ordering {
-        // note the reverse order -- so we can sort as a "min-heap"
         self.start.cmp(&other.start)
     }
 }
@@ -957,9 +980,9 @@ impl PlaintextCache {
 mod tests {
     use super::*;
 
-    fn clone_bheap<T: Clone + Ord + Copy>(heap: &mut BinaryHeap<T>) -> BinaryHeap<T> {
-        let heap_copy = std::mem::replace(heap, BinaryHeap::<T>::new());
-        let mut heap_clone = BinaryHeap::<T>::new();
+    fn clone_bheap<T: Clone + Ord + Copy>(heap: &mut BinaryHeap<Reverse<T>>) -> BinaryHeap<Reverse<T>> {
+        let heap_copy = std::mem::replace(heap, BinaryHeap::<Reverse<T>>::new());
+        let mut heap_clone = BinaryHeap::<Reverse<T>>::new();
         let heap_vec = heap_copy.into_sorted_vec();
         for &i in heap_vec.iter() {
             heap_clone.push(i.clone());
@@ -977,81 +1000,120 @@ mod tests {
         let init_max = KEY_MAXCOUNT as u32 - 1 - 1;
         // 1..131070
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         assert!(f.len() == 1);
-        assert!(f[0].start == 1);
-        assert!(f[0].run == init_max);
+        assert!(f[0].0.start == 1);
+        assert!(f[0].0.run == init_max);
         for i in 0..10 {
             assert!(d.get_free_key_index().unwrap().get() == i+1);
         }
         // 11...131060
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         assert!(f.len() == 1);
-        assert!(f[0].start == 11);
-        assert!(f[0].run == init_max - 10);
+        assert!(f[0].0.start == 11);
+        assert!(f[0].0.run == init_max - 10);
 
         d.put_free_key_index(4);
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         println!("insert 4: {:?}", f);
         assert!(f.len() == 2);
-        assert!(f[0].start == 4);
-        assert!(f[0].run == 0);
-        assert!(f[1].start == 11);
-        assert!(f[1].run == init_max - 10);
+        assert!(f[0].0.start == 4);
+        assert!(f[0].0.run == 0);
+        assert!(f[1].0.start == 11);
+        assert!(f[1].0.run == init_max - 10);
 
         d.put_free_key_index(9);
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         println!("insert 9: {:?}", f);
         assert!(f.len() == 3);
-        assert!(f[0].start == 4);
-        assert!(f[0].run == 0);
-        assert!(f[1].start == 9);
-        assert!(f[1].run == 0);
-        assert!(f[2].start == 11);
-        assert!(f[2].run == init_max - 10);
+        assert!(f[0].0.start == 4);
+        assert!(f[0].0.run == 0);
+        assert!(f[1].0.start == 9);
+        assert!(f[1].0.run == 0);
+        assert!(f[2].0.start == 11);
+        assert!(f[2].0.run == init_max - 10);
 
         d.put_free_key_index(10);
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         println!("insert 10: {:?}", f);
         assert!(f.len() == 2);
-        assert!(f[0].start == 4);
-        assert!(f[0].run == 0);
-        assert!(f[1].start == 9);
-        assert!(f[1].run == init_max - 8);
+        assert!(f[0].0.start == 4);
+        assert!(f[0].0.run == 0);
+        assert!(f[1].0.start == 9);
+        assert!(f[1].0.run == init_max - 8);
 
         d.put_free_key_index(3);
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         println!("insert 3: {:?}", f);
         assert!(f.len() == 2);
-        assert!(f[0].start == 3);
-        assert!(f[0].run == 1);
-        assert!(f[1].start == 9);
-        assert!(f[1].run == init_max - 8);
+        assert!(f[0].0.start == 3);
+        assert!(f[0].0.run == 1);
+        assert!(f[1].0.start == 9);
+        assert!(f[1].0.run == init_max - 8);
 
         d.put_free_key_index(5);
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         println!("insert 5: {:?}", f);
         assert!(f.len() == 2);
-        assert!(f[0].start == 3);
-        assert!(f[0].run == 2);
-        assert!(f[1].start == 9);
-        assert!(f[1].run == init_max - 8);
+        assert!(f[0].0.start == 3);
+        assert!(f[0].0.run == 2);
+        assert!(f[1].0.start == 9);
+        assert!(f[1].0.run == init_max - 8);
 
         d.put_free_key_index(8);
         let c = clone_bheap(&mut d.free_keys);
-        let f = c.into_sorted_vec();
+        let mut f = c.into_sorted_vec();
+        f.reverse();
         println!("insert 8: {:?}", f);
         assert!(f.len() == 2);
-        assert!(f[0].start == 3);
-        assert!(f[0].run == 2);
-        assert!(f[1].start == 8);
-        assert!(f[1].run == init_max - 7);
+        assert!(f[0].0.start == 3);
+        assert!(f[0].0.run == 2);
+        assert!(f[1].0.start == 8);
+        assert!(f[1].0.run == init_max - 7);
 
-    }
+        let k = d.get_free_key_index().unwrap().get();
+        let c = clone_bheap(&mut d.free_keys);
+        let mut f = c.into_sorted_vec();
+        f.reverse();
+        println!("get [3]: {:?}", f);
+        assert!(k == 3);
+        assert!(f.len() == 2);
+        assert!(f[0].0.start == 4);
+        assert!(f[0].0.run == 1);
+        assert!(f[1].0.start == 8);
+        assert!(f[1].0.run == init_max - 7);
+
+        assert!(d.get_free_key_index().unwrap().get() == 4);
+        let c = clone_bheap(&mut d.free_keys);
+        let mut f = c.into_sorted_vec();
+        f.reverse();
+        println!("get [4]: {:?}", f);
+        assert!(f.len() == 2);
+        assert!(f[0].0.start == 5);
+        assert!(f[0].0.run == 0);
+        assert!(f[1].0.start == 8);
+        assert!(f[1].0.run == init_max - 7);
+
+        assert!(d.get_free_key_index().unwrap().get() == 5);
+        let c = clone_bheap(&mut d.free_keys);
+        let mut f = c.into_sorted_vec();
+        f.reverse();
+        println!("get [5]: {:?}", f);
+        assert!(f.len() == 1);
+        assert!(f[0].0.start == 8);
+        assert!(f[0].0.run == init_max - 7);
+}
 }

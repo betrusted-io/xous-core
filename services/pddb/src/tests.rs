@@ -120,7 +120,13 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                 // note: if the key didn't already exist in the latest open basis, it's added, with just that patch data in it.
                 // to override this behavior, you'd want to specify a _specific_ basis, but for testing purposes, we only have one
                 // so we're doing this way that would lead to surprising results if it were copied as template code elsewhere.
-                basis_cache.key_update(hw, dict, key, patch_data.as_bytes(), Some(patch_offset), None, None, false).unwrap();
+                match basis_cache.key_update(hw, dict, key, patch_data.as_bytes(), Some(patch_offset), None, None, false) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        log::error!("couldn't update key {}:{} with {} bytes data offset {}: {:?}", dict, key, patch_data.as_bytes().len(), patch_offset, e);
+                        panic!("error updating patch key");
+                    }
+                }
 
                 // now fix the CI checksum. structured as two separate patches. not because it's efficient,
                 // but because it exercises the code harder.
@@ -141,10 +147,10 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                 } else {
                     // this gloms a new checksum onto the existing record, adding 4 new bytes.
                     let mut checkdata = Vec::<u8>::new();
-                    for &b in &patchbuf {
+                    for &b in &patchbuf[..readlen] {
                         checkdata.push(b);
                     }
-                    log::trace!("checkdata len: {}", checkdata.len());
+                    log::info!("checkdata len: {}", checkdata.len());
                     while checkdata.len() % 4 != 0 {
                         checkdata.push(0);
                     }

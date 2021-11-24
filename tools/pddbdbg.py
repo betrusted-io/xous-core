@@ -275,7 +275,12 @@ class KeyDescriptor:
         PRINT_LEN = 64
         global PRINTED_FULL
         desc = ''
-        desc += indent + 'Start: 0x{:x}\n'.format(self.start)
+        if self.start > 0x7e_fff02_0000:
+            desc += indent + 'Start: 0x{:x} (lg)\n'.format(self.start)
+        else:
+            dict = (self.start - 0x3f_8000_0000) // 0xFE_0000
+            pool = ((self.start - 0x3f_8000_0000) - dict * 0xFE_0000) // 0xFE0
+            desc += indent + 'Start: 0x{:x} | dict_index {} | pool {}\n'.format(self.start, dict, pool)
         desc += indent + 'Len:   {}/0x{:x}\n'.format(self.len, self.reserved)
         desc += indent + 'Flags: '
         if self.valid:
@@ -310,6 +315,8 @@ class BasisDicts:
         global PAGE_SIZE
         global VPAGE_SIZE
         dict_header_vaddr = self.DICT_VSTRIDE * (index + 1)
+        self.index = index
+        self.vaddr = dict_header_vaddr
         if dict_header_vaddr in v2p:
             self.valid = True
             pp = v2p[dict_header_vaddr]
@@ -341,6 +348,7 @@ class BasisDicts:
                 keys_tried = 1
                 while (keys_found < self.num_keys) and keys_tried < 131071:
                     keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
+                    # print('ki_vaddr {:x}'.format(keyindex_start_vaddr))
                     try:
                         pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
                         pp_data = disk[pp_start:pp_start + PAGE_SIZE]
@@ -348,7 +356,7 @@ class BasisDicts:
                             cipher = AES_GCM_SIV(key, pp_data[:12])
                             pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
                             key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
-                            # print(key_index)
+                            #print('key_index {:x}'.format(key_index))
                             maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
                             if maybe_key.valid:
                                 self.keys[maybe_key.name] = maybe_key
@@ -370,7 +378,7 @@ class BasisDicts:
 
     def as_str(self):
         desc = ''
-        desc += '  Name: {}\n'.format(self.name)
+        desc += '  Name: {} / index {} / vaddr: {:x}\n'.format(self.name, self.index, self.vaddr)
         desc += '  Age: {}\n'.format(self.age)
         desc += '  Flags: {}\n'.format(self.flags)
         desc += '  Key count: {}\n'.format(self.num_keys)
@@ -392,7 +400,7 @@ class BasisDicts:
             if keylen != key.len:
                 print(" Key named len vs disk len mismatch: {}/{}".format(keylen, key.len))
             if key.ci_ok == False:
-                print(" CI failed on key:")
+                print(" CI failed on key {}:".format(name))
                 print(key.as_str('  '))
                 check_ok = False
         if self.found_all_keys == False:
@@ -549,7 +557,11 @@ def decode_pagetable(img, entries, keys, mbbb):
                 if maybe_pte.is_valid():
                     print(maybe_pte.as_str(page_num))
                     p_addr = page_num * (4096 // Pte.PTE_LEN)
+                    if maybe_pte.addr() in v2p_table:
+                        print("duplicate V2P PTE entry, evicting {:x}:{:x}", maybe_pte.addr(), p_addr)
                     v2p_table[maybe_pte.addr()] = p_addr
+                    if p_addr in p2v_table:
+                        print("duplicate P2V PTE entry, evicting {:x}:{:x}", p_addr, maybe_pte.addr())
                     p2v_table[p_addr] = maybe_pte.addr()
 
                 page_num += Pte.PTE_LEN

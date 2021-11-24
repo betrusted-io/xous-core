@@ -141,6 +141,8 @@ use aes_gcm_siv::aead::NewAead;
 use std::iter::IntoIterator;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::io::{Result, Error, ErrorKind};
+use std::cmp::Reverse;
+use core::num::NonZeroU32;
 
 pub(crate) const SMALL_POOL_START: u64 = 0x0000_003F_8000_0000;
 pub(crate) const SMALL_POOL_END: u64 = 0x0000_007E_FF02_0000;
@@ -269,10 +271,10 @@ impl BasisCache {
             }
             let mut init_flags = DictFlags(0);
             init_flags.set_valid(true);
-            let mut free_keys = BinaryHeap::<FreeKeyRange>::new();
-            free_keys.push(FreeKeyRange{start: 1, run: KEY_MAXCOUNT as u32 - 1});
+            let mut free_keys = BinaryHeap::<Reverse<FreeKeyRange>>::new();
+            free_keys.push(Reverse(FreeKeyRange{start: 1, run: KEY_MAXCOUNT as u32 - 1}));
             let dict_cache = DictCacheEntry {
-                index: dict_index,
+                index: NonZeroU32::new(dict_index).unwrap(),
                 keys: HashMap::<String, KeyCacheEntry>::new(),
                 clean: false,
                 age: 0,
@@ -506,7 +508,7 @@ impl BasisCache {
         // mutate the page table to allocate data while we're accessing the page table. This huge gob of code
         // computes the pages needed. :-/
         let mut pages_needed = 0;
-        let reserved = if data.len() + offset.unwrap_or(0) < alloc_hint.unwrap_or(0) {
+        let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(0) {
             data.len() + offset.unwrap_or(0)
         } else {
             alloc_hint.unwrap_or(0)
@@ -526,14 +528,17 @@ impl BasisCache {
                 // see if we need to make a kcache entry
                 if let Some(kcache) = dict_entry.keys.get(key) {
                     // now check for data reservations
-                    if reserved < SMALL_CAPACITY {
+                    if let Some(key_index) = small_storage_index_from_key(&kcache, dict_entry.index) {
                         // it's probably going in the small pool.
                         // index exists, see if the page exists
-                        let key_index = (((kcache.start - SMALL_POOL_START as u64) - (dict_entry.index as u64 * SMALL_POOL_STRIDE as u64)) / SMALL_CAPACITY as u64) as usize;
+                        if reserved == 0 { // something went wrong here
+                            log::info!("reserved {}", reserved);
+                            log::info!("{}:{} - [{}]{:x}+{}->{}", dict, key, kcache.descriptor_index, kcache.start, kcache.len, kcache.reserved);
+                        }
                         if dict_entry.small_pool.len() > key_index {
                             log::trace!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
                             // see if the pool's address exists in the page table
-                            let pool_vaddr = VirtAddr::new(dict_entry.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START).unwrap();
+                            let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(dict_entry.index, key_index)).unwrap();
                             if !basis.v2p_map.contains_key(&pool_vaddr) {
                                 pages_needed += 1;
                             }
@@ -807,7 +812,7 @@ impl BasisCacheEntry {
             }
             // wipe & de-allocate any small pages
             for index in 0..dcache.small_pool.len() {
-                let pool_vaddr = VirtAddr::new(dcache.index as u64 * SMALL_POOL_STRIDE + SMALL_POOL_START + index as u64 * SMALL_CAPACITY as u64).unwrap();
+                let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(dcache.index, index)).unwrap();
                 if let Some(pp) = self.v2p_map.get_mut(&pool_vaddr) {
                     if paranoid {
                         let mut random = [0u8; PAGE_SIZE];
@@ -822,7 +827,8 @@ impl BasisCacheEntry {
             // decrypt correctly, are interpreted as valid keys, and thus cause consistency errors.
             let key_pages = 1 + (dcache.last_disk_key_index + 1) as usize / DK_PER_VPAGE;
             for page in 0..key_pages {
-                let dk_vaddr = VirtAddr::new(dcache.index as u64 * DICT_VSIZE as u64 + page as u64 * VPAGE_SIZE as u64).unwrap();
+                // note: check this code against dict_indices_to_vaddr() -- it's recoded here because we go by page, not by index, but this needs to be consistent with that function
+                let dk_vaddr = VirtAddr::new(dcache.index.get() as u64 * DICT_VSIZE as u64 + page as u64 * VPAGE_SIZE as u64).unwrap();
                 if let Some(pp) = self.v2p_map.get_mut(&dk_vaddr) {
                     log::info!("erasing dk page 0x{:x}/0x{:x}", dk_vaddr, pp.page_number() as usize * PAGE_SIZE);
                     let mut random = [0u8; PAGE_SIZE];
@@ -835,7 +841,7 @@ impl BasisCacheEntry {
             }
 
             // mark data for re-use
-            self.free_dict_offset = Some(dcache.index);
+            self.free_dict_offset = Some(dcache.index.get());
             self.num_dicts -= 1;
             // remove the cache entry
             self.dicts.remove(name);
@@ -951,7 +957,7 @@ impl BasisCacheEntry {
     pub(crate) fn dict_sync(&mut self, hw: &mut PddbOs, name: &str) -> Result<()> {
         self.last_sync = Some(hw.timestamp_now());
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
-            let dict_offset = VirtAddr::new(dict.index as u64 * DICT_VSIZE).unwrap();
+            let dict_offset = VirtAddr::new(dict.index.get() as u64 * DICT_VSIZE).unwrap();
             if !dict.clean {
                 let mut dict_name = [0u8; DICT_NAME_LEN];
                 for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
@@ -964,7 +970,7 @@ impl BasisCacheEntry {
                     free_key_index: dict.last_disk_key_index,
                     name: dict_name,
                 };
-                log::info!("syncing dict {}: {:?}", name, dict_disk);
+                log::trace!("syncing dict {}", name);
                 // log::info!("raw: {:x?}", dict_disk.deref());
                 // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be clean,
                 // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
