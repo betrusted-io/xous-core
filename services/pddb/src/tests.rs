@@ -115,7 +115,6 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     for dict in dict_list.iter() {
         if let Ok(key_list) = basis_cache.key_list(hw, dict) {
             for key in key_list.iter() {
-                let mut patchbuf = [0u8; UPPER_BOUND];
                 // this actually does something a bit more complicated on a multi-basis system than you'd think:
                 // it will get the union of all key names, and then patch the *latest open basis* only with new data.
                 // note: if the key didn't already exist in the latest open basis, it's added, with just that patch data in it.
@@ -125,6 +124,7 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
 
                 // now fix the CI checksum. structured as two separate patches. not because it's efficient,
                 // but because it exercises the code harder.
+                let mut patchbuf = [0u8; UPPER_BOUND];
                 let readlen = basis_cache.key_read(hw, dict, key, &mut patchbuf, Some(0), None).unwrap();
                 if !extend {
                     // now re-compute the checksum

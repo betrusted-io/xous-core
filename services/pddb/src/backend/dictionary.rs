@@ -753,18 +753,24 @@ impl DictCacheEntry {
                     FreeKeyCases::RightAdjacent => {
                         // see if we should merge to the right
                         if i + 1 < free_key_vec.len() {
-                            if free_key_vec[i+1].arg_compared_to_self(i as u32) == FreeKeyCases::LeftAdjacent {
-                                self.free_keys.push(FreeKeyRange{
-                                    start: free_key_vec[i].start,
-                                    run: free_key_vec[i].run + free_key_vec[i+1].run + 2
-                                });
+                            println!("middle insert {}: {:?}, {:?}", index, free_key_vec[i], free_key_vec[i+1]);
+                            if free_key_vec[i+1].arg_compared_to_self(index as u32) == FreeKeyCases::LeftAdjacent {
+                                self.free_keys.push(
+                                FreeKeyRange{
+                                        start: free_key_vec[i].start,
+                                        run: free_key_vec[i].run + free_key_vec[i+1].run + 2
+                                    });
                                 skip = true;
                                 placed = true;
+                                continue;
                             }
-                        } else {
-                            self.free_keys.push(FreeKeyRange { start: free_key_vec[i].start, run: free_key_vec[i].run + 1 });
-                            placed = true;
                         }
+                        self.free_keys.push(
+                        FreeKeyRange {
+                                start: free_key_vec[i].start,
+                                run: free_key_vec[i].run + 1
+                            });
+                        placed = true;
                     }
                     FreeKeyCases::GreaterThan => {
                         self.free_keys.push(free_key_vec[i]);
@@ -858,7 +864,7 @@ impl<'a> Default for DictKeyVpage {
 }
 
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub(crate) enum FreeKeyCases {
     LeftAdjacent,
     RightAdjacent,
@@ -866,7 +872,7 @@ pub(crate) enum FreeKeyCases {
     LessThan,
     GreaterThan,
 }
-#[derive(Eq, Copy, Clone)]
+#[derive(Eq, Copy, Clone, Debug)]
 pub(crate) struct FreeKeyRange {
     /// This index should be free
     pub(crate) start: u32,
@@ -894,12 +900,12 @@ impl FreeKeyRange {
 impl Ord for FreeKeyRange {
     fn cmp(&self, other: &Self) -> Ordering {
         // note the reverse order -- so we can sort as a "min-heap"
-        other.start.cmp(&self.start)
+        self.start.cmp(&other.start)
     }
 }
 impl PartialOrd for FreeKeyRange {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+        Some(self.cmp(&other))
     }
 }
 impl PartialEq for FreeKeyRange {
@@ -944,5 +950,108 @@ impl PlaintextCache {
             self.data = None;
             self.tag = None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn clone_bheap<T: Clone + Ord + Copy>(heap: &mut BinaryHeap<T>) -> BinaryHeap<T> {
+        let heap_copy = std::mem::replace(heap, BinaryHeap::<T>::new());
+        let mut heap_clone = BinaryHeap::<T>::new();
+        let heap_vec = heap_copy.into_sorted_vec();
+        for &i in heap_vec.iter() {
+            heap_clone.push(i.clone());
+            heap.push(i);
+        }
+        heap_clone
+    }
+    #[test]
+    fn test_free_key_index() {
+        let mut d = DictCacheEntry::new(
+            Dictionary::default(),
+            1,
+            &Vec::<u8>::new(),
+        );
+        let init_max = KEY_MAXCOUNT as u32 - 1 - 1;
+        // 1..131070
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        assert!(f.len() == 1);
+        assert!(f[0].start == 1);
+        assert!(f[0].run == init_max);
+        for i in 0..10 {
+            assert!(d.get_free_key_index().unwrap().get() == i+1);
+        }
+        // 11...131060
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        assert!(f.len() == 1);
+        assert!(f[0].start == 11);
+        assert!(f[0].run == init_max - 10);
+
+        d.put_free_key_index(4);
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        println!("insert 4: {:?}", f);
+        assert!(f.len() == 2);
+        assert!(f[0].start == 4);
+        assert!(f[0].run == 0);
+        assert!(f[1].start == 11);
+        assert!(f[1].run == init_max - 10);
+
+        d.put_free_key_index(9);
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        println!("insert 9: {:?}", f);
+        assert!(f.len() == 3);
+        assert!(f[0].start == 4);
+        assert!(f[0].run == 0);
+        assert!(f[1].start == 9);
+        assert!(f[1].run == 0);
+        assert!(f[2].start == 11);
+        assert!(f[2].run == init_max - 10);
+
+        d.put_free_key_index(10);
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        println!("insert 10: {:?}", f);
+        assert!(f.len() == 2);
+        assert!(f[0].start == 4);
+        assert!(f[0].run == 0);
+        assert!(f[1].start == 9);
+        assert!(f[1].run == init_max - 8);
+
+        d.put_free_key_index(3);
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        println!("insert 3: {:?}", f);
+        assert!(f.len() == 2);
+        assert!(f[0].start == 3);
+        assert!(f[0].run == 1);
+        assert!(f[1].start == 9);
+        assert!(f[1].run == init_max - 8);
+
+        d.put_free_key_index(5);
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        println!("insert 5: {:?}", f);
+        assert!(f.len() == 2);
+        assert!(f[0].start == 3);
+        assert!(f[0].run == 2);
+        assert!(f[1].start == 9);
+        assert!(f[1].run == init_max - 8);
+
+        d.put_free_key_index(8);
+        let c = clone_bheap(&mut d.free_keys);
+        let f = c.into_sorted_vec();
+        println!("insert 8: {:?}", f);
+        assert!(f.len() == 2);
+        assert!(f[0].start == 3);
+        assert!(f[0].run == 2);
+        assert!(f[1].start == 8);
+        assert!(f[1].run == init_max - 7);
+
     }
 }
