@@ -621,18 +621,12 @@ impl DictCacheEntry {
         let mut need_free_key: Option<u32> = None;
         if let Some(kcache) = self.keys.get_mut(&name) {
             self.clean = false;
+            self.key_count -= 1;
             if let Some(small_index) = small_storage_index_from_key(kcache, self.index) {
                 // handle the small pool case
                 let ksp = &mut self.small_pool[small_index];
-                log::info!("victim: {}", name);
-                for s in &ksp.contents {
-                    log::info!("before: {}", s);
-                }
                 ksp.contents.swap_remove(ksp.contents.iter().position(|s| *s == name)
                     .expect("Small pool did not contain the element we expected"));
-                for s in &ksp.contents {
-                    log::info!("after: {}", s);
-                }
                 assert!(kcache.reserved <= SMALL_CAPACITY as u64, "error in small key entry size");
                 ksp.avail += kcache.reserved as u16;
                 assert!(ksp.avail <= SMALL_CAPACITY as u16, "bookkeeping error in small pool capacity");

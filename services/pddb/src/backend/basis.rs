@@ -1010,7 +1010,7 @@ impl BasisCacheEntry {
                     free_key_index: dict.last_disk_key_index,
                     name: dict_name,
                 };
-                log::trace!("syncing dict {}", name);
+                log::info!("syncing dict {} with {} keys", name, dict.key_count);
                 // log::info!("raw: {:x?}", dict_disk.deref());
                 // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be clean,
                 // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
