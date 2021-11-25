@@ -1220,6 +1220,7 @@ impl PddbOs {
         let aad = basis_root.aad(self.dna);
         let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
             .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
+        assert!(pp.valid(), "v2p returned an invalid page");
         let journal_bytes = (0 as u32).to_le_bytes();
         let slice_iter =
             journal_bytes.iter() // journal rev

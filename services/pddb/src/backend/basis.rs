@@ -154,6 +154,35 @@ pub(crate) const SMALL_POOL_STRIDE: u64 = 0xFE_0000;
 pub(crate) const SMALL_CAPACITY: usize = VPAGE_SIZE;
 pub(crate) const LARGE_POOL_START: u64 = 0x0000_FE00_0000_0000;
 pub(crate) const KEY_MAXCOUNT: usize = 131_071; // 2^17 - 1
+/// This is a size limit on the biggest file you can create. It's currently 32GiB. No, this is not
+/// web scale, but it's big enough to hold a typical blu-ray movie as a single file. You can adjust
+/// this constant up or down, and the trade-off is, you get more or less total number of large files
+/// allocated over the life of the filesystem. We simply "increment a pointer" when a new large file
+/// is added to create the next virtual memory spot for the large file. So at 32GiB, you can create
+/// a lifetime total of about 200 million files (this includes files you've previously deleted, until
+/// we create a mechanism for sweeping through the memory space and tracking de-allocations). Note that
+/// a "large" file includes anything over 4kiB, so if you create a 5kiB file, it can potentially grow to
+/// 32 GiB without bumping into the next large file. This is a very "lazy" way to deal with large files.
+/// Given that the PDDB is designed for a 32-bit device with only 128MiB of memory and a read/write lifetime
+/// of 100k cycles for the FLASH, 200 million file allocations is probably greater than the lifetime of
+/// the device itself. If the PDDB migrates to a larger handphone-style application, I think it'll probably
+/// still hold up OK with 200 million total large file allocations over the device lifetime and a limit
+/// of 32GiB. That's about 73k files created per day for 10 years, or about 50 files per minute -- roughly
+/// one new file per second for 10 years straight before the PDDB runs out of virtual memory space.
+/// A web server creating a >4k temporary log file for every client that hit and then deleting it
+/// would probably crush this limit in months. So don't use the PDDB to back a high volume web server.
+/// But it's probably OK for a consumer electronics device with a typical lifetime of less than 10 years.
+/// If you really think you want larger files and also more write life, you'd need to implement an in-memory
+/// "free" file allocator, but honestly, this is not something I think we need to burn resources on for
+/// the initial target of the PDDB (that is, a 100MiB device with 100k read/write endurance lifetime).
+/// Anyways, the code is written so you can just slide this constant up or down and change the behavior
+/// of the system; it's recommended you reformat when you do that but I /think/ it should actually be OK
+/// if you made a change "on the fly".
+///
+/// Also note that in practice, a file size is limited to 4GiB on a 32-bit Precursor device anyways
+/// because the usize type isn't big enough. Recompiling for a 64-bit target, however, should give
+/// you access to the 32GiB file size limit.
+pub(crate) const LARGE_FILE_MAX_SIZE: u64 = 0x0000_0008_0000_0000;
 
 /// The chosen "stride" of a dict/key entry. Drives a lot of key parameters in the database's characteristics.
 /// This is chosen such that 32 of these entries fit evenly into a VPAGE.
@@ -256,9 +285,12 @@ impl BasisCache {
             // allocate a vpage offset for the dictionary
             let dict_index = basis.dict_get_free_offset(hw);
             let dict_offset = VirtAddr::new(dict_index as u64 * DICT_VSIZE).unwrap();
-            let pp = basis.v2p_map.entry(dict_offset).or_insert_with(||
-                hw.try_fast_space_alloc().expect("No free space to allocate dict"));
-            pp.set_valid(true);
+            let pp = basis.v2p_map.entry(dict_offset).or_insert_with(|| {
+                let mut ap = hw.try_fast_space_alloc().expect("No free space to allocate dict");
+                ap.set_valid(true);
+                ap
+            });
+            assert!(pp.valid(), "v2p returned an invalid page");
 
             // create the cache entry
             let mut dict_name = [0u8; DICT_NAME_LEN];
@@ -418,6 +450,7 @@ impl BasisCache {
                             log::trace!("reading offset {}/{}:{}",  cur_offset, endstop, kcache.len);
                             let mut read_offset = (cur_offset % VPAGE_SIZE as u64) as usize;
                             if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
+                                assert!(pp.valid(), "v2p returned an invalid page");
                                 let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
                                 if blocks_read != 0 {
                                     assert!(read_offset == 0, "algorithm error in handling offset data");
@@ -762,6 +795,7 @@ impl BasisCacheEntry {
         while try_entry <= DICT_MAXCOUNT && dict_count < self.num_dicts {
             let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
             if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
+                assert!(pp.valid(), "v2p returned an invalid page");
                 if let Some(dict) = self.dict_decrypt(hw, &pp) {
                     if dict.flags.valid() {
                         let dict_name = String::from(cstr_to_string(&dict.name));
@@ -814,12 +848,14 @@ impl BasisCacheEntry {
             for index in 0..dcache.small_pool.len() {
                 let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(dcache.index, index)).unwrap();
                 if let Some(pp) = self.v2p_map.get_mut(&pool_vaddr) {
-                    if paranoid {
+                    assert!(pp.valid(), "v2p returned an invalid page");
+                    { // always nuke old data
                         let mut random = [0u8; PAGE_SIZE];
                         hw.trng_slice(&mut random);
                         hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
                     }
                     hw.fast_space_free(pp);
+                    assert!(pp.valid() == false, "pp is still marked as valid!");
                 }
             }
             // erase the entire dictionary + key allocation area by writing over with random data. It's important to
@@ -830,11 +866,13 @@ impl BasisCacheEntry {
                 // note: check this code against dict_indices_to_vaddr() -- it's recoded here because we go by page, not by index, but this needs to be consistent with that function
                 let dk_vaddr = VirtAddr::new(dcache.index.get() as u64 * DICT_VSIZE as u64 + page as u64 * VPAGE_SIZE as u64).unwrap();
                 if let Some(pp) = self.v2p_map.get_mut(&dk_vaddr) {
+                    assert!(pp.valid(), "v2p returned an invalid page");
                     log::info!("erasing dk page 0x{:x}/0x{:x}", dk_vaddr, pp.page_number() as usize * PAGE_SIZE);
                     let mut random = [0u8; PAGE_SIZE];
                     hw.trng_slice(&mut random);
                     hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
                     hw.fast_space_free(pp);
+                    assert!(pp.valid() == false, "pp is still marked as valid!");
                 } else {
                     log::warn!("Inconsistent internal state: requested dictionary didn't have a mapping in the page table.");
                 }
@@ -862,6 +900,7 @@ impl BasisCacheEntry {
             while try_entry <= DICT_MAXCOUNT {
                 let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
                 if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
+                    assert!(pp.valid(), "v2p returned an invalid page");
                     if self.dict_decrypt(hw, &pp).is_none() {
                         // mapping exists, but the data is invalid. It's a free entry.
                         return try_entry as u32
@@ -886,6 +925,7 @@ impl BasisCacheEntry {
         while try_entry <= DICT_MAXCOUNT && dict_count < self.num_dicts {
             let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
             if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
+                assert!(pp.valid(), "v2p returned an invalid page");
                 if let Some(dict) = self.dict_decrypt(hw, &pp) {
                     if cstr_to_string(&dict.name) == name {
                         return Some((try_entry as u32, dict))
@@ -985,8 +1025,12 @@ impl BasisCacheEntry {
                     }
                     // 1. resolve the virtual address to a target page
                     let cur_vpage = VirtAddr::new(dict_offset.get() + (vpage_num as u64 * VPAGE_SIZE as u64)).unwrap();
-                    let pp = self.v2p_map.entry(cur_vpage).or_insert_with(||
-                        hw.try_fast_space_alloc().expect("FastSpace empty")).clone();
+                    let pp = self.v2p_map.entry(cur_vpage).or_insert_with(|| {
+                        let mut ap = hw.try_fast_space_alloc().expect("FastSpace empty");
+                        ap.set_valid(true);
+                        ap
+                    });
+                    assert!(pp.valid(), "v2p returned an invalid page");
 
                     // 2(a). fill in the target vpage with data: header special case
                     let mut dk_vpage = DictKeyVpage::default();
@@ -1100,6 +1144,7 @@ impl BasisCacheEntry {
             };
             let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
                 .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
+            assert!(pp.valid(), "basis page was invalid");
             let journal_bytes = self.journal.to_le_bytes(); // journal gets bumped by the patching function now
             let slice_iter =
                 journal_bytes.iter() // journal rev

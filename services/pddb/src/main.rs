@@ -428,7 +428,8 @@ fn xmain() -> ! {
         pddb_os.dbg_dump(Some("basecase1e".to_string()));
 
         log::info!("Doing delete/add consistency");
-        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None, None, None);
+        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None,
+            None, None, None);
         log::info!("Saving `dachecke` to local host");
         pddb_os.dbg_dump(Some("dachecke".to_string()));
 

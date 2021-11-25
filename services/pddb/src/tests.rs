@@ -2,6 +2,7 @@ use rand::Rng;
 use crate::*;
 
 const UPPER_BOUND: usize = 9000;
+const LOWER_BOUND: usize = 12; // needs to be big enough to compute murmur3 hash + hold checksum
 
 fn gen_key(dictname: &str, keynum: usize, lower_size_bound: usize, upper_size_bound: usize) -> (String, Vec::<u8>) {
     let mut rng = rand::thread_rng();
@@ -44,7 +45,7 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
 
     let num_dicts = maybe_num_dicts.unwrap_or(4);
     let num_keys = maybe_num_keys.unwrap_or(34);
-    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((1, UPPER_BOUND - 4)); // 4 bytes for the CI checksum
+    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((LOWER_BOUND, UPPER_BOUND - 4)); // 4 bytes for the CI checksum
     let extra_reserved = maybe_extra_reserved.unwrap_or(0);
 
     // make all the directories first
@@ -76,10 +77,13 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
 
 /// Delete & add dictionary consistency check
 pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut BasisCache,
-    maybe_num_dicts: Option<usize>, maybe_num_keys: Option<usize>, maybe_key_sizes: Option<(usize, usize)>) {
+    maybe_num_dicts: Option<usize>, maybe_num_keys: Option<usize>, maybe_key_sizes: Option<(usize, usize)>,
+    maybe_extra_reserved: Option<usize>,
+) {
     let evict_count = maybe_num_dicts.unwrap_or(1);
     let num_keys = maybe_num_keys.unwrap_or(36);
-    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((1, 9000));
+    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((LOWER_BOUND, UPPER_BOUND - 4));
+    let extra_reserved = maybe_extra_reserved.unwrap_or(0);
 
     let dict_list = basis_cache.dict_list(hw);
     let dict_start_index = dict_list.len();
@@ -99,7 +103,16 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
             let dictname = format!("dict{}", dictnum + dict_start_index);
             let (keyname, keydata) = gen_key(&dictname, keynum, key_lower_bound, key_upper_bound);
             // now we're ready to write it out
-            basis_cache.key_update(hw, &dictname, &keyname, &keydata, None, None, None, false).unwrap();
+            if maybe_extra_reserved.is_none() {
+                // we do this slightly funky way instead of just passing Some(0) because we want to test the "None" path explicitly
+                basis_cache.key_update(hw, &dictname, &keyname, &keydata, None,
+                    None,
+                    None, false).unwrap();
+            } else {
+                basis_cache.key_update(hw, &dictname, &keyname, &keydata, None,
+                    Some(keydata.len() + extra_reserved),
+                    None, false).unwrap();
+            }
         }
     }
 }

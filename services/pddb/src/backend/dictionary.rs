@@ -105,6 +105,7 @@ impl DictCacheEntry {
             } else {
                 let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
                 let pp = v2p_map.get(&VirtAddr::new(req_vaddr).unwrap()).expect("dictionary PP should be in existence");
+                assert!(pp.valid(), "v2p returned an invalid page");
                 assert!(cache_pp.page_number() == pp.page_number(), "cache inconsistency error");
                 let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
                 let mut keydesc = KeyDescriptor::default();
@@ -193,6 +194,7 @@ impl DictCacheEntry {
                     let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
                     let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
                     let pp = v2p_map.get(&VirtAddr::new(req_vaddr).unwrap()).expect("dictionary PP should be in existence");
+                    assert!(pp.valid(), "v2p returned an invalid page");
                     assert!(cache_pp.page_number() == pp.page_number(), "cache inconsistency error");
                     let mut keydesc = KeyDescriptor::default();
                     let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
@@ -302,8 +304,55 @@ impl DictCacheEntry {
             let kcache = self.keys.get_mut(name).expect("Entry was assured, but then not there!");
             // the update isn't going to fit in the reserved space, remove it, and re-insert it with an entirely new entry.
             if kcache.reserved < (data.len() + offset) as u64 {
-                self.key_remove(hw, v2p_map, cipher, name, false);
-                return self.key_update(hw, v2p_map, cipher, name, data, offset, alloc_hint, truncate, large_alloc_ptr);
+                if kcache.start < SMALL_POOL_END {
+                    // this started life as a small key. the algorithm is to remove and retry upon extend.
+                    // allocate a new vector that contains the *entire* data contents (not just the updated portion), and re-insert it
+                    let mut update_data = Vec::<u8>::with_capacity(data.len() + offset);
+                    if let Some(KeyCacheData::Small(old_data)) = &kcache.data {
+                        for &b in &old_data.data {
+                            update_data.push(b);
+                        }
+                    } else {
+                        log::error!("expected a small key, but the data type was incorrect or not in cache");
+                        panic!("expected a small key, but the data type was incorrect or not in cache");
+                    }
+                    // extend the vector out to the expected length, so the indexed slice in the next step doesn't panic
+                    while update_data.len() < offset + data.len() {
+                        update_data.push(0);
+                    }
+                    for (&src, dst) in data.iter().zip(update_data[offset..].iter_mut()) { *dst = src };
+                    log::info!("update/extend: removing {}", name);
+                    // now remove the old key entirely
+                    self.key_remove(hw, v2p_map, cipher, name, false);
+                    if update_data.len() > 4 { // just make sure that this log call doesn't fail on an index violation...
+                        log::info!("update/extend: re-adding {} with data len {}: {:x?}...", name, update_data.len(), &update_data[..4]);
+                    }
+                    // and re-add it with the extended data; if it's no longer a small key after this, it'll be handled inside this call.
+                    return self.key_update(hw, v2p_map, cipher, name, &update_data, 0, alloc_hint, truncate, large_alloc_ptr);
+                } else {
+                    // large data sets will need more physical pages to be allocated for the new file length. It's a hard error
+                    // if the requested size goes beyond the pre-allocated virtual memory space limit.
+                    if (offset + data.len()) as u64 > LARGE_FILE_MAX_SIZE {
+                        log::error!("Requested file update would exceed our file size limit. Asked: {}, limit: {}", offset + data.len(), LARGE_FILE_MAX_SIZE);
+                        panic!("Updated file size is greater than the large file size limit.");
+                    }
+                    assert!((kcache.start + kcache.reserved) % VPAGE_SIZE as u64 == 0, "large space allocation rules were violated");
+                    let new_reservation = PageAlignedVa::from(kcache.start + offset as u64 + data.len() as u64).as_u64();
+                    for vpage_addr in (
+                        (kcache.start + kcache.reserved)..new_reservation
+                    ).step_by(VPAGE_SIZE) {
+                        // ensures that a physical page entry exists for every new virtual address required by the extended key
+                        v2p_map.entry(VirtAddr::new(vpage_addr).unwrap()).or_insert_with(|| {
+                            let mut ap = hw.try_fast_space_alloc().expect("No free space to allocate additional large key storage");
+                            ap.set_valid(true);
+                            ap
+                        });
+                    }
+                    kcache.reserved = new_reservation;
+                    kcache.clean = false;
+                    // now retry the call, with the new physical page reservations in place
+                    return self.key_update(hw, v2p_map, cipher, name, data, offset, alloc_hint, truncate, large_alloc_ptr);
+                }
             }
             // the key exists, *and* there's sufficient space for the data
             if kcache.start < SMALL_POOL_END {
@@ -313,6 +362,7 @@ impl DictCacheEntry {
                 if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
                     cache_data.clean = false;
                     // grow the data cache to accommodate the necessary length; this should be efficient because we reserved space when the vector was allocated
+                    assert!(cache_data.data.len() != 0, "(temporary assert - expected data in the cache for a particular test. Remove this assert if you're hitting this on an actual zero-lenth data set.");
                     while cache_data.data.len() < data.len() + offset {
                         cache_data.data.push(0);
                     }
@@ -349,6 +399,7 @@ impl DictCacheEntry {
                     if ((kcache.start + offset as u64 + written as u64) % VPAGE_SIZE as u64) != 0 {
                         let start_vpage_addr = ((kcache.start + offset as u64) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
                         let pp = v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()).expect("large key data allocation missing");
+                        assert!(pp.valid(), "v2p returned an invalid page");
                         let mut pt_data = match hw.data_decrypt_page(&cipher, &self.aad, pp) {
                             Some(data) => data,
                             None => {
@@ -378,6 +429,7 @@ impl DictCacheEntry {
                     while written < data.len() {
                         let vpage_addr = ((kcache.start + written as u64 + offset as u64) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
                         let pp = v2p_map.get(&VirtAddr::new(vpage_addr).unwrap()).expect("large key data allocation missing");
+                        assert!(pp.valid(), "v2p returned an invalid page");
                         if data.len() - written >= VPAGE_SIZE {
                             // overwrite whole pages without decryption
                             let mut block = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
@@ -417,7 +469,9 @@ impl DictCacheEntry {
                         if (vpage_end_offset.as_u64() - kcache.start) > kcache.reserved {
                             for vpage in (vpage_end_offset.as_u64()..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
                                 if let Some(pp) = v2p_map.get_mut(&VirtAddr::new(vpage).unwrap()) {
+                                    assert!(pp.valid(), "v2p returned an invalid page");
                                     hw.fast_space_free(pp);
+                                    assert!(pp.valid() == false, "pp is still marked as valid!");
                                 }
                             }
                             kcache.reserved = vpage_end_offset.as_u64() - kcache.start;
@@ -533,7 +587,9 @@ impl DictCacheEntry {
                     v2p_map.insert(VirtAddr::new(vpage_addr).unwrap(), pp);
                 }
                 // 2. Recurse. Now, the key should exist, and it should go through the "write the data out" section of the algorithm.
-                return self.key_update(hw, v2p_map, cipher, name, data, offset, alloc_hint, truncate, large_alloc_ptr + reservation);
+                // note that the alloc pointer at this point sets the ultimate limit for the large file size (32GiB as of writing).
+                return self.key_update(hw, v2p_map, cipher, name, data, offset, alloc_hint, truncate,
+                    large_alloc_ptr + PageAlignedVa::from(LARGE_FILE_MAX_SIZE));
             }
         }
         Ok(large_alloc_ptr)
@@ -554,6 +610,10 @@ impl DictCacheEntry {
     /// overwritten in paranoid mode, but large keys are.
     pub fn key_remove(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str, paranoid: bool) {
+        if paranoid {
+            // large records are paranoid-erased, by default, because of the pool-reuse problem.
+            unimplemented!("Paranoid erase for small records not yet implemented. Calling sync after an update, however, effectively does a paranoid erase.");
+        }
         // this call makes sure we have a cache entry to operate on.
         self.ensure_key_entry(hw, v2p_map, cipher, name_str);
         let name = String::from(name_str);
@@ -564,8 +624,15 @@ impl DictCacheEntry {
             if let Some(small_index) = small_storage_index_from_key(kcache, self.index) {
                 // handle the small pool case
                 let ksp = &mut self.small_pool[small_index];
+                log::info!("victim: {}", name);
+                for s in &ksp.contents {
+                    log::info!("before: {}", s);
+                }
                 ksp.contents.swap_remove(ksp.contents.iter().position(|s| *s == name)
                     .expect("Small pool did not contain the element we expected"));
+                for s in &ksp.contents {
+                    log::info!("after: {}", s);
+                }
                 assert!(kcache.reserved <= SMALL_CAPACITY as u64, "error in small key entry size");
                 ksp.avail += kcache.reserved as u16;
                 assert!(ksp.avail <= SMALL_CAPACITY as u16, "bookkeeping error in small pool capacity");
@@ -583,12 +650,15 @@ impl DictCacheEntry {
                 // ...but we remove the virtual pages from the page pool, effectively reclaiming the physical space.
                 for vpage in kcache.large_pool_vpages() {
                     if let Some(pp) = v2p_map.get_mut(&vpage) {
-                        if paranoid {
+                        assert!(pp.valid(), "v2p returned an invalid page");
+                        { // this slows things down but it prevents data from leaking back into other basis data structures when the sector is re-allocated
+                        // in other words, i think it's probably very unsafe to not always secure-erase large data as it's de-allocated.
                             let mut noise = [0u8; PAGE_SIZE];
                             hw.trng_slice(&mut noise);
                             hw.patch_data(&noise, pp.page_number() * PAGE_SIZE as u32);
                         }
                         hw.fast_space_free(pp);
+                        assert!(pp.valid() == false, "pp is still marked as valid!");
                     }
                 }
             }
@@ -650,9 +720,12 @@ impl DictCacheEntry {
         for (index, entry) in self.small_pool.iter_mut().enumerate() {
             if !entry.clean {
                 let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(self.index, index)).unwrap();
-                let pp= v2p_map.entry(pool_vaddr).or_insert_with(||
-                    hw.try_fast_space_alloc().expect("No free space to allocate small key storage"));
-                pp.set_valid(true);
+                let pp = v2p_map.entry(pool_vaddr).or_insert_with(|| {
+                    let mut ap = hw.try_fast_space_alloc().expect("No free space to allocate small key storage");
+                    ap.set_valid(true);
+                    ap
+                });
+                assert!(pp.valid(), "v2p returned an invalid page");
 
                 // WARNING - we don't read back the journal number before loading data into the page!
                 // we /could/ do that, but it incurs an expensive full-page decryption when we plan to nuke all the data.
@@ -957,6 +1030,7 @@ impl PlaintextCache {
         req_vaddr: VirtAddr
     ) {
         if let Some(pp) = v2p_map.get(&req_vaddr) {
+            assert!(pp.valid(), "v2p returned an invalid page");
             let mut fill_needed = false;
             if let Some(tag) = self.tag {
                 if tag.page_number() != pp.page_number() {
