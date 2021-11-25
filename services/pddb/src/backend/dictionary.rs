@@ -73,7 +73,7 @@ impl DictCacheEntry {
             key_count: dict.num_keys,
             free_keys,
             last_disk_key_index: dict.free_key_index,
-            clean: true,
+            clean: false,
             age: dict.age,
             flags: dict.flags,
             small_pool: Vec::<KeySmallPool>::new(),
@@ -90,65 +90,100 @@ impl DictCacheEntry {
         let mut key_count = 0;
         let mut alloc_top = VirtAddr::new(LARGE_POOL_START).unwrap();
 
-        let mut index_cache = PlaintextCache { data: None, tag: None };
-        let mut data_cache = PlaintextCache { data: None, tag: None };
-        while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
-            // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
-            // be a substantial savings in effort.
-            let req_vaddr = dict_indices_to_vaddr(self.index, try_entry);
-            index_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(req_vaddr).unwrap());
-
-            if index_cache.data.is_none() || index_cache.tag.is_none() {
-                // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
-                log::warn!("Dictionary fill: encountered unallocated page at {} in the dictionary map. {}/{}", try_entry, key_count, self.key_count);
-                try_entry += DK_PER_VPAGE;
-            } else {
-                let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
-                let pp = v2p_map.get(&VirtAddr::new(req_vaddr).unwrap()).expect("dictionary PP should be in existence");
-                assert!(pp.valid(), "v2p returned an invalid page");
-                assert!(cache_pp.page_number() == pp.page_number(), "cache inconsistency error");
-                let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
-                let mut keydesc = KeyDescriptor::default();
-                let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
-                for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
-                    *dst = src;
-                }
-                if keydesc.flags.valid() {
-                    let mut kcache = KeyCacheEntry {
-                        start: keydesc.start,
-                        len: keydesc.len,
-                        reserved: keydesc.reserved,
-                        flags: keydesc.flags,
-                        age: keydesc.age,
-                        descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
-                        clean: true,
-                        data: None,
-                    };
-                    let kname = cstr_to_string(&keydesc.name);
-                    if !self.keys.contains_key(&kname) {
-                        if keydesc.start + keydesc.reserved > alloc_top.get() {
-                            // if the key is within the large pool space, note its allocation for the basis overall
-                            alloc_top = VirtAddr::new(keydesc.start + keydesc.reserved).unwrap();
-                            // nothing else needs to be done -- we don't pre-cache large key data.
-                        } else {
-                            // try to fill the small key cache entry details
-                            self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &mut kcache, &kname);
-                        }
-                        self.keys.insert(kname, kcache);
-                    } else {
-                        log::trace!("fill: entry already present {}", kname);
-                    }
-                    key_count += 1;
-                }
-                try_entry += 1;
+        let mut valid_keys = 0;
+        for key in self.keys.values() {
+            if key.flags.valid() {
+                valid_keys += 1;
             }
         }
-        // note where the scan left off, so we don't have to brute-force it in the future
-        self.last_disk_key_index = try_entry as u32;
+        assert!(valid_keys <= self.key_count, "Inconsistency in key count. See note on basis/dict_count for logic on why this assert should be true...");
+        if valid_keys == self.key_count {
+            // we've got an entry for every key, so we can safely skip the deep index search
+            let mut smallkeys_to_fill = Vec::<String>::new(); // work around inner mutability problem by copying the names of keys to fill
+            for (name, key) in self.keys.iter() {
+                if key.flags.valid() {
+                    if key.start + key.reserved > alloc_top.get() {
+                        // if the key is within the large pool space, note its allocation for the basis overall
+                        alloc_top = VirtAddr::new(key.start + key.reserved).unwrap();
+                        // nothing else needs to be done -- we don't pre-cache large key data.
+                    } else {
+                        if key.data.is_none() {
+                            smallkeys_to_fill.push(name.to_string());
+                        }
+                    }
+                }
+            }
+            // the cache may not be very effectively used because the key order is random, but let's try anyways.
+            let mut data_cache = PlaintextCache { data: None, tag: None };
+            for key_to_fill in smallkeys_to_fill.iter() {
+                self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, key_to_fill);
+            }
+        } else {
+            let mut index_cache = PlaintextCache { data: None, tag: None };
+            let mut data_cache = PlaintextCache { data: None, tag: None };
+            while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
+                // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
+                // be a substantial savings in effort.
+                let req_vaddr = dict_indices_to_vaddr(self.index, try_entry);
+                index_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(req_vaddr).unwrap());
 
-        // now build the small_pool_free binary heap structure
-        self.rebuild_free_pool();
+                if index_cache.data.is_none() || index_cache.tag.is_none() {
+                    // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
+                    log::warn!("Dictionary fill: encountered unallocated page at {} in the dictionary map. {}/{}", try_entry, key_count, self.key_count);
+                    try_entry += DK_PER_VPAGE;
+                } else {
+                    let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
+                    let pp = v2p_map.get(&VirtAddr::new(req_vaddr).unwrap()).expect("dictionary PP should be in existence");
+                    assert!(pp.valid(), "v2p returned an invalid page");
+                    assert!(cache_pp.page_number() == pp.page_number(), "cache inconsistency error");
+                    let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");
+                    let mut keydesc = KeyDescriptor::default();
+                    let start = size_of::<JournalType>() + (try_entry % DK_PER_VPAGE) * DK_STRIDE;
+                    for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
+                        *dst = src;
+                    }
+                    if keydesc.flags.valid() {
+                        let kcache = KeyCacheEntry {
+                            start: keydesc.start,
+                            len: keydesc.len,
+                            reserved: keydesc.reserved,
+                            flags: keydesc.flags,
+                            age: keydesc.age,
+                            descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
+                            clean: true,
+                            data: None,
+                        };
+                        let kname = cstr_to_string(&keydesc.name);
+                        let key_exists_and_valid =
+                            if let Some(kcache) = self.keys.get(&kname) {
+                                kcache.flags.valid()
+                            } else {
+                                false
+                            };
+                        if !key_exists_and_valid {
+                            self.keys.insert(kname.clone(), kcache);
+                            if keydesc.start + keydesc.reserved > alloc_top.get() {
+                                // if the key is within the large pool space, note its allocation for the basis overall
+                                alloc_top = VirtAddr::new(keydesc.start + keydesc.reserved).unwrap();
+                                // nothing else needs to be done -- we don't pre-cache large key data.
+                            } else {
+                                // try to fill the small key cache entry details
+                                self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &kname);
+                            }
+                        } else {
+                            log::trace!("fill: entry already present {}", kname);
+                        }
+                        key_count += 1;
+                    }
+                    try_entry += 1;
+                }
+            }
+            // note where the scan left off, so we don't have to brute-force it in the future
+            self.last_disk_key_index = try_entry as u32;
 
+            // now build the small_pool_free binary heap structure
+            self.rebuild_free_pool();
+        }
         alloc_top
     }
     /// merges the list of keys in this dict cache entry into a merge_list.
@@ -204,7 +239,7 @@ impl DictCacheEntry {
                     let kname = cstr_to_string(&keydesc.name);
                     if keydesc.flags.valid() {
                         if kname == name_str {
-                            let mut kcache = KeyCacheEntry {
+                            let kcache = KeyCacheEntry {
                                 start: keydesc.start,
                                 len: keydesc.len,
                                 reserved: keydesc.reserved,
@@ -214,8 +249,8 @@ impl DictCacheEntry {
                                 clean: true,
                                 data: None,
                             };
-                            self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &mut kcache, &kname);
-                            self.keys.insert(kname, kcache);
+                            self.keys.insert(kname.clone(), kcache);
+                            self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &kname);
                             return true;
                         }
                         key_count += 1;
@@ -235,46 +270,55 @@ impl DictCacheEntry {
         }
     }
     fn try_fill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
-        data_cache: &mut PlaintextCache, kcache: &mut KeyCacheEntry, key_name: &str) {
-        if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
-            // if the key is within the small pool space, create a bookkeeping record for it, and pre-cache its data.
-            // generate the index within the small pool based on the address
-            while self.small_pool.len() < pool_index + 1 {
-                // fill in the pool with blank entries. In general, we should have a low amount of blank entries, but
-                // one situation where we could get a leak is if we allocate a large amount of small data, and then delete
-                // all but the most recently allocated one, leaving an orphan at a high index, which is then subsequently
-                // treated as read-only so none of the subsequent write/update ops would have occassion to move it. This would
-                // need to be remedied with a "defrag" operation, but for now, we don't have that.
-                let ksp = KeySmallPool::new();
-                self.small_pool.push(ksp);
-            }
-            let ksp = &mut self.small_pool[pool_index];
-            ksp.contents.push(key_name.to_string());
-            assert!(kcache.reserved >= kcache.len, "Reserved amount is less than length, this is an error!");
-            assert!(kcache.reserved <= VPAGE_SIZE as u64, "Reserved amount is not appropriate for the small pool. Logic error in prior PDDB operation!");
-            log::info!("avail: {} reserved: {}", ksp.avail, kcache.reserved);
-            assert!((ksp.avail as u64) >= kcache.reserved, "Total amount allocated to a small pool chunk is incorrect; suspect logic error in prior PDDB operation!");
-            ksp.avail -= kcache.reserved as u16;
-            // note: small_pool_free is updated only after all the entries have been read in
+        data_cache: &mut PlaintextCache, key_name: &str) {
+        if let Some(kcache) = self.keys.get_mut(key_name) {
+            if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
+                // if the key is within the small pool space, create a bookkeeping record for it, and pre-cache its data.
+                // generate the index within the small pool based on the address
+                while self.small_pool.len() < pool_index + 1 {
+                    // fill in the pool with blank entries. In general, we should have a low amount of blank entries, but
+                    // one situation where we could get a leak is if we allocate a large amount of small data, and then delete
+                    // all but the most recently allocated one, leaving an orphan at a high index, which is then subsequently
+                    // treated as read-only so none of the subsequent write/update ops would have occassion to move it. This would
+                    // need to be remedied with a "defrag" operation, but for now, we don't have that.
+                    let ksp = KeySmallPool::new();
+                    self.small_pool.push(ksp);
+                }
+                let ksp = &mut self.small_pool[pool_index];
+                if !ksp.clean {
+                    ksp.contents.push(key_name.to_string());
+                    assert!(kcache.reserved >= kcache.len, "Reserved amount is less than length, this is an error!");
+                    assert!(kcache.reserved <= VPAGE_SIZE as u64, "Reserved amount is not appropriate for the small pool. Logic error in prior PDDB operation!");
+                    log::trace!("avail: {} reserved: {}", ksp.avail, kcache.reserved);
+                    assert!((ksp.avail as u64) >= kcache.reserved, "Total amount allocated to a small pool chunk is incorrect; suspect logic error in prior PDDB operation!");
+                    ksp.avail -= kcache.reserved as u16;
+                    // note: small_pool_free is updated only after all the entries have been read in
 
-            // now grab the *data* referred to by this key. Maybe this is a "bad" idea -- this can really eat up RAM fast to hold
-            // all the small pool data right away, but let's give it a try and see how it works. Later on we can always skip this.
-            // manage a separate small cache for data blocks, under the theory that small keys tend to be packed together
-            let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
-            data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
-            if let Some(page) = data_cache.data.as_ref() {
-                let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
-                let mut data = page[start_offset..start_offset + kcache.len as usize].to_vec();
-                data.reserve_exact((kcache.reserved - kcache.len) as usize);
-                kcache.data = Some(KeyCacheData::Small(
-                    KeySmallData {
-                        clean: true,
-                        data
+                    // now grab the *data* referred to by this key. Maybe this is a "bad" idea -- this can really eat up RAM fast to hold
+                    // all the small pool data right away, but let's give it a try and see how it works. Later on we can always skip this.
+                    // manage a separate small cache for data blocks, under the theory that small keys tend to be packed together
+                    let data_vaddr = small_storage_base_vaddr_from_indices(self.index, pool_index);
+                    data_cache.fill(hw, v2p_map, cipher, &self.aad, VirtAddr::new(data_vaddr).unwrap());
+                    if let Some(page) = data_cache.data.as_ref() {
+                        let start_offset = size_of::<JournalType>() + (kcache.start % VPAGE_SIZE as u64) as usize;
+                        let mut data = page[start_offset..start_offset + kcache.len as usize].to_vec();
+                        data.reserve_exact((kcache.reserved - kcache.len) as usize);
+                        kcache.data = Some(KeyCacheData::Small(
+                            KeySmallData {
+                                clean: true,
+                                data
+                            }
+                        ));
+                    } else {
+                        log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
                     }
-                ));
-            } else {
-                log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
+                } else {
+                    log::info!("pool is clean for key {} / index {}, skipping fill", key_name, pool_index);
+                }
             }
+        } else {
+            log::error!("try_fill_small_key() can only be called after the key cache entry has been allocated");
+            panic!("consistency error");
         }
     }
     /// Update a key entry. If the key does not already exist, it will create a new one.
@@ -302,6 +346,7 @@ impl DictCacheEntry {
         self.clean = false;
         if self.ensure_key_entry(hw, v2p_map, cipher, name) {
             let kcache = self.keys.get_mut(name).expect("Entry was assured, but then not there!");
+            kcache.clean = false;
             // the update isn't going to fit in the reserved space, remove it, and re-insert it with an entirely new entry.
             if kcache.reserved < (data.len() + offset) as u64 {
                 if kcache.start < SMALL_POOL_END {
@@ -357,6 +402,8 @@ impl DictCacheEntry {
             // the key exists, *and* there's sufficient space for the data
             if kcache.start < SMALL_POOL_END {
                 log::info!("doing data update");
+                kcache.age = kcache.age.saturating_add(1);
+                kcache.clean = false;
                 // it's a small key; note that we didn't consult the *size* of the key to determine its pool type:
                 // small-sized keys can still end up in the "large" space if the small pool allocation is exhausted.
                 if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
@@ -614,64 +661,72 @@ impl DictCacheEntry {
             // large records are paranoid-erased, by default, because of the pool-reuse problem.
             unimplemented!("Paranoid erase for small records not yet implemented. Calling sync after an update, however, effectively does a paranoid erase.");
         }
-        // this call makes sure we have a cache entry to operate on.
-        self.ensure_key_entry(hw, v2p_map, cipher, name_str);
-        let name = String::from(name_str);
-        let mut need_rebuild = false;
-        let mut need_free_key: Option<u32> = None;
-        if let Some(kcache) = self.keys.get_mut(&name) {
-            self.clean = false;
-            self.key_count -= 1;
-            if let Some(small_index) = small_storage_index_from_key(kcache, self.index) {
-                // handle the small pool case
-                let ksp = &mut self.small_pool[small_index];
-                ksp.contents.swap_remove(ksp.contents.iter().position(|s| *s == name)
-                    .expect("Small pool did not contain the element we expected"));
-                assert!(kcache.reserved <= SMALL_CAPACITY as u64, "error in small key entry size");
-                ksp.avail += kcache.reserved as u16;
-                assert!(ksp.avail <= SMALL_CAPACITY as u16, "bookkeeping error in small pool capacity");
-                ksp.clean = false; // this will also effectively cause the record to be deleted on disk once the small pool data is synchronized
-                need_rebuild = true;
-                kcache.clean = false;
+        // this call will check the disk to see if there's key data that's not in cache.
+        if self.ensure_key_entry(hw, v2p_map, cipher, name_str) {
+            let name = String::from(name_str);
+            let mut need_rebuild = false;
+            let mut need_free_key: Option<u32> = None;
+            if let Some(kcache) = self.keys.get_mut(&name) {
+                if !kcache.flags.valid() {
+                    // key was previously deleted, already in cache, but not flushed. Nothing to do here.
+                    return;
+                }
+                self.age = self.age.saturating_add(1);
+                self.clean = false;
+
                 kcache.age = kcache.age.saturating_add(1);
                 kcache.flags.set_valid(false);
-            } else {
-                // handle the large pool case
-                // mark the entry as invalid and dirty; virtual space is one huge memory leak...
                 kcache.clean = false;
-                kcache.age = kcache.age.saturating_add(1);
-                kcache.flags.set_valid(false);
-                // ...but we remove the virtual pages from the page pool, effectively reclaiming the physical space.
-                for vpage in kcache.large_pool_vpages() {
-                    if let Some(pp) = v2p_map.get_mut(&vpage) {
-                        assert!(pp.valid(), "v2p returned an invalid page");
-                        { // this slows things down but it prevents data from leaking back into other basis data structures when the sector is re-allocated
-                        // in other words, i think it's probably very unsafe to not always secure-erase large data as it's de-allocated.
-                            let mut noise = [0u8; PAGE_SIZE];
-                            hw.trng_slice(&mut noise);
-                            hw.patch_data(&noise, pp.page_number() * PAGE_SIZE as u32);
+
+                if let Some(small_index) = small_storage_index_from_key(kcache, self.index) {
+                    // handle the small pool case
+                    let ksp = &mut self.small_pool[small_index];
+                    ksp.contents.swap_remove(ksp.contents.iter().position(|s| *s == name)
+                        .expect("Small pool did not contain the element we expected"));
+                    assert!(kcache.reserved <= SMALL_CAPACITY as u64, "error in small key entry size");
+                    ksp.avail += kcache.reserved as u16;
+                    assert!(ksp.avail <= SMALL_CAPACITY as u16, "bookkeeping error in small pool capacity");
+                    ksp.clean = false; // this will also effectively cause the record to be deleted on disk once the small pool data is synchronized
+                    need_rebuild = true;
+
+                } else {
+                    // handle the large pool case
+                    // mark the entry as invalid and dirty; virtual space is one huge memory leak...
+                    // ...but we remove the virtual pages from the page pool, effectively reclaiming the physical space.
+                    for vpage in kcache.large_pool_vpages() {
+                        if let Some(pp) = v2p_map.get_mut(&vpage) {
+                            assert!(pp.valid(), "v2p returned an invalid page");
+                            { // this slows things down but it prevents data from leaking back into other basis data structures when the sector is re-allocated
+                            // in other words, i think it's probably very unsafe to not always secure-erase large data as it's de-allocated.
+                                let mut noise = [0u8; PAGE_SIZE];
+                                hw.trng_slice(&mut noise);
+                                hw.patch_data(&noise, pp.page_number() * PAGE_SIZE as u32);
+                            }
+                            hw.fast_space_free(pp);
+                            assert!(pp.valid() == false, "pp is still marked as valid!");
                         }
-                        hw.fast_space_free(pp);
-                        assert!(pp.valid() == false, "pp is still marked as valid!");
                     }
                 }
+                need_free_key = Some(kcache.descriptor_index.get());
             }
-            need_free_key = Some(kcache.descriptor_index.get());
-        }
-        // free up the key index in the dictionary, if necessary
-        if let Some(key_to_free) = need_free_key {
-            self.put_free_key_index(key_to_free);
-        }
-        if need_rebuild {
-            // no stable "retain" api, so we have to clear the heap and rebuild it https://github.com/rust-lang/rust/issues/71503
-            self.rebuild_free_pool();
-        }
+            // free up the key index in the dictionary, if necessary
+            if let Some(key_to_free) = need_free_key {
+                self.put_free_key_index(key_to_free);
+                self.key_count -= 1;
+                log::info!("key_count: {}", self.key_count);
+            }
+            if need_rebuild {
+                // no stable "retain" api, so we have to clear the heap and rebuild it https://github.com/rust-lang/rust/issues/71503
+                self.rebuild_free_pool();
+            }
 
-        // we don't remove the cache entry, because it hasn't been synchronized to disk.
-        // at this point:
-        //   - in-memory representation will return an entry, but with its valid flag set to false.
-        //   - disk still contains a key entry that claims we have a valid key
-        // a call to sync is necessary to completely flush things, but, we don't sync every time we remove because it's inefficient.
+            // we don't remove the cache entry, because it hasn't been synchronized to disk.
+            // at this point:
+            //   - in-memory representation will return an entry, but with its valid flag set to false.
+            //   - disk still contains a key entry that claims we have a valid key
+            // a call to sync is necessary to completely flush things, but, we don't sync every time we remove because it's inefficient.
+        }
+        // if there's no key....we're done!
     }
     /// used to remove a key from the dictionary, syncing 0's to the disk in the key's place
     /// sort of less relevant now that the large keys have a paranoid mode; probably this routine should actually
@@ -689,7 +744,7 @@ impl DictCacheEntry {
             if !ksp.clean {
                 for keyname in &ksp.contents {
                     let kce = self.keys.get(keyname).expect("data allocated but no index entry");
-                    if kce.flags.unresolved() {
+                    if kce.flags.unresolved() && kce.flags.valid() {
                         data_estimate += SMALL_CAPACITY - ksp.avail as usize;
                         index_estimate += 1;
                     }
@@ -739,22 +794,24 @@ impl DictCacheEntry {
                 // visit the entries in arbitrary order, but back them in optimally tightly packed
                 for key_name in &entry.contents {
                     let kcache = self.keys.get_mut(key_name).expect("data record without index");
-                    log::info!("sync {}/{}:0x{:x}..{}->{}", key_name, index, kcache.start, kcache.len, kcache.reserved);
-                    kcache.start = pool_vaddr.get() + pool_offset as u64;
-                    kcache.age = kcache.age.saturating_add(1);
-                    kcache.clean = false;
-                    kcache.flags.set_unresolved(false);
-                    kcache.flags.set_valid(true);
-                    if let Some(KeyCacheData::Small(data)) = kcache.data.as_mut() {
-                        data.clean = true;
-                        for (&src, dst) in data.data.iter()
-                        .zip(page[size_of::<JournalType>() + pool_offset..size_of::<JournalType>() + pool_offset + kcache.reserved as usize].iter_mut())
-                        {*dst = src;}
-                    } else {
-                        // we have a rule that all small keys, when cached, also carry their data: there should not be an index without data.
-                        panic!("Incorrect data cache type for small key entry.");
+                    if kcache.flags.valid() { // only sync valid keys, not ones that were marked for deletion but not yet synced.
+                        log::info!("sync {}/{}:0x{:x}..{}->{}", key_name, index, kcache.start, kcache.len, kcache.reserved);
+                        kcache.start = pool_vaddr.get() + pool_offset as u64;
+                        kcache.age = kcache.age.saturating_add(1);
+                        kcache.clean = false;
+                        kcache.flags.set_unresolved(false);
+                        kcache.flags.set_valid(true);
+                        if let Some(KeyCacheData::Small(data)) = kcache.data.as_mut() {
+                            data.clean = true;
+                            for (&src, dst) in data.data.iter()
+                            .zip(page[size_of::<JournalType>() + pool_offset..size_of::<JournalType>() + pool_offset + kcache.reserved as usize].iter_mut())
+                            {*dst = src;}
+                        } else {
+                            // we have a rule that all small keys, when cached, also carry their data: there should not be an index without data.
+                            panic!("Incorrect data cache type for small key entry.");
+                        }
+                        pool_offset += kcache.reserved as usize;
                     }
-                    pool_offset += kcache.reserved as usize;
                 }
                 // now commit the sector to disk
                 hw.data_encrypt_and_patch_page(cipher, &self.aad, &mut page, &pp);
@@ -859,6 +916,21 @@ impl DictCacheEntry {
             }
         }
     }
+
+    /// a cache entry doesn't actually know it's own name -- it's the key associated with the cache entry
+    /// so you must provide it to create the full record. It also doesn't know the name of its containing basis.
+    pub(crate) fn to_dict_attributes(&self, name: &str, basis_name: &str) -> DictAttributes {
+        DictAttributes {
+            flags: self.flags,
+            age: self.age,
+            num_keys: self.key_count,
+            free_key_index: self.last_disk_key_index,
+            name: name.to_string(),
+            clean: self.clean,
+            small_key_count: self.small_pool.len(),
+            basis: basis_name.to_string(),
+        }
+    }
 }
 
 /// converts a dictionary index -- which is a 1-offset number of dictionaries -- plus a key
@@ -927,6 +999,18 @@ impl DerefMut for Dictionary {
                 as &mut [u8]
         }
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct DictAttributes {
+    pub(crate) flags: DictFlags,
+    pub(crate) age: u32,
+    pub(crate) num_keys: u32,
+    pub(crate) free_key_index: u32,
+    pub(crate) name: String,
+    pub(crate) clean: bool,
+    pub(crate) small_key_count: usize,
+    pub(crate) basis: String,
 }
 
 /// This structure "enforces" the 127-byte stride of dict/key vpage entries

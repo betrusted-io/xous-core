@@ -149,7 +149,7 @@ impl KeySmallPool {
         KeySmallPool {
             contents: Vec::<String>::new(),
             avail: SMALL_CAPACITY as u16,
-            clean: true,
+            clean: false,
         }
     }
 }
@@ -177,6 +177,7 @@ impl PartialEq for KeySmallPoolOrd {
 }
 
 /// A structure for passing around key metadata
+#[derive(Debug)]
 pub(crate) struct KeyAttributes {
     /// actual length of data in the key
     pub(crate) len: usize,
@@ -188,4 +189,6 @@ pub(crate) struct KeyAttributes {
     pub(crate) dict: String,
     /// the specific basis from which this key's metadata was found
     pub(crate) basis: String,
+    /// flags
+    pub(crate) flags: KeyFlags,
 }

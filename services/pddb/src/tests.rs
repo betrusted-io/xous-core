@@ -163,7 +163,7 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                     for &b in &patchbuf[..readlen] {
                         checkdata.push(b);
                     }
-                    log::info!("checkdata len: {}", checkdata.len());
+                    log::trace!("checkdata len: {}", checkdata.len());
                     while checkdata.len() % 4 != 0 {
                         checkdata.push(0);
                     }
@@ -172,5 +172,72 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                 }
             }
         }
+    }
+}
+
+pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
+    maybe_num_dicts: Option<usize>, maybe_num_keys: Option<usize>, maybe_key_sizes: Option<(usize, usize)>,
+    maybe_extra_reserved: Option<usize>,
+) {
+    let evict_count = maybe_num_dicts.unwrap_or(2);
+    let num_keys = maybe_num_keys.unwrap_or(36);
+    let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((LOWER_BOUND, UPPER_BOUND - 4));
+    let extra_reserved = maybe_extra_reserved.unwrap_or(0);
+
+    let mut evicted_dicts = Vec::<String>::new();
+    let dict_list = basis_cache.dict_list(hw);
+    let mut evict_iter = 0;
+    for (evicted, evict_dict) in dict_list.iter().enumerate() {
+        if evicted < evict_count {
+            for (index, key) in basis_cache.key_list(hw, evict_dict).unwrap().iter().enumerate() {
+                if index % 2 == (evict_iter % 2) { // exercise odd/even patterns
+                    log::info!("deleting {}:{}", evict_dict, key);
+                    basis_cache.key_remove(hw, evict_dict, key,None, false).unwrap();
+                    let da = basis_cache.dict_attributes(hw, evict_dict, None).unwrap();
+                    log::info!("{:?}", da);
+                }
+            }
+        } else {
+            break;
+        }
+        evicted_dicts.push(evict_dict.to_string());
+        evict_iter += 1;
+    }
+    for dict in basis_cache.dict_list(hw).iter() {
+        let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
+        log::info!("{:?}", da);
+    }
+
+    for keynum in 1..=num_keys {
+        for dictname in evicted_dicts.iter() {
+            let (keyname, keydata) = gen_key(dictname, keynum, key_lower_bound, key_upper_bound);
+            // now we're ready to write it out
+            if maybe_extra_reserved.is_none() {
+                // we do this slightly funky way instead of just passing Some(0) because we want to test the "None" path explicitly
+                basis_cache.key_update(hw, dictname, &keyname, &keydata, None,
+                    None,
+                    None, false).unwrap();
+            } else {
+                basis_cache.key_update(hw, dictname, &keyname, &keydata, None,
+                    Some(keydata.len() + extra_reserved),
+                    None, false).unwrap();
+            }
+        }
+    }
+
+    log::info!("doing all-basis sync");
+    basis_cache.sync(hw, None).unwrap();
+    log::info!("all-basis sync done");
+
+    // now list all the attributes of the basis
+    for dict in basis_cache.dict_list(hw).iter() {
+        let da = basis_cache.dict_attributes(hw, &dict, None).unwrap();
+        log::info!("{:?}", da);
+        let mut sanity_count = 0;
+        for key in basis_cache.key_list(hw, dict).unwrap().iter() {
+            log::info!("{}:{}=>{:?}", dict, key, basis_cache.key_attributes(hw, dict, key, None));
+            sanity_count += 1;
+        }
+        log::info!("sanity check count: {}", sanity_count);
     }
 }

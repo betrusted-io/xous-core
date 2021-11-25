@@ -427,7 +427,7 @@ fn xmain() -> ! {
         log::info!("Saving `basecase1e` to local host");
         pddb_os.dbg_dump(Some("basecase1e".to_string()));
 
-        log::info!("Doing delete/add consistency");
+        log::info!("Doing delete/add consistency with data extension");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None,
             None, None, None);
         log::info!("Saving `dachecke` to local host");
@@ -436,6 +436,10 @@ fn xmain() -> ! {
         log::info!("Doing patch test");
         patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
         pddb_os.dbg_dump(Some("patche".to_string()));
+
+        log::info!("Doing delete pattern test");
+        delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
+        pddb_os.dbg_dump(Some("patterne".to_string()));
     }
     log::info!("CI done");
     /*
@@ -474,7 +478,7 @@ fn xmain() -> ! {
         [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
         [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
         [done] in-place update consistency: general integrity then patch all keys with a new test pattern
-        extend update consistency: general integrity then patch all keys with a longer test pattern
+        [done] extend update consistency: general integrity then patch all keys with a longer test pattern
         key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
         basis search: create basis A, populate with general integrity. create basis B, add test entries.
            hide basis B, confirm original A; mount basis B, confirm B overlay.

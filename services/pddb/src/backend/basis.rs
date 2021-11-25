@@ -560,33 +560,37 @@ impl BasisCache {
             if let Some(dict_entry) = basis.dicts.get(dict) {
                 // see if we need to make a kcache entry
                 if let Some(kcache) = dict_entry.keys.get(key) {
-                    // now check for data reservations
-                    if let Some(key_index) = small_storage_index_from_key(&kcache, dict_entry.index) {
-                        // it's probably going in the small pool.
-                        // index exists, see if the page exists
-                        if reserved == 0 { // something went wrong here
-                            log::info!("reserved {}", reserved);
-                            log::info!("{}:{} - [{}]{:x}+{}->{}", dict, key, kcache.descriptor_index, kcache.start, kcache.len, kcache.reserved);
-                        }
-                        if dict_entry.small_pool.len() > key_index {
-                            log::trace!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
-                            // see if the pool's address exists in the page table
-                            let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(dict_entry.index, key_index)).unwrap();
-                            if !basis.v2p_map.contains_key(&pool_vaddr) {
+                    if kcache.flags.valid() {
+                        // now check for data reservations
+                        if let Some(key_index) = small_storage_index_from_key(&kcache, dict_entry.index) {
+                            // it's probably going in the small pool.
+                            // index exists, see if the page exists
+                            if reserved == 0 { // something went wrong here
+                                log::info!("reserved {}", reserved);
+                                log::info!("{}:{} - [{}]{:x}+{}->{}", dict, key, kcache.descriptor_index, kcache.start, kcache.len, kcache.reserved);
+                            }
+                            if dict_entry.small_pool.len() > key_index {
+                                log::trace!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
+                                // see if the pool's address exists in the page table
+                                let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(dict_entry.index, key_index)).unwrap();
+                                if !basis.v2p_map.contains_key(&pool_vaddr) {
+                                    pages_needed += 1;
+                                }
+                            } else {
+                                // we're definitely going to need another small pool page
                                 pages_needed += 1;
                             }
                         } else {
-                            // we're definitely going to need another small pool page
-                            pages_needed += 1;
-                        }
-                    } else {
-                        // it's a large block. see if its address have been mapped
-                        // large pool start addresses should always be vpage aligned
-                        for vpage in (kcache.start..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
-                            if !basis.v2p_map.contains_key(&VirtAddr::new(vpage).unwrap()) {
-                                pages_needed += 1;
+                            // it's a large block. see if its address have been mapped
+                            // large pool start addresses should always be vpage aligned
+                            for vpage in (kcache.start..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
+                                if !basis.v2p_map.contains_key(&VirtAddr::new(vpage).unwrap()) {
+                                    pages_needed += 1;
+                                }
                             }
                         }
+                    } else {
+                        pages_needed += reserved_pages;
                     }
                 } else {
                     // there's no key cache entry. For simplicity, let's just assume this means none of the data
@@ -677,6 +681,7 @@ impl BasisCache {
                         age: kcache.age as usize,
                         dict: dict.to_string(),
                         basis: (&basis.name).to_string(),
+                        flags: kcache.flags,
                     })
                 } else {
                     return Err(Error::new(ErrorKind::NotFound, "key not found"));
@@ -685,6 +690,33 @@ impl BasisCache {
         } else {
             Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
         }
+    }
+
+    pub(crate) fn dict_attributes(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<DictAttributes> {
+        if let Some(basis_index) = self.select_basis(basis_name) {
+            let basis = &mut self.cache[basis_index];
+            if !basis.ensure_dict_in_cache(hw, dict) {
+                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+            } else {
+                let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
+                Ok(dict_entry.to_dict_attributes(dict, &basis.name))
+            }
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+        }
+    }
+
+    pub(crate) fn sync(&mut self, hw: &mut PddbOs, basis_name: Option<&str>) -> Result<()> {
+        if basis_name.is_some() {
+            if let Some(basis_index) = self.select_basis(basis_name) {
+                self.cache[basis_index].sync(hw)?
+            }
+        } else {
+            for basis in self.cache.iter_mut() {
+                basis.sync(hw)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -790,34 +822,71 @@ impl BasisCacheEntry {
 
     /// do a deep scan of all the dictionaries and keys and attempt to populate all the caches
     pub(crate) fn populate_caches(&mut self, hw: &mut PddbOs) {
-        let mut try_entry = 1;
-        let mut dict_count = 0;
-        while try_entry <= DICT_MAXCOUNT && dict_count < self.num_dicts {
-            let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
-            if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
-                assert!(pp.valid(), "v2p returned an invalid page");
-                if let Some(dict) = self.dict_decrypt(hw, &pp) {
-                    if dict.flags.valid() {
-                        let dict_name = String::from(cstr_to_string(&dict.name));
-                        let mut dcache = DictCacheEntry::new(dict, try_entry, &self.aad);
-                        let max_large_alloc = dcache.fill(hw, &self.v2p_map, &self.cipher);
-                        self.dicts.insert(dict_name, dcache);
-                        self.large_pool_update(max_large_alloc.get());
-                        dict_count += 1;
+        // count number of valid dictionaries
+        let mut num_valid = 0;
+        for dict in self.dicts.values() {
+            if dict.flags.valid() {
+                num_valid += 1;
+            }
+        }
+        // note to self: this should be true, because even if we didn't read all the dictionaries in from the basis,
+        // and then say, deleted a bunch of dictionaries and then added a bunch more, the num_dicts field should
+        // move up and down with the additions/deletions, and thus should relatively be larger than or equal to the num_valid
+        // at all times. In other words, the difference of self.num_dicts vs num_valid should be precisely the number
+        // of dictionary entries on disk that we haven't loaded into the cache.
+        assert!(num_valid <= self.num_dicts, "Inconsistency in number of dictionaries in the basis");
+        if num_valid == self.num_dicts { // no need to scan the index, just refresh the dictionaries themselves
+            let mut largest_extent = 0;
+            for dict in self.dicts.values_mut() {
+                if dict.flags.valid() {
+                    let extent = dict.fill(hw, &mut self.v2p_map, &self.cipher).get();
+                    if extent > largest_extent {
+                        largest_extent = extent;
+                    }
+                }
+            }
+            self.large_pool_update(largest_extent);
+        } else { // scan the full index
+            let mut try_entry = 1;
+            let mut dict_count = 0;
+            while try_entry <= DICT_MAXCOUNT && dict_count < self.num_dicts {
+                let dict_vaddr = VirtAddr::new(try_entry as u64 * DICT_VSIZE).unwrap();
+                if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
+                    assert!(pp.valid(), "v2p returned an invalid page");
+                    if let Some(dict) = self.dict_decrypt(hw, &pp) {
+                        if dict.flags.valid() {
+                            let dict_name = String::from(cstr_to_string(&dict.name));
+                            let dict_present_and_valid = if let Some(d) = self.dicts.get(&dict_name) {
+                                d.flags.valid()
+                            } else {
+                                false
+                            };
+                            if !dict_present_and_valid {
+                                let mut dcache = DictCacheEntry::new(dict, try_entry, &self.aad);
+                                let max_large_alloc = dcache.fill(hw, &self.v2p_map, &self.cipher);
+                                self.dicts.insert(dict_name, dcache);
+                                self.large_pool_update(max_large_alloc.get());
+                            } else {
+                                let dcache = self.dicts.get_mut(&dict_name).expect("dict should be present, as we checked for it already...");
+                                let extent = dcache.fill(hw, &mut self.v2p_map, &self.cipher).get();
+                                self.large_pool_update(extent);
+                            }
+                            dict_count += 1;
+                        } else {
+                            // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
+                            if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
+                        }
                     } else {
-                        // this is an empty dictionary entry. we could stick a dictionary in here later on, take note if we haven't already computed that
                         if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
                     }
                 } else {
                     if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
                 }
-            } else {
+                try_entry += 1;
+            }
+            if try_entry <= DICT_MAXCOUNT {
                 if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
             }
-            try_entry += 1;
-        }
-        if try_entry <= DICT_MAXCOUNT {
-            if self.free_dict_offset.is_none() { self.free_dict_offset = Some(try_entry as u32); }
         }
     }
 
@@ -880,6 +949,7 @@ impl BasisCacheEntry {
 
             // mark data for re-use
             self.free_dict_offset = Some(dcache.index.get());
+            dcache.flags.set_valid(false); // this shouldn't be necessary because we're removing the entry, but, it's "correct"
             self.num_dicts -= 1;
             // remove the cache entry
             self.dicts.remove(name);
@@ -927,7 +997,7 @@ impl BasisCacheEntry {
             if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
                 assert!(pp.valid(), "v2p returned an invalid page");
                 if let Some(dict) = self.dict_decrypt(hw, &pp) {
-                    if cstr_to_string(&dict.name) == name {
+                    if (cstr_to_string(&dict.name) == name) && dict.flags.valid() {
                         return Some((try_entry as u32, dict))
                     }
                     dict_count += 1;
@@ -1052,7 +1122,7 @@ impl BasisCacheEntry {
                     // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
                     for (key_name, key) in dict.keys.iter_mut() {
-                        if !key.clean {
+                        if !key.clean && key.flags.valid() {
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
                                 log::info!("merging in key {}", key_name);
@@ -1104,7 +1174,7 @@ impl BasisCacheEntry {
                     // exit the loop
                     let mut found_next = false;
                     for key in dict.keys.values() {
-                        if !key.clean {
+                        if !key.clean && key.flags.valid() {
                             found_next = true;
                             // note: we don't care *which* vpage we do next -- so we just break after finding the first one
                             vpage_num = key.descriptor_vpage_num();
@@ -1161,7 +1231,13 @@ impl BasisCacheEntry {
     /// This function ensures a dictionary is in the cache; if not, it will load its entry.
     pub(crate) fn ensure_dict_in_cache(&mut self, hw: &mut PddbOs, name: &str) -> bool {
         let mut dict_found = false;
-        if !self.dicts.contains_key(name) {
+        let dict_in_cache_and_valid =
+            if let Some(dict) = self.dicts.get(name) {
+                dict.flags.valid()
+            } else {
+                false
+            };
+        if !dict_in_cache_and_valid {
             log::info!("dict: key not in cache {}", name);
             // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
             // doesn't exist. Do a comprehensive search if our cache isn't complete.
@@ -1175,6 +1251,28 @@ impl BasisCacheEntry {
             dict_found = true;
         }
         dict_found
+    }
+
+    pub(crate) fn sync(&mut self, hw: &mut PddbOs) -> Result<()> {
+        // this is a bit awkward, but we have to make a copy of all the dictionary names
+        // because otherwise we borrow self as immutable to enumerate the names, and then
+        // we borrow it as mutable to do the sync. This deep-copy works around the issue.
+        let mut dictnames = Vec::<String>::new();
+        for dict in self.dicts.keys() {
+            dictnames.push(dict.to_string());
+        }
+        for dict in dictnames {
+            match self.dict_sync(hw, &dict) {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Error encountered syncing dict {}: {:?}", dict, e);
+                    return Err(Error::new(ErrorKind::Other, e.to_string()));
+                }
+            }
+        }
+        self.basis_sync(hw);
+        self.pt_sync(hw);
+        Ok(())
     }
 
     // allocate a pointer data in the large pool, of length `amount`. "always" succeeds because...

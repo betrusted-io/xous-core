@@ -234,6 +234,7 @@ class KeyDescriptor:
         else:
             self.unresolved = False
         if self.valid:
+            # print('valid key')
             page_addr = self.start
             self.data = bytearray()
             remaining = self.len
@@ -269,6 +270,9 @@ class KeyDescriptor:
             else:
                 self.ci_ok = False
                 print('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
+        else:
+            # print('invalid key')
+            pass
 
 
     def as_str(self, indent=''):
