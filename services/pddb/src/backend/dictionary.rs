@@ -193,8 +193,10 @@ impl DictCacheEntry {
         if self.keys.len() < self.key_count as usize {
             self.fill(hw, v2p_map, cipher);
         }
-        for key in self.keys.keys() {
-            merge_list.insert(key.to_string());
+        for (key, kcache) in self.keys.iter() {
+            if kcache.flags.valid() {
+                merge_list.insert(key.to_string());
+            }
         }
     }
     /// Simply ensures we have the description of a key in cache. Only tries to load small key data.

@@ -668,6 +668,7 @@ class SpaceUpdate:
 def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
     global SYSTEM_BASIS
     fscb = None
+    fscb_count = 0
     if SYSTEM_BASIS in keys:
         key = keys[SYSTEM_BASIS]
         pages = [img[i:i+4096] for i in range(0, len(img), 4096)]
@@ -711,7 +712,8 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
                         break
                     else:
                         fscb.try_replace(SpaceUpdate(cipher.decrypt(entry)))
-
+                        fscb_count += 1
+    print("Total FSCB entries found: {}".format(fscb_count))
     return fscb
 
 if __name__ == "__main__":

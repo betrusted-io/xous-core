@@ -340,8 +340,10 @@ impl BasisCache {
         let mut dict_set = HashSet::<String>::new();
         for basis in self.cache.iter_mut() {
             basis.populate_caches(hw);
-            for key in basis.dicts.keys() {
-                dict_set.insert(String::from(key));
+            for (key, dcache) in basis.dicts.iter() {
+                if dcache.flags.valid() {
+                    dict_set.insert(String::from(key));
+                }
             }
         }
         dict_set

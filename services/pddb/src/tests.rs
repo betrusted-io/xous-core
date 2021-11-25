@@ -224,11 +224,23 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
             }
         }
     }
+    for dict in basis_cache.dict_list(hw).iter() {
+        let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
+        log::info!("{:?}", da);
+    }
 
     log::info!("doing all-basis sync");
     basis_cache.sync(hw, None).unwrap();
     log::info!("all-basis sync done");
 
+    list_all(hw, basis_cache);
+    for dict in basis_cache.dict_list(hw).iter() {
+        let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
+        log::info!("{:?}", da);
+    }
+}
+
+pub(crate) fn list_all(hw: &mut PddbOs, basis_cache: &mut BasisCache) {
     // now list all the attributes of the basis
     for dict in basis_cache.dict_list(hw).iter() {
         let da = basis_cache.dict_attributes(hw, &dict, None).unwrap();

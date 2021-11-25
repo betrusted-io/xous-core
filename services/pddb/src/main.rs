@@ -440,6 +440,14 @@ fn xmain() -> ! {
         log::info!("Doing delete pattern test");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
         pddb_os.dbg_dump(Some("patterne".to_string()));
+
+        log::info!("Doing remount disk test");
+        let mut basis_cache = BasisCache::new();
+        if let Some(sys_basis) = pddb_os.pddb_mount() {
+            basis_cache.basis_add(sys_basis);
+            list_all(&mut pddb_os, &mut basis_cache);
+            pddb_os.dbg_dump(Some("remounte".to_string()));
+        }
     }
     log::info!("CI done");
     /*
