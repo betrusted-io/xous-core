@@ -423,7 +423,7 @@ fn xmain() -> ! {
         log::info!("Creating `basecase1e`");
         let mut basis_cache = BasisCache::new();
         create_basis_testcase(&mut pddb_os, &mut basis_cache, None,
-            None, None, Some(4));
+            None, None, Some(32));
         log::info!("Saving `basecase1e` to local host");
         pddb_os.dbg_dump(Some("basecase1e".to_string()));
 
@@ -440,6 +440,35 @@ fn xmain() -> ! {
         log::info!("Doing delete pattern test");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
         pddb_os.dbg_dump(Some("patterne".to_string()));
+
+        // extended tests.
+        // allocation space curtailed to force resource exhaustion faster.
+        // note to self: FSCB_PAGES revert to 16 (hw.rs), FASTSPACE_PAGES revert to 2 (fastspace.rs)
+        log::info!("Doing patch test 2");
+        patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
+        pddb_os.dbg_dump(Some("patche2".to_string()));
+
+        log::info!("Doing delete pattern test 2");
+        delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
+        pddb_os.dbg_dump(Some("patterne2".to_string()));
+
+        log::info!("Doing delete/add consistency with data extension 2");
+        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
+            Some(50), None, None);
+        log::info!("Saving `dachecke2` to local host");
+        pddb_os.dbg_dump(Some("dachecke2".to_string()));
+
+        log::info!("Doing delete/add consistency with data extension 3");
+        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
+            Some(50), None, None);
+        log::info!("Saving `dachecke3` to local host");
+        pddb_os.dbg_dump(Some("dachecke3".to_string()));
+
+        log::info!("Doing delete/add consistency with data extension 4");
+        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(6),
+            Some(50), None, None);
+        log::info!("Saving `dachecke4` to local host");
+        pddb_os.dbg_dump(Some("dachecke4".to_string()));
 
         log::info!("Doing remount disk test");
         let mut basis_cache = BasisCache::new();
@@ -483,12 +512,13 @@ fn xmain() -> ! {
     }
     */
     /* list of test cases:
-        [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
-        [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
-        [done] in-place update consistency: general integrity then patch all keys with a new test pattern
-        [done] extend update consistency: general integrity then patch all keys with a longer test pattern
-        key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
-        basis search: create basis A, populate with general integrity. create basis B, add test entries.
+        - [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
+        - [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
+        - [done] in-place update consistency: general integrity then patch all keys with a new test pattern
+        - [done] extend update consistency: general integrity then patch all keys with a longer test pattern
+        - [done] key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
+        - fast space exhaustion test: allocate and delete a bunch of stuff. trigger a fast-space regenerate.
+        - basis search: create basis A, populate with general integrity. create basis B, add test entries.
            hide basis B, confirm original A; mount basis B, confirm B overlay.
     */
     // register a suspend/resume listener

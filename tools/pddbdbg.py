@@ -135,7 +135,7 @@ def main():
     print(keys)
 
     global MBBB_PAGES
-    FSCB_PAGES = 16
+    FSCB_PAGES = 4
     KEY_PAGES = 1
     global PAGE_SIZE
     global VPAGE_SIZE
@@ -154,7 +154,7 @@ def main():
         img_index += PAGE_SIZE * KEY_PAGES
         mbbb = raw_img[img_index : img_index + PAGE_SIZE * MBBB_PAGES]
         img_index += PAGE_SIZE * MBBB_PAGES
-        fscb = decode_fscb(raw_img[img_index: img_index + PAGE_SIZE * FSCB_PAGES], keys)
+        fscb = decode_fscb(raw_img[img_index: img_index + PAGE_SIZE * FSCB_PAGES], keys, FSCB_LEN_PAGES=1) ## note this change for testing
         img_index += PAGE_SIZE * FSCB_PAGES
         data = raw_img[img_index:]
 
@@ -610,8 +610,7 @@ class PhysPage:
         return 'pp_{:05x} | c_{} | v_{} | ss_{} | j_{:02}'.format(self.page_number(), self.clean(), self.valid(), self.space_state(), self.journal())
 
 class Fscb:
-    def __init__(self, i_bytes):
-        FASTSPACE_PAGES = 2
+    def __init__(self, i_bytes, FASTSPACE_PAGES=1):
         NONCE_LEN = 12
         TAG_LEN = 16
         PP_LEN = 4
@@ -689,6 +688,7 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
         if fscb_start:
             print("Found FSCB at {:x}".format(fscb_start))
             fscb_enc = img[fscb_start * 4096 : (fscb_start + FSCB_LEN_PAGES) * 4096]
+            print("data: {}".format(fscb_enc.hex()))
             try:
                 nonce = fscb_enc[:12]
                 print("key: {}, nonce: {}".format(key.hex(), nonce.hex()))
@@ -697,7 +697,7 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
                 print("mac: {}".format(fscb_enc[-16:].hex()))
                 #print("data: {}".format(fscb_enc[12:-16].hex()))
                 fscb_dec = cipher.decrypt(fscb_enc[12:], Fscb.aad())
-                fscb = Fscb(fscb_dec)
+                fscb = Fscb(fscb_dec, FASTSPACE_PAGES=FSCB_LEN_PAGES)
             except KeyError:
                 print("couldn't decrypt")
                 fscb = None

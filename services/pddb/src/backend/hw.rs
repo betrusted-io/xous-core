@@ -18,7 +18,7 @@ use std::io::{Result, Error, ErrorKind};
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 
 pub(crate) const MBBB_PAGES: usize = 10;
-pub(crate) const FSCB_PAGES: usize = 16;
+pub(crate) const FSCB_PAGES: usize = 4;
 
 /// size of a physical page
 pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
@@ -90,6 +90,8 @@ pub(crate) struct PddbOs {
     fspace_log_addrs: Vec::<PageAlignedPa>,
     /// memoize the current target offset for the next log entry
     fspace_log_next_addr: Option<PhysAddr>,
+    /// track roughly how big the log has gotten, so we can pre-emptively garbage collect it before we get too full.
+    fspace_log_len: usize,
     /// a cached copy of the FPGA's DNA ID, used in the AAA records.
     dna: u64,
     /// reference to a TrngPool object that's shared among all the hardware functions
@@ -138,6 +140,7 @@ impl PddbOs {
             fspace_cache: HashSet::<PhysPage>::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
             fspace_log_next_addr: None,
+            fspace_log_len: 0,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
         };
@@ -159,6 +162,7 @@ impl PddbOs {
                 fspace_cache: HashSet::<PhysPage>::new(),
                 fspace_log_addrs: Vec::<PageAlignedPa>::new(),
                 fspace_log_next_addr: None,
+                fspace_log_len: 0,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
             }
@@ -543,6 +547,9 @@ impl PddbOs {
                 // commit the fscb data
                 self.patch_fscb(&[&nonce_array, ct_to_flash].concat(), dest_page * PAGE_SIZE as u32);
             } // end "it would be bad if we lost power now" region
+
+            // note: this function should be followed up by a fast_space_read() to regenerate the temporary
+            // bookkeeping variables that are not reset by this function.
         } else {
             panic!("invalid state!");
         }
@@ -656,6 +663,7 @@ impl PddbOs {
             self.fspace_cache.clear();
             self.fspace_log_addrs.clear();
             self.fspace_log_next_addr = None;
+            self.fspace_log_len = 0;
 
             // let fscb_slice = self.fscb_deref(); // can't use this line because it causse self to be immutably borrowed, so we write out the equivalent below.
             let fscb_slice = &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
@@ -873,6 +881,7 @@ impl PddbOs {
                     let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
                     log::trace!("patch: {:x?}", block);
                     self.patch_fscb(&block, log_addr);
+                    self.fspace_log_len += 1;
                     let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
                     if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
                         self.fspace_log_next_addr = Some(next_addr as PhysAddr);
@@ -908,6 +917,7 @@ impl PddbOs {
         let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
         log::trace!("patch: {:x?}", block);
         self.patch_fscb(&block, log_addr);
+        self.fspace_log_len += 1;
         let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
         if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
             self.fspace_log_next_addr = Some(next_addr as PhysAddr);
@@ -921,9 +931,13 @@ impl PddbOs {
     /// This is a "look before you leap" function that will potentially pause all system operations
     /// and do a deep scan for space if the required amount is not available.
     pub fn ensure_fast_space_alloc(&mut self, pages: usize, cache: &Vec::<BasisCacheEntry>) -> bool {
-        if self.fast_space_len() > pages {
+        // make sure we have fast space pages...
+        if (self.fast_space_len() > pages)
+        // ..and make sure we have space for fast space log entries
+        && (self.fspace_log_len < (FSCB_PAGES - FASTSPACE_PAGES - 1) * PAGE_SIZE / aes::BLOCK_SIZE) {
             true
         } else {
+            // if we're really out of space, do an expensive full-space sweep
             if let Some(used_pages) = self.pddb_generate_used_map(cache) {
                 let free_pool = self.fast_space_generate(used_pages);
                 if free_pool.len() == 0 {
@@ -937,6 +951,7 @@ impl PddbOs {
                         *dst = src;
                     }
                     // write just commits a new record to disk, but doesn't update our internal data cache
+                    // this also clears the fast space log.
                     self.fast_space_write(&fast_space);
                     // this will ensure the data cache is fully in sync
                     self.fast_space_read();
@@ -951,6 +966,21 @@ impl PddbOs {
             } else {
                 false
             }
+            /* -- note to self -- "to-do" optimization -- if just out of log pages, we can regenerate those only instead of doing an all-basis sweep
+            let mut fast_space = FastSpace {
+                free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+            };
+            // regenerate from the existing fast space cache
+            for (&src, dst) in self.fspace_cache.iter().zip(fast_space.free_pool.iter_mut()) {
+                *dst = src;
+            }
+            // write just commits a new record to disk, but doesn't update our internal data cache
+            // this also clears the fast space log.
+            self.fast_space_write(&fast_space);
+            // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is fully in sync
+            self.fast_space_read();
+            true
+            */
         }
     }
 

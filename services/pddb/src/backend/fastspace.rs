@@ -8,7 +8,7 @@ use aes_gcm_siv::{Nonce, Tag};
 
 /// Each free_pool entry takes about 4 bytes, so give-or-take we have about 1000 free_pool
 /// entries per page of storage for the free_pool, or 4k * 1000 ~ 4MiB per page, when PhysAddr is a u32
-pub(crate) const FASTSPACE_PAGES: usize = 2;
+pub(crate) const FASTSPACE_PAGES: usize = 1;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 #[repr(u8)]
