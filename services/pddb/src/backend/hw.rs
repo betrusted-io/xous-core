@@ -855,6 +855,7 @@ impl PddbOs {
     pub fn try_fast_space_alloc(&mut self) -> Option<PhysPage> {
         // 1. Confirm that the fspace_log_next_addr is valid. If not, regenerate it, or fail.
         if !self.fast_space_ensure_next_log() {
+            log::warn!("Couldn't ensure fast space log entry: {}", self.fspace_log_len);
             None
         } else {
             // 2. find the first page that is Free or Dirty. The order is already randomized, so we can do a stupid linear search.
@@ -893,8 +894,14 @@ impl PddbOs {
                     break;
                 }
             }
+            if maybe_alloc.is_none() {
+                log::warn!("Ran out of free space. fspace cache entries: {}", self.fspace_cache.len());
+                for entry in self.fspace_cache.iter() {
+                    log::info!("{:?}", entry);
+                }
+            }
             if let Some(alloc) = maybe_alloc {
-                assert!(self.fspace_cache.replace(alloc).is_some(), "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!");
+                assert!(self.fspace_cache.remove(&alloc), "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!");
             }
             maybe_alloc
         }
@@ -904,9 +911,10 @@ impl PddbOs {
         // update the fspace cache
         pp.set_space_state(SpaceState::Dirty);
         pp.set_journal(pp.journal() + 1);
-        if self.fspace_cache.contains(&pp) {
-            self.fspace_cache.replace(pp.clone());
-        }
+
+        // re-cycle the space into the fspace_cache
+        self.fspace_cache.insert(pp.clone());
+
         // commit the free'd block to the journal
         self.syskey_ensure();
         let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
@@ -931,56 +939,65 @@ impl PddbOs {
     /// This is a "look before you leap" function that will potentially pause all system operations
     /// and do a deep scan for space if the required amount is not available.
     pub fn ensure_fast_space_alloc(&mut self, pages: usize, cache: &Vec::<BasisCacheEntry>) -> bool {
+        const BUFFER: usize = 1; // a bit of slop in the trigger point
+        log::trace!("alloc fast_space_len: {}, log_len {}", self.fast_space_len(), self.fspace_log_len);
         // make sure we have fast space pages...
-        if (self.fast_space_len() > pages)
+        if (self.fast_space_len() > pages + BUFFER)
         // ..and make sure we have space for fast space log entries
         && (self.fspace_log_len < (FSCB_PAGES - FASTSPACE_PAGES - 1) * PAGE_SIZE / aes::BLOCK_SIZE) {
             true
         } else {
-            // if we're really out of space, do an expensive full-space sweep
-            if let Some(used_pages) = self.pddb_generate_used_map(cache) {
-                let free_pool = self.fast_space_generate(used_pages);
-                if free_pool.len() == 0 {
-                    // we're out of free space
-                    false
-                } else {
-                    let mut fast_space = FastSpace {
-                        free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-                    };
-                    for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
-                        *dst = src;
-                    }
-                    // write just commits a new record to disk, but doesn't update our internal data cache
-                    // this also clears the fast space log.
-                    self.fast_space_write(&fast_space);
-                    // this will ensure the data cache is fully in sync
-                    self.fast_space_read();
-
-                    // check that we have enough space now -- if not, we're just out of disk space!
-                    if self.fast_space_len() > pages {
-                        true
-                    } else {
+            if self.fast_space_len() <= pages + BUFFER {
+                log::trace!("alloc forced by lack of free space");
+                // if we're really out of space, do an expensive full-space sweep
+                if let Some(used_pages) = self.pddb_generate_used_map(cache) {
+                    let free_pool = self.fast_space_generate(used_pages);
+                    if free_pool.len() == 0 {
+                        // we're out of free space
                         false
+                    } else {
+                        let mut fast_space = FastSpace {
+                            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+                        };
+                        for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
+                            *dst = src;
+                        }
+                        // write just commits a new record to disk, but doesn't update our internal data cache
+                        // this also clears the fast space log.
+                        self.fast_space_write(&fast_space);
+                        // this will ensure the data cache is fully in sync
+                        self.fast_space_read();
+
+                        // check that we have enough space now -- if not, we're just out of disk space!
+                        if self.fast_space_len() > pages {
+                            true
+                        } else {
+                            false
+                        }
                     }
+                } else {
+                    false
                 }
             } else {
-                false
+                // log regenration is faster & less intrusive than fastspace regeneration, and we would have
+                // to do this more often. So we have a separate path for this outcome.
+                log::trace!("alloc forced by lack of log space");
+                let mut fast_space = FastSpace {
+                    free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+                };
+                // regenerate from the existing fast space cache
+                for (&src, dst) in self.fspace_cache.iter().zip(fast_space.free_pool.iter_mut()) {
+                    *dst = src;
+                }
+                // write just commits a new record to disk, but doesn't update our internal data cache
+                // this also clears the fast space log.
+                self.fast_space_write(&fast_space);
+                // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is fully in sync
+                self.fast_space_read();
+                // this will locate the next fast space log point.
+                self.fast_space_ensure_next_log();
+                true
             }
-            /* -- note to self -- "to-do" optimization -- if just out of log pages, we can regenerate those only instead of doing an all-basis sweep
-            let mut fast_space = FastSpace {
-                free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-            };
-            // regenerate from the existing fast space cache
-            for (&src, dst) in self.fspace_cache.iter().zip(fast_space.free_pool.iter_mut()) {
-                *dst = src;
-            }
-            // write just commits a new record to disk, but doesn't update our internal data cache
-            // this also clears the fast space log.
-            self.fast_space_write(&fast_space);
-            // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is fully in sync
-            self.fast_space_read();
-            true
-            */
         }
     }
 

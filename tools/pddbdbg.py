@@ -204,6 +204,7 @@ def main():
                         print("All dicts were found.")
                     else:
                         print("Missing dictionaries, something is wrong.")
+                    print("Reminder to selF: revert fast space sizes to originals once debugging alloc issue")
 
                 except ValueError:
                     print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
