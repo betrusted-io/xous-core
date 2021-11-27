@@ -18,7 +18,7 @@ use std::io::{Result, Error, ErrorKind};
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 
 pub(crate) const MBBB_PAGES: usize = 10;
-pub(crate) const FSCB_PAGES: usize = 4;
+pub(crate) const FSCB_PAGES: usize = 16;
 
 /// size of a physical page
 pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;

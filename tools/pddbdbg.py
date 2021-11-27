@@ -134,8 +134,10 @@ def main():
     print("Found basis keys:")
     print(keys)
 
+    # tunable parameters for a filesystem
     global MBBB_PAGES
-    FSCB_PAGES = 4
+    FSCB_PAGES = 16
+    FSCB_LEN_PAGES = 2
     KEY_PAGES = 1
     global PAGE_SIZE
     global VPAGE_SIZE
@@ -154,7 +156,7 @@ def main():
         img_index += PAGE_SIZE * KEY_PAGES
         mbbb = raw_img[img_index : img_index + PAGE_SIZE * MBBB_PAGES]
         img_index += PAGE_SIZE * MBBB_PAGES
-        fscb = decode_fscb(raw_img[img_index: img_index + PAGE_SIZE * FSCB_PAGES], keys, FSCB_LEN_PAGES=1) ## note this change for testing
+        fscb = decode_fscb(raw_img[img_index: img_index + PAGE_SIZE * FSCB_PAGES], keys, FSCB_LEN_PAGES=FSCB_LEN_PAGES)
         img_index += PAGE_SIZE * FSCB_PAGES
         data = raw_img[img_index:]
 
@@ -204,7 +206,6 @@ def main():
                         print("All dicts were found.")
                     else:
                         print("Missing dictionaries, something is wrong.")
-                    print("Reminder to selF: revert fast space sizes to originals once debugging alloc issue")
 
                 except ValueError:
                     print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
@@ -611,7 +612,7 @@ class PhysPage:
         return 'pp_{:05x} | c_{} | v_{} | ss_{} | j_{:02}'.format(self.page_number(), self.clean(), self.valid(), self.space_state(), self.journal())
 
 class Fscb:
-    def __init__(self, i_bytes, FASTSPACE_PAGES=1):
+    def __init__(self, i_bytes, FASTSPACE_PAGES=2):
         NONCE_LEN = 12
         TAG_LEN = 16
         PP_LEN = 4
