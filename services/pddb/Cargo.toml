@@ -27,6 +27,14 @@ bitfield = "0.13.2"
 aes-gcm-siv = "0.10.3"
 llio = {path="../llio"}
 
+# passwords
+sha2 = {path = "../engine-sha512"}
+digest = "0.9"
+
+# bcrypt
+blowfish = { version = "0.8", features = ["bcrypt"] }
+
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 

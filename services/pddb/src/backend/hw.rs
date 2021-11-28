@@ -16,7 +16,6 @@ use std::cmp::Reverse;
 use std::io::{Result, Error, ErrorKind};
 
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
-
 pub(crate) const MBBB_PAGES: usize = 10;
 pub(crate) const FSCB_PAGES: usize = 16;
 
@@ -30,9 +29,7 @@ pub(crate) struct StaticCryptoData {
     /// aes-256 key of the system basis, encrypted with the User0 root key
     pub(crate) system_key: [u8; AES_KEYSIZE],
     /// a pool of fixed data used to pick salts, based on a hash of the basis name
-    pub(crate) salt_base: [u8; 2048],
-    /// also random data, but no specific purpose
-    pub(crate) reserved: [u8; 2016],
+    pub(crate) salt_base: [u8; 4064],
 }
 impl Deref for StaticCryptoData {
     type Target = [u8];
@@ -1175,15 +1172,13 @@ impl PddbOs {
         }
         let mut crypto_keys = StaticCryptoData {
             system_key: [0; AES_KEYSIZE],
-            salt_base: [0; 2048],
-            reserved: [0; 2016],
+            salt_base: [0; 4064],
         };
         // copy the encrypted key into the data structure for commit to Flash
         for (&src, dst) in basis_key_aes.iter().zip(crypto_keys.system_key.iter_mut()) {
             *dst = src;
         }
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
-        self.entropy.borrow_mut().get_slice(&mut crypto_keys.reserved);
         self.patch_keys(crypto_keys.deref(), 0);
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
@@ -1341,6 +1336,73 @@ impl PddbOs {
 
         // for now, do nothing -- just indicate success with a returned empty set
         Some(Vec::<([u8; AES_KEYSIZE], String)>::new())
+    }
+
+    /// Derives a 256-bit AES encryption key for a basis given a basis name and its password.
+    /// You will also need to derive the AAD for the basis using the basis_name.
+    pub(crate) fn basis_derive_key(&self, basis_name: &str, password: &str) -> [u8; AES_KEYSIZE] {
+        use sha2::{FallbackStrategy, Sha512, Sha512Trunc256};
+        use digest::Digest;
+        use backend::bcrypt::*;
+
+        // 1. derive the salt from the "key" region. First step is to create the salt lookup
+        // table, which is done by hashing the name and password together with SHA-512
+        // manage the allocation of the data for the basis & password explicitly so that we may wipe them later
+        let mut bname_copy = [0u8; BASIS_NAME_LEN];
+        for (src, dst) in basis_name.bytes().zip(bname_copy.iter_mut()) {
+            *dst = src;
+        }
+        let mut plaintext_pw: [u8; 73] = [0; 73];
+        for (src, dst) in password.bytes().zip(plaintext_pw.iter_mut()) {
+            *dst = src;
+        }
+        plaintext_pw[72] = 0; // always null terminate
+
+        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        hasher.update(&bname_copy);
+        hasher.update(&plaintext_pw);
+        let digest = hasher.finalize();
+        // 2. now derive the actual salt by using indices from the digest to progressively
+        // index into the salt table.
+        let scd = self.static_crypto_data_get();
+        let mut salt = [0u8; 16];
+        for (index_bytes, dst) in digest.chunks(2).zip(salt.iter_mut()) {
+            let index = u16::from_le_bytes(index_bytes.try_into().unwrap());
+            *dst = scd.salt_base[index as usize % scd.salt_base.len()];
+            log::info!("index: {}, dst: {}", index as usize % scd.salt_base.len(), *dst);
+        }
+        log::info!("derived salt: {:x?}", salt);
+
+        // 3. use the salt + password and run bcrypt on it to derive a key.
+        let mut hashed_password: [u8; 24] = [0; 24];
+        let start_time = self.timestamp_now();
+        bcrypt(BCRYPT_COST, &salt, password, &mut hashed_password); // note: this internally makes a copy of the password, and destroys it
+        let elapsed = self.timestamp_now() - start_time;
+        log::info!("derived bcrypt password in {}ms", elapsed);
+
+        // 4. take the resulting 24-byte password and expand it to 32 bytes using sha512trunc256
+        let mut expander = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        expander.update(hashed_password);
+        let final_key = expander.finalize();
+        let mut key = [0u8; AES_KEYSIZE];
+        for (&src, dst) in final_key.iter().zip(key.iter_mut()) {
+            *dst = src;
+        }
+
+        // 5. erase extra plaintext copies made of the basis name and password using a routine that
+        // shouldn't be optimized out or re-ordered
+        let bn_ptr = bname_copy.as_mut_ptr();
+        for i in 0..bname_copy.len() {
+            unsafe{bn_ptr.add(i).write_volatile(core::mem::zeroed());}
+        }
+        let pt_ptr = plaintext_pw.as_mut_ptr();
+        for i in 0..plaintext_pw.len() {
+            unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        //6. return the key
+        key
     }
 }
 

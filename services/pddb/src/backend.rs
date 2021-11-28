@@ -10,7 +10,8 @@ mod fastspace;
 pub use fastspace::*;
 mod types;
 pub use types::*;
-
+mod bcrypt;
+pub use bcrypt::*;
 
 // local to the backend
 mod murmur3;

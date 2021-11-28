@@ -517,7 +517,8 @@ fn xmain() -> ! {
         - [done] in-place update consistency: general integrity then patch all keys with a new test pattern
         - [done] extend update consistency: general integrity then patch all keys with a longer test pattern
         - [done] key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
-        - fast space exhaustion test: allocate and delete a bunch of stuff. trigger a fast-space regenerate.
+        - [done] fast space exhaustion test: allocate and delete a bunch of stuff. trigger a fast-space regenerate.
+          note: for faster stress-testing, we dialed the FSCB_PAGES to 4 and the FASTSPACE_PAGES to 1.
         - basis search: create basis A, populate with general integrity. create basis B, add test entries.
            hide basis B, confirm original A; mount basis B, confirm B overlay.
     */
