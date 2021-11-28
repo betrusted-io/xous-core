@@ -138,6 +138,8 @@ use core::mem::size_of;
 use std::convert::TryInto;
 use aes_gcm_siv::{Aes256GcmSiv, Key};
 use aes_gcm_siv::aead::NewAead;
+use aes::Aes256;
+use aes::cipher::{NewBlockCipher, generic_array::GenericArray};
 use std::iter::IntoIterator;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::io::{Result, Error, ErrorKind};
@@ -804,6 +806,13 @@ impl BasisCache {
         let key = Key::clone_from_slice(&basis_key);
         hw.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
 
+        let cipher =  Aes256::new(GenericArray::from_slice(&basis_key));
+        for (&virt, phys) in basis_v2p_map.iter_mut() {
+            hw.pt_patch_mapping(virt, phys.page_number(), &cipher);
+            // mark the entry as clean, as it has been sync'd to disk
+            phys.set_clean(true);
+        }
+
         Ok(())
     }
 
@@ -870,6 +879,8 @@ pub(crate) struct BasisCacheEntry {
     pub free_dict_offset: Option<u32>,
     /// the cipher for the basis
     pub cipher: Aes256GcmSiv,
+    /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
+    pub cipher_ecb: Aes256,
     /// the AAD associated with this Basis
     pub aad: Vec::<u8>,
     /// modification count
@@ -926,6 +937,7 @@ impl BasisCacheEntry {
                     num_dicts: basis_root.num_dictionaries,
                     dicts: HashMap::<String, DictCacheEntry>::new(),
                     cipher,
+                    cipher_ecb: Aes256::new(GenericArray::from_slice(key)),
                     aad,
                     age: basis_root.age,
                     free_dict_offset: None,
@@ -1182,7 +1194,7 @@ impl BasisCacheEntry {
                 hw.pt_erase(phys.page_number());
             } else if !phys.clean() {
                 log::info!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
-                hw.pt_patch_mapping(virt, phys.page_number());
+                hw.pt_patch_mapping(virt, phys.page_number(), &self.cipher_ecb);
                 phys.set_clean(true);
             }
         }

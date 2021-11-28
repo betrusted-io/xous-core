@@ -69,7 +69,7 @@ pub(crate) struct PddbOs {
     fscb_phys_base: PageAlignedPa,
     data_phys_base: PageAlignedPa,
     system_basis_key: Option<[u8; AES_KEYSIZE]>,
-    /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
+    /// derived cipher for handling fastspace -- cache it, so we can save the time cost of constructing the cipher key schedule
     cipher_ecb: Option<Aes256>,
     /// fast space cache
     fspace_cache: HashSet<PhysPage>,
@@ -306,9 +306,7 @@ impl PddbOs {
     /// physical mapping. Note that the `va` is an *address* (in units of bytes), and the `phy_page_num` is
     /// a *page number* (so a physical address divided by the page size). It's a slightly awkward units, but
     /// it saves a bit of math going back and forth between the native storage formats of the records.
-    pub(crate) fn pt_patch_mapping(&mut self, va: VirtAddr, phys_page_num: u32) {
-        self.syskey_ensure();
-        let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
+    pub(crate) fn pt_patch_mapping(&mut self, va: VirtAddr, phys_page_num: u32, cipher: &Aes256) {
         let mut pte = Pte::new(va, PtFlags::CLEAN, Rc::clone(&self.entropy));
         let mut block = Block::from_mut_slice(pte.deref_mut());
         //log::info!("pte pt: {:x?}", block);
@@ -316,6 +314,7 @@ impl PddbOs {
         //log::info!("pte ct: {:x?}", block);
         self.patch_pagetable(&block, phys_page_num * aes::BLOCK_SIZE as u32);
     }
+
     /// erases a page table entry by overwriting it with garbage
     pub(crate) fn pt_erase(&mut self, phys_page_num: u32) {
         let mut eraseblock = [0u8; aes::BLOCK_SIZE];
@@ -1140,6 +1139,7 @@ impl PddbOs {
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         self.entropy.borrow_mut().get_slice(&mut system_basis_key);
         let mut basis_key_aes: [u8; AES_KEYSIZE] = system_basis_key.clone();
+        let cipher =  Aes256::new(GenericArray::from_slice(&basis_key_aes));
         self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
         for block in basis_key_aes.chunks_mut(aes::BLOCK_SIZE) {
             self.rootkeys.encrypt_block(block.try_into().unwrap());
@@ -1250,7 +1250,7 @@ impl PddbOs {
 
         // step 9. generate & write initial page table entries
         for (&virt, phys) in basis_v2p_map.iter_mut() {
-            self.pt_patch_mapping(virt, phys.page_number());
+            self.pt_patch_mapping(virt, phys.page_number(), &cipher);
             // mark the entry as clean, as it has been sync'd to disk
             phys.set_clean(true);
         }
