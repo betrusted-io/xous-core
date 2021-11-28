@@ -24,7 +24,7 @@ pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
 /// size of a virtual page -- after the AES encryption and journaling overhead is subtracted
 pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>();
 
-#[repr(C, packed)] // this can map directly into Flash
+#[repr(C)] // this can map directly into Flash
 pub(crate) struct StaticCryptoData {
     /// aes-256 key of the system basis, encrypted with the User0 root key
     pub(crate) system_key: [u8; AES_KEYSIZE],
@@ -39,16 +39,6 @@ impl Deref for StaticCryptoData {
                 as &[u8]
         }
     }
-}
-
-/// this is the structure of the Basis Key in RAM. The "key" and "iv" are actually never committed to
-/// flash; only the "salt" is written to disk. The final "salt" is computed as the XOR of the salt on disk
-/// and the user-provided "basis name". We never record the "basis name" on disk, so that the existence of
-/// any Basis can be denied.
-pub(crate) struct BasisKey {
-    salt: [u8; 16],
-    key: [u8; 32], // derived from lower 256 bits of sha512(bcrypt(salt, pw))
-    iv: [u8; 16], // an IV derived from the upper 128 bits of the sha512 hash from above, XOR with the salt
 }
 
 // emulated
@@ -93,13 +83,6 @@ pub(crate) struct PddbOs {
     dna: u64,
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
-
-    /*
-    /// keys to non-system basis that may or may not be mounted
-    /// We don't blend the System basis into this one because we need to refer to the System basis specifically
-    /// for decrypting management structures like the FSCB.
-    basis_keys: Vec::<[u8; AES_KEYSIZE]>,
-    */
 }
 
 impl PddbOs {
@@ -168,7 +151,7 @@ impl PddbOs {
     }
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    pub fn dbg_dump(&self, name: Option<String>) {
+    pub fn dbg_dump(&self, name: Option<String>, extra_keys: Option<&Vec::<KeyExport>>) {
         self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
         if let Some(key) = self.system_basis_key {
@@ -183,6 +166,11 @@ impl PddbOs {
                     key,
                 }
             );
+        }
+        if let Some(extra) = extra_keys {
+            for key in extra {
+                export.push(*key);
+            }
         }
         self.pddb_mr.dump_keys(&export, &name);
     }
@@ -285,6 +273,7 @@ impl PddbOs {
     }
     fn patch_keys(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE, "attempt to burn key data that is outside the key region");
+        log::info!("patching keys area with {} bytes", data.len());
         self.spinor.patch(
             self.pddb_mr.as_slice(),
             xous::PDDB_LOC,
@@ -416,7 +405,7 @@ impl PddbOs {
 
     /// maps a StaticCryptoData structure into the key area of the PDDB.
     fn static_crypto_data_get(&self) -> &StaticCryptoData {
-        let scd_ptr = self.key_phys_base.as_usize() as *const StaticCryptoData;
+        let scd_ptr = self.pddb_mr.as_slice()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoData;
         let scd: &StaticCryptoData = unsafe{scd_ptr.as_ref().unwrap()};
         scd
     }
@@ -1086,23 +1075,8 @@ impl PddbOs {
                         log::error!("PDDB system basis name is incorrect: {}; aborting mount operation.", basis_name);
                         return None;
                     }
-                    /*
-                    let bcache = BasisCacheEntry {
-                        name: basis_name.clone(),
-                        clean: true,
-                        last_sync: Some(self.tt.elapsed_ms()),
-                        num_dicts: basis_root.num_dictionaries,
-                        dicts: HashMap::<String, DictCacheEntry>::new(),
-                        cipher,
-                        aad,
-                        age: basis_root.age,
-                        free_dict_offset: None,
-                        v2p_map: sysbasis_map,
-                        journal: u32::from_le_bytes(vpage[..size_of::<JournalType>()].try_into().unwrap()),
-                        large_alloc_ptr: None,
-                    }; */
                     log::info!("System BasisRoot record found, generating cache entry");
-                    BasisCacheEntry::mount(self, &basis_name, &syskey, false)
+                    BasisCacheEntry::mount(self, &basis_name, &syskey, false, BasisRetentionPolicy::Persist)
                 } else {
                     // i guess technically we could try a brute-force search for the page, but meh.
                     log::error!("System basis did not contain a root page -- unrecoverable error.");
@@ -1358,17 +1332,20 @@ impl PddbOs {
         }
         plaintext_pw[72] = 0; // always null terminate
 
+        log::info!("making hasher");
         let mut hasher = Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly);
         hasher.update(&bname_copy);
         hasher.update(&plaintext_pw);
         let digest = hasher.finalize();
         // 2. now derive the actual salt by using indices from the digest to progressively
         // index into the salt table.
+        log::info!("creating salt");
         let scd = self.static_crypto_data_get();
         let mut salt = [0u8; 16];
-        for (index_bytes, dst) in digest.chunks(2).zip(salt.iter_mut()) {
-            let index = u16::from_le_bytes(index_bytes.try_into().unwrap());
-            *dst = scd.salt_base[index as usize % scd.salt_base.len()];
+        log::info!("got scd");
+        for (index_bytes, dst) in digest.chunks(2).into_iter().zip(salt.iter_mut()) {
+            let index = u16::from_le_bytes(index_bytes.try_into().unwrap()) as usize % scd.salt_base.len();
+            *dst = scd.salt_base[index];
             log::info!("index: {}, dst: {}", index as usize % scd.salt_base.len(), *dst);
         }
         log::info!("derived salt: {:x?}", salt);

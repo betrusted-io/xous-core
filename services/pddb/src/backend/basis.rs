@@ -235,6 +235,21 @@ impl DerefMut for BasisRoot {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub(crate) enum BasisRetentionPolicy {
+    Persist,
+    ClearAfterSleeps(u32),
+    TimeOutSecs(u32),
+}
+impl BasisRetentionPolicy {
+    pub(crate) fn derive_init_state(&self) -> u32 {
+        match self {
+            BasisRetentionPolicy::Persist => 0,
+            BasisRetentionPolicy::ClearAfterSleeps(sleeps) => *sleeps,
+            BasisRetentionPolicy::TimeOutSecs(secs) => *secs,
+        }
+    }
+}
 /// A list of open Basis that we can use to search and operate upon. Sort of the "root" data structure of the PDDB.
 ///
 /// Note to self: it's tempting to integrate the "hw" parameter (the pointer to the PddbOs structure). However, this
@@ -246,14 +261,8 @@ pub(crate) struct BasisCache {
 }
 impl BasisCache {
     pub(crate) fn new() -> Self {
-        BasisCache { cache: Vec::new(), }
+        BasisCache { cache: Vec::new() }
     }
-    pub(crate) fn basis_add(&mut self, basis: BasisCacheEntry) {
-        self.cache.push(basis);
-    }
-    // placeholder reminder: deleting a basis is a bit more complicated, as it requires
-    // syncing its contents.
-
     fn select_basis(&mut self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
             log::error!("Can't select basis: PDDB is not mounted");
@@ -708,6 +717,127 @@ impl BasisCache {
         }
     }
 
+    /// this largely copies code from the pddb_mount() routine. Perhaps this should be modified a little bit to
+    /// re-use that code. However, there are material differences in how the passwords are handled between
+    /// these two methods, so the API calls are different. pddb_mount mounts the system basis with the intention
+    /// of making it persistent, and assuming you're coming up from a blank slate. This routine makes no such
+    /// assumptions and allows one to specify a persistence.
+    pub(crate) fn basis_unlock(&mut self, hw: &mut PddbOs, name: &str, password: &str,
+    policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
+        let basis_key =  hw.basis_derive_key(name, password);
+        if let Some(basis_map) = hw.pt_scan_key(&basis_key, name) {
+            let cipher = Aes256GcmSiv::new(Key::from_slice(&basis_key));
+            let aad = hw.data_aad(name);
+            if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
+                let vpage = match hw.data_decrypt_page(&cipher, &aad, root_page) {
+                    Some(data) => data,
+                    None => {log::error!("Could not find basis {} root", name); return None;},
+                };
+                let mut basis_root = BasisRoot::default();
+                for (&src, dst) in vpage[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                    *dst = src;
+                }
+                if basis_root.magic != PDDB_MAGIC {
+                    log::error!("Basis root did not deserialize correctly, unrecoverable error.");
+                    return None;
+                }
+                if basis_root.version != PDDB_VERSION {
+                    log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
+                    return None;
+                }
+                let basis_name = cstr_to_string(&basis_root.name.0);
+                if basis_name != name {
+                    log::error!("PDDB mount requested {}, but got {}; aborting.", name, basis_name);
+                    return None;
+                }
+                log::info!("Basis {} record found, generating cache entry", name);
+                BasisCacheEntry::mount(hw, &basis_name, &basis_key, false, policy)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// this creates a basis entry in the PDDB, which should then be "mounted" to activate it.
+    /// similar to how you might use fdisk to create a partition, but you still must call mount to access it.
+    pub(crate) fn basis_create(&mut self, hw: &mut PddbOs, name: &str, password: &str) -> Result<()> {
+        if !hw.fast_space_ensure_next_log() {
+            return Err(Error::new(ErrorKind::OutOfMemory, "no free space to create basis"));
+        };
+        if !hw.ensure_fast_space_alloc(1, &self.cache) {
+            return Err(Error::new(ErrorKind::OutOfMemory, "no free space to create basis"));
+        };
+
+        let basis_key =  hw.basis_derive_key(name, password);
+        let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
+        let basis_root = BasisRoot {
+            magic: PDDB_MAGIC,
+            version: PDDB_VERSION,
+            name: BasisRootName::try_from_str(name).unwrap(),
+            age: 0,
+            num_dictionaries: 0
+        };
+        // allocate one page for the basis root
+        if let Some(alloc) = hw.try_fast_space_alloc() {
+            let mut rpte = alloc.clone();
+            rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
+            rpte.set_valid(true);
+            let va = VirtAddr::new((1 * VPAGE_SIZE) as u64).unwrap(); // page 1 is where the root goes, by definition
+            log::info!("adding basis {}: va {:x?} with pte {:?}", name, va, rpte);
+            basis_v2p_map.insert(va, rpte);
+        } else {
+            return Err(Error::new(ErrorKind::Other, "Space reservation failed"));
+        }
+        let aad = basis_root.aad(hw.dna());
+        let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap()).unwrap();
+        assert!(pp.valid(), "v2p returned an invalid page");
+        let journal_bytes = (0 as u32).to_le_bytes();
+        let slice_iter =
+            journal_bytes.iter() // journal rev
+            .chain(basis_root.as_ref().iter());
+        let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+        for (&src, dst) in slice_iter.zip(block.iter_mut()) {
+            *dst = src;
+        }
+        let key = Key::clone_from_slice(&basis_key);
+        hw.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
+
+        Ok(())
+    }
+
+    pub(crate) fn basis_list(&self) -> Vec<String> {
+        let mut ret = Vec::new();
+        for bcache in &self.cache {
+            ret.push(bcache.name.clone());
+        }
+        ret
+    }
+
+    pub(crate) fn basis_add(&mut self, basis: BasisCacheEntry) {
+        self.cache.push(basis);
+    }
+
+    pub(crate) fn basis_unmount(&mut self, hw: &mut PddbOs, mut basis: BasisCacheEntry) -> Result<()> {
+        basis.sync(hw)?;
+        self.cache.retain(|x| x.name != basis.name);
+        Ok(())
+    }
+
+    /// note: you can "delete" a basis simply by forgetting its password, but this is more thorough.
+    /// there might also need to be a variant to make which is a "change my password" function, but that is actually
+    /// surprisingly hard.
+    pub(crate) fn basis_delete(&mut self, hw: &mut PddbOs, mut basis: BasisCacheEntry) {
+        let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
+        for page in basis.v2p_map.values_mut() {
+            hw.trng_slice(&mut temp);
+            hw.patch_data(&temp, page.page_number() * PAGE_SIZE as u32);
+            hw.fast_space_free(page);
+        }
+        basis.pt_sync(hw);
+    }
+
     pub(crate) fn sync(&mut self, hw: &mut PddbOs, basis_name: Option<&str>) -> Result<()> {
         if basis_name.is_some() {
             if let Some(basis_index) = self.select_basis(basis_name) {
@@ -750,13 +880,17 @@ pub(crate) struct BasisCacheEntry {
     pub journal: u32,
     /// current allocation pointer for the "large" pool. This just keeps incrementing "forever".
     pub large_alloc_ptr: Option<PageAlignedVa>,
+    /// retiention policy
+    pub policy: BasisRetentionPolicy,
+    /// rention state
+    pub policy_state: u32,
 }
 impl BasisCacheEntry {
     /// given a pointer to the hardware, name of the basis, and its cryptographic key, try to derive
     /// the basis. If `lazy` is true, it stops with the minimal amount of effort to respond to a query.
     /// If it `lazy` is false, it will populate the dictionary cache and key cache entries, as well as
     /// discover the location of the `large_alloc_ptr`.
-    pub(crate) fn mount(hw: &mut PddbOs, name: &str, key: &[u8; AES_KEYSIZE], lazy: bool) -> Option<BasisCacheEntry> {
+    pub(crate) fn mount(hw: &mut PddbOs, name: &str, key: &[u8; AES_KEYSIZE], lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         if let Some(basis_map) = hw.pt_scan_key(key, name) {
             let cipher = Aes256GcmSiv::new(Key::from_slice(key));
             let aad = hw.data_aad(name);
@@ -798,6 +932,8 @@ impl BasisCacheEntry {
                     v2p_map: basis_map,
                     journal: u32::from_le_bytes(vpage[..size_of::<JournalType>()].try_into().unwrap()),
                     large_alloc_ptr: None,
+                    policy,
+                    policy_state: policy.derive_init_state(),
                 };
                 if !lazy {
                     bcache.populate_caches(hw);

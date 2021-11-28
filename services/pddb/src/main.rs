@@ -419,64 +419,92 @@ fn xmain() -> ! {
     */
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     {
+        const EXTRA_BASIS: &'static str = "Basis2";
+        const EXTRA_BASIS_PW: &'static str = "some password blah blah";
+
         pddb_os.test_reset();
         log::info!("Creating `basecase1e`");
         let mut basis_cache = BasisCache::new();
         create_basis_testcase(&mut pddb_os, &mut basis_cache, None,
             None, None, Some(32));
         log::info!("Saving `basecase1e` to local host");
-        pddb_os.dbg_dump(Some("basecase1e".to_string()));
+        pddb_os.dbg_dump(Some("basecase1e".to_string()), None);
+
+        let extra_basis_key = pddb_os.basis_derive_key(EXTRA_BASIS, EXTRA_BASIS_PW);
+        let extra_export = KeyExport {
+            basis_name: BasisRootName::try_from_str(EXTRA_BASIS).unwrap().0,
+            key: extra_basis_key,
+        };
+        let mut export: Vec::<KeyExport> = Vec::new();
+        export.push(extra_export);
+
+        log::info!("Building a second basis");
+        basis_cache.basis_create(&mut pddb_os,
+            EXTRA_BASIS, EXTRA_BASIS_PW).expect("couldn't build test basis");
 
         log::info!("Doing delete/add consistency with data extension");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None,
-            None, None, None);
+            None, None, None, None);
         log::info!("Saving `dachecke` to local host");
-        pddb_os.dbg_dump(Some("dachecke".to_string()));
+        pddb_os.dbg_dump(Some("dachecke".to_string()), None);
 
         log::info!("Doing patch test");
         patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
-        pddb_os.dbg_dump(Some("patche".to_string()));
+        pddb_os.dbg_dump(Some("patche".to_string()), None);
 
         log::info!("Doing delete pattern test");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
-        pddb_os.dbg_dump(Some("patterne".to_string()));
+        pddb_os.dbg_dump(Some("patterne".to_string()), None);
 
         // extended tests.
         // allocation space curtailed to force resource exhaustion faster.
         // note to self: FSCB_PAGES revert to 16 (hw.rs), FASTSPACE_PAGES revert to 2 (fastspace.rs)
         log::info!("Doing patch test 2");
         patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
-        pddb_os.dbg_dump(Some("patche2".to_string()));
+        pddb_os.dbg_dump(Some("patche2".to_string()), None);
 
         log::info!("Doing delete pattern test 2");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
-        pddb_os.dbg_dump(Some("patterne2".to_string()));
+        pddb_os.dbg_dump(Some("patterne2".to_string()), None);
 
         log::info!("Doing delete/add consistency with data extension 2");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
-            Some(50), None, None);
+            Some(50), None, None, None);
         log::info!("Saving `dachecke2` to local host");
-        pddb_os.dbg_dump(Some("dachecke2".to_string()));
+        pddb_os.dbg_dump(Some("dachecke2".to_string()), None);
 
         log::info!("Doing delete/add consistency with data extension 3");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
-            Some(50), None, None);
+            Some(50), None, None, None);
         log::info!("Saving `dachecke3` to local host");
-        pddb_os.dbg_dump(Some("dachecke3".to_string()));
+        pddb_os.dbg_dump(Some("dachecke3".to_string()), None);
 
         log::info!("Doing delete/add consistency with data extension 4");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(6),
-            Some(50), None, None);
+            Some(50), None, None, None);
         log::info!("Saving `dachecke4` to local host");
-        pddb_os.dbg_dump(Some("dachecke4".to_string()));
+        pddb_os.dbg_dump(Some("dachecke4".to_string()), None);
 
         log::info!("Doing remount disk test");
         let mut basis_cache = BasisCache::new();
         if let Some(sys_basis) = pddb_os.pddb_mount() {
             basis_cache.basis_add(sys_basis);
             list_all(&mut pddb_os, &mut basis_cache);
-            pddb_os.dbg_dump(Some("remounte".to_string()));
+            pddb_os.dbg_dump(Some("remounte".to_string()), Some(&export));
         }
+
+        log::info!("Mounting the second basis");
+        if let Some(basis2) = basis_cache.basis_unlock(&mut pddb_os,
+            EXTRA_BASIS, EXTRA_BASIS_PW, BasisRetentionPolicy::Persist) {
+            basis_cache.basis_add(basis2);
+        }
+        log::info!("Adding keys to Basis2");
+        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
+            Some(15), None, None, Some(EXTRA_BASIS));
+        log::info!("Saving `basis2` to local host");
+        pddb_os.dbg_dump(Some("basis2".to_string()), Some(&export));
+
+
     }
     log::info!("CI done");
     /*

@@ -162,7 +162,7 @@ def main():
 
         for name, key in keys.items():
             if name in tables:
-                print("Basis {}".format(name))
+                print("Basis {}, key: {}".format(name, key.hex()))
                 v2p_table = tables[name][0]
                 p2v_table = tables[name][1]
                 # v2p_table[0xfe0fe0] = 0x1200* 0x100
@@ -690,7 +690,7 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
         if fscb_start:
             print("Found FSCB at {:x}".format(fscb_start))
             fscb_enc = img[fscb_start * 4096 : (fscb_start + FSCB_LEN_PAGES) * 4096]
-            print("data: {}".format(fscb_enc.hex()))
+            # print("data: {}".format(fscb_enc.hex()))
             try:
                 nonce = fscb_enc[:12]
                 print("key: {}, nonce: {}".format(key.hex(), nonce.hex()))

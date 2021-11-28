@@ -41,7 +41,7 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
 
     hw.pddb_format(false).unwrap();
     let sys_basis = hw.pddb_mount().expect("couldn't mount system basis");
-    basis_cache.basis_add(sys_basis);
+        basis_cache.basis_add(sys_basis);
 
     let num_dicts = maybe_num_dicts.unwrap_or(4);
     let num_keys = maybe_num_keys.unwrap_or(34);
@@ -78,7 +78,7 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
 /// Delete & add dictionary consistency check
 pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     maybe_num_dicts: Option<usize>, maybe_num_keys: Option<usize>, maybe_key_sizes: Option<(usize, usize)>,
-    maybe_extra_reserved: Option<usize>,
+    maybe_extra_reserved: Option<usize>, basis_name: Option<&str>
 ) {
     let evict_count = maybe_num_dicts.unwrap_or(1);
     let num_keys = maybe_num_keys.unwrap_or(36);
@@ -89,7 +89,7 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
     let dict_start_index = dict_list.len();
     for (evicted, evict_dict) in dict_list.iter().enumerate() {
         if evicted < evict_count {
-            match basis_cache.dict_remove(hw, evict_dict, None, false) {
+            match basis_cache.dict_remove(hw, evict_dict, basis_name, false) {
                 Ok(_) => {},
                 Err(e) => log::error!("Error evicting dictionary {}: {:?}", evict_dict, e),
             }
@@ -107,11 +107,11 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
                 // we do this slightly funky way instead of just passing Some(0) because we want to test the "None" path explicitly
                 basis_cache.key_update(hw, &dictname, &keyname, &keydata, None,
                     None,
-                    None, false).unwrap();
+                    basis_name, false).unwrap();
             } else {
                 basis_cache.key_update(hw, &dictname, &keyname, &keydata, None,
                     Some(keydata.len() + extra_reserved),
-                    None, false).unwrap();
+                    basis_name, false).unwrap();
             }
         }
     }

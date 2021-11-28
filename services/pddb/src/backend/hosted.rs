@@ -37,6 +37,7 @@ fn flashmem() -> &'static mut FlashSingleton {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct KeyExport {
     pub basis_name: [u8; 64],
     pub key: [u8; 32],
