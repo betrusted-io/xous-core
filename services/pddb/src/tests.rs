@@ -85,7 +85,7 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
     let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((LOWER_BOUND, UPPER_BOUND - 4));
     let extra_reserved = maybe_extra_reserved.unwrap_or(0);
 
-    let dict_list = basis_cache.dict_list(hw);
+    let dict_list = basis_cache.dict_list(hw, None);
     let dict_start_index = dict_list.len();
     for (evicted, evict_dict) in dict_list.iter().enumerate() {
         if evicted < evict_count {
@@ -124,9 +124,9 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     let patch_offset = maybe_patch_offset.unwrap_or(5);
     let patch_data = maybe_patch_data.unwrap_or("patched!".to_string());
 
-    let dict_list = basis_cache.dict_list(hw);
+    let dict_list = basis_cache.dict_list(hw, None);
     for dict in dict_list.iter() {
-        if let Ok(key_list) = basis_cache.key_list(hw, dict) {
+        if let Ok(key_list) = basis_cache.key_list(hw, dict, None) {
             for key in key_list.iter() {
                 // this actually does something a bit more complicated on a multi-basis system than you'd think:
                 // it will get the union of all key names, and then patch the *latest open basis* only with new data.
@@ -185,11 +185,11 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     let extra_reserved = maybe_extra_reserved.unwrap_or(0);
 
     let mut evicted_dicts = Vec::<String>::new();
-    let dict_list = basis_cache.dict_list(hw);
+    let dict_list = basis_cache.dict_list(hw, None);
     let mut evict_iter = 0;
     for (evicted, evict_dict) in dict_list.iter().enumerate() {
         if evicted < evict_count {
-            for (index, key) in basis_cache.key_list(hw, evict_dict).unwrap().iter().enumerate() {
+            for (index, key) in basis_cache.key_list(hw, evict_dict, None).unwrap().iter().enumerate() {
                 if index % 2 == (evict_iter % 2) { // exercise odd/even patterns
                     log::info!("deleting {}:{}", evict_dict, key);
                     basis_cache.key_remove(hw, evict_dict, key,None, false).unwrap();
@@ -203,7 +203,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
         evicted_dicts.push(evict_dict.to_string());
         evict_iter += 1;
     }
-    for dict in basis_cache.dict_list(hw).iter() {
+    for dict in basis_cache.dict_list(hw, None).iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
         log::info!("{:?}", da);
     }
@@ -224,7 +224,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
             }
         }
     }
-    for dict in basis_cache.dict_list(hw).iter() {
+    for dict in basis_cache.dict_list(hw, None).iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
         log::info!("{:?}", da);
     }
@@ -234,7 +234,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     log::info!("all-basis sync done");
 
     list_all(hw, basis_cache);
-    for dict in basis_cache.dict_list(hw).iter() {
+    for dict in basis_cache.dict_list(hw, None).iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
         log::info!("{:?}", da);
     }
@@ -242,12 +242,22 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
 
 pub(crate) fn list_all(hw: &mut PddbOs, basis_cache: &mut BasisCache) {
     // now list all the attributes of the basis
-    for dict in basis_cache.dict_list(hw).iter() {
-        let da = basis_cache.dict_attributes(hw, &dict, None).unwrap();
+    for dict in basis_cache.dict_list(hw, None).iter() {
+        let da = match basis_cache.dict_attributes(hw, &dict, None) {
+            Ok(da) => da,
+            Err(e) => {
+                log::warn!("dictionary {} not in sub-basis (this is normal for multi-basis systems, {:?}", dict, e);
+                continue;
+            }
+        };
         log::info!("{:?}", da);
         let mut sanity_count = 0;
-        for key in basis_cache.key_list(hw, dict).unwrap().iter() {
-            log::info!("{}:{}=>{:?}", dict, key, basis_cache.key_attributes(hw, dict, key, None));
+        for key in basis_cache.key_list(hw, dict, None).unwrap().iter() {
+            let attrs = match basis_cache.key_attributes(hw, dict, key, None) {
+                Ok(a) => a,
+                Err(e) => {log::debug!("key not in basis, searching another basis, {:?}", e);  continue},
+            };
+            log::info!("{}:{}=>{:?}", dict, key, attrs);
             sanity_count += 1;
         }
         log::info!("sanity check count: {}", sanity_count);

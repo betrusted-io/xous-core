@@ -347,26 +347,49 @@ impl BasisCache {
     /// Returns a list of all the known dictionaries, across all the basis. A HashSet is returned
     /// because you can have the same-named dictionary in multiple basis, and what we're asking for
     /// is the union of all the dictionary names, without duplicates.
-    pub(crate) fn dict_list(&mut self, hw: &mut PddbOs) -> HashSet::<String> {
+    pub(crate) fn dict_list(&mut self, hw: &mut PddbOs, basis_name: Option<&str>) -> HashSet::<String> {
         let mut dict_set = HashSet::<String>::new();
-        for basis in self.cache.iter_mut() {
-            basis.populate_caches(hw);
-            for (key, dcache) in basis.dicts.iter() {
-                if dcache.flags.valid() {
-                    dict_set.insert(String::from(key));
+        if basis_name.is_some() {
+            if let Some(basis_index) = self.select_basis(basis_name) {
+                let basis = &mut self.cache[basis_index];
+                basis.populate_caches(hw);
+                for (key, dcache) in basis.dicts.iter() {
+                    if dcache.flags.valid() {
+                        dict_set.insert(String::from(key));
+                    }
+                }
+            }
+        } else {
+            for basis in self.cache.iter_mut() {
+                basis.populate_caches(hw);
+                for (key, dcache) in basis.dicts.iter() {
+                    if dcache.flags.valid() {
+                        dict_set.insert(String::from(key));
+                    }
                 }
             }
         }
         dict_set
     }
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str) -> Result<HashSet::<String>> {
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<HashSet::<String>> {
         let mut merge_list = HashSet::<String>::new();
         let mut found_dict = false;
-        for basis in self.cache.iter_mut() {
-            basis.populate_caches(hw);
-            if let Some(dcache) = basis.dicts.get_mut(dict) {
-                dcache.key_list(hw, &basis.v2p_map, &basis.cipher, &mut merge_list);
-                found_dict = true;
+        if basis_name.is_some() {
+            if let Some(basis_index) = self.select_basis(basis_name) {
+                let basis = &mut self.cache[basis_index];
+                basis.populate_caches(hw);
+                if let Some(dcache) = basis.dicts.get_mut(dict) {
+                    dcache.key_list(hw, &basis.v2p_map, &basis.cipher, &mut merge_list);
+                    found_dict = true;
+                }
+            }
+        } else {
+            for basis in self.cache.iter_mut() {
+                basis.populate_caches(hw);
+                if let Some(dcache) = basis.dicts.get_mut(dict) {
+                    dcache.key_list(hw, &basis.v2p_map, &basis.cipher, &mut merge_list);
+                    found_dict = true;
+                }
             }
         }
         if found_dict {
@@ -680,42 +703,81 @@ impl BasisCache {
     }
 
     pub(crate) fn key_attributes(&mut self, hw: &mut PddbOs, dict: &str, key: &str, basis_name: Option<&str>) -> Result<KeyAttributes> {
-        if let Some(basis_index) = self.select_basis(basis_name) {
-            let basis = &mut self.cache[basis_index];
-            if !basis.ensure_dict_in_cache(hw, dict) {
-                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
-            } else {
-                let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
-                if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
-                    let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
-                    Ok(KeyAttributes {
-                        len: kcache.len as usize,
-                        reserved: kcache.reserved as usize,
-                        age: kcache.age as usize,
-                        dict: dict.to_string(),
-                        basis: (&basis.name).to_string(),
-                        flags: kcache.flags,
-                    })
+        if basis_name.is_none() {
+            for basis in self.cache.iter_mut().rev() {
+                if !basis.ensure_dict_in_cache(hw, dict) {
+                    continue;
                 } else {
-                    return Err(Error::new(ErrorKind::NotFound, "key not found"));
+                    let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
+                    if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
+                        let kcache = match dict_entry.keys.get_mut(key) {
+                            Some(kc) => kc,
+                            None => continue,
+                        };
+                        return Ok(KeyAttributes {
+                            len: kcache.len as usize,
+                            reserved: kcache.reserved as usize,
+                            age: kcache.age as usize,
+                            dict: dict.to_string(),
+                            basis: (&basis.name).to_string(),
+                            flags: kcache.flags,
+                        })
+                    } else {
+                        return Err(Error::new(ErrorKind::NotFound, "key not found"));
+                    }
                 }
             }
+            Err(Error::new(ErrorKind::NotFound, "key not found"))
         } else {
-            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+            if let Some(basis_index) = self.select_basis(basis_name) {
+                let basis = &mut self.cache[basis_index];
+                if !basis.ensure_dict_in_cache(hw, dict) {
+                    return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+                } else {
+                    let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
+                    if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
+                        let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                        Ok(KeyAttributes {
+                            len: kcache.len as usize,
+                            reserved: kcache.reserved as usize,
+                            age: kcache.age as usize,
+                            dict: dict.to_string(),
+                            basis: (&basis.name).to_string(),
+                            flags: kcache.flags,
+                        })
+                    } else {
+                        return Err(Error::new(ErrorKind::NotFound, "key not found"));
+                    }
+                }
+            } else {
+                Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+            }
         }
     }
 
     pub(crate) fn dict_attributes(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<DictAttributes> {
-        if let Some(basis_index) = self.select_basis(basis_name) {
-            let basis = &mut self.cache[basis_index];
-            if !basis.ensure_dict_in_cache(hw, dict) {
-                return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
-            } else {
-                let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
-                Ok(dict_entry.to_dict_attributes(dict, &basis.name))
+        if basis_name.is_none() {
+            for basis in self.cache.iter_mut().rev() {
+                if !basis.ensure_dict_in_cache(hw, dict) {
+                    continue;
+                } else {
+                    let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
+                    return Ok(dict_entry.to_dict_attributes(dict, &basis.name));
+                }
             }
+            return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
         } else {
-            Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+            if let Some(basis_index) = self.select_basis(basis_name) {
+                let basis = &mut self.cache[basis_index];
+                if !basis.ensure_dict_in_cache(hw, dict) {
+                    return Err(Error::new(ErrorKind::NotFound, "dictionary not found"));
+                } else {
+                    let dict_entry = basis.dicts.get_mut(dict).expect("Entry was assured, but not there!");
+                    Ok(dict_entry.to_dict_attributes(dict, &basis.name))
+                }
+            } else {
+                Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."))
+            }
         }
     }
 
@@ -828,10 +890,15 @@ impl BasisCache {
         self.cache.push(basis);
     }
 
-    pub(crate) fn basis_unmount(&mut self, hw: &mut PddbOs, mut basis: BasisCacheEntry) -> Result<()> {
-        basis.sync(hw)?;
-        self.cache.retain(|x| x.name != basis.name);
-        Ok(())
+    pub(crate) fn basis_unmount(&mut self, hw: &mut PddbOs, basis_name: &str) -> Result<()> {
+        if let Some(basis_index) = self.select_basis(Some(basis_name)) {
+            let basis = &mut self.cache[basis_index];
+            basis.sync(hw)?;
+            self.cache.retain(|x| x.name != basis_name);
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Basis not found"))
+        }
     }
 
     /// note: you can "delete" a basis simply by forgetting its password, but this is more thorough.

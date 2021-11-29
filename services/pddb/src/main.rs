@@ -379,6 +379,8 @@ use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 use core::cell::RefCell;
 use std::rc::Rc;
 
+use std::collections::HashSet;
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -455,7 +457,7 @@ fn xmain() -> ! {
         log::info!("Doing delete pattern test");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
         pddb_os.dbg_dump(Some("patterne".to_string()), None);
-
+/*
         // extended tests.
         // allocation space curtailed to force resource exhaustion faster.
         // note to self: FSCB_PAGES revert to 16 (hw.rs), FASTSPACE_PAGES revert to 2 (fastspace.rs)
@@ -484,6 +486,13 @@ fn xmain() -> ! {
             Some(50), None, None, None);
         log::info!("Saving `dachecke4` to local host");
         pddb_os.dbg_dump(Some("dachecke4".to_string()), None);
+*/
+        let mut pre_list = HashSet::<String>::new();
+        for dict in basis_cache.dict_list(&mut pddb_os, None).iter() {
+            for key in basis_cache.key_list(&mut pddb_os, dict, None).unwrap().iter() {
+                pre_list.insert(key.to_string());
+            }
+        }
 
         log::info!("Doing remount disk test");
         let mut basis_cache = BasisCache::new();
@@ -504,6 +513,56 @@ fn xmain() -> ! {
         log::info!("Saving `basis2` to local host");
         pddb_os.dbg_dump(Some("basis2".to_string()), Some(&export));
 
+        let mut merge_list = HashSet::<String>::new();
+        for dict in basis_cache.dict_list(&mut pddb_os, None).iter() {
+            for key in basis_cache.key_list(&mut pddb_os, dict, None).unwrap().iter() {
+                merge_list.insert(key.to_string());
+            }
+        }
+        assert!(pre_list.is_subset(&merge_list), "pre-merge list is not a subset of the merged basis");
+
+        let mut b2_list = HashSet::<String>::new();
+        for dict in basis_cache.dict_list(&mut pddb_os, Some(EXTRA_BASIS)).iter() {
+            for key in basis_cache.key_list(&mut pddb_os, dict, Some(EXTRA_BASIS)).unwrap().iter() {
+                b2_list.insert(key.to_string());
+            }
+        }
+        assert!(b2_list.is_subset(&merge_list), "basis 2 is not a subset of the merged lists");
+
+        basis_cache.basis_unmount(&mut pddb_os, EXTRA_BASIS).unwrap();
+        let mut post_list = HashSet::<String>::new();
+        for dict in basis_cache.dict_list(&mut pddb_os, None).iter() {
+            for key in basis_cache.key_list(&mut pddb_os, dict, None).unwrap().iter() {
+                post_list.insert(key.to_string());
+            }
+        }
+
+        log::info!("Doing remount disk test part 2");
+        let mut basis_cache = BasisCache::new();
+        if let Some(sys_basis) = pddb_os.pddb_mount() {
+            basis_cache.basis_add(sys_basis);
+        }
+        let mut remount_list = HashSet::<String>::new();
+        for dict in basis_cache.dict_list(&mut pddb_os, None).iter() {
+            for key in basis_cache.key_list(&mut pddb_os, dict, None).unwrap().iter() {
+                remount_list.insert(key.to_string());
+            }
+        }
+        assert!(remount_list.difference(&pre_list).count() == 0, "remounted list is not identical to the original list");
+
+        log::info!("Mounting the second basis again");
+        if let Some(basis2) = basis_cache.basis_unlock(&mut pddb_os,
+            EXTRA_BASIS, EXTRA_BASIS_PW, BasisRetentionPolicy::Persist) {
+            basis_cache.basis_add(basis2);
+        }
+        let mut merge2_list = HashSet::<String>::new();
+        for dict in basis_cache.dict_list(&mut pddb_os, None).iter() {
+            for key in basis_cache.key_list(&mut pddb_os, dict, None).unwrap().iter() {
+                merge2_list.insert(key.to_string());
+            }
+        }
+        assert!(merge2_list.difference(&merge_list).count() == 0, "merged list is different from the original list after remount");
+        list_all(&mut pddb_os, &mut basis_cache);
 
     }
     log::info!("CI done");
@@ -547,7 +606,7 @@ fn xmain() -> ! {
         - [done] key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
         - [done] fast space exhaustion test: allocate and delete a bunch of stuff. trigger a fast-space regenerate.
           note: for faster stress-testing, we dialed the FSCB_PAGES to 4 and the FASTSPACE_PAGES to 1.
-        - basis search: create basis A, populate with general integrity. create basis B, add test entries.
+        - [done] basis search: create basis A, populate with general integrity. create basis B, add test entries.
            hide basis B, confirm original A; mount basis B, confirm B overlay.
     */
     // register a suspend/resume listener
