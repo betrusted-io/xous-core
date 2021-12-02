@@ -213,7 +213,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let ut = env.com.get_ec_uptime().unwrap();
                     env.llio.ec_reset().unwrap();
 
-                    env.ticktimer.sleep_ms(4000).unwrap(); // wait so we have some realistic delta on the datetime function
+                    env.ticktimer.sleep_ms(6000).unwrap(); // wait so we have some realistic delta on the datetime function
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
                     self.end_time = rtc_get(&mut env.llio);
 
