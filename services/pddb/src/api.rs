@@ -6,6 +6,8 @@ pub(crate) const DICT_NAME_LEN: usize = 127 - 4 - 4 - 4 - 4; // u32: flags, age,
 #[allow(dead_code)]
 pub(crate) const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4; // u64: vaddr/len/resvd, u32: flags, age = 95
 #[allow(dead_code)]
+pub(crate) const PASSWORD_LEN: usize = 72; // this is actually set by bcrypt
+#[allow(dead_code)]
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 #[allow(dead_code)]
 pub(crate) const PDDB_VERSION: u32 = 0x00_00_00_01;
@@ -42,6 +44,8 @@ pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
 pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
 
+#[allow(dead_code)]
+pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
@@ -61,6 +65,8 @@ pub(crate) enum Opcode {
 
     /// Suspend/resume callback
     SuspendResume,
+    /// quit the server
+    Quit,
 }
 
 /// A structure for requesting a token to access a particular key/value pair

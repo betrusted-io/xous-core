@@ -88,7 +88,7 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 7;
+const MAX_UX_CONTEXTS: usize = 8;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
@@ -257,7 +257,7 @@ impl ContextManager {
             //
             // That being said, if you are to run "generic apps from the internet" you can't
             // put a proper bound on this number.
-            log::error!("Ran out of UX contexts: try increasing MAX_UX_CONTEXTS in gam.rs");
+            log::error!("Ran out of UX contexts: try increasing MAX_UX_CONTEXTS in gam/main.rs");
             None
         }
     }

@@ -368,6 +368,8 @@ mod api;
 use api::*;
 mod backend;
 use backend::*;
+mod ux;
+use ux::*;
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod tests;
@@ -375,11 +377,19 @@ mod tests;
 use tests::*;
 
 use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use xous_ipc::Buffer;
 use core::cell::RefCell;
 use std::rc::Rc;
 
 use std::collections::HashSet;
+use std::thread;
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct BasisRequestPassword {
+    db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>,
+    plaintext_pw: Option<xous_ipc::String::<{crate::api::PASSWORD_LEN}>>,
+}
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -613,6 +623,28 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
     let _susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    // our very own password modal. Password modals are precious and privately owned, to avoid
+    // other processes from crafting them.
+    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    let pw_handle = thread::spawn({
+        move || {
+            password_ux_manager(
+                xous::connect(pddb_sid).unwrap(),
+                pw_sid
+            )
+        }
+    });
+
+    let request = BasisRequestPassword {
+        db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str("test basis"),
+        plaintext_pw: None,
+    };
+    let mut buf = Buffer::into_buf(request).unwrap();
+    buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+    let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
+    log::info!("Got password: {:?}", ret.plaintext_pw);
+
     loop {
         let msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -642,14 +674,23 @@ fn xmain() -> ! {
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 pddb.resume(); */
             }),
-            None => {
-                log::error!("couldn't convert opcode");
+            Some(Opcode::Quit) => {
+                log::warn!("quitting the PDDB server");
+                send_message(
+                    pw_cid,
+                    Message::new_blocking_scalar(PwManagerOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)
+                ).unwrap();
+                xous::return_scalar(msg.sender, 0).unwrap();
                 break
+            }
+            None => {
+                log::error!("couldn't convert opcode: {:?}", msg);
             }
         }
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
+    pw_handle.join().expect("password ux manager thread did not join as expected");
     xns.unregister_server(pddb_sid).unwrap();
     xous::destroy_server(pddb_sid).unwrap();
     log::trace!("quitting");

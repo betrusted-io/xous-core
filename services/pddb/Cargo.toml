@@ -34,6 +34,9 @@ digest = "0.9"
 # bcrypt
 blowfish = { version = "0.8", features = ["bcrypt"] }
 
+# UX (for password entry and notifications)
+gam = {path="../gam"}
+locales = {path = "../../locales"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

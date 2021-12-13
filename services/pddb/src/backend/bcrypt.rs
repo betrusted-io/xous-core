@@ -29,17 +29,17 @@ pub fn bcrypt(cost: u32, salt: &[u8], pw: &str, output: &mut [u8]) {
     assert!(salt.len() == 16);
     assert!(output.len() == 24);
 
-    let pw_len = if pw.len() > 72 {
-        log::warn!("password of length {} is truncated to 72 bytes [reason: bcrypt limitation]", pw.len());
-        72
+    let pw_len = if pw.len() > crate::api::PASSWORD_LEN {
+        log::warn!("password of length {} is truncated to {} bytes [reason: bcrypt limitation]", pw.len(), crate::api::PASSWORD_LEN);
+        crate::api::PASSWORD_LEN
     } else {
         pw.len() + 1
     };
-    let mut plaintext_copy: [u8; 73] = [0; 73];
+    let mut plaintext_copy: [u8; crate::api::PASSWORD_LEN + 1] = [0; crate::api::PASSWORD_LEN + 1];
     for (src, dst) in pw.bytes().zip(plaintext_copy.iter_mut()) {
         *dst = src;
     }
-    plaintext_copy[72] = 0; // always null terminate
+    plaintext_copy[crate::api::PASSWORD_LEN] = 0; // always null terminate
 
     // this function takes the plaintext key and uses it to prime a ~4k region of stack with an s-box
     // that's used for the round function. The upstream Rust crypto crate does not wipe the sbox after use.
