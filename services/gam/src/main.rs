@@ -88,7 +88,6 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 8;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
@@ -102,7 +101,7 @@ const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 */
 struct ContextManager {
     tm: TokenManager,
-    contexts: [Option<UxContext>; MAX_UX_CONTEXTS],
+    contexts: HashMap::<[u32; 4], UxContext>, // historical note: we used to limit the number of contexts to prevent rogue UX elements, but now we track valid ones in 'tokens.rs', allowing context storage allocations to grow on-demand.
     focused_context: Option<[u32; 4]>, // app_token of the app that has I/O focus, if any
     last_context: Option<[u32; 4]>, // previously focused context, if any
     imef: ime_plugin_api::ImeFrontEnd,
@@ -123,7 +122,7 @@ impl ContextManager {
         imef.hook_listener_callback(imef_cb).expect("couldn't request events from IMEF");
         ContextManager {
             tm: TokenManager::new(&xns),
-            contexts: [None; MAX_UX_CONTEXTS],
+            contexts: HashMap::new(),
             focused_context: None,
             last_context: None,
             imef,
@@ -151,7 +150,6 @@ impl ContextManager {
                 registration: UxRegistration)
             -> Option<[u32; 4]> {
         let maybe_token = self.tm.claim_token(registration.app_name.as_str().unwrap());
-        let mut found_slot = false;
         if let Some(token) = maybe_token {
             match registration.ux_type {
                 UxType::Chat => {
@@ -172,13 +170,7 @@ impl ContextManager {
                         rawkeys_id: None,
                         vibe: false,
                     };
-                    for maybe_context in self.contexts.iter_mut() {
-                        if maybe_context.is_none() {
-                            *maybe_context = Some(ux_context);
-                            found_slot = true;
-                            break;
-                        }
-                    }
+                    self.contexts.insert(token, ux_context);
                 },
                 UxType::Menu => {
                     let mut menulayout = MenuLayout::init(&gfx, &trng,
@@ -199,19 +191,13 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                     };
-                    for maybe_context in self.contexts.iter_mut() {
-                        if maybe_context.is_none() {
-                            *maybe_context = Some(ux_context);
-                            found_slot = true;
-                            // if this is the main menu, note its app token, as we have to conjure it later on
-                            if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
-                                log::debug!("main menu found and registered!");
-                                assert!(self.main_menu_app_token == None, "attempt to double-register main menu handler, this should never happen.");
-                                self.main_menu_app_token = Some(token);
-                            }
-                            break;
-                        }
+
+                    if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
+                        log::debug!("main menu found and registered!");
+                        assert!(self.main_menu_app_token == None, "attempt to double-register main menu handler, this should never happen.");
+                        self.main_menu_app_token = Some(token);
                     }
+                    self.contexts.insert(token, ux_context);
                 }
                 UxType::Modal => {
                     let mut modallayout = ModalLayout::init(&gfx, &trng,
@@ -232,13 +218,7 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                     };
-                    for maybe_context in self.contexts.iter_mut() {
-                        if maybe_context.is_none() {
-                            *maybe_context = Some(ux_context);
-                            found_slot = true;
-                            break;
-                        }
-                    }
+                    self.contexts.insert(token, ux_context);
                 }
             }
         } else {
@@ -248,28 +228,14 @@ impl ContextManager {
             return None;
         }
 
-        if found_slot {
-            maybe_token
-        } else {
-            // Note: for the most paranoid modes, you probably want exactly as many UX contexts
-            // as you expect to use. This cap helps prevent rouge processes from registering
-            // UX contexts that it shouldn't.
-            //
-            // That being said, if you are to run "generic apps from the internet" you can't
-            // put a proper bound on this number.
-            log::error!("Ran out of UX contexts: try increasing MAX_UX_CONTEXTS in gam/main.rs");
-            None
-        }
+        maybe_token
     }
     pub(crate) fn get_content_canvas(&self, token: [u32; 4]) -> Option<Gid> {
-        for maybe_context in self.contexts.iter() {
-            if let Some(context) = maybe_context {
-                if context.app_token == token {
-                    return Some(context.layout.get_content_canvas());
-                }
-            }
+        if let Some(context) = self.contexts.get(&token) {
+            return Some(context.layout.get_content_canvas());
+        } else {
+            None
         }
-        None
     }
     pub(crate) fn set_canvas_height(&mut self,
         gfx: &graphics_server::Gfx,
@@ -278,12 +244,10 @@ impl ContextManager {
         status_canvas: &Canvas,
         canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
-        for maybe_context in self.contexts.iter_mut() {
-            if let Some(context) = maybe_context {
-                if context.gam_token == gam_token {
-                    let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
-                    return Some(result)
-                }
+        for context in self.contexts.values_mut() {
+            if context.gam_token == gam_token {
+                let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
+                return Some(result)
             }
         }
         None
@@ -296,35 +260,18 @@ impl ContextManager {
         status_canvas: &Canvas,
         canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
-        for maybe_context in self.contexts.iter_mut() {
-            if let Some(context) = maybe_context {
-                if context.app_token == app_token {
-                    let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
-                    return Some(result)
-                }
-            }
+        if let Some(context) = self.contexts.get_mut(&app_token) {
+            let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
+            Some(result)
+        } else {
+            None
         }
-        None
     }
     fn get_context_by_token_mut(&'_ mut self, token: [u32; 4]) -> Option<&'_ mut UxContext> {
-        for maybe_context in self.contexts.iter_mut() {
-            if let Some(context) = maybe_context {
-                if context.app_token == token {
-                    return Some(context)
-                }
-            }
-        }
-        None
+        self.contexts.get_mut(&token)
     }
     fn get_context_by_token(&'_ self, token: [u32; 4]) -> Option<&'_ UxContext> {
-        for maybe_context in self.contexts.iter() {
-            if let Some(context) = maybe_context {
-                if context.app_token == token {
-                    return Some(context)
-                }
-            }
-        }
-        None
+        self.contexts.get(&token)
     }
     pub(crate) fn activate(&mut self,
         gfx: &graphics_server::Gfx,
@@ -446,15 +393,11 @@ impl ContextManager {
     }
     pub(crate) fn redraw(&self) -> Result<(), xous::Error> { // redraws the currently focused context
         if let Some(token) = self.focused_app() {
-            for maybe_context in self.contexts.iter() {
-                if let Some(context) = maybe_context {
-                    if token == context.app_token {
-                        log::trace!("redraw msg to {}, id {}", context.listener, context.redraw_id);
-                        return xous::send_message(context.listener,
-                            xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
-                        ).map(|_| ())
-                    }
-                }
+            if let Some(context) = self.contexts.get(&token) {
+                log::trace!("redraw msg to {}, id {}", context.listener, context.redraw_id);
+                return xous::send_message(context.listener,
+                    xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
+                ).map(|_| ())
             }
         } else {
             return Err(xous::Error::UseBeforeInit)
@@ -478,14 +421,10 @@ impl ContextManager {
     }
     pub(crate) fn forward_input(&self, input: String::<4000>) -> Result<(), xous::Error> {
         if let Some(token) = self.focused_app() {
-            for maybe_context in self.contexts.iter() {
-                if let Some(context) = maybe_context {
-                    if token == context.app_token {
-                        if let Some(input_op) = context.gotinput_id {
-                            let buf = Buffer::into_buf(input).or(Err(xous::Error::InternalError)).unwrap();
-                            return buf.send(context.listener, input_op).map(|_| ())
-                        }
-                    }
+            if let Some(context) = self.contexts.get(&token) {
+                if let Some(input_op) = context.gotinput_id {
+                    let buf = Buffer::into_buf(input).or(Err(xous::Error::InternalError)).unwrap();
+                    return buf.send(context.listener, input_op).map(|_| ())
                 }
             }
         } else {
