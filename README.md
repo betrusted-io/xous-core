@@ -20,6 +20,8 @@ from source.  It consists of the following projects:
 - You may need to remove the `target/` directory before building, if `rustc` continues to behave like it can't find the `xous` target even after it is installed.
 - If you plan on doing USB firmware updates, you'll need `progressbar2` (updates) and `pyusb` (updates). Note that `pyusb` has name space conflicts with similarly named packages, so if updates aren't working you may need to create a `venv` or uninstall conflicting packages.
 - If you are doing development on the digital signatures with the Python helper scripts, you will need: `pycryptodome` (signing - PEM read), `cryptography` (signing - x509 read), `pynacl` (signing - ed25519 signatures) (most users won't need this).
+- Some system packages are needed, which can be installed with `sudo apt install libssl-dev libxkbcommon-dev` or similar
+- If you receive an error about `feature resolver is required`, try installing a newer version of `rustc` and `cargo` via [rustup](https://rustup.rs)
 
 ## Quickstart using Hosted Mode
 
