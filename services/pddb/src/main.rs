@@ -624,19 +624,6 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
     let _susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
-    // test the modal dialog box function
-    let modals = modals::Modals::new(&xns).unwrap();
-    log::info!("testing modals");
-    match modals.get_text_input("Test input", Some(test_validator), None) {
-        Ok(text) => {
-            log::info!("Input: {}", text.0);
-        }
-        _ => {
-            log::error!("get_text_input failed");
-        }
-    }
-    log::info!("done");
-
     // our very own password modal. Password modals are precious and privately owned, to avoid
     // other processes from crafting them.
     let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
@@ -649,7 +636,7 @@ fn xmain() -> ! {
             )
         }
     });
-
+    /* just for testing
     let request = BasisRequestPassword {
         db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str("test basis"),
         plaintext_pw: None,
@@ -658,7 +645,7 @@ fn xmain() -> ! {
     buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
     let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
     log::info!("Got password: {:?}", ret.plaintext_pw);
-
+    */
     loop {
         let msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {

@@ -23,7 +23,7 @@ impl Modals {
 
     pub fn get_text_input(&self,
         prompt: &str,
-        maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr> >,
+        maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
         maybe_validator_op: Option<u32>,
     ) -> Result<TextEntryPayload, xous::Error> {
         let validator = if let Some(validator) = maybe_validator {

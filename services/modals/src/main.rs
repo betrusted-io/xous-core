@@ -64,7 +64,7 @@ fn xmain() -> ! {
 
     let op = Arc::new(Mutex::new(RendererState::None));
     // create a thread that just handles the redrawing requests
-    let redraw_handle = thread::spawn({
+    let _redraw_handle = thread::spawn({
         let op = Arc::clone(&op);
         move || {
             // build the core data structure here
@@ -201,6 +201,10 @@ fn xmain() -> ! {
             xous::destroy_server(renderer_sid).unwrap();
         }
     });
+
+    if cfg!(feature = "ux_tests") {
+        tests::spawn_test();
+    }
 
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();

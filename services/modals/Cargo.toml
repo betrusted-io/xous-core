@@ -22,4 +22,5 @@ locales = {path = "../../locales"}
 utralib = { path = "../../utralib"}
 
 [features]
-default = []
+ux_tests = []
+default = ["ux_tests"]
