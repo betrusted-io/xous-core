@@ -48,7 +48,7 @@ pub trait ActionApi {
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
-    fn key_action(&mut self, _key: char) -> (Option<xous_ipc::String::<512>>, bool) {(None, true)}
+    fn key_action(&mut self, _key: char) -> (Option<ValidatorErr>, bool) {(None, true)}
     fn set_action_opcode(&mut self, _op: u32) {}
 }
 

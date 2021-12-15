@@ -161,7 +161,7 @@ impl ActionApi for Slider {
         );
         modal.gam.draw_rectangle(modal.canvas, inner_rect).expect("couldn't draw inner rectangle");
     }
-    fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {
+    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
         if !self.is_progressbar {
             match k {

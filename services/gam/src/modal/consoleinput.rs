@@ -24,7 +24,7 @@ impl ActionApi for ConsoleInput {
     fn redraw(&self, _at_height: i16, _modal: &Modal) {
         // has nothing
     }
-    fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {
+    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
         match k {
             '\u{0}' => {

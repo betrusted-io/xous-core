@@ -146,7 +146,7 @@ impl ActionApi for RadioButtons {
             DrawStyle::new(color, color, 1))
             ).expect("couldn't draw entry line");
     }
-    fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {
+    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
         match k {
             '←' | '→' => {

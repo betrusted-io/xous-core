@@ -7,6 +7,8 @@ use num_traits::*;
 
 use core::fmt::Write;
 
+pub type ValidatorErr = xous_ipc::String::<256>;
+
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum TextEntryVisibility {
     /// text is fully visible
@@ -25,7 +27,7 @@ pub struct TextEntry {
     pub action_payload: TextEntryPayload,
     // validator borrows the text entry payload, and returns an error message if something didn't go well.
     // validator takes as ragument the current action_payload, and the current action_opcode
-    pub validator: Option<fn(TextEntryPayload, u32) -> Option<xous_ipc::String::<512>> >,
+    pub validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr> >,
 }
 impl ActionApi for TextEntry {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
@@ -180,7 +182,7 @@ impl ActionApi for TextEntry {
             DrawStyle::new(color, color, 1))
             ).expect("couldn't draw entry line");
     }
-    fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {
+    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
         match k {
             '←' => {

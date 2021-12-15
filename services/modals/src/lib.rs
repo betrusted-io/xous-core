@@ -3,7 +3,7 @@
 pub mod api;
 use api::*;
 
-use gam::TextEntryPayload;
+use gam::*;
 use xous::{CID, SID, send_message, Message};
 use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
@@ -23,7 +23,7 @@ impl Modals {
 
     pub fn get_text_input(&self,
         prompt: &str,
-        maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<xous_ipc::String::<256>> >,
+        maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr> >,
         maybe_validator_op: Option<u32>,
     ) -> Result<TextEntryPayload, xous::Error> {
         let validator = if let Some(validator) = maybe_validator {

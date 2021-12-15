@@ -522,42 +522,42 @@ mod implementation {
     }
 }
 
-fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<xous_ipc::String::<512>> {
+fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<ValidatorErr> {
     let text_str = input.as_str();
     let input_int = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(xous_ipc::String::<512>::from_str(t!("rtc.integer_err", xous::LANG))),
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
     };
     log::trace!("validating input {}, parsed as {} for opcode {}", text_str, input_int, opcode);
     match FromPrimitive::from_u32(opcode) {
         Some(Opcode::UxMonth) => {
             if input_int < 1 || input_int > 12 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
         Some(Opcode::UxDay) => {
             if input_int < 1 || input_int > 31 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
         Some(Opcode::UxYear) => {
             if input_int > 99 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
         Some(Opcode::UxHour) => {
             if input_int > 23 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
         Some(Opcode::UxMinute) => {
             if input_int > 59 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
         Some(Opcode::UxSeconds) => {
             if input_int > 59 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
         _ => {

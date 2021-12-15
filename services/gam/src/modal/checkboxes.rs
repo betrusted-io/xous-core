@@ -132,7 +132,7 @@ impl ActionApi for CheckBoxes {
             DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
             ).expect("couldn't draw entry line");
     }
-    fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {
+    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
         match k {
             '←' | '→' => {
