@@ -37,6 +37,7 @@ blowfish = { version = "0.8", features = ["bcrypt"] }
 # UX (for password entry and notifications)
 gam = {path="../gam"}
 locales = {path = "../../locales"}
+modals = {path="../modals"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

@@ -1261,6 +1261,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "modals"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "locales",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "net"
 version = "0.1.0"
 dependencies = [
@@ -1438,6 +1456,7 @@ dependencies = [
  "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "rand 0.8.4",

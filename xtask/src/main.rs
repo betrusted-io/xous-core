@@ -60,6 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "net",
         "dns",
         "pddb",
+        "modals",
     ];
     let benchmark_pkgs = [
         "benchmark",

@@ -12,7 +12,7 @@ use xous_ipc::String;
 */
 
 // if you add more UxContexts, and you want them authorized by the GAM, add their names here.
-const TOKEN_SLOTS: usize = 9;
+const TOKEN_SLOTS: usize = 10;
 const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = [
     "shellchat",
     "main menu",
@@ -23,6 +23,7 @@ const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = [
     "rootkeys menu",
     "test modal",
     "pddb modal",
+    "shared modal",
 ];
 
 #[derive(Copy, Clone, Debug)]
