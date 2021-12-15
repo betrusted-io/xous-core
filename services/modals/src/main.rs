@@ -80,7 +80,7 @@ fn xmain() -> ! {
                 renderer_cid,
                 RendererOp::RadioReturn.to_u32().unwrap()
             );
-            let mut notification = gam::modal::Notification::new(
+            let notification = gam::modal::Notification::new(
                 renderer_cid,
                 RendererOp::NotificationReturn.to_u32().unwrap()
             );
@@ -116,10 +116,18 @@ fn xmain() -> ! {
                                 renderer_modal.modify(
                                     Some(ActionType::TextEntry(text_action)),
                                     Some(config.prompt.as_str().unwrap()), false,
-                                    None, false, None
+                                    None, true, None
                                 );
                                 renderer_modal.activate();
                                 log::info!("should be active!");
+                            },
+                            RendererState::RunNotification(config) => {
+                                renderer_modal.modify(
+                                    Some(ActionType::Notification(notification)),
+                                    Some(config.message.as_str().unwrap()), false,
+                                    None, true, None
+                                );
+                                renderer_modal.activate();
                             },
                             RendererState::None => {
                                 log::error!("Operation initiated with no argument specified. Ignoring request.");
@@ -170,6 +178,16 @@ fn xmain() -> ! {
                             }
                         }
                     }
+                    Some(RendererOp::NotificationReturn) => {
+                        let mut mutex_op = op.lock().unwrap();
+                        match *mutex_op {
+                            RendererState::RunNotification(_) => *mutex_op = RendererState::None,
+                            _ => {
+                                log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                                panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                            }
+                        }
+                    },
                     Some(RendererOp::ModalRedraw) => {
                         renderer_modal.redraw();
                     },
@@ -219,9 +237,7 @@ fn xmain() -> ! {
             Some(Opcode::PromptWithTextResponse) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let spec = buffer.to_original::<ManagedPromptWithTextResponse, _>().unwrap();
-                {
-                    *op.lock().unwrap() = RendererState::RunText(spec);
-                }
+                *op.lock().unwrap() = RendererState::RunText(spec);
                 send_message(
                 renderer_cid,
                     Message::new_scalar(RendererOp::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0)
@@ -242,7 +258,24 @@ fn xmain() -> ! {
                 }
             },
             Some(Opcode::Notification) => {
-
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let spec = buffer.to_original::<ManagedNotification, _>().unwrap();
+                *op.lock().unwrap() = RendererState::RunNotification(spec);
+                send_message(
+                renderer_cid,
+                    Message::new_scalar(RendererOp::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate UX op");
+                loop {
+                    match *op.lock().unwrap() {
+                        RendererState::RunNotification(_) => (),
+                        RendererState::None => break,
+                        _ => {
+                            log::error!("Illegal state transition in renderer");
+                            panic!("Illegal state transition in renderer");
+                        }
+                    }
+                    tt.sleep_ms(100).unwrap(); // don't put the idle in the match/lock(), it'll prevent the other thread from running!
+                }
             },
             Some(Opcode::StartProgress) => {
 

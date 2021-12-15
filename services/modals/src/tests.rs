@@ -21,6 +21,10 @@ pub(crate) fn spawn_test() {
                 }
             }
             log::info!("text input test done");
+
+            log::info!("testing notification");
+            modals.show_notification("This is a test!\n这是一个测验!").expect("notification failed");
+            log::info!("notification test done");
         }
     });
 }

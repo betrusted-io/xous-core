@@ -76,6 +76,16 @@ impl Modals {
             _ => Err(xous::Error::InternalError)
         }
     }
+
+    /// this blocks until the notification has been acknowledged.
+    pub fn show_notification(&self, notification: &str) -> Result<(), xous::Error> {
+        let spec = ManagedNotification {
+            message: xous_ipc::String::from_str(notification),
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
