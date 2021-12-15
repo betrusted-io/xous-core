@@ -3,6 +3,8 @@
 
 mod api;
 use api::*;
+mod tests;
+use tests::*;
 
 use xous::{SID, CID};
 
