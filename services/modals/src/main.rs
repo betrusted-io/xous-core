@@ -7,7 +7,7 @@ mod tests;
 
 use xous::SID;
 
-use xous::{msg_scalar_unpack, send_message, Message};
+use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
 
 use std::sync::{Arc, Mutex};
@@ -323,13 +323,37 @@ fn xmain() -> ! {
         tests::spawn_test();
     }
 
+    let mut token_lock: Option<[u32; 4]> = None;
+    let trng = trng::Trng::new(&xns).unwrap();
+    // this is a random number that serves as a "default" that cannot be guessed
+    let default_nonce = [
+        trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(),
+    ];
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
         log::debug!("message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::GetMutex) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
+                let incoming_token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
+                if let Some(token) = token_lock {
+                    if token == incoming_token {
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    } else {
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    }
+                } else {
+                    token_lock = Some(incoming_token);
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                }
+            }),
             Some(Opcode::PromptWithFixedResponse) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let spec = buffer.to_original::<ManagedPromptWithFixedResponse, _>().unwrap();
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    buffer.replace(ItemName::new("internal error")).unwrap();
+                    continue;
+                }
                 *op.lock().unwrap() = RendererState::RunRadio(spec);
                 send_message(
                 renderer_cid,
@@ -340,6 +364,7 @@ fn xmain() -> ! {
                         RendererState::RunRadio(_) => (),
                         RendererState::ResponseRadio(item) => {
                             buffer.replace(item).unwrap();
+                            token_lock = None;
                             break;
                         },
                         _ => {
@@ -353,6 +378,11 @@ fn xmain() -> ! {
             Some(Opcode::PromptWithMultiResponse) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let spec = buffer.to_original::<ManagedPromptWithFixedResponse, _>().unwrap();
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    buffer.replace(CheckBoxPayload::new()).unwrap();
+                    continue;
+                }
                 *op.lock().unwrap() = RendererState::RunCheckBox(spec);
                 send_message(
                 renderer_cid,
@@ -363,6 +393,7 @@ fn xmain() -> ! {
                         RendererState::RunCheckBox(_) => (),
                         RendererState::ResponseCheckBox(items) => {
                             buffer.replace(items).unwrap();
+                            token_lock = None;
                             break;
                         },
                         _ => {
@@ -376,6 +407,11 @@ fn xmain() -> ! {
             Some(Opcode::PromptWithTextResponse) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let spec = buffer.to_original::<ManagedPromptWithTextResponse, _>().unwrap();
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    buffer.replace(TextEntryPayload::new()).unwrap();
+                    continue;
+                }
                 *op.lock().unwrap() = RendererState::RunText(spec);
                 send_message(
                 renderer_cid,
@@ -386,6 +422,7 @@ fn xmain() -> ! {
                         RendererState::RunText(_) => (),
                         RendererState::ResponseText(text) => {
                             buffer.replace(text).unwrap();
+                            token_lock = None;
                             break;
                         },
                         _ => {
@@ -399,6 +436,10 @@ fn xmain() -> ! {
             Some(Opcode::Notification) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let spec = buffer.to_original::<ManagedNotification, _>().unwrap();
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
                 *op.lock().unwrap() = RendererState::RunNotification(spec);
                 send_message(
                 renderer_cid,
@@ -407,7 +448,7 @@ fn xmain() -> ! {
                 loop {
                     match *op.lock().unwrap() {
                         RendererState::RunNotification(_) => (),
-                        RendererState::None => break,
+                        RendererState::None => {token_lock = None; break},
                         _ => {
                             log::error!("Illegal state transition in renderer");
                             panic!("Illegal state transition in renderer");
@@ -419,6 +460,10 @@ fn xmain() -> ! {
             Some(Opcode::StartProgress) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let spec = buffer.to_original::<ManagedProgress, _>().unwrap();
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
                 *op.lock().unwrap() = RendererState::RunProgress(spec);
                 send_message(
                     renderer_cid,
@@ -431,15 +476,27 @@ fn xmain() -> ! {
                     Message::new_scalar(RendererOp::UpdateProgress.to_usize().unwrap(), current, 0, 0, 0)
                 ).expect("couldn't update progress bar");
             }),
-            Some(Opcode::StopProgress) => {
+            Some(Opcode::StopProgress) => msg_scalar_unpack!(msg, t0, t1, t2, t3, {
+                let token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
+                if token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
                 send_message(
                     renderer_cid,
                     Message::new_scalar(RendererOp::FinishProgress.to_usize().unwrap(), 0, 0, 0, 0)
                 ).expect("couldn't update progress bar");
-            },
+                token_lock = None;
+            }),
             Some(Opcode::AddModalItem) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                buffer.lend(renderer_cid, RendererOp::AddModalItem.to_u32().unwrap()).expect("couldn't add item");
+                let manageditem = buffer.to_original::<ManagedListItem, _>().unwrap();
+                if manageditem.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                let fwd_buf = Buffer::into_buf(manageditem.item).unwrap();
+                fwd_buf.lend(renderer_cid, RendererOp::AddModalItem.to_u32().unwrap()).expect("couldn't add item");
             }
             Some(Opcode::Quit) => {
                 log::warn!("Shared modal UX handler exiting.");

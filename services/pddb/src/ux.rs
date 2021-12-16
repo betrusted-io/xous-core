@@ -209,3 +209,22 @@ pub(crate) fn password_ux_manager(
     unsafe{xous::disconnect(renderer_cid).unwrap()}; // can't remember if this is...necessary? it'll throw an error if it's not.
     xous::destroy_server(ux_sid).unwrap();
 }
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum UxOpcode {
+    // add UX opcodes here, separate from the main loop's
+    Format,
+    OkCancelNotice,
+    OkNotice,
+    UnlockBasis,
+    LockBasis,
+    LockAllBasis,
+    Scuttle,
+
+    PasswordReturn,
+    ModalRedraw,
+    ModalKeys,
+    ModalDrop,
+    Gutter,
+    Quit,
+}

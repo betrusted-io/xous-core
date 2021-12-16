@@ -11,13 +11,20 @@ use std::thread;
 
 pub struct Modals {
     conn: CID,
+    token: [u32; 4],
+    tt: ticktimer_server::Ticktimer,
 }
 impl Modals {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_MODALS).expect("Can't connect to Modals server");
+        let trng = trng::Trng::new(&xns).unwrap();
+        let mut token = [0u32; 4];
+        trng.fill_buf(&mut token).unwrap();
         Ok(Modals {
-            conn
+            conn,
+            token,
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         })
     }
 
@@ -26,6 +33,7 @@ impl Modals {
         maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
         maybe_validator_op: Option<u32>,
     ) -> Result<TextEntryPayload, xous::Error> {
+        self.lock();
         let validator = if let Some(validator) = maybe_validator {
             // create a one-time use server
             let validator_server = xous::create_server().unwrap();
@@ -59,6 +67,7 @@ impl Modals {
             None
         };
         let spec = ManagedPromptWithTextResponse {
+            token: self.token,
             prompt: xous_ipc::String::from_str(prompt),
             validator,
             validator_op: maybe_validator_op.unwrap_or(0)
@@ -79,7 +88,9 @@ impl Modals {
 
     /// this blocks until the notification has been acknowledged.
     pub fn show_notification(&self, notification: &str) -> Result<(), xous::Error> {
+        self.lock();
         let spec = ManagedNotification {
+            token: self.token,
             message: xous_ipc::String::from_str(notification),
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
@@ -88,7 +99,9 @@ impl Modals {
     }
 
     pub fn start_progress(&self, title: &str, start: u32, end: u32, current: u32) -> Result<(), xous::Error> {
+        self.lock();
         let spec = ManagedProgress {
+            token: self.token,
             title: xous_ipc::String::from_str(title),
             start_work: start,
             end_work: end,
@@ -99,6 +112,9 @@ impl Modals {
         Ok(())
     }
 
+    /// note that this API is not atomically token-locked, so, someone could mess with the progress bar state
+    /// but, progress updates are meant to be fast and frequent, and generally if a progress bar shows
+    /// something whacky it's not going to affect a security outcome
     pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::UpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
@@ -108,21 +124,33 @@ impl Modals {
 
     /// close the progress bar, regardless of the current state
     pub fn finish_progress(&self) -> Result<(), xous::Error> {
+        self.lock();
         send_message(self.conn,
-            Message::new_scalar(Opcode::StopProgress.to_usize().unwrap(), 0, 0, 0, 0)
+            Message::new_scalar(Opcode::StopProgress.to_usize().unwrap(),
+            self.token[0] as usize,
+            self.token[1] as usize,
+            self.token[2] as usize,
+            self.token[3] as usize,
+            )
         ).expect("couldn't stop progress");
         Ok(())
     }
 
     pub fn add_list_item(&self, item: &str) -> Result<(), xous::Error> {
-        let itemname = ItemName::new(item);
+        self.lock();
+        let itemname = ManagedListItem {
+            token: self.token,
+            item: ItemName::new(item)
+        };
         let buf = Buffer::into_buf(itemname).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::AddModalItem.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         Ok(())
     }
 
     pub fn get_radiobutton(&self, prompt: &str) -> Result<String, xous::Error> {
+        self.lock();
         let spec = ManagedPromptWithFixedResponse {
+            token: self.token,
             prompt: xous_ipc::String::from_str(prompt),
         };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
@@ -132,7 +160,9 @@ impl Modals {
     }
 
     pub fn get_checkbox(&self, prompt: &str) -> Result<Vec::<String>, xous::Error> {
+        self.lock();
         let spec = ManagedPromptWithFixedResponse {
+            token: self.token,
             prompt: xous_ipc::String::from_str(prompt),
         };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
@@ -145,6 +175,37 @@ impl Modals {
             }
         }
         Ok(ret)
+    }
+
+    /// busy-wait until we have acquired a mutex on the Modals server
+    fn lock(&self) {
+        while !self.try_get_mutex() {
+            self.tt.sleep_ms(1000).unwrap();
+        }
+    }
+
+    fn try_get_mutex(&self) -> bool {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::GetMutex.to_usize().unwrap(),
+            self.token[0] as usize,
+            self.token[1] as usize,
+            self.token[2] as usize,
+            self.token[3] as usize,
+        )).expect("couldn't send mutex acquisition message") {
+            xous::Result::Scalar1(code) => {
+                if code == 1 {
+                    true
+                } else {
+                    false
+                }
+            },
+            _ => {
+                log::error!("Internal error trying to acquire mutex");
+                false
+            }
+        }
+
     }
 }
 

@@ -20,6 +20,7 @@ const CHECKBOX_TEST: [&'static str; 5] = [
 ];
 
 pub(crate) fn spawn_test() {
+    // spawn two threads that compete for modal resources, to test the interlocking mechanisms
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
@@ -34,15 +35,6 @@ pub(crate) fn spawn_test() {
             }
             modals.finish_progress().expect("couldn't dismiss progress bar");
 
-            // test radio box
-            for item in RADIO_TEST {
-                modals.add_list_item(item).expect("couldn't build radio item list");
-            }
-            match modals.get_radiobutton("Pick an animal") {
-                Ok(animal) => log::info!("{} was picked", animal),
-                _ => log::error!("get_radiobutton failed"),
-            }
-
             // test check box
             for item in CHECKBOX_TEST {
                 modals.add_list_item(item).expect("couldn't build checkbox list");
@@ -55,6 +47,28 @@ pub(crate) fn spawn_test() {
                     }
                 },
                 _ => log::error!("get_checkbox failed"),
+            }
+
+            // test notificatons
+            log::info!("testing notification");
+            modals.show_notification("This is a test!").expect("notification failed");
+            log::info!("notification test done");
+        }
+    });
+
+    thread::spawn({
+        move || {
+            let xns = XousNames::new().unwrap();
+            let modals = modals::Modals::new(&xns).unwrap();
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+
+            // test radio box
+            for item in RADIO_TEST {
+                modals.add_list_item(item).expect("couldn't build radio item list");
+            }
+            match modals.get_radiobutton("Pick an animal") {
+                Ok(animal) => log::info!("{} was picked", animal),
+                _ => log::error!("get_radiobutton failed"),
             }
 
             // test the modal dialog box function
@@ -71,7 +85,7 @@ pub(crate) fn spawn_test() {
 
             // test notificatons
             log::info!("testing notification");
-            modals.show_notification("This is a test!\n这是一个测验!").expect("notification failed");
+            modals.show_notification("这是一个测验!").expect("notification failed");
             log::info!("notification test done");
         }
     });

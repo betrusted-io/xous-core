@@ -698,14 +698,6 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn test_validator(input: TextEntryPayload, _opcode: u32) -> Option<xous_ipc::String::<256>> {
-    let text_str = input.as_str();
-    match text_str.parse::<u32>() {
-        Ok(_input_int) => None,
-        _ => return Some(xous_ipc::String::<256>::from_str("enter an integer value"))
-    }
-}
-
 #[allow(dead_code)]
 pub(crate) fn manual_testcase(hw: &mut PddbOs) {
     log::info!("Initializing disk...");

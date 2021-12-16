@@ -16,10 +16,17 @@ pub(crate) enum ValidationOp {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithFixedResponse {
+    pub token: [u32; 4],
     pub prompt: xous_ipc::String::<1024>,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct ManagedListItem {
+    pub token: [u32; 4],
+    pub item: ItemName,
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithTextResponse {
+    pub token: [u32; 4],
     pub prompt: xous_ipc::String::<1024>,
     /// SID of a validator
     pub validator: Option<[u32; 4]>,
@@ -28,10 +35,12 @@ pub struct ManagedPromptWithTextResponse {
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedNotification {
+    pub token: [u32; 4],
     pub message: xous_ipc::String::<1024>,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
+    pub token: [u32; 4],
     pub title: xous_ipc::String::<1024>,
     // these are automatcally turned into percentages on a scale of 0->100%
     /// starting quanta to track (e.g. starting sector for erase).
@@ -64,24 +73,8 @@ pub(crate) enum Opcode {
     UpdateProgress,
     /// lower a progress bar
     StopProgress,
-    Quit,
-}
 
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-pub(crate) enum UxOpcode {
-    // add UX opcodes here, separate from the main loop's
-    Format,
-    OkCancelNotice,
-    OkNotice,
-    UnlockBasis,
-    LockBasis,
-    LockAllBasis,
-    Scuttle,
+    GetMutex,
 
-    PasswordReturn,
-    ModalRedraw,
-    ModalKeys,
-    ModalDrop,
-    Gutter,
     Quit,
 }

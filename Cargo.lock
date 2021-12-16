@@ -1272,6 +1272,7 @@ dependencies = [
  "num-traits",
  "rkyv",
  "ticktimer-server",
+ "trng",
  "utralib",
  "xous",
  "xous-ipc",

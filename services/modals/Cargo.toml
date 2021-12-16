@@ -17,6 +17,7 @@ xous-ipc = { path = "../../xous-ipc" }
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 gam = {path="../gam"}
 locales = {path = "../../locales"}
+trng = {path="../trng"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
