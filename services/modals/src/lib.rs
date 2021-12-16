@@ -59,7 +59,7 @@ impl Modals {
             None
         };
         let spec = ManagedPromptWithTextResponse {
-            prompt: xous_ipc::String::<1024>::from_str(prompt),
+            prompt: xous_ipc::String::from_str(prompt),
             validator,
             validator_op: maybe_validator_op.unwrap_or(0)
         };
@@ -84,6 +84,33 @@ impl Modals {
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+
+    pub fn start_progress(&self, title: &str, start: u32, end: u32, current: u32) -> Result<(), xous::Error> {
+        let spec = ManagedProgress {
+            title: xous_ipc::String::from_str(title),
+            start_work: start,
+            end_work: end,
+            current_work: current,
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::StartProgress.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+
+    pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::UpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
+        ).expect("couldn't update progress");
+        Ok(())
+    }
+
+    /// close the progress bar, regardless of the current state
+    pub fn finish_progress(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::StopProgress.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't stop progress");
         Ok(())
     }
 }

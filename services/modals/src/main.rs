@@ -36,6 +36,8 @@ enum RendererState {
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum RendererOp {
     InitiateOp,
+    UpdateProgress,
+    FinishProgress,
 
     TextEntryReturn,
     RadioReturn,
@@ -85,8 +87,11 @@ fn xmain() -> ! {
                 RendererOp::NotificationReturn.to_u32().unwrap()
             );
             let mut progress_action = Slider::new(renderer_cid, RendererOp::NotificationReturn.to_u32().unwrap(),
-                0, 100, 10, Some("%"), 0, true, true
+                0, 100, 1, Some("%"), 0, true, true
             );
+            let mut last_percentage = 0;
+            let mut start_work: u32 = 0;
+            let mut end_work: u32 = 100;
             let mut renderer_modal =
                 Modal::new(
                     crate::api::SHARED_MODAL_NAME,
@@ -96,7 +101,6 @@ fn xmain() -> ! {
                     GlyphStyle::Small,
                     8
                 );
-            let mut progressbar = ProgressBar::new(&mut renderer_modal, &mut progress_action);
             renderer_modal.spawn_helper(renderer_sid, renderer_modal.sid,
                 RendererOp::ModalRedraw.to_u32().unwrap(),
                 RendererOp::ModalKeypress.to_u32().unwrap(),
@@ -129,6 +133,20 @@ fn xmain() -> ! {
                                 );
                                 renderer_modal.activate();
                             },
+                            RendererState::RunProgress(config) => {
+                                start_work = config.start_work;
+                                end_work = config.end_work;
+                                last_percentage = compute_checked_percentage(
+                                    config.current_work, start_work, end_work);
+                                progress_action.set_state(last_percentage);
+
+                                renderer_modal.modify(
+                                    Some(ActionType::Slider(progress_action)),
+                                    Some(config.title.as_str().unwrap()), false,
+                                    None, true, None
+                                );
+                                renderer_modal.activate();
+                            },
                             RendererState::None => {
                                 log::error!("Operation initiated with no argument specified. Ignoring request.");
                                 continue;
@@ -138,6 +156,25 @@ fn xmain() -> ! {
                                 unimplemented!();
                             }
                         }
+                    },
+                    Some(RendererOp::UpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
+                        let new_percentage = compute_checked_percentage(
+                            current as u32, start_work, end_work);
+                        if new_percentage != last_percentage {
+                            last_percentage = new_percentage;
+                            progress_action.set_state(last_percentage);
+
+                            renderer_modal.modify(
+                                Some(ActionType::Slider(progress_action)),
+                                None, false,
+                                None, false, None
+                            );
+                            renderer_modal.redraw();
+                            xous::yield_slice(); // give time for the GAM to redraw
+                        }
+                    }),
+                    Some(RendererOp::FinishProgress) => {
+                        renderer_modal.gam.relinquish_focus().unwrap();
                     },
                     Some(RendererOp::TextEntryReturn) => {
                         let mut mutex_op = op.lock().unwrap();
@@ -278,13 +315,25 @@ fn xmain() -> ! {
                 }
             },
             Some(Opcode::StartProgress) => {
-
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let spec = buffer.to_original::<ManagedProgress, _>().unwrap();
+                *op.lock().unwrap() = RendererState::RunProgress(spec);
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(RendererOp::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate UX op");
             },
-            Some(Opcode::UpdateProgress) => {
-
-            },
+            Some(Opcode::UpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(RendererOp::UpdateProgress.to_usize().unwrap(), current, 0, 0, 0)
+                ).expect("couldn't update progress bar");
+            }),
             Some(Opcode::StopProgress) => {
-
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(RendererOp::FinishProgress.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't update progress bar");
             },
             Some(Opcode::Quit) => {
                 log::warn!("Shared modal UX handler exiting.");
@@ -305,4 +354,18 @@ fn xmain() -> ! {
     xous::destroy_server(modals_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+fn compute_checked_percentage(current: u32, start: u32, end: u32) -> u32 {
+    if end <= start {
+        100
+    } else {
+        if current < start {
+            0
+        } else if current >= end {
+            100
+        } else {
+            (current * 100) / (end - start)
+        }
+    }
 }

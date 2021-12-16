@@ -8,9 +8,18 @@ pub(crate) fn spawn_test() {
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
+            let modals = modals::Modals::new(&xns).unwrap();
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+
+            // test progress bar
+            modals.start_progress("Progress Quest", 100, 500, 100).expect("couldn't raise progress bar");
+            for i in (100..500).step_by(8) {
+                modals.update_progress(i).expect("couldn't update progress bar");
+                tt.sleep_ms(100).unwrap();
+            }
+            modals.finish_progress().expect("couldn't dismiss progress bar");
 
             // test the modal dialog box function
-            let modals = modals::Modals::new(&xns).unwrap();
             log::info!("test text input");
             match modals.get_text_input("Test input", Some(test_validator), None) {
                 Ok(text) => {
@@ -22,6 +31,7 @@ pub(crate) fn spawn_test() {
             }
             log::info!("text input test done");
 
+            // test notificatons
             log::info!("testing notification");
             modals.show_notification("This is a test!\n这是一个测验!").expect("notification failed");
             log::info!("notification test done");
