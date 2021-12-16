@@ -86,7 +86,7 @@ impl TextEntryPayload {
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct RadioButtonPayload(ItemName); // returns the name of the item corresponding to the radio button selection
+pub struct RadioButtonPayload(pub ItemName); // returns the name of the item corresponding to the radio button selection
 impl RadioButtonPayload {
     pub fn new(name: &str) -> Self {
         RadioButtonPayload(ItemName::new(name))
@@ -99,7 +99,7 @@ impl RadioButtonPayload {
     }
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct CheckBoxPayload([Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
+pub struct CheckBoxPayload(pub [Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
 impl CheckBoxPayload {
     pub fn new() -> Self {
         CheckBoxPayload([None; MAX_ITEMS])

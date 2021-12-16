@@ -14,7 +14,6 @@ pub struct RadioButtons {
     pub action_opcode: u32,
     pub action_payload: RadioButtonPayload, // the current "radio button" selection
     pub select_index: i16, // the current candidate to be selected
-    pub max_items: i16,
     pub is_password: bool,
 }
 impl RadioButtons {
@@ -25,7 +24,6 @@ impl RadioButtons {
             action_opcode,
             action_payload: RadioButtonPayload::new(""),
             select_index: 0,
-            max_items: 0,
             is_password: false,
         }
     }
@@ -149,12 +147,12 @@ impl ActionApi for RadioButtons {
                 }
             }
             '↓' => {
-                if self.select_index < self.max_items + 1 { // +1 is the "OK" button
+                if self.select_index < self.items.len() as i16 + 1 { // +1 is the "OK" button
                     self.select_index += 1;
                 }
             }
             '∴' | '\u{d}' => {
-                if self.select_index < self.max_items {
+                if self.select_index < self.items.len() as i16 {
                     self.action_payload = RadioButtonPayload::new(self.items[self.select_index as usize].as_str());
                 } else {  // the OK button select
                     let buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");

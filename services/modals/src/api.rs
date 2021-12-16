@@ -17,8 +17,6 @@ pub(crate) enum ValidationOp {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithFixedResponse {
     pub prompt: xous_ipc::String::<1024>,
-    pub items: [Option<ItemName>; MAX_ITEMS],
-    pub single_item: bool,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithTextResponse {
@@ -47,9 +45,9 @@ pub struct ManagedProgress {
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     // these are blocking calls
-    /// ask a question, get a single response from a list of defined items
+    /// ask a question, get a single response from a list of defined items (radio box)
     PromptWithFixedResponse,
-    /// ask a question, get multiple responses from a list of defined items
+    /// ask a question, get multiple responses from a list of defined items (check box)
     PromptWithMultiResponse,
     /// ask a question, get a free-form answer back
     PromptWithTextResponse,
@@ -57,6 +55,9 @@ pub(crate) enum Opcode {
     Notification,
 
     // these are non-blocking calls
+    /// add an item to the radio box or check box. Note that all added items
+    /// are cleared after the relevant "action" call happens (PrmoptWith[Fixed,Multi]Response)
+    AddModalItem,
     /// raise a progress bar
     StartProgress,
     /// update the progress bar

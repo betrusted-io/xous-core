@@ -21,7 +21,7 @@ impl Modals {
         })
     }
 
-    pub fn get_text_input(&self,
+    pub fn get_text(&self,
         prompt: &str,
         maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
         maybe_validator_op: Option<u32>,
@@ -112,6 +112,39 @@ impl Modals {
             Message::new_scalar(Opcode::StopProgress.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't stop progress");
         Ok(())
+    }
+
+    pub fn add_list_item(&self, item: &str) -> Result<(), xous::Error> {
+        let itemname = ItemName::new(item);
+        let buf = Buffer::into_buf(itemname).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::AddModalItem.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+
+    pub fn get_radiobutton(&self, prompt: &str) -> Result<String, xous::Error> {
+        let spec = ManagedPromptWithFixedResponse {
+            prompt: xous_ipc::String::from_str(prompt),
+        };
+        let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::PromptWithFixedResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let itemname = buf.to_original::<ItemName, _>().unwrap();
+        Ok(String::from(itemname.as_str()))
+    }
+
+    pub fn get_checkbox(&self, prompt: &str) -> Result<Vec::<String>, xous::Error> {
+        let spec = ManagedPromptWithFixedResponse {
+            prompt: xous_ipc::String::from_str(prompt),
+        };
+        let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::PromptWithMultiResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let selected_items = buf.to_original::<CheckBoxPayload, _>().unwrap();
+        let mut ret = Vec::<String>::new();
+        for maybe_item in selected_items.payload() {
+            if let Some(item) = maybe_item {
+                ret.push(String::from(item.as_str()));
+            }
+        }
+        Ok(ret)
     }
 }
 

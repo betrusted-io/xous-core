@@ -13,7 +13,6 @@ pub struct CheckBoxes {
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     pub action_payload: CheckBoxPayload,
-    pub max_items: i16,
     pub select_index: i16,
 }
 impl CheckBoxes {
@@ -23,7 +22,6 @@ impl CheckBoxes {
             action_conn,
             action_opcode,
             action_payload: CheckBoxPayload::new(),
-            max_items: 0,
             select_index: 0,
         }
     }
@@ -134,7 +132,7 @@ impl ActionApi for CheckBoxes {
                 }
             }
             '↓' => {
-                if self.select_index < self.max_items + 1 { // +1 is the "OK" button
+                if self.select_index < self.items.len() as i16 + 1 { // +1 is the "OK" button
                     self.select_index += 1;
                 }
             }

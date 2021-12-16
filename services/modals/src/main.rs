@@ -4,16 +4,14 @@
 mod api;
 use api::*;
 mod tests;
-use tests::*;
 
-use xous::{SID, CID};
+use xous::SID;
 
 use xous::{msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
 
 use std::sync::{Arc, Mutex};
 use std::thread;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 use gam::modal::*;
 use locales::t;
@@ -24,13 +22,15 @@ enum RendererState {
     /// idle state
     None,
     /// running state
-    RunFixed(ManagedPromptWithFixedResponse),
+    RunRadio(ManagedPromptWithFixedResponse),
+    RunCheckBox(ManagedPromptWithFixedResponse),
     RunText(ManagedPromptWithTextResponse),
     RunProgress(ManagedProgress),
     RunNotification(ManagedNotification),
     /// response ready state
     ResponseText(TextEntryPayload),
-    ResponseFixed([Option<ItemName>; MAX_ITEMS]),
+    ResponseRadio(ItemName),
+    ResponseCheckBox(CheckBoxPayload),
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -41,7 +41,10 @@ pub(crate) enum RendererOp {
 
     TextEntryReturn,
     RadioReturn,
+    CheckBoxReturn,
     NotificationReturn,
+
+    AddModalItem,
 
     ModalRedraw,
     ModalKeypress,
@@ -70,7 +73,7 @@ fn xmain() -> ! {
         let op = Arc::clone(&op);
         move || {
             // build the core data structure here
-            let mut text_action = TextEntry {
+            let text_action = TextEntry {
                 is_password: false,
                 visibility: TextEntryVisibility::Visible,
                 action_conn: renderer_cid,
@@ -78,10 +81,7 @@ fn xmain() -> ! {
                 action_payload: TextEntryPayload::new(),
                 validator: None,
             };
-            let mut radiobox = gam::modal::RadioButtons::new(
-                renderer_cid,
-                RendererOp::RadioReturn.to_u32().unwrap()
-            );
+            let mut fixed_items = Vec::<ItemName>::new();
             let notification = gam::modal::Notification::new(
                 renderer_cid,
                 RendererOp::NotificationReturn.to_u32().unwrap()
@@ -147,9 +147,37 @@ fn xmain() -> ! {
                                 );
                                 renderer_modal.activate();
                             },
-                            RendererState::RunFixed(config) => {
-                                // going back to modify the GAM to use a smarter heap allocated struct for radio list
-                                //radiobox.add_item();
+                            RendererState::RunRadio(config) => {
+                                let mut radiobuttons = gam::modal::RadioButtons::new(
+                                    renderer_cid,
+                                    RendererOp::RadioReturn.to_u32().unwrap()
+                                );
+                                for item in fixed_items.iter() {
+                                    radiobuttons.add_item(*item);
+                                }
+                                fixed_items.clear();
+                                renderer_modal.modify(
+                                    Some(ActionType::RadioButtons(radiobuttons)),
+                                    Some(config.prompt.as_str().unwrap()), false,
+                                    None, true, None
+                                );
+                                renderer_modal.activate();
+                            },
+                            RendererState::RunCheckBox(config) => {
+                                let mut checkbox = gam::modal::CheckBoxes::new(
+                                    renderer_cid,
+                                    RendererOp::CheckBoxReturn.to_u32().unwrap()
+                                );
+                                for item in fixed_items.iter() {
+                                    checkbox.add_item(*item);
+                                }
+                                fixed_items.clear();
+                                renderer_modal.modify(
+                                    Some(ActionType::CheckBoxes(checkbox)),
+                                    Some(config.prompt.as_str().unwrap()), false,
+                                    None, true, None
+                                );
+                                renderer_modal.activate();
                             },
                             RendererState::None => {
                                 log::error!("Operation initiated with no argument specified. Ignoring request.");
@@ -229,6 +257,39 @@ fn xmain() -> ! {
                             }
                         }
                     },
+                    Some(RendererOp::AddModalItem) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let item = buffer.to_original::<ItemName, _>().unwrap();
+                        fixed_items.push(item);
+                    }
+                    Some(RendererOp::RadioReturn) => {
+                        let mut mutex_op = op.lock().unwrap();
+                        match *mutex_op {
+                            RendererState::RunRadio(_config) => {
+                                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                                let item = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                                *mutex_op = RendererState::ResponseRadio(item.0);
+                            }
+                            _ => {
+                                log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                                panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                            }
+                        }
+                    }
+                    Some(RendererOp::CheckBoxReturn) => {
+                        let mut mutex_op = op.lock().unwrap();
+                        match *mutex_op {
+                            RendererState::RunCheckBox(_config) => {
+                                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                                let item = buffer.to_original::<CheckBoxPayload, _>().unwrap();
+                                *mutex_op = RendererState::ResponseCheckBox(item);
+                            }
+                            _ => {
+                                log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                                panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                            }
+                        }
+                    }
                     Some(RendererOp::ModalRedraw) => {
                         renderer_modal.redraw();
                     },
@@ -252,9 +313,6 @@ fn xmain() -> ! {
                     None => {
                         log::error!("Couldn't convert opcode: {:?}", msg);
                     }
-                    _ => {
-                        unimplemented!();
-                    }
                 }
             }
             xous::destroy_server(renderer_sid).unwrap();
@@ -270,10 +328,50 @@ fn xmain() -> ! {
         log::debug!("message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::PromptWithFixedResponse) => {
-
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let spec = buffer.to_original::<ManagedPromptWithFixedResponse, _>().unwrap();
+                *op.lock().unwrap() = RendererState::RunRadio(spec);
+                send_message(
+                renderer_cid,
+                    Message::new_scalar(RendererOp::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate UX op");
+                loop {
+                    match *op.lock().unwrap() {
+                        RendererState::RunRadio(_) => (),
+                        RendererState::ResponseRadio(item) => {
+                            buffer.replace(item).unwrap();
+                            break;
+                        },
+                        _ => {
+                            log::error!("Illegal state transition in renderer");
+                            panic!("Illegal state transition in renderer");
+                        }
+                    }
+                    tt.sleep_ms(100).unwrap(); // don't put the idle in the match/lock(), it'll prevent the other thread from running!
+                }
             },
             Some(Opcode::PromptWithMultiResponse) => {
-
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let spec = buffer.to_original::<ManagedPromptWithFixedResponse, _>().unwrap();
+                *op.lock().unwrap() = RendererState::RunCheckBox(spec);
+                send_message(
+                renderer_cid,
+                    Message::new_scalar(RendererOp::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate UX op");
+                loop {
+                    match *op.lock().unwrap() {
+                        RendererState::RunCheckBox(_) => (),
+                        RendererState::ResponseCheckBox(items) => {
+                            buffer.replace(items).unwrap();
+                            break;
+                        },
+                        _ => {
+                            log::error!("Illegal state transition in renderer");
+                            panic!("Illegal state transition in renderer");
+                        }
+                    }
+                    tt.sleep_ms(100).unwrap(); // don't put the idle in the match/lock(), it'll prevent the other thread from running!
+                }
             },
             Some(Opcode::PromptWithTextResponse) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -339,6 +437,10 @@ fn xmain() -> ! {
                     Message::new_scalar(RendererOp::FinishProgress.to_usize().unwrap(), 0, 0, 0, 0)
                 ).expect("couldn't update progress bar");
             },
+            Some(Opcode::AddModalItem) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                buffer.lend(renderer_cid, RendererOp::AddModalItem.to_u32().unwrap()).expect("couldn't add item");
+            }
             Some(Opcode::Quit) => {
                 log::warn!("Shared modal UX handler exiting.");
                 break
