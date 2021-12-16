@@ -369,7 +369,6 @@ use api::*;
 mod backend;
 use backend::*;
 mod ux;
-use gam::TextEntryPayload;
 use ux::*;
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -407,6 +406,8 @@ fn xmain() -> ! {
     // shared entropy cache across all process-local services (it's more efficient to request entropy in blocks from the TRNG)
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
+    // for less-secured user prompts (everything but password entry)
+    let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
