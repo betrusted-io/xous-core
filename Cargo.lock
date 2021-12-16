@@ -1265,7 +1265,6 @@ name = "modals"
 version = "0.1.0"
 dependencies = [
  "gam",
- "locales",
  "log",
  "log-server",
  "num-derive",
@@ -1826,11 +1825,11 @@ dependencies = [
  "bitflags",
  "chrono",
  "gam",
- "graphics-server",
  "llio",
  "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "rkyv",

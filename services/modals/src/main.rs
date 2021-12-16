@@ -14,7 +14,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use gam::modal::*;
-use locales::t;
 
 use num_traits::*;
 
@@ -55,7 +54,7 @@ pub(crate) enum RendererOp {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -212,7 +211,7 @@ fn xmain() -> ! {
                         let mut mutex_op = op.lock().unwrap();
                         match *mutex_op {
                             RendererState::RunText(config) => {
-                                log::info!("validating text entry modale");
+                                log::trace!("validating text entry modal");
                                 let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                                 let text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
                                 if let Some(validator_sid) = config.validator {

@@ -16,7 +16,6 @@ num-traits = {version = "0.2", default-features = false}
 xous-ipc = { path = "../../xous-ipc" }
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 gam = {path="../gam"}
-locales = {path = "../../locales"}
 trng = {path="../trng"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
@@ -24,4 +23,4 @@ utralib = { path = "../../utralib"}
 
 [features]
 ux_tests = []
-default = ["ux_tests"]
+default = []

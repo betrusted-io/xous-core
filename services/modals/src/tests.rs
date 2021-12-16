@@ -60,7 +60,6 @@ pub(crate) fn spawn_test() {
         move || {
             let xns = XousNames::new().unwrap();
             let modals = modals::Modals::new(&xns).unwrap();
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
 
             // test radio box
             for item in RADIO_TEST {
