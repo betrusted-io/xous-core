@@ -68,6 +68,9 @@ for examples of idiomatic ways to write code for Xous.
   - Initial support of emulation of EC
     - No COM-based inter-chip communication yet
 
+## New in 0.9.1
+- `modals` server for a simple "Pure Rust" API for creating dialog boxes and getting user input. See the `tests.rs` file for some examples how to use the applcation calls.
+
 ## Roadmap to 1.0
 
 The items that are still missing before we can hit a 1.0 release include:

@@ -213,9 +213,16 @@ between "fully visible", "partially visible", and "fully obscured" states.
 TextEntry is specifically coded so that its payload is cleared upon send,
 so that plaintext passwords are not left hanging around in the heap or stack.
 
+The `modals` server allows applications to pop up generic modals without having
+to write all the eventing glue code to the GAM. The server has the following properties:
+- "Does about the right thing" for 90% of the applications
+- Shared between multiple processes with a lock -- so the messages from this server should not be absolutely trusted
+- Currently implements notifications, progress bars, text input, radio buttons, and checkboxes.
+- Has a "pure Rust" blocking API so routines can sequence through the dialog boxes in a declarative fashion without having to write fancy sequencing logic.
+
 Example code:
- - The `rtc` server contains an example of a modal that is dynamically modified with several states, and uses the helper mechanism.
- - The `root-keys` server contains an example of a static password modal, and uses an explicitly coded helper thread.
+ - The `rtc` server contains an example of a modal that uses the `modals` server.
+ - The `root-keys` server contains an example of a static password modal, and uses an explicitly coded helper thread. It manages its own modals because it has a unique rendering property that can only be summoned by this process.
 
 ### Helper Threads
 
