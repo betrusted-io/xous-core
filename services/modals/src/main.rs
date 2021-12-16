@@ -147,6 +147,10 @@ fn xmain() -> ! {
                                 );
                                 renderer_modal.activate();
                             },
+                            RendererState::RunFixed(config) => {
+                                // going back to modify the GAM to use a smarter heap allocated struct for radio list
+                                //radiobox.add_item();
+                            },
                             RendererState::None => {
                                 log::error!("Operation initiated with no argument specified. Ignoring request.");
                                 continue;

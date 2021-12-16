@@ -18,6 +18,7 @@ pub(crate) enum ValidationOp {
 pub struct ManagedPromptWithFixedResponse {
     pub prompt: xous_ipc::String::<1024>,
     pub items: [Option<ItemName>; MAX_ITEMS],
+    pub single_item: bool,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithTextResponse {

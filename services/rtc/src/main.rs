@@ -602,17 +602,6 @@ fn xmain() -> ! {
         action_payload: TextEntryPayload::new(),
         validator: Some(rtc_ux_validator),
     };
-    let mut rtc_radiobox = gam::modal::RadioButtons::new(
-        CB_TO_MAIN_CONN.load(Ordering::Relaxed).to_u32().unwrap(),
-        Opcode::UxDayOfWeek.to_u32().unwrap()
-    );
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.monday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.tuesday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.wednesday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.thursday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.friday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.saturday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.sunday", xous::LANG)));
     log::trace!("building rtc ux modal");
     let mut modal = gam::Modal::new(
         crate::api::RTC_MODAL_NAME,
@@ -784,6 +773,17 @@ fn xmain() -> ! {
                 years = input as u8;
 
                 rtc_textentry.action_opcode = Opcode::UxDayOfWeek.to_u32().unwrap();
+                let mut rtc_radiobox = gam::modal::RadioButtons::new(
+                    CB_TO_MAIN_CONN.load(Ordering::Relaxed).to_u32().unwrap(),
+                    Opcode::UxDayOfWeek.to_u32().unwrap()
+                );
+                rtc_radiobox.add_item(ItemName::new(t!("rtc.monday", xous::LANG)));
+                rtc_radiobox.add_item(ItemName::new(t!("rtc.tuesday", xous::LANG)));
+                rtc_radiobox.add_item(ItemName::new(t!("rtc.wednesday", xous::LANG)));
+                rtc_radiobox.add_item(ItemName::new(t!("rtc.thursday", xous::LANG)));
+                rtc_radiobox.add_item(ItemName::new(t!("rtc.friday", xous::LANG)));
+                rtc_radiobox.add_item(ItemName::new(t!("rtc.saturday", xous::LANG)));
+                rtc_radiobox.add_item(ItemName::new(t!("rtc.sunday", xous::LANG)));
                 modal.modify(Some(RadioButtons(rtc_radiobox)),
                 Some(t!("rtc.day_of_week", xous::LANG)), false, None, true, None);
                 modal.activate();
