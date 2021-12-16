@@ -144,7 +144,10 @@ impl ActionApi for CheckBoxes {
                     if self.action_payload.contains(item_name) {
                         self.action_payload.remove(item_name);
                     } else {
-                        self.action_payload.add(item_name);
+                        if !self.action_payload.add(item_name) {
+                            log::warn!("Limit of {} items that can be checked hit, consider increasing MAX_ITEMS in gam/src/modal.rs", MAX_ITEMS);
+                            log::warn!("The attempted item '{}' was not selected.", item_name);
+                        }
                     }
                 } else {  // the OK button select
                     let buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
