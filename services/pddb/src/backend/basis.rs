@@ -329,7 +329,7 @@ impl BasisCache {
                 small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
                 aad: my_aad,
             };
-            log::info!("adding dictionary {}", name);
+            log::debug!("adding dictionary {}", name);
             basis.dicts.insert(String::from(name), dict_cache);
             basis.num_dicts += 1;
             // encrypt and write the dict entry to disk
@@ -407,7 +407,7 @@ impl BasisCache {
         hw: &mut PddbOs, dict: &str, basis_name: Option<&str>, paranoid: bool
     ) -> Result<()> {
         if let Some(basis_index) = self.select_basis(basis_name) {
-            log::info!("deleting dict {}", dict);
+            log::debug!("deleting dict {}", dict);
             let basis = &mut self.cache[basis_index];
 
             basis.age = basis.age.saturating_add(1);
@@ -602,8 +602,8 @@ impl BasisCache {
                             // it's probably going in the small pool.
                             // index exists, see if the page exists
                             if reserved == 0 { // something went wrong here
-                                log::info!("reserved {}", reserved);
-                                log::info!("{}:{} - [{}]{:x}+{}->{}", dict, key, kcache.descriptor_index, kcache.start, kcache.len, kcache.reserved);
+                                log::debug!("reserved {}", reserved);
+                                log::debug!("{}:{} - [{}]{:x}+{}->{}", dict, key, kcache.descriptor_index, kcache.start, kcache.len, kcache.reserved);
                             }
                             if dict_entry.small_pool.len() > key_index {
                                 log::trace!("resolved key index {}, small pool len: {}", key_index, dict_entry.small_pool.len());
@@ -814,7 +814,7 @@ impl BasisCache {
                     log::error!("PDDB mount requested {}, but got {}; aborting.", name, basis_name);
                     return None;
                 }
-                log::info!("Basis {} record found, generating cache entry", name);
+                log::debug!("Basis {} record found, generating cache entry", name);
                 BasisCacheEntry::mount(hw, &basis_name, &basis_key, false, policy)
             } else {
                 None
@@ -849,7 +849,7 @@ impl BasisCache {
             rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
             rpte.set_valid(true);
             let va = VirtAddr::new((1 * VPAGE_SIZE) as u64).unwrap(); // page 1 is where the root goes, by definition
-            log::info!("adding basis {}: va {:x?} with pte {:?}", name, va, rpte);
+            log::debug!("adding basis {}: va {:x?} with pte {:?}", name, va, rpte);
             basis_v2p_map.insert(va, rpte);
         } else {
             return Err(Error::new(ErrorKind::Other, "Space reservation failed"));
@@ -1256,11 +1256,11 @@ impl BasisCacheEntry {
         for (&virt, phys) in self.v2p_map.iter_mut() {
             if !phys.valid() {
                 // erase the entry
-                log::info!("deleting pte va: {:x?} pa: {:x?}", virt, phys);
+                log::debug!("deleting pte va: {:x?} pa: {:x?}", virt, phys);
                 kill_list.push(virt);
                 hw.pt_erase(phys.page_number());
             } else if !phys.clean() {
-                log::info!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
+                log::debug!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
                 hw.pt_patch_mapping(virt, phys.page_number(), &self.cipher_ecb);
                 phys.set_clean(true);
             }
@@ -1297,7 +1297,7 @@ impl BasisCacheEntry {
                     free_key_index: dict.last_disk_key_index,
                     name: dict_name,
                 };
-                log::info!("syncing dict {} with {} keys", name, dict.key_count);
+                log::debug!("syncing dict {} with {} keys", name, dict.key_count);
                 // log::info!("raw: {:x?}", dict_disk.deref());
                 // observation: all keys to be flushed to disk will be in the KeyCacheEntry. Some may be clean,
                 // but definitely all the dirty ones are in there (if they aren't, where else would they be??)
@@ -1342,7 +1342,7 @@ impl BasisCacheEntry {
                         if !key.clean && key.flags.valid() {
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
-                                log::info!("merging in key {}", key_name);
+                                log::debug!("merging in key {}", key_name);
                                 // key is within the current page, add it to the target list
                                 let mut dk_entry = DictKeyEntry::default();
                                 let mut kn = [0u8; KEY_NAME_LEN];
@@ -1402,7 +1402,7 @@ impl BasisCacheEntry {
                         break;
                     }
                 }
-                log::info!("done syncing dict");
+                log::debug!("done syncing dict");
                 dict.clean = true;
             }
             Ok(())
@@ -1455,7 +1455,7 @@ impl BasisCacheEntry {
                 false
             };
         if !dict_in_cache_and_valid {
-            log::info!("dict: key not in cache {}", name);
+            log::debug!("dict: key not in cache {}", name);
             // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
             // doesn't exist. Do a comprehensive search if our cache isn't complete.
             if let Some((index, dict_record)) = self.dict_deep_search(hw, name) {

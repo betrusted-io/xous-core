@@ -208,7 +208,7 @@ impl DictCacheEntry {
         name_str: &str) -> bool {
         // only fill if the key isn't in the cache.
         if !self.keys.contains_key(name_str) {
-            log::info!("searching for key {}", name_str);
+            log::debug!("searching for key {}", name_str);
             let mut data_cache = PlaintextCache { data: None, tag: None };
             let mut try_entry = 1;
             let mut key_count = 0;
@@ -315,7 +315,7 @@ impl DictCacheEntry {
                         log::error!("Key {}'s data region at pp: {:x?} va: {:x} is unreadable", key_name, data_cache.tag, kcache.start);
                     }
                 } else {
-                    log::info!("pool is clean for key {} / index {}, skipping fill", key_name, pool_index);
+                    log::debug!("pool is clean for key {} / index {}, skipping fill", key_name, pool_index);
                 }
             }
         } else {
@@ -368,11 +368,11 @@ impl DictCacheEntry {
                         update_data.push(0);
                     }
                     for (&src, dst) in data.iter().zip(update_data[offset..].iter_mut()) { *dst = src };
-                    log::info!("update/extend: removing {}", name);
+                    log::debug!("update/extend: removing {}", name);
                     // now remove the old key entirely
                     self.key_remove(hw, v2p_map, cipher, name, false);
                     if update_data.len() > 4 { // just make sure that this log call doesn't fail on an index violation...
-                        log::info!("update/extend: re-adding {} with data len {}: {:x?}...", name, update_data.len(), &update_data[..4]);
+                        log::debug!("update/extend: re-adding {} with data len {}: {:x?}...", name, update_data.len(), &update_data[..4]);
                     }
                     // and re-add it with the extended data; if it's no longer a small key after this, it'll be handled inside this call.
                     return self.key_update(hw, v2p_map, cipher, name, &update_data, 0, alloc_hint, truncate, large_alloc_ptr);
@@ -403,7 +403,7 @@ impl DictCacheEntry {
             }
             // the key exists, *and* there's sufficient space for the data
             if kcache.start < SMALL_POOL_END {
-                log::info!("doing data update");
+                log::debug!("doing data update");
                 kcache.age = kcache.age.saturating_add(1);
                 kcache.clean = false;
                 // it's a small key; note that we didn't consult the *size* of the key to determine its pool type:
@@ -534,7 +534,7 @@ impl DictCacheEntry {
             // key does not exist (or was previously erased) -- create one or replace the erased one.
             // try to fit the key in the small pool first
             if ((data.len() + offset) < SMALL_CAPACITY) && (alloc_hint.unwrap_or(0) < SMALL_CAPACITY) {
-                log::info!("creating small key");
+                log::debug!("creating small key");
                 // handle the case that we're a brand new dictionary and no small keys have ever been stored before.
                 if self.small_pool.len() == 0 {
                     self.small_pool.push(KeySmallPool::new());
@@ -603,7 +603,7 @@ impl DictCacheEntry {
                 self.keys.insert(name.to_string(), kcache);
                 self.key_count += 1;
             } else {
-                log::info!("creating large key");
+                log::debug!("creating large key");
                 // it didn't fit in the small pool, stick it in the big pool.
                 let reservation = PageAlignedVa::from(
                     if alloc_hint.unwrap_or(0) > data.len() + offset {
@@ -715,7 +715,7 @@ impl DictCacheEntry {
             if let Some(key_to_free) = need_free_key {
                 self.put_free_key_index(key_to_free);
                 self.key_count -= 1;
-                log::info!("key_count: {}", self.key_count);
+                log::debug!("key_count: {}", self.key_count);
             }
             if need_rebuild {
                 // no stable "retain" api, so we have to clear the heap and rebuild it https://github.com/rust-lang/rust/issues/71503
@@ -797,7 +797,7 @@ impl DictCacheEntry {
                 for key_name in &entry.contents {
                     let kcache = self.keys.get_mut(key_name).expect("data record without index");
                     if kcache.flags.valid() { // only sync valid keys, not ones that were marked for deletion but not yet synced.
-                        log::info!("sync {}/{}:0x{:x}..{}->{}", key_name, index, kcache.start, kcache.len, kcache.reserved);
+                        log::debug!("sync {}/{}:0x{:x}..{}->{}", key_name, index, kcache.start, kcache.len, kcache.reserved);
                         kcache.start = pool_vaddr.get() + pool_offset as u64;
                         kcache.age = kcache.age.saturating_add(1);
                         kcache.clean = false;

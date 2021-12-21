@@ -205,7 +205,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     }
     for dict in basis_cache.dict_list(hw, None).iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
-        log::info!("{:?}", da);
+        log::debug!("{:?}", da);
     }
 
     for keynum in 1..=num_keys {
@@ -226,7 +226,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     }
     for dict in basis_cache.dict_list(hw, None).iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
-        log::info!("{:?}", da);
+        log::debug!("{:?}", da);
     }
 
     log::info!("doing all-basis sync");
@@ -250,14 +250,14 @@ pub(crate) fn list_all(hw: &mut PddbOs, basis_cache: &mut BasisCache) {
                 continue;
             }
         };
-        log::info!("{:?}", da);
+        log::debug!("{:?}", da);
         let mut sanity_count = 0;
         for key in basis_cache.key_list(hw, dict, None).unwrap().iter() {
             let attrs = match basis_cache.key_attributes(hw, dict, key, None) {
                 Ok(a) => a,
                 Err(e) => {log::debug!("key not in basis, searching another basis, {:?}", e);  continue},
             };
-            log::info!("{}:{}=>{:?}", dict, key, attrs);
+            log::debug!("{}:{}=>{:?}", dict, key, attrs);
             sanity_count += 1;
         }
         log::info!("sanity check count: {}", sanity_count);

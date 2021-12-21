@@ -606,10 +606,11 @@ impl PddbOs {
             noise = -noise;
         }
         let deniable_free_pages = (total_free_pages as f32 * (FSCB_FILL_COEFFICIENT + noise)) as usize;
-        // we're guarantede to have at least one free page, because we errored out if the pages was 0 above.
+        // we're guaranteed to have at least one free page, because we errored out if the pages was 0 above.
         let deniable_free_pages = if deniable_free_pages == 0 { 1 } else { deniable_free_pages };
         free_pool.truncate(deniable_free_pages);
-        log::info!("free_pool after PD trim: {}; max pages allowed: {}", free_pool.len(), deniable_free_pages);
+        log::warn!("total_free: {}; free_pool after PD trim: {}; max pages allowed: {}",
+            total_free_pages, free_pool.len(), deniable_free_pages);
 
         // 5. Take the free_pool and annotate it for writing to disk
         let mut page_pool = Vec::<PhysPage>::new();
@@ -738,7 +739,7 @@ impl PddbOs {
                     }
                     cipher.decrypt_block(&mut block);
                     if let Some(pp) = SpaceUpdate::try_into_phys_page(block.as_slice()) {
-                        log::info!("maybe replacing fspace block: {:x?}", pp);
+                        log::debug!("maybe replacing fspace block: {:x?}", pp);
                         // note: pp.valid() isn't the cryptographic check, the cryptographic check of record validity is in try_into_phys_page()
                         if pp.valid() { // PS: it should always be valid!
                             if let Some(prev_pp) = self.fspace_cache.get(&pp) {
@@ -749,7 +750,7 @@ impl PddbOs {
                                     panic!("Inconsistent FSCB state");
                                 }
                             } else {
-                                log::info!("Strange...we have a journal entry for a free space page that isn't already in our cache. Guru meditation: {:?}", pp);
+                                log::warn!("Strange...we have a journal entry for a free space page that isn't already in our cache. Guru meditation: {:?}", pp);
                                 self.fspace_cache.insert(pp);
                             }
                         }
@@ -809,6 +810,7 @@ impl PddbOs {
                         }
                         if is_blank {
                             self.fspace_log_next_addr = Some( (page_start + (1 + index) * aes::BLOCK_SIZE) as PhysAddr );
+                            log::info!("Next FSCB entry: {:x?}", self.fspace_log_next_addr);
                             return true
                         }
                     }
@@ -823,6 +825,7 @@ impl PddbOs {
                 let random_index = self.entropy.borrow_mut().get_u32() as usize % blank_pages.len();
                 // set the next log address at an offset of one AES block in from the top.
                 self.fspace_log_next_addr = Some((blank_pages[random_index] + aes::BLOCK_SIZE) as PhysAddr);
+                log::warn!("Moving log to fresh FSCB page: {:x?}", self.fspace_log_next_addr);
                 true
             } else {
                 false
@@ -933,7 +936,7 @@ impl PddbOs {
             true
         } else {
             if self.fast_space_len() <= pages + BUFFER {
-                log::trace!("alloc forced by lack of free space");
+                log::warn!("FastSpace alloc forced by lack of free space");
                 // if we're really out of space, do an expensive full-space sweep
                 if let Some(used_pages) = self.pddb_generate_used_map(cache) {
                     let free_pool = self.fast_space_generate(used_pages);
@@ -966,7 +969,7 @@ impl PddbOs {
             } else {
                 // log regenration is faster & less intrusive than fastspace regeneration, and we would have
                 // to do this more often. So we have a separate path for this outcome.
-                log::trace!("alloc forced by lack of log space");
+                log::warn!("FastSpace alloc forced by lack of log space");
                 let mut fast_space = FastSpace {
                     free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
                 };

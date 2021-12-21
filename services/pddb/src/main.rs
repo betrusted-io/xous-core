@@ -436,6 +436,8 @@ fn xmain() -> ! {
         const EXTRA_BASIS: &'static str = "Basis2";
         const EXTRA_BASIS_PW: &'static str = "some password blah blah";
 
+        log::set_max_level(log::LevelFilter::Info);
+
         pddb_os.test_reset();
         log::info!("Creating `basecase1e`");
         let mut basis_cache = BasisCache::new();
@@ -466,10 +468,12 @@ fn xmain() -> ! {
         patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
         pddb_os.dbg_dump(Some("patche".to_string()), None);
 
+        log::set_max_level(log::LevelFilter::Debug);
         log::info!("Doing delete pattern test");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
         pddb_os.dbg_dump(Some("patterne".to_string()), None);
-/*
+        log::set_max_level(log::LevelFilter::Info);
+
         // extended tests.
         // allocation space curtailed to force resource exhaustion faster.
         // note to self: FSCB_PAGES revert to 16 (hw.rs), FASTSPACE_PAGES revert to 2 (fastspace.rs)
@@ -498,7 +502,7 @@ fn xmain() -> ! {
             Some(50), None, None, None);
         log::info!("Saving `dachecke4` to local host");
         pddb_os.dbg_dump(Some("dachecke4".to_string()), None);
-*/
+
         let mut pre_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(&mut pddb_os, None).iter() {
             for key in basis_cache.key_list(&mut pddb_os, dict, None).unwrap().iter() {
@@ -577,6 +581,7 @@ fn xmain() -> ! {
         list_all(&mut pddb_os, &mut basis_cache);
 
     }
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("CI done");
     /*
     { // a simple case that could be run directly on the hardware
