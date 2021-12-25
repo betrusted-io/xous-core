@@ -4,6 +4,7 @@ use super::{PAGE_SIZE, VPAGE_SIZE};
 use crate::SpaceState;
 use bitfield::bitfield;
 use std::hash::{Hash, Hasher};
+use std::cmp::Ordering;
 
 /// for the life of me, I can't figure out how to query the AES crate to give me the length of a 256-bit key.
 /// I mean, we know what it is, it's well-defined and never changes. But it'd just be nice to you know,
@@ -50,6 +51,16 @@ impl Hash for PhysPage {
 impl PartialEq for PhysPage {
     fn eq(&self, other: &Self) -> bool {
         self.page_number() == other.page_number()
+    }
+}
+impl Ord for PhysPage {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.page_number().cmp(&other.page_number())
+    }
+}
+impl PartialOrd for PhysPage {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 

@@ -54,4 +54,7 @@ u64_pa = []
 # the page table when being updated in the case of a power loss, in exchange for more than doubling the time it
 # takes to update the page table.
 mbbb = []
-default = ["mbbb"]
+# selecting deterministic makes the allocation and page replacement algorithms deterministic. normally we don't want
+# this but it's helpful for debugging.
+deterministic = []
+default = ["mbbb", "deterministic"]

@@ -10,10 +10,18 @@ use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
 use std::collections::HashMap;
+#[cfg(not(feature="deterministic"))]
 use std::collections::HashSet;
+#[cfg(feature="deterministic")]
+use std::collections::BTreeSet;
 use std::collections::BinaryHeap;
 use std::cmp::Reverse;
 use std::io::{Result, Error, ErrorKind};
+
+#[cfg(not(feature="deterministic"))]
+type FspaceSet = HashSet::<PhysPage>;
+#[cfg(feature="deterministic")]
+type FspaceSet = BTreeSet::<PhysPage>;
 
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 pub(crate) const MBBB_PAGES: usize = 10;
@@ -72,7 +80,7 @@ pub(crate) struct PddbOs {
     /// derived cipher for handling fastspace -- cache it, so we can save the time cost of constructing the cipher key schedule
     cipher_ecb: Option<Aes256>,
     /// fast space cache
-    fspace_cache: HashSet<PhysPage>,
+    fspace_cache: FspaceSet,
     /// memoize the location of the fscb log pages
     fspace_log_addrs: Vec::<PageAlignedPa>,
     /// memoize the current target offset for the next log entry
@@ -117,7 +125,7 @@ impl PddbOs {
             data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
             cipher_ecb: None,
-            fspace_cache: HashSet::<PhysPage>::new(),
+            fspace_cache: FspaceSet::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
             fspace_log_next_addr: None,
             fspace_log_len: 0,
@@ -139,7 +147,7 @@ impl PddbOs {
                 data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
                 system_basis_key: None,
                 cipher_ecb: None,
-                fspace_cache: HashSet::<PhysPage>::new(),
+                fspace_cache: FspaceSet::new(),
                 fspace_log_addrs: Vec::<PageAlignedPa>::new(),
                 fspace_log_next_addr: None,
                 fspace_log_len: 0,
@@ -182,7 +190,7 @@ impl PddbOs {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
     pub fn test_reset(&mut self) {
-        self.fspace_cache = HashSet::<PhysPage>::new();
+        self.fspace_cache = FspaceSet::new();
         self.fspace_log_addrs = Vec::<PageAlignedPa>::new();
         self.system_basis_key = None;
         self.cipher_ecb = None;
