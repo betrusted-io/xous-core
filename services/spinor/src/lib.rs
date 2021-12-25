@@ -324,6 +324,12 @@ impl Drop for Spinor {
     }
 }
 
+#[cfg(test)]
+use core::sync::atomic::AtomicU64;
+
+#[cfg(test)]
+static TEST_RNG_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED);
+
 // run with `cargo test -- --nocapture --test-threads=1`:
 //   --nocapture to see the print output (while debugging)
 //   --test-threads=1 because the FLASH ROM is a shared state object
@@ -411,11 +417,13 @@ mod tests {
         }
     }
     fn flash_fill_rand() {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
+        use rand::prelude::*;
+        use rand_chacha::ChaCha8Rng;
+        let mut rng = ChaCha8Rng::seed_from_u64(TEST_RNG_STATE.load(Ordering::SeqCst));;
         for byte in EMU_FLASH.lock().unwrap().iter_mut() {
             *byte = rng.gen::<u8>();
         }
+        TEST_RNG_STATE.store(rng.next_u64(), Ordering::SeqCst);
     }
 
     /*

@@ -1,11 +1,15 @@
-use rand::Rng;
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 use crate::*;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 const UPPER_BOUND: usize = 9000;
 const LOWER_BOUND: usize = 12; // needs to be big enough to compute murmur3 hash + hold checksum
 
+static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED);
+
 fn gen_key(dictname: &str, keynum: usize, lower_size_bound: usize, upper_size_bound: usize) -> (String, Vec::<u8>) {
-    let mut rng = rand::thread_rng();
+    let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst));
     // we want roughly half our keys to be in the small bin, and half in the large bin
     let keylen = if rng.gen_bool(0.5) {
         rng.gen_range(lower_size_bound..VPAGE_SIZE)
@@ -31,6 +35,7 @@ fn gen_key(dictname: &str, keynum: usize, lower_size_bound: usize, upper_size_bo
     }
     let checksum = murmur3_32(&checkdata, 0);
     keydata.append(&mut checksum.to_le_bytes().to_vec());
+    RNG_LOCAL_STATE.store(rng.next_u64(), Ordering::SeqCst);
     (keyname, keydata)
 }
 

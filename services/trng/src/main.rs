@@ -467,9 +467,12 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
+    use rand::prelude::*;
+    use rand_chacha::ChaCha8Rng;
     use crate::api::{HealthTests, TrngBuf, TrngErrors};
 
     pub struct Trng {
+        rng: ChaCha8Rng,
         seed: u32,
         msgcount: u16, // re-print the message every time we rollover
     }
@@ -477,6 +480,7 @@ mod implementation {
     impl Trng {
         pub fn new(_xns: &xous_names::XousNames) -> Trng {
             Trng {
+                rng: ChaCha8Rng::seed_from_u64(xous::TESTING_RNG_SEED),
                 seed: 0x1afe_cafe,
                 msgcount: 0,
             }
@@ -497,15 +501,12 @@ mod implementation {
                 log::info!("hosted mode TRNG is *not* random, it is a deterministic LFSR");
             }
             self.msgcount += 1;
-            let mut tb = TrngBuf {
-                data: [0; 1024],
+            let mut data = [0; 1024];
+            self.rng.fill(&mut data);
+            TrngBuf {
+                data,
                 len,
-            };
-            for i in 0..len as usize {
-                self.seed = self.move_lfsr(self.seed);
-                tb.data[i] = self.seed;
             }
-            tb
         }
 
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {

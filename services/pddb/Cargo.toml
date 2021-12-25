@@ -44,6 +44,7 @@ utralib = { path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.4"
+rand_chacha = "0.3.1"
 
 [features]
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
