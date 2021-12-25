@@ -328,7 +328,7 @@ impl Drop for Spinor {
 use core::sync::atomic::AtomicU64;
 
 #[cfg(test)]
-static TEST_RNG_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED);
+static TEST_RNG_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED + 4);
 
 // run with `cargo test -- --nocapture --test-threads=1`:
 //   --nocapture to see the print output (while debugging)

@@ -17,7 +17,7 @@ static GLOBAL: &StatsAlloc<std::alloc::System> = &INSTRUMENTED_SYSTEM;
 const SERVER_SPEC: &str = "127.0.0.1:0";
 
 use core::sync::atomic::{AtomicU64, Ordering};
-static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED);
+static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED + 1);
 
 fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     assert!(

@@ -65,7 +65,7 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
 #[cfg(not(test))]
 use core::sync::atomic::{AtomicU64, Ordering};
 #[cfg(not(test))]
-static LOCAL_RNG_STATE: AtomicU64 = AtomicU64::new(xous_kernel::TESTING_RNG_SEED);
+static LOCAL_RNG_STATE: AtomicU64 = AtomicU64::new(xous_kernel::TESTING_RNG_SEED + 2);
 
 #[cfg(not(test))]
 fn generate_pid_key() -> [u8; 16] {

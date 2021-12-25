@@ -40,7 +40,7 @@ pub const PDDB_LOC: u32 = 0x0100_0000; // PDDB start
 pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC;
 
 #[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
-pub const TESTING_RNG_SEED: u64 = 0;
+pub const TESTING_RNG_SEED: u64 = 0; // 2 "works"
 
 pub mod exceptions;
 pub use exceptions::*;
