@@ -2,6 +2,7 @@ use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use crate::*;
 use core::sync::atomic::{AtomicU64, Ordering};
+use std::collections::{BTreeSet, BTreeMap};
 
 const UPPER_BOUND: usize = 9000;
 const LOWER_BOUND: usize = 12; // needs to be big enough to compute murmur3 hash + hold checksum
@@ -90,7 +91,11 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
     let (key_lower_bound, key_upper_bound) = maybe_key_sizes.unwrap_or((LOWER_BOUND, UPPER_BOUND - 4));
     let extra_reserved = maybe_extra_reserved.unwrap_or(0);
 
-    let dict_list = basis_cache.dict_list(hw, None);
+    let dict_list_unord = basis_cache.dict_list(hw, None);
+    let mut dict_list = BTreeSet::<String>::new();
+    for s in dict_list_unord {
+        dict_list.insert(s);
+    }
     let dict_start_index = dict_list.len();
     for (evicted, evict_dict) in dict_list.iter().enumerate() {
         if evicted < evict_count {
@@ -129,9 +134,17 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     let patch_offset = maybe_patch_offset.unwrap_or(5);
     let patch_data = maybe_patch_data.unwrap_or("patched!".to_string());
 
-    let dict_list = basis_cache.dict_list(hw, None);
+    let dict_list_unord = basis_cache.dict_list(hw, None);
+    let mut dict_list = BTreeSet::<String>::new();
+    for s in dict_list_unord {
+        dict_list.insert(s);
+    }
     for dict in dict_list.iter() {
-        if let Ok(key_list) = basis_cache.key_list(hw, dict, None) {
+        if let Ok(key_list_unord) = basis_cache.key_list(hw, dict, None) {
+            let mut key_list = BTreeSet::<String>::new();
+            for s in key_list_unord {
+                key_list.insert(s);
+            }
             for key in key_list.iter() {
                 // this actually does something a bit more complicated on a multi-basis system than you'd think:
                 // it will get the union of all key names, and then patch the *latest open basis* only with new data.
@@ -190,11 +203,20 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     let extra_reserved = maybe_extra_reserved.unwrap_or(0);
 
     let mut evicted_dicts = Vec::<String>::new();
-    let dict_list = basis_cache.dict_list(hw, None);
+    let dict_list_unord = basis_cache.dict_list(hw, None);
+    let mut dict_list = BTreeSet::<String>::new();
+    for s in dict_list_unord {
+        dict_list.insert(s);
+    }
     let mut evict_iter = 0;
     for (evicted, evict_dict) in dict_list.iter().enumerate() {
         if evicted < evict_count {
-            for (index, key) in basis_cache.key_list(hw, evict_dict, None).unwrap().iter().enumerate() {
+            let key_list_unord = basis_cache.key_list(hw, evict_dict, None).unwrap();
+            let mut key_list = BTreeSet::<String>::new();
+            for s in key_list_unord {
+                key_list.insert(s);
+            }
+            for (index, key) in key_list.iter().enumerate() {
                 if index % 2 == (evict_iter % 2) { // exercise odd/even patterns
                     log::info!("deleting {}:{}", evict_dict, key);
                     basis_cache.key_remove(hw, evict_dict, key,None, false).unwrap();
@@ -208,7 +230,12 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
         evicted_dicts.push(evict_dict.to_string());
         evict_iter += 1;
     }
-    for dict in basis_cache.dict_list(hw, None).iter() {
+    let dict_list_unord = basis_cache.dict_list(hw, None);
+    let mut dict_list = BTreeSet::<String>::new();
+    for s in dict_list_unord {
+        dict_list.insert(s);
+    }
+    for dict in dict_list.iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
         log::debug!("{:?}", da);
     }
@@ -229,7 +256,12 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
             }
         }
     }
-    for dict in basis_cache.dict_list(hw, None).iter() {
+    let dict_list_unord = basis_cache.dict_list(hw, None);
+    let mut dict_list = BTreeSet::<String>::new();
+    for s in dict_list_unord {
+        dict_list.insert(s);
+    }
+    for dict in dict_list.iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
         log::debug!("{:?}", da);
     }
@@ -239,15 +271,26 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
     log::info!("all-basis sync done");
 
     list_all(hw, basis_cache);
-    for dict in basis_cache.dict_list(hw, None).iter() {
+    let dict_list_unord = basis_cache.dict_list(hw, None);
+    let mut dict_list = BTreeSet::<String>::new();
+    for s in dict_list_unord {
+        dict_list.insert(s);
+    }
+    for dict in dict_list.iter() {
         let da = basis_cache.dict_attributes(hw, dict, None).unwrap();
         log::info!("{:?}", da);
     }
 }
 
 pub(crate) fn list_all(hw: &mut PddbOs, basis_cache: &mut BasisCache) {
+    let dict_list_unord = basis_cache.dict_list(hw, None);
+    let mut dict_list = BTreeSet::<String>::new();
+    for s in dict_list_unord {
+        dict_list.insert(s);
+    }
+
     // now list all the attributes of the basis
-    for dict in basis_cache.dict_list(hw, None).iter() {
+    for dict in dict_list.iter() {
         let da = match basis_cache.dict_attributes(hw, &dict, None) {
             Ok(da) => da,
             Err(e) => {

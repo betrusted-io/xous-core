@@ -440,6 +440,7 @@ fn xmain() -> ! {
 
         pddb_os.test_reset();
         log::info!("Creating `basecase1e`");
+        log::set_max_level(log::LevelFilter::Debug);
         let mut basis_cache = BasisCache::new();
         create_basis_testcase(&mut pddb_os, &mut basis_cache, None,
             None, None, Some(32));
