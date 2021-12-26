@@ -437,10 +437,11 @@ fn xmain() -> ! {
         const EXTRA_BASIS_PW: &'static str = "some password blah blah";
 
         log::set_max_level(log::LevelFilter::Info);
+        log::info!("Seed for this run: {}", xous::TESTING_RNG_SEED);
 
         pddb_os.test_reset();
         log::info!("Creating `basecase1e`");
-        log::set_max_level(log::LevelFilter::Debug);
+        log::set_max_level(log::LevelFilter::Info);
         let mut basis_cache = BasisCache::new();
         create_basis_testcase(&mut pddb_os, &mut basis_cache, None,
             None, None, Some(32));
@@ -469,11 +470,9 @@ fn xmain() -> ! {
         patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
         pddb_os.dbg_dump(Some("patche".to_string()), None);
 
-        log::set_max_level(log::LevelFilter::Debug);
         log::info!("Doing delete pattern test");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
         pddb_os.dbg_dump(Some("patterne".to_string()), None);
-        log::set_max_level(log::LevelFilter::Info);
 
         // extended tests.
         // allocation space curtailed to force resource exhaustion faster.
@@ -486,11 +485,14 @@ fn xmain() -> ! {
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
         pddb_os.dbg_dump(Some("patterne2".to_string()), None);
 
+        log::set_max_level(log::LevelFilter::Debug);
+        // dict2|key6|len794
         log::info!("Doing delete/add consistency with data extension 2");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
             Some(50), None, None, None);
         log::info!("Saving `dachecke2` to local host");
         pddb_os.dbg_dump(Some("dachecke2".to_string()), None);
+        log::set_max_level(log::LevelFilter::Info);
 
         log::info!("Doing delete/add consistency with data extension 3");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),

@@ -384,9 +384,9 @@ impl DictCacheEntry {
                         panic!("Updated file size is greater than the large file size limit.");
                     }
                     assert!((kcache.start + kcache.reserved) % VPAGE_SIZE as u64 == 0, "large space allocation rules were violated");
-                    let new_reservation = PageAlignedVa::from(kcache.start + offset as u64 + data.len() as u64).as_u64();
+                    let new_reservation_abs_addr = PageAlignedVa::from(kcache.start + offset as u64 + data.len() as u64).as_u64();
                     for vpage_addr in (
-                        (kcache.start + kcache.reserved)..new_reservation
+                        (kcache.start + kcache.reserved)..new_reservation_abs_addr
                     ).step_by(VPAGE_SIZE) {
                         // ensures that a physical page entry exists for every new virtual address required by the extended key
                         v2p_map.entry(VirtAddr::new(vpage_addr).unwrap()).or_insert_with(|| {
@@ -395,7 +395,7 @@ impl DictCacheEntry {
                             ap
                         });
                     }
-                    kcache.reserved = new_reservation;
+                    kcache.reserved = new_reservation_abs_addr - kcache.start; // convert absolute address to an actual length
                     kcache.clean = false;
                     // now retry the call, with the new physical page reservations in place
                     return self.key_update(hw, v2p_map, cipher, name, data, offset, alloc_hint, truncate, large_alloc_ptr);
@@ -727,6 +727,8 @@ impl DictCacheEntry {
             //   - in-memory representation will return an entry, but with its valid flag set to false.
             //   - disk still contains a key entry that claims we have a valid key
             // a call to sync is necessary to completely flush things, but, we don't sync every time we remove because it's inefficient.
+        } else {
+            log::debug!("key_remove() key does not exist: {}", name_str);
         }
         // if there's no key....we're done!
     }

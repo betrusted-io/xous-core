@@ -1116,17 +1116,21 @@ impl BasisCacheEntry {
     pub(crate) fn dict_delete(&mut self, hw: &mut PddbOs, name: &str, paranoid: bool) -> Result<()> {
         if self.ensure_dict_in_cache(hw, name) {
             let dcache = self.dicts.get_mut(name).expect("entry was ensured, but somehow missing");
-            //log::info!("dcache {} index {}, key_count {}", name, dcache.index, dcache.key_count);
+            log::trace!("dcache {} index {}, key_count {}", name, dcache.index, dcache.key_count);
             // ensure all the keys are in RAM
             dcache.fill(hw, &self.v2p_map, &self.cipher);
-            //log::info!("dcache filled");
+
             // allocate a copy of the key list, to avoid interior mutability problems with the next remove step
             let mut key_list = Vec::<String>::new();
-            for key in dcache.keys.keys() {
-                key_list.push(key.to_string());
+            let mut key_sanity_check = 0;
+            for (key, entry) in dcache.keys.iter() {
+                if entry.flags.valid() {
+                    key_list.push(key.to_string());
+                    key_sanity_check += 1;
+                }
             }
             for key in key_list {
-                //log::info!("removing {}:{}", name, key);
+                log::debug!("removing {}:{}", name, key);
                 // this will wipe any large pools if paranoid is set
                 dcache.key_remove(hw, &mut self.v2p_map, &self.cipher, &key, paranoid);
             }
