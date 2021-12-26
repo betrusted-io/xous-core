@@ -328,7 +328,7 @@ impl Drop for Spinor {
 use core::sync::atomic::AtomicU64;
 
 #[cfg(test)]
-static TEST_RNG_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED + 4);
+static TEST_RNG_STATE: AtomicU64 = AtomicU64::new(4);
 
 // run with `cargo test -- --nocapture --test-threads=1`:
 //   --nocapture to see the print output (while debugging)
@@ -419,7 +419,7 @@ mod tests {
     fn flash_fill_rand() {
         use rand::prelude::*;
         use rand_chacha::ChaCha8Rng;
-        let mut rng = ChaCha8Rng::seed_from_u64(TEST_RNG_STATE.load(Ordering::SeqCst));;
+        let mut rng = ChaCha8Rng::seed_from_u64(TEST_RNG_STATE.load(Ordering::SeqCst) + xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
         for byte in EMU_FLASH.lock().unwrap().iter_mut() {
             *byte = rng.gen::<u8>();
         }

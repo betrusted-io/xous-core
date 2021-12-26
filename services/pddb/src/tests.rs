@@ -7,10 +7,10 @@ use std::collections::BTreeSet;
 const UPPER_BOUND: usize = 9000;
 const LOWER_BOUND: usize = 12; // needs to be big enough to compute murmur3 hash + hold checksum
 
-static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED + 3);
+static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(3);
 
 fn gen_key(dictname: &str, keynum: usize, lower_size_bound: usize, upper_size_bound: usize) -> (String, Vec::<u8>) {
-    let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst));
+    let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst) + xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
     // we want roughly half our keys to be in the small bin, and half in the large bin
     let keylen = if rng.gen_bool(0.5) {
         rng.gen_range(lower_size_bound..VPAGE_SIZE)

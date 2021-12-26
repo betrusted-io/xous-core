@@ -437,7 +437,7 @@ fn xmain() -> ! {
         const EXTRA_BASIS_PW: &'static str = "some password blah blah";
 
         log::set_max_level(log::LevelFilter::Info);
-        log::info!("Seed for this run: {}", xous::TESTING_RNG_SEED);
+        log::info!("Seed for this run: {}", xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
 
         pddb_os.test_reset();
         log::info!("Creating `basecase1e`");

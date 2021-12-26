@@ -17,7 +17,7 @@ static GLOBAL: &StatsAlloc<std::alloc::System> = &INSTRUMENTED_SYSTEM;
 const SERVER_SPEC: &str = "127.0.0.1:0";
 
 use core::sync::atomic::{AtomicU64, Ordering};
-static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(xous::TESTING_RNG_SEED + 1);
+static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(1);
 
 fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     assert!(
@@ -32,7 +32,7 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;
     let mut pid1_key = [0u8; 16];
-    let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst));
+    let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst) + xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
     for b in pid1_key.iter_mut() {
         *b = rng.gen();
     }

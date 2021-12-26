@@ -480,7 +480,7 @@ mod implementation {
     impl Trng {
         pub fn new(_xns: &xous_names::XousNames) -> Trng {
             Trng {
-                rng: ChaCha8Rng::seed_from_u64(xous::TESTING_RNG_SEED),
+                rng: ChaCha8Rng::seed_from_u64(xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst)),
                 seed: 0x1afe_cafe,
                 msgcount: 0,
             }

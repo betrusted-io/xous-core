@@ -65,7 +65,7 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
 #[cfg(not(test))]
 use core::sync::atomic::{AtomicU64, Ordering};
 #[cfg(not(test))]
-static LOCAL_RNG_STATE: AtomicU64 = AtomicU64::new(xous_kernel::TESTING_RNG_SEED + 2);
+static LOCAL_RNG_STATE: AtomicU64 = AtomicU64::new(2);
 
 #[cfg(not(test))]
 fn generate_pid_key() -> [u8; 16] {
@@ -73,7 +73,7 @@ fn generate_pid_key() -> [u8; 16] {
     use rand_chacha::ChaCha8Rng;
 
     let mut process_key = [0u8; 16];
-    let mut rng = ChaCha8Rng::seed_from_u64(LOCAL_RNG_STATE.load(Ordering::SeqCst));
+    let mut rng = ChaCha8Rng::seed_from_u64(LOCAL_RNG_STATE.load(Ordering::SeqCst) + xous_kernel::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
     for b in process_key.iter_mut() {
         *b = rng.gen();
     }
