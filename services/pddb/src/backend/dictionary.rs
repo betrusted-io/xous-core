@@ -633,6 +633,8 @@ impl DictCacheEntry {
                 // 1. allocate all the pages up to the reservation limit
                 for vpage_addr in (large_alloc_ptr.as_u64()..large_alloc_ptr.as_u64() + reservation.as_u64()).step_by(VPAGE_SIZE) {
                     let pp = hw.try_fast_space_alloc().expect("out of disk space");
+                    assert!(pp.valid(), "didn't receive a valid page in large space alloc");
+                    log::debug!("pp alloc v{:x}->p{:x?}", vpage_addr, pp);
                     v2p_map.insert(VirtAddr::new(vpage_addr).unwrap(), pp);
                 }
                 // 2. Recurse. Now, the key should exist, and it should go through the "write the data out" section of the algorithm.

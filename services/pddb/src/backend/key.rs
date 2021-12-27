@@ -191,4 +191,6 @@ pub(crate) struct KeyAttributes {
     pub(crate) basis: String,
     /// flags
     pub(crate) flags: KeyFlags,
+    /// descriptor index
+    pub(crate) index: NonZeroU32,
 }

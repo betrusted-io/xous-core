@@ -721,6 +721,7 @@ impl BasisCache {
                             dict: dict.to_string(),
                             basis: (&basis.name).to_string(),
                             flags: kcache.flags,
+                            index: kcache.descriptor_index,
                         })
                     } else {
                         return Err(Error::new(ErrorKind::NotFound, "key not found"));
@@ -744,6 +745,7 @@ impl BasisCache {
                             dict: dict.to_string(),
                             basis: (&basis.name).to_string(),
                             flags: kcache.flags,
+                            index: kcache.descriptor_index,
                         })
                     } else {
                         return Err(Error::new(ErrorKind::NotFound, "key not found"));
@@ -1257,22 +1259,29 @@ impl BasisCacheEntry {
     pub(crate) fn pt_sync(&mut self, hw: &mut PddbOs) {
         self.last_sync = Some(hw.timestamp_now());
         let mut kill_list = Vec::<VirtAddr>::new();
+        // iterate once to delete old entries
         for (&virt, phys) in self.v2p_map.iter_mut() {
             if !phys.valid() {
                 // erase the entry
                 log::debug!("deleting pte va: {:x?} pa: {:x?}", virt, phys);
                 kill_list.push(virt);
                 hw.pt_erase(phys.page_number());
-            } else if !phys.clean() {
-                log::debug!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
-                hw.pt_patch_mapping(virt, phys.page_number(), &self.cipher_ecb);
-                phys.set_clean(true);
             }
         }
         // have to do this in a second phase due to interior mutability problems doing it inside the first iterator
         for kill in kill_list {
             if self.v2p_map.remove(&kill).is_none() {
                 log::warn!("went to remove PTE from v2p map but it wasn't there: {:x}", kill);
+            }
+        }
+        // iterate a second time to write new entries -- can't do this in a single loop because the
+        // order of visitation is arbitrary and we can delete after writing an entry if we put these
+        // two in the same loop!
+        for (&virt, phys) in self.v2p_map.iter_mut() {
+            if !phys.clean() {
+                log::debug!("syncing dirty pte va: {:x?} pa: {:x?}", virt, phys);
+                hw.pt_patch_mapping(virt, phys.page_number(), &self.cipher_ecb);
+                phys.set_clean(true);
             }
         }
     }
@@ -1309,6 +1318,7 @@ impl BasisCacheEntry {
                 // this is the virtual page within the dictionary region that we're currently serializing
                 let mut vpage_num = 0;
                 let mut loopcheck= 0;
+                let mut sync_count = 0;
                 loop {
                     loopcheck += 1;
                     if loopcheck == 256 {
@@ -1321,6 +1331,9 @@ impl BasisCacheEntry {
                         ap.set_valid(true);
                         ap
                     });
+                    //if name.contains("dict2") {
+                    //    log::debug!("TRACING: {}/{} | {:x?}", name, vpage_num, pp);
+                    //}
                     assert!(pp.valid(), "v2p returned an invalid page");
 
                     // 2(a). fill in the target vpage with data: header special case
@@ -1343,6 +1356,12 @@ impl BasisCacheEntry {
                     // the assumption that the KeyCacheEntry doesn't ever get to a very large N.
                     let next_vpage = VirtAddr::new(cur_vpage.get() + VPAGE_SIZE as u64).unwrap();
                     for (key_name, key) in dict.keys.iter_mut() {
+                        /*if key_name.contains("dict2|key6|len2347") {
+                            log::warn!("TRACING: {}", key_name);
+                            log::warn!("start: {:x}, clean: {}, flags: {:?}, desciptor: {:?}",
+                                key.start, key.clean, key.flags, key.descriptor_index,
+                            );
+                        }*/
                         if !key.clean && key.flags.valid() {
                             if key.descriptor_vaddr(dict_offset) >= cur_vpage &&
                             key.descriptor_vaddr(dict_offset) < next_vpage {
@@ -1403,8 +1422,10 @@ impl BasisCacheEntry {
                         }
                     }
                     if !found_next {
+                        log::debug!("breaking after syncing {} keys", sync_count);
                         break;
                     }
+                    sync_count += 1;
                 }
                 log::debug!("done syncing dict");
                 dict.clean = true;
@@ -1479,8 +1500,10 @@ impl BasisCacheEntry {
         // because otherwise we borrow self as immutable to enumerate the names, and then
         // we borrow it as mutable to do the sync. This deep-copy works around the issue.
         let mut dictnames = Vec::<String>::new();
-        for dict in self.dicts.keys() {
-            dictnames.push(dict.to_string());
+        for (dict, entry) in self.dicts.iter() {
+            if entry.flags.valid() {
+                dictnames.push(dict.to_string());
+            }
         }
         for dict in dictnames {
             match self.dict_sync(hw, &dict) {

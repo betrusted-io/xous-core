@@ -206,6 +206,11 @@ def main():
                     for bdict in basis_dicts.values():
                         logging.debug(bdict.as_str())
 
+                    #d2 = basis_dicts["dict2"]
+                    #logging.info("listing {} keys".format(len(d2.keys)))
+                    #for key in d2.keys:
+                    #    logging.info("{}".format(key))
+
                     logging.info("CI checks:")
                     for bdict in basis_dicts.values():
                         bdict.ci_check()
@@ -250,7 +255,12 @@ class KeyDescriptor:
             read_start = self.start % VPAGE_SIZE # reads can start not page-aligned
             while page_addr < self.start + self.len:
                 data_base = (page_addr // VPAGE_SIZE) * VPAGE_SIZE
-                pp_start = v2p[data_base]
+                try:
+                    pp_start = v2p[data_base]
+                except KeyError:
+                    logging.error("key {} is missing data allocation at va {:x}".format(self.name, data_base))
+                    self.ci_ok = False
+                    raise KeyError
                 pp_data = disk[pp_start:pp_start + PAGE_SIZE]
                 try:
                     cipher = AES_GCM_SIV(key, pp_data[:12])
@@ -362,31 +372,50 @@ class BasisDicts:
                 keys_tried = 1
                 while (keys_found < self.num_keys) and keys_tried < 131071:
                     keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
-                    # print('ki_vaddr {:x}'.format(keyindex_start_vaddr))
+                    #if self.name == 'dict2' and keyindex_start_vaddr < (0x1fc2fa0 + 0xfe0):
+                    #    try:
+                    #        print('keys_tried {}'.format(keys_tried))
+                    #        print('ki_vaddr {:x}'.format((keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE))
+                    #        pp = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
+                    #        print('ki_paddr {:x}'.format(pp))
+                    #    except KeyError:
+                    #        pass
                     try:
                         pp_start = v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]
                         pp_data = disk[pp_start:pp_start + PAGE_SIZE]
+                    except KeyError:
+                        # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
+                        keys_tried += VPAGE_SIZE // self.KV_STRIDE
+                        continue
+                    try:
+                        cipher = AES_GCM_SIV(key, pp_data[:12])
+                        pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                        key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
+                        #if self.name == 'dict2':
+                        #    print('key_index {:x}/{}/{:x}/{:x}'.format(key_index, keys_tried, pp, (keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE))
+                        #    print('{:x}'.format(v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]))
                         try:
-                            cipher = AES_GCM_SIV(key, pp_data[:12])
-                            pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
-                            key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
-                            #print('key_index {:x}'.format(key_index))
                             maybe_key = KeyDescriptor(pt_data[key_index:key_index + self.KV_STRIDE], v2p, disk, key, name)
                             if maybe_key.valid:
                                 self.keys[maybe_key.name] = maybe_key
                                 keys_found += 1
+                                #if self.name == 'dict2':
+                                #    print('found {}: {}'.format(keys_found, maybe_key.name))
+                        except KeyError:
+                            logging.error("Key @ offset {} is missing data allocation".format(key_index))
 
-                        except ValueError:
-                            logging.error("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr, pp_start))
-                        keys_tried += 1
-                    except KeyError:
-                        # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
-                        keys_tried += VPAGE_SIZE // self.KV_STRIDE
+                    except ValueError:
+                        logging.error("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr, pp_start))
+                    keys_tried += 1
                 if keys_found < self.num_keys:
                     logging.error("Expected {} keys but only found {}".format(self.num_keys, keys_found))
                     self.found_all_keys = False
                 else:
                     self.found_all_keys = True
+                #if self.name == 'dict2':
+                #    for v, p in v2p.items():
+                #        print('map: v{:16x} | p{:8x}'.format(v, p))
+
         else:
             self.valid = False
 

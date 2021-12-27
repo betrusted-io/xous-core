@@ -176,6 +176,7 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                     }
                 }
 
+                log::debug!("bef readback");
                 // now fix the CI checksum. structured as two separate patches. not because it's efficient,
                 // but because it exercises the code harder.
                 let mut patchbuf = [0u8; UPPER_BOUND];

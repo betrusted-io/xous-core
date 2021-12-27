@@ -463,12 +463,14 @@ fn xmain() -> ! {
         log::info!("Doing delete/add consistency with data extension");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None,
             None, None, None, None);
+        log::set_max_level(log::LevelFilter::Debug);
         log::info!("Saving `dachecke` to local host");
         pddb_os.dbg_dump(Some("dachecke".to_string()), None);
 
         log::info!("Doing patch test");
         patch_test(&mut pddb_os, &mut basis_cache, None, None, true);
         pddb_os.dbg_dump(Some("patche".to_string()), None);
+        log::set_max_level(log::LevelFilter::Info);
 
         log::info!("Doing delete pattern test");
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
@@ -485,14 +487,11 @@ fn xmain() -> ! {
         delete_pattern(&mut pddb_os, &mut basis_cache, None, None, None, None);
         pddb_os.dbg_dump(Some("patterne2".to_string()), None);
 
-        log::set_max_level(log::LevelFilter::Debug);
-        // dict2|key6|len794
         log::info!("Doing delete/add consistency with data extension 2");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
             Some(50), None, None, None);
         log::info!("Saving `dachecke2` to local host");
         pddb_os.dbg_dump(Some("dachecke2".to_string()), None);
-        log::set_max_level(log::LevelFilter::Info);
 
         log::info!("Doing delete/add consistency with data extension 3");
         delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, Some(3),
