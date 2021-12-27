@@ -828,10 +828,10 @@ impl BasisCache {
     /// similar to how you might use fdisk to create a partition, but you still must call mount to access it.
     pub(crate) fn basis_create(&mut self, hw: &mut PddbOs, name: &str, password: &str) -> Result<()> {
         if !hw.fast_space_ensure_next_log() {
-            return Err(Error::new(ErrorKind::OutOfMemory, "no free space to create basis"));
+            return Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis"));
         };
         if !hw.ensure_fast_space_alloc(1, &self.cache) {
-            return Err(Error::new(ErrorKind::OutOfMemory, "no free space to create basis"));
+            return Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis"));
         };
 
         let basis_key =  hw.basis_derive_key(name, password);

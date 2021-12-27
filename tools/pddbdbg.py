@@ -106,7 +106,7 @@ def main():
         "--name", required=False, help="pddb disk image root name", type=str, nargs='?', metavar=('name'), const='./pddb'
     )
     parser.add_argument(
-        "--loglevel", required=False, help="set logging level", type=str, default="INFO",
+        "--loglevel", required=False, help="set logging level (INFO/DEBUG/WARNING/ERROR)", type=str, default="INFO",
     )
     args = parser.parse_args()
 
