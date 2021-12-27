@@ -25,6 +25,16 @@ lazy_static::lazy_static! {
         .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
     };
     static ref PROCESS_KEY: ProcessKey = {
+        // piggy back a seed initialization on top of the PROCESS_KEY initialization
+        let seed = match std::env::var("XOUS_SEED") {
+            Ok(s) => {
+                s.parse::<u64>().unwrap_or(0u64)
+            }
+            Err(_) => 0u64
+        };
+        crate::TESTING_RNG_SEED.store(seed, core::sync::atomic::Ordering::SeqCst);
+
+        // resume with PROCESS_KEY initialization
         std::env::var("XOUS_PROCESS_KEY")
         .map(|s| {
             let mut base = ProcessKey([0u8; 16]);

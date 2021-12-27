@@ -42,8 +42,14 @@ pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC;
 #[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
 use core::sync::atomic::AtomicU64;
 
+// Secretly, you can change this by setting the XOUS_SEED environment variable.
+// I don't lke environment variables because where do you document features like this?
+// But, this was the most expedient way to get all the threads in Hosted mode to pick up a seed.
+// The code that reads the varable this is all the way over in xous-rs\src\arch\hosted\mod.rs#29, and
+// it's glommed onto some other static process initialization code because I don't fully understand
+// what's going on over there.
 #[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
-pub const TESTING_RNG_SEED: AtomicU64 = AtomicU64::new(0); // 0, 1, 2, 3, 4, 7, 8 "works"; 5 "oom"; 6 "key space oom"
+pub static TESTING_RNG_SEED: AtomicU64 = AtomicU64::new(0);
 
 pub mod exceptions;
 pub use exceptions::*;
