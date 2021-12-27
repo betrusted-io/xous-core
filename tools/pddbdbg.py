@@ -5,8 +5,7 @@ import sys
 from Crypto.Cipher import AES
 from rfc8452 import AES_GCM_SIV
 
-import binascii
-import hashlib
+import logging
 
 SYSTEM_BASIS = '.System'
 PAGE_SIZE = 4096
@@ -106,6 +105,9 @@ def main():
     parser.add_argument(
         "--name", required=False, help="pddb disk image root name", type=str, nargs='?', metavar=('name'), const='./pddb'
     )
+    parser.add_argument(
+        "--loglevel", required=False, help="set logging level", type=str, default="INFO",
+    )
     args = parser.parse_args()
 
     if args.name == None:
@@ -114,6 +116,11 @@ def main():
     else:
         keyfile = './tools/pddb-images/{}.key'.format(args.name)
         imagefile = './tools/pddb-images/{}.bin'.format(args.name)
+
+    numeric_level = getattr(logging, args.loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError('Invalid log level: %s' % args.loglevel)
+    logging.basicConfig(level=numeric_level)
 
     keys = {}
     with open(keyfile, 'rb') as key_f:
@@ -131,8 +138,8 @@ def main():
             key = raw_key[4 + i*96 + 64 : 4 + i*96 + 96]
             keys[name] = key
 
-    print("Found basis keys:")
-    print(keys)
+    logging.info("Found basis keys:")
+    logging.info(str(keys))
 
     # tunable parameters for a filesystem
     global MBBB_PAGES
@@ -162,7 +169,7 @@ def main():
 
         for name, key in keys.items():
             if name in tables:
-                print("Basis {}, key: {}".format(name, key.hex()))
+                logging.info("Basis {}, key: {}".format(name, key.hex()))
                 v2p_table = tables[name][0]
                 p2v_table = tables[name][1]
                 # v2p_table[0xfe0fe0] = 0x1200* 0x100
@@ -175,10 +182,10 @@ def main():
                     cipher = AES_GCM_SIV(key, pp_data[:12])
                     pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
                     basis_data.extend(bytearray(pt_data))
-                    print("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
+                    logging.debug("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
                     # print([hex(x) for x in basis_data[:256]])
                     basis = Basis(basis_data)
-                    print(basis.as_str())
+                    logging.info(basis.as_str())
 
                     basis_dicts = {}
                     dicts_found = 0
@@ -190,25 +197,25 @@ def main():
                             dicts_found += 1
                         dict_index += 1
                     if dicts_found != basis.num_dicts:
-                        print("Expected {} dictionaries, only found {}; searched {}".format(basis.num_dicts, dicts_found, dict_index))
+                        logging.error("Expected {} dictionaries, only found {}; searched {}".format(basis.num_dicts, dicts_found, dict_index))
                         found_all_dicts = False
                     else:
                         found_all_dicts = True
 
-                    print(" Dictionaries: ")
+                    logging.debug(" Dictionaries: ")
                     for bdict in basis_dicts.values():
-                        print(bdict.as_str())
+                        logging.debug(bdict.as_str())
 
-                    print("CI checks:")
+                    logging.info("CI checks:")
                     for bdict in basis_dicts.values():
                         bdict.ci_check()
                     if found_all_dicts:
-                        print("All dicts were found.")
+                        logging.info("All dicts were found.")
                     else:
-                        print("Missing dictionaries, something is wrong.")
+                        logging.error("Missing dictionaries, something is wrong.")
 
                 except ValueError:
-                    print("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
+                    logging.error("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
 
 PRINTED_FULL = False
 class KeyDescriptor:
@@ -259,7 +266,7 @@ class KeyDescriptor:
                     if remaining > 0:
                         assert(read_start == 0)
                 except ValueError:
-                    print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(page_addr), pp_start)
+                    logging.error("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(page_addr), pp_start)
                 page_addr += VPAGE_SIZE
             # CI check -- if it doesn't pass, it doesn't mean we've failed -- could also just be a "normal" record that doesn't have the checksum appended
             check_data = self.data[:-4]
@@ -271,7 +278,7 @@ class KeyDescriptor:
                 self.ci_ok = True
             else:
                 self.ci_ok = False
-                print('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
+                logging.debug('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
         else:
             # print('invalid key')
             pass
@@ -328,7 +335,7 @@ class BasisDicts:
             pp = v2p[dict_header_vaddr]
             self.keys = {}
             try:
-                print('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
+                logging.debug('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
                 cipher = AES_GCM_SIV(key, disk[pp:pp+12])
                 pt_data = cipher.decrypt(disk[pp+12:pp+PAGE_SIZE], basis_aad(name))
                 # print('raw pt_data: {}'.format(pt_data[:127].hex()))
@@ -345,9 +352,10 @@ class BasisDicts:
                 i += 4
                 self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
                 i += BasisDicts.MAX_NAME_LEN
-                print("dict header len: {}".format(i-4)) # subtract 4 because of the journal
+                logging.info("decrypt dict '{}' with {} keys and {} free_key_index".format(self.name, self.num_keys, self.free_key_index))
+                logging.debug("dict header len: {}".format(i-4)) # subtract 4 because of the journal
             except ValueError:
-                print("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
+                logging.error("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
 
             if self.num_keys > 0:
                 keys_found = 0
@@ -369,13 +377,13 @@ class BasisDicts:
                                 keys_found += 1
 
                         except ValueError:
-                            print("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr, pp_start))
+                            logging.error("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(keyindex_start_vaddr, pp_start))
                         keys_tried += 1
                     except KeyError:
                         # the page wasn't allocated, so let's just assume all the key entries are invalid, and were "tried"
                         keys_tried += VPAGE_SIZE // self.KV_STRIDE
                 if keys_found < self.num_keys:
-                    print("Expected {} keys but only found {}".format(self.num_keys, keys_found))
+                    logging.error("Expected {} keys but only found {}".format(self.num_keys, keys_found))
                     self.found_all_keys = False
                 else:
                     self.found_all_keys = True
@@ -401,21 +409,21 @@ class BasisDicts:
         for (name, key) in self.keys.items():
             namecheck = name.split('|')
             if namecheck[1] != self.name:
-                print(" Key/dict mismatch: {}/{}".format(key.name, self.name))
+                logging.warning(" Key/dict mismatch: {}/{}".format(key.name, self.name))
             keylen = int(namecheck[3][3:])
-            if keylen != key.len:
-                print(" Key named len vs disk len mismatch: {}/{}".format(keylen, key.len))
+            if keylen != key.len and keylen + 4 != key.len: # the second case is what happens with the length extension test, it's actually not an error
+                logging.warning(" Key named len vs disk len mismatch: {}/{}".format(keylen, key.len))
             if key.ci_ok == False:
-                print(" CI failed on key {}:".format(name))
-                print(key.as_str('  '))
+                logging.warning(" CI failed on key {}:".format(name))
+                logging.warning(key.as_str('  '))
                 check_ok = False
         if self.found_all_keys == False:
-            print(' Dictionary was missing keys')
+            logging.warning(' Dictionary was missing keys')
             check_ok = False
         if check_ok:
-            print(' Dictionary {} CI check: OK'.format(self.name))
+            logging.info(' Dictionary {} CI check: OK'.format(self.name))
         else:
-            print(' Dictionary {} CI check: FAIL'.format(self.name))
+            logging.error(' Dictionary {} CI check: FAIL'.format(self.name))
 
 
 class Basis:
@@ -532,7 +540,7 @@ def find_mbbb(mbbb):
             candidates.append(page)
 
     if len(candidates) > 1:
-        print("More than one MBBB found, this is an error!")
+        logging.error("More than one MBBB found, this is an error!")
     else:
         return candidates[0]
     return None
@@ -541,8 +549,8 @@ def decode_pagetable(img, entries, keys, mbbb):
     global PAGE_SIZE
     key_table = {}
     for name, key in keys.items():
-        print("Pages for basis {}".format(name))
-        print("key: {}".format(key.hex()))
+        logging.debug("Pages for basis {}".format(name))
+        logging.debug("key: {}".format(key.hex()))
         cipher = AES.new(key, AES.MODE_ECB)
         pages = [img[i:i+PAGE_SIZE] for i in range(0, entries * Pte.PTE_LEN, PAGE_SIZE)]
         page_num = 0
@@ -551,23 +559,23 @@ def decode_pagetable(img, entries, keys, mbbb):
         for page in pages:
             if bytearray(page[:16]) == bytearray([0xff] * 16):
                 # decrypt from mbbb
-                print("Found a blank PTE page, falling back to MBBB!")
+                logging.debug("Found a blank PTE page, falling back to MBBB!")
                 maybe_page = find_mbbb(mbbb)
                 if maybe_page != None:
                     page = maybe_page
                 else:
-                    print("Blank entry in PTE found, but no corresponding MBBB entry found. Filesystem likely corrupted.")
+                    logging.warning("Blank entry in PTE found, but no corresponding MBBB entry found. Filesystem likely corrupted.")
             encrypted_ptes = [page[i:i+Pte.PTE_LEN] for i in range(0, PAGE_SIZE, Pte.PTE_LEN)]
             for pte in encrypted_ptes:
                 maybe_pte = Pte(cipher.decrypt(pte))
                 if maybe_pte.is_valid():
-                    print(maybe_pte.as_str(page_num))
+                    logging.debug(maybe_pte.as_str(page_num))
                     p_addr = page_num * (4096 // Pte.PTE_LEN)
                     if maybe_pte.addr() in v2p_table:
-                        print("duplicate V2P PTE entry, evicting {:x}:{:x}", maybe_pte.addr(), p_addr)
+                        logging.warning("duplicate V2P PTE entry, evicting {:x}:{:x}", maybe_pte.addr(), p_addr)
                     v2p_table[maybe_pte.addr()] = p_addr
                     if p_addr in p2v_table:
-                        print("duplicate P2V PTE entry, evicting {:x}:{:x}", p_addr, maybe_pte.addr())
+                        logging.warning("duplicate P2V PTE entry, evicting {:x}:{:x}", p_addr, maybe_pte.addr())
                     p2v_table[p_addr] = maybe_pte.addr()
 
                 page_num += Pte.PTE_LEN
@@ -633,14 +641,14 @@ class Fscb:
 
     def print(self):
         for pagenum, pp in self.free_space.items():
-            print(pp.as_str())
+            logging.debug(pp.as_str())
 
     def try_replace(self, candidate):
         if candidate.is_valid():
             pp = candidate.get_pp()
             cur_pp = self.free_space[pp.page_number() * 4096]
             if pp.valid() and (cur_pp.journal() < pp.journal()):
-                print("FSCB replace {} /with/ {}".format(cur_pp.as_str(), pp.as_str()))
+                logging.debug("FSCB replace {} /with/ {}".format(cur_pp.as_str(), pp.as_str()))
                 self.free_space[pp.page_number() * 4096] = pp
 
     # this is the "AAD" used to encrypt the FastSpace
@@ -688,24 +696,24 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
             pg += 1
 
         if fscb_start:
-            print("Found FSCB at {:x}".format(fscb_start))
+            logging.debug("Found FSCB at {:x}".format(fscb_start))
             fscb_enc = img[fscb_start * 4096 : (fscb_start + FSCB_LEN_PAGES) * 4096]
             # print("data: {}".format(fscb_enc.hex()))
             try:
                 nonce = fscb_enc[:12]
-                print("key: {}, nonce: {}".format(key.hex(), nonce.hex()))
+                logging.info("key: {}, nonce: {}".format(key.hex(), nonce.hex()))
                 cipher = AES_GCM_SIV(key, nonce)
-                print("aad: {}".format(Fscb.aad().hex()))
-                print("mac: {}".format(fscb_enc[-16:].hex()))
+                logging.info("aad: {}".format(Fscb.aad().hex()))
+                logging.info("mac: {}".format(fscb_enc[-16:].hex()))
                 #print("data: {}".format(fscb_enc[12:-16].hex()))
                 fscb_dec = cipher.decrypt(fscb_enc[12:], Fscb.aad())
                 fscb = Fscb(fscb_dec, FASTSPACE_PAGES=FSCB_LEN_PAGES)
             except KeyError:
-                print("couldn't decrypt")
+                logging.error("couldn't decrypt")
                 fscb = None
 
         if fscb != None:
-            print("key: {}".format(key.hex()))
+            logging.debug("key: {}".format(key.hex()))
             cipher = AES.new(key, AES.MODE_ECB)
             for update in space_update:
                 entries = [update[i:i+SpaceUpdate.SU_LEN] for i in range(0, len(update), SpaceUpdate.SU_LEN)]
@@ -715,7 +723,7 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
                     else:
                         fscb.try_replace(SpaceUpdate(cipher.decrypt(entry)))
                         fscb_count += 1
-    print("Total FSCB entries found: {}".format(fscb_count))
+    logging.info("Total FSCB entries found: {}".format(fscb_count))
     return fscb
 
 if __name__ == "__main__":
