@@ -25,7 +25,7 @@ lazy_static::lazy_static! {
         .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
     };
     static ref PROCESS_KEY: ProcessKey = {
-        // piggy back a seed initialization on top of the PROCESS_KEY initialization
+        // piggy back a seed initialization on top of the PROCESS_KEY initialization.
         let seed = match std::env::var("XOUS_SEED") {
             Ok(s) => {
                 s.parse::<u64>().unwrap_or(0u64)
