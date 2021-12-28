@@ -282,7 +282,7 @@ impl BasisCache {
     ///    - if `basis_name` is Some, searches for the given basis and adds the dictionary to that.
     /// If the dictionary already exists, it returns an informative error.
     pub(crate) fn dict_add(&mut self, hw: &mut PddbOs, name: &str, basis_name: Option<&str>) -> Result<()> {
-        if !hw.ensure_fast_space_alloc(1, &self.cache) {
+        if !hw.ensure_fast_space_alloc(2, &self.cache) {
             return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"));
         }
         if let Some(basis_index) = self.select_basis(basis_name) {
@@ -483,7 +483,7 @@ impl BasisCache {
                             } else {
                                 data_endstop
                             };
-                            log::trace!("reading offset {}/{}:{}",  cur_offset, endstop, kcache.len);
+                            log::debug!("reading offset {}->{}/{}:{}", key, cur_offset, endstop, kcache.len);
                             let mut read_offset = (cur_offset % VPAGE_SIZE as u64) as usize;
                             if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
                                 assert!(pp.valid(), "v2p returned an invalid page");
@@ -513,6 +513,10 @@ impl BasisCache {
                             }
                             // break if we've hit or exceeded our endstop
                             if read_offset >= endstop {
+                                break;
+                            }
+                            // also exit if we're "just nice", e.g. the size of the data happened to be exactly a multiple of the length of our block size
+                            if cur_offset == kcache.len {
                                 break;
                             }
                         }
@@ -576,7 +580,7 @@ impl BasisCache {
         // we have to estimate how many pages are needed *before* we do anything, because we can't
         // mutate the page table to allocate data while we're accessing the page table. This huge gob of code
         // computes the pages needed. :-/
-        let mut pages_needed = 0;
+        let mut pages_needed = 2; // things go badly when no space is available so make sure there's always at least 1 spot
         let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(0) {
             data.len() + offset.unwrap_or(0)
         } else {
@@ -651,6 +655,7 @@ impl BasisCache {
             return Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."));
         }
         // make the reservation
+        log::info!("reserving {} pages - {}", pages_needed, reserved_pages);
         if !hw.ensure_fast_space_alloc(pages_needed, &self.cache) {
             return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"));
         }
@@ -678,10 +683,12 @@ impl BasisCache {
                     alloc_hint,
                     truncate,
                     basis.large_alloc_ptr.unwrap_or(PageAlignedVa::from(LARGE_POOL_START))
-                ).expect("couldn't add key");
+                )?;
                 basis.large_alloc_ptr = Some(updated_ptr);
 
-                dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher);
+                if !dict_entry.sync_small_pool(hw, &mut basis.v2p_map, &basis.cipher) {
+                    return Err(Error::new(ErrorKind::OutOfMemory, "Ran out of memory syncing small pool"));
+                }
                 // we don't have large pool caches yet, but this is a placeholder to remember to do "something" at this point,
                 // once we do have them.
                 dict_entry.sync_large_pool();

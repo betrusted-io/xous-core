@@ -840,6 +840,18 @@ impl PddbOs {
             }
         }
     }
+    pub fn fast_space_has_pages(&self, count: usize) -> bool {
+        let mut free_count = 0;
+        for pp in self.fspace_cache.iter() {
+            if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty) && (pp.journal() < PHYS_PAGE_JOURNAL_MAX) {
+                free_count += 1;
+            }
+            if free_count >= count {
+                return true
+            }
+        }
+        false
+    }
     /// Attempts to allocate a page out of the fspace cache (in RAM). This is the "normal" route for allocating pages.
     /// This call should be prefixed by a call to ensure_fast_space_alloc() to make sure it doesn't fail.
     /// We do a two-stage "look before you leap" because trying to dynamically redo the fast space allocation tables
@@ -891,10 +903,10 @@ impl PddbOs {
                 }
             }
             if maybe_alloc.is_none() {
-                log::warn!("Ran out of free space. fspace cache entries: {}", self.fspace_cache.len());
-                for entry in self.fspace_cache.iter() {
-                    log::info!("{:?}", entry);
-                }
+                log::warn!("Ran out of free space. fspace cache has {} entries", self.fspace_cache.len());
+                // for entry in self.fspace_cache.iter() {
+                //    log::info!("{:?}", entry);
+                //}
             }
             if let Some(alloc) = maybe_alloc {
                 assert!(self.fspace_cache.remove(&alloc), "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!");

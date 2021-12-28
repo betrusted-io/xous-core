@@ -632,7 +632,7 @@ impl DictCacheEntry {
                 self.key_count += 1;
                 // 1. allocate all the pages up to the reservation limit
                 for vpage_addr in (large_alloc_ptr.as_u64()..large_alloc_ptr.as_u64() + reservation.as_u64()).step_by(VPAGE_SIZE) {
-                    let pp = hw.try_fast_space_alloc().expect("out of disk space");
+                    let pp = hw.try_fast_space_alloc().ok_or(Error::new(ErrorKind::OutOfMemory, "couldn't allocate memory for large key"))?;
                     assert!(pp.valid(), "didn't receive a valid page in large space alloc");
                     log::debug!("pp alloc v{:x}->p{:x?}", vpage_addr, pp);
                     v2p_map.insert(VirtAddr::new(vpage_addr).unwrap(), pp);
@@ -771,10 +771,13 @@ impl DictCacheEntry {
     ///
     /// Observation: given the dictionary index and the small key pool index, we know exactly
     /// the virtual address of the data pool.
-    pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) {
+    pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> bool {
         for (index, entry) in self.small_pool.iter_mut().enumerate() {
             if !entry.clean {
                 let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(self.index, index)).unwrap();
+                if !hw.fast_space_has_pages(1) {
+                    return false
+                }
                 let pp = v2p_map.entry(pool_vaddr).or_insert_with(|| {
                     let mut ap = hw.try_fast_space_alloc().expect("No free space to allocate small key storage");
                     ap.set_valid(true);
@@ -825,6 +828,7 @@ impl DictCacheEntry {
             }
         }
         // we now have a bunch of dirty kcache entries. You should call `dict_sync` shortly after this to synchronize those entries to disk.
+        true
     }
 
     /// No data cache to flush yet...large pool caches not implemented!

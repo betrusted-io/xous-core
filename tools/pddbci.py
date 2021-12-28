@@ -23,7 +23,7 @@ def main():
 
     pass_log = {}
     err_log = []
-    for seed in range(0, 51):
+    for seed in range(0, 201):
         err_log.append("Starting seed {}".format(seed))
         seed_env = os.environ
         seed_env["XOUS_SEED"] = str(seed)
@@ -57,15 +57,15 @@ def main():
                 if 'CI done' in realtime_output:
                     logging.info(realtime_output.strip())
                     proc.kill()
-                if 'out of disk space' in realtime_output:
+                if 'Ran out of memory' in realtime_output:
                     err_log.append(realtime_output)
                     logging.debug("ran out of space")
-                    passing = False
+                    # passing = False # not a fail, because it's the test condition that's wrong, not the code
                     proc.kill()
-                if 'No free space' in realtime_output:
+                if "couldn't allocate memory" in realtime_output:
                     err_log.append(realtime_output)
                     logging.debug("ran out of space")
-                    passing = False
+                    # passing = False # not a fail, because it's the test condition that's wrong, not the code
                     proc.kill()
                 if 'Decryption auth error' in realtime_output:
                     err_log.append(realtime_output)
