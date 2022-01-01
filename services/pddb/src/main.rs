@@ -411,71 +411,16 @@ fn xmain() -> ! {
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
-    /*
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    {
-        log::info!("Creating `basecase1`");
-        let mut basis_cache = BasisCache::new();
-        create_basis_testcase(&mut pddb_os, &mut basis_cache, None,
-            None, None, None);
-        log::info!("Saving `basecase1` to local host");
-        pddb_os.dbg_dump(Some("basecase1".to_string()));
-
-        log::info!("Doing delete/add consistency");
-        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None, None, None);
-        log::info!("Saving `dacheck` to local host");
-        pddb_os.dbg_dump(Some("dacheck".to_string()));
-
-        log::info!("Doing patch test");
-        patch_test(&mut pddb_os, &mut basis_cache, None, None, false);
-        pddb_os.dbg_dump(Some("patch".to_string()));
-    }
-    */
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(all(
+        not(any(target_os = "none", target_os = "xous")),
+        feature = "ci"
+    ))]
     ci_tests(&mut pddb_os).map_err(|e| log::error!("{}", e)).ok();
-    /*
-    { // a simple case that could be run directly on the hardware
-        log::info!("Running `manual` test case");
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        pddb_os.test_reset();
 
-        manual_testcase(&mut pddb_os);
-
-        log::info!("Re-mount the PDDB");
-        let mut basis_cache = BasisCache::new();
-        if let Some(sys_basis) = pddb_os.pddb_mount() {
-            log::info!("PDDB mount operation finished successfully");
-            basis_cache.basis_add(sys_basis);
-        } else {
-            log::info!("PDDB did not mount; did you remember to format the PDDB region?");
-        }
-        log::info!("test readback of wifi/wpa_keys/e4200");
-        let mut readback = [0u8; 16]; // this buffer is bigger than the data in the key, but that's alright...
-        match basis_cache.key_read(&mut pddb_os, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
-            Ok(readsize) => {
-                log::info!("read back {} bytes", readsize);
-                log::info!("read data: {}", String::from_utf8_lossy(&readback));
-            },
-            Err(e) => {
-                log::info!("couldn't read data: {:?}", e);
-            }
-        }
-
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        pddb_os.dbg_dump(Some("manual".to_string()));
+    if false { // this will re-init the PDDB and do a simple key query. Really useful only for early shake-down testing, eliminate this reminder stub once we have some confidence in the code
+        hw_testcase(&mut pddb_os);
     }
-    */
-    /* list of test cases:
-        - [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
-        - [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
-        - [done] in-place update consistency: general integrity then patch all keys with a new test pattern
-        - [done] extend update consistency: general integrity then patch all keys with a longer test pattern
-        - [done] key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
-        - [done] fast space exhaustion test: allocate and delete a bunch of stuff. trigger a fast-space regenerate.
-          note: for faster stress-testing, we dialed the FSCB_PAGES to 4 and the FASTSPACE_PAGES to 1.
-        - [done] basis search: create basis A, populate with general integrity. create basis B, add test entries.
-           hide basis B, confirm original A; mount basis B, confirm B overlay.
-    */
+
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
     let _susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
@@ -492,16 +437,17 @@ fn xmain() -> ! {
             )
         }
     });
-    /* just for testing
-    let request = BasisRequestPassword {
-        db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str("test basis"),
-        plaintext_pw: None,
-    };
-    let mut buf = Buffer::into_buf(request).unwrap();
-    buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
-    let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
-    log::info!("Got password: {:?}", ret.plaintext_pw);
-    */
+    // stub for testing the password request mechanism
+    if false {
+        let request = BasisRequestPassword {
+            db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str("test basis"),
+            plaintext_pw: None,
+        };
+        let mut buf = Buffer::into_buf(request).unwrap();
+        buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+        let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
+        log::info!("Got password: {:?}", ret.plaintext_pw);
+    }
     loop {
         let msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -552,62 +498,4 @@ fn xmain() -> ! {
     xous::destroy_server(pddb_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
-}
-
-#[allow(dead_code)]
-pub(crate) fn manual_testcase(hw: &mut PddbOs) {
-    log::info!("Initializing disk...");
-    hw.pddb_format(true).unwrap();
-    log::info!("Done initializing disk");
-
-    // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
-    let mut basis_cache = BasisCache::new();
-
-    log::info!("Attempting to mount the PDDB");
-    if let Some(sys_basis) = hw.pddb_mount() {
-        log::info!("PDDB mount operation finished successfully");
-        basis_cache.basis_add(sys_basis);
-    } else {
-        log::info!("PDDB did not mount; did you remember to format the PDDB region?");
-    }
-    log::info!("size of vpage: {}", VPAGE_SIZE);
-
-    // add a "system settings" dictionary to the default basis
-    log::info!("adding 'system settings' dictionary");
-    basis_cache.dict_add(hw, "system settings", None).expect("couldn't add system settings dictionary");
-    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/Kosagi", "my_wpa_key_here".as_bytes(), None, None, None, false).expect("couldn't add a key");
-    let mut readback = [0u8; 15];
-    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/Kosagi", &mut readback, None, None) {
-        Ok(readsize) => {
-            log::info!("read back {} bytes", readsize);
-            log::info!("read data: {}", String::from_utf8_lossy(&readback));
-        },
-        Err(e) => {
-            log::info!("couldn't read data: {:?}", e);
-        }
-    }
-    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "12345678".as_bytes(), None, None, None, false).expect("couldn't add a key");
-
-    // add a "big" key
-    let mut bigdata = [0u8; 5000];
-    for (i, d) in bigdata.iter_mut().enumerate() {
-        *d = i as u8;
-    }
-    basis_cache.key_update(hw, "system settings", "big_pool1", &bigdata, None, None, None, false).expect("couldn't add a key");
-
-    basis_cache.dict_add(hw, "test_dict_2", None).expect("couldn't add test dictionary 2");
-    basis_cache.key_update(hw, "test_dict_2", "test key in dict 2", "some data".as_bytes(), None, Some(128), None, false).expect("couldn't add a key to second dict");
-
-    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "ABC".as_bytes(), Some(2), None, None, false).expect("couldn't update e4200 key");
-
-    log::info!("test readback of wifi/wpa_keys/e4200");
-    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
-        Ok(readsize) => {
-            log::info!("read back {} bytes", readsize);
-            log::info!("read data: {}", String::from_utf8_lossy(&readback));
-        },
-        Err(e) => {
-            log::info!("couldn't read data: {:?}", e);
-        }
-    }
 }

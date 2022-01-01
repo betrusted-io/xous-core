@@ -376,6 +376,19 @@ pub(crate) fn list_all(hw: &mut PddbOs, basis_cache: &mut BasisCache) {
     }
 }
 
+/* list of test cases:
+    - [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
+    - [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
+    - [done] in-place update consistency: general integrity then patch all keys with a new test pattern
+    - [done] extend update consistency: general integrity then patch all keys with a longer test pattern
+    - [done] key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
+    - [done] fast space exhaustion test: allocate and delete a bunch of stuff. trigger a fast-space regenerate.
+        note: for faster stress-testing, we dialed the FSCB_PAGES to 4 and the FASTSPACE_PAGES to 1.
+    - [done] basis search: create basis A, populate with general integrity. create basis B, add test entries.
+        hide basis B, confirm original A; mount basis B, confirm B overlay.
+*/
+
+#[allow(dead_code)]
 pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
     {
         const EXTRA_BASIS: &'static str = "Basis2";
@@ -530,4 +543,94 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         log::info!("CI done");
         Ok(())
     }
+}
+
+#[allow(dead_code)]
+pub(crate) fn manual_testcase(hw: &mut PddbOs) {
+    log::info!("Initializing disk...");
+    hw.pddb_format(true).unwrap();
+    log::info!("Done initializing disk");
+
+    // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
+    let mut basis_cache = BasisCache::new();
+
+    log::info!("Attempting to mount the PDDB");
+    if let Some(sys_basis) = hw.pddb_mount() {
+        log::info!("PDDB mount operation finished successfully");
+        basis_cache.basis_add(sys_basis);
+    } else {
+        log::info!("PDDB did not mount; did you remember to format the PDDB region?");
+    }
+    log::info!("size of vpage: {}", VPAGE_SIZE);
+
+    // add a "system settings" dictionary to the default basis
+    log::info!("adding 'system settings' dictionary");
+    basis_cache.dict_add(hw, "system settings", None).expect("couldn't add system settings dictionary");
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/Kosagi", "my_wpa_key_here".as_bytes(), None, None, None, false).expect("couldn't add a key");
+    let mut readback = [0u8; 15];
+    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/Kosagi", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "12345678".as_bytes(), None, None, None, false).expect("couldn't add a key");
+
+    // add a "big" key
+    let mut bigdata = [0u8; 5000];
+    for (i, d) in bigdata.iter_mut().enumerate() {
+        *d = i as u8;
+    }
+    basis_cache.key_update(hw, "system settings", "big_pool1", &bigdata, None, None, None, false).expect("couldn't add a key");
+
+    basis_cache.dict_add(hw, "test_dict_2", None).expect("couldn't add test dictionary 2");
+    basis_cache.key_update(hw, "test_dict_2", "test key in dict 2", "some data".as_bytes(), None, Some(128), None, false).expect("couldn't add a key to second dict");
+
+    basis_cache.key_update(hw, "system settings", "wifi/wpa_keys/e4200", "ABC".as_bytes(), Some(2), None, None, false).expect("couldn't update e4200 key");
+
+    log::info!("test readback of wifi/wpa_keys/e4200");
+    match basis_cache.key_read(hw, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
+    log::info!("Running `hw` test case");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pddb_os.test_reset();
+
+    manual_testcase(pddb_os);
+
+    log::info!("Re-mount the PDDB");
+    let mut basis_cache = BasisCache::new();
+    if let Some(sys_basis) = pddb_os.pddb_mount() {
+        log::info!("PDDB mount operation finished successfully");
+        basis_cache.basis_add(sys_basis);
+    } else {
+        log::info!("PDDB did not mount; did you remember to format the PDDB region?");
+    }
+    log::info!("test readback of wifi/wpa_keys/e4200");
+    let mut readback = [0u8; 16]; // this buffer is bigger than the data in the key, but that's alright...
+    match basis_cache.key_read(pddb_os, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pddb_os.dbg_dump(Some("manual".to_string()), None);
 }
