@@ -288,7 +288,7 @@ class KeyDescriptor:
                 self.ci_ok = True
             else:
                 self.ci_ok = False
-                logging.debug('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
+                logging.error('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
         else:
             # print('invalid key')
             pass
@@ -370,6 +370,7 @@ class BasisDicts:
             if self.num_keys > 0:
                 keys_found = 0
                 keys_tried = 1
+                prev_index = 128 # hack to optimize effort by only decrypting a new page when the key index resets
                 while (keys_found < self.num_keys) and keys_tried < 131071:
                     keyindex_start_vaddr = self.DICT_VSTRIDE * (index + 1) + (keys_tried * self.KV_STRIDE)
                     #if self.name == 'dict2' and keyindex_start_vaddr < (0x1fc2fa0 + 0xfe0):
@@ -388,9 +389,11 @@ class BasisDicts:
                         keys_tried += VPAGE_SIZE // self.KV_STRIDE
                         continue
                     try:
-                        cipher = AES_GCM_SIV(key, pp_data[:12])
-                        pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
                         key_index = 4 + keys_tried % (VPAGE_SIZE // self.KV_STRIDE) * self.KV_STRIDE
+                        if key_index < prev_index:
+                            cipher = AES_GCM_SIV(key, pp_data[:12])
+                            pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                        prev_index = key_index
                         #if self.name == 'dict2':
                         #    print('key_index {:x}/{}/{:x}/{:x}'.format(key_index, keys_tried, pp, (keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE))
                         #    print('{:x}'.format(v2p[(keyindex_start_vaddr // VPAGE_SIZE) * VPAGE_SIZE]))
