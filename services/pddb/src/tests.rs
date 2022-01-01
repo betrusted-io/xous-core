@@ -281,6 +281,14 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
         for dictname in evicted_dicts.iter() {
             let (keyname, keydata) = gen_key(dictname, keynum, key_lower_bound, key_upper_bound);
             // now we're ready to write it out
+            match basis_cache.key_attributes(hw, dictname, &keyname, None) {
+                Ok(ka) => {
+                    log::warn!("rng collision on keygen: {}, deleting key", keyname);
+                    basis_cache.key_remove(hw, dictname, &keyname, None, false)?;
+                }
+                _ => {
+                }
+            }
             if maybe_extra_reserved.is_none() {
                 // we do this slightly funky way instead of just passing Some(0) because we want to test the "None" path explicitly
                 basis_cache.key_update(hw, dictname, &keyname, &keydata, None,
@@ -400,18 +408,18 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         log::info!("Doing delete/add consistency with data extension");
         delete_add_dict_consistency(pddb_os, &mut basis_cache, None,
             None, None, None, None)?;
-        log::set_max_level(log::LevelFilter::Debug);
         log::info!("Saving `dachecke` to local host");
         pddb_os.dbg_dump(Some("dachecke".to_string()), None);
 
         log::info!("Doing patch test");
         patch_test(pddb_os, &mut basis_cache, None, None, true)?;
         pddb_os.dbg_dump(Some("patche".to_string()), None);
-        log::set_max_level(log::LevelFilter::Info);
 
+        log::set_max_level(log::LevelFilter::Debug);
         log::info!("Doing delete pattern test");
         delete_pattern(pddb_os, &mut basis_cache, None, None, None, None)?;
         pddb_os.dbg_dump(Some("patterne".to_string()), None);
+        log::set_max_level(log::LevelFilter::Info);
 
         // extended tests.
         // allocation space curtailed to force resource exhaustion faster.
@@ -519,7 +527,6 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         assert!(merge2_list.difference(&merge_list).count() == 0, "merged list is different from the original list after remount");
         list_all(pddb_os, &mut basis_cache);
 
-        log::set_max_level(log::LevelFilter::Debug);
         log::info!("CI done");
         Ok(())
     }

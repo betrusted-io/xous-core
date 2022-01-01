@@ -403,7 +403,7 @@ impl DictCacheEntry {
             }
             // the key exists, *and* there's sufficient space for the data
             if kcache.start < SMALL_POOL_END {
-                log::debug!("doing data update");
+                log::debug!("doing data update of {}", name);
                 kcache.age = kcache.age.saturating_add(1);
                 kcache.clean = false;
                 // it's a small key; note that we didn't consult the *size* of the key to determine its pool type:
@@ -534,7 +534,7 @@ impl DictCacheEntry {
             // key does not exist (or was previously erased) -- create one or replace the erased one.
             // try to fit the key in the small pool first
             if ((data.len() + offset) < SMALL_CAPACITY) && (alloc_hint.unwrap_or(0) < SMALL_CAPACITY) {
-                log::debug!("creating small key");
+                log::debug!("creating small key {}", name);
                 // handle the case that we're a brand new dictionary and no small keys have ever been stored before.
                 if self.small_pool.len() == 0 {
                     self.small_pool.push(KeySmallPool::new());

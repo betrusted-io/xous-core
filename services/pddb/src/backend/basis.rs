@@ -655,7 +655,7 @@ impl BasisCache {
             return Err(Error::new(ErrorKind::NotFound, "Requested basis not found, or PDDB not mounted."));
         }
         // make the reservation
-        log::info!("reserving {} pages - {}", pages_needed, reserved_pages);
+        log::debug!("reserving {} pages - {}", pages_needed, reserved_pages);
         if !hw.ensure_fast_space_alloc(pages_needed, &self.cache) {
             return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"));
         }

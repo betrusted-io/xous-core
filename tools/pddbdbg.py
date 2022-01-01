@@ -443,8 +443,12 @@ class BasisDicts:
             if namecheck[1] != self.name:
                 logging.warning(" Key/dict mismatch: {}/{}".format(key.name, self.name))
             keylen = int(namecheck[3][3:])
-            if keylen != key.len and keylen + 4 != key.len: # the second case is what happens with the length extension test, it's actually not an error
-                logging.warning(" Key named len vs disk len mismatch: {}/{}".format(keylen, key.len))
+            if keylen > 12:
+                if keylen != key.len and keylen + 4 != key.len: # the second case is what happens with the length extension test, it's actually not an error
+                    logging.warning(" Key named len vs disk len mismatch: {}/{}".format(keylen, key.len))
+            else:
+                if key.len != 17:
+                    logging.warning(" Key named len vs disk len mismatch: {}/{} (extension did not work correctly)".format(keylen, key.len))
             if key.ci_ok == False:
                 logging.warning(" CI failed on key {}:".format(name))
                 logging.warning(key.as_str('  '))

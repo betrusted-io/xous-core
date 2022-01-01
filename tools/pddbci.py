@@ -23,7 +23,7 @@ def main():
 
     pass_log = {}
     err_log = []
-    for seed in range(0, 201):
+    for seed in range(200, 401):
         err_log.append("Starting seed {}".format(seed))
         seed_env = os.environ
         seed_env["XOUS_SEED"] = str(seed)
@@ -34,7 +34,7 @@ def main():
         #        logging.info(line)
 
         start_time = time.time()
-        passing = True
+        passing = 'PASS'
         proc = subprocess.Popen(
             ['cargo', 'xtask', 'run'],
             stdout=subprocess.PIPE,
@@ -49,7 +49,7 @@ def main():
                 proc.kill()
                 if time.time() - start_time > 20:
                     logging.debug("timeout on generation")
-                    passing = False
+                    passing = 'FAIL TIMEOUT'
                 break
             if realtime_output:
                 if 'Seed' in realtime_output:
@@ -61,16 +61,18 @@ def main():
                     err_log.append(realtime_output)
                     logging.debug("ran out of space")
                     # passing = False # not a fail, because it's the test condition that's wrong, not the code
+                    passing = 'OOM'
                     proc.kill()
                 if "couldn't allocate memory" in realtime_output:
                     err_log.append(realtime_output)
                     logging.debug("ran out of space")
                     # passing = False # not a fail, because it's the test condition that's wrong, not the code
+                    passing = 'OOM'
                     proc.kill()
                 if 'Decryption auth error' in realtime_output:
                     err_log.append(realtime_output)
                     logging.debug("decryption auth error")
-                    passing = False
+                    passing = 'FAIL AUTH'
                     proc.kill()
 
         proc = subprocess.Popen(
@@ -84,7 +86,7 @@ def main():
             realtime_output = proc.stdout.readline()
             if (realtime_output == '' and proc.poll() is not None) or (time.time() - start_time > 45):
                 if time.time() - start_time > 45:
-                    passing = False
+                    passing = 'FAIL ANALYSIS TIMEOUT'
                     logging.debug("analysis timed out")
                 proc.kill()
                 break
@@ -93,19 +95,15 @@ def main():
                     logging.info(realtime_output.strip())
                     err_log.append(realtime_output)
                     logging.debug("output contained errors")
-                    passing = False
+                    passing = 'FAIL CI ERRORS'
                 if 'WARNING' in realtime_output:
                     logging.info(realtime_output.strip())
                     err_log.append(realtime_output)
                     logging.debug("output contained warnings")
-                    passing = False
+                    passing = 'FAIL CI WARNINGS'
 
-        if passing:
-            logging.info("Seed {} PASS".format(seed))
-            pass_log[seed] = 'PASS'
-        else:
-            logging.info("Seed {} FAIL".format(seed))
-            pass_log[seed] = 'FAIL'
+        logging.info("Seed {} {}".format(seed, passing))
+        pass_log[seed] = passing
 
     for line in err_log:
         logging.info(line)
