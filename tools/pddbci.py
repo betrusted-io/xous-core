@@ -23,7 +23,7 @@ def main():
 
     pass_log = {}
     err_log = []
-    for seed in range(200, 401):
+    for seed in range(0, 501):
         err_log.append("Starting seed {}".format(seed))
         seed_env = os.environ
         seed_env["XOUS_SEED"] = str(seed)
@@ -33,7 +33,6 @@ def main():
         #    if 'Seed' in line:
         #        logging.info(line)
 
-        start_time = time.time()
         passing = 'PASS'
         proc = subprocess.Popen(
             ['cargo', 'xtask', 'run'],
@@ -43,6 +42,7 @@ def main():
             encoding='utf-8',
             errors='replace'
         )
+        start_time = time.time()
         while True:
             realtime_output = proc.stdout.readline()
             if (realtime_output == '' and proc.poll() is not None) or (time.time() - start_time > 20):
@@ -69,6 +69,12 @@ def main():
                     # passing = False # not a fail, because it's the test condition that's wrong, not the code
                     passing = 'OOM'
                     proc.kill()
+                if "No free space" in realtime_output:
+                    err_log.append(realtime_output)
+                    logging.debug("ran out of space")
+                    # passing = False # not a fail, because it's the test condition that's wrong, not the code
+                    passing = 'OOM'
+                    proc.kill()
                 if 'Decryption auth error' in realtime_output:
                     err_log.append(realtime_output)
                     logging.debug("decryption auth error")
@@ -82,6 +88,7 @@ def main():
             encoding='utf-8',
             errors='replace'
         )
+        start_time = time.time()
         while True:
             realtime_output = proc.stdout.readline()
             if (realtime_output == '' and proc.poll() is not None) or (time.time() - start_time > 45):
@@ -105,9 +112,11 @@ def main():
         logging.info("Seed {} {}".format(seed, passing))
         pass_log[seed] = passing
 
-    for line in err_log:
-        logging.info(line)
+        for line in err_log:
+            logging.info(line)
+        err_log = []
 
+    # summary report
     for items in pass_log.items():
         logging.info(items)
 

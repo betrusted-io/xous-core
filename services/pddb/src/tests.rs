@@ -415,11 +415,9 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         patch_test(pddb_os, &mut basis_cache, None, None, true)?;
         pddb_os.dbg_dump(Some("patche".to_string()), None);
 
-        log::set_max_level(log::LevelFilter::Debug);
         log::info!("Doing delete pattern test");
         delete_pattern(pddb_os, &mut basis_cache, None, None, None, None)?;
         pddb_os.dbg_dump(Some("patterne".to_string()), None);
-        log::set_max_level(log::LevelFilter::Info);
 
         // extended tests.
         // allocation space curtailed to force resource exhaustion faster.
@@ -470,11 +468,13 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
             EXTRA_BASIS, EXTRA_BASIS_PW, BasisRetentionPolicy::Persist) {
             basis_cache.basis_add(basis2);
         }
+        log::set_max_level(log::LevelFilter::Debug);
         log::info!("Adding keys to Basis2");
         delete_add_dict_consistency(pddb_os, &mut basis_cache, Some(3),
             Some(15), None, None, Some(EXTRA_BASIS))?;
         log::info!("Saving `basis2` to local host");
         pddb_os.dbg_dump(Some("basis2".to_string()), Some(&export));
+        log::set_max_level(log::LevelFilter::Info);
 
         let mut merge_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, None).iter() {

@@ -845,6 +845,8 @@ impl PddbOs {
         for pp in self.fspace_cache.iter() {
             if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty) && (pp.journal() < PHYS_PAGE_JOURNAL_MAX) {
                 free_count += 1;
+            } else {
+                log::trace!("fastpace other entry: {:?}", pp.space_state());
             }
             if free_count >= count {
                 return true
@@ -948,14 +950,15 @@ impl PddbOs {
     /// and do a deep scan for space if the required amount is not available.
     pub fn ensure_fast_space_alloc(&mut self, pages: usize, cache: &Vec::<BasisCacheEntry>) -> bool {
         const BUFFER: usize = 1; // a bit of slop in the trigger point
-        log::trace!("alloc fast_space_len: {}, log_len {}", self.fast_space_len(), self.fspace_log_len);
+        let has_pages = self.fast_space_has_pages(pages + BUFFER);
+        log::trace!("alloc fast_space_len: {}, log_len {}, has {} pages: {}", self.fast_space_len(), self.fspace_log_len, pages + BUFFER, has_pages);
         // make sure we have fast space pages...
-        if (self.fast_space_len() > pages + BUFFER)
+        if has_pages
         // ..and make sure we have space for fast space log entries
         && (self.fspace_log_len < (FSCB_PAGES - FASTSPACE_PAGES - 1) * PAGE_SIZE / aes::BLOCK_SIZE) {
             true
         } else {
-            if self.fast_space_len() <= pages + BUFFER {
+            if !has_pages {
                 log::warn!("FastSpace alloc forced by lack of free space");
                 // if we're really out of space, do an expensive full-space sweep
                 if let Some(used_pages) = self.pddb_generate_used_map(cache) {
