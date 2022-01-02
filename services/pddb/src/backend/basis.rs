@@ -866,7 +866,7 @@ impl BasisCache {
         let aad = basis_root.aad(hw.dna());
         let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap()).unwrap();
         assert!(pp.valid(), "v2p returned an invalid page");
-        let journal_bytes = (0 as u32).to_le_bytes();
+        let journal_bytes = (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes();
         let slice_iter =
             journal_bytes.iter() // journal rev
             .chain(basis_root.as_ref().iter());
@@ -1405,7 +1405,11 @@ impl BasisCacheEntry {
                     } else {
                         log::trace!("existing data invalid, creating a new page");
                         // the existing data was invalid (this happens e.g. on the first time a dict is created). Just overwrite the whole page.
-                        vec![0u8; VPAGE_SIZE + size_of::<JournalType>()]
+                        let mut d = vec![0u8; VPAGE_SIZE + size_of::<JournalType>()];
+                        for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(d[..size_of::<JournalType>()].iter_mut()) {
+                            *dst = src;
+                        }
+                        d
                     };
                     for (index, stride) in page[size_of::<JournalType>()..].chunks_mut(DK_STRIDE).enumerate() {
                         if let Some(elem) = dk_vpage.elements[index] {
@@ -1469,6 +1473,9 @@ impl BasisCacheEntry {
                 journal_bytes.iter() // journal rev
                 .chain(basis_root.as_ref().iter());
             let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+            for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(block[..size_of::<JournalType>()].iter_mut()) {
+                *dst = src;
+            }
             for (&src, dst) in slice_iter.zip(block.iter_mut()) {
                 *dst = src;
             }
@@ -1567,160 +1574,3 @@ impl Default for BasisRootName {
         BasisRootName([0; BASIS_NAME_LEN])
     }
 }
-
-/* this is retired, but kept around because it's a cool idea that could be useful later.
-   the code below is how the encryptor iterator would be called, followed by the iterator itself.
-   The idea is to create a thing that can chain iterators and generate encrypted blocks. Could
-   be useful for e.g. encrypting long keys and stuff...?
-
-   The code was retired only because we decided to simplify the BasisRoot and it always fits in
-   one page, so all this iterator is just baroque and frankly kind of pointless in that context.
-
-        if let Some(syskey) = self.system_basis_key {
-            let key = Key::from_slice(&syskey);
-            let cipher = Aes256GcmSiv::new(key);
-            let basis_encryptor = BasisEncryptor::new(
-                &basis_root,
-                self.dna,
-                cipher,
-                0,
-                Rc::clone(&self.entropy),
-            );
-            for (&k, &v) in basis_v2p_map.iter() {
-                log::info!("basis_v2p_map retrieved va: {:x?} pp: {:x?}", k, v);
-            }
-            for (vpage_no, ppage_data) in basis_encryptor.into_iter().enumerate() {
-                let vaddr = VirtAddr::new( ((vpage_no + 1) * VPAGE_SIZE) as u64 ).unwrap();
-                match basis_v2p_map.get(&vaddr) {
-                    Some(pp) => {
-                        self.patch_data(&ppage_data, pp.page_number() * PAGE_SIZE as u32);
-                    }
-                    None => {
-                        log::error!("Previously allocated page was not found in our map!");
-                        panic!("Inconsistent internal state");
-                    }
-                }
-            }
-        } else {
-            log::error!("System key was not found, but it should be present!");
-            panic!("Inconsistent internal state");
-        }
-/// Takes in the constituents of the Basis area, and encrypts them into
-/// PAGE_SIZE blocks. Can be called as an iterator, or as a single-shot
-/// for a given offset. Requires a cipher that is pre-keyed with the encryption
-/// key, and the DNA code from the FPGA as a `u64`. This function generates
-/// the AAD based off of the DNA code + version of PDDB + Basis Name.
-///
-/// The iteration step is in VPAGE units within the virtual space, but
-/// it always returns a full PAGE_SIZE block. This object will handle
-/// padding of the very last block so the encrypted data fills up a full
-/// PAGE_SIZE; request for blocks beyond the length of the Basis pre-alloc
-/// region will return None.
-///
-/// This routine is a bit heavyweight because we were originally going to
-/// attach the dictionary data to the Basis Root but have since decided against that.
-#[repr(C)]
-pub(crate) struct BasisEncryptor<'a> {
-    root: &'a BasisRoot,
-    cipher: Aes256GcmSiv,
-    cur_vpage: usize,
-    aad: Vec::<u8>,
-    journal_rev: JournalType,
-    entropy: Rc<RefCell<TrngPool>>,
-}
-impl<'a> BasisEncryptor<'a> {
-    pub(crate) fn new(root: &'a BasisRoot, dna: u64, cipher: Aes256GcmSiv, rev: JournalType, entropy: Rc<RefCell<TrngPool>>) -> Self {
-        let mut aad = Vec::<u8>::new();
-        aad.extend_from_slice(&root.name.0);
-        aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
-        aad.extend_from_slice(&dna.to_le_bytes());
-
-        log::info!("aad: {:?}", aad);
-
-        BasisEncryptor {
-            root,
-            cur_vpage: 0,
-            aad,
-            cipher,
-            journal_rev: rev,
-            entropy,
-        }
-    }
-}
-
-pub(crate) struct BasisEncryptorIter<'a> {
-    basis_data: BasisEncryptor<'a>,
-    // the virtual address of the currently requested iteration
-    vaddr: usize,
-}
-impl<'a> IntoIterator for BasisEncryptor<'a> {
-    type Item=[u8; PAGE_SIZE];
-    type IntoIter=BasisEncryptorIter<'a>;
-    fn into_iter(self) -> BasisEncryptorIter<'a> {
-        BasisEncryptorIter {
-            basis_data: self,
-            vaddr: 0,
-        }
-    }
-}
-impl<'a> Iterator for BasisEncryptorIter<'a> {
-    type Item = [u8; PAGE_SIZE];
-
-    fn next<'s>(&'s mut self) -> Option<Self::Item> {
-        if self.vaddr < VPAGE_SIZE { // legacy from when we tried to have a multi-page basis area
-            let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
-            let block_iter = block.iter_mut();
-
-            let journal_bytes = self.basis_data.journal_rev.to_le_bytes();
-            let slice_iter =
-            journal_bytes.iter() // journal rev
-                .chain(self.basis_data.root.as_ref().iter()
-            ).skip(self.vaddr);
-
-            // note that in the case that we've already serialized the journal, basis, and dictionary, this will produce nothing
-            let mut written = 0;
-            for(&src, dst) in slice_iter.zip(block_iter) {
-                *dst = src;
-                written += 1;
-            }
-            // which allows this to correctly pad out the rest of the prealloc region with 0's.
-            while written < block.len() {
-                block[written] = 0;
-                written += 1;
-            }
-
-            let nonce_array = self.basis_data.entropy.borrow_mut().get_nonce();
-            let nonce = Nonce::from_slice(&nonce_array);
-            let ciphertext = self.basis_data.cipher.encrypt(
-                &nonce,
-                Payload {
-                    aad: &self.basis_data.aad,
-                    msg: &block,
-                }
-            ).unwrap();
-            self.vaddr += VPAGE_SIZE;
-            //log::info!("nonce: {} ct: {} total: {}", nonce_array.len(), ciphertext.deref().len(), nonce_array.len() + ciphertext.deref().len());
-            Some([&nonce_array, ciphertext.deref()].concat().try_into().unwrap())
-        } else {
-            None
-        }
-    }
-}
-*/
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    // turns out these test are invalid because the structures always end up being aligned
-    fn test_dict_size() {
-        print!("dict size: {}", core::mem::size_of::<Dictionary>());
-        assert!(core::mem::size_of::<Dictionary>() == 127, "Dictionary is not an even multiple of the VPAGE size");
-    }
-    #[test]
-    fn test_key_size() {
-        print!("key size: {}", core::mem::size_of::<KeyDescriptor>());
-        assert!(core::mem::size_of::<KeyDescriptor>() == 127, "Key descriptor is not an even multiple of the VPAGE size");
-    }
-}
-*/

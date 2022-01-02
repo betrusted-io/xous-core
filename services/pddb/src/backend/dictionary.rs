@@ -459,7 +459,11 @@ impl DictCacheEntry {
                                 // in response to this, we allocate a fresh page of 0's.
                                 log::debug!("Reserved and uninitialized page encountered updating large block: {} {:x}..{}->{}; update @{}..{}",
                                     name, kcache.start, kcache.len, kcache.reserved, offset, data.len());
-                                vec![0u8; VPAGE_SIZE + size_of::<JournalType>()]
+                                let mut d = vec![0u8; VPAGE_SIZE + size_of::<JournalType>()];
+                                for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(d[..size_of::<JournalType>()].iter_mut()) {
+                                    *dst = src;
+                                }
+                                d
                             }
                         };
                         if offset > 0 {
@@ -482,6 +486,9 @@ impl DictCacheEntry {
                         if data.len() - written >= VPAGE_SIZE {
                             // overwrite whole pages without decryption
                             let mut block = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
+                            for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(block[..size_of::<JournalType>()].iter_mut()) {
+                                *dst = src;
+                            }
                             for (&src, dst) in data[written..].iter().zip(block[size_of::<JournalType>()..].iter_mut()) {
                                 *dst = src;
                                 written += 1;
@@ -498,6 +505,9 @@ impl DictCacheEntry {
                             } else {
                                 // page didn't exist, initialize it with 0's and merge the tail end.
                                 let mut pt_data = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
+                                for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(pt_data[..size_of::<JournalType>()].iter_mut()) {
+                                    *dst = src;
+                                }
                                 for (&src, dst) in data[written..].iter().zip(pt_data[size_of::<JournalType>()..].iter_mut()) {
                                     *dst = src;
                                     written += 1;
@@ -799,6 +809,9 @@ impl DictCacheEntry {
                 //   5. sync the page tables
                 // This implementation just skips to step 3.
                 let mut page = [0u8; VPAGE_SIZE + size_of::<JournalType>()];
+                for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(page[..size_of::<JournalType>()].iter_mut()) {
+                    *dst = src;
+                }
                 let mut pool_offset = 0;
                 // visit the entries in arbitrary order, but back them in optimally tightly packed
                 for key_name in &entry.contents {

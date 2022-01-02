@@ -208,6 +208,12 @@ impl PddbOs {
     pub(crate) fn trng_slice(&mut self, slice: &mut [u8]) {
         self.entropy.borrow_mut().get_slice(slice);
     }
+    pub(crate) fn trng_u32(&mut self) -> u32 {
+        self.entropy.borrow_mut().get_u32()
+    }
+    pub(crate) fn trng_u8(&mut self) -> u8 {
+        self.entropy.borrow_mut().get_u8()
+    }
     pub(crate) fn timestamp_now(&self) -> u64 {self.tt.elapsed_ms()}
 
     /// patches data at an offset starting from the data physical base address, which corresponds
@@ -625,6 +631,7 @@ impl PddbOs {
         let mut page_pool = Vec::<PhysPage>::new();
         for page in free_pool {
             let mut pp = PhysPage(0);
+            pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE);
             pp.set_page_number(page as PhysAddr);
             pp.set_space_state(SpaceState::Free);
             pp.set_valid(true);
@@ -971,6 +978,9 @@ impl PddbOs {
                         let mut fast_space = FastSpace {
                             free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
                         };
+                        for pp in fast_space.free_pool.iter_mut() {
+                            pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
+                        }
                         for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
                             *dst = src;
                         }
@@ -997,6 +1007,9 @@ impl PddbOs {
                 let mut fast_space = FastSpace {
                     free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
                 };
+                for pp in fast_space.free_pool.iter_mut() {
+                    pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
+                }
                 // regenerate from the existing fast space cache
                 for (&src, dst) in self.fspace_cache.iter().zip(fast_space.free_pool.iter_mut()) {
                     *dst = src;
@@ -1264,7 +1277,7 @@ impl PddbOs {
         let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
             .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
         assert!(pp.valid(), "v2p returned an invalid page");
-        let journal_bytes = (0 as u32).to_le_bytes();
+        let journal_bytes = (self.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes();
         let slice_iter =
             journal_bytes.iter() // journal rev
             .chain(basis_root.as_ref().iter());
