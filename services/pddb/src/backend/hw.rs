@@ -1363,6 +1363,7 @@ impl PddbOs {
         log::info!("creating salt");
         // uses an HMAC keyed with the salt array to generate a compressed version of
         // the basis name and plaintext password, which forms the Salt that is fed into bcrypt
+        // our salt is probably way too big but what else are we going to use all that page's data for?
         let scd = self.static_crypto_data_get();
         let mut salt = [0u8; 16];
         let mut mac = Hmac::<Sha256>::new_varkey(&scd.salt_base).expect("Couldn't build HMAC");
