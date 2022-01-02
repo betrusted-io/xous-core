@@ -15,6 +15,19 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_00_01;
 #[allow(dead_code)]
 pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
+/// range for the starting point of a journal number, picked from a random seed
+/// the goal is to reduce info leakage about the age of structures relative to each other
+/// in various basis in case of partial disclosure of passwords (especially the system password)
+#[allow(dead_code)]
+pub(crate) const JOURNAL_RAND_RANGE: u32 = 1_000_000;
+/// fixed offset for system journal entries. If we get "unlucky" and a new system record has
+/// a low journal number, and then a basis entry has a lower journal number, we could conclude
+/// that this basis data is younger (because journal numbers start at a value and count up).
+/// By introducing a fixed offset on the system basis records, a lower offset on a basis entry
+/// is no longer such a surprising outcome (I hope...).
+#[allow(dead_code)]
+pub(crate) const JOURNAL_SYS_OFFSET: u32 = 100_000;
+
 /// A number between (0, 1] that defines how many of the "truly free" pages we
 /// should put into the FSCB. A value of 0.0 is not allowed as that leaves no free pages.
 /// A value of 1.0 would allow an attacker to deduce the real size of data because all

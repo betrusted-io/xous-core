@@ -5,6 +5,7 @@ use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
 use aes::{Aes256, Block};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
+use hmac::NewMac;
 use root_keys::api::AesRootkeyType;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
@@ -1341,7 +1342,8 @@ impl PddbOs {
     /// Derives a 256-bit AES encryption key for a basis given a basis name and its password.
     /// You will also need to derive the AAD for the basis using the basis_name.
     pub(crate) fn basis_derive_key(&self, basis_name: &str, password: &str) -> [u8; AES_KEYSIZE] {
-        use sha2::{FallbackStrategy, Sha512, Sha512Trunc256};
+        use sha2::{FallbackStrategy, Sha256, Sha512Trunc256};
+        use hmac::{Hmac, Mac};
         use digest::Digest;
         use backend::bcrypt::*;
 
@@ -1358,41 +1360,16 @@ impl PddbOs {
         }
         plaintext_pw[72] = 0; // always null terminate
 
-        log::info!("making hasher");
-        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly);
-        hasher.update(&bname_copy);
-        hasher.update(&plaintext_pw);
-
-        /*
-          v1 salt: takes Sha512 hash of {basis name, plaintext password}, and uses the bits of the hash
-          to sequence through a lookup table of salt values. It was noted that this process actually could
-          reduce entropy, and it's complicated and hard to analyze without necessarily adding any security.
-
-          v2 salt: takes Sha512 hash of {basis name, plaintext password, salt region}, and uses the first
-          16 bytes as the salt to the bcrypt algorithm. This is much "simpler" and hopefully easier to analyze
-          for problems. We use the full salt region only because we already have it, we could, of course,
-          go to a shorter string if for some reason that was a better idea.
-         */
-        #[cfg(feature="salt_v1")]
-        let digest = hasher.finalize();
-        // 2. now derive the actual salt by using indices from the digest to progressively
-        // index into the salt table.
         log::info!("creating salt");
+        // uses an HMAC keyed with the salt array to generate a compressed version of
+        // the basis name and plaintext password, which forms the Salt that is fed into bcrypt
         let scd = self.static_crypto_data_get();
         let mut salt = [0u8; 16];
-        log::info!("got scd");
-        #[cfg(feature="salt_v1")]
-        for (index_bytes, dst) in digest.chunks(2).into_iter().zip(salt.iter_mut()) {
-            let index = u16::from_le_bytes(index_bytes.try_into().unwrap()) as usize % scd.salt_base.len();
-            *dst = scd.salt_base[index];
-            log::info!("index: {}, dst: {}", index as usize % scd.salt_base.len(), *dst);
-        }
-        #[cfg(not(feature="salt_v1"))]
-        hasher.update(&scd.salt_base);
-        #[cfg(not(feature="salt_v1"))]
-        let digest = hasher.finalize();
-        #[cfg(not(feature="salt_v1"))]
-        for (&src, dst) in digest.iter().zip(salt.iter_mut()) {
+        let mut mac = Hmac::<Sha256>::new_varkey(&scd.salt_base).expect("Couldn't build HMAC");
+        mac.update(&bname_copy);
+        mac.update(&plaintext_pw);
+        let result = mac.finalize().into_bytes();
+        for (&src, dst) in result.iter().zip(salt.iter_mut()) {
             *dst = src;
         }
         log::info!("derived salt: {:x?}", salt);
