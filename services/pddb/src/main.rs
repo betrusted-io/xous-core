@@ -422,10 +422,6 @@ fn xmain() -> ! {
         hw_testcase(&mut pddb_os);
     }
 
-    // register a suspend/resume listener
-    let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
-    let _susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
-
     // our very own password modal. Password modals are precious and privately owned, to avoid
     // other processes from crafting them.
     let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
@@ -473,11 +469,6 @@ fn xmain() -> ! {
             Some(Opcode::WriteKeyFlush) => {
                 // placeholder
             }
-            Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, _token, _, _, _, {
-                /* pddb.suspend();
-                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                pddb.resume(); */
-            }),
             Some(Opcode::Quit) => {
                 log::warn!("quitting the PDDB server");
                 send_message(

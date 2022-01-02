@@ -63,8 +63,6 @@ pub(crate) enum Opcode {
     WriteKeyMem,
     WriteKeyFlush,
 
-    /// Suspend/resume callback
-    SuspendResume,
     /// quit the server
     Quit,
 }
