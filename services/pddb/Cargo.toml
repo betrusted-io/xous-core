@@ -59,4 +59,6 @@ mbbb = []
 deterministic = []
 # this flag adds CI tests to the build
 ci = []
+# selects the salt strategy; defaults to salt_v2 if salt_v1 is not present
+salt_v1 = []
 default = ["mbbb"]
