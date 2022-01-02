@@ -23,6 +23,7 @@ def main():
 
     pass_log = {}
     err_log = []
+    timeout = 240 # a bit longer to allow for a compilation to happen
     for seed in range(0, 501):
         err_log.append("Starting seed {}".format(seed))
         seed_env = os.environ
@@ -35,7 +36,7 @@ def main():
 
         passing = 'PASS'
         proc = subprocess.Popen(
-            ['cargo', 'xtask', 'run'],
+            ['cargo', 'xtask', 'pddb-ci'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             #shell=True,
@@ -47,7 +48,7 @@ def main():
             realtime_output = proc.stdout.readline()
             if (realtime_output == '' and proc.poll() is not None) or (time.time() - start_time > 20):
                 proc.kill()
-                if time.time() - start_time > 20:
+                if time.time() - start_time > timeout:
                     logging.debug("timeout on generation")
                     passing = 'FAIL TIMEOUT'
                 break
@@ -80,6 +81,8 @@ def main():
                     logging.debug("decryption auth error")
                     passing = 'FAIL AUTH'
                     proc.kill()
+
+        timeout = 20 # reset the timeout after the first run to something shorter, now that any potential compilation step is done
 
         proc = subprocess.Popen(
             ['python', './tools/pddbdbg.py', '--name', args.name],
