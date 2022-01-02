@@ -23,7 +23,7 @@ pub struct MemoryRegion {
     name: XousArgumentCode,
 
     /// Unused
-    padding: u32,
+    _padding: u32,
 }
 
 #[derive(Default)]
@@ -56,7 +56,7 @@ impl MemoryRegion {
             start,
             length,
             name,
-            padding: 0,
+            _padding: 0,
         }
     }
 

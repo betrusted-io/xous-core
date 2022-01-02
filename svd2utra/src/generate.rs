@@ -36,7 +36,7 @@ pub struct Interrupt {
 pub struct Peripheral {
     name: String,
     pub base: usize,
-    size: usize,
+    _size: usize,
     interrupt: Vec<Interrupt>,
     registers: Vec<Register>,
 }
@@ -308,7 +308,7 @@ fn generate_peripheral<T: BufRead>(reader: &mut Reader<T>) -> Result<Peripheral,
     Ok(Peripheral {
         name: name.ok_or(ParseError::MissingValue)?,
         base: base.ok_or(ParseError::MissingValue)?,
-        size: size.ok_or(ParseError::MissingValue)?,
+        _size: size.ok_or(ParseError::MissingValue)?,
         interrupt: interrupts,
         registers,
     })

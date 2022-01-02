@@ -1131,11 +1131,9 @@ impl BasisCacheEntry {
 
             // allocate a copy of the key list, to avoid interior mutability problems with the next remove step
             let mut key_list = Vec::<String>::new();
-            let mut key_sanity_check = 0;
             for (key, entry) in dcache.keys.iter() {
                 if entry.flags.valid() {
                     key_list.push(key.to_string());
-                    key_sanity_check += 1;
                 }
             }
             for key in key_list {

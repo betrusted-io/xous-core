@@ -78,8 +78,8 @@ struct Connection {
     pub sid: xous::SID,
     pub current_conns: u32, // number of unauthenticated (inherentely trusted) connections
     pub max_conns: Option<u32>, // if None, unlimited connections allowed
-    pub allow_authenticate: bool,
-    pub auth_conns: u32,         // number of authenticated connections
+    pub _allow_authenticate: bool,
+    pub _auth_conns: u32,         // number of authenticated connections
     pub token: Option<[u32; 4]>, // a random number that must be presented to allow for disconnection for single-connection servers
 }
 #[derive(Debug)]
@@ -114,8 +114,8 @@ impl CheckedHashMap {
                 sid,
                 current_conns: 0,
                 max_conns,
-                allow_authenticate: false, // for now, we don't support authenticated connections
-                auth_conns: 0,
+                _allow_authenticate: false, // for now, we don't support authenticated connections
+                _auth_conns: 0,
                 token,
             },
         );
