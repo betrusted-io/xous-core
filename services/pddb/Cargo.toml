@@ -59,4 +59,4 @@ mbbb = []
 deterministic = []
 # this flag adds CI tests to the build
 ci = []
-default = ["mbbb", "deterministic", "ci"]
+default = ["mbbb"]

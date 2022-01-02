@@ -410,6 +410,8 @@ fn xmain() -> ! {
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+
+    // run the CI tests if the option has been selected
     #[cfg(all(
         not(any(target_os = "none", target_os = "xous")),
         feature = "ci"

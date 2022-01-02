@@ -887,6 +887,7 @@ impl BasisCache {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn basis_list(&self) -> Vec<String> {
         let mut ret = Vec::new();
         for bcache in &self.cache {
@@ -913,6 +914,7 @@ impl BasisCache {
     /// note: you can "delete" a basis simply by forgetting its password, but this is more thorough.
     /// there might also need to be a variant to make which is a "change my password" function, but that is actually
     /// surprisingly hard.
+    #[allow(dead_code)]
     pub(crate) fn basis_delete(&mut self, hw: &mut PddbOs, mut basis: BasisCacheEntry) {
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
         for page in basis.v2p_map.values_mut() {

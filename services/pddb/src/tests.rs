@@ -2,8 +2,8 @@ use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use crate::*;
 use core::sync::atomic::{AtomicU64, Ordering};
-use std::collections::BTreeSet;
-use std::io::{Result, Error, ErrorKind};
+use std::collections::{BTreeSet, HashSet};
+use std::io::Result;
 
 const UPPER_BOUND: usize = 9000;
 const LOWER_BOUND: usize = 12; // needs to be big enough to compute murmur3 hash + hold checksum
@@ -282,7 +282,7 @@ pub(crate) fn delete_pattern(hw: &mut PddbOs, basis_cache: &mut BasisCache,
             let (keyname, keydata) = gen_key(dictname, keynum, key_lower_bound, key_upper_bound);
             // now we're ready to write it out
             match basis_cache.key_attributes(hw, dictname, &keyname, None) {
-                Ok(ka) => {
+                Ok(_ka) => {
                     log::warn!("rng collision on keygen: {}, deleting key", keyname);
                     basis_cache.key_remove(hw, dictname, &keyname, None, false)?;
                 }
