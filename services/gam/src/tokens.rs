@@ -12,14 +12,13 @@ use xous_ipc::String;
 */
 
 // if you add more UxContexts, and you want them authorized by the GAM, add their names here.
-const TOKEN_SLOTS: usize = 10;
+const TOKEN_SLOTS: usize = 9;
 const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = [
     "shellchat",
     "main menu",
     "status",
     "emoji menu",
     "rootkeys modal",
-    "rtc modal",
     "rootkeys menu",
     "test modal",
     "pddb modal",
@@ -48,6 +47,16 @@ impl<'a> TokenManager {
         for t in self.tokens.iter() {
             if t.is_none() {
                 allow = false
+            }
+        }
+        // throw a bone to the dev who has to debug this error. This typically only triggers after a major
+        // refactor and some UX element was removed and we forgot to update it in this table here.
+        if !allow {
+            log::info!("Occupied token slots:");
+            for t in self.tokens.iter() {
+                if let Some(s) = t {
+                    log::info!("{}", s.name);
+                }
             }
         }
         allow
