@@ -5,6 +5,7 @@ use xous_ipc::String;
 use codec::*;
 use xous::MessageEnvelope;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Audio {
     codec: codec::Codec,

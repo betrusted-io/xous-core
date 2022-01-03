@@ -46,7 +46,7 @@ pub(crate) fn create_basis_testcase(hw: &mut PddbOs, basis_cache: &mut BasisCach
     maybe_extra_reserved: Option<usize>,
 ) -> Result<()> {
 
-    hw.pddb_format(false).unwrap();
+    hw.pddb_format(false, None).unwrap();
     let sys_basis = hw.pddb_mount().expect("couldn't mount system basis");
         basis_cache.basis_add(sys_basis);
 

@@ -384,6 +384,8 @@ use std::rc::Rc;
 
 use std::thread;
 
+use locales::t;
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct BasisRequestPassword {
     db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>,
@@ -410,6 +412,8 @@ fn xmain() -> ! {
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+    // storage for the basis cache
+    let mut basis_cache = BasisCache::new();
 
     // run the CI tests if the option has been selected
     #[cfg(all(
@@ -444,6 +448,58 @@ fn xmain() -> ! {
         buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
         log::info!("Got password: {:?}", ret.plaintext_pw);
+    }
+    if pddb_os.rootkeys_initialized() {
+        log::info!("Attempting to mount the PDDB");
+        if let Some(sys_basis) = pddb_os.pddb_mount() {
+            log::info!("PDDB mount operation finished successfully");
+            basis_cache.basis_add(sys_basis);
+        } else {
+            log::debug!("PDDB did not mount; requesting format");
+            modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
+            modals.add_list_item(t!("pddb.cancel", xous::LANG)).expect("couldn't build radio item list");
+            let do_format: bool;
+            match modals.get_radiobutton(t!("pddb.requestformat", xous::LANG)) {
+                Ok(response) => {
+                    if response.as_str() == t!("pddb.okay", xous::LANG) {
+                        do_format = true;
+                    } else if response.as_str() == t!("pddb.cancel", xous::LANG) {
+                        log::info!("PDDB format aborted by user");
+                        do_format = false;
+                    } else {
+                        panic!("Got unexpected return from radiobutton");
+                    }
+                }
+                _ => panic!("get_radiobutton failed"),
+            }
+            if do_format {
+                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                let fast: bool;
+                match modals.get_radiobutton(t!("pddb.devbypass", xous::LANG)) {
+                    Ok(response) => {
+                        if response.as_str() == t!("pddb.yes", xous::LANG) {
+                            fast = true;
+                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                            fast = false;
+                        } else {
+                            panic!("Got unexpected return from radiobutton");
+                        }
+                    }
+                    _ => panic!("get_radiobutton failed"),
+                }
+                pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
+                if let Some(sys_basis) = pddb_os.pddb_mount() {
+                    log::info!("PDDB mount operation finished successfully");
+                    basis_cache.basis_add(sys_basis);
+                } else {
+                    log::error!("Despite formatting, no PDDB was found!");
+                    let mut err = String::from(t!("pddb.internalerror", xous::LANG));
+                    err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
+                    modals.show_notification(err.as_str()).expect("notification failed");
+                }
+            }
+        }
     }
     loop {
         let msg = xous::receive_message(pddb_sid).unwrap();
@@ -496,7 +552,7 @@ fn xmain() -> ! {
 #[allow(dead_code)]
 pub(crate) fn manual_testcase(hw: &mut PddbOs) {
     log::info!("Initializing disk...");
-    hw.pddb_format(true).unwrap();
+    hw.pddb_format(true, None).unwrap();
     log::info!("Done initializing disk");
 
     // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest

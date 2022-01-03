@@ -29,7 +29,6 @@ llio = {path="../llio"}
 
 # passwords
 sha2 = {path = "../engine-sha512"}
-hmac = "0.9.0"
 digest = "0.9"
 
 # bcrypt

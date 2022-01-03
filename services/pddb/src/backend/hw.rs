@@ -5,7 +5,6 @@ use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
 use aes::{Aes256, Block};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
-use hmac::NewMac;
 use root_keys::api::AesRootkeyType;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
@@ -183,6 +182,7 @@ impl PddbOs {
         }
         self.pddb_mr.dump_keys(&export, &name);
     }
+    #[allow(dead_code)]
     #[cfg(any(target_os = "none", target_os = "xous"))]
     pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
@@ -215,7 +215,10 @@ impl PddbOs {
         self.entropy.borrow_mut().get_u8()
     }
     pub(crate) fn timestamp_now(&self) -> u64 {self.tt.elapsed_ms()}
-
+    /// checks if the root keys are initialized, which is a prerequisite to formatting and mounting
+    pub(crate) fn rootkeys_initialized(&self) -> bool {
+        self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
+    }
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
     pub(crate) fn patch_data(&self, data: &[u8], offset: u32) {
@@ -1131,7 +1134,7 @@ impl PddbOs {
     /// in the PDDB an replace it with a brand-spanking new, blank PDDB.
     /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a reference
     /// to the Spinor object allocated to the PDDB implementation for this operation.
-    pub(crate) fn pddb_format(&mut self, fast: bool) -> Result<()> {
+    pub(crate) fn pddb_format(&mut self, fast: bool, progress: Option<&modals::Modals>) -> Result<()> {
         if !self.rootkeys.is_initialized().unwrap() {
             return Err(Error::new(ErrorKind::Unsupported, "Root keys are not initialized; cannot format a PDDB without root keys!"));
         }
@@ -1141,6 +1144,9 @@ impl PddbOs {
             let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE];
 
             // there is no convenience routine for erasing the entire disk. Maybe that's a good thing?
+            if let Some(modals) = progress {
+                modals.start_progress(t!("pddb.erase", xous::LANG), 0, PDDB_A_LEN as u32, 0).expect("couldn't raise progress bar");
+            }
             for offset in (0..PDDB_A_LEN).step_by(PAGE_SIZE) {
                 if (offset / PAGE_SIZE) % 64 == 0 {
                     log::info!("Initial erase: {}/{}", offset, PDDB_A_LEN);
@@ -1151,14 +1157,30 @@ impl PddbOs {
                     &blank_sector,
                     offset as u32
                 ).expect("couldn't erase memory");
+                if let Some(modals) = progress {
+                    modals.update_progress(offset as u32).expect("couldn't update progress bar");
+                }
+            }
+            if let Some(modals) = progress {
+                modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
+                modals.finish_progress().expect("couldn't dismiss progress bar");
             }
         }
 
         // step 2. fill in the page table with junk, which marks it as cryptographically empty
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.initpt", xous::LANG), 0, size_of::<PageTableInFlash>() as u32, 0).expect("couldn't raise progress bar");
+        }
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
         for page in (0..size_of::<PageTableInFlash>()).step_by(PAGE_SIZE) {
             self.entropy.borrow_mut().get_slice(&mut temp);
             self.patch_pagetable_raw(&temp, page as u32);
+            if let Some(modals) = progress {
+                modals.update_progress(page as u32).expect("couldn't update progress bar");
+            }
+        }
+        if let Some(modals) = progress {
+            modals.update_progress(size_of::<PageTableInFlash>() as u32).expect("couldn't update progress bar");
         }
         if size_of::<PageTableInFlash>() & (PAGE_SIZE - 1) != 0 {
             let remainder_start = size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1);
@@ -1169,12 +1191,18 @@ impl PddbOs {
             }
             self.patch_pagetable_raw(&temp, remainder_start as u32);
         }
+        if let Some(modals) = progress {
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+        }
 
         // step 3. create our key material
         // consider: making ensure_aes_password() a pub-scoped function? let's see how this works in practice.
         //if !self.rootkeys.ensure_aes_password() {
         //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
         //}
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.key", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+        }
         assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         self.entropy.borrow_mut().get_slice(&mut system_basis_key);
@@ -1188,12 +1216,19 @@ impl PddbOs {
             system_key: [0; AES_KEYSIZE],
             salt_base: [0; 4064],
         };
+        if let Some(modals) = progress {
+            modals.update_progress(50).expect("couldn't update progress bar");
+        }
         // copy the encrypted key into the data structure for commit to Flash
         for (&src, dst) in basis_key_aes.iter().zip(crypto_keys.system_key.iter_mut()) {
             *dst = src;
         }
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
         self.patch_keys(crypto_keys.deref(), 0);
+        if let Some(modals) = progress {
+            modals.update_progress(100).expect("couldn't update progress bar");
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+        }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
         // step 4. mbbb handling
@@ -1202,6 +1237,9 @@ impl PddbOs {
         // step 5. fscb handling
         // pick a set of random pages from the free pool and assign it to the fscb
         // pass the generator an empty cache - this causes it to treat the entire disk as free space
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.fastspace", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+        }
         let free_pool = self.fast_space_generate(BinaryHeap::<Reverse<u32>>::new());
         let mut fast_space = FastSpace {
             free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
@@ -1209,11 +1247,22 @@ impl PddbOs {
         for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
             *dst = src;
         }
+        if let Some(modals) = progress {
+            modals.update_progress(50).expect("couldn't update progress bar");
+        }
         self.fast_space_write(&fast_space);
+        if let Some(modals) = progress {
+            modals.update_progress(100).expect("couldn't update progress bar");
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+        }
 
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
         // this is coded using "direct disk" offsets...under the assumption that we only ever really want to do this here, and
         // not re-use this routine elsewhere.
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.randomize", xous::LANG),
+            self.data_phys_base.as_u32(), PDDB_A_LEN as u32, self.data_phys_base.as_u32()).expect("couldn't raise progress bar");
+        }
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for offset in (self.data_phys_base.as_usize()..PDDB_A_LEN).step_by(PAGE_SIZE) {
             if fast {
@@ -1245,9 +1294,19 @@ impl PddbOs {
                 &temp,
                 offset as u32
             ).expect("couldn't fill in disk with random datax");
+            if let Some(modals) = progress {
+                modals.update_progress(offset as u32).expect("couldn't update progress bar");
+            }
+        }
+        if let Some(modals) = progress {
+            modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
+            modals.finish_progress().expect("couldn't dismiss progress bar");
         }
 
         // step 6. create the system basis root structure
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.structure", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+        }
         let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
             version: api::PDDB_VERSION,
@@ -1258,6 +1317,9 @@ impl PddbOs {
 
         // step 7. Create a hashmap for our reverse PTE, allocate sectors, and add it to the Pddb's cache
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
+        if let Some(modals) = progress {
+            modals.update_progress(33).expect("couldn't update progress bar");
+        }
 
         let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
         // allocate one page for the basis root
@@ -1287,6 +1349,9 @@ impl PddbOs {
         }
         let key = Key::clone_from_slice(self.system_basis_key.as_ref().unwrap());
         self.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
+        if let Some(modals) = progress {
+            modals.update_progress(66).expect("couldn't update progress bar");
+        }
 
         // step 9. generate & write initial page table entries
         for (&virt, phys) in basis_v2p_map.iter_mut() {
@@ -1294,7 +1359,10 @@ impl PddbOs {
             // mark the entry as clean, as it has been sync'd to disk
             phys.set_clean(true);
         }
-
+        if let Some(modals) = progress {
+            modals.update_progress(100).expect("couldn't update progress bar");
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+        }
         Ok(())
     }
 
@@ -1355,8 +1423,7 @@ impl PddbOs {
     /// Derives a 256-bit AES encryption key for a basis given a basis name and its password.
     /// You will also need to derive the AAD for the basis using the basis_name.
     pub(crate) fn basis_derive_key(&self, basis_name: &str, password: &str) -> [u8; AES_KEYSIZE] {
-        use sha2::{FallbackStrategy, Sha256, Sha512Trunc256};
-        use hmac::{Hmac, Mac};
+        use sha2::{FallbackStrategy, Sha512Trunc256};
         use digest::Digest;
         use backend::bcrypt::*;
 
@@ -1374,15 +1441,16 @@ impl PddbOs {
         plaintext_pw[72] = 0; // always null terminate
 
         log::info!("creating salt");
-        // uses an HMAC keyed with the salt array to generate a compressed version of
+        // uses Sha512Trunc256 on the salt array to generate a compressed version of
         // the basis name and plaintext password, which forms the Salt that is fed into bcrypt
         // our salt is probably way too big but what else are we going to use all that page's data for?
         let scd = self.static_crypto_data_get();
         let mut salt = [0u8; 16];
-        let mut mac = Hmac::<Sha256>::new_varkey(&scd.salt_base).expect("Couldn't build HMAC");
-        mac.update(&bname_copy);
-        mac.update(&plaintext_pw);
-        let result = mac.finalize().into_bytes();
+        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        hasher.update(&scd.salt_base);
+        hasher.update(&bname_copy);
+        hasher.update(&plaintext_pw);
+        let result = hasher.finalize();
         for (&src, dst) in result.iter().zip(salt.iter_mut()) {
             *dst = src;
         }
