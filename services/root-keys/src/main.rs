@@ -1025,8 +1025,8 @@ fn xmain() -> ! {
                     Opcode::UxAesEnsureReturn.to_u32().unwrap()
                 );
                 confirm_radiobox.is_password = true;
-                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG)));
                 confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_suspend", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG)));
                 confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_keep", xous::LANG)));
                 rootkeys_modal.modify(
                     Some(ActionType::RadioButtons(confirm_radiobox)),
