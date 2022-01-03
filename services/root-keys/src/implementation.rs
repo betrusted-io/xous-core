@@ -1820,6 +1820,19 @@ impl<'a> RootKeys {
         // use most of the available space for the kernel, so by the time we're done maybe only 10-20% of the space is empty.
         let kernel_len = kernel_region.len() - SIGBLOCK_SIZE as usize;
 
+        // we need to update our actual length because the initial burn doesn't set this
+        let mut len_data = [0u8; 8];
+        for (&src, dst) in SIG_VERSION.to_le_bytes().iter().zip(len_data[..4].iter_mut()) {
+            *dst = src;
+        }
+        for (&src, dst) in (kernel_len as u32 - 4).to_le_bytes().iter().zip(len_data[4..].iter_mut()) {
+            *dst = src;
+        }
+        log::info!("kernel len area before: {:x?}", &(self.kernel()[kernel_region.len()-8..]));
+        self.spinor.patch(self.kernel(), self.kernel_base(), &len_data, kernel_region.len() as u32 - 8)
+            .expect("couldn't patch length area");
+        log::info!("kernel len area after: {:x?}", &(self.kernel()[kernel_region.len()-8..]));
+
         (signing_key.sign(&kernel_region[SIGBLOCK_SIZE as usize..]), kernel_len as u32)
     }
 
@@ -1988,7 +2001,7 @@ impl<'a> RootKeys {
         // map a structure onto the signature region, so we can do something sane when writing stuff to it
         let mut signature: &mut SignatureInFlash = unsafe{(sig_region.as_mut_ptr() as *mut SignatureInFlash).as_mut().unwrap()}; // this pointer better not be null, we just created it!
 
-        signature.version = 1;
+        signature.version = SIG_VERSION;
         signature.signed_len = len;
         signature.signature = sig.to_bytes();
         log::debug!("sig: {:x?}", sig.to_bytes());

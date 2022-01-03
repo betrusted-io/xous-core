@@ -3,6 +3,8 @@ pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manag
 pub(crate) const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 #[allow(dead_code)]
 pub(crate) const ROOTKEY_MENU_NAME: &'static str = "rootkeys menu";
+#[allow(dead_code)]
+pub(crate) const SIG_VERSION: u32 = 1;
 
 #[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
