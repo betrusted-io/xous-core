@@ -299,7 +299,7 @@ impl<'a> RootKeys {
                 key_enc
             },
             _ => {
-                // within a single boot, return a stable, non-changing fake ky based off of a single root
+                // within a single boot, return a stable, non-changing fake key based off of a single root
                 // fake key. This will make it a bit harder for an attacker to "probe out" an oracle and see
                 // which keys are null or which are populated.
                 self.fake_key[0] = key_index;
