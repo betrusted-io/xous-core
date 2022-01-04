@@ -6,6 +6,7 @@ use aes_gcm_siv::aead::{Aead, NewAead, Payload};
 use aes::{Aes256, Block};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
 use root_keys::api::AesRootkeyType;
+use spinor::SPINOR_BULK_ERASE_SIZE;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
@@ -524,13 +525,14 @@ impl PddbOs {
                 msg: fs_ser,
                 aad: &aad,
             };
-            log::info!("key: {:x?}", key);
-            log::info!("nonce: {:x?}", nonce);
-            log::info!("aad: {:x?}", aad);
-            log::info!("payload: {:x?}", fs_ser);
+            // these are useful for debug, but do a hard-comment on them because they leak secret info
+            //log::info!("key: {:x?}", key);
+            //log::info!("nonce: {:x?}", nonce);
+            //log::info!("aad: {:x?}", aad);
+            //log::info!("payload: {:x?}", fs_ser);
             let ciphertext = cipher.encrypt(nonce, payload).expect("failed to encrypt FastSpace record");
-            log::info!("ct_len: {}", ciphertext.len());
-            log::info!("mac: {:x?}", &ciphertext[ciphertext.len()-16..]);
+            //log::info!("ct_len: {}", ciphertext.len());
+            //log::info!("mac: {:x?}", &ciphertext[ciphertext.len()-16..]);
             let ct_to_flash = ciphertext.deref();
             // determine which page we're going to write the ciphertext into
             let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
@@ -900,10 +902,10 @@ impl PddbOs {
                     let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
                     let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
                     let mut block = Block::from_mut_slice(update.deref_mut());
-                    log::debug!("block: {:x?}", block);
+                    log::trace!("block: {:x?}", block);
                     cipher.encrypt_block(&mut block);
                     let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
-                    log::debug!("patch: {:x?}", block);
+                    log::trace!("patch: {:x?}", block);
                     self.patch_fscb(&block, log_addr);
                     self.fspace_log_len += 1;
                     let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
@@ -1143,29 +1145,26 @@ impl PddbOs {
         // step 1. Erase the entire PDDB region - leaves the state in all 1's
         if !fast {
             log::info!("Erasing the PDDB region");
-            let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE];
-
-            // there is no convenience routine for erasing the entire disk. Maybe that's a good thing?
             if let Some(modals) = progress {
-                modals.start_progress(t!("pddb.erase", xous::LANG), 0, PDDB_A_LEN as u32, 0).expect("couldn't raise progress bar");
+                modals.start_progress(
+                    t!("pddb.erase", xous::LANG),
+                    xous::PDDB_LOC, xous::PDDB_LOC + PDDB_A_LEN as u32, xous::PDDB_LOC)
+                    .expect("couldn't raise progress bar");
+                self.tt.sleep_ms(100).unwrap();
             }
-            for offset in (0..PDDB_A_LEN).step_by(PAGE_SIZE) {
-                if (offset / PAGE_SIZE) % 64 == 0 {
-                    log::info!("Initial erase: {}/{}", offset, PDDB_A_LEN);
+            for offset in (xous::PDDB_LOC..(xous::PDDB_LOC + PDDB_A_LEN as u32)).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
+                if (offset / SPINOR_BULK_ERASE_SIZE) % 4 == 0 {
+                    log::info!("Initial erase: {}/{}", offset - xous::PDDB_LOC, PDDB_A_LEN as u32 - xous::PDDB_LOC);
                     if let Some(modals) = progress {
                         modals.update_progress(offset as u32).expect("couldn't update progress bar");
                     }
                 }
-                self.spinor.patch(
-                    self.pddb_mr.as_slice(),
-                    xous::PDDB_LOC,
-                    &blank_sector,
-                    offset as u32
-                ).expect("couldn't erase memory");
+                self.spinor.bulk_erase(offset, SPINOR_BULK_ERASE_SIZE).expect("couldn't erase memory");
             }
             if let Some(modals) = progress {
-                modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
+                modals.update_progress(xous::PDDB_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
                 modals.finish_progress().expect("couldn't dismiss progress bar");
+                self.tt.sleep_ms(100).unwrap();
             }
         }
 
@@ -1174,11 +1173,13 @@ impl PddbOs {
             modals.start_progress(t!("pddb.initpt", xous::LANG), 0, size_of::<PageTableInFlash>() as u32, 0).expect("couldn't raise progress bar");
         }
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
-        for page in (0..size_of::<PageTableInFlash>()).step_by(PAGE_SIZE) {
+        for page in (0..(size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1))).step_by(PAGE_SIZE) {
             self.entropy.borrow_mut().get_slice(&mut temp);
             self.patch_pagetable_raw(&temp, page as u32);
             if let Some(modals) = progress {
-                modals.update_progress(page as u32).expect("couldn't update progress bar");
+                if (page / PAGE_SIZE) % 16 == 0 {
+                    modals.update_progress(page as u32).expect("couldn't update progress bar");
+                }
             }
         }
         if let Some(modals) = progress {
@@ -1186,7 +1187,7 @@ impl PddbOs {
         }
         if size_of::<PageTableInFlash>() & (PAGE_SIZE - 1) != 0 {
             let remainder_start = size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1);
-            log::info!("Page table does not end on a page boundary. Handling trailing page case of {} bytes", remainder_start);
+            log::info!("Page table does not end on a page boundary. Handling trailing page case of {} bytes", size_of::<PageTableInFlash>() - remainder_start);
             let mut temp = Vec::<u8>::new();
             for _ in remainder_start..size_of::<PageTableInFlash>() {
                 temp.push(self.entropy.borrow_mut().get_u8());
@@ -1195,6 +1196,7 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
 
         // step 3. create our key material
@@ -1204,6 +1206,7 @@ impl PddbOs {
         //}
         if let Some(modals) = progress {
             modals.start_progress(t!("pddb.key", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
@@ -1221,6 +1224,7 @@ impl PddbOs {
         };
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         // copy the encrypted key into the data structure for commit to Flash
         for (&src, dst) in basis_key_aes.iter().zip(crypto_keys.system_key.iter_mut()) {
@@ -1230,9 +1234,14 @@ impl PddbOs {
         self.patch_keys(crypto_keys.deref(), 0);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
+
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        self.tt.sleep_ms(500).unwrap(); // delay for UX to catch up in emulation
 
         // step 4. mbbb handling
         // mbbb should just be blank at this point, and the flash was erased in step 1, so there's nothing to do.
@@ -1242,6 +1251,7 @@ impl PddbOs {
         // pass the generator an empty cache - this causes it to treat the entire disk as free space
         if let Some(modals) = progress {
             modals.start_progress(t!("pddb.fastspace", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         let free_pool = self.fast_space_generate(BinaryHeap::<Reverse<u32>>::new());
         let mut fast_space = FastSpace {
@@ -1252,12 +1262,18 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         self.fast_space_write(&fast_space);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
+
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        self.tt.sleep_ms(500).unwrap();
 
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
         // this is coded using "direct disk" offsets...under the assumption that we only ever really want to do this here, and
@@ -1265,6 +1281,7 @@ impl PddbOs {
         if let Some(modals) = progress {
             modals.start_progress(t!("pddb.randomize", xous::LANG),
             self.data_phys_base.as_u32(), PDDB_A_LEN as u32, self.data_phys_base.as_u32()).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for offset in (self.data_phys_base.as_usize()..PDDB_A_LEN).step_by(PAGE_SIZE) {
@@ -1288,7 +1305,7 @@ impl PddbOs {
                 }
             }
             self.entropy.borrow_mut().get_slice(&mut temp);
-            if (offset / PAGE_SIZE) % 64 == 0 {
+            if (offset / PAGE_SIZE) % 256 == 0 { // ~one update per megabyte
                 log::info!("Cryptographic 'erase': {}/{}", offset, PDDB_A_LEN);
                 if let Some(modals) = progress {
                     modals.update_progress(offset as u32).expect("couldn't update progress bar");
@@ -1303,12 +1320,15 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
 
         // step 6. create the system basis root structure
         if let Some(modals) = progress {
             modals.start_progress(t!("pddb.structure", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
@@ -1322,6 +1342,7 @@ impl PddbOs {
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
         if let Some(modals) = progress {
             modals.update_progress(33).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
 
         let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
@@ -1354,6 +1375,7 @@ impl PddbOs {
         self.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
         if let Some(modals) = progress {
             modals.update_progress(66).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
 
         // step 9. generate & write initial page table entries
@@ -1364,7 +1386,9 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
         Ok(())
     }

@@ -489,6 +489,10 @@ fn xmain() -> ! {
                     _ => panic!("get_radiobutton failed"),
                 }
                 pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
+
+                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                pddb_os.dbg_dump(Some("full".to_string()), None);
+
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
                     basis_cache.basis_add(sys_basis);

@@ -20,9 +20,9 @@
         "en-audio": "No"
     },
     "pddb.requestformat": {
-        "en": "The PDDB storage needs\nformatting. This takes\nabout 8 mins and can't\nbe interrupted.\nProceed?\n",
+        "en": "The PDDB storage needs\nformatting. This takes\nabout 15 minutes and can't\nbe interrupted.\n\nProceed?\n",
         "zh": "存储需要格式化。这需要8分钟。继续？",
-        "en-audio": "The PDDB storage needs formatting. It will take about 8 minutes and can't be interrupted. Proceed?"
+        "en-audio": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?"
     },
     "pddb.devbypass": {
         "en": "Are you testing the PDDB?",
@@ -50,7 +50,7 @@
         "en-audio": "Fastspace step 4 of 6"
     },
     "pddb.randomize": {
-        "en": "Randomize disk\n(5/6)",
+        "en": "Cryptographic wipe\n(5/6)",
         "zh": "随机存储(5/6)",
         "en-audio": "Randomize disk step 5 of 6"
     },
