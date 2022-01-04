@@ -101,9 +101,11 @@ impl PddbOs {
             xous::MemoryAddress::new(xous::PDDB_LOC as usize + xous::FLASH_PHYS_BASE as usize),
             None,
             PDDB_A_LEN as usize,
-            xous::MemoryFlags::R,
+            xous::MemoryFlags::R | xous::MemoryFlags::RESERVE,
         )
         .expect("Couldn't map the PDDB memory range");
+        #[cfg(any(target_os = "none", target_os = "xous"))]
+        log::info!("pddb slice len: {}, PDDB_A_LEN: {}, raw len: {}", pddb.as_slice::<u8>().len(), PDDB_A_LEN, pddb.len()); // sanity check the PDDB size on init
 
         // the mbbb is located one page off from the Page Table
         let key_phys_base = PageAlignedPa::from(size_of::<PageTableInFlash>());
@@ -422,7 +424,7 @@ impl PddbOs {
 
     /// maps a StaticCryptoData structure into the key area of the PDDB.
     fn static_crypto_data_get(&self) -> &StaticCryptoData {
-        let scd_ptr = self.pddb_mr.as_slice()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoData;
+        let scd_ptr = self.pddb_mr.as_slice::<u8>()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoData;
         let scd: &StaticCryptoData = unsafe{scd_ptr.as_ref().unwrap()};
         scd
     }
@@ -898,10 +900,10 @@ impl PddbOs {
                     let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
                     let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
                     let mut block = Block::from_mut_slice(update.deref_mut());
-                    log::trace!("block: {:x?}", block);
+                    log::debug!("block: {:x?}", block);
                     cipher.encrypt_block(&mut block);
                     let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
-                    log::trace!("patch: {:x?}", block);
+                    log::debug!("patch: {:x?}", block);
                     self.patch_fscb(&block, log_addr);
                     self.fspace_log_len += 1;
                     let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
@@ -917,7 +919,7 @@ impl PddbOs {
             }
             if maybe_alloc.is_none() {
                 log::warn!("Ran out of free space. fspace cache has {} entries", self.fspace_cache.len());
-                // for entry in self.fspace_cache.iter() {
+                //for entry in self.fspace_cache.iter() {
                 //    log::info!("{:?}", entry);
                 //}
             }
@@ -1150,6 +1152,9 @@ impl PddbOs {
             for offset in (0..PDDB_A_LEN).step_by(PAGE_SIZE) {
                 if (offset / PAGE_SIZE) % 64 == 0 {
                     log::info!("Initial erase: {}/{}", offset, PDDB_A_LEN);
+                    if let Some(modals) = progress {
+                        modals.update_progress(offset as u32).expect("couldn't update progress bar");
+                    }
                 }
                 self.spinor.patch(
                     self.pddb_mr.as_slice(),
@@ -1157,9 +1162,6 @@ impl PddbOs {
                     &blank_sector,
                     offset as u32
                 ).expect("couldn't erase memory");
-                if let Some(modals) = progress {
-                    modals.update_progress(offset as u32).expect("couldn't update progress bar");
-                }
             }
             if let Some(modals) = progress {
                 modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
@@ -1207,6 +1209,7 @@ impl PddbOs {
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         self.entropy.borrow_mut().get_slice(&mut system_basis_key);
         let mut basis_key_aes: [u8; AES_KEYSIZE] = system_basis_key.clone();
+        self.cipher_ecb = Some(Aes256::new(GenericArray::from_slice(&basis_key_aes))); // build the ECB cipher for page table entries
         let cipher =  Aes256::new(GenericArray::from_slice(&basis_key_aes));
         self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
         for block in basis_key_aes.chunks_mut(aes::BLOCK_SIZE) {
@@ -1287,6 +1290,9 @@ impl PddbOs {
             self.entropy.borrow_mut().get_slice(&mut temp);
             if (offset / PAGE_SIZE) % 64 == 0 {
                 log::info!("Cryptographic 'erase': {}/{}", offset, PDDB_A_LEN);
+                if let Some(modals) = progress {
+                    modals.update_progress(offset as u32).expect("couldn't update progress bar");
+                }
             }
             self.spinor.patch(
                 self.pddb_mr.as_slice(),
@@ -1294,9 +1300,6 @@ impl PddbOs {
                 &temp,
                 offset as u32
             ).expect("couldn't fill in disk with random datax");
-            if let Some(modals) = progress {
-                modals.update_progress(offset as u32).expect("couldn't update progress bar");
-            }
         }
         if let Some(modals) = progress {
             modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
