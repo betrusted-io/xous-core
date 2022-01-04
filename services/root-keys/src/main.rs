@@ -1065,11 +1065,8 @@ fn xmain() -> ! {
                 // deserialize the specifier
                 match aes_op.block {
                     AesBlockType::SingleBlock(mut b) => {
-                        log::info!("b: {:x?}", b);
                         keys.aes_op(aes_op.key_index, op, &mut b);
-                        log::info!("b: {:x?}", b);
                         aes_op.block = AesBlockType::SingleBlock(b);
-                        log::info!("after b: {:x?}", aes_op);
                     }
                     AesBlockType::ParBlock(mut pb) => {
                         keys.aes_par_op(aes_op.key_index, op, &mut pb);
