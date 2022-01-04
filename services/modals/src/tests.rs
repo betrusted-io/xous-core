@@ -28,8 +28,8 @@ pub(crate) fn spawn_test() {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
             // test progress bar
-            modals.start_progress("Progress Quest", 100, 500, 100).expect("couldn't raise progress bar");
-            for i in (100..500).step_by(8) {
+            modals.start_progress("Progress Quest", xous::PDDB_LOC, xous::PDDB_LOC + 64*1024*128, xous::PDDB_LOC).expect("couldn't raise progress bar");
+            for i in (xous::PDDB_LOC..xous::PDDB_LOC + 64*1024*128).step_by(64*1024) {
                 modals.update_progress(i).expect("couldn't update progress bar");
                 tt.sleep_ms(100).unwrap();
             }

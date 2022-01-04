@@ -137,6 +137,7 @@ fn xmain() -> ! {
                                 end_work = config.end_work;
                                 last_percentage = compute_checked_percentage(
                                     config.current_work, start_work, end_work);
+                                log::info!("init percentage: {}, current: {}, start: {}, end: {}", last_percentage, config.current_work, start_work, end_work);
                                 progress_action.set_state(last_percentage);
 
                                 renderer_modal.modify(
@@ -191,7 +192,8 @@ fn xmain() -> ! {
                     Some(RendererOp::UpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
                         let new_percentage = compute_checked_percentage(
                             current as u32, start_work, end_work);
-                        if new_percentage != last_percentage {
+                            log::trace!("percentage: {}, current: {}, start: {}, end: {}", new_percentage, current, start_work, end_work);
+                            if new_percentage != last_percentage {
                             last_percentage = new_percentage;
                             progress_action.set_state(last_percentage);
 
@@ -527,7 +529,8 @@ fn compute_checked_percentage(current: u32, start: u32, end: u32) -> u32 {
         } else if current >= end {
             100
         } else {
-            (current * 100) / (end - start)
+            // do math in higher precision because we could overflow a u32
+            (((current as u64 - start as u64) * 100) / (end as u64 - start as u64)) as u32
         }
     }
 }
