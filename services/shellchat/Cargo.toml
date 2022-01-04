@@ -72,6 +72,7 @@ utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []
+spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 default = [] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]

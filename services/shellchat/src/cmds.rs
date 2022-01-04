@@ -86,7 +86,7 @@ mod rtc_cmd;  use rtc_cmd::*;
 mod vibe;     use vibe::*;
 mod ssid;     use ssid::*;
 mod ver;      use ver::*;
-mod audio;    use audio::*;
+//mod audio;    use audio::*; // this command is currently contra-indicated with PDDB, as the test audio currently overlaps the PDDB space. We'll fix this eventually, but for now, let's switch to PDDB mode.
 mod backlight; use backlight::*;
 mod accel;    use accel::*;
 mod sha;      use sha::*;
@@ -95,7 +95,7 @@ mod aes_cmd;  use aes_cmd::*;
 mod trng_cmd; use trng_cmd::*;
 mod engine;   use engine::*;
 mod console;  use console::*;
-mod memtest;  use memtest::*;
+//mod memtest;  use memtest::*;
 mod keys;     use keys::*;
 mod wlan;     use wlan::*;
 mod jtag_cmd; use jtag_cmd::*;
@@ -115,13 +115,13 @@ pub struct CmdEnv {
     rtc_cmd: RtcCmd,
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
-    audio_cmd: Audio,
+    //audio_cmd: Audio,
     sha_cmd: Sha,
     ecup_cmd: EcUpdate,
     aes_cmd: Aes,
     trng_cmd: TrngCmd,
     engine_cmd: Engine,
-    memtest_cmd: Memtest,
+    //memtest_cmd: Memtest,
     keys_cmd: Keys,
     jtag_cmd: JtagCmd,
     net_cmd: NetCmd,
@@ -145,7 +145,7 @@ impl CmdEnv {
         let aes = Aes::new(&xns, &mut common);
         let ecup = EcUpdate::new(&mut common);
         let engine = Engine::new(&xns, &mut common);
-        let memtest = Memtest::new(&xns, &mut common);
+        //let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
         let (maj, min, rev, extra, gitrev) = common.llio.soc_gitrev().unwrap();
@@ -168,13 +168,13 @@ impl CmdEnv {
             rtc_cmd: RtcCmd::new(&xns),
             vibe_cmd: Vibe::new(),
             ssid_cmd: Ssid::new(),
-            audio_cmd: Audio::new(&xns),
+            //audio_cmd: Audio::new(&xns),
             sha_cmd: sha,
             ecup_cmd: ecup,
             aes_cmd: aes,
             trng_cmd: TrngCmd::new(),
             engine_cmd: engine,
-            memtest_cmd: memtest,
+            //memtest_cmd: memtest,
             keys_cmd: Keys::new(&xns),
             jtag_cmd: JtagCmd::new(&xns),
             net_cmd: NetCmd::new(&xns),
@@ -203,7 +203,7 @@ impl CmdEnv {
             &mut self.vibe_cmd,
             &mut self.ssid_cmd,
             &mut ver_cmd,
-            &mut self.audio_cmd,
+            //&mut self.audio_cmd,
             &mut backlight_cmd,
             &mut accel_cmd,
             &mut self.sha_cmd,
@@ -212,7 +212,7 @@ impl CmdEnv {
             &mut self.trng_cmd,
             &mut self.engine_cmd,
             &mut console_cmd,
-            &mut self.memtest_cmd,
+            // &mut self.memtest_cmd,
             &mut self.keys_cmd,
             &mut wlan_cmd,
             &mut self.jtag_cmd,
