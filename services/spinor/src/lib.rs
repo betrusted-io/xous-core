@@ -57,6 +57,9 @@ impl Spinor {
     /// it must be called very early in the boot process, while we are still in the fully trusted code zone
     /// This registers that server as the only server which is authorized to request a patch to the SOC gateware region.
     /// later on, anyone is welcome to try to call it; it will have no effect.
+    ///
+    /// Note to self: because we don't have the SOC updater written, this token is curretnly occupied by keys.rs in
+    /// the shellchat command. Later on, we will want to move this to the final server, once it is written.
     pub fn register_soc_token(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::RegisterSocToken.to_usize().unwrap(),
@@ -123,6 +126,83 @@ impl Spinor {
         Ok(())
     }
 
+    #[cfg(not(test))]
+    fn send_bulk_erase(&self, be: &BulkErase) -> Result<(), SpinorError> {
+        let mut buf = Buffer::into_buf(*be).or(Err(SpinorError::IpcError))?;
+        buf.lend_mut(self.conn, Opcode::BulkErase.to_u32().unwrap()).or(Err(SpinorError::IpcError))?;
+
+        match buf.to_original::<BulkErase, _>() {
+            Ok(wr) => {
+                if let Some(res) = wr.result {
+                    match res {
+                        SpinorError::NoError => Ok(()),
+                        _ => Err(res)
+                    }
+                } else {
+                    Err(SpinorError::ImplementationError)
+                }
+            }
+            _ => Err(SpinorError::ImplementationError)
+        }
+    }
+
+    #[cfg(test)]
+    fn send_bulk_erase(&self, be: &BulkErase) -> Result<(), SpinorError> {
+        let mut i = 0;
+        for addr in be.start..be.start + be.len {
+            EMU_FLASH.lock().unwrap()[addr as usize] = 0xFF;
+            i += 1;
+        }
+        Ok(())
+    }
+
+    /// `bulk_erase` is a function to be used fairly rarely, as it will erase just about anything and everything and it
+    /// requires a 64k-alignment for the start and len arguments. It's a bit too coarse a hammer to be used in many
+    /// functions, and confers little performance benefit when erasing fewer than a couple megabytes of data. The main
+    /// intended use of this is for PDDB-region bulk erase, which is about 100MiB and this should reduce the erase time
+    /// by about 20-30% instead of using the `patch` function to patch a blank sector. The current implementation enforces
+    /// the bounds of `bulk_erase` to be within the PDDB region with a check on the server side.
+    ///
+    /// Also note that the `start` address is given as an offset from the start of FLASH, and not as an absolute memory address.
+    pub fn bulk_erase(&self, start: u32, len: u32) -> Result<(), SpinorError> {
+        if (start & (SPINOR_BULK_ERASE_SIZE - 1)) != 0 {
+            return Err(SpinorError::AlignmentError);
+        }
+        if (len & (SPINOR_BULK_ERASE_SIZE - 1)) != 0 {
+            return Err(SpinorError::AlignmentError);
+        }
+        // acquire a write lock on the unit
+        #[cfg(not(test))]
+        {
+            let response = send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                    self.token[0] as usize,
+                    self.token[1] as usize,
+                    self.token[2] as usize,
+                    self.token[3] as usize,
+                )
+            ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
+            if let xous::Result::Scalar1(result) = response {
+                if result == 0 {
+                    return Err(SpinorError::BusyTryAgain)
+                }
+            }
+        }
+        let be = BulkErase {
+            id: self.token,
+            start,
+            len,
+            result: None
+        };
+        let ret = self.send_bulk_erase(&be);
+        // release the write lock before exiting
+        #[cfg(not(test))]
+        let _ = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ReleaseExclusive.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send ReleaseExclusive message");
+        ret
+    }
+
     /// `patch` is an extremely low-level function that can patch data on FLASH. Access control must be enforced by higher level
     ///     abstractions. However, there is a single sanity check on the server side that prevents rogue writes to the SoC gateware area.
     ///     Aside from that, it's the wild west! Think of this as `dd` into a raw disk device node, and not a filesystem-abstracted `write`
@@ -162,7 +242,7 @@ impl Spinor {
                     self.token[2] as usize,
                     self.token[3] as usize,
                 )
-            ).expect("couldn't send AcquireExclusive message to Sha2 hardware!");
+            ).expect("couldn't send AcquireExclusive message to Spinor hardware!");
             if let xous::Result::Scalar1(result) = response {
                 if result == 0 {
                     return Err(SpinorError::BusyTryAgain)
