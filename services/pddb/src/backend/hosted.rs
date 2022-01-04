@@ -49,8 +49,13 @@ impl EmuStorage {
         EmuStorage {
         }
     }
-    pub fn as_slice(&self) -> &[u8] {
-        flashmem().memory.as_slice()
+    pub fn as_slice<T>(&self) -> &[T] {
+        unsafe {
+            core::slice::from_raw_parts(
+                flashmem().memory.as_ptr() as *const T,
+                flashmem().memory.len() / core::mem::size_of::<T>(),
+            )
+        }
     }
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         flashmem().memory.as_mut_slice()
