@@ -344,6 +344,7 @@ impl Drop for Gam {
             unsafe{xous::disconnect(cid).unwrap();}
             xous::destroy_server(sid).unwrap();
         }
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

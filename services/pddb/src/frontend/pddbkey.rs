@@ -14,7 +14,9 @@ pub struct PddbKey<'a> {
     conn: CID,
     dict: String,
     key: String,
-    token: [u32; 3],
+    token: ApiToken,
+    /// position in the key's data "stream"
+    pos: u64,
     buf: Buffer<'a>,
 }
 impl<'a> PddbKey<'a> {
@@ -80,6 +82,7 @@ impl<'a> PddbKey<'a> {
                 dict,
                 key,
                 token,
+                pos: 0,
                 buf: Buffer::new(core::mem::size_of::<PddbBuf>()),
             })
         } else {
@@ -100,35 +103,6 @@ impl<'a> Read for PddbKey<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         if buf.len() == 0 {
             Ok(0)
-        } else if buf.len() <= 8 {
-            let response = send_message(
-                self.conn,
-                Message::new_blocking_scalar(
-                    Opcode::ReadKeyScalar.to_usize().unwrap(),
-                    self.token[0] as usize,
-                    self.token[1] as usize,
-                    self.token[2] as usize,
-                    buf.len() as usize,
-                )
-            ).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-            // scalars can return up to 64 bits of data. Split into an array and copy into the buf as demanded.
-            if let xous::Result::Scalar2(a, b) = response {
-                let mut maxbuf: [u8; 8] = [0; 8];
-                for (&src, dst) in (a as u32).to_le_bytes().iter().zip(maxbuf[..4].iter_mut()) {
-                    *dst = src;
-                }
-                if buf.len() > 4 {
-                    for (&src, dst) in (b as u32).to_le_bytes().iter().zip(maxbuf[4..].iter_mut()) {
-                        *dst = src;
-                    }
-                }
-                for (&src, dst) in maxbuf.iter().zip(buf.iter_mut()) {
-                    *dst = src;
-                }
-                Ok(buf.len())
-            } else {
-                Err(Error::new(ErrorKind::Other, "Xous internal error"))
-            }
         } else {
             // create pbuf from a pre-reserved chunk of memory, to save on allocator thrashing
             // note that it does mean that un-erased data from previous reads and writes are passed back
@@ -148,10 +122,11 @@ impl<'a> Read for PddbKey<'a> {
                 };
                 pbuf.len = readlen;
                 pbuf.retcode = PddbRetcode::Uninit;
+                pbuf.position = self.pos;
                 readlen
             };
             // this takes the buffer and remaps it to the server, and on return the data is mapped back
-            self.buf.lend_mut(self.conn, Opcode::ReadKeyMem.to_u32().unwrap())
+            self.buf.lend_mut(self.conn, Opcode::ReadKey.to_u32().unwrap())
                 .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
             {
                 // at this point, pbuf has been mutated by the server with a return code and the return data.
@@ -162,6 +137,7 @@ impl<'a> Read for PddbKey<'a> {
                             *dst = src;
                         }
                         assert!(pbuf.len <= readlen, "More data returned than we requested");
+                        self.pos += buf.len() as u64;
                         Ok(pbuf.len as usize)
                     }
                     PddbRetcode::BasisLost => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
@@ -177,39 +153,6 @@ impl<'a> Write for PddbKey<'a> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         if buf.len() == 0 {
             Ok(0)
-        } else if buf.len() <= 4 {
-            let opcode = match buf.len() {
-                1 => Opcode::WriteKeyScalar1.to_usize().unwrap(),
-                2 => Opcode::WriteKeyScalar2.to_usize().unwrap(),
-                3 => Opcode::WriteKeyScalar3.to_usize().unwrap(),
-                4 => Opcode::WriteKeyScalar4.to_usize().unwrap(),
-                _ => panic!("This shouldn't happen")
-            };
-            // guarantee we have enough bytes to do the u32 conversion, even if we have less data in the incoming buf
-            let mut u32buf: [u8; 4] = [0; 4];
-            for (&src, dst) in buf.iter().zip(u32buf.iter_mut()) {
-                *dst = src;
-            }
-            let response = send_message(
-                self.conn,
-                Message::new_blocking_scalar(
-                    opcode,
-                    self.token[0] as usize,
-                    self.token[1] as usize,
-                    self.token[2] as usize,
-                    u32::from_le_bytes(u32buf) as usize,
-                )
-            ).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-            if let xous::Result::Scalar2(rcode, len) = response {
-                match FromPrimitive::from_u8(rcode as u8) {
-                    Some(PddbRetcode::Ok) => Ok(len),
-                    Some(PddbRetcode::BasisLost) => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
-                    Some(PddbRetcode::AccessDenied) => Err(Error::new(ErrorKind::PermissionDenied, "Access denied")),
-                    _ => Err(Error::new(ErrorKind::Other, "Unhandled error code in PddbKey Read")),
-                }
-            } else {
-                Err(Error::new(ErrorKind::Other, "Xous internal error"))
-            }
         } else {
             let writelen = {
                 let pbuf = PddbBuf::from_slice_mut(self.buf.as_mut());
@@ -227,10 +170,11 @@ impl<'a> Write for PddbKey<'a> {
                 for (&src, dst) in buf.iter().zip(pbuf.data.iter_mut()) {
                     *dst = src;
                 }
+                pbuf.position = self.pos;
                 writelen
             };
             // this takes the buffer and remaps it to the server, and on return the data is mapped back
-            self.buf.lend_mut(self.conn, Opcode::WriteKeyMem.to_u32().unwrap())
+            self.buf.lend_mut(self.conn, Opcode::WriteKey.to_u32().unwrap())
                 .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
             {
                 // at this point, pbuf has been mutated by the server with a return code and the return data.
@@ -238,6 +182,7 @@ impl<'a> Write for PddbKey<'a> {
                 match pbuf.retcode {
                     PddbRetcode::Ok => {
                         assert!(pbuf.len <= writelen, "More data written than we requested");
+                        self.pos += writelen as u64;
                         Ok(pbuf.len as usize)
                     }
                     PddbRetcode::BasisLost => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
@@ -273,6 +218,7 @@ impl<'a> Drop for PddbKey<'a> {
         // the connection to the server side must be reference counted, so that multiple instances of this object within
         // a single process do not end up de-allocating the CID on other threads before they go out of scope.
         // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

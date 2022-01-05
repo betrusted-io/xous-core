@@ -24,6 +24,7 @@ impl Drop for Codec {
         // the connection to the server side must be reference counted, so that multiple instances of this object within
         // a single process do not end up de-allocating the CID on other threads before they go out of scope.
         // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

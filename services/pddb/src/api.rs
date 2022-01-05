@@ -64,28 +64,22 @@ pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
 pub(crate) enum Opcode {
     KeyRequest,
 
-    /// read implemented using only scalars -- fast, but limited size
-    ReadKeyScalar,
-    /// read implemented using a memory buffer -- slower, but just shy of a page in size
-    ReadKeyMem,
-
-    WriteKeyScalar1,
-    WriteKeyScalar2,
-    WriteKeyScalar3,
-    WriteKeyScalar4,
-    WriteKeyMem,
+    ReadKey,
+    WriteKey,
     WriteKeyFlush,
 
     /// quit the server
     Quit,
 }
 
+pub type ApiToken = [u32; 3];
+
 /// A structure for requesting a token to access a particular key/value pair
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct PddbKeyRequest {
     pub(crate) dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
     pub(crate) key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub(crate) token: Option<[u32; 3]>,
+    pub(crate) token: Option<ApiToken>,
 }
 
 /// Return codes for Read/Write API calls to the main server
@@ -107,13 +101,15 @@ pub(crate) enum PddbRetcode {
 #[repr(C, packed)]
 pub(crate) struct PddbBuf {
     /// api token for the given buffer
-    pub(crate) token: [u32; 3],
+    pub(crate) token: ApiToken,
+    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
+    pub(crate) position: u64,
     /// length of the data field
     pub(crate) len: u16,
     /// a field reserved for the return code
     pub(crate) retcode: PddbRetcode,
     pub(crate) reserved: u8,
-    pub(crate) data: [u8; 4080],
+    pub(crate) data: [u8; 4072],
 }
 impl PddbBuf {
     pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {

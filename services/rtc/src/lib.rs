@@ -115,6 +115,7 @@ impl Drop for Rtc {
 
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
         // all implementations will need this
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

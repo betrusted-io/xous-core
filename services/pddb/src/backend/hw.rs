@@ -505,20 +505,11 @@ impl PddbOs {
         }
     }
     fn syskey_ensure(&mut self) {
-        if self.system_basis_key.is_none() {
-            let scd = self.static_crypto_data_get();
-            let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
-            for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
-                *dst = src;
-            }
-            for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
-                self.rootkeys.decrypt_block(block.try_into().unwrap());
-            }
-            self.system_basis_key = Some(system_key);
-        }
-        if self.cipher_ecb.is_none() {
-            let cipher = Aes256::new(GenericArray::from_slice(&self.system_basis_key.unwrap()));
-            self.cipher_ecb = Some(cipher);
+        while !self.try_login() {
+            self.clear_password(); // clear the bad password entry
+            let xns = xous_names::XousNames::new().unwrap();
+            let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
+            modals.show_notification(t!("pddb.badpass_infallible", xous::LANG)).expect("notification failed");
         }
     }
 

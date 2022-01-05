@@ -65,6 +65,7 @@ static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Keyboard {
     fn drop(&mut self) {
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

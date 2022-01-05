@@ -24,6 +24,11 @@
         "zh": "密码错误。 再试一次？",
         "en-audio": "Incorrect password. Try again?"
     },
+    "pddb.badpass_infallible": {
+        "en": "Incorrect password.\n\nPlease try again.",
+        "zh": "密码错误。",
+        "en-audio": "Incorrect password. Please try again."
+    },
     "pddb.requestformat": {
         "en": "The PDDB storage needs\nformatting. This takes\nabout 15 minutes and can't\nbe interrupted.\n\nProceed?\n",
         "zh": "存储需要格式化。这需要8分钟。继续？",

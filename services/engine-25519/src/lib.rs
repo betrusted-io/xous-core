@@ -149,6 +149,7 @@ static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Engine25519 {
     fn drop(&mut self) {
         // disconnect from the main server, only if there are no more instances active
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

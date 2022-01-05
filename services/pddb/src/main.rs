@@ -381,8 +381,9 @@ use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message}
 use xous_ipc::Buffer;
 use core::cell::RefCell;
 use std::rc::Rc;
-
 use std::thread;
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
 use locales::t;
 
@@ -391,6 +392,25 @@ pub(crate) struct BasisRequestPassword {
     db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>,
     plaintext_pw: Option<xous_ipc::String::<{crate::api::PASSWORD_LEN}>>,
 }
+
+#[derive(Eq)]
+struct TokenRecord {
+    token: ApiToken,
+    dict: String,
+    key: String,
+    basis: Option<String>,
+}
+impl Hash for TokenRecord {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.token.hash(state);
+    }
+}
+impl PartialEq for TokenRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token
+    }
+}
+
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -415,6 +435,8 @@ fn xmain() -> ! {
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
+    // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
+    let mut token_dict = HashSet::<TokenRecord>::new();
 
     // run the CI tests if the option has been selected
     #[cfg(all(
@@ -540,19 +562,10 @@ fn xmain() -> ! {
             Some(Opcode::KeyRequest) => {
                 // placeholder
             }
-            Some(Opcode::ReadKeyScalar) => msg_blocking_scalar_unpack!(msg, _tok0, _tok1, _tok2, _len, {
-                // placeholder
-            }),
-            Some(Opcode::ReadKeyMem) => {
+            Some(Opcode::ReadKey) => {
                 // placeholder
             }
-            Some(Opcode::WriteKeyScalar1)
-            | Some(Opcode::WriteKeyScalar2)
-            | Some(Opcode::WriteKeyScalar3)
-            | Some(Opcode::WriteKeyScalar4) => msg_blocking_scalar_unpack!(msg, _tok0, _tok1, _tok2, _data, {
-                // placeholder
-            }),
-            Some(Opcode::WriteKeyMem) => {
+            Some(Opcode::WriteKey) => {
                 // placeholder
             }
             Some(Opcode::WriteKeyFlush) => {
