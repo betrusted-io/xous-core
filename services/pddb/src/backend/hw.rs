@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use crate::*;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
-use aes::{Aes256, Block};
+use aes::{Aes256, Block, BLOCK_SIZE};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
 use root_keys::api::AesRootkeyType;
 use spinor::SPINOR_BULK_ERASE_SIZE;
@@ -37,8 +37,10 @@ pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() 
 pub(crate) struct StaticCryptoData {
     /// aes-256 key of the system basis, encrypted with the User0 root key
     pub(crate) system_key: [u8; AES_KEYSIZE],
+    /// check data to confirm the password was entered correctly; it is the encryption of the first 128 bits of the salt below.
+    pub(crate) check_data: [u8; BLOCK_SIZE],
     /// a pool of fixed data used to pick salts, based on a hash of the basis name
-    pub(crate) salt_base: [u8; 4064],
+    pub(crate) salt_base: [u8; 4048],
 }
 impl Deref for StaticCryptoData {
     type Target = [u8];
@@ -443,6 +445,64 @@ impl PddbOs {
             core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         }
         self.cipher_ecb = None;
+    }
+    pub(crate) fn clear_password(&self) {
+        self.rootkeys.clear_password(AesRootkeyType::User0);
+    }
+    pub (crate) fn try_login(&mut self) -> bool {
+        if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
+            let scd = self.static_crypto_data_get();
+            let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+            let mut blank = true;
+            for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
+                *dst = src;
+                if src != 0xFF {
+                    blank = false;
+                }
+            }
+            for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
+                self.rootkeys.decrypt_block(block.try_into().unwrap());
+            }
+            if !blank {
+                // form the ECB cipher and check the check data
+                let cipher = Aes256::new(GenericArray::from_slice(&system_key));
+                let mut block = [0u8; BLOCK_SIZE];
+                for (&src, dst) in scd.check_data[0..BLOCK_SIZE].iter().zip(block.iter_mut()) {
+                    *dst = src;
+                }
+                let ga = GenericArray::from_mut_slice(&mut block);
+                //log::info!("test block before: {:x?}", ga);
+                cipher.decrypt_block(ga);
+                //log::info!("test block after check: {:x?}", ga);
+                let mut success = true;
+                let mut checkedlen = 0;
+                for (&a, &b) in scd.salt_base[0..BLOCK_SIZE].iter().zip(ga.iter()) {
+                    if a != b {
+                        success = false;
+                    }
+                    checkedlen += 1;
+                }
+                if checkedlen != BLOCK_SIZE {
+                    success = false;
+                }
+                if success {
+                    let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+                    for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
+                        *dst = src;
+                    }
+                    for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
+                        self.rootkeys.decrypt_block(block.try_into().unwrap());
+                    }
+                    self.system_basis_key = Some(system_key);
+                    self.cipher_ecb = Some(cipher);
+                }
+                success
+            } else {
+                true // the first password entered is always correct. If you made a typo, nothing we can do about it...
+            }
+        } else {
+            true
+        }
     }
     fn syskey_ensure(&mut self) {
         if self.system_basis_key.is_none() {
@@ -1154,7 +1214,7 @@ impl PddbOs {
             }
             for offset in (xous::PDDB_LOC..(xous::PDDB_LOC + PDDB_A_LEN as u32)).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
                 if (offset / SPINOR_BULK_ERASE_SIZE) % 4 == 0 {
-                    log::info!("Initial erase: {}/{}", offset - xous::PDDB_LOC, PDDB_A_LEN as u32 - xous::PDDB_LOC);
+                    log::info!("Initial erase: {}/{}", offset - xous::PDDB_LOC, PDDB_A_LEN as u32);
                     if let Some(modals) = progress {
                         modals.update_progress(offset as u32).expect("couldn't update progress bar");
                     }
@@ -1220,7 +1280,8 @@ impl PddbOs {
         }
         let mut crypto_keys = StaticCryptoData {
             system_key: [0; AES_KEYSIZE],
-            salt_base: [0; 4064],
+            check_data: [0; BLOCK_SIZE],
+            salt_base: [0; 4048],
         };
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
@@ -1231,6 +1292,19 @@ impl PddbOs {
             *dst = src;
         }
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
+        let cipher_ecb = self.cipher_ecb.as_ref().unwrap();
+        let mut block = [0u8; BLOCK_SIZE];
+        // the test data is just the first 128 bits of the salt base
+        for (&src, dst) in crypto_keys.salt_base[0..BLOCK_SIZE].iter().zip(block.iter_mut()) {
+            *dst = src;
+        }
+        let ga = GenericArray::from_mut_slice(&mut block);
+        log::info!("test block before: {:x?}", ga);
+        cipher_ecb.encrypt_block(ga);
+        for (&src, dst) in ga.iter().zip(crypto_keys.check_data.iter_mut()) {
+            *dst = src;
+        }
+        log::info!("test block after: {:x?}", crypto_keys.check_data);
         self.patch_keys(crypto_keys.deref(), 0);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");

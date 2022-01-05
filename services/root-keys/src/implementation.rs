@@ -417,6 +417,12 @@ impl<'a> RootKeys {
             }
         }
     }
+    pub fn purge_user_password(&mut self, pw_type: AesRootkeyType) {
+        match pw_type {
+            AesRootkeyType::User0 => self.purge_password(PasswordType::Boot),
+            _ => log::warn!("Requested to purge a password for a key that we don't have. Ignoring."),
+        }
+    }
     pub fn purge_password(&mut self, pw_type: PasswordType) {
         unsafe {
             let pcache_ptr: *mut PasswordCache = self.pass_cache.as_mut_ptr() as *mut PasswordCache;

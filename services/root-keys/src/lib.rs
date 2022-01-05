@@ -161,6 +161,13 @@ impl RootKeys {
             0, 0, 0, 0)
         ).expect("couldn't send bbram provision message");
     }
+
+    pub fn clear_password(&self, pass_type: AesRootkeyType) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ClearPasswordCacheEntry.to_usize().unwrap(),
+            pass_type.to_usize().unwrap(), 0, 0, 0)
+        ).expect("couldn't send bbram provision message");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

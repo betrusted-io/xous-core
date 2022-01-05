@@ -401,6 +401,7 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", pddb_sid);
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     log::trace!("ready to accept requests");
 
@@ -450,57 +451,85 @@ fn xmain() -> ! {
         log::info!("Got password: {:?}", ret.plaintext_pw);
     }
     if pddb_os.rootkeys_initialized() {
-        log::info!("Attempting to mount the PDDB");
-        if let Some(sys_basis) = pddb_os.pddb_mount() {
-            log::info!("PDDB mount operation finished successfully");
-            basis_cache.basis_add(sys_basis);
-        } else {
-            log::debug!("PDDB did not mount; requesting format");
-            modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
-            modals.add_list_item(t!("pddb.cancel", xous::LANG)).expect("couldn't build radio item list");
-            let do_format: bool;
-            match modals.get_radiobutton(t!("pddb.requestformat", xous::LANG)) {
-                Ok(response) => {
-                    if response.as_str() == t!("pddb.okay", xous::LANG) {
-                        do_format = true;
-                    } else if response.as_str() == t!("pddb.cancel", xous::LANG) {
-                        log::info!("PDDB format aborted by user");
-                        do_format = false;
-                    } else {
-                        panic!("Got unexpected return from radiobutton");
-                    }
-                }
-                _ => panic!("get_radiobutton failed"),
-            }
-            if do_format {
-                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+        tt.sleep_ms(1000).unwrap(); // wait 1 second after boot before attempting to mount, to let the boot screen finish redrawing (cometic issue).
+        log::info!("Requesting login password");
+        let mut done = false;
+        let mut skip = false;
+        while !done {
+            done = pddb_os.try_login();
+            if !done {
+                pddb_os.clear_password(); // clear the bad password entry
                 modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
-                let fast: bool;
-                match modals.get_radiobutton(t!("pddb.devbypass", xous::LANG)) {
+                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
                     Ok(response) => {
                         if response.as_str() == t!("pddb.yes", xous::LANG) {
-                            fast = true;
+                            done = false;
                         } else if response.as_str() == t!("pddb.no", xous::LANG) {
-                            fast = false;
+                            done = true;
+                            skip = true;
                         } else {
                             panic!("Got unexpected return from radiobutton");
                         }
                     }
                     _ => panic!("get_radiobutton failed"),
                 }
-                pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
+            }
+        }
 
-                #[cfg(not(any(target_os = "none", target_os = "xous")))]
-                pddb_os.dbg_dump(Some("full".to_string()), None);
+        if !skip {
+            log::info!("Attempting to mount the PDDB");
+            if let Some(sys_basis) = pddb_os.pddb_mount() {
+                log::info!("PDDB mount operation finished successfully");
+                basis_cache.basis_add(sys_basis);
+            } else {
+                log::debug!("PDDB did not mount; requesting format");
+                modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
+                modals.add_list_item(t!("pddb.cancel", xous::LANG)).expect("couldn't build radio item list");
+                let do_format: bool;
+                match modals.get_radiobutton(t!("pddb.requestformat", xous::LANG)) {
+                    Ok(response) => {
+                        if response.as_str() == t!("pddb.okay", xous::LANG) {
+                            do_format = true;
+                        } else if response.as_str() == t!("pddb.cancel", xous::LANG) {
+                            log::info!("PDDB format aborted by user");
+                            do_format = false;
+                        } else {
+                            panic!("Got unexpected return from radiobutton");
+                        }
+                    }
+                    _ => panic!("get_radiobutton failed"),
+                }
+                if do_format {
+                    modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                    let fast: bool;
+                    match modals.get_radiobutton(t!("pddb.devbypass", xous::LANG)) {
+                        Ok(response) => {
+                            if response.as_str() == t!("pddb.yes", xous::LANG) {
+                                fast = true;
+                            } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                                fast = false;
+                            } else {
+                                panic!("Got unexpected return from radiobutton");
+                            }
+                        }
+                        _ => panic!("get_radiobutton failed"),
+                    }
+                    pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
 
-                if let Some(sys_basis) = pddb_os.pddb_mount() {
-                    log::info!("PDDB mount operation finished successfully");
-                    basis_cache.basis_add(sys_basis);
-                } else {
-                    log::error!("Despite formatting, no PDDB was found!");
-                    let mut err = String::from(t!("pddb.internalerror", xous::LANG));
-                    err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
-                    modals.show_notification(err.as_str()).expect("notification failed");
+                    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                    pddb_os.dbg_dump(Some("full".to_string()), None);
+
+                    if let Some(sys_basis) = pddb_os.pddb_mount() {
+                        log::info!("PDDB mount operation finished successfully");
+                        basis_cache.basis_add(sys_basis);
+                    } else {
+                        log::error!("Despite formatting, no PDDB was found!");
+                        let mut err = String::from(t!("pddb.internalerror", xous::LANG));
+                        err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
+                        modals.show_notification(err.as_str()).expect("notification failed");
+                    }
                 }
             }
         }

@@ -375,6 +375,11 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
+            Some(Opcode::ClearPasswordCacheEntry) => msg_blocking_scalar_unpack!(msg, pass_type_code, _, _, _, {
+                let pass_type: AesRootkeyType = FromPrimitive::from_usize(pass_type_code).unwrap_or(AesRootkeyType::NoneSpecified);
+                keys.purge_user_password(pass_type);
+                xous::return_scalar(msg.sender, 1).unwrap();
+            }),
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
@@ -1026,7 +1031,7 @@ fn xmain() -> ! {
                 );
                 confirm_radiobox.is_password = true;
                 confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_suspend", xous::LANG)));
-                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG)));
+                // confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG))); // this policy makes no sense in the use case of the key
                 confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_keep", xous::LANG)));
                 rootkeys_modal.modify(
                     Some(ActionType::RadioButtons(confirm_radiobox)),

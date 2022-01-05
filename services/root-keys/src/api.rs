@@ -21,6 +21,8 @@ pub(crate) enum Opcode {
     AesOracle,
     /// create new FPGA keys; provisioning requires a slave device to be connected that can run the JTAG sequence
     BbramProvision,
+    /// clear a cached password
+    ClearPasswordCacheEntry,
 
     TestUx,
 
