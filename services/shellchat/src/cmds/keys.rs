@@ -10,6 +10,7 @@ pub struct Keys {
     rootkeys: root_keys::RootKeys,
 }
 #[derive(Debug)]
+#[allow(dead_code)]
 #[cfg(not(feature="spinortest"))]
 pub struct Keys {
     spinor: spinor::Spinor,
@@ -63,7 +64,7 @@ impl<'a> ShellCmdApi<'a> for Keys {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "keys [usblock] [usbunlock] [spinortest]";
+        let helpstring = "keys [usblock] [usbunlock] [pddbrecycle]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -112,6 +113,11 @@ impl<'a> ShellCmdApi<'a> for Keys {
                 "usbunlock" => {
                     env.llio.debug_usb(Some(false)).unwrap();
                     write!(ret, "USB debug port unlocked: all secrets are readable via USB!").unwrap();
+                }
+                "pddbrecycle" => {
+                    // erase the page table, which should effectively trigger a reformat on the next boot
+                    self.spinor.bulk_erase(xous::PDDB_LOC, 1024 * 1024).expect("couldn't erase page table");
+                    write!(ret, "PDDB page table ereased").unwrap();
                 }
                 #[cfg(feature="spinortest")]
                 "spinortest" => {
