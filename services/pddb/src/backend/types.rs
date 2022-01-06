@@ -146,7 +146,7 @@ impl Add for PageAlignedVa {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct PageAlignedPa(PhysAddr);
 impl PageAlignedPa {
     #[allow(dead_code)]

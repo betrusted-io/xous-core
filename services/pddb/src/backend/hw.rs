@@ -112,8 +112,11 @@ impl PddbOs {
 
         // the mbbb is located one page off from the Page Table
         let key_phys_base = PageAlignedPa::from(size_of::<PageTableInFlash>());
+        log::debug!("key_phys_base: {:x?}", key_phys_base);
         let mbbb_phys_base = key_phys_base + PageAlignedPa::from(PAGE_SIZE);
+        log::debug!("mbbb_phys_base: {:x?}", mbbb_phys_base);
         let fscb_phys_base = PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
+        log::debug!("fscb_phys_base: {:x?}", fscb_phys_base);
 
         let llio = llio::Llio::new(&xns).unwrap();
         // native hardware

@@ -12,21 +12,10 @@ pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 #[allow(dead_code)]
 pub(crate) const PDDB_VERSION: u32 = 0x00_00_00_01;
 #[allow(dead_code)]
-#[cfg(all(
-    not(any(target_os = "none", target_os = "xous")),
-    feature = "ci"
-))]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
-// Also the CI digest scripts don't currently handle filesystems that aren't an even mutiple of 1 megabyte
-// This has to do with the CI script parsing the page table itself in page-sized increments, and not handling
-// the case that the page table isn't an even multiple of one page correctly.
-pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 #[allow(dead_code)]
-#[cfg(not(all(
-    not(any(target_os = "none", target_os = "xous")),
-    feature = "ci"
-)))]
 pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
+// pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// range for the starting point of a journal number, picked from a random seed
 /// the goal is to reduce info leakage about the age of structures relative to each other
