@@ -2029,6 +2029,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "oqc-test",
+ "pddb",
  "rand_core 0.5.1",
  "rkyv",
  "root-keys",

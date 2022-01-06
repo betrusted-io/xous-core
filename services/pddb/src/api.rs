@@ -71,6 +71,8 @@ pub(crate) enum Opcode {
     /// warning, the Delete routine has not been well tested
     DeleteBasis,
 
+    CreateDict,
+
     KeyRequest,
 
     ReadKey,
@@ -90,7 +92,7 @@ pub struct PddbBasisList {
     pub num: u32,
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum PddbBasisMgmtCode {
+pub enum PddbRequestCode {
     Create,
     Open,
     Close,
@@ -104,11 +106,18 @@ pub enum PddbBasisMgmtCode {
     Uninit,
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct PddbBasisMgmt {
-    /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
+pub struct PddbBasisRequest {
     pub name: [u8; BASIS_NAME_LEN],
-    /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
-    pub code: PddbBasisMgmtCode,
+    pub code: PddbRequestCode,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbDictRequest {
+    /// applications shouldn't specify a basis so that the PD mechanism works as intended, but non-sensitive system config keys will want to generally specify the system basis.
+    pub basis_specified: bool,
+    pub basis_name: [u8; BASIS_NAME_LEN],
+    pub dict_name: [u8; DICT_NAME_LEN],
+    pub code: PddbRequestCode,
 }
 
 /// A structure for requesting a token to access a particular key/value pair

@@ -51,18 +51,18 @@ impl PddbBasisManager {
     /// returns the latest basis that is opened -- this is where all new values are being sent by default
     /// if the PDDB is not mounted, returns None
     pub fn latest_basis(&self) -> Option<String> {
-        let mgmt = PddbBasisMgmt {
+        let mgmt = PddbBasisRequest {
             name: [0u8; BASIS_NAME_LEN],
-            code: PddbBasisMgmtCode::Uninit,
+            code: PddbRequestCode::Uninit,
         };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::LatestBasis.to_u32().unwrap()).expect("Couldn't execute ListBasis opcode");
-        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore list structure");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore list structure");
         match ret.code {
-            PddbBasisMgmtCode::NoErr => {
+            PddbRequestCode::NoErr => {
                 Some(cstr_to_string(&ret.name))
             }
-            PddbBasisMgmtCode::NotMounted => {
+            PddbRequestCode::NotMounted => {
                 None
             }
             _ => {
@@ -72,18 +72,18 @@ impl PddbBasisManager {
         }
     }
     pub fn create(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisMgmt {
+        let mut mgmt = PddbBasisRequest {
             name: [0u8; BASIS_NAME_LEN],
-            code: PddbBasisMgmtCode::Create,
+            code: PddbRequestCode::Create,
         };
         for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap()).expect("Couldn't execute CreateBasis opcode");
-        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
         match ret.code {
-            PddbBasisMgmtCode::NoErr => Ok(()),
-            PddbBasisMgmtCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis")),
-            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
             _ => {
                 log::error!("Invalid return code");
                 panic!("Invalid return code");
@@ -91,18 +91,18 @@ impl PddbBasisManager {
         }
     }
     pub fn open(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisMgmt {
+        let mut mgmt = PddbBasisRequest {
             name: [0u8; BASIS_NAME_LEN],
-            code: PddbBasisMgmtCode::Open,
+            code: PddbRequestCode::Open,
         };
         for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap()).expect("Couldn't execute OpenBasis opcode");
-        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
         match ret.code {
-            PddbBasisMgmtCode::NoErr => Ok(()),
-            PddbBasisMgmtCode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Authentication error")),
-            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Authentication error")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
             _ => {
                 log::error!("Invalid return code");
                 panic!("Invalid return code");
@@ -110,18 +110,18 @@ impl PddbBasisManager {
         }
     }
     pub fn close(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisMgmt {
+        let mut mgmt = PddbBasisRequest {
             name: [0u8; BASIS_NAME_LEN],
-            code: PddbBasisMgmtCode::Close,
+            code: PddbRequestCode::Close,
         };
         for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CloseBasis.to_u32().unwrap()).expect("Couldn't execute CloseBasis opcode");
-        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
         match ret.code {
-            PddbBasisMgmtCode::NoErr => Ok(()),
-            PddbBasisMgmtCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
-            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error closing basis")),
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error closing basis")),
             _ => {
                 log::error!("Invalid return code");
                 panic!("Invalid return code");
@@ -129,18 +129,18 @@ impl PddbBasisManager {
         }
     }
     pub fn delete(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisMgmt {
+        let mut mgmt = PddbBasisRequest {
             name: [0u8; BASIS_NAME_LEN],
-            code: PddbBasisMgmtCode::Delete,
+            code: PddbRequestCode::Delete,
         };
         for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::DeleteBasis.to_u32().unwrap()).expect("Couldn't execute DeleteBasis opcode");
-        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
         match ret.code {
-            PddbBasisMgmtCode::NoErr => Ok(()),
-            PddbBasisMgmtCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
-            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error deleting basis")),
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error deleting basis")),
             _ => {
                 log::error!("Invalid return code");
                 panic!("Invalid return code");
@@ -155,19 +155,20 @@ pub struct Pddb<'a> {
     callback: Option<Box<dyn FnMut() + 'a>>,
 }
 impl<'a> Pddb<'a> {
-    // opens a dictionary only if it exists
-    pub fn open(_dict_name: &str) -> Option<Self> { None }
     // creates a dictionary only if it does not already exist
-    pub fn create(dict_name: &str) -> Option<Self> {
+    pub fn create(dict_name: &str, basis_name: Option<&str>) -> Option<Self> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("can't connect to Pddb server");
+        /*let mut request = PddbDictRequest {
+            basis_specified: basis_name.is_some(),
+        }*/
 
         None
     }
 
     /// returns a key only if it exists
-    pub fn get(&mut self, _key_name: &str, key_changed_cb: impl FnMut() + 'a) -> Result<Option<PddbKey>> {
+    pub fn get(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>, key_changed_cb: impl FnMut() + 'a) -> Result<Option<PddbKey>> {
         self.callback = Some(Box::new(key_changed_cb));
         Ok(None)
     }

@@ -378,7 +378,7 @@ mod tests;
 use tests::*;
 
 use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use xous::{send_message, Message};
 use xous_ipc::Buffer;
 use core::cell::RefCell;
 use std::rc::Rc;
@@ -566,20 +566,20 @@ fn xmain() -> ! {
             }
             Some(Opcode::LatestBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 if let Some(name) = basis_cache.basis_latest() {
                     for (&src, dst) in name.as_bytes().iter().zip(mgmt.name.iter_mut()) { *dst = src }
-                    mgmt.code = PddbBasisMgmtCode::NoErr;
+                    mgmt.code = PddbRequestCode::NoErr;
                 } else {
-                    mgmt.code = PddbBasisMgmtCode::NotMounted;
+                    mgmt.code = PddbRequestCode::NotMounted;
                 }
                 buffer.replace(mgmt).unwrap();
             }
             Some(Opcode::CreateBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
-                    PddbBasisMgmtCode::Create => {
+                    PddbRequestCode::Create => {
                         let name = cstr_to_string(&mgmt.name);
                         let request = BasisRequestPassword {
                             db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str(name.as_str()),
@@ -590,24 +590,24 @@ fn xmain() -> ! {
                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                         if let Some(pw) = ret.plaintext_pw {
                             match basis_cache.basis_create(&mut pddb_os, &name, pw.as_str().expect("password was not valid utf-8")) {
-                                Ok(_) => mgmt.code = PddbBasisMgmtCode::NoErr,
-                                _ => mgmt.code = PddbBasisMgmtCode::InternalError,
+                                Ok(_) => mgmt.code = PddbRequestCode::NoErr,
+                                _ => mgmt.code = PddbRequestCode::InternalError,
                             }
                         } else {
-                            mgmt.code = PddbBasisMgmtCode::InternalError;
+                            mgmt.code = PddbRequestCode::InternalError;
                         }
                     }
                     _ => {
-                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                        mgmt.code = PddbRequestCode::InternalError;
                     }
                 }
                 buffer.replace(mgmt).unwrap();
             }
             Some(Opcode::OpenBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
-                    PddbBasisMgmtCode::Open => {
+                    PddbRequestCode::Open => {
                         let name = cstr_to_string(&mgmt.name);
                         let mut finished = false;
                         while !finished {
@@ -625,7 +625,7 @@ fn xmain() -> ! {
                                 ) {
                                     basis_cache.basis_add(basis);
                                     finished = true;
-                                    mgmt.code = PddbBasisMgmtCode::NoErr;
+                                    mgmt.code = PddbRequestCode::NoErr;
                                 }
                             } else {
                                 modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
@@ -637,7 +637,7 @@ fn xmain() -> ! {
                                             // this will cause just another go-around
                                         } else if response.as_str() == t!("pddb.no", xous::LANG) {
                                             finished = true;
-                                            mgmt.code = PddbBasisMgmtCode::AccessDenied; // this will cause a return of AccessDenied
+                                            mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
                                         } else {
                                             panic!("Got unexpected return from radiobutton");
                                         }
@@ -648,50 +648,53 @@ fn xmain() -> ! {
                         }
                     }
                     _ => {
-                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                        mgmt.code = PddbRequestCode::InternalError;
                     }
                 }
                 buffer.replace(mgmt).unwrap();
             }
             Some(Opcode::CloseBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
-                    PddbBasisMgmtCode::Close => {
+                    PddbRequestCode::Close => {
                         let name = cstr_to_string(&mgmt.name);
                         match basis_cache.basis_unmount(&mut pddb_os, &name) {
-                            Ok(_) => mgmt.code = PddbBasisMgmtCode::NoErr,
+                            Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                             Err(e) => match e.kind() {
-                                ErrorKind::NotFound => mgmt.code = PddbBasisMgmtCode::NotFound,
-                                _ => mgmt.code = PddbBasisMgmtCode::InternalError,
+                                ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
+                                _ => mgmt.code = PddbRequestCode::InternalError,
                             }
                         }
                     }
                     _ => {
-                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                        mgmt.code = PddbRequestCode::InternalError;
                     }
                 }
                 buffer.replace(mgmt).unwrap();
             }
             Some(Opcode::DeleteBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
-                    PddbBasisMgmtCode::Delete => {
+                    PddbRequestCode::Delete => {
                         let name = cstr_to_string(&mgmt.name);
                         match basis_cache.basis_delete(&mut pddb_os, &name) {
-                            Ok(_) => mgmt.code = PddbBasisMgmtCode::NoErr,
+                            Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                             Err(e) => match e.kind() {
-                                ErrorKind::NotFound => mgmt.code = PddbBasisMgmtCode::NotFound,
-                                _ => mgmt.code = PddbBasisMgmtCode::InternalError,
+                                ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
+                                _ => mgmt.code = PddbRequestCode::InternalError,
                             }
                         }
                     }
                     _ => {
-                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                        mgmt.code = PddbRequestCode::InternalError;
                     }
                 }
                 buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::CreateDict) => {
+
             }
             Some(Opcode::KeyRequest) => {
                 // placeholder
