@@ -154,17 +154,32 @@ def main():
         raw_img = img_f.read()
         pddb_len = len(raw_img)
         pddb_size_pages = pddb_len // PAGE_SIZE
+        logging.info("Disk size: 0x{:x}".format(pddb_len))
 
         mbbb_offset = pddb_size_pages * Pte.PTE_LEN + PAGE_SIZE * KEY_PAGES
+        if mbbb_offset & (PAGE_SIZE - 1) != 0:
+            mbbb_offset = (mbbb_offset + PAGE_SIZE) & 0xFFFF_F000 # round up to nearest page
+        logging.info("MBBB: 0x{:x}".format(mbbb_offset))
+
         img_index = 0
         tables = decode_pagetable(raw_img, pddb_size_pages, keys, raw_img[mbbb_offset:mbbb_offset + MBBB_PAGES * PAGE_SIZE])
         img_index += pddb_size_pages * Pte.PTE_LEN
+        if img_index & (PAGE_SIZE - 1) != 0:
+            img_index = (img_index + PAGE_SIZE) & 0xFFFF_F000
+
         rawkeys = raw_img[img_index : img_index + PAGE_SIZE * KEY_PAGES]
+        logging.debug("Keys: 0x{:x}".format(img_index))
         img_index += PAGE_SIZE * KEY_PAGES
+
         mbbb = raw_img[img_index : img_index + PAGE_SIZE * MBBB_PAGES]
+        logging.debug("MBBB check: 0x{:x}".format(img_index))
         img_index += PAGE_SIZE * MBBB_PAGES
+
         fscb = decode_fscb(raw_img[img_index: img_index + PAGE_SIZE * FSCB_PAGES], keys, FSCB_LEN_PAGES=FSCB_LEN_PAGES)
+        logging.debug("FSCB: 0x{:x}".format(img_index))
         img_index += PAGE_SIZE * FSCB_PAGES
+
+        logging.debug("Data: 0x{:x}".format(img_index))
         data = raw_img[img_index:]
 
         for name, key in keys.items():
@@ -589,7 +604,6 @@ def decode_pagetable(img, entries, keys, mbbb):
         logging.debug("key: {}".format(key.hex()))
         cipher = AES.new(key, AES.MODE_ECB)
         pages = [img[i:i+PAGE_SIZE] for i in range(0, entries * Pte.PTE_LEN, PAGE_SIZE)]
-        print(entries * Pte.PTE_LEN)
         page_num = 0
         v2p_table = {}
         p2v_table = {}
