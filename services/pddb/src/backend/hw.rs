@@ -498,7 +498,13 @@ impl PddbOs {
                 }
                 success
             } else {
-                true // the first password entered is always correct. If you made a typo, nothing we can do about it...
+                // the system is in a blank state -- use the bogus key so that the later test for
+                // mounting the PDDB doesn't fail on account of a lack of key matter. We'll deal
+                // with setting the key correctly later.
+                self.system_basis_key = Some(system_key);
+                let cipher = Aes256::new(GenericArray::from_slice(&system_key));
+                self.cipher_ecb = Some(cipher);
+                true
             }
         } else {
             true
@@ -1189,6 +1195,27 @@ impl PddbOs {
         if !self.rootkeys.is_initialized().unwrap() {
             return Err(Error::new(ErrorKind::Unsupported, "Root keys are not initialized; cannot format a PDDB without root keys!"));
         }
+        // step 0. If we have a modal, confirm that the password entered was correct with a double-entry.
+        if let Some(modals) = progress {
+            let mut success = false;
+            while !success {
+                let mut checkblock_a = [0u8; BLOCK_SIZE];
+                self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
+
+                modals.show_notification(t!("pddb.checkpass", xous::LANG)).expect("notification failed");
+                self.clear_password();
+                let mut checkblock_b = [0u8; BLOCK_SIZE];
+                self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_b));
+
+                if checkblock_a == checkblock_b {
+                    success = true;
+                } else {
+                    modals.show_notification(t!("pddb.checkpass_fail", xous::LANG)).expect("notification failed");
+                    self.clear_password();
+                }
+            }
+        }
+
         // step 1. Erase the entire PDDB region - leaves the state in all 1's
         if !fast {
             log::info!("Erasing the PDDB region");

@@ -992,7 +992,8 @@ fn xmain() -> ! {
                         aes_sender = Some(msg.sender);
                     }
                     keys.set_ux_password_type(Some(PasswordType::Boot));
-                    password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap());
+                    //password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap()); // skip policy question. it's annoying.
+                    password_action.set_action_opcode(Opcode::UxAesEnsureReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action)),
                         Some(t!("rootkeys.get_login_password", xous::LANG)), false,
@@ -1018,7 +1019,7 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
-            Some(Opcode::UxAesPasswordPolicy) => {
+            Some(Opcode::UxAesPasswordPolicy) => { // this is bypassed, it's not useful. You basically always only want to retain the password until sleep.
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
 
@@ -1041,17 +1042,32 @@ fn xmain() -> ! {
                 rootkeys_modal.activate();
             },
             Some(Opcode::UxAesEnsureReturn) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
-                if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
-                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
-                } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                /*
+                { // in case we want to bring back the policy check
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                    if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
+                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
+                    } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                        keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                    } else if payload.as_str() == "no change" {
+                        // don't change the policy
+                    } else {
+                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                    }
+                }*/
+                {
+                    let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                    keys.hash_and_save_password(plaintext_pw.as_str());
+                    plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                    buf.volatile_clear();
+
+                    // this is a reasonable default policy -- don't bother the user to answer this question all the time.
                     keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
-                } else if payload.as_str() == "no change" {
-                    // don't change the policy
-                } else {
-                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
                 }
+
                 keys.set_ux_password_type(None);
                 if let Some(sender) = aes_sender.take() {
                     xous::return_scalar(sender, 1).unwrap();

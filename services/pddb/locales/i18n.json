@@ -24,6 +24,16 @@
         "zh": "密码错误。 再试一次？",
         "en-audio": "Incorrect password. Try again?"
     },
+    "pddb.checkpass": {
+        "en": "Press any key, then\nre-enter your password\nfor setup confirmation.",
+        "zh": "第一次使用，再次输入密码",
+        "en-audio": "First-time setup: Enter password again."
+    },
+    "pddb.checkpass_fail": {
+        "en": "Password mismatch!\nPlease try again.",
+        "zh": "密码不匹配，请重试.",
+        "en-audio": "Password mismatch! Please try again."
+    },
     "pddb.badpass_infallible": {
         "en": "Incorrect password.\n\nPlease try again.",
         "zh": "密码错误。",
