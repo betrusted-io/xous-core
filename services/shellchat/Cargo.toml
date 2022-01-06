@@ -34,6 +34,7 @@ root-keys = {path="../root-keys"}
 jtag = {path="../jtag"}
 net = {path="../net"}
 dns = {path="../dns"}
+pddb = {path="../pddb"}
 
 trng = {path = "../trng"}
 

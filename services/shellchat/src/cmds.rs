@@ -100,6 +100,7 @@ mod keys;     use keys::*;
 mod wlan;     use wlan::*;
 mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
+mod pddb_cmd; use pddb_cmd::*;
 
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -125,6 +126,7 @@ pub struct CmdEnv {
     keys_cmd: Keys,
     jtag_cmd: JtagCmd,
     net_cmd: NetCmd,
+    pddb_cmd: PddbCmd,
 
     //fcc_cmd: Fcc,
 }
@@ -178,6 +180,7 @@ impl CmdEnv {
             keys_cmd: Keys::new(&xns),
             jtag_cmd: JtagCmd::new(&xns),
             net_cmd: NetCmd::new(&xns),
+            pddb_cmd: PddbCmd::new(&xns),
 
             //fcc_cmd: fcc,
         }
@@ -217,6 +220,7 @@ impl CmdEnv {
             &mut wlan_cmd,
             &mut self.jtag_cmd,
             &mut self.net_cmd,
+            &mut self.pddb_cmd,
 
             //&mut self.fcc_cmd,
         ];
