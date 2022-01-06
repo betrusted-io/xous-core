@@ -921,15 +921,20 @@ impl BasisCache {
     /// note: you can "delete" a basis simply by forgetting its password, but this is more thorough.
     /// there might also need to be a variant to make which is a "change my password" function, but that is actually
     /// surprisingly hard.
-    #[allow(dead_code)]
-    pub(crate) fn basis_delete(&mut self, hw: &mut PddbOs, mut basis: BasisCacheEntry) {
-        let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
-        for page in basis.v2p_map.values_mut() {
-            hw.trng_slice(&mut temp);
-            hw.patch_data(&temp, page.page_number() * PAGE_SIZE as u32);
-            hw.fast_space_free(page);
+    pub(crate) fn basis_delete(&mut self, hw: &mut PddbOs, basis_name: &str) -> Result<()> {
+        if let Some(basis_index) = self.select_basis(Some(basis_name)) {
+            let basis = &mut self.cache[basis_index];
+            let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
+            for page in basis.v2p_map.values_mut() {
+                hw.trng_slice(&mut temp);
+                hw.patch_data(&temp, page.page_number() * PAGE_SIZE as u32);
+                hw.fast_space_free(page);
+            }
+            basis.pt_sync(hw);
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "Basis not found"))
         }
-        basis.pt_sync(hw);
     }
 
     pub(crate) fn sync(&mut self, hw: &mut PddbOs, basis_name: Option<&str>) -> Result<()> {

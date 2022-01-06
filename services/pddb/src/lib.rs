@@ -51,35 +51,104 @@ impl PddbBasisManager {
     /// returns the latest basis that is opened -- this is where all new values are being sent by default
     /// if the PDDB is not mounted, returns None
     pub fn latest_basis(&self) -> Option<String> {
-        // just re-use this structure -- because we have to clear the whole page anyways to share it
-        let list_alloc = PddbBasisList {
-            list: [[0u8; BASIS_NAME_LEN]; 63],
-            num: 0
+        let mgmt = PddbBasisMgmt {
+            name: [0u8; BASIS_NAME_LEN],
+            code: PddbBasisMgmtCode::Uninit,
         };
-        let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::LatestBasis.to_u32().unwrap()).expect("Couldn't execute ListBasis opcode");
-        let list = buf.to_original::<PddbBasisList, _>().expect("couldn't restore list structure");
-        if list.num == 1 {
-            Some(cstr_to_string(&list.list[0]))
-        } else if list.num == 0 {
-            None
-        } else {
-            log::error!("Either 1 or 0 items should be returned by the latest basis call");
-            panic!("Either 1 or 0 items should be returned by the latest basis call");
+        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore list structure");
+        match ret.code {
+            PddbBasisMgmtCode::NoErr => {
+                Some(cstr_to_string(&ret.name))
+            }
+            PddbBasisMgmtCode::NotMounted => {
+                None
+            }
+            _ => {
+                log::error!("Invalid return from latest basis call");
+                panic!("Invalid return from latest basis call");
+            }
         }
     }
-    pub fn create(basis_name: &str) -> Result<()> {
-        Ok(())
+    pub fn create(&self, basis_name: &str) -> Result<()> {
+        let mut mgmt = PddbBasisMgmt {
+            name: [0u8; BASIS_NAME_LEN],
+            code: PddbBasisMgmtCode::Create,
+        };
+        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap()).expect("Couldn't execute CreateBasis opcode");
+        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbBasisMgmtCode::NoErr => Ok(()),
+            PddbBasisMgmtCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis")),
+            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
     }
-    pub fn open(basis_name: &str) -> Result<()> {
-        Ok(())
+    pub fn open(&self, basis_name: &str) -> Result<()> {
+        let mut mgmt = PddbBasisMgmt {
+            name: [0u8; BASIS_NAME_LEN],
+            code: PddbBasisMgmtCode::Open,
+        };
+        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap()).expect("Couldn't execute OpenBasis opcode");
+        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbBasisMgmtCode::NoErr => Ok(()),
+            PddbBasisMgmtCode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Authentication error")),
+            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
     }
-    pub fn close(basis_name: &str) -> Result<()> {
-        Ok(())
+    pub fn close(&self, basis_name: &str) -> Result<()> {
+        let mut mgmt = PddbBasisMgmt {
+            name: [0u8; BASIS_NAME_LEN],
+            code: PddbBasisMgmtCode::Close,
+        };
+        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::CloseBasis.to_u32().unwrap()).expect("Couldn't execute CloseBasis opcode");
+        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbBasisMgmtCode::NoErr => Ok(()),
+            PddbBasisMgmtCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
+            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error closing basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
+    }
+    pub fn delete(&self, basis_name: &str) -> Result<()> {
+        let mut mgmt = PddbBasisMgmt {
+            name: [0u8; BASIS_NAME_LEN],
+            code: PddbBasisMgmtCode::Delete,
+        };
+        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::DeleteBasis.to_u32().unwrap()).expect("Couldn't execute DeleteBasis opcode");
+        let ret = buf.to_original::<PddbBasisMgmt, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbBasisMgmtCode::NoErr => Ok(()),
+            PddbBasisMgmtCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
+            PddbBasisMgmtCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error deleting basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
     }
 }
 
-// this structure can be shared on the user side?
 pub struct Pddb<'a> {
     conn: CID,
     contents: HashMap<PddbKey<'a>, &'a [u8]>,

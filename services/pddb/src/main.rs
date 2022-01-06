@@ -374,6 +374,7 @@ use ux::*;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod tests;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[allow(unused_imports)]
 use tests::*;
 
 use num_traits::*;
@@ -384,6 +385,7 @@ use std::rc::Rc;
 use std::thread;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::io::ErrorKind;
 
 use locales::t;
 
@@ -461,17 +463,7 @@ fn xmain() -> ! {
             )
         }
     });
-    // stub for testing the password request mechanism
-    if false {
-        let request = BasisRequestPassword {
-            db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str("test basis"),
-            plaintext_pw: None,
-        };
-        let mut buf = Buffer::into_buf(request).unwrap();
-        buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
-        let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
-        log::info!("Got password: {:?}", ret.plaintext_pw);
-    }
+    // try to mount the PDDB automatically before starting the server
     if pddb_os.rootkeys_initialized() {
         tt.sleep_ms(1000).unwrap(); // wait 1 second after boot before attempting to mount, to let the boot screen finish redrawing (cometic issue).
         log::info!("Requesting login password");
@@ -556,6 +548,7 @@ fn xmain() -> ! {
             }
         }
     }
+    // main server loop
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -573,14 +566,132 @@ fn xmain() -> ! {
             }
             Some(Opcode::LatestBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
+                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
                 if let Some(name) = basis_cache.basis_latest() {
-                    for (&src, dst) in name.as_bytes().iter().zip(list_ipc.list[0].iter_mut()) { *dst = src }
-                    list_ipc.num = 1;
+                    for (&src, dst) in name.as_bytes().iter().zip(mgmt.name.iter_mut()) { *dst = src }
+                    mgmt.code = PddbBasisMgmtCode::NoErr;
                 } else {
-                    list_ipc.num = 0;
+                    mgmt.code = PddbBasisMgmtCode::NotMounted;
                 }
-                buffer.replace(list_ipc).unwrap();
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::CreateBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                match mgmt.code {
+                    PddbBasisMgmtCode::Create => {
+                        let name = cstr_to_string(&mgmt.name);
+                        let request = BasisRequestPassword {
+                            db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str(name.as_str()),
+                            plaintext_pw: None,
+                        };
+                        let mut buf = Buffer::into_buf(request).unwrap();
+                        buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                        let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
+                        if let Some(pw) = ret.plaintext_pw {
+                            match basis_cache.basis_create(&mut pddb_os, &name, pw.as_str().expect("password was not valid utf-8")) {
+                                Ok(_) => mgmt.code = PddbBasisMgmtCode::NoErr,
+                                _ => mgmt.code = PddbBasisMgmtCode::InternalError,
+                            }
+                        } else {
+                            mgmt.code = PddbBasisMgmtCode::InternalError;
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::OpenBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                match mgmt.code {
+                    PddbBasisMgmtCode::Open => {
+                        let name = cstr_to_string(&mgmt.name);
+                        let mut finished = false;
+                        while !finished {
+                            let request = BasisRequestPassword {
+                                db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str(name.as_str()),
+                                plaintext_pw: None,
+                            };
+                            let mut buf = Buffer::into_buf(request).unwrap();
+                            buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                            let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
+                            if let Some(pw) = ret.plaintext_pw {
+                                if let Some(basis) = basis_cache.basis_unlock(
+                                    &mut pddb_os, &name, pw.as_str().expect("password was not valid utf-8"),
+                                    BasisRetentionPolicy::Persist
+                                ) {
+                                    basis_cache.basis_add(basis);
+                                    finished = true;
+                                    mgmt.code = PddbBasisMgmtCode::NoErr;
+                                }
+                            } else {
+                                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
+                                    Ok(response) => {
+                                        if response.as_str() == t!("pddb.yes", xous::LANG) {
+                                            finished = false;
+                                            // this will cause just another go-around
+                                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                                            finished = true;
+                                            mgmt.code = PddbBasisMgmtCode::AccessDenied; // this will cause a return of AccessDenied
+                                        } else {
+                                            panic!("Got unexpected return from radiobutton");
+                                        }
+                                    }
+                                    _ => panic!("get_radiobutton failed"),
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::CloseBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                match mgmt.code {
+                    PddbBasisMgmtCode::Close => {
+                        let name = cstr_to_string(&mgmt.name);
+                        match basis_cache.basis_unmount(&mut pddb_os, &name) {
+                            Ok(_) => mgmt.code = PddbBasisMgmtCode::NoErr,
+                            Err(e) => match e.kind() {
+                                ErrorKind::NotFound => mgmt.code = PddbBasisMgmtCode::NotFound,
+                                _ => mgmt.code = PddbBasisMgmtCode::InternalError,
+                            }
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::DeleteBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisMgmt, _>().unwrap();
+                match mgmt.code {
+                    PddbBasisMgmtCode::Delete => {
+                        let name = cstr_to_string(&mgmt.name);
+                        match basis_cache.basis_delete(&mut pddb_os, &name) {
+                            Ok(_) => mgmt.code = PddbBasisMgmtCode::NoErr,
+                            Err(e) => match e.kind() {
+                                ErrorKind::NotFound => mgmt.code = PddbBasisMgmtCode::NotFound,
+                                _ => mgmt.code = PddbBasisMgmtCode::InternalError,
+                            }
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbBasisMgmtCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
             }
             Some(Opcode::KeyRequest) => {
                 // placeholder

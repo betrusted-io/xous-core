@@ -64,6 +64,12 @@ pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
 pub(crate) enum Opcode {
     ListBasis,
     LatestBasis,
+    /// Note that creating a basis does not automatically open it!
+    CreateBasis,
+    OpenBasis,
+    CloseBasis,
+    /// warning, the Delete routine has not been well tested
+    DeleteBasis,
 
     KeyRequest,
 
@@ -82,6 +88,27 @@ pub struct PddbBasisList {
     pub list: [[u8; BASIS_NAME_LEN]; 63],
     /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
     pub num: u32,
+}
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum PddbBasisMgmtCode {
+    Create,
+    Open,
+    Close,
+    Delete,
+    NoErr,
+    NotMounted,
+    NoFreeSpace,
+    NotFound,
+    InternalError,
+    AccessDenied,
+    Uninit,
+}
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbBasisMgmt {
+    /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
+    pub name: [u8; BASIS_NAME_LEN],
+    /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
+    pub code: PddbBasisMgmtCode,
 }
 
 /// A structure for requesting a token to access a particular key/value pair
