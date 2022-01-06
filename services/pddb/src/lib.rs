@@ -30,7 +30,7 @@ impl PddbBasisManager {
     /// return a list of all open bases
     pub fn list_basis(&self) -> Vec::<String> {
         let list_alloc = PddbBasisList {
-            list: [[0u8; BASIS_NAME_LEN]; 63],
+            list: [xous_ipc::String::<BASIS_NAME_LEN>::default(); 63],
             num: 0
         };
         let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
@@ -44,7 +44,7 @@ impl PddbBasisManager {
             if index as u32 == list.num {
                 break;
             }
-            ret.push(cstr_to_string(name));
+            ret.push(name.as_str().expect("name is not valid utf-8").to_string());
         }
         ret
     }
@@ -52,7 +52,7 @@ impl PddbBasisManager {
     /// if the PDDB is not mounted, returns None
     pub fn latest_basis(&self) -> Option<String> {
         let mgmt = PddbBasisRequest {
-            name: [0u8; BASIS_NAME_LEN],
+            name: xous_ipc::String::<BASIS_NAME_LEN>::new(),
             code: PddbRequestCode::Uninit,
         };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
@@ -60,7 +60,7 @@ impl PddbBasisManager {
         let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore list structure");
         match ret.code {
             PddbRequestCode::NoErr => {
-                Some(cstr_to_string(&ret.name))
+                Some(ret.name.as_str().expect("name wasn't valid utf-8").to_string())
             }
             PddbRequestCode::NotMounted => {
                 None
@@ -72,11 +72,10 @@ impl PddbBasisManager {
         }
     }
     pub fn create(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisRequest {
-            name: [0u8; BASIS_NAME_LEN],
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Create,
         };
-        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap()).expect("Couldn't execute CreateBasis opcode");
         let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
@@ -91,11 +90,10 @@ impl PddbBasisManager {
         }
     }
     pub fn open(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisRequest {
-            name: [0u8; BASIS_NAME_LEN],
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Open,
         };
-        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap()).expect("Couldn't execute OpenBasis opcode");
         let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
@@ -110,11 +108,10 @@ impl PddbBasisManager {
         }
     }
     pub fn close(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisRequest {
-            name: [0u8; BASIS_NAME_LEN],
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Close,
         };
-        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CloseBasis.to_u32().unwrap()).expect("Couldn't execute CloseBasis opcode");
         let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
@@ -129,11 +126,10 @@ impl PddbBasisManager {
         }
     }
     pub fn delete(&self, basis_name: &str) -> Result<()> {
-        let mut mgmt = PddbBasisRequest {
-            name: [0u8; BASIS_NAME_LEN],
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Delete,
         };
-        for (&src, dst) in basis_name.as_bytes().iter().zip(mgmt.name.iter_mut()) {*dst = src}
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::DeleteBasis.to_u32().unwrap()).expect("Couldn't execute DeleteBasis opcode");
         let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
@@ -198,9 +194,4 @@ impl<'a> Drop for Pddb<'a> {
         // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
         // de-allocate those items here. They don't need a reference count because they are object-specific
     }
-}
-
-pub(crate) fn cstr_to_string(cstr: &[u8]) -> String {
-    let null_index = cstr.iter().position(|&c| c == 0).expect("couldn't find null terminator on c string");
-    String::from_utf8(cstr[..null_index].to_vec()).expect("c string has invalid characters")
 }

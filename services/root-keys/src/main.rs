@@ -165,6 +165,7 @@ mod implementation {
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.init.signing_kernel", xous::LANG))
         }
         pub fn purge_password(&mut self, _ptype: PasswordType) {}
+        pub fn purge_user_password(&mut self, _ptype: AesRootkeyType) {}
 
         pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
         pub fn finish_key_init(&mut self) {}

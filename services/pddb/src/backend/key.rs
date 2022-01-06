@@ -5,6 +5,7 @@ use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use std::cmp::Ordering;
 use bitfield::bitfield;
+use std::io::{Result, Error, ErrorKind};
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq)]
@@ -14,6 +15,38 @@ bitfield! {
     pub valid, set_valid: 0;
     /// resolved indicates that the "start" address isn't fully resolved yet in the cache
     pub unresolved, set_unresolved: 1;
+}
+
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[repr(C, align(8))]
+pub struct KeyName {
+    pub len: u8,
+    pub data: [u8; KEY_NAME_LEN - 1],
+}
+impl KeyName {
+    pub fn try_from_str(name: &str) -> Result<KeyName> {
+        let mut alloc = [0u8; KEY_NAME_LEN - 1];
+        let bytes = name.as_bytes();
+        if bytes.len() > (KEY_NAME_LEN - 1) {
+            Err(Error::new(ErrorKind::InvalidInput, "key name is too long"))
+        } else {
+            for (&src, dst) in bytes.iter().zip(alloc.iter_mut()) {
+                *dst = src;
+            }
+            Ok(KeyName {
+                len: bytes.len() as u8, // this as checked above to be short enough
+                data: alloc,
+            })
+        }
+    }
+}
+impl Default for KeyName {
+    fn default() -> KeyName {
+        KeyName {
+            len: 0,
+            data: [0; KEY_NAME_LEN - 1]
+        }
+    }
 }
 
 /// On-disk representation of the Key. Note that the storage on disk is mis-aligned relative
@@ -32,7 +65,7 @@ pub(crate) struct KeyDescriptor {
     /// Access count to the key
     pub(crate) age: u32,
     /// Name. Length should pad out the record to exactly 127 bytes.
-    pub(crate) name: [u8; KEY_NAME_LEN],
+    pub(crate) name: KeyName,
 }
 impl Default for KeyDescriptor {
     fn default() -> Self {
@@ -42,7 +75,7 @@ impl Default for KeyDescriptor {
             reserved: 0,
             flags: KeyFlags(0),
             age: 0,
-            name: [0; KEY_NAME_LEN],
+            name: KeyName::default(),
         }
     }
 }

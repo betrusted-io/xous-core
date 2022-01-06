@@ -1085,12 +1085,8 @@ impl PddbOs {
     }
 
     pub(crate) fn data_aad(&self, name: &str) -> Vec::<u8> {
-        let mut full_name = [0u8; BASIS_NAME_LEN];
-        for (&src, dst) in name.as_bytes().iter().zip(full_name.iter_mut()) {
-            *dst = src;
-        }
         let mut aad = Vec::<u8>::new();
-        aad.extend_from_slice(&full_name);
+        aad.extend_from_slice(&name.as_bytes());
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         aad.extend_from_slice(&self.dna.to_le_bytes());
         aad
@@ -1167,8 +1163,8 @@ impl PddbOs {
                         log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
                         return None;
                     }
-                    let basis_name = cstr_to_string(&basis_root.name.0);
-                    if basis_name != String::from(PDDB_DEFAULT_SYSTEM_BASIS) {
+                    let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize]).expect("basis is not valid utf-8");
+                    if basis_name != PDDB_DEFAULT_SYSTEM_BASIS {
                         log::error!("PDDB system basis name is incorrect: {}; aborting mount operation.", basis_name);
                         return None;
                     }
@@ -1579,9 +1575,4 @@ impl PddbOs {
         //6. return the key
         key
     }
-}
-
-pub(crate) fn cstr_to_string(cstr: &[u8]) -> String {
-    let null_index = cstr.iter().position(|&c| c == 0).expect("couldn't find null terminator on c string");
-    String::from_utf8(cstr[..null_index].to_vec()).expect("c string has invalid characters")
 }

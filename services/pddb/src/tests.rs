@@ -407,8 +407,12 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         pddb_os.dbg_dump(Some("basecase1e".to_string()), None);
 
         let extra_basis_key = pddb_os.basis_derive_key(EXTRA_BASIS, EXTRA_BASIS_PW);
+        let mut name = [0 as u8; 64];
+        for (&src, dst) in EXTRA_BASIS.as_bytes().iter().zip(name.iter_mut()) {
+            *dst = src;
+        }
         let extra_export = KeyExport {
-            basis_name: BasisRootName::try_from_str(EXTRA_BASIS).unwrap().0,
+            basis_name: name,
             key: extra_basis_key,
         };
         let mut export: Vec::<KeyExport> = Vec::new();

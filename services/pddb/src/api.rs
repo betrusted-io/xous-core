@@ -11,9 +11,21 @@ pub(crate) const PASSWORD_LEN: usize = 72; // this is actually set by bcrypt
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 #[allow(dead_code)]
 pub(crate) const PDDB_VERSION: u32 = 0x00_00_00_01;
-/// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing
 #[allow(dead_code)]
-//pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+#[cfg(all(
+    not(any(target_os = "none", target_os = "xous")),
+    feature = "ci"
+))]
+// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
+// Also the CI digest scripts don't currently handle filesystems that aren't an even mutiple of 1 megabyte
+// This has to do with the CI script parsing the page table itself in page-sized increments, and not handling
+// the case that the page table isn't an even multiple of one page correctly.
+pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+#[allow(dead_code)]
+#[cfg(not(all(
+    not(any(target_os = "none", target_os = "xous")),
+    feature = "ci"
+)))]
 pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
 
 /// range for the starting point of a journal number, picked from a random seed
@@ -87,7 +99,7 @@ pub type ApiToken = [u32; 3];
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbBasisList {
     /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
-    pub list: [[u8; BASIS_NAME_LEN]; 63],
+    pub list: [xous_ipc::String::<BASIS_NAME_LEN>; 63],
     /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
     pub num: u32,
 }
@@ -107,7 +119,7 @@ pub enum PddbRequestCode {
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbBasisRequest {
-    pub name: [u8; BASIS_NAME_LEN],
+    pub name: xous_ipc::String::<BASIS_NAME_LEN>,
     pub code: PddbRequestCode,
 }
 
@@ -115,8 +127,8 @@ pub struct PddbBasisRequest {
 pub struct PddbDictRequest {
     /// applications shouldn't specify a basis so that the PD mechanism works as intended, but non-sensitive system config keys will want to generally specify the system basis.
     pub basis_specified: bool,
-    pub basis_name: [u8; BASIS_NAME_LEN],
-    pub dict_name: [u8; DICT_NAME_LEN],
+    pub basis_name: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub dict_name: xous_ipc::String::</* DICT_NAME_LEN] */ 111>, // pending https://github.com/rust-lang/rust/issues/90195
     pub code: PddbRequestCode,
 }
 

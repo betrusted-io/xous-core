@@ -153,15 +153,15 @@ impl DictCacheEntry {
                             clean: true,
                             data: None,
                         };
-                        let kname = cstr_to_string(&keydesc.name);
+                        let kname = std::str::from_utf8(&keydesc.name.data[..keydesc.name.len as usize]).expect("key is not valid utf-8");
                         let key_exists_and_valid =
-                            if let Some(kcache) = self.keys.get(&kname) {
+                            if let Some(kcache) = self.keys.get(kname) {
                                 kcache.flags.valid()
                             } else {
                                 false
                             };
                         if !key_exists_and_valid {
-                            self.keys.insert(kname.clone(), kcache);
+                            self.keys.insert(kname.to_string(), kcache);
                             if keydesc.start + keydesc.reserved > alloc_top.get() {
                                 // if the key is within the large pool space, note its allocation for the basis overall
                                 alloc_top = VirtAddr::new(keydesc.start + keydesc.reserved).unwrap();
@@ -238,7 +238,7 @@ impl DictCacheEntry {
                     for (&src, dst) in cache[start..start + DK_STRIDE].iter().zip(keydesc.deref_mut().iter_mut()) {
                         *dst = src;
                     }
-                    let kname = cstr_to_string(&keydesc.name);
+                    let kname = std::str::from_utf8(&keydesc.name.data[..keydesc.name.len as usize]).expect("key is not valid utf-8");
                     if keydesc.flags.valid() {
                         if kname == name_str {
                             let kcache = KeyCacheEntry {
@@ -251,7 +251,7 @@ impl DictCacheEntry {
                                 clean: true,
                                 data: None,
                             };
-                            self.keys.insert(kname.clone(), kcache);
+                            self.keys.insert(kname.to_string(), kcache);
                             self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &kname);
                             return true;
                         }
@@ -982,6 +982,39 @@ pub(crate) fn small_storage_index_from_key(kcache: &KeyCacheEntry, dict_index: N
 pub(crate) fn small_storage_base_vaddr_from_indices(dict_index: NonZeroU32, base_index: usize) -> u64 {
     SMALL_POOL_START + (dict_index.get()-1) as u64 * DICT_VSIZE + base_index as u64 * SMALL_CAPACITY as u64
 }
+
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[repr(C, align(8))]
+pub struct DictName {
+    pub len: u8,
+    pub data: [u8; DICT_NAME_LEN - 1],
+}
+impl DictName {
+    pub fn try_from_str(name: &str) -> Result<DictName> {
+        let mut alloc = [0u8; DICT_NAME_LEN - 1];
+        let bytes = name.as_bytes();
+        if bytes.len() > (DICT_NAME_LEN - 1) {
+            Err(Error::new(ErrorKind::InvalidInput, "dict name is too long"))
+        } else {
+            for (&src, dst) in bytes.iter().zip(alloc.iter_mut()) {
+                *dst = src;
+            }
+            Ok(DictName {
+                len: bytes.len() as u8, // this as checked above to be short enough
+                data: alloc,
+            })
+        }
+    }
+}
+impl Default for DictName {
+    fn default() -> DictName {
+        DictName {
+            len: 0,
+            data: [0; DICT_NAME_LEN - 1]
+        }
+    }
+}
+
 #[derive(Debug)]
 /// On-disk representation of the dictionary header. This structure is mainly for archival/unarchival
 /// purposes. To "functionalize" a stored disk entry, it needs to be deserialized into a DictionaryCacheEntry.
@@ -997,13 +1030,13 @@ pub(crate) struct Dictionary {
     /// an expensive, long search operation during the creation of a dictionary cache record.
     pub(crate) free_key_index: u32,
     /// Name. Length should pad out the record to exactly 127 bytes.
-    pub(crate) name: [u8; DICT_NAME_LEN],
+    pub(crate) name: DictName,
 }
 impl Default for Dictionary {
     fn default() -> Dictionary {
         let mut flags = DictFlags(0);
         flags.set_valid(true);
-        Dictionary { flags, age: 0, num_keys: 0, free_key_index: 1, name: [0; DICT_NAME_LEN] }
+        Dictionary { flags, age: 0, num_keys: 0, free_key_index: 1, name: DictName::default() }
     }
 }
 impl Deref for Dictionary {

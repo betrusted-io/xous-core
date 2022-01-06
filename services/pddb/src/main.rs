@@ -386,6 +386,7 @@ use std::thread;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
+use core::fmt::Write;
 
 use locales::t;
 
@@ -557,9 +558,8 @@ fn xmain() -> ! {
                 let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
                 let basis_list = basis_cache.basis_list();
                 for (src, dst) in basis_list.iter().zip(list_ipc.list.iter_mut()) {
-                    for (&s, d) in src.as_bytes().iter().zip(dst.iter_mut()) {
-                        *d = s;
-                    }
+                    dst.clear();
+                    write!(dst, "{}", src).expect("couldn't write basis name");
                 }
                 list_ipc.num = basis_list.len() as u32;
                 buffer.replace(list_ipc).unwrap();
@@ -568,7 +568,8 @@ fn xmain() -> ! {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 if let Some(name) = basis_cache.basis_latest() {
-                    for (&src, dst) in name.as_bytes().iter().zip(mgmt.name.iter_mut()) { *dst = src }
+                    mgmt.name.clear();
+                    write!(mgmt.name, "{}", name).expect("couldn't write basis name");
                     mgmt.code = PddbRequestCode::NoErr;
                 } else {
                     mgmt.code = PddbRequestCode::NotMounted;
@@ -580,16 +581,15 @@ fn xmain() -> ! {
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Create => {
-                        let name = cstr_to_string(&mgmt.name);
                         let request = BasisRequestPassword {
-                            db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str(name.as_str()),
+                            db_name: mgmt.name,
                             plaintext_pw: None,
                         };
                         let mut buf = Buffer::into_buf(request).unwrap();
                         buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                         if let Some(pw) = ret.plaintext_pw {
-                            match basis_cache.basis_create(&mut pddb_os, &name, pw.as_str().expect("password was not valid utf-8")) {
+                            match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8")) {
                                 Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                                 _ => mgmt.code = PddbRequestCode::InternalError,
                             }
@@ -608,11 +608,10 @@ fn xmain() -> ! {
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Open => {
-                        let name = cstr_to_string(&mgmt.name);
                         let mut finished = false;
                         while !finished {
                             let request = BasisRequestPassword {
-                                db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>::from_str(name.as_str()),
+                                db_name: mgmt.name,
                                 plaintext_pw: None,
                             };
                             let mut buf = Buffer::into_buf(request).unwrap();
@@ -620,7 +619,7 @@ fn xmain() -> ! {
                             let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                             if let Some(pw) = ret.plaintext_pw {
                                 if let Some(basis) = basis_cache.basis_unlock(
-                                    &mut pddb_os, &name, pw.as_str().expect("password was not valid utf-8"),
+                                    &mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8"),
                                     BasisRetentionPolicy::Persist
                                 ) {
                                     basis_cache.basis_add(basis);
@@ -658,8 +657,7 @@ fn xmain() -> ! {
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Close => {
-                        let name = cstr_to_string(&mgmt.name);
-                        match basis_cache.basis_unmount(&mut pddb_os, &name) {
+                        match basis_cache.basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
                             Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                             Err(e) => match e.kind() {
                                 ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
@@ -678,8 +676,7 @@ fn xmain() -> ! {
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
                     PddbRequestCode::Delete => {
-                        let name = cstr_to_string(&mgmt.name);
-                        match basis_cache.basis_delete(&mut pddb_os, &name) {
+                        match basis_cache.basis_delete(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
                             Ok(_) => mgmt.code = PddbRequestCode::NoErr,
                             Err(e) => match e.kind() {
                                 ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,

@@ -213,7 +213,7 @@ pub(crate) struct BasisRoot {
 impl BasisRoot {
     pub(crate) fn aad(&self, dna: u64) -> Vec::<u8> {
         let mut aad = Vec::<u8>::new();
-        aad.extend_from_slice(&self.name.0);
+        aad.extend_from_slice(&self.name.data[..self.name.len as usize]);
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         aad.extend_from_slice(&dna.to_le_bytes());
         aad
@@ -818,7 +818,7 @@ impl BasisCache {
                     log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
                     return None;
                 }
-                let basis_name = cstr_to_string(&basis_root.name.0);
+                let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize]).expect("basis name is not valid utf-8");
                 if basis_name != name {
                     log::error!("PDDB mount requested {}, but got {}; aborting.", name, basis_name);
                     return None;
@@ -1015,13 +1015,13 @@ impl BasisCacheEntry {
                     log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
                     return None;
                 }
-                let basis_name = cstr_to_string(&basis_root.name.0);
+                let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize]).expect("basis name is not valid utf-8");
                 if basis_name != String::from(name) {
                     log::error!("Discovered basis name does not match the requested name: {}; aborting mount operation.", basis_name);
                     return None;
                 }
                 let mut bcache = BasisCacheEntry {
-                    name: basis_name.clone(),
+                    name: basis_name.to_string(),
                     clean: true,
                     last_sync: Some(hw.timestamp_now()),
                     num_dicts: basis_root.num_dictionaries,
@@ -1095,7 +1095,7 @@ impl BasisCacheEntry {
                     assert!(pp.valid(), "v2p returned an invalid page");
                     if let Some(dict) = self.dict_decrypt(hw, &pp) {
                         if dict.flags.valid() {
-                            let dict_name = String::from(cstr_to_string(&dict.name));
+                            let dict_name = std::str::from_utf8(&dict.name.data[..dict.name.len as usize]).expect("dict name is not valid utf-8").to_string();
                             let dict_present_and_valid = if let Some(d) = self.dicts.get(&dict_name) {
                                 d.flags.valid()
                             } else {
@@ -1104,7 +1104,7 @@ impl BasisCacheEntry {
                             if !dict_present_and_valid {
                                 let mut dcache = DictCacheEntry::new(dict, try_entry, &self.aad);
                                 let max_large_alloc = dcache.fill(hw, &self.v2p_map, &self.cipher);
-                                self.dicts.insert(dict_name, dcache);
+                                self.dicts.insert(dict_name.to_string(), dcache);
                                 self.large_pool_update(max_large_alloc.get());
                             } else {
                                 let dcache = self.dicts.get_mut(&dict_name).expect("dict should be present, as we checked for it already...");
@@ -1239,7 +1239,8 @@ impl BasisCacheEntry {
             if let Some(pp) = self.v2p_map.get(&dict_vaddr) {
                 assert!(pp.valid(), "v2p returned an invalid page");
                 if let Some(dict) = self.dict_decrypt(hw, &pp) {
-                    if (cstr_to_string(&dict.name) == name) && dict.flags.valid() {
+                    let dict_name = std::str::from_utf8(&dict.name.data[..dict.name.len as usize]).expect("dict name is not valid utf-8");
+                    if (dict_name == name) && dict.flags.valid() {
                         return Some((try_entry as u32, dict))
                     }
                     dict_count += 1;
@@ -1318,10 +1319,7 @@ impl BasisCacheEntry {
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
             let dict_offset = VirtAddr::new(dict.index.get() as u64 * DICT_VSIZE).unwrap();
             if !dict.clean {
-                let mut dict_name = [0u8; DICT_NAME_LEN];
-                for (src, dst) in name.bytes().into_iter().zip(dict_name.iter_mut()) {
-                    *dst = src;
-                }
+                let mut dict_name = DictName::try_from_str(name).or(Err(Error::new(ErrorKind::InvalidInput, "dictionary name invalid: invalid utf-8 or length")))?;
                 let dict_disk = Dictionary {
                     flags: dict.flags,
                     age: dict.age,
@@ -1387,10 +1385,7 @@ impl BasisCacheEntry {
                                 log::debug!("merging in key {}", key_name);
                                 // key is within the current page, add it to the target list
                                 let mut dk_entry = DictKeyEntry::default();
-                                let mut kn = [0u8; KEY_NAME_LEN];
-                                for (&src, dst) in key_name.as_bytes().iter().zip(kn.iter_mut()) {
-                                    *dst = src;
-                                }
+                                let mut kn = KeyName::try_from_str(key_name).or(Err(Error::new(ErrorKind::InvalidInput, "key name invalid: invalid utf-8 or length")))?;
                                 let key_desc = KeyDescriptor {
                                     start: key.start,
                                     len: key.len,
@@ -1510,7 +1505,7 @@ impl BasisCacheEntry {
             // if the dictionary doesn't exist in our cache it doesn't necessarily mean it
             // doesn't exist. Do a comprehensive search if our cache isn't complete.
             if let Some((index, dict_record)) = self.dict_deep_search(hw, name) {
-                let dict_name = String::from(cstr_to_string(&dict_record.name));
+                let dict_name = std::str::from_utf8(&dict_record.name.data[..dict_record.name.len as usize]).expect("dict name is not valid utf-8").to_string();
                 let dcache = DictCacheEntry::new(dict_record, index as usize, &self.aad);
                 self.dicts.insert(dict_name, dcache);
                 dict_found = true;
@@ -1566,23 +1561,32 @@ impl BasisCacheEntry {
 
 /// Newtype for BasisRootName so we can give it a default initializer.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub struct BasisRootName(pub [u8; BASIS_NAME_LEN]);
+pub struct BasisRootName {
+    pub len: u8,
+    pub data: [u8; BASIS_NAME_LEN - 1],
+}
 impl BasisRootName {
     pub fn try_from_str(name: &str) -> Result<BasisRootName> {
-        let mut alloc = [0u8; BASIS_NAME_LEN];
+        let mut alloc = [0u8; BASIS_NAME_LEN - 1];
         let bytes = name.as_bytes();
-        if bytes.len() > BASIS_NAME_LEN {
+        if bytes.len() > (BASIS_NAME_LEN - 1) {
             Err(Error::new(ErrorKind::InvalidInput, "basis name is too long")) // FileNameTooLong is still nightly :-/
         } else {
             for (&src, dst) in bytes.iter().zip(alloc.iter_mut()) {
                 *dst = src;
             }
-            Ok(BasisRootName(alloc))
+            Ok(BasisRootName {
+                len: bytes.len() as u8, // this as checked above to be short enough
+                data: alloc,
+            })
         }
     }
 }
 impl Default for BasisRootName {
     fn default() -> BasisRootName {
-        BasisRootName([0; BASIS_NAME_LEN])
+        BasisRootName{
+            len: 0,
+            data: [0; BASIS_NAME_LEN - 1]
+        }
     }
 }

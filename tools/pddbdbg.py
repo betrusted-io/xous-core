@@ -238,7 +238,7 @@ class KeyDescriptor:
         i += 4
         self.age = int.from_bytes(record[i:i+4], 'little')
         i += 4
-        self.name = record[i:i+KeyDescriptor.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+        self.name = record[i+1:i+1+record[i]].decode('utf8', errors='ignore')
         if self.flags_code & 1 != 0:
             self.valid = True
         else:
@@ -360,7 +360,7 @@ class BasisDicts:
                 i += 4
                 self.free_key_index = int.from_bytes(pt_data[i:i+4], 'little')
                 i += 4
-                self.name = pt_data[i:i+BasisDicts.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+                self.name = pt_data[i+1:i+1+pt_data[i]].decode('utf8', errors='ignore')
                 i += BasisDicts.MAX_NAME_LEN
                 logging.info("decrypt dict '{}' with {} keys and {} free_key_index".format(self.name, self.num_keys, self.free_key_index))
                 logging.debug("dict header len: {}".format(i-4)) # subtract 4 because of the journal
@@ -477,7 +477,7 @@ class Basis:
         i += 4
         self.num_dicts = int.from_bytes(i_bytes[i:i+4], 'little')
         i += 4
-        self.name = i_bytes[i:i+Basis.MAX_NAME_LEN].rstrip(b'\x00').decode('utf8', errors='ignore')
+        self.name = i_bytes[i+1:i+1+i_bytes[i]].rstrip(b'\x00').decode('utf8', errors='ignore')
         i += Basis.MAX_NAME_LEN
         #self.prealloc_open_end = int.from_bytes(i_bytes[i:i+8], 'little')
         #i += 8
@@ -522,7 +522,7 @@ class Basis:
 
 def basis_aad(name, version=1, dna=0):
     name_bytes = bytearray(name, 'utf-8')
-    name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
+    # name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
     name_bytes += version.to_bytes(4, 'little')
     name_bytes += dna.to_bytes(8, 'little')
 
@@ -589,6 +589,7 @@ def decode_pagetable(img, entries, keys, mbbb):
         logging.debug("key: {}".format(key.hex()))
         cipher = AES.new(key, AES.MODE_ECB)
         pages = [img[i:i+PAGE_SIZE] for i in range(0, entries * Pte.PTE_LEN, PAGE_SIZE)]
+        print(entries * Pte.PTE_LEN)
         page_num = 0
         v2p_table = {}
         p2v_table = {}
