@@ -887,13 +887,20 @@ impl BasisCache {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub(crate) fn basis_list(&self) -> Vec<String> {
         let mut ret = Vec::new();
         for bcache in &self.cache {
             ret.push(bcache.name.clone());
         }
         ret
+    }
+    pub(crate) fn basis_latest(&mut self) -> Option<String> {
+        if let Some(basis_index) = self.select_basis(None) {
+            let basis = &mut self.cache[basis_index];
+            Some(basis.name.clone())
+        } else {
+            None
+        }
     }
 
     pub(crate) fn basis_add(&mut self, basis: BasisCacheEntry) {

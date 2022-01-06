@@ -62,6 +62,9 @@ pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
+    ListBasis,
+    LatestBasis,
+
     KeyRequest,
 
     ReadKey,
@@ -73,6 +76,13 @@ pub(crate) enum Opcode {
 }
 
 pub type ApiToken = [u32; 3];
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbBasisList {
+    /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
+    pub list: [[u8; BASIS_NAME_LEN]; 63],
+    /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
+    pub num: u32,
+}
 
 /// A structure for requesting a token to access a particular key/value pair
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

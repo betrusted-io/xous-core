@@ -557,8 +557,31 @@ fn xmain() -> ! {
         }
     }
     loop {
-        let msg = xous::receive_message(pddb_sid).unwrap();
+        let mut msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::ListBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
+                let basis_list = basis_cache.basis_list();
+                for (src, dst) in basis_list.iter().zip(list_ipc.list.iter_mut()) {
+                    for (&s, d) in src.as_bytes().iter().zip(dst.iter_mut()) {
+                        *d = s;
+                    }
+                }
+                list_ipc.num = basis_list.len() as u32;
+                buffer.replace(list_ipc).unwrap();
+            }
+            Some(Opcode::LatestBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
+                if let Some(name) = basis_cache.basis_latest() {
+                    for (&src, dst) in name.as_bytes().iter().zip(list_ipc.list[0].iter_mut()) { *dst = src }
+                    list_ipc.num = 1;
+                } else {
+                    list_ipc.num = 0;
+                }
+                buffer.replace(list_ipc).unwrap();
+            }
             Some(Opcode::KeyRequest) => {
                 // placeholder
             }
