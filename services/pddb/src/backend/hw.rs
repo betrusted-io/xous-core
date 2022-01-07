@@ -171,7 +171,7 @@ impl PddbOs {
         self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
         if let Some(key) = self.system_basis_key {
-            log::info!("written key: {:x?}", key);
+            log::info!("(hosted mode debug) written key: {:x?}", key);
             let mut name = [0 as u8; 64];
             for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
                 *dst = src;
@@ -1205,7 +1205,9 @@ impl PddbOs {
                 let mut checkblock_a = [0u8; BLOCK_SIZE];
                 self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
 
+                #[cfg(any(target_os = "none", target_os = "xous"))] // skip this dialog in hosted mode
                 modals.show_notification(t!("pddb.checkpass", xous::LANG)).expect("notification failed");
+
                 self.clear_password();
                 let mut checkblock_b = [0u8; BLOCK_SIZE];
                 self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_b));
