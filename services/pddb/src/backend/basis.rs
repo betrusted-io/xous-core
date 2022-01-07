@@ -237,21 +237,6 @@ impl DerefMut for BasisRoot {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(crate) enum BasisRetentionPolicy {
-    Persist,
-    ClearAfterSleeps(u32),
-    TimeOutSecs(u32),
-}
-impl BasisRetentionPolicy {
-    pub(crate) fn derive_init_state(&self) -> u32 {
-        match self {
-            BasisRetentionPolicy::Persist => 0,
-            BasisRetentionPolicy::ClearAfterSleeps(sleeps) => *sleeps,
-            BasisRetentionPolicy::TimeOutSecs(secs) => *secs,
-        }
-    }
-}
 /// A list of open Basis that we can use to search and operate upon. Sort of the "root" data structure of the PDDB.
 ///
 /// Note to self: it's tempting to integrate the "hw" parameter (the pointer to the PddbOs structure). However, this
@@ -949,6 +934,31 @@ impl BasisCache {
         }
         Ok(())
     }
+
+    pub(crate) fn suspend(&mut self, hw: &mut PddbOs) {
+        self.sync(hw, None).expect("couldn't sync on suspend");
+        let mut lock_list = Vec::<String>::new();
+        for basis in self.cache.iter_mut() {
+            match basis.policy {
+                BasisRetentionPolicy::Persist => (),
+                BasisRetentionPolicy::ClearAfterSleeps(sleeps) => {
+                    basis.policy_state += 1;
+                    if basis.policy_state >= sleeps {
+                        lock_list.push(basis.name.clone());
+                    }
+                }
+                /*
+                BasisRetentionPolicy::TimeOutSecs(secs) => {
+                    if secs < basis.policy_state {
+                        lock_list.push(basis.name.clone());
+                    }
+                }*/
+            }
+        }
+        for basis in lock_list {
+            self.basis_unmount(hw, &basis).ok();
+        }
+    }
 }
 
 /// This is the RAM cached copy of a basis as maintained in the PDDB.
@@ -983,7 +993,7 @@ pub(crate) struct BasisCacheEntry {
     pub large_alloc_ptr: Option<PageAlignedVa>,
     /// retiention policy
     pub policy: BasisRetentionPolicy,
-    /// rention state
+    // rention state
     pub policy_state: u32,
 }
 impl BasisCacheEntry {

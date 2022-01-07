@@ -95,6 +95,8 @@ pub(crate) enum Opcode {
     /// drops any connection state associated with a given key
     KeyDrop,
 
+    /// Suspend/resume callback
+    SuspendResume,
     /// quit the server
     Quit,
 }
@@ -121,10 +123,27 @@ pub enum PddbRequestCode {
     AccessDenied,
     Uninit,
 }
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum BasisRetentionPolicy {
+    Persist,
+    ClearAfterSleeps(u32),
+    //TimeOutSecs(u32),
+}
+impl BasisRetentionPolicy {
+    pub fn derive_init_state(&self) -> u32 {
+        match self {
+            BasisRetentionPolicy::Persist => 0,
+            BasisRetentionPolicy::ClearAfterSleeps(sleeps) => *sleeps,
+            //BasisRetentionPolicy::TimeOutSecs(secs) => *secs,
+        }
+    }
+}
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbBasisRequest {
     pub name: xous_ipc::String::<BASIS_NAME_LEN>,
     pub code: PddbRequestCode,
+    pub policy: Option<BasisRetentionPolicy>,
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDictRequest {

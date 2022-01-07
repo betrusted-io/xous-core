@@ -115,6 +115,7 @@ impl Pddb {
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::new(),
             code: PddbRequestCode::Uninit,
+            policy: None,
         };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::LatestBasis.to_u32().unwrap()).expect("Couldn't execute ListBasis opcode");
@@ -139,6 +140,7 @@ impl Pddb {
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Create,
+            policy: None,
         };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap()).expect("Couldn't execute CreateBasis opcode");
@@ -153,13 +155,14 @@ impl Pddb {
             }
         }
     }
-    pub fn unlock_basis(&self, basis_name: &str) -> Result<()> {
+    pub fn unlock_basis(&self, basis_name: &str, policy: Option<BasisRetentionPolicy>) -> Result<()> {
         if basis_name.len() > BASIS_NAME_LEN - 1 {
             return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
         }
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Open,
+            policy,
         };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap()).expect("Couldn't execute OpenBasis opcode");
@@ -181,6 +184,7 @@ impl Pddb {
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Close,
+            policy: None,
         };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::CloseBasis.to_u32().unwrap()).expect("Couldn't execute CloseBasis opcode");
@@ -202,6 +206,7 @@ impl Pddb {
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Delete,
+            policy: None,
         };
         let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
         buf.lend_mut(self.conn, Opcode::DeleteBasis.to_u32().unwrap()).expect("Couldn't execute DeleteBasis opcode");

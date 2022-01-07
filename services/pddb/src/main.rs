@@ -542,9 +542,17 @@ fn xmain() -> ! {
     let mut key_token: Option<[u32; 4]> = None;
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
+
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                basis_cache.suspend(&mut pddb_os);
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+            }),
             Some(Opcode::ListBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
@@ -612,7 +620,7 @@ fn xmain() -> ! {
                             if let Some(pw) = ret.plaintext_pw {
                                 if let Some(basis) = basis_cache.basis_unlock(
                                     &mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8"),
-                                    BasisRetentionPolicy::Persist
+                                    mgmt.policy.unwrap_or(BasisRetentionPolicy::Persist)
                                 ) {
                                     basis_cache.basis_add(basis);
                                     finished = true;
