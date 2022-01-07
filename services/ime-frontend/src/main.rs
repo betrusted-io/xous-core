@@ -252,7 +252,7 @@ impl InputTracker {
                     '\u{0000}' => (),
                     '←' => { // move insertion point back
                         if self.insertion > 0 {
-                            info!("moving insertion point back");
+                            log::debug!("moving insertion point back");
                             self.insertion -= 1;
                         }
                         do_redraw = true;
