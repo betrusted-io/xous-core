@@ -537,6 +537,10 @@ fn xmain() -> ! {
         }
     }
     // main server loop
+    let mut key_list = Vec::<String>::new(); // storage for key lists
+    let mut key_token: Option<[u32; 4]> = None;
+    let mut dict_list = Vec::<String>::new(); // storage for dict lists
+    let mut dict_token: Option<[u32; 4]> = None;
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -862,6 +866,108 @@ fn xmain() -> ! {
                         }
                     }
                 }
+            }
+            Some(Opcode::KeyCountInDict) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if key_token.is_some() {
+                    req.code = PddbRequestCode::AccessDenied;
+                    buffer.replace(req).unwrap();
+                    continue;
+                }
+                key_token = Some(req.token);
+                key_list.clear();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                match basis_cache.key_list(&mut pddb_os, dict, bname) {
+                    Ok(list) => {
+                        req.index = list.len() as u32;
+                        for key in list {
+                            key_list.push(key);
+                        }
+                        req.code = PddbRequestCode::NoErr;
+                    }
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::NotFound => req.code = PddbRequestCode::NotFound,
+                        _ => req.code = PddbRequestCode::InternalError,
+                    }
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::GetKeyNameAtIndex) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if let Some(token) = key_token {
+                    if req.token != token {
+                        req.code = PddbRequestCode::AccessDenied;
+                    } else {
+                        if req.index >= key_list.len() as u32 {
+                            req.code = PddbRequestCode::InternalError;
+                        } else {
+                            req.key = xous_ipc::String::<KEY_NAME_LEN>::from_str(&key_list[req.index as usize]);
+                            req.code = PddbRequestCode::NoErr;
+                            // the last index requested must be the highest one!
+                            if req.index == key_list.len() as u32 - 1 {
+                                key_token = None;
+                                key_list.clear();
+                            }
+                        }
+                    }
+                } else {
+                    req.code = PddbRequestCode::AccessDenied;
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::DictCountInBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if key_token.is_some() {
+                    req.code = PddbRequestCode::AccessDenied;
+                    buffer.replace(req).unwrap();
+                    continue;
+                }
+                dict_token = Some(req.token);
+                dict_list.clear();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let list = basis_cache.dict_list(&mut pddb_os, bname);
+                req.index = list.len() as u32;
+                for dict in list {
+                    dict_list.push(dict);
+                }
+                req.code = PddbRequestCode::NoErr;
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::GetDictNameAtIndex) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if let Some(token) = key_token {
+                    if req.token != token {
+                        req.code = PddbRequestCode::AccessDenied;
+                    } else {
+                        if req.index >= dict_list.len() as u32 {
+                            req.code = PddbRequestCode::InternalError;
+                        } else {
+                            req.dict = xous_ipc::String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
+                            req.code = PddbRequestCode::NoErr;
+                            // the last index requested must be the highest one!
+                            if req.index == dict_list.len() as u32 - 1 {
+                                dict_token = None;
+                                dict_list.clear();
+                            }
+                        }
+                    }
+                } else {
+                    req.code = PddbRequestCode::AccessDenied;
+                }
+                buffer.replace(req).unwrap();
             }
             Some(Opcode::ReadKey) => {
                 // placeholder

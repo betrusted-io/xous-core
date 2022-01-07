@@ -46,6 +46,7 @@ pub struct Pddb {
     /// in the case of a basis change. Basis changes are thought to be rare; so, big changes
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
+    trng: trng::Trng,
 }
 impl Pddb {
     pub fn new() -> Self {
@@ -84,6 +85,7 @@ impl Pddb {
             cb_sid: sid,
             cb_handle: Some(handle),
             keys,
+            trng: trng::Trng::new(&xns).unwrap(),
         }
     }
     /// return a list of all open bases
@@ -369,6 +371,124 @@ impl Pddb {
             PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
             _ => Err(Error::new(ErrorKind::Other, "Internal error"))
         }
+    }
+
+    pub fn list_keys(&mut self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+        // this is a two-phase query, because it's quite likely that the number of keys can be very large in a dict.
+        let token = [self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap()];
+        let request = PddbDictRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            index: 0,
+            code: PddbRequestCode::Uninit,
+            token,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::KeyCountInDict.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+        let count = match response.code {
+            PddbRequestCode::NoErr => response.index,
+            _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+        };
+        // very non-optimal, slow way of doing this, but let's just get it working first and optimize later.
+        // it's absolutely important that you access every entry, and the highest index last, because
+        // that is how the server knows you've finished with the list-out.
+        let mut key_list = Vec::<String>::new();
+        for index in 0..count {
+            let request = PddbDictRequest {
+                basis_specified: basis_name.is_some(),
+                basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+                dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+                key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+                index,
+                code: PddbRequestCode::Uninit,
+                token,
+            };
+            let mut buf = Buffer::into_buf(request)
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            buf.lend_mut(self.conn, Opcode::GetKeyNameAtIndex.to_u32().unwrap())
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+            match response.code {
+                PddbRequestCode::NoErr => key_list.push(String::from(response.key.as_str().expect("utf-8 parse error in key name"))),
+                _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+            }
+        }
+        Ok(key_list)
+    }
+
+
+    pub fn list_dict(&mut self, basis_name: Option<&str>) -> Result<Vec::<String>> {
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+        // this is a two-phase query, because it's quite likely that the number of keys can be very large in a dict.
+        let token = [self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap()];
+        let request = PddbDictRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
+            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            index: 0,
+            code: PddbRequestCode::Uninit,
+            token,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DictCountInBasis.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+        let count = match response.code {
+            PddbRequestCode::NoErr => response.index,
+            _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+        };
+        // very non-optimal, slow way of doing this, but let's just get it working first and optimize later.
+        // it's absolutely important that you access every entry, and the highest index last, because
+        // that is how the server knows you've finished with the list-out.
+        let mut dict_list = Vec::<String>::new();
+        for index in 0..count {
+            let request = PddbDictRequest {
+                basis_specified: basis_name.is_some(),
+                basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+                dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
+                key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+                index,
+                code: PddbRequestCode::Uninit,
+                token,
+            };
+            let mut buf = Buffer::into_buf(request)
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            buf.lend_mut(self.conn, Opcode::GetDictNameAtIndex.to_u32().unwrap())
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+            match response.code {
+                PddbRequestCode::NoErr => dict_list.push(String::from(response.dict.as_str().expect("utf-8 parse error in key name"))),
+                _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+            }
+        }
+        Ok(dict_list)
     }
 }
 

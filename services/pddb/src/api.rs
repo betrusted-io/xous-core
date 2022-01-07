@@ -78,6 +78,12 @@ pub(crate) enum Opcode {
     DeleteDict,
     KeyAttributes,
 
+    // routines to list available resources
+    KeyCountInDict,
+    GetKeyNameAtIndex,
+    DictCountInBasis,
+    GetDictNameAtIndex,
+
     /// primary method for accessing the database
     KeyRequest,
 
@@ -118,6 +124,16 @@ pub enum PddbRequestCode {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbBasisRequest {
     pub name: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub code: PddbRequestCode,
+}
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbDictRequest {
+    pub basis_specified: bool,
+    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub index: u32,
+    pub token: [u32; 4],
     pub code: PddbRequestCode,
 }
 
