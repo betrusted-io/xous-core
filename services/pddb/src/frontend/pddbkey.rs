@@ -134,6 +134,7 @@ impl<'a> Write for PddbKey<'a> {
             match FromPrimitive::from_u8(rcode as u8) {
                 Some(PddbRetcode::Ok) => Ok(()),
                 Some(PddbRetcode::BasisLost) => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
+                Some(PddbRetcode::DiskFull) => Err(Error::new(ErrorKind::OutOfMemory, "Out of disk space, some data lost on sync")),
                 _ => Err(Error::new(ErrorKind::Interrupted, "Flush failed for unspecified reasons")),
             }
         } else {

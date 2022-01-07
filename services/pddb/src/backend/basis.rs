@@ -1319,7 +1319,7 @@ impl BasisCacheEntry {
         if let Some(dict) = self.dicts.get_mut(&String::from(name)) {
             let dict_offset = VirtAddr::new(dict.index.get() as u64 * DICT_VSIZE).unwrap();
             if !dict.clean {
-                let mut dict_name = DictName::try_from_str(name).or(Err(Error::new(ErrorKind::InvalidInput, "dictionary name invalid: invalid utf-8 or length")))?;
+                let dict_name = DictName::try_from_str(name).or(Err(Error::new(ErrorKind::InvalidInput, "dictionary name invalid: invalid utf-8 or length")))?;
                 let dict_disk = Dictionary {
                     flags: dict.flags,
                     age: dict.age,
@@ -1385,7 +1385,7 @@ impl BasisCacheEntry {
                                 log::debug!("merging in key {}", key_name);
                                 // key is within the current page, add it to the target list
                                 let mut dk_entry = DictKeyEntry::default();
-                                let mut kn = KeyName::try_from_str(key_name).or(Err(Error::new(ErrorKind::InvalidInput, "key name invalid: invalid utf-8 or length")))?;
+                                let kn = KeyName::try_from_str(key_name).or(Err(Error::new(ErrorKind::InvalidInput, "key name invalid: invalid utf-8 or length")))?;
                                 let key_desc = KeyDescriptor {
                                     start: key.start,
                                     len: key.len,

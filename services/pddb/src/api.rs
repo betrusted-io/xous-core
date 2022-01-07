@@ -160,6 +160,9 @@ pub(crate) enum PddbRetcode {
     Ok = 1,
     BasisLost = 2,
     AccessDenied = 3,
+    UnexpectedEof = 4,
+    InternalError = 5,
+    DiskFull = 6,
 }
 /// PddbBuf is a C-representation of a page of memory that's used
 /// to shuttle data for streaming channels. It must be exactly one

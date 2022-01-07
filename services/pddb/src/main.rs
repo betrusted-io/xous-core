@@ -399,6 +399,7 @@ struct TokenRecord {
     pub dict: String,
     pub key: String,
     pub basis: Option<String>,
+    pub alloc_hint: Option<usize>,
     pub conn: xous::CID, // callback connection
 }
 
@@ -724,6 +725,7 @@ fn xmain() -> ! {
                     key: String::from(key),
                     basis: if let Some(name) = bname {Some(String::from(name))} else {None},
                     conn: cid,
+                    alloc_hint: if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None},
                 };
                 token_dict.insert(token, token_record);
                 req.token = Some(token);
@@ -948,7 +950,7 @@ fn xmain() -> ! {
             Some(Opcode::GetDictNameAtIndex) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
-                if let Some(token) = key_token {
+                if let Some(token) = dict_token {
                     if req.token != token {
                         req.code = PddbRequestCode::AccessDenied;
                     } else {
@@ -970,14 +972,66 @@ fn xmain() -> ! {
                 buffer.replace(req).unwrap();
             }
             Some(Opcode::ReadKey) => {
-                // placeholder
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
+                let token = pbuf.token;
+                if let Some(rec) = token_dict.get(&token) {
+                    match basis_cache.key_read(&mut pddb_os,
+                        &rec.dict, &rec.key,
+                        &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
+                        if let Some (name) = &rec.basis {Some(&name)} else {None}) {
+                        Ok(readlen) => {
+                            pbuf.len = readlen as u16;
+                            pbuf.retcode = PddbRetcode::Ok;
+                        }
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
+                            std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                            std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
+                            _ => pbuf.retcode = PddbRetcode::InternalError,
+                        }
+                    }
+                } else {
+                    pbuf.retcode = PddbRetcode::BasisLost;
+                }
+                // we don't nede a "replace" operation because all ops happen in-place
             }
             Some(Opcode::WriteKey) => {
-                // placeholder
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
+                let token = pbuf.token;
+                if let Some(rec) = token_dict.get(&token) {
+                    match basis_cache.key_update(&mut pddb_os,
+                        &rec.dict, &rec.key,
+                        &pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
+                        rec.alloc_hint, if let Some (name) = &rec.basis {Some(&name)} else {None},
+                        false
+                    ) {
+                        Ok(_) => {
+                            pbuf.retcode = PddbRetcode::Ok;
+                        }
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
+                            std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                            std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
+                            _ => pbuf.retcode = PddbRetcode::InternalError,
+                        }
+                    }
+                } else {
+                    pbuf.retcode = PddbRetcode::BasisLost;
+                }
+                // we don't nede a "replace" operation because all ops happen in-place
             }
-            Some(Opcode::WriteKeyFlush) => {
-                // placeholder
-            }
+            Some(Opcode::WriteKeyFlush) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                match basis_cache.sync(&mut pddb_os, None) {
+                    Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::OutOfMemory => xous::return_scalar(msg.sender, PddbRetcode::DiskFull.to_usize().unwrap()).unwrap(),
+                        std::io::ErrorKind::NotFound => xous::return_scalar(msg.sender, PddbRetcode::BasisLost.to_usize().unwrap()).unwrap(),
+                        _ => xous::return_scalar(msg.sender, PddbRetcode::InternalError.to_usize().unwrap()).unwrap(),
+                    }
+                };
+            }),
             Some(Opcode::Quit) => {
                 log::warn!("quitting the PDDB server");
                 send_message(
