@@ -384,7 +384,6 @@ use core::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
 use core::fmt::Write;
 
@@ -396,25 +395,12 @@ pub(crate) struct BasisRequestPassword {
     plaintext_pw: Option<xous_ipc::String::<{crate::api::PASSWORD_LEN}>>,
 }
 
-//#[derive(Eq)]
 struct TokenRecord {
     pub dict: String,
     pub key: String,
     pub basis: Option<String>,
     pub conn: xous::CID, // callback connection
 }
-/*
-impl Hash for TokenRecord {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.token.hash(state);
-    }
-}
-impl PartialEq for TokenRecord {
-    fn eq(&self, other: &Self) -> bool {
-        self.token == other.token
-    }
-}*/
-
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -856,6 +842,26 @@ fn xmain() -> ! {
                     }
                 }
                 buffer.replace(req).unwrap();
+            }
+            Some(Opcode::KeyAttributes) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbKeyAttrIpc, _>().unwrap();
+                if let Some(token_record) = token_dict.get(&req.token) {
+                    let bname = if let Some(name) = &token_record.basis {
+                        Some(name.as_str())
+                    } else {
+                        None
+                    };
+                    match basis_cache.key_attributes(&mut pddb_os, &token_record.dict, &token_record.key, bname) {
+                        Ok(attr) => {
+                            buffer.replace(PddbKeyAttrIpc::from_attributes(attr, req.token)).unwrap();
+                        }
+                        _ => {
+                            req.code = PddbRequestCode::NotFound;
+                            buffer.replace(req).unwrap();
+                        }
+                    }
+                }
             }
             Some(Opcode::ReadKey) => {
                 // placeholder

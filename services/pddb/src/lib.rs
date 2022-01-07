@@ -269,9 +269,10 @@ impl Pddb {
                     }
                     REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
                     let pk = PddbKey {
-                        dict: String::from(dict_name),
-                        key: String::from(key_name),
-                        basis: if basis_name.is_some() {Some(String::from(bname.as_str().unwrap()))} else {None},
+                        // i think these fields are redundant, let's save the storage and remove them for now...
+                        //dict: String::from(dict_name),
+                        //key: String::from(key_name),
+                        //basis: if basis_name.is_some() {Some(String::from(bname.as_str().unwrap()))} else {None},
                         pos: 0,
                         token,
                         buf: Buffer::new(core::mem::size_of::<PddbBuf>()),

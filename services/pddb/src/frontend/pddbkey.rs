@@ -4,16 +4,9 @@ use xous_ipc::Buffer;
 
 use num_traits::*;
 use std::io::{Result, Error, ErrorKind};
-use std::path::{Path, Component};
-use std::format;
 use std::io::{Read, Write};
 
-use std::string::String;
-
 pub struct PddbKey<'a> {
-    pub(crate) dict: String,
-    pub(crate) key: String,
-    pub(crate) basis: Option<String>,
     pub(crate) token: ApiToken,
     /// position in the key's data "stream"
     pub(crate) pos: u64,
@@ -26,8 +19,16 @@ impl<'a> PddbKey<'a> {
     pub fn volatile_clear(&mut self) {
         self.buf.volatile_clear();
     }
-    pub fn attributes(&self) -> KeyAttributes {
-        unimplemented!()
+    pub fn attributes(&self) -> Result<KeyAttributes> {
+        let req = PddbKeyAttrIpc::new(self.token);
+        let mut buf = Buffer::into_buf(req).expect("Couldn't convert memory structure");
+        buf.lend_mut(self.conn, Opcode::KeyAttributes.to_u32().unwrap()).expect("couldn't execute KeyAttributes opcode");
+        let ret = buf.to_original::<PddbKeyAttrIpc, _>().expect("couldn't restore req structure");
+        match ret.code {
+            PddbRequestCode::NoErr => Ok(ret.to_attributes()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Key not found")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal error requesting key attributes")),
+        }
     }
 }
 

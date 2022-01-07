@@ -76,6 +76,7 @@ pub(crate) enum Opcode {
     DeleteBasis,
     DeleteKey,
     DeleteDict,
+    KeyAttributes,
 
     /// primary method for accessing the database
     KeyRequest,
@@ -199,6 +200,61 @@ pub struct KeyAttributes {
     /// descriptor index
     pub index: NonZeroU32,
 }
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+/// serializeable version of the attributes structure
+pub struct PddbKeyAttrIpc {
+    pub len: u64,
+    pub reserved: u64,
+    pub age: u64,
+    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub flags: u32,
+    pub index: u32,
+    pub token: ApiToken,
+    pub code: PddbRequestCode,
+}
+impl PddbKeyAttrIpc {
+    pub fn new(token: ApiToken) -> PddbKeyAttrIpc {
+        PddbKeyAttrIpc {
+            len: 0,
+            reserved: 0,
+            age: 0,
+            dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::new(),
+            flags: 0,
+            index: 0,
+            token,
+            code: PddbRequestCode::Uninit,
+        }
+    }
+    #[allow(dead_code)]
+    pub fn to_attributes(&self) -> KeyAttributes {
+        KeyAttributes {
+            len: self.len as usize,
+            reserved: self.reserved as usize,
+            age: self.age as usize,
+            dict: String::from(self.dict.as_str().unwrap()),
+            basis: String::from(self.basis.as_str().unwrap()),
+            flags: KeyFlags(self.flags),
+            index: NonZeroU32::new(self.index).unwrap(),
+        }
+    }
+    pub fn from_attributes(attr: KeyAttributes, token: ApiToken) -> PddbKeyAttrIpc {
+        PddbKeyAttrIpc {
+            len: attr.len as u64,
+            reserved: attr.reserved as u64,
+            age: attr.age as u64,
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(&attr.dict),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&attr.basis),
+            flags: attr.flags.0,
+            index: attr.index.get(),
+            token,
+            code: PddbRequestCode::NoErr,
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
