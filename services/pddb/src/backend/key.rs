@@ -4,18 +4,7 @@ use super::*;
 use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use std::cmp::Ordering;
-use bitfield::bitfield;
 use std::io::{Result, Error, ErrorKind};
-
-bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq)]
-    pub struct KeyFlags(u32);
-    impl Debug;
-    /// set if the entry is valid -- in the cache, an invalid entry means it was previously allocated but then deleted, and needs a sync
-    pub valid, set_valid: 0;
-    /// resolved indicates that the "start" address isn't fully resolved yet in the cache
-    pub unresolved, set_unresolved: 1;
-}
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[repr(C, align(8))]
@@ -207,23 +196,4 @@ impl PartialEq for KeySmallPoolOrd {
     fn eq(&self, other: &Self) -> bool {
         self.avail == other.avail
     }
-}
-
-/// A structure for passing around key metadata
-#[derive(Debug)]
-pub(crate) struct KeyAttributes {
-    /// actual length of data in the key
-    pub(crate) len: usize,
-    /// pre-reserved storage space for the key (growable to this bound "at no cost")
-    pub(crate) reserved: usize,
-    /// access count
-    pub(crate) age: usize,
-    /// owning dictionary
-    pub(crate) dict: String,
-    /// the specific basis from which this key's metadata was found
-    pub(crate) basis: String,
-    /// flags
-    pub(crate) flags: KeyFlags,
-    /// descriptor index
-    pub(crate) index: NonZeroU32,
 }

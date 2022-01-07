@@ -7,24 +7,83 @@ pub use frontend::*;
 
 use num_traits::*;
 use std::io::{Result, Error, ErrorKind};
-use xous::CID;
+use xous::{CID, SID, msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::thread::JoinHandle;
 
 use core::sync::atomic::{AtomicU32, Ordering};
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
-pub struct PddbBasisManager {
-    conn: CID,
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum CbOp {
+    Change,
+    Quit
 }
-impl PddbBasisManager {
+
+/// The intention is that one Pddb management object is made per process, and this serves
+/// as the gateway for parcelling out PddbKey objects, which are the equivalent of a File
+/// in a convention system that implements read/write operations.
+///
+/// The Pddb management object also handles meta-issues such as basis creation, unlock/lock,
+/// and callbacks in case data changes.
+pub struct Pddb {
+    conn: CID,
+    /// a SID that we can directly share with the PDDB server for the purpose of handling key change callbacks
+    cb_sid: SID,
+    cb_handle: Option<JoinHandle::<()>>,
+    /// Handle key change updates. The general intent is that the closure implements a
+    /// `send` of a message to the server to deal with a key change appropriately,
+    /// but no mutable data is allowed within the closure itself due to safety problems.
+    /// Thus, the closure might encode something like whether the message is blocking or nonblocking;
+    /// the CID of the message; and the opcode and arguments, as static variables. An implementation
+    /// with many keys might, for example, keep a lookup table of indices to keys to track which
+    /// ones need clearing if you're working at a very fine granularity, but more generally,
+    /// the application behavior might be something like a refresh of the data from storage
+    /// in the case of a basis change. Basis changes are thought to be rare; so, big changes
+    /// like this are probably OK.
+    keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
+}
+impl Pddb {
     pub fn new() -> Self {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("can't connect to Pddb server");
-        PddbBasisManager {
-            conn
+        let sid = xous::create_server().unwrap();
+        let keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>> = Arc::new(Mutex::new(HashMap::new()));
+        let handle = thread::spawn({
+            let keys = Arc::clone(&keys);
+            let sid = sid.clone();
+            move || {
+                loop {
+                    let msg = xous::receive_message(sid).unwrap();
+                    match FromPrimitive::from_usize(msg.body.id()) {
+                        Some(CbOp::Change) => msg_scalar_unpack!(msg, t0, t1, t2, _, {
+                            let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
+                            if let Some(cb) = keys.lock().unwrap().get(&token) {
+                                cb();
+                            } else {
+                                log::warn!("Key changed but no callback was hooked to receive it");
+                            }
+                        }),
+                        Some(CbOp::Quit) => { // blocking scalar
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                            break;
+                        },
+                        _ =>log::warn!("Got unknown opcode: {:?}", msg),
+                    }
+                }
+                xous::destroy_server(sid).unwrap();
+            }
+        });
+        Pddb {
+            conn,
+            cb_sid: sid,
+            cb_handle: Some(handle),
+            keys,
         }
     }
     /// return a list of all open bases
@@ -71,7 +130,10 @@ impl PddbBasisManager {
             }
         }
     }
-    pub fn create(&self, basis_name: &str) -> Result<()> {
+    pub fn create_basis(&self, basis_name: &str) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Create,
@@ -89,7 +151,10 @@ impl PddbBasisManager {
             }
         }
     }
-    pub fn open(&self, basis_name: &str) -> Result<()> {
+    pub fn unlock_basis(&self, basis_name: &str) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Open,
@@ -107,7 +172,10 @@ impl PddbBasisManager {
             }
         }
     }
-    pub fn close(&self, basis_name: &str) -> Result<()> {
+    pub fn lock_basis(&self, basis_name: &str) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Close,
@@ -125,7 +193,10 @@ impl PddbBasisManager {
             }
         }
     }
-    pub fn delete(&self, basis_name: &str) -> Result<()> {
+    pub fn delete_basis(&self, basis_name: &str) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
         let mgmt = PddbBasisRequest {
             name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
             code: PddbRequestCode::Delete,
@@ -143,55 +214,175 @@ impl PddbBasisManager {
             }
         }
     }
-}
 
-pub struct Pddb<'a> {
-    conn: CID,
-    contents: HashMap<PddbKey<'a>, &'a [u8]>,
-    callback: Option<Box<dyn FnMut() + 'a>>,
-}
-impl<'a> Pddb<'a> {
-    // creates a dictionary only if it does not already exist
-    pub fn create(dict_name: &str, basis_name: Option<&str>) -> Option<Self> {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
-        let xns = xous_names::XousNames::new().unwrap();
-        let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("can't connect to Pddb server");
-        /*let mut request = PddbDictRequest {
+    /// If the `create_*` flags are set, creates the asset if they do not exist, otherwise if false, returns
+    /// an error if the asset does not exist.
+    /// `alloc_hint` is an optional field to guide the PDDB allocator to put the key in the right pool. Setting it to `None`
+    /// is perfectly fine, it just has a potential performance impact, especially for very large keys.
+    /// `key_changed_cb` is a static function meant to initiate a message to a server in case the key in question
+    /// goes away due to a basis locking.
+    pub fn get(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>,
+        create_dict: bool, create_key: bool, alloc_hint: Option<usize>, key_changed_cb: Option<impl Fn() + 'static + Send>) -> Result<PddbKey> {
+        if key_name.len() > (KEY_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "key name too long"));
+        }
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+
+        let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
-        }*/
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key_name),
+            create_dict,
+            create_key,
+            token: None,
+            result: PddbRequestCode::Uninit,
+            cb_sid: self.cb_sid.to_array(),
+            alloc_hint: if let Some(a) = alloc_hint {Some(a as u64)} else {None},
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::KeyRequest.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
 
-        None
+        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
+
+        // we probably should never remove this check -- the code may compile correctly and
+        // "work" without this being an even page size, but it's pretty easy to get this wrong,
+        // and if it's wrong we can lose a lot in terms of efficiency of execution.
+        assert!(core::mem::size_of::<PddbBuf>() == 4096, "PddBuf record has the wrong size");
+        match response.result {
+            PddbRequestCode::NoErr => {
+                if let Some(token) = response.token {
+                    if let Some(cb) = key_changed_cb {
+                        self.keys.lock().unwrap().insert(token, Box::new(cb));
+                    }
+                    REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+                    let pk = PddbKey {
+                        dict: String::from(dict_name),
+                        key: String::from(key_name),
+                        basis: if basis_name.is_some() {Some(String::from(bname.as_str().unwrap()))} else {None},
+                        pos: 0,
+                        token,
+                        buf: Buffer::new(core::mem::size_of::<PddbBuf>()),
+                        conn: self.conn,
+                    };
+                    Ok(pk)
+                } else {
+                    Err(Error::new(ErrorKind::PermissionDenied, "Dict/Key access denied"))
+                }
+            }
+            PddbRequestCode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Dict/Key access denied")),
+            PddbRequestCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No more space on disk")),
+            PddbRequestCode::NotMounted => Err(Error::new(ErrorKind::ConnectionReset, "PDDB was unmounted")),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
     }
 
-    /// returns a key only if it exists
-    pub fn get(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>, key_changed_cb: impl FnMut() + 'a) -> Result<Option<PddbKey>> {
-        self.callback = Some(Box::new(key_changed_cb));
-        Ok(None)
+    /// deletes a key within the dictionary
+    pub fn delete_key(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>) -> Result<()> {
+        if key_name.len() > (KEY_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "key name too long"));
+        }
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+
+        let request = PddbKeyRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key_name),
+            create_dict: false,
+            create_key: false,
+            token: None,
+            result: PddbRequestCode::Uninit,
+            cb_sid: self.cb_sid.to_array(),
+            alloc_hint: None,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DeleteKey.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
+        match response.result {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
     }
-    /// closes the key, de-allocating the OS memory to track it.
-    pub fn close(&mut self, _key: PddbKey) -> Result<()> {
-        Ok(())
+    /// deletes the entire dictionary
+    pub fn delete_dict(&mut self, dict_name: &str, basis_name: Option<&str>) -> Result<()> {
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+
+        let request = PddbKeyRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            create_dict: false,
+            create_key: false,
+            token: None,
+            result: PddbRequestCode::Uninit,
+            cb_sid: self.cb_sid.to_array(),
+            alloc_hint: None,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DeleteKey.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
+        match response.result {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
     }
-    // updates an existing key's value. mainly used by write().
-    pub fn update(&mut self, _key: PddbKey) -> Result<Option<PddbKey>> { Ok(None) }
-    // creates a key or overwrites it
-    pub fn insert(&mut self, _key: PddbKey) -> Option<PddbKey> { None } // may return the displaced key
-    // deletes a key within the dictionary
-    pub fn remove(&mut self, _key: PddbKey) -> Result<()> { Ok(()) }
-    // deletes the entire dictionary
-    pub fn delete(&mut self) {}
 }
 
-impl<'a> Drop for Pddb<'a> {
+impl Drop for Pddb {
     fn drop(&mut self) {
-        // the connection to the server side must be reference counted, so that multiple instances of this object within
-        // a single process do not end up de-allocating the CID on other threads before they go out of scope.
-        // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
+        let cid = xous::connect(self.cb_sid).unwrap();
+        send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+        unsafe{xous::disconnect(cid).unwrap();}
+        if let Some(handle) = self.cb_handle.take() {
+            handle.join().expect("couldn't terminate callback helper thread");
+        }
+
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
-        // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
-        // de-allocate those items here. They don't need a reference count because they are object-specific
     }
 }

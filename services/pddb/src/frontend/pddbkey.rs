@@ -11,91 +11,23 @@ use std::io::{Read, Write};
 use std::string::String;
 
 pub struct PddbKey<'a> {
-    conn: CID,
-    dict: String,
-    key: String,
-    token: ApiToken,
+    pub(crate) dict: String,
+    pub(crate) key: String,
+    pub(crate) basis: Option<String>,
+    pub(crate) token: ApiToken,
     /// position in the key's data "stream"
-    pos: u64,
-    buf: Buffer<'a>,
+    pub(crate) pos: u64,
+    pub(crate) buf: Buffer<'a>,
+    pub(crate) conn: CID,
 }
+/// PddbKeys are created by Pddb
 impl<'a> PddbKey<'a> {
-    pub fn get<P: AsRef<Path>>(path: P) -> Result<PddbKey<'a>> {
-        let xns = xous_names::XousNames::new().unwrap();
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
-        let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("Can't connect to Pddb server");
-
-        if !path.as_ref().is_absolute() {
-            return Err(Error::new(ErrorKind::InvalidInput, "All PDDB keys must be fully specified relative to a dictionary"));
-        }
-        let mut dict = String::new();
-        let mut key = String::new();
-        let mut components = path.as_ref().components();
-        match components.next().unwrap() {
-            Component::Prefix(prefix_component) => {
-                if let Some(dictstr) = prefix_component.as_os_str().to_str() {
-                    if dictstr.len() <= DICT_NAME_LEN {
-                        dict.push_str(dictstr);
-                    } else {
-                        return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB dictionary names must be shorter than {} bytes", DICT_NAME_LEN)));
-                    }
-                } else {
-                    return Err(Error::new(ErrorKind::InvalidInput, "PDDB dictionary names must valid UTF-8"));
-                }
-            }
-            _ => {
-                return Err(Error::new(ErrorKind::InvalidInput, "All PDDB entries must be of the format `dict:key`, where `dict` is treated as a Prefix"));
-            }
-        }
-        // collect the remaining components into the key
-        for comps in components {
-            if let Some(keystr) = comps.as_os_str().to_str() {
-                key.push_str(keystr);
-            } else {
-                return Err(Error::new(ErrorKind::InvalidInput, "PDDB dictionary names must valid UTF-8"));
-            }
-        }
-
-        if key.len() > KEY_NAME_LEN {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB key names must be shorter than {} bytes", DICT_NAME_LEN)));
-        }
-
-        let request = PddbKeyRequest {
-            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict.as_str()),
-            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key.as_str()),
-            token: None,
-        };
-        let mut buf = Buffer::into_buf(request)
-            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-        buf.lend_mut(conn, Opcode::KeyRequest.to_u32().unwrap())
-            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-
-        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
-
-        // we probably should never remove this check -- the code may compile correctly and
-        // "work" without this being an even page size, but it's pretty easy to get this wrong,
-        // and if it's wrong we can lose a lot in terms of efficiency of execution.
-        assert!(core::mem::size_of::<PddbBuf>() == 4096, "PddBuf record has the wrong size");
-        if let Some(token) = response.token {
-            Ok(PddbKey {
-                conn,
-                dict,
-                key,
-                token,
-                pos: 0,
-                buf: Buffer::new(core::mem::size_of::<PddbBuf>()),
-            })
-        } else {
-            Err(Error::new(ErrorKind::PermissionDenied, "Dict/Key access denied"))
-        }
-    }
     /// this will clear all residual values in the buffer. Should be called whenever the Basis set changes.
     pub fn volatile_clear(&mut self) {
         self.buf.volatile_clear();
     }
-
-    pub(crate) fn conn(&self) -> CID {
-        self.conn
+    pub fn attributes(&self) -> KeyAttributes {
+        unimplemented!()
     }
 }
 
@@ -209,21 +141,19 @@ impl<'a> Write for PddbKey<'a> {
     }
 }
 
-use core::sync::atomic::{AtomicU32, Ordering};
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+use core::sync::atomic::Ordering;
 impl<'a> Drop for PddbKey<'a> {
     fn drop(&mut self) {
         self.buf.volatile_clear(); // clears any confidential data in our memory buffer
 
-        // the connection to the server side must be reference counted, so that multiple instances of this object within
-        // a single process do not end up de-allocating the CID on other threads before they go out of scope.
-        // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
+        // notify the server that we can drop the connection state when our object goes out of scope
+        send_message(self.conn, Message::new_blocking_scalar(Opcode::KeyDrop.to_usize().unwrap(),
+        self.token[0] as usize, self.token[1] as usize, self.token[2] as usize, 0)).expect("couldn't send KeyDrop message");
+
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
-        // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
-        // de-allocate those items here. They don't need a reference count because they are object-specific
     }
 }
 

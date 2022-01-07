@@ -378,12 +378,12 @@ mod tests;
 use tests::*;
 
 use num_traits::*;
-use xous::{send_message, Message};
+use xous::{send_message, Message, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use core::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
 use core::fmt::Write;
@@ -396,13 +396,14 @@ pub(crate) struct BasisRequestPassword {
     plaintext_pw: Option<xous_ipc::String::<{crate::api::PASSWORD_LEN}>>,
 }
 
-#[derive(Eq)]
+//#[derive(Eq)]
 struct TokenRecord {
-    token: ApiToken,
-    dict: String,
-    key: String,
-    basis: Option<String>,
+    pub dict: String,
+    pub key: String,
+    pub basis: Option<String>,
+    pub conn: xous::CID, // callback connection
 }
+/*
 impl Hash for TokenRecord {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.token.hash(state);
@@ -412,7 +413,7 @@ impl PartialEq for TokenRecord {
     fn eq(&self, other: &Self) -> bool {
         self.token == other.token
     }
-}
+}*/
 
 
 #[xous::xous_main]
@@ -439,7 +440,7 @@ fn xmain() -> ! {
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
-    let mut token_dict = HashSet::<TokenRecord>::new();
+    let mut token_dict = HashMap::<ApiToken, TokenRecord>::new();
 
     // run the CI tests if the option has been selected
     #[cfg(all(
@@ -690,11 +691,171 @@ fn xmain() -> ! {
                 }
                 buffer.replace(mgmt).unwrap();
             }
-            Some(Opcode::CreateDict) => {
-
-            }
             Some(Opcode::KeyRequest) => {
-                // placeholder
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                let key = req.key.as_str().expect("key utf-8 decode error");
+                if basis_cache.dict_attributes(&mut pddb_os, dict, bname).is_err() {
+                    if req.create_dict {
+                        match basis_cache.dict_add(&mut pddb_os, dict, bname) {
+                            Ok(_) => (),
+                            Err(e) => {
+                                match e.kind() {
+                                    std::io::ErrorKind::OutOfMemory => {req.result = PddbRequestCode::NoFreeSpace; buffer.replace(req).unwrap(); continue}
+                                    std::io::ErrorKind::NotFound => {req.result = PddbRequestCode::NotMounted; buffer.replace(req).unwrap(); continue}
+                                    _ => {req.result = PddbRequestCode::InternalError; buffer.replace(req).unwrap(); continue}
+                                }
+                            }
+                        }
+                    } else {
+                        req.result = PddbRequestCode::NotFound;
+                        buffer.replace(req).unwrap(); continue
+                    }
+                }
+                if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
+                    if !req.create_key {
+                        req.result = PddbRequestCode::NotFound;
+                        buffer.replace(req).unwrap(); continue
+                    }
+                    // by default keys are created when they are written on the first try.
+                    // ...do need to remember to create an "empty" key if we try to read a key that doesn't already exist, tho...
+                }
+                // at this point, we have established a basis/dict/key tuple.
+                let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
+                let cid = xous::connect(xous::SID::from_array(req.cb_sid)).expect("couldn't connect for callback");
+                let token_record = TokenRecord {
+                    dict: String::from(dict),
+                    key: String::from(key),
+                    basis: if let Some(name) = bname {Some(String::from(name))} else {None},
+                    conn: cid,
+                };
+                token_dict.insert(token, token_record);
+                req.token = Some(token);
+                req.result = PddbRequestCode::NoErr;
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::KeyDrop) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
+                let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
+                if let Some(rec) = token_dict.remove(&token) {
+                    // now check if we can safely disconnect and recycle our connection number.
+                    // This is important because we can only have 32 outgoing connections...
+                    let mut has_cid = false;
+                    for r in token_dict.values() {
+                        if r.conn == rec.conn {
+                            has_cid = true;
+                            break;
+                        }
+                    }
+                    if !has_cid {
+                        unsafe{xous::disconnect(rec.conn).expect("couldn't disconnect from callback server")};
+                    }
+                }
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack KeyDrop");
+            }),
+            Some(Opcode::DeleteKey) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                let key = req.key.as_str().expect("key utf-8 decode error");
+                match basis_cache.key_remove(&mut pddb_os, dict, key, bname, false) {
+                    Ok(_) => {
+                        let mut evict_list = Vec::<ApiToken>::new();
+                        // check to see if we need to eliminate any ApiTokens as a result of this.
+                        for (token, rec) in token_dict.iter() {
+                            if (rec.dict == dict) && (rec.key == key) {
+                                // check the basis union rules
+                                let mut matching = false;
+                                if rec.basis.is_none() && bname.is_none() {
+                                    matching = true;
+                                }
+                                if let Some(breq) = bname {
+                                    if rec.basis.is_none() {
+                                        matching = true;
+                                    }
+                                    if let Some(brec) = &rec.basis {
+                                        if brec == breq {
+                                            matching = true;
+                                        }
+                                    }
+                                }
+                                if matching {
+                                    evict_list.push(*token);
+                                }
+                            }
+                        }
+                        for token in evict_list {
+                            token_dict.remove(&token);
+                        }
+                        req.result = PddbRequestCode::NoErr;
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
+                            _ => req.result = PddbRequestCode::InternalError,
+                        }
+                    }
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::DeleteDict) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                match basis_cache.dict_remove(&mut pddb_os, dict, bname, false) {
+                    Ok(_) => {
+                        let mut evict_list = Vec::<ApiToken>::new();
+                        // check to see if we need to eliminate any ApiTokens as a result of this.
+                        for (token, rec) in token_dict.iter() {
+                            if rec.dict == dict {
+                                // check the basis union rules
+                                let mut matching = false;
+                                if rec.basis.is_none() && bname.is_none() {
+                                    matching = true;
+                                }
+                                if let Some(breq) = bname {
+                                    if rec.basis.is_none() {
+                                        matching = true;
+                                    }
+                                    if let Some(brec) = &rec.basis {
+                                        if brec == breq {
+                                            matching = true;
+                                        }
+                                    }
+                                }
+                                if matching {
+                                    evict_list.push(*token);
+                                }
+                            }
+                        }
+                        for token in evict_list {
+                            token_dict.remove(&token);
+                        }
+                        req.result = PddbRequestCode::NoErr;
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
+                            _ => req.result = PddbRequestCode::InternalError,
+                        }
+                    }
+                }
+                buffer.replace(req).unwrap();
             }
             Some(Opcode::ReadKey) => {
                 // placeholder

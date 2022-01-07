@@ -1,3 +1,6 @@
+use bitfield::bitfield;
+use std::num::NonZeroU32;
+
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.
@@ -69,16 +72,21 @@ pub(crate) enum Opcode {
     CreateBasis,
     OpenBasis,
     CloseBasis,
-    /// warning, the Delete routine has not been well tested
+    /// warning, the Delete routines have not been well tested
     DeleteBasis,
+    DeleteKey,
+    DeleteDict,
 
-    CreateDict,
-
+    /// primary method for accessing the database
     KeyRequest,
 
+    // pddbkey methods
     ReadKey,
     WriteKey,
     WriteKeyFlush,
+
+    /// drops any connection state associated with a given key
+    KeyDrop,
 
     /// quit the server
     Quit,
@@ -112,21 +120,19 @@ pub struct PddbBasisRequest {
     pub code: PddbRequestCode,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct PddbDictRequest {
-    /// applications shouldn't specify a basis so that the PD mechanism works as intended, but non-sensitive system config keys will want to generally specify the system basis.
-    pub basis_specified: bool,
-    pub basis_name: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub dict_name: xous_ipc::String::</* DICT_NAME_LEN] */ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub code: PddbRequestCode,
-}
-
 /// A structure for requesting a token to access a particular key/value pair
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct PddbKeyRequest {
-    pub(crate) dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub(crate) key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub(crate) token: Option<ApiToken>,
+pub struct PddbKeyRequest {
+    pub basis_specified: bool,
+    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub token: Option<ApiToken>,
+    pub create_dict: bool,
+    pub create_key: bool,
+    pub alloc_hint: Option<u64>, // this is a usize but for IPC we must have defined memory sizes, so we pick the big option.
+    pub cb_sid: [u32; 4],
+    pub result: PddbRequestCode,
 }
 
 /// Return codes for Read/Write API calls to the main server
@@ -164,6 +170,36 @@ impl PddbBuf {
         unsafe {core::mem::transmute::<*mut u8, &mut PddbBuf>(slice.as_mut_ptr()) }
     }
 }
+
+bitfield! {
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    pub struct KeyFlags(u32);
+    impl Debug;
+    /// set if the entry is valid -- in the cache, an invalid entry means it was previously allocated but then deleted, and needs a sync
+    pub valid, set_valid: 0;
+    /// resolved indicates that the "start" address isn't fully resolved yet in the cache
+    pub unresolved, set_unresolved: 1;
+}
+
+/// A structure for passing around key metadata
+#[derive(Debug)]
+pub struct KeyAttributes {
+    /// actual length of data in the key
+    pub len: usize,
+    /// pre-reserved storage space for the key (growable to this bound "at no cost")
+    pub reserved: usize,
+    /// access count
+    pub age: usize,
+    /// owning dictionary
+    pub dict: String,
+    /// the specific basis from which this key's metadata was found
+    pub basis: String,
+    /// flags
+    pub flags: KeyFlags,
+    /// descriptor index
+    pub index: NonZeroU32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

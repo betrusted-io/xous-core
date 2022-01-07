@@ -2,12 +2,12 @@ use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 
 pub struct PddbCmd {
-    manager: pddb::PddbBasisManager,
+    pddb: pddb::Pddb,
 }
 impl PddbCmd {
     pub fn new(xns: &xous_names::XousNames) -> PddbCmd {
         PddbCmd {
-            manager: pddb::PddbBasisManager::new(),
+            pddb: pddb::Pddb::new(),
         }
     }
 }
@@ -21,14 +21,25 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         let helpstring = "pddb [basislist]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
+        let sid = xous::create_server().unwrap();
+        let cid = xous::connect(sid).unwrap();
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "basislist" => {
-                    let bases = self.manager.list_basis();
+                    let bases = self.pddb.list_basis();
                     for basis in bases {
                         write!(ret, "{}\n", basis).unwrap();
                     }
+                    /*
+                    self.pddb.get("foo", "bar", None, false, false,
+                        Some({
+                            let cid = cid.clone();
+                            let counter = self.counter.clone();
+                            move || {
+                            xous::send_message(cid, xous::Message::new_scalar(0, counter as usize, 0, 0, 0)).expect("couldn't send");
+                        }})
+                    ).unwrap();*/
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
