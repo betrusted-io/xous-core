@@ -377,7 +377,7 @@ impl PddbOs {
                 if let Some(page) = self.mbbb_retrieve() {
                     page
                 } else {
-                    log::warn!("Blank page in PT found, but no MBBB entry exists. Suspect PT corruption!");
+                    log::debug!("Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!");
                     pt_page
                 }
             } else {
