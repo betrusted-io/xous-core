@@ -44,6 +44,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
     Ok(xous_kernel::Result::ResumeProcess)
 }
 
+#[allow(dead_code)] // needed to silence a hosted mode warning
 pub fn for_each_irq<F>(op: F)
 where
     F: Fn(usize, &PID, MemoryAddress, Option<MemoryAddress>),
