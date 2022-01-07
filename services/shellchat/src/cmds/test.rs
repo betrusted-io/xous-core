@@ -35,6 +35,7 @@ pub struct Test {
     //kbd: Arc<Mutex<keyboard::Keyboard>>,
     oqc: oqc_test::Oqc,
     oqc_start: u64,
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     jtag: jtag::Jtag,
 }
 impl Test {
@@ -71,6 +72,7 @@ impl Test {
             //kbd: Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap())),
             oqc: oqc_test::Oqc::new(&xns).unwrap(),
             oqc_start: 0,
+            #[cfg(any(target_os = "none", target_os = "xous"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
         }
     }

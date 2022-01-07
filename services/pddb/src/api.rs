@@ -1,3 +1,6 @@
+use bitfield::bitfield;
+use std::num::NonZeroU32;
+
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.
@@ -6,12 +9,28 @@ pub(crate) const DICT_NAME_LEN: usize = 127 - 4 - 4 - 4 - 4; // u32: flags, age,
 #[allow(dead_code)]
 pub(crate) const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4; // u64: vaddr/len/resvd, u32: flags, age = 95
 #[allow(dead_code)]
+pub(crate) const PASSWORD_LEN: usize = 72; // this is actually set by bcrypt
+#[allow(dead_code)]
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 #[allow(dead_code)]
 pub(crate) const PDDB_VERSION: u32 = 0x00_00_00_01;
-/// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing
 #[allow(dead_code)]
-pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
+#[allow(dead_code)]
+pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
+// pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+
+/// range for the starting point of a journal number, picked from a random seed
+/// the goal is to reduce info leakage about the age of structures relative to each other
+/// in various basis in case of partial disclosure of passwords (especially the system password)
+/// The idea is to pick a number that is larger than the wear-out lifetime of the FLASH memory.
+/// This memory should wear out after about 100k R/W cycles, so, 100MM is probably a big enough
+/// range, while avoiding exhausting a 32-bit count.
+#[allow(dead_code)]
+pub(crate) const JOURNAL_RAND_RANGE: u32 = 100_000_000;
+/// The FSCB has a much smaller journal number (256), so we can't afford to make the starting point as big.
+#[allow(dead_code)]
+pub(crate) const FSCB_JOURNAL_RAND_RANGE: u8 = 24;
 
 /// A number between (0, 1] that defines how many of the "truly free" pages we
 /// should put into the FSCB. A value of 0.0 is not allowed as that leaves no free pages.
@@ -38,32 +57,118 @@ pub(crate) const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 #[allow(dead_code)]
 pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
 
+#[allow(dead_code)]
+// TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
+pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
+
+#[allow(dead_code)]
+pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
+    ListBasis,
+    LatestBasis,
+    /// Note that creating a basis does not automatically open it!
+    CreateBasis,
+    OpenBasis,
+    CloseBasis,
+    /// warning, the Delete routines have not been well tested
+    DeleteBasis,
+    DeleteKey,
+    DeleteDict,
+    KeyAttributes,
+
+    // routines to list available resources
+    KeyCountInDict,
+    GetKeyNameAtIndex,
+    DictCountInBasis,
+    GetDictNameAtIndex,
+
+    /// primary method for accessing the database
     KeyRequest,
 
-    /// read implemented using only scalars -- fast, but limited size
-    ReadKeyScalar,
-    /// read implemented using a memory buffer -- slower, but just shy of a page in size
-    ReadKeyMem,
-
-    WriteKeyScalar1,
-    WriteKeyScalar2,
-    WriteKeyScalar3,
-    WriteKeyScalar4,
-    WriteKeyMem,
+    // pddbkey methods
+    ReadKey,
+    WriteKey,
     WriteKeyFlush,
+
+    /// drops any connection state associated with a given key
+    KeyDrop,
 
     /// Suspend/resume callback
     SuspendResume,
+    /// quit the server
+    Quit,
+}
+
+pub type ApiToken = [u32; 3];
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbBasisList {
+    /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
+    pub list: [xous_ipc::String::<BASIS_NAME_LEN>; 63],
+    /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
+    pub num: u32,
+}
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum PddbRequestCode {
+    Create,
+    Open,
+    Close,
+    Delete,
+    NoErr,
+    NotMounted,
+    NoFreeSpace,
+    NotFound,
+    InternalError,
+    AccessDenied,
+    Uninit,
+}
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum BasisRetentionPolicy {
+    Persist,
+    ClearAfterSleeps(u32),
+    //TimeOutSecs(u32),
+}
+impl BasisRetentionPolicy {
+    pub fn derive_init_state(&self) -> u32 {
+        match self {
+            BasisRetentionPolicy::Persist => 0,
+            BasisRetentionPolicy::ClearAfterSleeps(sleeps) => *sleeps,
+            //BasisRetentionPolicy::TimeOutSecs(secs) => *secs,
+        }
+    }
+}
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbBasisRequest {
+    pub name: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub code: PddbRequestCode,
+    pub policy: Option<BasisRetentionPolicy>,
+}
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbDictRequest {
+    pub basis_specified: bool,
+    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub index: u32,
+    pub token: [u32; 4],
+    pub code: PddbRequestCode,
 }
 
 /// A structure for requesting a token to access a particular key/value pair
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct PddbKeyRequest {
-    pub(crate) dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub(crate) key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub(crate) token: Option<[u32; 3]>,
+pub struct PddbKeyRequest {
+    pub basis_specified: bool,
+    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub token: Option<ApiToken>,
+    pub create_dict: bool,
+    pub create_key: bool,
+    pub alloc_hint: Option<u64>, // this is a usize but for IPC we must have defined memory sizes, so we pick the big option.
+    pub cb_sid: [u32; 4],
+    pub result: PddbRequestCode,
 }
 
 /// Return codes for Read/Write API calls to the main server
@@ -74,6 +179,9 @@ pub(crate) enum PddbRetcode {
     Ok = 1,
     BasisLost = 2,
     AccessDenied = 3,
+    UnexpectedEof = 4,
+    InternalError = 5,
+    DiskFull = 6,
 }
 /// PddbBuf is a C-representation of a page of memory that's used
 /// to shuttle data for streaming channels. It must be exactly one
@@ -85,13 +193,15 @@ pub(crate) enum PddbRetcode {
 #[repr(C, packed)]
 pub(crate) struct PddbBuf {
     /// api token for the given buffer
-    pub(crate) token: [u32; 3],
+    pub(crate) token: ApiToken,
+    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
+    pub(crate) position: u64,
     /// length of the data field
     pub(crate) len: u16,
     /// a field reserved for the return code
     pub(crate) retcode: PddbRetcode,
     pub(crate) reserved: u8,
-    pub(crate) data: [u8; 4080],
+    pub(crate) data: [u8; 4072],
 }
 impl PddbBuf {
     pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
@@ -99,6 +209,91 @@ impl PddbBuf {
         unsafe {core::mem::transmute::<*mut u8, &mut PddbBuf>(slice.as_mut_ptr()) }
     }
 }
+
+bitfield! {
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    pub struct KeyFlags(u32);
+    impl Debug;
+    /// set if the entry is valid -- in the cache, an invalid entry means it was previously allocated but then deleted, and needs a sync
+    pub valid, set_valid: 0;
+    /// resolved indicates that the "start" address isn't fully resolved yet in the cache
+    pub unresolved, set_unresolved: 1;
+}
+
+/// A structure for passing around key metadata
+#[derive(Debug)]
+pub struct KeyAttributes {
+    /// actual length of data in the key
+    pub len: usize,
+    /// pre-reserved storage space for the key (growable to this bound "at no cost")
+    pub reserved: usize,
+    /// access count
+    pub age: usize,
+    /// owning dictionary
+    pub dict: String,
+    /// the specific basis from which this key's metadata was found
+    pub basis: String,
+    /// flags
+    pub flags: KeyFlags,
+    /// descriptor index
+    pub index: NonZeroU32,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+/// serializeable version of the attributes structure
+pub struct PddbKeyAttrIpc {
+    pub len: u64,
+    pub reserved: u64,
+    pub age: u64,
+    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub flags: u32,
+    pub index: u32,
+    pub token: ApiToken,
+    pub code: PddbRequestCode,
+}
+impl PddbKeyAttrIpc {
+    pub fn new(token: ApiToken) -> PddbKeyAttrIpc {
+        PddbKeyAttrIpc {
+            len: 0,
+            reserved: 0,
+            age: 0,
+            dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::new(),
+            flags: 0,
+            index: 0,
+            token,
+            code: PddbRequestCode::Uninit,
+        }
+    }
+    #[allow(dead_code)]
+    pub fn to_attributes(&self) -> KeyAttributes {
+        KeyAttributes {
+            len: self.len as usize,
+            reserved: self.reserved as usize,
+            age: self.age as usize,
+            dict: String::from(self.dict.as_str().unwrap()),
+            basis: String::from(self.basis.as_str().unwrap()),
+            flags: KeyFlags(self.flags),
+            index: NonZeroU32::new(self.index).unwrap(),
+        }
+    }
+    pub fn from_attributes(attr: KeyAttributes, token: ApiToken) -> PddbKeyAttrIpc {
+        PddbKeyAttrIpc {
+            len: attr.len as u64,
+            reserved: attr.reserved as u64,
+            age: attr.age as u64,
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(&attr.dict),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&attr.basis),
+            flags: attr.flags.0,
+            index: attr.index.get(),
+            token,
+            code: PddbRequestCode::NoErr,
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

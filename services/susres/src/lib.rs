@@ -128,6 +128,7 @@ impl Drop for Susres {
         if let Some(sid) = self.suspend_cb_sid.take() {
             drop_conn(sid);
         }
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

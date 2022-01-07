@@ -37,6 +37,7 @@ fn flashmem() -> &'static mut FlashSingleton {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct KeyExport {
     pub basis_name: [u8; 64],
     pub key: [u8; 32],
@@ -48,8 +49,13 @@ impl EmuStorage {
         EmuStorage {
         }
     }
-    pub fn as_slice(&self) -> &[u8] {
-        flashmem().memory.as_slice()
+    pub fn as_slice<T>(&self) -> &[T] {
+        unsafe {
+            core::slice::from_raw_parts(
+                flashmem().memory.as_ptr() as *const T,
+                flashmem().memory.len() / core::mem::size_of::<T>(),
+            )
+        }
     }
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         flashmem().memory.as_mut_slice()
@@ -92,6 +98,12 @@ impl HostedSpinor {
             flashmem().memory.as_mut_slice()[offset as usize..offset as usize + data.len()].iter_mut()
         ) {
             *dst = src;
+        }
+        Ok(())
+    }
+    pub fn bulk_erase(&self, start: u32, len: u32) -> Result<(), xous::Error> {
+        for b in flashmem().memory.as_mut_slice()[(start - xous::PDDB_LOC) as usize .. (start - xous::PDDB_LOC + len) as usize].iter_mut() {
+            *b = 0xFF;
         }
         Ok(())
     }

@@ -353,11 +353,25 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
         if sig.version != 1 || (sig.version != protected_version) {
             gfx.msg("Check fail: mismatch on signature record version numbering.\n\r", &mut cursor);
             println!("Check fail: mismatch on signature record version numbering.\n\r");
+            println!("sig.version: {}", sig.version);
+            println!("protected_version: {}", protected_version);
+            // a little insight to help debug what went wrong.
+            for words in image[signed_len as usize - 16 .. ].chunks(4) {
+                let _word = u32::from_le_bytes(words.try_into().unwrap());
+                println!("{:x}", _word);
+            }
             die();
         }
         if protected_len != signed_len - 4 {
             gfx.msg("Check fail: mismatch on header length vs protected length.\n\r", &mut cursor);
             println!("Check fail: mismatch on header length vs protected length.\n\r");
+            println!("signed_len - 4: {}", signed_len - 4);
+            println!("protected_len: {}", protected_len);
+            // a little insight to help debug what went wrong.
+            for words in image[signed_len as usize - 16 .. ].chunks(4) {
+                let _word = u32::from_le_bytes(words.try_into().unwrap());
+                println!("{:x}", _word);
+            }
             die();
         }
 

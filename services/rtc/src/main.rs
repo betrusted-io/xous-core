@@ -9,9 +9,7 @@ use xous_ipc::Buffer;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 use locales::t;
-use graphics_server::GlyphStyle;
 use gam::modal::*;
-use gam::ActionType::*;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
@@ -522,42 +520,52 @@ mod implementation {
     }
 }
 
-fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<xous_ipc::String::<512>> {
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum ValidatorOp {
+    UxMonth,
+    UxDay,
+    UxYear,
+    UxHour,
+    UxMinute,
+    UxSeconds,
+}
+
+fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<ValidatorErr> {
     let text_str = input.as_str();
     let input_int = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
-        _ => return Some(xous_ipc::String::<512>::from_str(t!("rtc.integer_err", xous::LANG))),
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
     };
     log::trace!("validating input {}, parsed as {} for opcode {}", text_str, input_int, opcode);
     match FromPrimitive::from_u32(opcode) {
-        Some(Opcode::UxMonth) => {
+        Some(ValidatorOp::UxMonth) => {
             if input_int < 1 || input_int > 12 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
-        Some(Opcode::UxDay) => {
+        Some(ValidatorOp::UxDay) => {
             if input_int < 1 || input_int > 31 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
-        Some(Opcode::UxYear) => {
+        Some(ValidatorOp::UxYear) => {
             if input_int > 99 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
-        Some(Opcode::UxHour) => {
+        Some(ValidatorOp::UxHour) => {
             if input_int > 23 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
-        Some(Opcode::UxMinute) => {
+        Some(ValidatorOp::UxMinute) => {
             if input_int > 59 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
-        Some(Opcode::UxSeconds) => {
+        Some(ValidatorOp::UxSeconds) => {
             if input_int > 59 {
-                return Some(xous_ipc::String::<512>::from_str(t!("rtc.range_err", xous::LANG)))
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
         _ => {
@@ -594,49 +602,19 @@ fn xmain() -> ! {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let mut rtc = Rtc::new(&xns);
 
-    let mut rtc_textentry = gam::modal::TextEntry {
-        is_password: false,
-        visibility: gam::modal::TextEntryVisibility::Visible,
-        action_conn: CB_TO_MAIN_CONN.load(Ordering::Relaxed),
-        action_opcode: Opcode::UxMonth.to_u32().unwrap(),
-        action_payload: TextEntryPayload::new(),
-        validator: Some(rtc_ux_validator),
-    };
-    let mut rtc_radiobox = gam::modal::RadioButtons::new(
-        CB_TO_MAIN_CONN.load(Ordering::Relaxed).to_u32().unwrap(),
-        Opcode::UxDayOfWeek.to_u32().unwrap()
-    );
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.monday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.tuesday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.wednesday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.thursday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.friday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.saturday", xous::LANG)));
-    rtc_radiobox.add_item(ItemName::new(t!("rtc.sunday", xous::LANG)));
-    log::trace!("building rtc ux modal");
-    let mut modal = gam::Modal::new(
-        crate::api::RTC_MODAL_NAME,
-        gam::ActionType::TextEntry(rtc_textentry),
-        Some(t!("rtc.month", xous::LANG)),
-        None,
-        GlyphStyle::Small,
-        8
-    );
-    modal.spawn_helper(rtc_sid, modal.sid,
-        Opcode::UxRedraw.to_u32().unwrap(),
-        Opcode::UxRawkeys.to_u32().unwrap(),
-        Opcode::UxQuit.to_u32().unwrap()
-    );
-    let mut secs: u8;
-    let mut mins: u8 = 0;
-    let mut hours: u8 = 0;
-    let mut months: u8 = 0;
-    let mut days: u8 = 0;
-    let mut years: u8 = 0;
-    let mut weekday: Weekday = Weekday::Monday;
+    let day_of_week_list = [
+        t!("rtc.monday", xous::LANG),
+        t!("rtc.tuesday", xous::LANG),
+        t!("rtc.wednesday", xous::LANG),
+        t!("rtc.thursday", xous::LANG),
+        t!("rtc.friday", xous::LANG),
+        t!("rtc.saturday", xous::LANG),
+        t!("rtc.sunday", xous::LANG),
+    ];
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer");
     let mut dt_cb_conns: [bool; xous::MAX_CID] = [false; xous::MAX_CID];
+    let modals = modals::Modals::new(&xns).unwrap();
     log::trace!("ready to accept requests");
     loop {
         let msg = xous::receive_message(rtc_sid).unwrap();
@@ -749,48 +727,39 @@ fn xmain() -> ! {
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             Some(Opcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
-                rtc_textentry.action_opcode = Opcode::UxMonth.to_u32().unwrap();
-                modal.modify(Some(TextEntry(rtc_textentry)), Some(t!("rtc.month", xous::LANG)), false, None, true, None);
-                modal.activate();
-            }),
-            Some(Opcode::UxMonth) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<TextEntryPayload, _>().unwrap();
-                let input = payload.as_str().parse::<u32>().expect("pre-validated input failed to re-parse!");
-                months = input as u8;
+                let secs: u8;
+                let mins: u8;
+                let hours: u8;
+                let months: u8;
+                let days: u8;
+                let years: u8;
+                let weekday: Weekday;
+
+                months = modals.get_text(
+                    t!("rtc.month", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap())
+                ).expect("couldn't get month").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
                 log::debug!("got months {}", months);
 
-                rtc_textentry.action_opcode = Opcode::UxDay.to_u32().unwrap();
-                modal.modify(Some(TextEntry(rtc_textentry)),
-                Some(t!("rtc.day", xous::LANG)), false, None, true, None);
-                modal.activate();
-            }
-            Some(Opcode::UxDay) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<TextEntryPayload, _>().unwrap();
-                let input = payload.as_str().parse::<u32>().expect("pre-validated input failed to re-parse!");
-                days = input as u8;
+                days = modals.get_text(
+                    t!("rtc.day", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap())
+                ).expect("couldn't get month").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
                 log::debug!("got days {}", days);
 
-                rtc_textentry.action_opcode = Opcode::UxYear.to_u32().unwrap();
-                modal.modify(Some(TextEntry(rtc_textentry)),
-                Some(t!("rtc.year", xous::LANG)), false, None, true, None);
-                modal.activate();
-            }
-            Some(Opcode::UxYear) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<TextEntryPayload, _>().unwrap();
-                let input = payload.as_str().parse::<u32>().expect("pre-validated input failed to re-parse!");
-                years = input as u8;
+                years = modals.get_text(
+                    t!("rtc.year", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap())
+                ).expect("couldn't get month").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got years {}", years);
 
-                rtc_textentry.action_opcode = Opcode::UxDayOfWeek.to_u32().unwrap();
-                modal.modify(Some(RadioButtons(rtc_radiobox)),
-                Some(t!("rtc.day_of_week", xous::LANG)), false, None, true, None);
-                modal.activate();
-            }
-            Some(Opcode::UxDayOfWeek) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                for dow in day_of_week_list.iter() {
+                    modals.add_list_item(dow).expect("couldn't build day of week list");
+                }
+                let payload = modals.get_radiobutton(t!("rtc.day_of_week", xous::LANG)).expect("couldn't get day of week");
                 weekday =
                     if payload.as_str() == t!("rtc.monday", xous::LANG) {
                         Weekday::Monday
@@ -807,73 +776,32 @@ fn xmain() -> ! {
                     } else {
                         Weekday::Sunday
                     };
+                log::debug!("got weekday {:?}", weekday);
 
-                rtc_textentry.action_opcode = Opcode::UxHour.to_u32().unwrap();
-                modal.modify(Some(TextEntry(rtc_textentry)),
-                Some(t!("rtc.hour", xous::LANG)), false, None, true, None);
-                modal.activate();
-            }
-            Some(Opcode::UxHour) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<TextEntryPayload, _>().unwrap();
-                let input = payload.as_str().parse::<u32>().expect("pre-validated input failed to re-parse!");
-                hours = input as u8;
+                hours = modals.get_text(
+                    t!("rtc.hour", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap())
+                ).expect("couldn't get hour").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got hours {}", hours);
 
-                rtc_textentry.action_opcode = Opcode::UxMinute.to_u32().unwrap();
-                modal.modify(Some(TextEntry(rtc_textentry)),
-                Some(t!("rtc.minute", xous::LANG)), false, None, true, None);
-                modal.activate();
-            }
-            Some(Opcode::UxMinute) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<TextEntryPayload, _>().unwrap();
-                let input = payload.as_str().parse::<u32>().expect("pre-validated input failed to re-parse!");
-                mins = input as u8;
+                mins = modals.get_text(
+                    t!("rtc.minute", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap())
+                ).expect("couldn't get minutes").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got minutes {}", mins);
 
-                rtc_textentry.action_opcode = Opcode::UxSeconds.to_u32().unwrap();
-                modal.modify(Some(TextEntry(rtc_textentry)),
-                Some(t!("rtc.seconds", xous::LANG)), false, None, true, None);
-                modal.activate();
-            }
-            Some(Opcode::UxSeconds) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<TextEntryPayload, _>().unwrap();
-                let input = payload.as_str().parse::<u32>().expect("pre-validated input failed to re-parse!");
-                secs = input as u8;
+                secs = modals.get_text(
+                    t!("rtc.seconds", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap())
+                ).expect("couldn't get seconds").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got seconds {}", secs);
 
+                log::info!("Setting time: {}/{}/{} {}:{}:{} {:?}", months, days, years, hours, mins, secs, weekday);
                 rtc.rtc_set(secs, mins, hours, days, months, years, weekday).expect("couldn't set the current time");
-            }
-            Some(Opcode::UxRedraw) => {
-                modal.redraw();
-            }
-            Some(Opcode::UxRawkeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
-                let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k2 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k3 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k4 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                ];
-                modal.key_event(keys);
             }),
-            Some(Opcode::UxQuit) => {
-                panic!("Modal handler quit unexpectedly");
-            }
             Some(Opcode::Quit) => {
                 log::error!("Quitting RTC server");
                 break;

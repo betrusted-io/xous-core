@@ -227,6 +227,57 @@ class PrecursorUsb:
                     self.gitrev = row[1]
         print("Using SoC {} registers".format(self.gitrev))
 
+    def erase_region(self, addr, length):
+        # ID code check
+        code = self.flash_rdid(1)
+        print("ID code bytes 1-2: 0x{:08x}".format(code))
+        if code != 0x8080c2c2:
+            print("ID code mismatch")
+            exit(1)
+        code = self.flash_rdid(2)
+        print("ID code bytes 2-3: 0x{:08x}".format(code))
+        if code != 0x3b3b8080:
+            print("ID code mismatch")
+            exit(1)
+
+        # block erase
+        progress = ProgressBar(min_value=0, max_value=length, prefix='Erasing ').start()
+        erased = 0
+        while erased < length:
+            self.ping_wdt()
+            if (length - erased >= 65536) and ((addr & 0xFFFF) == 0):
+                blocksize = 65536
+            else:
+                blocksize = 4096
+
+            while True:
+                self.flash_wren()
+                status = self.flash_rdsr(1)
+                if status & 0x02 != 0:
+                    break
+
+            if blocksize == 4096:
+                self.flash_se4b(addr + erased)
+            else:
+                self.flash_be4b(addr + erased)
+            erased += blocksize
+
+            while (self.flash_rdsr(1) & 0x01) != 0:
+                pass
+
+            result = self.flash_rdscur()
+            if result & 0x60 != 0:
+                print("E_FAIL/P_FAIL set on erase, programming may fail, but trying anyways...")
+
+            if self.flash_rdsr(1) & 0x02 != 0:
+                self.flash_wrdi()
+                while (self.flash_rdsr(1) & 0x02) != 0:
+                    pass
+            if erased < length:
+                progress.update(erased)
+        progress.finish()
+        print("Erase finished")
+
     # addr is relative to the base of FLASH (not absolute)
     def flash_program(self, addr, data, verify=True):
         flash_region = int(self.regions['spiflash'][0], 0)
@@ -362,6 +413,9 @@ def main():
         "-w", "--wf200", required=False, help="WF200 firmware", type=str, nargs='?', metavar=('WF200 firmware package'), const='wf200_fw.bin'
     )
     parser.add_argument(
+        "--erase-pddb", help="Erase the PDDB area", action="store_true"
+    )
+    parser.add_argument(
         "--audiotest", required=False, help="Test audio clip (must be 8kHz WAV)", type=str, nargs='?', metavar=('Test audio clip'), const="testaudio.wav"
     )
     parser.add_argument(
@@ -449,6 +503,7 @@ def main():
         LOC_EC     = 0x07FCE000
         LOC_AUDIO  = 0x06340000
         LEN_AUDIO  = 0x01C40000
+        LOC_PDDB   = 0x01000000
     elif args.force == True:
         # try the v0.9 offsets
         LOC_SOC    = 0x00000000
@@ -459,6 +514,7 @@ def main():
         LOC_EC     = 0x07FCE000
         LOC_AUDIO  = 0x06340000
         LEN_AUDIO  = 0x01C40000
+        LOC_PDDB   = 0x01000000
     else:
         print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
@@ -467,6 +523,10 @@ def main():
     pc_usb.ping_wdt()
     print("Halting CPU.")
     pc_usb.poke(vexdbg_addr, 0x00020000)
+
+    if args.erase_pddb:
+        print("Erasing PDDB region")
+        pc_usb.erase_region(LOC_PDDB, LOC_EC - LOC_PDDB)
 
     if args.image:
         image_file, addr_str = args.image

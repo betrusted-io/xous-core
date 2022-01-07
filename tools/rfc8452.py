@@ -15,6 +15,7 @@
 # Rust crate, so, in the worst case, we just get some invalid diagnostic results.
 
 import Crypto.Cipher.AES as AES
+import pyaesni
 import binascii
 import six
 import struct
@@ -30,19 +31,20 @@ class Field(object):
 
     @staticmethod
     def add(x, y):
-        assert x < (1 << 128)
-        assert y < (1 << 128)
+        #assert x < (1 << 128) # in pursuit of great performance we take great risks :-P
+        #assert y < (1 << 128)
         return x ^ y
 
     @staticmethod
     def mul(x, y):
-        assert x < (1 << 128), x
-        assert y < (1 << 128), y
+        #assert x < (1 << 128), x
+        #assert y < (1 << 128), y
 
         res = 0
         for bit in range(128):
             if (y >> bit) & 1:
-                res ^= (2 ** bit) * x
+                #res ^= (2 ** bit) * x
+                res ^= (1 << bit) * x
 
         return Field.mod(res, Field._MOD)
 
@@ -154,14 +156,20 @@ def le_uint64(i):
 
 class AES_GCM_SIV(object):
     def __init__(self, key_gen_key, nonce):
-        aes_obj = AES.new(key_gen_key, AES.MODE_ECB)
-        msg_auth_key = aes_obj.encrypt(le_uint32(0) + nonce)[0:8] + \
-                       aes_obj.encrypt(le_uint32(1) + nonce)[0:8]
-        msg_enc_key = aes_obj.encrypt(le_uint32(2) + nonce)[0:8] + \
-                      aes_obj.encrypt(le_uint32(3) + nonce)[0:8]
+        #aes_obj = AES.new(key_gen_key, AES.MODE_ECB)
+        #msg_auth_key = aes_obj.encrypt(le_uint32(0) + nonce)[0:8] + \
+        #               aes_obj.encrypt(le_uint32(1) + nonce)[0:8]
+        msg_auth_key = pyaesni.cbc256_encrypt(le_uint32(0) + nonce, key_gen_key, bytearray(16))[0:8] + \
+                       pyaesni.cbc256_encrypt((le_uint32(1) + nonce), key_gen_key, bytearray(16))[0:8]
+        #msg_enc_key = aes_obj.encrypt(le_uint32(2) + nonce)[0:8] + \
+        #              aes_obj.encrypt(le_uint32(3) + nonce)[0:8]
+        msg_enc_key = pyaesni.cbc256_encrypt(le_uint32(2) + nonce, key_gen_key, bytearray(16))[0:8] + \
+                      pyaesni.cbc256_encrypt(le_uint32(3) + nonce, key_gen_key, bytearray(16))[0:8]
         if len(key_gen_key) == 32:
-            msg_enc_key += aes_obj.encrypt(le_uint32(4) + nonce)[0:8] + \
-                           aes_obj.encrypt(le_uint32(5) + nonce)[0:8]
+            #msg_enc_key += aes_obj.encrypt(le_uint32(4) + nonce)[0:8] + \
+            #               aes_obj.encrypt(le_uint32(5) + nonce)[0:8]
+            msg_enc_key += pyaesni.cbc256_encrypt(le_uint32(4) + nonce, key_gen_key, bytearray(16))[0:8] + \
+                           pyaesni.cbc256_encrypt(le_uint32(5) + nonce, key_gen_key, bytearray(16))[0:8]
         self.msg_auth_key = msg_auth_key
         self.msg_enc_key = msg_enc_key
         self.nonce = nonce
@@ -175,7 +183,11 @@ class AES_GCM_SIV(object):
         block = initial_block
         output = b''
         while len(inp) > 0:
-            keystream_block = AES.new(key, AES.MODE_ECB).encrypt(block)
+            #keystream_block = AES.new(key, AES.MODE_ECB).encrypt(block)
+            keystream_block = pyaesni.cbc256_encrypt(block, key, bytearray(16))
+            #print("aes")
+            #print(binascii.hexlify(keystream_block))
+            #print(binascii.hexlify(keystream_block_a))
             block = le_uint32((read_le_uint32(block[0:4]) + 1) & 0xffffffff) + block[4:]
             todo = min(len(inp), len(keystream_block))
             for j in range(todo):
@@ -224,7 +236,8 @@ class AES_GCM_SIV(object):
 
         # Polyval/tag calculation
         S_s = self._polyval_calc(plaintext, additional_data)
-        tag = AES.new(self.msg_enc_key).encrypt(bytes(S_s))
+        #tag = AES.new(self.msg_enc_key).encrypt(bytes(S_s))
+        tag = pyaesni.cbc256_encrypt(bytes(S_s), self.msg_enc_key, bytearray(16))
 
         # Encrypt
         counter_block = bytearray(tag)

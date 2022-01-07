@@ -12,12 +12,12 @@ use crate::{LayoutApi, LayoutBehavior};
 pub(crate) struct ModalLayout {
     pub modal: Gid,
     modal_y_pad: i16,
-    modal_x_pad: i16,
+    _modal_x_pad: i16,
     modal_min_height: i16,
     screensize: Point,
-    height: i16,
+    _height: i16,
     visible: bool,
-    modal_y_max: i16,
+    _modal_y_max: i16,
 }
 impl ModalLayout {
     pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8, canvases: &mut HashMap<Gid, Canvas>) -> Result<ModalLayout, xous::Error> {
@@ -43,12 +43,12 @@ impl ModalLayout {
         Ok(ModalLayout {
             modal: modal_canvas.gid(),
             modal_y_pad: MODAL_Y_PAD,
-            modal_x_pad: MODAL_X_PAD,
+            _modal_x_pad: MODAL_X_PAD,
             modal_min_height: height,
             screensize,
-            height: screensize.y - MODAL_Y_PAD, // start with the "maximum" size, and shrink down once items are known
+            _height: screensize.y - MODAL_Y_PAD, // start with the "maximum" size, and shrink down once items are known
             visible: true,
-            modal_y_max: crate::api::MODAL_Y_MAX,
+            _modal_y_max: crate::api::MODAL_Y_MAX,
         })
     }
 }

@@ -557,8 +557,8 @@ impl Drop for Com {
                 Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
             unsafe{xous::disconnect(cid).unwrap();}
         }
-
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

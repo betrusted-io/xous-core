@@ -34,6 +34,7 @@ root-keys = {path="../root-keys"}
 jtag = {path="../jtag"}
 net = {path="../net"}
 dns = {path="../dns"}
+pddb = {path="../pddb"}
 
 trng = {path = "../trng"}
 
@@ -72,6 +73,7 @@ utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []
+spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 default = [] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]

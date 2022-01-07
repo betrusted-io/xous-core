@@ -27,11 +27,24 @@ bitfield = "0.13.2"
 aes-gcm-siv = "0.10.3"
 llio = {path="../llio"}
 
+# passwords
+sha2 = {path = "../engine-sha512"}
+digest = "0.9"
+
+# bcrypt
+blowfish = { version = "0.8", features = ["bcrypt"] }
+
+# UX (for password entry and notifications)
+gam = {path="../gam"}
+locales = {path = "../../locales"}
+modals = {path="../modals"}
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.4"
+rand_chacha = "0.3.1"
 
 [features]
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
@@ -41,4 +54,9 @@ u64_pa = []
 # the page table when being updated in the case of a power loss, in exchange for more than doubling the time it
 # takes to update the page table.
 mbbb = []
+# selecting deterministic makes the allocation and page replacement algorithms deterministic. normally we don't want
+# this but it's helpful for debugging.
+deterministic = []
+# this flag adds CI tests to the build
+ci = []
 default = ["mbbb"]

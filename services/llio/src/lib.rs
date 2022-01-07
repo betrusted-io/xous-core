@@ -590,6 +590,7 @@ impl Drop for Llio {
         if let Some(sid) = self.gpio_sid.take() {
             drop_conn(sid);
         }
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

@@ -20,6 +20,7 @@ mod implementation {
     #[derive(Debug)]
     enum FlashOp {
         EraseSector(u32), // 4k sector
+        EraseBlock(u32), // 64k block
         WritePages(u32, [u8; 4096], usize), // page address, data, len
         ReadId,
     }
@@ -42,6 +43,38 @@ mod implementation {
                 }
                 // issue erase command
                 flash_se4b(&mut spinor.csr, sector_address);
+                // wait for WIP bit to drop
+                loop {
+                    let status = flash_rdsr(&mut spinor.csr, 1);
+                    if status & 0x01 == 0 {
+                        break;
+                    }
+                }
+                // get the success code for return
+                result = flash_rdscur(&mut spinor.csr);
+                // disable writes: send wrdi
+                if flash_rdsr(&mut spinor.csr, 1) & 0x02 != 0 {
+                    loop {
+                        flash_wrdi(&mut spinor.csr);
+                        let status = flash_rdsr(&mut spinor.csr, 1);
+                        if status & 0x02 == 0 {
+                            break;
+                        }
+                    }
+                }
+                flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
+            },
+            Some(FlashOp::EraseBlock(block_address)) => {
+                // enable writes: set wren mode
+                loop {
+                    flash_wren(&mut spinor.csr);
+                    let status = flash_rdsr(&mut spinor.csr, 1);
+                    if status & 0x02 != 0 {
+                        break;
+                    }
+                }
+                // issue erase command
+                flash_be4b(&mut spinor.csr, block_address);
                 // wait for WIP bit to drop
                 loop {
                     let status = flash_rdsr(&mut spinor.csr, 1);
@@ -276,7 +309,6 @@ mod implementation {
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
-    #[allow(dead_code)]
     fn flash_be4b(csr: &mut utralib::CSR<u32>, block_address: u32) {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, block_address);
         csr.wo(utra::spinor::COMMAND,
@@ -453,6 +485,27 @@ mod implementation {
             }
         }
 
+        pub(crate) fn bulk_erase(&mut self, be: &mut BulkErase) -> SpinorError {
+            if (be.start & (SPINOR_BULK_ERASE_SIZE - 1)) != 0 {
+                log::warn!("Bulk erase start address is not block-aligned. Aborting.");
+                return SpinorError::AlignmentError;
+            }
+            if (be.len & (SPINOR_BULK_ERASE_SIZE - 1)) != 0 {
+                log::warn!("Bulk erase end address is not block-aligned. Aborting.");
+                return SpinorError::AlignmentError;
+            }
+            for block in (be.start..be.start + be.len).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
+                self.cur_op = Some(FlashOp::EraseBlock(block));
+                log::trace!("bulk erase: {:x?}", block);
+                let erase_result = self.call_spinor_context_blocking();
+                if erase_result & 0x40 != 0 {
+                    log::error!("E_FAIL set, erase failed: result 0x{:02x}, block addr 0x{:08x}", erase_result, block);
+                    return SpinorError::EraseFailed;
+                }
+            }
+            return SpinorError::NoError
+        }
+
         pub fn suspend(&mut self) {
             self.susres.suspend();
         }
@@ -481,6 +534,9 @@ mod implementation {
         pub fn resume(&self) {
         }
         pub(crate) fn write_region(&mut self, _wr: &mut WriteRegion) -> SpinorError {
+            SpinorError::ImplementationError
+        }
+        pub(crate) fn bulk_erase(&mut self, _be: &mut BulkErase) -> SpinorError {
             SpinorError::ImplementationError
         }
     }
@@ -681,6 +737,34 @@ fn xmain() -> ! {
                 }
                 buffer.replace(wr).expect("couldn't return response code to WriteRegion");
             },
+            Some(Opcode::BulkErase) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut wr = buffer.to_original::<BulkErase, _>().unwrap();
+                // bounds check to within the PDDB region for bulk erases. Please use standard patching for other regions.
+                let authorized =
+                    if (wr.start >= xous::PDDB_LOC) && ((wr.start + wr.len) <= (xous::PDDB_LOC + xous::PDDB_LEN)) {
+                        true
+                    } else {
+                        false
+                    };
+                if authorized {
+                    match client_id {
+                        Some(id) => {
+                            if wr.id == id {
+                                wr.result = Some(spinor.bulk_erase(&mut wr)); // note: this must reject out-of-bound length requests for security reasons
+                            } else {
+                                wr.result = Some(SpinorError::IdMismatch);
+                            }
+                        },
+                        _ => {
+                            wr.result = Some(SpinorError::NoId);
+                        }
+                    }
+                } else {
+                    wr.result = Some(SpinorError::AccessDenied);
+                }
+                buffer.replace(wr).expect("couldn't return response code to WriteRegion");
+            }
             Some(Opcode::EccError) => msg_scalar_unpack!(msg, address, _overflow, _, _, {
                 // just some stand-in code -- should probably do something more clever, e.g. a rolling log
                 // plus some error handling callback. But this is in the distant future once we have enough

@@ -368,16 +368,40 @@ mod api;
 use api::*;
 mod backend;
 use backend::*;
+mod ux;
+use ux::*;
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod tests;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[allow(unused_imports)]
 use tests::*;
 
 use num_traits::*;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
+use xous::{send_message, Message, msg_blocking_scalar_unpack};
+use xous_ipc::Buffer;
 use core::cell::RefCell;
 use std::rc::Rc;
+use std::thread;
+use std::collections::HashMap;
+use std::io::ErrorKind;
+use core::fmt::Write;
+
+use locales::t;
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct BasisRequestPassword {
+    db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>,
+    plaintext_pw: Option<xous_ipc::String::<{crate::api::PASSWORD_LEN}>>,
+}
+
+struct TokenRecord {
+    pub dict: String,
+    pub key: String,
+    pub basis: Option<String>,
+    pub alloc_hint: Option<usize>,
+    pub conn: xous::CID, // callback connection
+}
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -388,125 +412,681 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", pddb_sid);
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     log::trace!("ready to accept requests");
 
     // shared entropy cache across all process-local services (it's more efficient to request entropy in blocks from the TRNG)
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
+    // for less-secured user prompts (everything but password entry)
+    let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    {
-        log::info!("Creating `basecase1`");
-        let mut basis_cache = BasisCache::new();
-        create_basis_testcase(&mut pddb_os, &mut basis_cache, None, None, None);
-        log::info!("Saving `basecase1` to local host");
-        pddb_os.dbg_dump(Some("basecase1".to_string()));
+    // storage for the basis cache
+    let mut basis_cache = BasisCache::new();
+    // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
+    let mut token_dict = HashMap::<ApiToken, TokenRecord>::new();
 
-        log::info!("Doing delete/add consistency");
-        delete_add_dict_consistency(&mut pddb_os, &mut basis_cache, None, None, None);
-        log::info!("Saving `dacheck` to local host");
-        pddb_os.dbg_dump(Some("dacheck".to_string()));
+    // run the CI tests if the option has been selected
+    #[cfg(all(
+        not(any(target_os = "none", target_os = "xous")),
+        feature = "ci"
+    ))]
+    ci_tests(&mut pddb_os).map_err(|e| log::error!("{}", e)).ok();
 
-        log::info!("Doing patch test");
-        patch_test(&mut pddb_os, &mut basis_cache, None, None);
-        pddb_os.dbg_dump(Some("patch".to_string()));
-        log::info!("CI done");
+    if false { // this will re-init the PDDB and do a simple key query. Really useful only for early shake-down testing, eliminate this reminder stub once we have some confidence in the code
+        hw_testcase(&mut pddb_os);
     }
-    /*
-    { // a simple case that could be run directly on the hardware
-        log::info!("Running `manual` test case");
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        pddb_os.test_reset();
 
-        manual_testcase(&mut pddb_os);
-
-        log::info!("Re-mount the PDDB");
-        let mut basis_cache = BasisCache::new();
-        if let Some(sys_basis) = pddb_os.pddb_mount() {
-            log::info!("PDDB mount operation finished successfully");
-            basis_cache.basis_add(sys_basis);
-        } else {
-            log::info!("PDDB did not mount; did you remember to format the PDDB region?");
+    // our very own password modal. Password modals are precious and privately owned, to avoid
+    // other processes from crafting them.
+    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    let pw_handle = thread::spawn({
+        move || {
+            password_ux_manager(
+                xous::connect(pddb_sid).unwrap(),
+                pw_sid
+            )
         }
-        log::info!("test readback of wifi/wpa_keys/e4200");
-        let mut readback = [0u8; 16]; // this buffer is bigger than the data in the key, but that's alright...
-        match basis_cache.key_read(&mut pddb_os, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
-            Ok(readsize) => {
-                log::info!("read back {} bytes", readsize);
-                log::info!("read data: {}", String::from_utf8_lossy(&readback));
-            },
-            Err(e) => {
-                log::info!("couldn't read data: {:?}", e);
+    });
+    // try to mount the PDDB automatically before starting the server
+    if pddb_os.rootkeys_initialized() {
+        tt.sleep_ms(1000).unwrap(); // wait 1 second after boot before attempting to mount, to let the boot screen finish redrawing (cometic issue).
+        log::info!("Requesting login password");
+        let mut done = false;
+        let mut skip = false;
+        while !done {
+            done = pddb_os.try_login();
+            if !done {
+                pddb_os.clear_password(); // clear the bad password entry
+                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
+                    Ok(response) => {
+                        if response.as_str() == t!("pddb.yes", xous::LANG) {
+                            done = false;
+                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                            done = true;
+                            skip = true;
+                        } else {
+                            panic!("Got unexpected return from radiobutton");
+                        }
+                    }
+                    _ => panic!("get_radiobutton failed"),
+                }
             }
         }
 
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        pddb_os.dbg_dump(Some("manual".to_string()));
+        if !skip {
+            log::info!("Attempting to mount the PDDB");
+            if let Some(sys_basis) = pddb_os.pddb_mount() {
+                log::info!("PDDB mount operation finished successfully");
+                basis_cache.basis_add(sys_basis);
+            } else {
+                #[cfg(any(target_os = "none", target_os = "xous"))]
+                {
+                    log::debug!("PDDB did not mount; requesting format");
+                    modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("pddb.cancel", xous::LANG)).expect("couldn't build radio item list");
+                    let do_format: bool;
+                    match modals.get_radiobutton(t!("pddb.requestformat", xous::LANG)) {
+                        Ok(response) => {
+                            if response.as_str() == t!("pddb.okay", xous::LANG) {
+                                do_format = true;
+                            } else if response.as_str() == t!("pddb.cancel", xous::LANG) {
+                                log::info!("PDDB format aborted by user");
+                                do_format = false;
+                            } else {
+                                panic!("Got unexpected return from radiobutton");
+                            }
+                        }
+                        _ => panic!("get_radiobutton failed"),
+                    }
+                    if do_format {
+                        let fast: bool;
+                        if false {
+                            modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                            modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                            match modals.get_radiobutton(t!("pddb.devbypass", xous::LANG)) {
+                                Ok(response) => {
+                                    if response.as_str() == t!("pddb.yes", xous::LANG) {
+                                        fast = true;
+                                    } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                                        fast = false;
+                                    } else {
+                                        panic!("Got unexpected return from radiobutton");
+                                    }
+                                }
+                                _ => panic!("get_radiobutton failed"),
+                            }
+                        } else {
+                            fast = false;
+                        }
+
+                        pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
+
+                        if let Some(sys_basis) = pddb_os.pddb_mount() {
+                            log::info!("PDDB mount operation finished successfully");
+                            basis_cache.basis_add(sys_basis);
+                        } else {
+                            log::error!("Despite formatting, no PDDB was found!");
+                            let mut err = String::from(t!("pddb.internalerror", xous::LANG));
+                            err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
+                            modals.show_notification(err.as_str()).expect("notification failed");
+                        }
+                    }
+                }
+                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                {
+                    pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
+                    pddb_os.dbg_dump(Some("full".to_string()), None);
+                    if let Some(sys_basis) = pddb_os.pddb_mount() {
+                        log::info!("PDDB mount operation finished successfully");
+                        basis_cache.basis_add(sys_basis);
+                    } else {
+                        log::error!("Despite formatting, no PDDB was found!");
+                        let mut err = String::from(t!("pddb.internalerror", xous::LANG));
+                        err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
+                        modals.show_notification(err.as_str()).expect("notification failed");
+                    }
+                }
+            }
+        }
     }
-    */
-    /* list of test cases:
-        [done] genenral integrity: allocate 4 dictionaries, each with 34 keys of various sizes ranging from 1k-9k.
-        [done] delete/add consistency: general integrity, delete a dictionary, then add a dictionary.
-        in-place update consistency: general integrity then patch all keys with a new test pattern
-        extend update consistency: general integrity then patch all keys with a longer test pattern
-        key deletion torture test: delete every other key in a dictionary, then regenerate some of them with new data.
-        basis search: create basis A, populate with general integrity. create basis B, add test entries.
-           hide basis B, confirm original A; mount basis B, confirm B overlay.
-    */
+    // main server loop
+    let mut key_list = Vec::<String>::new(); // storage for key lists
+    let mut key_token: Option<[u32; 4]> = None;
+    let mut dict_list = Vec::<String>::new(); // storage for dict lists
+    let mut dict_token: Option<[u32; 4]> = None;
+
     // register a suspend/resume listener
     let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
-    let _susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
-
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
     loop {
-        let msg = xous::receive_message(pddb_sid).unwrap();
+        let mut msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::KeyRequest) => {
-                // placeholder
-            }
-            Some(Opcode::ReadKeyScalar) => msg_blocking_scalar_unpack!(msg, _tok0, _tok1, _tok2, _len, {
-                // placeholder
-            }),
-            Some(Opcode::ReadKeyMem) => {
-                // placeholder
-            }
-            Some(Opcode::WriteKeyScalar1)
-            | Some(Opcode::WriteKeyScalar2)
-            | Some(Opcode::WriteKeyScalar3)
-            | Some(Opcode::WriteKeyScalar4) => msg_blocking_scalar_unpack!(msg, _tok0, _tok1, _tok2, _data, {
-                // placeholder
-            }),
-            Some(Opcode::WriteKeyMem) => {
-                // placeholder
-            }
-            Some(Opcode::WriteKeyFlush) => {
-                // placeholder
-            }
-            Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, _token, _, _, _, {
-                /* pddb.suspend();
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                pddb.resume(); */
             }),
-            None => {
-                log::error!("couldn't convert opcode");
+            Some(Opcode::ListBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
+                let basis_list = basis_cache.basis_list();
+                for (src, dst) in basis_list.iter().zip(list_ipc.list.iter_mut()) {
+                    dst.clear();
+                    write!(dst, "{}", src).expect("couldn't write basis name");
+                }
+                list_ipc.num = basis_list.len() as u32;
+                buffer.replace(list_ipc).unwrap();
+            }
+            Some(Opcode::LatestBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                if let Some(name) = basis_cache.basis_latest() {
+                    mgmt.name.clear();
+                    write!(mgmt.name, "{}", name).expect("couldn't write basis name");
+                    mgmt.code = PddbRequestCode::NoErr;
+                } else {
+                    mgmt.code = PddbRequestCode::NotMounted;
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::CreateBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                match mgmt.code {
+                    PddbRequestCode::Create => {
+                        let request = BasisRequestPassword {
+                            db_name: mgmt.name,
+                            plaintext_pw: None,
+                        };
+                        let mut buf = Buffer::into_buf(request).unwrap();
+                        buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                        let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
+                        if let Some(pw) = ret.plaintext_pw {
+                            match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8")) {
+                                Ok(_) => mgmt.code = PddbRequestCode::NoErr,
+                                _ => mgmt.code = PddbRequestCode::InternalError,
+                            }
+                        } else {
+                            mgmt.code = PddbRequestCode::InternalError;
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbRequestCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::OpenBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                match mgmt.code {
+                    PddbRequestCode::Open => {
+                        let mut finished = false;
+                        while !finished {
+                            let request = BasisRequestPassword {
+                                db_name: mgmt.name,
+                                plaintext_pw: None,
+                            };
+                            let mut buf = Buffer::into_buf(request).unwrap();
+                            buf.lend_mut(pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                            let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
+                            if let Some(pw) = ret.plaintext_pw {
+                                if let Some(basis) = basis_cache.basis_unlock(
+                                    &mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8"),
+                                    mgmt.policy.unwrap_or(BasisRetentionPolicy::Persist)
+                                ) {
+                                    basis_cache.basis_add(basis);
+                                    finished = true;
+                                    mgmt.code = PddbRequestCode::NoErr;
+                                }
+                            } else {
+                                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
+                                    Ok(response) => {
+                                        if response.as_str() == t!("pddb.yes", xous::LANG) {
+                                            finished = false;
+                                            // this will cause just another go-around
+                                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                                            finished = true;
+                                            mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
+                                        } else {
+                                            panic!("Got unexpected return from radiobutton");
+                                        }
+                                    }
+                                    _ => panic!("get_radiobutton failed"),
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbRequestCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::CloseBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                match mgmt.code {
+                    PddbRequestCode::Close => {
+                        match basis_cache.basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
+                            Ok(_) => mgmt.code = PddbRequestCode::NoErr,
+                            Err(e) => match e.kind() {
+                                ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
+                                _ => mgmt.code = PddbRequestCode::InternalError,
+                            }
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbRequestCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::DeleteBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                match mgmt.code {
+                    PddbRequestCode::Delete => {
+                        match basis_cache.basis_delete(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
+                            Ok(_) => mgmt.code = PddbRequestCode::NoErr,
+                            Err(e) => match e.kind() {
+                                ErrorKind::NotFound => mgmt.code = PddbRequestCode::NotFound,
+                                _ => mgmt.code = PddbRequestCode::InternalError,
+                            }
+                        }
+                    }
+                    _ => {
+                        mgmt.code = PddbRequestCode::InternalError;
+                    }
+                }
+                buffer.replace(mgmt).unwrap();
+            }
+            Some(Opcode::KeyRequest) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                let key = req.key.as_str().expect("key utf-8 decode error");
+                if basis_cache.dict_attributes(&mut pddb_os, dict, bname).is_err() {
+                    if req.create_dict {
+                        match basis_cache.dict_add(&mut pddb_os, dict, bname) {
+                            Ok(_) => (),
+                            Err(e) => {
+                                match e.kind() {
+                                    std::io::ErrorKind::OutOfMemory => {req.result = PddbRequestCode::NoFreeSpace; buffer.replace(req).unwrap(); continue}
+                                    std::io::ErrorKind::NotFound => {req.result = PddbRequestCode::NotMounted; buffer.replace(req).unwrap(); continue}
+                                    _ => {req.result = PddbRequestCode::InternalError; buffer.replace(req).unwrap(); continue}
+                                }
+                            }
+                        }
+                    } else {
+                        req.result = PddbRequestCode::NotFound;
+                        buffer.replace(req).unwrap(); continue
+                    }
+                }
+                if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
+                    if !req.create_key {
+                        req.result = PddbRequestCode::NotFound;
+                        buffer.replace(req).unwrap(); continue
+                    }
+                    // by default keys are created when they are written on the first try.
+                    // ...do need to remember to create an "empty" key if we try to read a key that doesn't already exist, tho...
+                }
+                // at this point, we have established a basis/dict/key tuple.
+                let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
+                let cid = xous::connect(xous::SID::from_array(req.cb_sid)).expect("couldn't connect for callback");
+                let token_record = TokenRecord {
+                    dict: String::from(dict),
+                    key: String::from(key),
+                    basis: if let Some(name) = bname {Some(String::from(name))} else {None},
+                    conn: cid,
+                    alloc_hint: if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None},
+                };
+                token_dict.insert(token, token_record);
+                req.token = Some(token);
+                req.result = PddbRequestCode::NoErr;
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::KeyDrop) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
+                let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
+                if let Some(rec) = token_dict.remove(&token) {
+                    // now check if we can safely disconnect and recycle our connection number.
+                    // This is important because we can only have 32 outgoing connections...
+                    let mut has_cid = false;
+                    for r in token_dict.values() {
+                        if r.conn == rec.conn {
+                            has_cid = true;
+                            break;
+                        }
+                    }
+                    if !has_cid {
+                        unsafe{xous::disconnect(rec.conn).expect("couldn't disconnect from callback server")};
+                    }
+                }
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack KeyDrop");
+            }),
+            Some(Opcode::DeleteKey) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                let key = req.key.as_str().expect("key utf-8 decode error");
+                match basis_cache.key_remove(&mut pddb_os, dict, key, bname, false) {
+                    Ok(_) => {
+                        let mut evict_list = Vec::<ApiToken>::new();
+                        // check to see if we need to eliminate any ApiTokens as a result of this.
+                        for (token, rec) in token_dict.iter() {
+                            if (rec.dict == dict) && (rec.key == key) {
+                                // check the basis union rules
+                                let mut matching = false;
+                                if rec.basis.is_none() && bname.is_none() {
+                                    matching = true;
+                                }
+                                if let Some(breq) = bname {
+                                    if rec.basis.is_none() {
+                                        matching = true;
+                                    }
+                                    if let Some(brec) = &rec.basis {
+                                        if brec == breq {
+                                            matching = true;
+                                        }
+                                    }
+                                }
+                                if matching {
+                                    evict_list.push(*token);
+                                }
+                            }
+                        }
+                        for token in evict_list {
+                            token_dict.remove(&token);
+                        }
+                        req.result = PddbRequestCode::NoErr;
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
+                            _ => req.result = PddbRequestCode::InternalError,
+                        }
+                    }
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::DeleteDict) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                match basis_cache.dict_remove(&mut pddb_os, dict, bname, false) {
+                    Ok(_) => {
+                        let mut evict_list = Vec::<ApiToken>::new();
+                        // check to see if we need to eliminate any ApiTokens as a result of this.
+                        for (token, rec) in token_dict.iter() {
+                            if rec.dict == dict {
+                                // check the basis union rules
+                                let mut matching = false;
+                                if rec.basis.is_none() && bname.is_none() {
+                                    matching = true;
+                                }
+                                if let Some(breq) = bname {
+                                    if rec.basis.is_none() {
+                                        matching = true;
+                                    }
+                                    if let Some(brec) = &rec.basis {
+                                        if brec == breq {
+                                            matching = true;
+                                        }
+                                    }
+                                }
+                                if matching {
+                                    evict_list.push(*token);
+                                }
+                            }
+                        }
+                        for token in evict_list {
+                            token_dict.remove(&token);
+                        }
+                        req.result = PddbRequestCode::NoErr;
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotFound,
+                            _ => req.result = PddbRequestCode::InternalError,
+                        }
+                    }
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::KeyAttributes) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbKeyAttrIpc, _>().unwrap();
+                if let Some(token_record) = token_dict.get(&req.token) {
+                    let bname = if let Some(name) = &token_record.basis {
+                        Some(name.as_str())
+                    } else {
+                        None
+                    };
+                    match basis_cache.key_attributes(&mut pddb_os, &token_record.dict, &token_record.key, bname) {
+                        Ok(attr) => {
+                            buffer.replace(PddbKeyAttrIpc::from_attributes(attr, req.token)).unwrap();
+                        }
+                        _ => {
+                            req.code = PddbRequestCode::NotFound;
+                            buffer.replace(req).unwrap();
+                        }
+                    }
+                }
+            }
+            Some(Opcode::KeyCountInDict) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if key_token.is_some() {
+                    req.code = PddbRequestCode::AccessDenied;
+                    buffer.replace(req).unwrap();
+                    continue;
+                }
+                key_token = Some(req.token);
+                key_list.clear();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                match basis_cache.key_list(&mut pddb_os, dict, bname) {
+                    Ok(list) => {
+                        req.index = list.len() as u32;
+                        for key in list {
+                            key_list.push(key);
+                        }
+                        req.code = PddbRequestCode::NoErr;
+                    }
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::NotFound => req.code = PddbRequestCode::NotFound,
+                        _ => req.code = PddbRequestCode::InternalError,
+                    }
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::GetKeyNameAtIndex) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if let Some(token) = key_token {
+                    if req.token != token {
+                        req.code = PddbRequestCode::AccessDenied;
+                    } else {
+                        if req.index >= key_list.len() as u32 {
+                            req.code = PddbRequestCode::InternalError;
+                        } else {
+                            req.key = xous_ipc::String::<KEY_NAME_LEN>::from_str(&key_list[req.index as usize]);
+                            req.code = PddbRequestCode::NoErr;
+                            // the last index requested must be the highest one!
+                            if req.index == key_list.len() as u32 - 1 {
+                                key_token = None;
+                                key_list.clear();
+                            }
+                        }
+                    }
+                } else {
+                    req.code = PddbRequestCode::AccessDenied;
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::DictCountInBasis) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if key_token.is_some() {
+                    req.code = PddbRequestCode::AccessDenied;
+                    buffer.replace(req).unwrap();
+                    continue;
+                }
+                dict_token = Some(req.token);
+                dict_list.clear();
+                let bname = if req.basis_specified {
+                    Some(req.basis.as_str().unwrap())
+                } else {
+                    None
+                };
+                let list = basis_cache.dict_list(&mut pddb_os, bname);
+                req.index = list.len() as u32;
+                for dict in list {
+                    dict_list.push(dict);
+                }
+                req.code = PddbRequestCode::NoErr;
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::GetDictNameAtIndex) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                if let Some(token) = dict_token {
+                    if req.token != token {
+                        req.code = PddbRequestCode::AccessDenied;
+                    } else {
+                        if req.index >= dict_list.len() as u32 {
+                            req.code = PddbRequestCode::InternalError;
+                        } else {
+                            req.dict = xous_ipc::String::<DICT_NAME_LEN>::from_str(&dict_list[req.index as usize]);
+                            req.code = PddbRequestCode::NoErr;
+                            // the last index requested must be the highest one!
+                            if req.index == dict_list.len() as u32 - 1 {
+                                dict_token = None;
+                                dict_list.clear();
+                            }
+                        }
+                    }
+                } else {
+                    req.code = PddbRequestCode::AccessDenied;
+                }
+                buffer.replace(req).unwrap();
+            }
+            Some(Opcode::ReadKey) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
+                let token = pbuf.token;
+                if let Some(rec) = token_dict.get(&token) {
+                    match basis_cache.key_read(&mut pddb_os,
+                        &rec.dict, &rec.key,
+                        &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
+                        if let Some (name) = &rec.basis {Some(&name)} else {None}) {
+                        Ok(readlen) => {
+                            pbuf.len = readlen as u16;
+                            pbuf.retcode = PddbRetcode::Ok;
+                        }
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
+                            std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                            std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
+                            _ => pbuf.retcode = PddbRetcode::InternalError,
+                        }
+                    }
+                } else {
+                    pbuf.retcode = PddbRetcode::BasisLost;
+                }
+                // we don't nede a "replace" operation because all ops happen in-place
+            }
+            Some(Opcode::WriteKey) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
+                let token = pbuf.token;
+                if let Some(rec) = token_dict.get(&token) {
+                    match basis_cache.key_update(&mut pddb_os,
+                        &rec.dict, &rec.key,
+                        &pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
+                        rec.alloc_hint, if let Some (name) = &rec.basis {Some(&name)} else {None},
+                        false
+                    ) {
+                        Ok(_) => {
+                            pbuf.retcode = PddbRetcode::Ok;
+                        }
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
+                            std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                            std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
+                            _ => pbuf.retcode = PddbRetcode::InternalError,
+                        }
+                    }
+                } else {
+                    pbuf.retcode = PddbRetcode::BasisLost;
+                }
+                // we don't nede a "replace" operation because all ops happen in-place
+            }
+            Some(Opcode::WriteKeyFlush) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                match basis_cache.sync(&mut pddb_os, None) {
+                    Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::OutOfMemory => xous::return_scalar(msg.sender, PddbRetcode::DiskFull.to_usize().unwrap()).unwrap(),
+                        std::io::ErrorKind::NotFound => xous::return_scalar(msg.sender, PddbRetcode::BasisLost.to_usize().unwrap()).unwrap(),
+                        _ => xous::return_scalar(msg.sender, PddbRetcode::InternalError.to_usize().unwrap()).unwrap(),
+                    }
+                };
+            }),
+            Some(Opcode::Quit) => {
+                log::warn!("quitting the PDDB server");
+                send_message(
+                    pw_cid,
+                    Message::new_blocking_scalar(PwManagerOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)
+                ).unwrap();
+                xous::return_scalar(msg.sender, 0).unwrap();
                 break
+            }
+            None => {
+                log::error!("couldn't convert opcode: {:?}", msg);
             }
         }
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
+    pw_handle.join().expect("password ux manager thread did not join as expected");
     xns.unregister_server(pddb_sid).unwrap();
     xous::destroy_server(pddb_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
 }
 
+// Test cases that have been coded to run directly on hardware (that is, they do not require host-OS debug features)
 #[allow(dead_code)]
 pub(crate) fn manual_testcase(hw: &mut PddbOs) {
     log::info!("Initializing disk...");
-    hw.pddb_format(true).unwrap();
+    hw.pddb_format(true, None).unwrap();
     log::info!("Done initializing disk");
 
     // it's a vector because order is important: by default access to keys/dicts go into the latest entry first, and then recurse to the earliest
@@ -560,3 +1140,36 @@ pub(crate) fn manual_testcase(hw: &mut PddbOs) {
         }
     }
 }
+
+#[allow(dead_code)]
+pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
+    log::info!("Running `hw` test case");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pddb_os.test_reset();
+
+    manual_testcase(pddb_os);
+
+    log::info!("Re-mount the PDDB");
+    let mut basis_cache = BasisCache::new();
+    if let Some(sys_basis) = pddb_os.pddb_mount() {
+        log::info!("PDDB mount operation finished successfully");
+        basis_cache.basis_add(sys_basis);
+    } else {
+        log::info!("PDDB did not mount; did you remember to format the PDDB region?");
+    }
+    log::info!("test readback of wifi/wpa_keys/e4200");
+    let mut readback = [0u8; 16]; // this buffer is bigger than the data in the key, but that's alright...
+    match basis_cache.key_read(pddb_os, "system settings", "wifi/wpa_keys/e4200", &mut readback, None, None) {
+        Ok(readsize) => {
+            log::info!("read back {} bytes", readsize);
+            log::info!("read data: {}", String::from_utf8_lossy(&readback));
+        },
+        Err(e) => {
+            log::info!("couldn't read data: {:?}", e);
+        }
+    }
+
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pddb_os.dbg_dump(Some("manual".to_string()), None);
+}
+

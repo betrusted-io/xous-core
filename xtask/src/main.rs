@@ -60,6 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "net",
         "dns",
         "pddb",
+        "modals",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -158,7 +159,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs, &[])?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs, &[])?,
-        Some("run") => run(false, &hw_pkgs)?,
+        Some("run") => run(false, &hw_pkgs, None)?,
+        Some("pddb-ci") => run(false, &hw_pkgs, Some(
+            &["--features", "pddb/ci", "--features", "pddb/deterministic"]
+        ))?,
         Some("hw-image") => {
             build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None, &[])?
         }
@@ -171,7 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None,
             &[],
         )?,
-        Some("pddb-hosted") => run(false, &pddb_dev_pkgs)?,
+        Some("pddb-hosted") => run(false, &pddb_dev_pkgs, None)?,
         Some("benchmark") => build_hw_image(
             false,
             env::args().nth(2),
@@ -229,7 +233,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("sr-test") => {
             build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
         }
-        Some("debug") => run(true, &hw_pkgs)?,
+        Some("debug") => run(true, &hw_pkgs, None)?,
         Some("burn-kernel") => update_usb(true, false, false, false)?,
         Some("burn-loader") => update_usb(false, true, false, false)?,
         Some("nuke-soc") => update_usb(false, false, true, false)?,
@@ -379,7 +383,7 @@ fn build_hw_image(
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args)?;
+    let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args, None)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
         pkg_path.push(pkg);
@@ -395,7 +399,7 @@ fn build_hw_image(
         debug,
         Some(KERNEL_TARGET),
         Some("loader".into()),
-        None,
+        None, None,
     )?;
     loader.push(PathBuf::from("loader"));
 
@@ -533,10 +537,10 @@ fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Resu
     )
 }
 
-fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
+fn run(debug: bool, init: &[&str], features: Option<&[&str]>) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
 
-    build(init, debug, None, None, None)?;
+    build(init, debug, None, None, None, features)?;
 
     // Build and run the kernel
     let mut args = vec!["run"];
@@ -582,7 +586,7 @@ fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
         debug,
         Some(KERNEL_TARGET),
         Some("kernel".into()),
-        None,
+        None, None,
     )?;
     path.push("kernel");
     Ok(path)
@@ -831,11 +835,18 @@ fn build(
     target: Option<&str>,
     directory: Option<PathBuf>,
     extra_args: Option<&[&str]>,
+    features: Option<&[&str]>,
 ) -> Result<PathBuf, DynError> {
     ensure_compiler(&target)?;
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["build"];
     print!("Building");
+
+    if let Some(feature) = features {
+        for &a in feature {
+            args.push(a);
+        }
+    }
     for package in packages {
         print!(" {}", package);
         args.push("--package");

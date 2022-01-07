@@ -19,8 +19,8 @@ pub(crate) struct ChatLayout {
     min_content_height: i16,
     min_input_height: i16,
     screensize: Point,
-    small_height: i16,
-    regular_height: i16,
+    _small_height: i16,
+    _regular_height: i16,
     visible: bool,
 }
 impl ChatLayout {
@@ -68,8 +68,8 @@ impl ChatLayout {
             min_content_height: 64,
             min_input_height,
             screensize,
-            small_height,
-            regular_height,
+            _small_height: small_height,
+            _regular_height: regular_height,
             visible: true,
         })
     }

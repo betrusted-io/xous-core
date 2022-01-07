@@ -31,7 +31,6 @@ use core::fmt::Write;
 pub const MAX_ITEMS: usize = 8;
 
 #[enum_dispatch(ActionApi)]
-#[derive(Copy, Clone)]
 pub enum ActionType {
     TextEntry,
     RadioButtons,
@@ -48,7 +47,7 @@ pub trait ActionApi {
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
-    fn key_action(&mut self, _key: char) -> (Option<xous_ipc::String::<512>>, bool) {(None, true)}
+    fn key_action(&mut self, _key: char) -> (Option<ValidatorErr>, bool) {(None, true)}
     fn set_action_opcode(&mut self, _op: u32) {}
 }
 
@@ -87,7 +86,7 @@ impl TextEntryPayload {
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct RadioButtonPayload(ItemName); // returns the name of the item corresponding to the radio button selection
+pub struct RadioButtonPayload(pub ItemName); // returns the name of the item corresponding to the radio button selection
 impl RadioButtonPayload {
     pub fn new(name: &str) -> Self {
         RadioButtonPayload(ItemName::new(name))
@@ -95,9 +94,12 @@ impl RadioButtonPayload {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
+    pub fn clear(&mut self) {
+        self.0.0.clear();
+    }
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct CheckBoxPayload([Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
+pub struct CheckBoxPayload(pub [Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
 impl CheckBoxPayload {
     pub fn new() -> Self {
         CheckBoxPayload([None; MAX_ITEMS])
@@ -167,7 +169,7 @@ pub struct Modal<'a> {
     bot_memoized_height: Option<i16>,
 }
 
-fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
+fn recompute_canvas(modal: &mut Modal, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
     // we need to set a "max" size to our modal box, so that the text computations don't fail later on
     let current_bounds = modal.gam.get_canvas_bounds(modal.canvas).expect("couldn't get current bounds");
 
@@ -214,7 +216,7 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
 
     // compute height of action item
     log::trace!("step 1 total_height: {}", total_height);
-    total_height += action.height(modal.line_height, modal.margin);
+    total_height += modal.action.height(modal.line_height, modal.margin);
     total_height += modal.margin;
 
     // compute height of bot_text, if any
@@ -323,7 +325,7 @@ impl<'a> Modal<'a> {
             top_memoized_height: None,
             bot_memoized_height: None,
         };
-        recompute_canvas(&mut modal, action, top_text, bot_text, style);
+        recompute_canvas(&mut modal, top_text, bot_text, style);
         modal
     }
     pub fn activate(&self) {
@@ -447,11 +449,8 @@ impl<'a> Modal<'a> {
         update_top_text: Option<&str>, remove_top: bool,
         update_bot_text: Option<&str>, remove_bot: bool,
         update_style: Option<GlyphStyle>) {
-        let action = if let Some(action) = update_action {
+        if let Some(action) = update_action {
             self.action = action;
-            action
-        } else {
-            self.action
         };
 
         if remove_top {
@@ -504,7 +503,7 @@ impl<'a> Modal<'a> {
         } else {
             self.style
         };
-        recompute_canvas(self, action, top_text, bot_text, style);
+        recompute_canvas(self, top_text, bot_text, style);
     }
 }
 

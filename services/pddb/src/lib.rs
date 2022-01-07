@@ -1,365 +1,5 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-/// # PDDB - Plausibly Deniable DataBase
-///
-/// ## Glossary:
-/// * Basis - a unionizeable dictionary that can be unlocked with a password-protected key.
-/// * Dictionary - similar to a "volume" on a typical filesystem. Contains a group of k/v pairs
-///   that share attributes such as access permissions
-/// * Key - a unique string that identifies a piece of data in the PDDB
-/// * Path - Rust's notion of how to locate a file, except we interpret it as a PDDB key, where
-///   the "root" directory is the dictionary, and the remainder is the "key"
-/// * Value - the value associated with a key, isomorphic ot a "file" in Rust
-/// * Open Basis - A Basis that is decryptable and known to the system.
-/// * Closed Basis - A Basis that is not decryptable. It's unknown to the system and potentially treated
-///   identically to free disk space, e.g., it could be partially overwritten.
-/// * FSCB - Free Space Commit Buffer. A few pages allocated to tracking a subset of free space,
-///   meant to accelerate PDDB operations. Creates a side-channel that can reveal that some activity
-///   has happened, but without disclosing what and why. Contains FastSpace and SpaceUpdate records.
-///   Frequently updated, so the buffer is slightly oversized, and which sector is "hot" is randomized
-///   for wear-levelling.
-/// * MBBB - Make Before Break Buffer. A set of randomly allocated pages that are a shadow copy
-///   of a page table page. If any data exists, its contents override those of a corrupted page table.
-/// * FastSpace - a collection of random pages that are known to be empty. The number of pages in FastSpace
-///   is reduced from the absolute amount of free space available by at least a factor of FSCB_FILL_COEFFICIENT.
-/// * SpaceUpdate - encrypted patches to the FastSpace table. The FastSpace table is "heavyweight", and would
-///   be too expensive to update on every page allocation, so SpaceUpdate is used to patch the FastSpace table.
-///
-/// A `Path` like the following is deconstructed as follows by the PDDB:
-///
-/// ```Text
-///  Dictionary
-///    |         Key
-///    |          |
-///  --+- --------+---------------------
-///  logs:matrix/alice/oct30_2021/bob.txt
-/// ```
-///
-/// It could equally have an arbitrary name like `logs:Matrix - alice to bob Oct 30 2021`;
-/// as long as the string that identifies a Key is unique, it's stored in the database
-/// all the same. Any valid utf-8 unicode characters are acceptable.
-///
-/// Likewise, something like this:
-/// `settings:wifi/Kosagi.json`
-/// Would be deconstructed into the "settings" dictionary with a key of `wifi/Kosagi.json`.
-///
-/// ## Code Organization:
-/// Accurate as of Nov 2021. May be subject to charge, ymmv.
-///
-/// ### `frontend.rs`
-/// Defines a set of modules that plug the PDDB into applications (in particular, they
-/// attemp to provide a Rust-compatible `read`/`write`/`open` abstraction layer,
-/// torturing the notion of `Prefix`, `Path` and `File` in Rust to fit the basis/dict/key
-/// format of the PDDB).
-///
-/// This is the `lib`-facing set of operations.
-///
-/// ### `backend.rs`
-/// Defines a set of modules that implement the PDDB itself. This is the hardware-facing set
-/// of operations.
-///
-/// #### `basis.rs`
-/// The set of known `Basis` are tracked in the `BasisCache` structure. This is the "entry point"
-/// for most operations on the PDDB, and thus most externally-visible API calls will be revealed
-/// on that structure; in fact many calls on that object are just pass-through of lower level calls.
-///
-/// A `BasisCach`e consists of one or more `BasisCacheEntries`. This structure manages one or more
-/// `DictCacheEntry` within a `BasisCacheEntry`'s dictionary cache.
-///
-/// #### `dictionary.rs`
-/// The `DictCacheEntry` is defined in this file, along with the on-disk `Dictionary`
-/// storage stucture. Most of the methods on `DictCacheEntry` are concerned with managing
-/// keys contained within the dictionary cache.
-///
-/// #### `keys.rs`
-/// The `KeyCacheEntry` is defined in this file. It's a bookkeeping record for the
-/// `DictCacheEntry` structure. Keys themselves are split into metadata and data
-/// records. The `KeyDescriptor` is the on-disk format for key metadata. The key
-/// storage is either described in `KeySmallPool` for keys less than one `VPAGE_SIZE`
-/// (just shy of 4kiB), or written directly to disk as fully allocated blocks of
-/// `VPAGE_SIZE` for keys larger than one `VPAGE_SIZE` unit.
-///
-/// ## Threat model:
-/// The user is forced to divulge "all the Basis passwords" on the device, through
-/// coercion, blackmail, subpoena, customs checkpoint etc. The adversary has physical
-/// access to the device, and is able to take a static disk image; they may even have
-/// the opportunity to take several disk images over time and diff the images.
-/// The adversary may be able to decrypt the root key of the cryptographic enclave.
-/// The adversary may also be able to observe the contents of encrypted data within the
-/// "system" basis, which includes some of the bookkeeping information for the PDDB,
-/// as the user will have at least been forced to divulge the system basis password as
-/// this is a password that every device requires and they cannot deny its existence.
-///
-/// Under these conditions, it should be impossible for the adversary to conclusively prove or
-/// disprove that every Basis password has been presented and unlocked for inspection
-/// through forensic analysis of the PDDB alone (significantly, we cannot prevent disclosure
-/// by poorly constructed end-user applications storing things like "last opened Basis"
-/// convenience lists, or if the user themselves wrote a note referring to a secret
-/// Basis in a less secret area). Furthermore, if a device is permanently seized by
-/// the adversary for extensive analysis, any Basis whose password that has not been
-/// voluntarily disclosed should be "as good as deleted".
-///
-/// The PDDB also cannot protect against key loggers or surveillance cameras recording
-/// key strokes as the user operates the device. Resistance to key loggers is instead
-/// a problem handled by the OS, and it is up to the user to not type secret passwords
-/// in areas that may be under camera surveillance.
-///
-/// ## Auditor Notices:
-/// There's probably a lot of things the PDDB does wrong. Here's a list of some things
-/// to worry about:
-///  - The device RootKeys shares one salt across all of its keys, instead of a per-key salt.
-///    Currently there are only two keys in the RootKey store sharing the one salt. The concern
-///    is that a migration to an ASIC base design would make eFuse bits scarce, so, the initial
-///    draft of the RootKeys shares one salt to maximize key capacity. The per-key salt is slightly
-///    modified by adding the key index to the salt. This isn't meant to be a robust mitigation:
-///    it just prevents a naive rainbow attack from re-using its table.
-///  - The bcrypt() implementation is vendored in from a Rust bcrypt crate. It hasn't been audited.
-///  - The COST of 7 for bcrypt is relatively low by today's standards (should be 10). However,
-///    we can't raise the cost to 10 because our CPU is slower than most modern x86 devices. There is
-///    an open issue to try to improve this with hardware acceleration. The mitigation is to use
-///    a longer passphrase instead of a 12 or 14-character password.
-///  - The RootKey is used to decrypt a locally stored System Basis key. The key is encrypted using
-///    straight AES-256 with no authentication.
-///  - Secret basis keys are not stored anywhere on the device. They are all derived from a password
-///    using bcrypt. The salt for the password is drawn from a "salt pool", whose index is derived from
-///    a weak hash of the password itself. This means there is a chance that a salt gets re-used. However,
-///    we do not store per-password salts because the existence of the salt would betray the existence of
-///    a password.
-///  - Disk blocks are encrypted & authenticated on a page-by-page basis using AES-GCM-SIV, with a 256-bit key.
-///  - Page table entries and space update entries are salted & hinted using a 64-bit nonce + weak checksum.
-///    There is a fairly high chance of a checksum collision, thus PTE decrypts are regarded as advisory and
-///    not final; the PTE is not accepted as authentic until the AES-GCM-SIV behind it checks out. Free space
-///    entries have no such protection, which means there is a slight chance of data loss due to a checksum
-///    collision on the free space entries.
-///
-/// ## General Operation:
-/// The initial Basis is known as the "System" Basis. It's a low-security framework basis
-/// onto which all other Basis overlay. The initial set of Dictionaries, along with their
-/// Key/Value pairs, are available to any and all processes.
-///
-/// Each new Basis opened will contain zero or more dictionaries. If the dictionary within
-/// the new Basis has the same name as an existing dictionary, the Keys are searched in
-/// the reverse order of opening. In other words, a new Basis can temporarily override or
-/// mask existing Keys. When updating a Key, one may specify the following modes of
-/// operation:
-///
-///  - UpdateLatest: updates only the copy in the latest Basis to be opened
-///  - UpdateOpened: updates copies in other currently opened Basis
-///
-/// Note that `UpdateOpened` is dangerous in the sense that if you have a Basis that is
-/// is currently Closed, it cannot update copies in the closed Basis. Thus any global
-/// update of database schema requires a user to open any and all knows Basis so that
-/// synchronization can be maintained.
-///
-/// Furthermore, it is possible for a Basis to be closed on a "File" that is currently open.
-/// In this case, two things happen:
-///  - If a notification callback is registered, it's pinged by the PDDB. The notification
-///    of closure callback is an additional feature to the typical Rust File interface.
-///  - If the client attempts to read or write to any keys that span a Basis modification,
-///    the now-ambiguous key operation will return a `BrokenPipe` error to the caller.
-///
-/// ## General flash->key structure
-///
-/// The basic unit of memory is a page (4k). Keys shorter than 4k will be packed into a single
-/// page, but no allocation will ever be smaller than 4k due to the erase block size of the FLASH.
-///
-/// Because the flash is always encrypted, there is also no such thing as "incremental writing of data"
-/// to a page, as the presence of free space (all 1's regions) are considered a side-channel. Thus,
-/// the PDDB relies heavily on caching data structures in RAM, with periodic commits of encrypted data
-/// back to the flash. This means it is also very easy to lose data when the system has a panic and
-/// reboots ungracefully. Thus, the structure of data at rest is journaled, so that we have some
-/// chance of recovering an older snapshot of the data if there is an ungraceful power-down event.
-///
-/// I believe this relative unreliability compared to more traditional storage is just a fact of life for
-/// an encrypted, plausibly deniable filesystem, as you have to trade-off the side channel of partially
-/// erased blocks versus the finite write lifetime of flash storage.
-///
-/// When a Basis is created, it starts with 64k of space allocated to it. Most of this is blank (but encrypted
-/// in flash), but it is important in a PD filesystem to claim some freespace for day-to-day operations. This
-/// is because when you need to allocate more data, you have to make a guess as to what is free, and what
-/// previously allocated but currently denied to exist (locked Basis look identical to free space when locked).
-///
-/// Each Dictionary within a Basis starts with a 4k allocation as well, although most of it is free space.
-/// Keys are then populated into dictionaries, with additional pages allocated to dictionaries as the keys
-/// grow.
-///
-/// Blocks on disk are mapped into a virtual PDDB space via a page table. The virtual PDDB space is 64-bit.
-/// Each Basis gets its own 48-bit address space, allowing for up to 64k Basis.
-/// The PDDB page table guarantees that no matter the order of allocation in FLASH, a Basis can linearly
-/// access its blocks through a page table lookup. A reverse-lookup structure is constructed on boot
-/// by scanning the entire PDDB, and creating a HashMap of (basis, offset) -> pddb_addr tuples.
-///
-/// Physical addresses can be 32 or 64 bit based upon the specific implementation. The physical address
-/// type is defined in types.rs. For Precursor, it's defined as a u32, which limits the physical address
-/// size to 32 bits. This is important because Precursor operates out of a very small amount of RAM,
-/// and doubling the size of the overhead bookkeeping structures to handle disk sizes that are well
-/// beyond the current implementation has a real impact on the system's free memory footprint. However,
-/// the PDDB is coded in a way such that one "should" be able to swap out the u32 for a u64 in the
-/// "newtype" definition for a PhysAddr, and the system will work.
-///
-/// Page table entries don't define themselves with a Basis -- every time a Basis is opened, the entire
-/// table must be scanned, brute-force decrypting every entry against the Basis key, and seeing if the
-/// checksum in the table entry matches the address. If there's a match, then that entry is recorded as
-/// belonging to a given Basis.
-///
-/// When a system boots, it starts with two default Basis: FastSpace, and System. These Basis are protected
-/// with the "device unlock" key. System is a set of low-security data that are used
-/// to configure "everyday details". FastSpace Basis is a special-case Basis that is not structured as
-/// a Key/Value store. Instead, it tracks a small amount of pre-allocated "free" space, that can be
-/// pulled from to grow Dictionaries without requesting that the user unlock every known Basis in the system
-/// to ensure none of the valuable data is overwritten.
-///
-/// The .FastSpace basis should never be equal to the total amount of free space in the system, as it
-/// would betray the actual amount of data available and destroy plausible deniability. The system can
-/// operate with .FastSpace set to the nil set, but it would also operate without confidentiality of hidden
-/// Basis, because in order to allocate new blocks it must prompt the user to enter all known Basis passwords,
-/// to avoid accidentally overwriting data that should be retained (as locked Basis would appear as free space
-/// and risk being overwritten). However, in order to accelerate bookkeeping, the .FastSpace basis operates
-/// with an encrypted record that rotates through a set of "clean" pages (that is, pages that have been set
-/// to all 1's) in a circular buffer basis. The state of where the .FastSpace record is in the "clean" pages
-/// disclose nothing other than the fact that the system has been used.
-///
-/// ## Basis Deniability
-///
-/// The existence of a Basis itself must be confidential; if we stored a list of encrypted Basis passwords
-/// somewhere, a rubber-hose attacker would simply need to count the number of encrypted entries and commence
-/// the beatings until the number of passwords that have been disclosed under duress match the number of
-/// encrypted password entries.
-///
-/// Herein lies a challenge. Standard password storage techniques demand that each password be stored
-/// with a unique salt. The existence of this salt betrays that a password must, in essence, exist.
-/// There are at least two methods to counter this:
-///
-/// 1. Dummy salt entries. In this approach, each system is initialized with a random set of additional, dummy
-///    salt/encrypted password combos. In the case of a rubber-hose attack, the attacker cannot know precisely
-///    when to stop the beatings, as the few remaining entries could be dummies with absolutely no meaning.
-/// 2. A single salt entry. In this approach, a single shared salt is used by /all/ passwords, and there is no
-///    encrypted password list stored; instead, the the password as presented is directly used to decrypt
-///    the Basis page table and if no valid entries are found we may conclude that the password provided has a typo.
-///
-/// The advantage of (1) is that the usage of salt falls precisely within the traditional cryptographic
-/// specification of bcrypt(). The disadvantages of (1) include: one still has to have a method to match
-/// a presented password to a given salt entry. In a traditional user/pass login database, the username is
-/// the plaintext key to match the salt. In this case, we would use a nickname used to refer to each Basis
-/// to correlate to its salt entry. Thus, we'd have to come up with "garbage" plaintext nicknames
-/// for a Basis that are not trivial for a rubber-hose attacker to dismiss as chaffe. I think this is Hard.
-/// The alternative is to "brute force" the entire list of salts, guessing each one in sequence until one
-/// is found to decrypt entries in the Basis page table. The problem with this is that bcrypt is designed to
-/// be computationally slow, even for valid passwords. The complexity parameter is chosen so that it takes
-/// about 1 second per iteration through the password function. Note that a faster CPU does not solve this
-/// problem: if you CPU gets faster, you should increase your complexity, so one is always suffering the 1
-/// second penalty to try a password. This means brute forcing a list of salts necessarily incurs at
-/// least a 1 second penalty per entry; thus each dummy basis adds a 1 second minimum overhead to unlocking
-/// a new Basis database. This puts a downward pressure on the number of dummies to be included; however, the
-/// number of dummies needs to be at least as large as the number of Basis we wish to plausibly deny. This
-/// creates a negative incentive to using plausible deniability.
-///
-/// The advantage of (2) is that when a user presents a password, we only need to run the bcrypt routine
-/// once, and then we can immediately start checking the Basis page table for valid entries. The disadvantage
-/// of (2) is that we are re-using a salt across all of a given user's passwords. Note that the salt itself
-/// is from a TRNG, so between user devices, the salt performs its role. However, it means that an attacker
-/// can generate a single rainbow table specific to a given user to reverse all of their passwords; and furthermore,
-/// re-used passwords are trivially discoverable with the rainbow table.
-///
-/// Approach (1) is probably what most crypto purists would adopt: you, dear user, /should/ understand that
-/// cryptography is worth the wait. However, a second principle states that "users always pick convenience over
-/// security". A 15-second wait is an eternity in the UX world, and would act as an effective deterrent to any
-/// user ever using the PD function because it is too slow. Thus for v1 of the PDDB, we're going to try approach
-/// (2), where a common salt is used across all the PDDB passwords, but the salt is /not/ re-used between devices.
-/// This choice diminishes the overall security of the system in the case that a user chooses weak passwords, or re-uses
-/// passwords, but in exchange for a great improvement in responsivity of the implementation.
-///
-/// The final implementation uses a slight mod on (2), where the 128-bit common salt stored on disk is XOR'd
-/// with the user-provided "basis name". Users are of course allowed to pick crappy names for their basis, and
-/// re-use the names, but hopefully this adds a modicum of robustness against rainbow table attacks.
-///
-///
-/// ## Basis Unlock Procedure
-///
-/// Each Basis has a name and a passcode associated with it. The default Basis name is `.System`.
-/// In addition to that, a `.FastSpace` structure is unlocked along side the default Basis.
-/// These are both associated with the default system unlock passcode.
-///
-/// A newly created Basis will request a name for the Basis, and a password. It is a requirement
-/// that the combination of `(name, password)` be unique; this property is enforced and a system will
-/// reject attempts to create identically named, identially passworded Basis. However, one can have
-/// same-named Basis that have a different password, or diffently-named Basis with the same password
-/// (this is generally not recommended, but it's not prohibited).
-///
-/// The `name` field is XOR'd with the device-local `salt` field to form the salt for the password,
-/// and the plaintext of the password itself is used as the password which is fed into the bcrypt()
-/// algorithm to generate a 192-bit encrypted password, which is expanded to 256-bits using SHA-512/256,
-/// and then used as the AES key for the given `(name, password)` Basis.
-///
-///
-/// ## Journaling
-///
-/// A major issue with the implementation is that even a small change in a data structure turns into
-/// the mutation of at least an entire sector of data, with a sector being 4k. The reason is that
-/// we can't take advantage of FLASH memory's property where 1's (erased) can be set to 0's on a byte-by-byte
-/// basis: in order to mask free space signatures, the entire storage area is filled with random bytes.
-/// Furthermore, any update to a part of data within a block should necessarily propagate to the entire
-/// block changing, in order to avoid attacks where observations on which portion of ciphertext has changed
-/// leading to a definitive conclusion about the state of the database records. Therefore, a large portion
-/// of the database data will have to persist in RAM, and be updated only at regular, but widely-spaced-out
-/// (to avoid FLASH wear-out), intervals.
-///
-/// In the case that power is lost during an update, the system uses a 32-bit `journal_rev` number at the
-/// top of every major database structure. If two competing copies of data are found, the one with the
-/// highest `journal_rev` number wins. It may be possible to overflow the 32-bit number, so at some point a
-/// garbage collection step needs to be made where any errant, lower journal rev blocks are overwritten
-/// with random data; all the journal revs are confirmed to be the same; and then all set to 0 again. Power
-/// should not be lost during this process; but it should be rare, and likely never needed.
-///
-/// When writing to disk, a write-then-erase method is used:
-///   1. Required blocks for the update are taken out of the .FastSpace pool
-///   2. Detached data sections of structural records are written first (only database structural records can have detached data;
-///      all stored data have individual journal revision fields associated with them), and into blocks
-///      taken out of the .FastSpace pool.
-///   3. The head of the updated structural record is written, with the new latest journal rev noted.
-///   4. The page table is updated using the procedure outlined below.
-///   5. The old blocks are erased and overwritten with random data.
-///   6. The .FastSpace pool is updated with the newly freed blocks
-///
-/// When updating the page table, it's important not to lose an entire page's worth of entries in case
-/// power is lost when updating it. The following process is used to update a page table entry:
-///   0. At the end of the page table there is a circular buffer of blank pages (they are truly blank,
-///      but this will not leak metadata about the contents of the PDDB, as it only does bookkeeping
-///      on page table updates as a whole). This is known as the make-before-break buffer (mbbb).
-///   1. The previous mbbb entry is erased, if there is any, and the next entry is noted.
-///   2. The new page table entry is written into the mbbb
-///   3. The old page table entry in the page table itself is erased.
-///   4. The old page table entry is populated with the updated page table records.
-///
-/// Detecting and Repairing a broken page table:
-///   The special case of long run's of 1's (more than 32 bits in a row) is checked during the page table scan.
-///   If a long run of 1's is detected, then a suspected corrupted page table update is flagged, and for that page the data
-///   is pulled from the mbbb record.
-///
-/// ## Precursor's Implementation-Specific Flash Memory Organization:
-///
-/// ```Text
-///   offset from |
-///   pt_phys_base|  contents  (example for total PDDB len of 0x6f8_0000 or 111 MiB)
-///   ------------|---------------------------------------------------
-///   0x0000_0000 |  virtual map for page at (0x0000 + data_phys_base)
-///   0x0000_0010 |  virtual map for page at (0x1000 + data_phys_base)
-///   0x0000_0020 |  virtual map for page at (0x2000 + data_phys_base)
-///    ...
-///   0x0006_F7F0 |  virtual map for page at (0x06F7_F000 + data_phys_base)
-///   0x0006_F800 |  unused
-///    ...
-///   0x0007_0000 |  key page
-///    ...
-///   0x0007_1000 |  mbbb start (example of 10 pages)
-///    ...
-///   0x0007_B000 |  fscb start (example of 10 pages)
-///    ...
-///   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
-/// ```
-
-// historical note: 389 hours, 11 mins elapsed since the start of the PDDB coding, and the first attempt at a hardware test -- as evidenced by the uptime of the hardware validation unit.
-
 pub mod api;
 pub use api::*;
 pub mod frontend;
@@ -367,61 +7,508 @@ pub use frontend::*;
 
 use num_traits::*;
 use std::io::{Result, Error, ErrorKind};
+use xous::{CID, SID, msg_scalar_unpack, send_message, Message};
+use xous_ipc::Buffer;
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::thread::JoinHandle;
 
+use core::sync::atomic::{AtomicU32, Ordering};
+pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
-
-////// probably things in this file should eventually be split ount into their own
-////// frontend module file.
-
-// this is an intenal structure for managing the overall PDDB
-#[allow(dead_code)]
-pub(crate) struct PddbManager {
-
-}
-#[allow(dead_code)]
-impl PddbManager {
-    // return a list of open bases
-    fn list_basis() {}
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum CbOp {
+    Change,
+    Quit
 }
 
-// this is an internal struct for managing a basis
-#[allow(dead_code)]
-pub(crate) struct PddbBasis {
-
+/// The intention is that one Pddb management object is made per process, and this serves
+/// as the gateway for parcelling out PddbKey objects, which are the equivalent of a File
+/// in a convention system that implements read/write operations.
+///
+/// The Pddb management object also handles meta-issues such as basis creation, unlock/lock,
+/// and callbacks in case data changes.
+pub struct Pddb {
+    conn: CID,
+    /// a SID that we can directly share with the PDDB server for the purpose of handling key change callbacks
+    cb_sid: SID,
+    cb_handle: Option<JoinHandle::<()>>,
+    /// Handle key change updates. The general intent is that the closure implements a
+    /// `send` of a message to the server to deal with a key change appropriately,
+    /// but no mutable data is allowed within the closure itself due to safety problems.
+    /// Thus, the closure might encode something like whether the message is blocking or nonblocking;
+    /// the CID of the message; and the opcode and arguments, as static variables. An implementation
+    /// with many keys might, for example, keep a lookup table of indices to keys to track which
+    /// ones need clearing if you're working at a very fine granularity, but more generally,
+    /// the application behavior might be something like a refresh of the data from storage
+    /// in the case of a basis change. Basis changes are thought to be rare; so, big changes
+    /// like this are probably OK.
+    keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
+    trng: trng::Trng,
 }
-#[allow(dead_code)]
-impl PddbBasis {
-    // opening and closing basis will side-effect PddbDicts and PddbKeys
-    fn open() {} // will result in a password box being triggered to open a basis
-    fn close() {}
-}
-
-// this structure can be shared on the user side?
-#[allow(dead_code)]
-pub struct PddbDict<'a> {
-    contents: HashMap<PddbKey<'a>, &'a [u8]>,
-    callback: Box<dyn FnMut() + 'a>,
-}
-impl<'a> PddbDict<'a> {
-    // opens a dictionary only if it exists
-    pub fn open(_dict_name: &str) -> Option<PddbDict> { None }
-    // creates a dictionary only if it does not already exist
-    pub fn create(_dict_name: &str) -> Option<PddbDict> { None }
-
-    // returns a key only if it exists
-    pub fn get(&mut self, _key_name: &str, key_changed_cb: impl FnMut() + 'a) -> Result<Option<PddbKey>> {
-        self.callback = Box::new(key_changed_cb);
-        Ok(None)
+impl Pddb {
+    pub fn new() -> Self {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("can't connect to Pddb server");
+        let sid = xous::create_server().unwrap();
+        let keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>> = Arc::new(Mutex::new(HashMap::new()));
+        let handle = thread::spawn({
+            let keys = Arc::clone(&keys);
+            let sid = sid.clone();
+            move || {
+                loop {
+                    let msg = xous::receive_message(sid).unwrap();
+                    match FromPrimitive::from_usize(msg.body.id()) {
+                        Some(CbOp::Change) => msg_scalar_unpack!(msg, t0, t1, t2, _, {
+                            let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
+                            if let Some(cb) = keys.lock().unwrap().get(&token) {
+                                cb();
+                            } else {
+                                log::warn!("Key changed but no callback was hooked to receive it");
+                            }
+                        }),
+                        Some(CbOp::Quit) => { // blocking scalar
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                            break;
+                        },
+                        _ =>log::warn!("Got unknown opcode: {:?}", msg),
+                    }
+                }
+                xous::destroy_server(sid).unwrap();
+            }
+        });
+        Pddb {
+            conn,
+            cb_sid: sid,
+            cb_handle: Some(handle),
+            keys,
+            trng: trng::Trng::new(&xns).unwrap(),
+        }
     }
-    // updates an existing key's value. mainly used by write().
-    pub fn update(&mut self, _key: PddbKey) -> Result<Option<PddbKey>> { Ok(None) }
-    // creates a key or overwrites it
-    pub fn insert(&mut self, _key: PddbKey) -> Option<PddbKey> { None } // may return the displaced key
-    // deletes a key within the dictionary
-    pub fn remove(&mut self, _key: PddbKey) -> Result<()> { Ok(()) }
-    // deletes the entire dictionary
-    pub fn delete(&mut self) {}
+    /// return a list of all open bases
+    pub fn list_basis(&self) -> Vec::<String> {
+        let list_alloc = PddbBasisList {
+            list: [xous_ipc::String::<BASIS_NAME_LEN>::default(); 63],
+            num: 0
+        };
+        let mut buf = Buffer::into_buf(list_alloc).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::ListBasis.to_u32().unwrap()).expect("Couldn't execute ListBasis opcode");
+        let list = buf.to_original::<PddbBasisList, _>().expect("couldn't restore list structure");
+        if list.num > list.list.len() as u32 {
+            log::warn!("Number of open basis larger than our IPC structure. May need to refactor this API.");
+        }
+        let mut ret = Vec::<String>::new();
+        for (index, name) in list.list.iter().enumerate() {
+            if index as u32 == list.num {
+                break;
+            }
+            ret.push(name.as_str().expect("name is not valid utf-8").to_string());
+        }
+        ret
+    }
+    /// returns the latest basis that is opened -- this is where all new values are being sent by default
+    /// if the PDDB is not mounted, returns None
+    pub fn latest_basis(&self) -> Option<String> {
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::new(),
+            code: PddbRequestCode::Uninit,
+            policy: None,
+        };
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::LatestBasis.to_u32().unwrap()).expect("Couldn't execute ListBasis opcode");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore list structure");
+        match ret.code {
+            PddbRequestCode::NoErr => {
+                Some(ret.name.as_str().expect("name wasn't valid utf-8").to_string())
+            }
+            PddbRequestCode::NotMounted => {
+                None
+            }
+            _ => {
+                log::error!("Invalid return from latest basis call");
+                panic!("Invalid return from latest basis call");
+            }
+        }
+    }
+    pub fn create_basis(&self, basis_name: &str) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            code: PddbRequestCode::Create,
+            policy: None,
+        };
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::CreateBasis.to_u32().unwrap()).expect("Couldn't execute CreateBasis opcode");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
+    }
+    pub fn unlock_basis(&self, basis_name: &str, policy: Option<BasisRetentionPolicy>) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            code: PddbRequestCode::Open,
+            policy,
+        };
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::OpenBasis.to_u32().unwrap()).expect("Couldn't execute OpenBasis opcode");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Authentication error")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
+    }
+    pub fn lock_basis(&self, basis_name: &str) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            code: PddbRequestCode::Close,
+            policy: None,
+        };
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::CloseBasis.to_u32().unwrap()).expect("Couldn't execute CloseBasis opcode");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error closing basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
+    }
+    pub fn delete_basis(&self, basis_name: &str) -> Result<()> {
+        if basis_name.len() > BASIS_NAME_LEN - 1 {
+            return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+        }
+        let mgmt = PddbBasisRequest {
+            name: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis_name),
+            code: PddbRequestCode::Delete,
+            policy: None,
+        };
+        let mut buf = Buffer::into_buf(mgmt).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.conn, Opcode::DeleteBasis.to_u32().unwrap()).expect("Couldn't execute DeleteBasis opcode");
+        let ret = buf.to_original::<PddbBasisRequest, _>().expect("couldn't restore mgmt structure");
+        match ret.code {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Basis not found")),
+            PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error deleting basis")),
+            _ => {
+                log::error!("Invalid return code");
+                panic!("Invalid return code");
+            }
+        }
+    }
+
+    /// If the `create_*` flags are set, creates the asset if they do not exist, otherwise if false, returns
+    /// an error if the asset does not exist.
+    /// `alloc_hint` is an optional field to guide the PDDB allocator to put the key in the right pool. Setting it to `None`
+    /// is perfectly fine, it just has a potential performance impact, especially for very large keys.
+    /// `key_changed_cb` is a static function meant to initiate a message to a server in case the key in question
+    /// goes away due to a basis locking.
+    pub fn get(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>,
+        create_dict: bool, create_key: bool, alloc_hint: Option<usize>, key_changed_cb: Option<impl Fn() + 'static + Send>) -> Result<PddbKey> {
+        if key_name.len() > (KEY_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "key name too long"));
+        }
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+
+        let request = PddbKeyRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key_name),
+            create_dict,
+            create_key,
+            token: None,
+            result: PddbRequestCode::Uninit,
+            cb_sid: self.cb_sid.to_array(),
+            alloc_hint: if let Some(a) = alloc_hint {Some(a as u64)} else {None},
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::KeyRequest.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
+
+        // we probably should never remove this check -- the code may compile correctly and
+        // "work" without this being an even page size, but it's pretty easy to get this wrong,
+        // and if it's wrong we can lose a lot in terms of efficiency of execution.
+        assert!(core::mem::size_of::<PddbBuf>() == 4096, "PddBuf record has the wrong size");
+        match response.result {
+            PddbRequestCode::NoErr => {
+                if let Some(token) = response.token {
+                    if let Some(cb) = key_changed_cb {
+                        self.keys.lock().unwrap().insert(token, Box::new(cb));
+                    }
+                    REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+                    let pk = PddbKey {
+                        // i think these fields are redundant, let's save the storage and remove them for now...
+                        //dict: String::from(dict_name),
+                        //key: String::from(key_name),
+                        //basis: if basis_name.is_some() {Some(String::from(bname.as_str().unwrap()))} else {None},
+                        pos: 0,
+                        token,
+                        buf: Buffer::new(core::mem::size_of::<PddbBuf>()),
+                        conn: self.conn,
+                    };
+                    Ok(pk)
+                } else {
+                    Err(Error::new(ErrorKind::PermissionDenied, "Dict/Key access denied"))
+                }
+            }
+            PddbRequestCode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Dict/Key access denied")),
+            PddbRequestCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No more space on disk")),
+            PddbRequestCode::NotMounted => Err(Error::new(ErrorKind::ConnectionReset, "PDDB was unmounted")),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
+    }
+
+    /// deletes a key within the dictionary
+    pub fn delete_key(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>) -> Result<()> {
+        if key_name.len() > (KEY_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "key name too long"));
+        }
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+
+        let request = PddbKeyRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::from_str(key_name),
+            create_dict: false,
+            create_key: false,
+            token: None,
+            result: PddbRequestCode::Uninit,
+            cb_sid: self.cb_sid.to_array(),
+            alloc_hint: None,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DeleteKey.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
+        match response.result {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
+    }
+    /// deletes the entire dictionary
+    pub fn delete_dict(&mut self, dict_name: &str, basis_name: Option<&str>) -> Result<()> {
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+
+        let request = PddbKeyRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            create_dict: false,
+            create_key: false,
+            token: None,
+            result: PddbRequestCode::Uninit,
+            cb_sid: self.cb_sid.to_array(),
+            alloc_hint: None,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DeleteKey.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
+        match response.result {
+            PddbRequestCode::NoErr => Ok(()),
+            PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
+            _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
+    }
+
+    pub fn list_keys(&mut self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
+        if dict_name.len() > (DICT_NAME_LEN - 1) {
+            return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
+        }
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+        // this is a two-phase query, because it's quite likely that the number of keys can be very large in a dict.
+        let token = [self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap()];
+        let request = PddbDictRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            index: 0,
+            code: PddbRequestCode::Uninit,
+            token,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::KeyCountInDict.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+        let count = match response.code {
+            PddbRequestCode::NoErr => response.index,
+            _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+        };
+        // very non-optimal, slow way of doing this, but let's just get it working first and optimize later.
+        // it's absolutely important that you access every entry, and the highest index last, because
+        // that is how the server knows you've finished with the list-out.
+        let mut key_list = Vec::<String>::new();
+        for index in 0..count {
+            let request = PddbDictRequest {
+                basis_specified: basis_name.is_some(),
+                basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+                dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
+                key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+                index,
+                code: PddbRequestCode::Uninit,
+                token,
+            };
+            let mut buf = Buffer::into_buf(request)
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            buf.lend_mut(self.conn, Opcode::GetKeyNameAtIndex.to_u32().unwrap())
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+            match response.code {
+                PddbRequestCode::NoErr => key_list.push(String::from(response.key.as_str().expect("utf-8 parse error in key name"))),
+                _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+            }
+        }
+        Ok(key_list)
+    }
+
+
+    pub fn list_dict(&mut self, basis_name: Option<&str>) -> Result<Vec::<String>> {
+        let bname = if let Some(bname) = basis_name {
+            if bname.len() > BASIS_NAME_LEN - 1 {
+                return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
+            }
+            xous_ipc::String::<BASIS_NAME_LEN>::from_str(bname)
+        } else {
+            xous_ipc::String::<BASIS_NAME_LEN>::new()
+        };
+        // this is a two-phase query, because it's quite likely that the number of keys can be very large in a dict.
+        let token = [self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap()];
+        let request = PddbDictRequest {
+            basis_specified: basis_name.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
+            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            index: 0,
+            code: PddbRequestCode::Uninit,
+            token,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::DictCountInBasis.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+
+        let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+        let count = match response.code {
+            PddbRequestCode::NoErr => response.index,
+            _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+        };
+        // very non-optimal, slow way of doing this, but let's just get it working first and optimize later.
+        // it's absolutely important that you access every entry, and the highest index last, because
+        // that is how the server knows you've finished with the list-out.
+        let mut dict_list = Vec::<String>::new();
+        for index in 0..count {
+            let request = PddbDictRequest {
+                basis_specified: basis_name.is_some(),
+                basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
+                dict: xous_ipc::String::<DICT_NAME_LEN>::new(),
+                key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+                index,
+                code: PddbRequestCode::Uninit,
+                token,
+            };
+            let mut buf = Buffer::into_buf(request)
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            buf.lend_mut(self.conn, Opcode::GetDictNameAtIndex.to_u32().unwrap())
+                .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+            let response = buf.to_original::<PddbDictRequest, _>().unwrap();
+            match response.code {
+                PddbRequestCode::NoErr => dict_list.push(String::from(response.dict.as_str().expect("utf-8 parse error in key name"))),
+                _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+            }
+        }
+        Ok(dict_list)
+    }
 }
 
+impl Drop for Pddb {
+    fn drop(&mut self) {
+        let cid = xous::connect(self.cb_sid).unwrap();
+        send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+        unsafe{xous::disconnect(cid).unwrap();}
+        if let Some(handle) = self.cb_handle.take() {
+            handle.join().expect("couldn't terminate callback helper thread");
+        }
+
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
+    }
+}

@@ -161,6 +161,13 @@ impl RootKeys {
             0, 0, 0, 0)
         ).expect("couldn't send bbram provision message");
     }
+
+    pub fn clear_password(&self, pass_type: AesRootkeyType) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ClearPasswordCacheEntry.to_usize().unwrap(),
+            pass_type.to_usize().unwrap(), 0, 0, 0)
+        ).expect("couldn't send bbram provision message");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -171,6 +178,7 @@ impl Drop for RootKeys {
         // the connection to the server side must be reference counted, so that multiple instances of this object within
         // a single process do not end up de-allocating the CID on other threads before they go out of scope.
         // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }

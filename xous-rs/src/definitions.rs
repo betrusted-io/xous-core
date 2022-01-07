@@ -29,7 +29,7 @@ pub const LOADER_TOTAL_LEN: u32 = LOADER_CODE_LEN + LOADER_FONT_LEN; // code + f
 pub const KERNEL_LOC: u32 = 0x0098_0000; // kernel start
 pub const KERNEL_LEN: u32 = 0x0068_0000; // max kernel length
 
-pub const EC_REGION_LOC: u32 = 0x07F8_0000; // EC update staging area
+pub const EC_REGION_LOC: u32 = 0x07F8_0000; // EC update staging area. Must be aligned to a 64k-address.
 pub const EC_WF200_PKG_LOC: u32 = 0x07F8_0000;
 pub const EC_WF200_PKG_LEN: u32 = 0x0004_E000;
 pub const EC_FW_PKG_LOC: u32 = 0x07FC_E000;
@@ -37,7 +37,19 @@ pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
 pub const EC_REGION_LEN: u32 = 0x0008_0000;
 
 pub const PDDB_LOC: u32 = 0x0100_0000; // PDDB start
-pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC;
+pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC; // must be 64k-aligned (bulk erase block size) for proper function.
+
+#[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
+use core::sync::atomic::AtomicU64;
+
+// Secretly, you can change this by setting the XOUS_SEED environment variable.
+// I don't lke environment variables because where do you document features like this?
+// But, this was the most expedient way to get all the threads in Hosted mode to pick up a seed.
+// The code that reads the varable this is all the way over in xous-rs\src\arch\hosted\mod.rs#29, and
+// it's glommed onto some other static process initialization code because I don't fully understand
+// what's going on over there.
+#[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
+pub static TESTING_RNG_SEED: AtomicU64 = AtomicU64::new(0);
 
 pub mod exceptions;
 pub use exceptions::*;

@@ -416,7 +416,6 @@ pub struct RoundedRectangleIterator {
     top_left: Point,
     bottom_right: Point,
     style: DrawStyle,
-    radius: i16,
     p: Point,
     clip: Option<Rectangle>,
     // the four quadrants for drawing the rounded corners
@@ -506,9 +505,8 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
         top_left: rr.border.tl,
         bottom_right: rr.border.br,
         style: rr.border.style,
-        radius: rr.radius,
         p: rr.border.tl,
-        clip: clip,
+        clip,
         tlq: Rectangle::new(
             rr.border.tl,
             Point::new(rr.border.tl.x + rr.radius, rr.border.tl.y + rr.radius),

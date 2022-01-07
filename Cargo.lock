@@ -1261,6 +1261,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "modals"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "net"
 version = "0.1.0"
 dependencies = [
@@ -1430,16 +1448,23 @@ dependencies = [
  "aes-gcm-siv",
  "bitfield",
  "bitflags",
+ "blowfish",
  "cipher",
+ "digest",
+ "gam",
  "llio",
+ "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "rand 0.8.4",
+ "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rkyv",
  "root-keys",
+ "sha2",
  "spinor",
  "susres",
  "ticktimer-server",
@@ -1569,7 +1594,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e7573632e6454cf6b99d7aac4ccca54be06da05aca2ef7423d22d27d4d4bcd8"
 dependencies = [
  "libc",
- "rand_chacha 0.3.0",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.3",
  "rand_hc 0.3.0",
 ]
@@ -1586,9 +1611,9 @@ dependencies = [
 
 [[package]]
 name = "rand_chacha"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e12735cf05c9e10bf21534da50a147b924d555dc7a547c42e6bb2d5b6017ae0d"
+checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
  "rand_core 0.6.3",
@@ -1801,11 +1826,11 @@ dependencies = [
  "bitflags",
  "chrono",
  "gam",
- "graphics-server",
  "llio",
  "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -2004,6 +2029,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "oqc-test",
+ "pddb",
  "rand_core 0.5.1",
  "rkyv",
  "root-keys",
@@ -2361,6 +2387,8 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "rand 0.8.4",
+ "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rkyv",
  "susres",

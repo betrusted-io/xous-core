@@ -3,23 +3,33 @@ use root_keys::api::{AesRootkeyType, Block};
 use xous_ipc::String;
 
 #[derive(Debug)]
+#[cfg(feature="spinortest")]
 pub struct Keys {
     testing_range: xous::MemoryRange,
     spinor: spinor::Spinor,
     rootkeys: root_keys::RootKeys,
 }
+#[derive(Debug)]
+#[allow(dead_code)]
+#[cfg(not(feature="spinortest"))]
+pub struct Keys {
+    spinor: spinor::Spinor,
+    rootkeys: root_keys::RootKeys,
+}
+#[cfg(feature="spinortest")]
 const TEST_SIZE: usize = 0x4000;
+#[cfg(feature="spinortest")]
 const TEST_BASE: usize = 0x608_0000;
 impl Keys {
     pub fn new(xns: &xous_names::XousNames) -> Keys {
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(all(any(target_os = "none", target_os = "xous"), feature="spinortest"))]
         let testing_range = xous::syscall::map_memory(
             Some(core::num::NonZeroUsize::new(TEST_BASE + xous::FLASH_PHYS_BASE as usize).unwrap()), // occupy the 44.1khz short sample area for testing
             None,
             TEST_SIZE,
             xous::MemoryFlags::R,
         ).expect("couldn't map in testing range");
-        #[cfg(not(any(target_os = "none", target_os = "xous")))] // just make a dummy mapping to keep things from crashing in hosted mode
+        #[cfg(all(not(any(target_os = "none", target_os = "xous")), feature="spinortest"))] // just make a dummy mapping to keep things from crashing in hosted mode
         let testing_range = xous::syscall::map_memory(
             None,
             None,
@@ -31,11 +41,20 @@ impl Keys {
         // NOTE NOTE NOTE -- this should be removed once we have the SoC updater code written, but for testing
         // we occupy this slot as it is a pre-requisite for the block to work
         spinor.register_soc_token().unwrap();
-        Keys {
+
+        #[cfg(feature="spinortest")]
+        let keys = Keys {
             testing_range,
             spinor,
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("couldn't allocate rootkeys API"),
-        }
+        };
+
+        #[cfg(not(feature="spinortest"))]
+        let keys = Keys {
+            spinor,
+            rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("couldn't allocate rootkeys API"),
+        };
+        keys
     }
 }
 
@@ -45,7 +64,7 @@ impl<'a> ShellCmdApi<'a> for Keys {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "keys [usblock] [usbunlock] [spinortest]";
+        let helpstring = "keys [usblock] [usbunlock] [pddbrecycle]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -95,6 +114,12 @@ impl<'a> ShellCmdApi<'a> for Keys {
                     env.llio.debug_usb(Some(false)).unwrap();
                     write!(ret, "USB debug port unlocked: all secrets are readable via USB!").unwrap();
                 }
+                "pddbrecycle" => {
+                    // erase the page table, which should effectively trigger a reformat on the next boot
+                    self.spinor.bulk_erase(xous::PDDB_LOC, 1024 * 1024).expect("couldn't erase page table");
+                    write!(ret, "PDDB page table ereased").unwrap();
+                }
+                #[cfg(feature="spinortest")]
                 "spinortest" => {
                     let region = self.testing_range.as_slice::<u8>();
                     let region_base = TEST_BASE as u32; // base offsets are 0-relative to start of FLASH

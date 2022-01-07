@@ -12,10 +12,10 @@ use crate::{LayoutApi, LayoutBehavior};
 pub(crate) struct MenuLayout {
     pub menu: Gid,
     menu_y_pad: i16,
-    menu_x_pad: i16,
+    _menu_x_pad: i16,
     menu_min_height: i16,
     screensize: Point,
-    height: i16,
+    _height: i16,
     visible: bool,
 }
 impl MenuLayout {
@@ -43,10 +43,10 @@ impl MenuLayout {
         Ok(MenuLayout {
             menu: menu_canvas.gid(),
             menu_y_pad: MENU_Y_PAD,
-            menu_x_pad: MENU_X_PAD,
+            _menu_x_pad: MENU_X_PAD,
             menu_min_height: height,
             screensize,
-            height, // start with "minimum" size and grow up as items are added
+            _height: height, // start with "minimum" size and grow up as items are added
             visible: true,
         })
     }

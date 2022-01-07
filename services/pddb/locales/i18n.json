@@ -1,0 +1,97 @@
+{
+    "pddb.okay": {
+        "en": "Okay",
+        "zh": "确定",
+        "en-audio": "Okay"
+    },
+    "pddb.cancel": {
+        "en": "Cancel",
+        "zh": "取消",
+        "en-audio": "Cancel"
+    },
+    "pddb.yes": {
+        "en": "Yes",
+        "zh": "是的",
+        "en-audio": "Yes"
+    },
+    "pddb.no": {
+        "en": "No",
+        "zh": "不",
+        "en-audio": "No"
+    },
+    "pddb.badpass": {
+        "en": "Incorrect password.\n\nTry again?\n",
+        "zh": "密码错误。 再试一次？",
+        "en-audio": "Incorrect password. Try again?"
+    },
+    "pddb.checkpass": {
+        "en": "Press any key, then\nre-enter your password\nfor setup confirmation.",
+        "zh": "第一次使用，再次输入密码",
+        "en-audio": "First-time setup: Enter password again."
+    },
+    "pddb.checkpass_fail": {
+        "en": "Password mismatch!\nPlease try again.",
+        "zh": "密码不匹配，请重试.",
+        "en-audio": "Password mismatch! Please try again."
+    },
+    "pddb.badpass_infallible": {
+        "en": "Incorrect password.\n\nPlease try again.",
+        "zh": "密码错误。",
+        "en-audio": "Incorrect password. Please try again."
+    },
+    "pddb.requestformat": {
+        "en": "The PDDB storage needs\nformatting. This takes\nabout 15 minutes and can't\nbe interrupted.\n\nProceed?\n",
+        "zh": "存储需要格式化。这需要8分钟。继续？",
+        "en-audio": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?"
+    },
+    "pddb.devbypass": {
+        "en": "Are you testing the PDDB?",
+        "zh": "你在测试存储吗？",
+        "en-audio": "Are you testing the PDDB?"
+    },
+    "pddb.erase": {
+        "en": "Bulk erase\n(1/6)",
+        "zh": "擦除存储(1/6)",
+        "en-audio": "Bulk erase step 1 of 6"
+    },
+    "pddb.initpt": {
+        "en": "Pagetable\n(2/6)",
+        "zh": "分页表(2/6)",
+        "en-audio": "Pagetable step 2 of 6"
+    },
+    "pddb.key": {
+        "en": "Keys\n(3/6)",
+        "zh": "密钥(3/6)",
+        "en-audio": "Keys step 3 of 6"
+    },
+    "pddb.fastspace": {
+        "en": "Fastspace\n(4/6)",
+        "zh": "快空间(4/6)",
+        "en-audio": "Fastspace step 4 of 6"
+    },
+    "pddb.randomize": {
+        "en": "Cryptographic wipe\n(5/6)",
+        "zh": "随机存储(5/6)",
+        "en-audio": "Randomize disk step 5 of 6"
+    },
+    "pddb.structure": {
+        "en": "Commit root\n(6/6)",
+        "zh": "提交根(6/6)",
+        "en-audio": "Commit root step 6 of 6"
+    },
+    "pddb.internalerror": {
+        "en": "Internal Error",
+        "zh": "内部错误",
+        "en-audio": "Internal Error"
+    },
+    "pddb.basisname": {
+        "en": "Basis Name:",
+        "zh": "基础名称",
+        "en-audio": "Enter name of Basis"
+    },
+    "pddb.password": {
+        "en": "Basis Password:",
+        "zh": "基础密码",
+        "en-audio": "Enter password for Basis"
+    }
+}

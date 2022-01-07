@@ -37,6 +37,7 @@ default-members = [
   "services/pddb",
   "services/net",
   "services/dns",
+  "services/modals",
 ]
 members = [
   "xous-ipc",
@@ -88,6 +89,7 @@ members = [
   "services/pddb",
   "services/net",
   "services/dns",
+  "services/modals",
 ]
 resolver = "2"
 

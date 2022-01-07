@@ -64,17 +64,6 @@ pub(crate) enum Opcode {
 
     /// Ux callbacks
     UxSetTime,
-    UxMonth,
-    UxDay,
-    UxYear,
-    UxDayOfWeek,
-    UxHour,
-    UxMinute,
-    UxSeconds,
-
-    UxRedraw,
-    UxRawkeys,
-    UxQuit,
 
     /// Quit
     Quit

@@ -88,7 +88,7 @@ impl ActionApi for Notification {
             ).expect("couldn't draw entry line");
         }
     }
-    fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {
+    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
         match k {
             '\u{0}' => {

@@ -3,20 +3,28 @@ use std::convert::TryInto;
 use crate::*;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
-use aes::{Aes256, Block};
+use aes::{Aes256, Block, BLOCK_SIZE};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
 use root_keys::api::AesRootkeyType;
+use spinor::SPINOR_BULK_ERASE_SIZE;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
 use std::collections::HashMap;
+#[cfg(not(feature="deterministic"))]
 use std::collections::HashSet;
+#[cfg(feature="deterministic")]
+use std::collections::BTreeSet;
 use std::collections::BinaryHeap;
 use std::cmp::Reverse;
 use std::io::{Result, Error, ErrorKind};
 
-/// Implementation-specific PDDB structures: for Precursor/Xous OS pair
+#[cfg(not(feature="deterministic"))]
+type FspaceSet = HashSet::<PhysPage>;
+#[cfg(feature="deterministic")]
+type FspaceSet = BTreeSet::<PhysPage>;
 
+/// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 pub(crate) const MBBB_PAGES: usize = 10;
 pub(crate) const FSCB_PAGES: usize = 16;
 
@@ -25,14 +33,14 @@ pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
 /// size of a virtual page -- after the AES encryption and journaling overhead is subtracted
 pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>();
 
-#[repr(C, packed)] // this can map directly into Flash
+#[repr(C)] // this can map directly into Flash
 pub(crate) struct StaticCryptoData {
     /// aes-256 key of the system basis, encrypted with the User0 root key
     pub(crate) system_key: [u8; AES_KEYSIZE],
+    /// check data to confirm the password was entered correctly; it is the encryption of the first 128 bits of the salt below.
+    pub(crate) check_data: [u8; BLOCK_SIZE],
     /// a pool of fixed data used to pick salts, based on a hash of the basis name
-    pub(crate) salt_base: [u8; 2048],
-    /// also random data, but no specific purpose
-    pub(crate) reserved: [u8; 2016],
+    pub(crate) salt_base: [u8; 4048],
 }
 impl Deref for StaticCryptoData {
     type Target = [u8];
@@ -42,16 +50,6 @@ impl Deref for StaticCryptoData {
                 as &[u8]
         }
     }
-}
-
-/// this is the structure of the Basis Key in RAM. The "key" and "iv" are actually never committed to
-/// flash; only the "salt" is written to disk. The final "salt" is computed as the XOR of the salt on disk
-/// and the user-provided "basis name". We never record the "basis name" on disk, so that the existence of
-/// any Basis can be denied.
-pub(crate) struct BasisKey {
-    salt: [u8; 16],
-    key: [u8; 32], // derived from lower 256 bits of sha512(bcrypt(salt, pw))
-    iv: [u8; 16], // an IV derived from the upper 128 bits of the sha512 hash from above, XOR with the salt
 }
 
 // emulated
@@ -82,25 +80,20 @@ pub(crate) struct PddbOs {
     fscb_phys_base: PageAlignedPa,
     data_phys_base: PageAlignedPa,
     system_basis_key: Option<[u8; AES_KEYSIZE]>,
-    /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
+    /// derived cipher for handling fastspace -- cache it, so we can save the time cost of constructing the cipher key schedule
     cipher_ecb: Option<Aes256>,
     /// fast space cache
-    fspace_cache: HashSet<PhysPage>,
+    fspace_cache: FspaceSet,
     /// memoize the location of the fscb log pages
     fspace_log_addrs: Vec::<PageAlignedPa>,
     /// memoize the current target offset for the next log entry
     fspace_log_next_addr: Option<PhysAddr>,
+    /// track roughly how big the log has gotten, so we can pre-emptively garbage collect it before we get too full.
+    fspace_log_len: usize,
     /// a cached copy of the FPGA's DNA ID, used in the AAA records.
     dna: u64,
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
-
-    /*
-    /// keys to non-system basis that may or may not be mounted
-    /// We don't blend the System basis into this one because we need to refer to the System basis specifically
-    /// for decrypting management structures like the FSCB.
-    basis_keys: Vec::<[u8; AES_KEYSIZE]>,
-    */
 }
 
 impl PddbOs {
@@ -111,14 +104,19 @@ impl PddbOs {
             xous::MemoryAddress::new(xous::PDDB_LOC as usize + xous::FLASH_PHYS_BASE as usize),
             None,
             PDDB_A_LEN as usize,
-            xous::MemoryFlags::R,
+            xous::MemoryFlags::R | xous::MemoryFlags::RESERVE,
         )
         .expect("Couldn't map the PDDB memory range");
+        #[cfg(any(target_os = "none", target_os = "xous"))]
+        log::info!("pddb slice len: {}, PDDB_A_LEN: {}, raw len: {}", pddb.as_slice::<u8>().len(), PDDB_A_LEN, pddb.len()); // sanity check the PDDB size on init
 
         // the mbbb is located one page off from the Page Table
         let key_phys_base = PageAlignedPa::from(size_of::<PageTableInFlash>());
+        log::debug!("key_phys_base: {:x?}", key_phys_base);
         let mbbb_phys_base = key_phys_base + PageAlignedPa::from(PAGE_SIZE);
+        log::debug!("mbbb_phys_base: {:x?}", mbbb_phys_base);
         let fscb_phys_base = PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
+        log::debug!("fscb_phys_base: {:x?}", fscb_phys_base);
 
         let llio = llio::Llio::new(&xns).unwrap();
         // native hardware
@@ -135,9 +133,10 @@ impl PddbOs {
             data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
             cipher_ecb: None,
-            fspace_cache: HashSet::<PhysPage>::new(),
+            fspace_cache: FspaceSet::new(),
             fspace_log_addrs: Vec::<PageAlignedPa>::new(),
             fspace_log_next_addr: None,
+            fspace_log_len: 0,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
         };
@@ -156,9 +155,10 @@ impl PddbOs {
                 data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
                 system_basis_key: None,
                 cipher_ecb: None,
-                fspace_cache: HashSet::<PhysPage>::new(),
+                fspace_cache: FspaceSet::new(),
                 fspace_log_addrs: Vec::<PageAlignedPa>::new(),
                 fspace_log_next_addr: None,
+                fspace_log_len: 0,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
             }
@@ -167,11 +167,11 @@ impl PddbOs {
     }
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    pub fn dbg_dump(&self, name: Option<String>) {
+    pub fn dbg_dump(&self, name: Option<String>, extra_keys: Option<&Vec::<KeyExport>>) {
         self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
         if let Some(key) = self.system_basis_key {
-            log::info!("written key: {:x?}", key);
+            log::info!("(hosted mode debug) written key: {:x?}", key);
             let mut name = [0 as u8; 64];
             for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
                 *dst = src;
@@ -183,8 +183,14 @@ impl PddbOs {
                 }
             );
         }
+        if let Some(extra) = extra_keys {
+            for key in extra {
+                export.push(*key);
+            }
+        }
         self.pddb_mr.dump_keys(&export, &name);
     }
+    #[allow(dead_code)]
     #[cfg(any(target_os = "none", target_os = "xous"))]
     pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
@@ -193,7 +199,7 @@ impl PddbOs {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
     pub fn test_reset(&mut self) {
-        self.fspace_cache = HashSet::<PhysPage>::new();
+        self.fspace_cache = FspaceSet::new();
         self.fspace_log_addrs = Vec::<PageAlignedPa>::new();
         self.system_basis_key = None;
         self.cipher_ecb = None;
@@ -210,8 +216,17 @@ impl PddbOs {
     pub(crate) fn trng_slice(&mut self, slice: &mut [u8]) {
         self.entropy.borrow_mut().get_slice(slice);
     }
+    pub(crate) fn trng_u32(&mut self) -> u32 {
+        self.entropy.borrow_mut().get_u32()
+    }
+    pub(crate) fn trng_u8(&mut self) -> u8 {
+        self.entropy.borrow_mut().get_u8()
+    }
     pub(crate) fn timestamp_now(&self) -> u64 {self.tt.elapsed_ms()}
-
+    /// checks if the root keys are initialized, which is a prerequisite to formatting and mounting
+    pub(crate) fn rootkeys_initialized(&self) -> bool {
+        self.rootkeys.is_initialized().expect("couldn't query initialization state of the rootkeys server")
+    }
     /// patches data at an offset starting from the data physical base address, which corresponds
     /// exactly to the first entry in the page table
     pub(crate) fn patch_data(&self, data: &[u8], offset: u32) {
@@ -284,6 +299,7 @@ impl PddbOs {
     }
     fn patch_keys(&self, data: &[u8], offset: u32) {
         assert!(data.len() + offset as usize <= PAGE_SIZE, "attempt to burn key data that is outside the key region");
+        log::info!("patching keys area with {} bytes", data.len());
         self.spinor.patch(
             self.pddb_mr.as_slice(),
             xous::PDDB_LOC,
@@ -316,15 +332,20 @@ impl PddbOs {
     /// physical mapping. Note that the `va` is an *address* (in units of bytes), and the `phy_page_num` is
     /// a *page number* (so a physical address divided by the page size). It's a slightly awkward units, but
     /// it saves a bit of math going back and forth between the native storage formats of the records.
-    pub(crate) fn pt_patch_mapping(&mut self, va: VirtAddr, phys_page_num: u32) {
-        self.syskey_ensure();
-        let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
+    pub(crate) fn pt_patch_mapping(&mut self, va: VirtAddr, phys_page_num: u32, cipher: &Aes256) {
         let mut pte = Pte::new(va, PtFlags::CLEAN, Rc::clone(&self.entropy));
         let mut block = Block::from_mut_slice(pte.deref_mut());
         //log::info!("pte pt: {:x?}", block);
         cipher.encrypt_block(&mut block);
         //log::info!("pte ct: {:x?}", block);
         self.patch_pagetable(&block, phys_page_num * aes::BLOCK_SIZE as u32);
+    }
+
+    /// erases a page table entry by overwriting it with garbage
+    pub(crate) fn pt_erase(&mut self, phys_page_num: u32) {
+        let mut eraseblock = [0u8; aes::BLOCK_SIZE];
+        self.trng_slice(&mut eraseblock);
+        self.patch_pagetable(&eraseblock, phys_page_num * aes::BLOCK_SIZE as u32);
     }
     /// Searches the page table for an MBBB slot. This is currently an O(N) search but
     /// in practice for Precursor there are only 8 pages, so it's quite fast on average.
@@ -356,7 +377,7 @@ impl PddbOs {
                 if let Some(page) = self.mbbb_retrieve() {
                     page
                 } else {
-                    log::warn!("Blank page in PT found, but no MBBB entry exists. Suspect PT corruption!");
+                    log::debug!("Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!");
                     pt_page
                 }
             } else {
@@ -371,6 +392,7 @@ impl PddbOs {
                     pp.set_page_number(((page_index * PAGE_SIZE / aes::BLOCK_SIZE) + index) as PhysAddr);
                     // the state is clean because this entry is, by definition, synchronized with the disk
                     pp.set_clean(true);
+                    pp.set_valid(true);
                     // handle conflicting journal versions here
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
                         let cipher = Aes256GcmSiv::new(Key::from_slice(key));
@@ -408,7 +430,7 @@ impl PddbOs {
 
     /// maps a StaticCryptoData structure into the key area of the PDDB.
     fn static_crypto_data_get(&self) -> &StaticCryptoData {
-        let scd_ptr = self.key_phys_base.as_usize() as *const StaticCryptoData;
+        let scd_ptr = self.pddb_mr.as_slice::<u8>()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoData;
         let scd: &StaticCryptoData = unsafe{scd_ptr.as_ref().unwrap()};
         scd
     }
@@ -427,21 +449,76 @@ impl PddbOs {
         }
         self.cipher_ecb = None;
     }
-    fn syskey_ensure(&mut self) {
-        if self.system_basis_key.is_none() {
+    pub(crate) fn clear_password(&self) {
+        self.rootkeys.clear_password(AesRootkeyType::User0);
+    }
+    pub (crate) fn try_login(&mut self) -> bool {
+        if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
             let scd = self.static_crypto_data_get();
             let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+            let mut blank = true;
             for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
                 *dst = src;
+                if src != 0xFF {
+                    blank = false;
+                }
             }
             for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
                 self.rootkeys.decrypt_block(block.try_into().unwrap());
             }
-            self.system_basis_key = Some(system_key);
+            if !blank {
+                // form the ECB cipher and check the check data
+                let cipher = Aes256::new(GenericArray::from_slice(&system_key));
+                let mut block = [0u8; BLOCK_SIZE];
+                for (&src, dst) in scd.check_data[0..BLOCK_SIZE].iter().zip(block.iter_mut()) {
+                    *dst = src;
+                }
+                let ga = GenericArray::from_mut_slice(&mut block);
+                //log::info!("test block before: {:x?}", ga);
+                cipher.decrypt_block(ga);
+                //log::info!("test block after check: {:x?}", ga);
+                let mut success = true;
+                let mut checkedlen = 0;
+                for (&a, &b) in scd.salt_base[0..BLOCK_SIZE].iter().zip(ga.iter()) {
+                    if a != b {
+                        success = false;
+                    }
+                    checkedlen += 1;
+                }
+                if checkedlen != BLOCK_SIZE {
+                    success = false;
+                }
+                if success {
+                    let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+                    for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
+                        *dst = src;
+                    }
+                    for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
+                        self.rootkeys.decrypt_block(block.try_into().unwrap());
+                    }
+                    self.system_basis_key = Some(system_key);
+                    self.cipher_ecb = Some(cipher);
+                }
+                success
+            } else {
+                // the system is in a blank state -- use the bogus key so that the later test for
+                // mounting the PDDB doesn't fail on account of a lack of key matter. We'll deal
+                // with setting the key correctly later.
+                self.system_basis_key = Some(system_key);
+                let cipher = Aes256::new(GenericArray::from_slice(&system_key));
+                self.cipher_ecb = Some(cipher);
+                true
+            }
+        } else {
+            true
         }
-        if self.cipher_ecb.is_none() {
-            let cipher = Aes256::new(GenericArray::from_slice(&self.system_basis_key.unwrap()));
-            self.cipher_ecb = Some(cipher);
+    }
+    fn syskey_ensure(&mut self) {
+        while !self.try_login() {
+            self.clear_password(); // clear the bad password entry
+            let xns = xous_names::XousNames::new().unwrap();
+            let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
+            modals.show_notification(t!("pddb.badpass_infallible", xous::LANG)).expect("notification failed");
         }
     }
 
@@ -508,13 +585,14 @@ impl PddbOs {
                 msg: fs_ser,
                 aad: &aad,
             };
-            log::info!("key: {:x?}", key);
-            log::info!("nonce: {:x?}", nonce);
-            log::info!("aad: {:x?}", aad);
-            log::info!("payload: {:x?}", fs_ser);
+            // these are useful for debug, but do a hard-comment on them because they leak secret info
+            //log::info!("key: {:x?}", key);
+            //log::info!("nonce: {:x?}", nonce);
+            //log::info!("aad: {:x?}", aad);
+            //log::info!("payload: {:x?}", fs_ser);
             let ciphertext = cipher.encrypt(nonce, payload).expect("failed to encrypt FastSpace record");
-            log::info!("ct_len: {}", ciphertext.len());
-            log::info!("mac: {:x?}", &ciphertext[ciphertext.len()-16..]);
+            //log::info!("ct_len: {}", ciphertext.len());
+            //log::info!("mac: {:x?}", &ciphertext[ciphertext.len()-16..]);
             let ct_to_flash = ciphertext.deref();
             // determine which page we're going to write the ciphertext into
             let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
@@ -536,6 +614,9 @@ impl PddbOs {
                 // commit the fscb data
                 self.patch_fscb(&[&nonce_array, ct_to_flash].concat(), dest_page * PAGE_SIZE as u32);
             } // end "it would be bad if we lost power now" region
+
+            // note: this function should be followed up by a fast_space_read() to regenerate the temporary
+            // bookkeeping variables that are not reset by this function.
         } else {
             panic!("invalid state!");
         }
@@ -607,15 +688,17 @@ impl PddbOs {
             noise = -noise;
         }
         let deniable_free_pages = (total_free_pages as f32 * (FSCB_FILL_COEFFICIENT + noise)) as usize;
-        // we're guarantede to have at least one free page, because we errored out if the pages was 0 above.
+        // we're guaranteed to have at least one free page, because we errored out if the pages was 0 above.
         let deniable_free_pages = if deniable_free_pages == 0 { 1 } else { deniable_free_pages };
         free_pool.truncate(deniable_free_pages);
-        log::info!("free_pool after PD trim: {}; max pages allowed: {}", free_pool.len(), deniable_free_pages);
+        log::warn!("total_free: {}; free_pool after PD trim: {}; max pages allowed: {}",
+            total_free_pages, free_pool.len(), deniable_free_pages);
 
         // 5. Take the free_pool and annotate it for writing to disk
         let mut page_pool = Vec::<PhysPage>::new();
         for page in free_pool {
             let mut pp = PhysPage(0);
+            pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE);
             pp.set_page_number(page as PhysAddr);
             pp.set_space_state(SpaceState::Free);
             pp.set_valid(true);
@@ -649,6 +732,7 @@ impl PddbOs {
             self.fspace_cache.clear();
             self.fspace_log_addrs.clear();
             self.fspace_log_next_addr = None;
+            self.fspace_log_len = 0;
 
             // let fscb_slice = self.fscb_deref(); // can't use this line because it causse self to be immutably borrowed, so we write out the equivalent below.
             let fscb_slice = &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
@@ -738,7 +822,7 @@ impl PddbOs {
                     }
                     cipher.decrypt_block(&mut block);
                     if let Some(pp) = SpaceUpdate::try_into_phys_page(block.as_slice()) {
-                        log::info!("maybe replacing fspace block: {:x?}", pp);
+                        log::debug!("maybe replacing fspace block: {:x?}", pp);
                         // note: pp.valid() isn't the cryptographic check, the cryptographic check of record validity is in try_into_phys_page()
                         if pp.valid() { // PS: it should always be valid!
                             if let Some(prev_pp) = self.fspace_cache.get(&pp) {
@@ -749,7 +833,7 @@ impl PddbOs {
                                     panic!("Inconsistent FSCB state");
                                 }
                             } else {
-                                log::info!("Strange...we have a journal entry for a free space page that isn't already in our cache. Guru meditation: {:?}", pp);
+                                log::warn!("Strange...we have a journal entry for a free space page that isn't already in our cache. Guru meditation: {:?}", pp);
                                 self.fspace_cache.insert(pp);
                             }
                         }
@@ -809,6 +893,7 @@ impl PddbOs {
                         }
                         if is_blank {
                             self.fspace_log_next_addr = Some( (page_start + (1 + index) * aes::BLOCK_SIZE) as PhysAddr );
+                            log::info!("Next FSCB entry: {:x?}", self.fspace_log_next_addr);
                             return true
                         }
                     }
@@ -823,11 +908,26 @@ impl PddbOs {
                 let random_index = self.entropy.borrow_mut().get_u32() as usize % blank_pages.len();
                 // set the next log address at an offset of one AES block in from the top.
                 self.fspace_log_next_addr = Some((blank_pages[random_index] + aes::BLOCK_SIZE) as PhysAddr);
+                log::warn!("Moving log to fresh FSCB page: {:x?}", self.fspace_log_next_addr);
                 true
             } else {
                 false
             }
         }
+    }
+    pub fn fast_space_has_pages(&self, count: usize) -> bool {
+        let mut free_count = 0;
+        for pp in self.fspace_cache.iter() {
+            if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty) && (pp.journal() < PHYS_PAGE_JOURNAL_MAX) {
+                free_count += 1;
+            } else {
+                log::trace!("fastpace other entry: {:?}", pp.space_state());
+            }
+            if free_count >= count {
+                return true
+            }
+        }
+        false
     }
     /// Attempts to allocate a page out of the fspace cache (in RAM). This is the "normal" route for allocating pages.
     /// This call should be prefixed by a call to ensure_fast_space_alloc() to make sure it doesn't fail.
@@ -840,6 +940,7 @@ impl PddbOs {
     pub fn try_fast_space_alloc(&mut self) -> Option<PhysPage> {
         // 1. Confirm that the fspace_log_next_addr is valid. If not, regenerate it, or fail.
         if !self.fast_space_ensure_next_log() {
+            log::warn!("Couldn't ensure fast space log entry: {}", self.fspace_log_len);
             None
         } else {
             // 2. find the first page that is Free or Dirty. The order is already randomized, so we can do a stupid linear search.
@@ -853,6 +954,7 @@ impl PddbOs {
                     // the log with 2x the number of operations to record MaybeUsed and then Used.
                     ppc.set_space_state(SpaceState::Used);
                     ppc.set_clean(false); // the allocated page is not clean, because it hasn't been written to disk
+                    ppc.set_valid(true); // the allocated page is now valid, so it should be flushed to disk
                     ppc.set_journal(pp.journal() + 1); // this is guaranteed not to overflow because of a check in the "if" clause above
 
                     // commit the usage to the journal
@@ -865,6 +967,7 @@ impl PddbOs {
                     let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
                     log::trace!("patch: {:x?}", block);
                     self.patch_fscb(&block, log_addr);
+                    self.fspace_log_len += 1;
                     let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
                     if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
                         self.fspace_log_next_addr = Some(next_addr as PhysAddr);
@@ -876,30 +979,38 @@ impl PddbOs {
                     break;
                 }
             }
+            if maybe_alloc.is_none() {
+                log::warn!("Ran out of free space. fspace cache has {} entries", self.fspace_cache.len());
+                //for entry in self.fspace_cache.iter() {
+                //    log::info!("{:?}", entry);
+                //}
+            }
             if let Some(alloc) = maybe_alloc {
-                assert!(self.fspace_cache.replace(alloc).is_some(), "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!");
+                assert!(self.fspace_cache.remove(&alloc), "inconsistent state: we found a free page, but later when we tried to update it, it wasn't there!");
             }
             maybe_alloc
         }
     }
-    pub fn fast_space_free(&mut self, mut pp: PhysPage) {
+    pub fn fast_space_free(&mut self, pp: &mut PhysPage) {
         self.fast_space_ensure_next_log();
         // update the fspace cache
         pp.set_space_state(SpaceState::Dirty);
         pp.set_journal(pp.journal() + 1);
-        if self.fspace_cache.contains(&pp) {
-            self.fspace_cache.replace(pp.clone());
-        }
+
+        // re-cycle the space into the fspace_cache
+        self.fspace_cache.insert(pp.clone());
+
         // commit the free'd block to the journal
         self.syskey_ensure();
         let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
-        let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), pp);
+        let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), pp.clone());
         let mut block = Block::from_mut_slice(update.deref_mut());
         log::trace!("block: {:x?}", block);
         cipher.encrypt_block(&mut block);
         let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
         log::trace!("patch: {:x?}", block);
         self.patch_fscb(&block, log_addr);
+        self.fspace_log_len += 1;
         let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
         if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
             self.fspace_log_next_addr = Some(next_addr as PhysAddr);
@@ -907,50 +1018,84 @@ impl PddbOs {
             // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
             // next journal entry the next time around.
         }
+        // mark the page as invalid, so that it will be deleted on the next PT sync
+        pp.set_valid(false);
     }
     /// This is a "look before you leap" function that will potentially pause all system operations
     /// and do a deep scan for space if the required amount is not available.
     pub fn ensure_fast_space_alloc(&mut self, pages: usize, cache: &Vec::<BasisCacheEntry>) -> bool {
-        if self.fast_space_len() > pages {
+        const BUFFER: usize = 1; // a bit of slop in the trigger point
+        let has_pages = self.fast_space_has_pages(pages + BUFFER);
+        log::trace!("alloc fast_space_len: {}, log_len {}, has {} pages: {}", self.fast_space_len(), self.fspace_log_len, pages + BUFFER, has_pages);
+        // make sure we have fast space pages...
+        if has_pages
+        // ..and make sure we have space for fast space log entries
+        && (self.fspace_log_len < (FSCB_PAGES - FASTSPACE_PAGES - 1) * PAGE_SIZE / aes::BLOCK_SIZE) {
             true
         } else {
-            if let Some(used_pages) = self.pddb_generate_used_map(cache) {
-                let free_pool = self.fast_space_generate(used_pages);
-                if free_pool.len() == 0 {
-                    // we're out of free space
-                    false
-                } else {
-                    let mut fast_space = FastSpace {
-                        free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-                    };
-                    for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
-                        *dst = src;
-                    }
-                    // write just commits a new record to disk, but doesn't update our internal data cache
-                    self.fast_space_write(&fast_space);
-                    // this will ensure the data cache is fully in sync
-                    self.fast_space_read();
-
-                    // check that we have enough space now -- if not, we're just out of disk space!
-                    if self.fast_space_len() > pages {
-                        true
-                    } else {
+            if !has_pages {
+                log::warn!("FastSpace alloc forced by lack of free space");
+                // if we're really out of space, do an expensive full-space sweep
+                if let Some(used_pages) = self.pddb_generate_used_map(cache) {
+                    let free_pool = self.fast_space_generate(used_pages);
+                    if free_pool.len() == 0 {
+                        // we're out of free space
                         false
+                    } else {
+                        let mut fast_space = FastSpace {
+                            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+                        };
+                        for pp in fast_space.free_pool.iter_mut() {
+                            pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
+                        }
+                        for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
+                            *dst = src;
+                        }
+                        // write just commits a new record to disk, but doesn't update our internal data cache
+                        // this also clears the fast space log.
+                        self.fast_space_write(&fast_space);
+                        // this will ensure the data cache is fully in sync
+                        self.fast_space_read();
+
+                        // check that we have enough space now -- if not, we're just out of disk space!
+                        if self.fast_space_len() > pages {
+                            true
+                        } else {
+                            false
+                        }
                     }
+                } else {
+                    false
                 }
             } else {
-                false
+                // log regenration is faster & less intrusive than fastspace regeneration, and we would have
+                // to do this more often. So we have a separate path for this outcome.
+                log::warn!("FastSpace alloc forced by lack of log space");
+                let mut fast_space = FastSpace {
+                    free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+                };
+                for pp in fast_space.free_pool.iter_mut() {
+                    pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
+                }
+                // regenerate from the existing fast space cache
+                for (&src, dst) in self.fspace_cache.iter().zip(fast_space.free_pool.iter_mut()) {
+                    *dst = src;
+                }
+                // write just commits a new record to disk, but doesn't update our internal data cache
+                // this also clears the fast space log.
+                self.fast_space_write(&fast_space);
+                // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is fully in sync
+                self.fast_space_read();
+                // this will locate the next fast space log point.
+                self.fast_space_ensure_next_log();
+                true
             }
         }
     }
 
     pub(crate) fn data_aad(&self, name: &str) -> Vec::<u8> {
-        let mut full_name = [0u8; BASIS_NAME_LEN];
-        for (&src, dst) in name.as_bytes().iter().zip(full_name.iter_mut()) {
-            *dst = src;
-        }
         let mut aad = Vec::<u8>::new();
-        aad.extend_from_slice(&full_name);
+        aad.extend_from_slice(&name.as_bytes());
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         aad.extend_from_slice(&self.dna.to_le_bytes());
         aad
@@ -1027,28 +1172,13 @@ impl PddbOs {
                         log::error!("PDDB version mismatch in system basis root. Unrecoverable error.");
                         return None;
                     }
-                    let basis_name = cstr_to_string(&basis_root.name.0);
-                    if basis_name != String::from(PDDB_DEFAULT_SYSTEM_BASIS) {
+                    let basis_name = std::str::from_utf8(&basis_root.name.data[..basis_root.name.len as usize]).expect("basis is not valid utf-8");
+                    if basis_name != PDDB_DEFAULT_SYSTEM_BASIS {
                         log::error!("PDDB system basis name is incorrect: {}; aborting mount operation.", basis_name);
                         return None;
                     }
-                    /*
-                    let bcache = BasisCacheEntry {
-                        name: basis_name.clone(),
-                        clean: true,
-                        last_sync: Some(self.tt.elapsed_ms()),
-                        num_dicts: basis_root.num_dictionaries,
-                        dicts: HashMap::<String, DictCacheEntry>::new(),
-                        cipher,
-                        aad,
-                        age: basis_root.age,
-                        free_dict_offset: None,
-                        v2p_map: sysbasis_map,
-                        journal: u32::from_le_bytes(vpage[..size_of::<JournalType>()].try_into().unwrap()),
-                        large_alloc_ptr: None,
-                    }; */
                     log::info!("System BasisRoot record found, generating cache entry");
-                    BasisCacheEntry::mount(self, &basis_name, &syskey, false)
+                    BasisCacheEntry::mount(self, &basis_name, &syskey, false, BasisRetentionPolicy::Persist)
                 } else {
                     // i guess technically we could try a brute-force search for the page, but meh.
                     log::error!("System basis did not contain a root page -- unrecoverable error.");
@@ -1064,43 +1194,88 @@ impl PddbOs {
     /// in the PDDB an replace it with a brand-spanking new, blank PDDB.
     /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a reference
     /// to the Spinor object allocated to the PDDB implementation for this operation.
-    pub(crate) fn pddb_format(&mut self, fast: bool) -> Result<()> {
+    pub(crate) fn pddb_format(&mut self, fast: bool, progress: Option<&modals::Modals>) -> Result<()> {
         if !self.rootkeys.is_initialized().unwrap() {
             return Err(Error::new(ErrorKind::Unsupported, "Root keys are not initialized; cannot format a PDDB without root keys!"));
         }
+        // step 0. If we have a modal, confirm that the password entered was correct with a double-entry.
+        if let Some(modals) = progress {
+            let mut success = false;
+            while !success {
+                let mut checkblock_a = [0u8; BLOCK_SIZE];
+                self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
+
+                #[cfg(any(target_os = "none", target_os = "xous"))] // skip this dialog in hosted mode
+                modals.show_notification(t!("pddb.checkpass", xous::LANG)).expect("notification failed");
+
+                self.clear_password();
+                let mut checkblock_b = [0u8; BLOCK_SIZE];
+                self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_b));
+
+                if checkblock_a == checkblock_b {
+                    success = true;
+                } else {
+                    modals.show_notification(t!("pddb.checkpass_fail", xous::LANG)).expect("notification failed");
+                    self.clear_password();
+                }
+            }
+        }
+
         // step 1. Erase the entire PDDB region - leaves the state in all 1's
         if !fast {
             log::info!("Erasing the PDDB region");
-            let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE];
-
-            // there is no convenience routine for erasing the entire disk. Maybe that's a good thing?
-            for offset in (0..PDDB_A_LEN).step_by(PAGE_SIZE) {
-                if (offset / PAGE_SIZE) % 64 == 0 {
-                    log::info!("Initial erase: {}/{}", offset, PDDB_A_LEN);
+            if let Some(modals) = progress {
+                modals.start_progress(
+                    t!("pddb.erase", xous::LANG),
+                    xous::PDDB_LOC, xous::PDDB_LOC + PDDB_A_LEN as u32, xous::PDDB_LOC)
+                    .expect("couldn't raise progress bar");
+                self.tt.sleep_ms(100).unwrap();
+            }
+            for offset in (xous::PDDB_LOC..(xous::PDDB_LOC + PDDB_A_LEN as u32)).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
+                if (offset / SPINOR_BULK_ERASE_SIZE) % 4 == 0 {
+                    log::info!("Initial erase: {}/{}", offset - xous::PDDB_LOC, PDDB_A_LEN as u32);
+                    if let Some(modals) = progress {
+                        modals.update_progress(offset as u32).expect("couldn't update progress bar");
+                    }
                 }
-                self.spinor.patch(
-                    self.pddb_mr.as_slice(),
-                    xous::PDDB_LOC,
-                    &blank_sector,
-                    offset as u32
-                ).expect("couldn't erase memory");
+                self.spinor.bulk_erase(offset, SPINOR_BULK_ERASE_SIZE).expect("couldn't erase memory");
+            }
+            if let Some(modals) = progress {
+                modals.update_progress(xous::PDDB_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
+                modals.finish_progress().expect("couldn't dismiss progress bar");
+                self.tt.sleep_ms(100).unwrap();
             }
         }
 
         // step 2. fill in the page table with junk, which marks it as cryptographically empty
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.initpt", xous::LANG), 0, size_of::<PageTableInFlash>() as u32, 0).expect("couldn't raise progress bar");
+        }
         let mut temp: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
-        for page in (0..size_of::<PageTableInFlash>()).step_by(PAGE_SIZE) {
+        for page in (0..(size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1))).step_by(PAGE_SIZE) {
             self.entropy.borrow_mut().get_slice(&mut temp);
             self.patch_pagetable_raw(&temp, page as u32);
+            if let Some(modals) = progress {
+                if (page / PAGE_SIZE) % 16 == 0 {
+                    modals.update_progress(page as u32).expect("couldn't update progress bar");
+                }
+            }
+        }
+        if let Some(modals) = progress {
+            modals.update_progress(size_of::<PageTableInFlash>() as u32).expect("couldn't update progress bar");
         }
         if size_of::<PageTableInFlash>() & (PAGE_SIZE - 1) != 0 {
             let remainder_start = size_of::<PageTableInFlash>() & !(PAGE_SIZE - 1);
-            log::info!("Page table does not end on a page boundary. Handling trailing page case of {} bytes", remainder_start);
+            log::info!("Page table does not end on a page boundary. Handling trailing page case of {} bytes", size_of::<PageTableInFlash>() - remainder_start);
             let mut temp = Vec::<u8>::new();
             for _ in remainder_start..size_of::<PageTableInFlash>() {
                 temp.push(self.entropy.borrow_mut().get_u8());
             }
             self.patch_pagetable_raw(&temp, remainder_start as u32);
+        }
+        if let Some(modals) = progress {
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
         }
 
         // step 3. create our key material
@@ -1108,27 +1283,58 @@ impl PddbOs {
         //if !self.rootkeys.ensure_aes_password() {
         //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
         //}
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.key", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         self.entropy.borrow_mut().get_slice(&mut system_basis_key);
         let mut basis_key_aes: [u8; AES_KEYSIZE] = system_basis_key.clone();
+        self.cipher_ecb = Some(Aes256::new(GenericArray::from_slice(&basis_key_aes))); // build the ECB cipher for page table entries
+        let cipher =  Aes256::new(GenericArray::from_slice(&basis_key_aes));
         self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
         for block in basis_key_aes.chunks_mut(aes::BLOCK_SIZE) {
             self.rootkeys.encrypt_block(block.try_into().unwrap());
         }
         let mut crypto_keys = StaticCryptoData {
             system_key: [0; AES_KEYSIZE],
-            salt_base: [0; 2048],
-            reserved: [0; 2016],
+            check_data: [0; BLOCK_SIZE],
+            salt_base: [0; 4048],
         };
+        if let Some(modals) = progress {
+            modals.update_progress(50).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         // copy the encrypted key into the data structure for commit to Flash
         for (&src, dst) in basis_key_aes.iter().zip(crypto_keys.system_key.iter_mut()) {
             *dst = src;
         }
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
-        self.entropy.borrow_mut().get_slice(&mut crypto_keys.reserved);
+        let cipher_ecb = self.cipher_ecb.as_ref().unwrap();
+        let mut block = [0u8; BLOCK_SIZE];
+        // the test data is just the first 128 bits of the salt base
+        for (&src, dst) in crypto_keys.salt_base[0..BLOCK_SIZE].iter().zip(block.iter_mut()) {
+            *dst = src;
+        }
+        let ga = GenericArray::from_mut_slice(&mut block);
+        log::info!("test block before: {:x?}", ga);
+        cipher_ecb.encrypt_block(ga);
+        for (&src, dst) in ga.iter().zip(crypto_keys.check_data.iter_mut()) {
+            *dst = src;
+        }
+        log::info!("test block after: {:x?}", crypto_keys.check_data);
         self.patch_keys(crypto_keys.deref(), 0);
+        if let Some(modals) = progress {
+            modals.update_progress(100).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
+
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        self.tt.sleep_ms(500).unwrap(); // delay for UX to catch up in emulation
 
         // step 4. mbbb handling
         // mbbb should just be blank at this point, and the flash was erased in step 1, so there's nothing to do.
@@ -1136,6 +1342,10 @@ impl PddbOs {
         // step 5. fscb handling
         // pick a set of random pages from the free pool and assign it to the fscb
         // pass the generator an empty cache - this causes it to treat the entire disk as free space
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.fastspace", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         let free_pool = self.fast_space_generate(BinaryHeap::<Reverse<u32>>::new());
         let mut fast_space = FastSpace {
             free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
@@ -1143,11 +1353,29 @@ impl PddbOs {
         for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
             *dst = src;
         }
+        if let Some(modals) = progress {
+            modals.update_progress(50).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         self.fast_space_write(&fast_space);
+        if let Some(modals) = progress {
+            modals.update_progress(100).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
+
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        self.tt.sleep_ms(500).unwrap();
 
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
         // this is coded using "direct disk" offsets...under the assumption that we only ever really want to do this here, and
         // not re-use this routine elsewhere.
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.randomize", xous::LANG),
+            self.data_phys_base.as_u32(), PDDB_A_LEN as u32, self.data_phys_base.as_u32()).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         let blank = [0xffu8; aes::BLOCK_SIZE];
         for offset in (self.data_phys_base.as_usize()..PDDB_A_LEN).step_by(PAGE_SIZE) {
             if fast {
@@ -1170,8 +1398,11 @@ impl PddbOs {
                 }
             }
             self.entropy.borrow_mut().get_slice(&mut temp);
-            if (offset / PAGE_SIZE) % 64 == 0 {
+            if (offset / PAGE_SIZE) % 256 == 0 { // ~one update per megabyte
                 log::info!("Cryptographic 'erase': {}/{}", offset, PDDB_A_LEN);
+                if let Some(modals) = progress {
+                    modals.update_progress(offset as u32).expect("couldn't update progress bar");
+                }
             }
             self.spinor.patch(
                 self.pddb_mr.as_slice(),
@@ -1180,8 +1411,18 @@ impl PddbOs {
                 offset as u32
             ).expect("couldn't fill in disk with random datax");
         }
+        if let Some(modals) = progress {
+            modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
 
         // step 6. create the system basis root structure
+        if let Some(modals) = progress {
+            modals.start_progress(t!("pddb.structure", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         let basis_root = BasisRoot {
             magic: api::PDDB_MAGIC,
             version: api::PDDB_VERSION,
@@ -1192,6 +1433,10 @@ impl PddbOs {
 
         // step 7. Create a hashmap for our reverse PTE, allocate sectors, and add it to the Pddb's cache
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
+        if let Some(modals) = progress {
+            modals.update_progress(33).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
 
         let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
         // allocate one page for the basis root
@@ -1210,7 +1455,8 @@ impl PddbOs {
         let aad = basis_root.aad(self.dna);
         let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
             .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
-        let journal_bytes = (0 as u32).to_le_bytes();
+        assert!(pp.valid(), "v2p returned an invalid page");
+        let journal_bytes = (self.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes();
         let slice_iter =
             journal_bytes.iter() // journal rev
             .chain(basis_root.as_ref().iter());
@@ -1220,14 +1466,23 @@ impl PddbOs {
         }
         let key = Key::clone_from_slice(self.system_basis_key.as_ref().unwrap());
         self.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
+        if let Some(modals) = progress {
+            modals.update_progress(66).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
 
         // step 9. generate & write initial page table entries
         for (&virt, phys) in basis_v2p_map.iter_mut() {
-            self.pt_patch_mapping(virt, phys.page_number());
+            self.pt_patch_mapping(virt, phys.page_number(), &cipher);
             // mark the entry as clean, as it has been sync'd to disk
             phys.set_clean(true);
         }
-
+        if let Some(modals) = progress {
+            modals.update_progress(100).expect("couldn't update progress bar");
+            self.tt.sleep_ms(100).unwrap();
+            modals.finish_progress().expect("couldn't dismiss progress bar");
+            self.tt.sleep_ms(100).unwrap();
+        }
         Ok(())
     }
 
@@ -1284,9 +1539,72 @@ impl PddbOs {
         // for now, do nothing -- just indicate success with a returned empty set
         Some(Vec::<([u8; AES_KEYSIZE], String)>::new())
     }
-}
 
-pub(crate) fn cstr_to_string(cstr: &[u8]) -> String {
-    let null_index = cstr.iter().position(|&c| c == 0).expect("couldn't find null terminator on c string");
-    String::from_utf8(cstr[..null_index].to_vec()).expect("c string has invalid characters")
+    /// Derives a 256-bit AES encryption key for a basis given a basis name and its password.
+    /// You will also need to derive the AAD for the basis using the basis_name.
+    pub(crate) fn basis_derive_key(&self, basis_name: &str, password: &str) -> [u8; AES_KEYSIZE] {
+        use sha2::{FallbackStrategy, Sha512Trunc256};
+        use digest::Digest;
+        use backend::bcrypt::*;
+
+        // 1. derive the salt from the "key" region. First step is to create the salt lookup
+        // table, which is done by hashing the name and password together with SHA-512
+        // manage the allocation of the data for the basis & password explicitly so that we may wipe them later
+        let mut bname_copy = [0u8; BASIS_NAME_LEN];
+        for (src, dst) in basis_name.bytes().zip(bname_copy.iter_mut()) {
+            *dst = src;
+        }
+        let mut plaintext_pw: [u8; 73] = [0; 73];
+        for (src, dst) in password.bytes().zip(plaintext_pw.iter_mut()) {
+            *dst = src;
+        }
+        plaintext_pw[72] = 0; // always null terminate
+
+        log::info!("creating salt");
+        // uses Sha512Trunc256 on the salt array to generate a compressed version of
+        // the basis name and plaintext password, which forms the Salt that is fed into bcrypt
+        // our salt is probably way too big but what else are we going to use all that page's data for?
+        let scd = self.static_crypto_data_get();
+        let mut salt = [0u8; 16];
+        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        hasher.update(&scd.salt_base);
+        hasher.update(&bname_copy);
+        hasher.update(&plaintext_pw);
+        let result = hasher.finalize();
+        for (&src, dst) in result.iter().zip(salt.iter_mut()) {
+            *dst = src;
+        }
+        log::info!("derived salt: {:x?}", salt);
+
+        // 3. use the salt + password and run bcrypt on it to derive a key.
+        let mut hashed_password: [u8; 24] = [0; 24];
+        let start_time = self.timestamp_now();
+        bcrypt(BCRYPT_COST, &salt, password, &mut hashed_password); // note: this internally makes a copy of the password, and destroys it
+        let elapsed = self.timestamp_now() - start_time;
+        log::info!("derived bcrypt password in {}ms", elapsed);
+
+        // 4. take the resulting 24-byte password and expand it to 32 bytes using sha512trunc256
+        let mut expander = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        expander.update(hashed_password);
+        let final_key = expander.finalize();
+        let mut key = [0u8; AES_KEYSIZE];
+        for (&src, dst) in final_key.iter().zip(key.iter_mut()) {
+            *dst = src;
+        }
+
+        // 5. erase extra plaintext copies made of the basis name and password using a routine that
+        // shouldn't be optimized out or re-ordered
+        let bn_ptr = bname_copy.as_mut_ptr();
+        for i in 0..bname_copy.len() {
+            unsafe{bn_ptr.add(i).write_volatile(core::mem::zeroed());}
+        }
+        let pt_ptr = plaintext_pw.as_mut_ptr();
+        for i in 0..plaintext_pw.len() {
+            unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        //6. return the key
+        key
+    }
 }
