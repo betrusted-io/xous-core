@@ -32,7 +32,8 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;
     let mut pid1_key = [0u8; 16];
-    let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst) + xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
+    let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst) + xous_kernel::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
+    //let mut rng = thread_rng();
     for b in pid1_key.iter_mut() {
         *b = rng.gen();
     }

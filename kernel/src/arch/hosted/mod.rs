@@ -62,9 +62,7 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
     });
 }
 
-#[cfg(not(test))]
 use core::sync::atomic::{AtomicU64, Ordering};
-#[cfg(not(test))]
 static LOCAL_RNG_STATE: AtomicU64 = AtomicU64::new(2);
 
 #[cfg(not(test))]
