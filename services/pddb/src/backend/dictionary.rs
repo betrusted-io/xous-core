@@ -1057,6 +1057,7 @@ impl DerefMut for Dictionary {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct DictAttributes {
     pub(crate) flags: DictFlags,

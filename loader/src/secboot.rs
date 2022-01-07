@@ -357,8 +357,8 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
             println!("protected_version: {}", protected_version);
             // a little insight to help debug what went wrong.
             for words in image[signed_len as usize - 16 .. ].chunks(4) {
-                let word = u32::from_le_bytes(words.try_into().unwrap());
-                println!("{:x}", word);
+                let _word = u32::from_le_bytes(words.try_into().unwrap());
+                println!("{:x}", _word);
             }
             die();
         }
@@ -369,8 +369,8 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
             println!("protected_len: {}", protected_len);
             // a little insight to help debug what went wrong.
             for words in image[signed_len as usize - 16 .. ].chunks(4) {
-                let word = u32::from_le_bytes(words.try_into().unwrap());
-                println!("{:x}", word);
+                let _word = u32::from_le_bytes(words.try_into().unwrap());
+                println!("{:x}", _word);
             }
             die();
         }

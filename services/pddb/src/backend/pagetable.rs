@@ -76,6 +76,7 @@ impl Pte {
         }
         VirtAddr::new(u64::from_le_bytes(full_addr)).unwrap()
     }
+    #[allow(dead_code)]
     pub fn flags(&self) -> PtFlags {
         self.flags
     }

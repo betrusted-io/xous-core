@@ -1457,6 +1457,7 @@ impl BasisCacheEntry {
     /// Runs through the dictionary listing in a basis and compacts them. Call when the
     /// the dictionary space becomes sufficiently fragmented that accesses are becoming
     /// inefficient.
+    #[allow(dead_code)]
     pub(crate) fn dict_compact(&self, _basis_name: Option<&str>) -> Result<()> {
         unimplemented!();
     }
