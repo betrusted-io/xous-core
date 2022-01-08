@@ -22,6 +22,9 @@ com = {path = "../com"}
 byteorder = { version = "1.0", default-features = false }
 trng = {path = "../trng"}
 
+# for automatic SSID management and AP list storage
+pddb = {path = "../pddb"}
+
 [dependencies.smoltcp]
 # ugh. have to reference `main` directly because they haven't pushed a new tag in months, and none
 # of the worked examples match the actual documentation now.

@@ -7,6 +7,7 @@ use num_traits::*;
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 
 mod device;
+mod connection_manager;
 
 use xous::{Message, CID, SID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
@@ -181,6 +182,16 @@ fn xmain() -> ! {
     // register a suspend/resume listener
     let sr_cid = xous::connect(net_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
+    // kick off the connection manager thread
+    let cm_sid = xous::create_server().expect("couldn't create connection manager server");
+    let cm_cid = xous::connect(cm_sid).unwrap();
+    let activity_interval = Arc::new(AtomicU32::new(0));
+    thread::spawn({
+        move || {
+            connection_manager::connection_manager(cm_sid, activity_interval.clone());
+        }
+    });
 
     let mut cid_to_disconnect: Option<CID> = None;
     loop {
@@ -952,6 +963,8 @@ fn xmain() -> ! {
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
+    xous::send_message(cm_cid, Message::new_blocking_scalar(connection_manager::ConnectionManagerOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't quit connection manager server");
+    unsafe{xous::disconnect(cm_cid).ok()};
     xns.unregister_server(net_sid).unwrap();
     xous::destroy_server(net_sid).unwrap();
     log::trace!("quitting");

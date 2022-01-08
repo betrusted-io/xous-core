@@ -3,6 +3,10 @@
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
 pub(crate) const SERVER_NAME_COM: &str      = "_COM manager_";
 pub use com_rs_ref::serdes::Ipv4Conf;
+#[allow(dead_code)]
+pub const WF200_PASS_MAX_LEN: usize = 64;
+#[allow(dead_code)]
+pub const WF200_SSID_MAX_LEN: usize = 32;
 
 // extra 30 bytes for the header over 1500
 pub const NET_MTU: usize = 1530;

@@ -744,7 +744,15 @@ fn xmain() -> ! {
                         let status_str = String::<STR_64_U8_SIZE>::from_str(&status);
                         let _ = buffer.replace(status_str);
                     }
-                    _ => info!("status decode failed"),
+                    _ => {
+                        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                        {
+                            let status_str = String::<STR_64_U8_SIZE>::from_str("down");
+                            let _ = buffer.replace(status_str);
+                            log::info!("replacing status with bogus data");
+                        }
+                        info!("status decode failed");
+                    },
                 };
             }
             Some(Opcode::WlanGetConfig) => {

@@ -1289,6 +1289,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "pddb",
  "rkyv",
  "smoltcp",
  "susres",
