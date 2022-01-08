@@ -66,6 +66,9 @@ pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
+    IsMounted,
+    TryMount,
+
     ListBasis,
     LatestBasis,
     /// Note that creating a basis does not automatically open it!

@@ -88,6 +88,26 @@ impl Pddb {
             trng: trng::Trng::new(&xns).unwrap(),
         }
     }
+    pub fn is_mounted(&self) -> bool {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+        match ret {
+            xous::Result::Scalar1(code) => {
+                if code == 0 {false} else {true}
+            },
+            _ => panic!("Internal error"),
+        }
+    }
+    pub fn try_mount(&self) -> bool {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+        match ret {
+            xous::Result::Scalar1(code) => {
+                if code == 0 {false} else {true}
+            },
+            _ => panic!("Internal error"),
+        }
+    }
     /// return a list of all open bases
     pub fn list_basis(&self) -> Vec::<String> {
         let list_alloc = PddbBasisList {

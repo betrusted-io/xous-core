@@ -261,6 +261,7 @@ impl BasisCache {
             Some(self.cache.len() - 1)
         }
     }
+    pub(crate) fn basis_count(&self) -> usize {self.cache.len()}
 
     /// Adds a dictionary with `name` to:
     ///    - if `basis_name` is None, the most recently opened basis
