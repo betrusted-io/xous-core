@@ -8,6 +8,7 @@ import array
 import sys
 import hashlib
 import csv
+import urllib.request
 
 from progressbar.bar import ProgressBar
 
@@ -442,6 +443,9 @@ def main():
     parser.add_argument(
         "--bounce", help="cycle the device through a reset", action="store_true"
     )
+    parser.add_argument(
+        "--factory-new", help="reset the entire image to mimic exactly what comes out of the factory, including temp files for testing. Warning: this will take a long time.", action="store_true"
+    )
     args = parser.parse_args()
 
     if not len(sys.argv) > 1:
@@ -486,35 +490,42 @@ def main():
 
     pc_usb.load_csrs() # prime the CSR values
     if "v0.8" in pc_usb.gitrev:
-        LOC_SOC    = 0x00000000
-        LOC_STAGING= 0x00280000
-        LOC_LOADER = 0x00500000
-        LOC_KERNEL = 0x00980000
-        LOC_WF200  = 0x07F80000
-        LOC_EC     = 0x07FCE000
-        LOC_AUDIO  = 0x06340000
-        LEN_AUDIO  = 0x01C40000
+        locs = {
+           "LOC_SOC"    : [0x0000_0000, "soc_csr.bin"],
+           "LOC_STAGING": [0x0028_0000, "pass"],
+           "LOC_LOADER" : [0x0050_0000, "loader.bin"],
+           "LOC_KERNEL" : [0x0098_0000, "xous.img"],
+           "LOC_WF200"  : [0x07F8_0000, "pass"],
+           "LOC_EC"     : [0x07FC_E000, "pass"],
+           "LOC_AUDIO"  : [0x0634_0000, "short_8khz.wav"],
+           "LEN_AUDIO"  : [0x01C4_0000, "pass"],
+           "LOC_PDDB"   : [0x0100_0000, "pass"],
+        }
     elif "v0.9" in pc_usb.gitrev:
-        LOC_SOC    = 0x00000000
-        LOC_STAGING= 0x00280000
-        LOC_LOADER = 0x00500000
-        LOC_KERNEL = 0x00980000
-        LOC_WF200  = 0x07F80000
-        LOC_EC     = 0x07FCE000
-        LOC_AUDIO  = 0x06340000
-        LEN_AUDIO  = 0x01C40000
-        LOC_PDDB   = 0x01000000
+        locs = {
+            "LOC_SOC"    : [0x0000_0000, "soc_csr.bin"],
+            "LOC_STAGING": [0x0028_0000, "pass"],
+            "LOC_LOADER" : [0x0050_0000, "loader.bin"],
+            "LOC_KERNEL" : [0x0098_0000, "xous.img"],
+            "LOC_WF200"  : [0x07F8_0000, "pass"],
+            "LOC_EC"     : [0x07FC_E000, "pass"],
+            "LOC_AUDIO"  : [0x0634_0000, "short_8khz.wav"],
+            "LEN_AUDIO"  : [0x01C4_0000, "pass"],
+            "LOC_PDDB"   : [0x01D8_0000, "pass"],
+        }
     elif args.force == True:
         # try the v0.9 offsets
-        LOC_SOC    = 0x00000000
-        LOC_STAGING= 0x00280000
-        LOC_LOADER = 0x00500000
-        LOC_KERNEL = 0x00980000
-        LOC_WF200  = 0x07F80000
-        LOC_EC     = 0x07FCE000
-        LOC_AUDIO  = 0x06340000
-        LEN_AUDIO  = 0x01C40000
-        LOC_PDDB   = 0x01000000
+        locs = {
+           "LOC_SOC"    : [0x00000000, "soc_csr.bin"],
+           "LOC_STAGING": [0x00280000, "pass"],
+           "LOC_LOADER" : [0x00500000, "loader.bin"],
+           "LOC_KERNEL" : [0x00980000, "xous.img"],
+           "LOC_WF200"  : [0x07F80000, "pass"],
+           "LOC_EC"     : [0x07FCE000, "pass"],
+           "LOC_AUDIO"  : [0x06340000, "short_8khz.wav"],
+           "LEN_AUDIO"  : [0x01C40000, "pass"],
+           "LOC_PDDB"   : [0x01D80000, "pass"],
+        }
     else:
         print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
@@ -526,7 +537,7 @@ def main():
 
     if args.erase_pddb:
         print("Erasing PDDB region")
-        pc_usb.erase_region(LOC_PDDB, LOC_EC - LOC_PDDB)
+        pc_usb.erase_region(locs['LOC_PDDB'][0], locs['LOC_EC'][0] - locs['LOC_PDDB'][0])
 
     if args.image:
         image_file, addr_str = args.image
@@ -540,38 +551,38 @@ def main():
         print("Staging EC firmware package '{}' in SOC memory space...".format(args.ec))
         with open(args.ec, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_EC, image, verify=verify)
+            pc_usb.flash_program(locs['LOC_EC'][0], image, verify=verify)
 
     if args.wf200 != None:
         print("Staging WF200 firmware package '{}' in SOC memory space...".format(args.wf200))
         with open(args.wf200, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_WF200, image, verify=verify)
+            pc_usb.flash_program(locs['LOC_WF200'][0], image, verify=verify)
 
     if args.staging != None:
         print("Programming SoC gateware {}".format(args.soc))
         with open(args.staging, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_STAGING, image, verify=verify)
+            pc_usb.flash_program(locs['LOC_STAGING'][0], image, verify=verify)
 
     if args.kernel != None:
         print("Programming kernel image {}".format(args.kernel))
         with open(args.kernel, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_KERNEL, image, verify=verify)
+            pc_usb.flash_program(locs['LOC_KERNEL'][0], image, verify=verify)
 
     if args.loader != None:
         print("Programming loader image {}".format(args.loader))
         with open(args.loader, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_LOADER, image, verify=verify)
+            pc_usb.flash_program(locs['LOC_LOADER'][0], image, verify=verify)
 
     if args.soc != None:
         if args.force == True:
             print("Programming SoC gateware {}".format(args.soc))
             with open(args.soc, "rb") as f:
                 image = f.read()
-                pc_usb.flash_program(LOC_SOC, image, verify=verify)
+                pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
         else:
             print("This will overwrite any secret keys in your device. Continue? (y/n)")
             confirm = input()
@@ -579,16 +590,30 @@ def main():
                 print("Programming SoC gateware {}".format(args.soc))
                 with open(args.soc, "rb") as f:
                     image = f.read()
-                    pc_usb.flash_program(LOC_SOC, image, verify=verify)
+                    pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
 
     if args.audiotest != None:
         print("Loading audio test clip {}".format(args.audiotest))
         with open(args.audiotest, "rb") as f:
             image = f.read()
-            if len(image) >= LEN_AUDIO:
+            if len(image) >= locs['LEN_AUDIO'][0]:
                 print("audio file is too long, aborting audio burn!")
             else:
-                pc_usb.flash_program(LOC_AUDIO, image, verify=verify)
+                pc_usb.flash_program(locs['LOC_AUDIO'][0], image, verify=verify)
+
+    if args.factory_new:
+        base_url = "https://ci.betrusted.io/releases/v0.9.5/"
+        # erase the entire flash
+        pc_usb.erase_region(0, 0x800_0000)
+        # burn the gateware
+        for sections in locs.values():
+            if sections[1] != 'pass':
+                print('retrieving {}'.format(base_url + sections[1]))
+                with urllib.request.urlopen(base_url + sections[1]) as f:
+                    print('burning at {:x}'.format(sections[0]))
+                    image = f.read()
+                    pc_usb.flash_program(sections[0], image, verify=False)
+
 
     print("Resuming CPU.")
     pc_usb.poke(vexdbg_addr, 0x02000000)
