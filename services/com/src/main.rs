@@ -740,7 +740,7 @@ fn xmain() -> ! {
                 let mut des = StringDes::<STR_64_WORDS, STR_64_U8_SIZE>::new();
                 match des.decode_u16(&rx_buf) {
                     Ok(status) => {
-                        info!("status: {}", status);
+                        log::debug!("status: {}", status);
                         let status_str = String::<STR_64_U8_SIZE>::from_str(&status);
                         let _ = buffer.replace(status_str);
                     }

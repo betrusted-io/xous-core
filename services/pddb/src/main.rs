@@ -406,7 +406,7 @@ struct TokenRecord {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -830,6 +830,7 @@ fn xmain() -> ! {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if key_token.is_some() {
+                    log::debug!("key list already in progress");
                     req.code = PddbRequestCode::AccessDenied;
                     buffer.replace(req).unwrap();
                     continue;
@@ -842,17 +843,31 @@ fn xmain() -> ! {
                     None
                 };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                log::debug!("counting keys in dict {} basis {:?}", dict, bname);
                 match basis_cache.key_list(&mut pddb_os, dict, bname) {
                     Ok(list) => {
-                        req.index = list.len() as u32;
-                        for key in list {
-                            key_list.push(key);
+                        log::debug!("count: {}", list.len());
+                        if list.len() > 0 {
+                            req.index = list.len() as u32;
+                            for key in list {
+                                log::debug!("key list: {}", key);
+                                key_list.push(key);
+                            }
+                        } else {
+                            log::debug!("count is 0, resetting state");
+                            // no keys to list, so reset the state
+                            key_token = None;
+                            key_list.clear();
                         }
                         req.code = PddbRequestCode::NoErr;
                     }
-                    Err(e) => match e.kind() {
-                        std::io::ErrorKind::NotFound => req.code = PddbRequestCode::NotFound,
-                        _ => req.code = PddbRequestCode::InternalError,
+                    Err(e) => {
+                        key_token = None;
+                        key_list.clear();
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => req.code = PddbRequestCode::NotFound,
+                            _ => req.code = PddbRequestCode::InternalError,
+                        }
                     }
                 }
                 buffer.replace(req).unwrap();
@@ -869,14 +884,17 @@ fn xmain() -> ! {
                         } else {
                             req.key = xous_ipc::String::<KEY_NAME_LEN>::from_str(&key_list[req.index as usize]);
                             req.code = PddbRequestCode::NoErr;
+                            log::debug!("fetching key at index {}: {}", req.index, req.key);
                             // the last index requested must be the highest one!
                             if req.index == key_list.len() as u32 - 1 {
+                                log::debug!("last key, resetting state");
                                 key_token = None;
                                 key_list.clear();
                             }
                         }
                     }
                 } else {
+                    log::debug!("multiple concurrent requests detected, returning error");
                     req.code = PddbRequestCode::AccessDenied;
                 }
                 buffer.replace(req).unwrap();
@@ -897,9 +915,14 @@ fn xmain() -> ! {
                     None
                 };
                 let list = basis_cache.dict_list(&mut pddb_os, bname);
-                req.index = list.len() as u32;
-                for dict in list {
-                    dict_list.push(dict);
+                if list.len() > 0 {
+                    req.index = list.len() as u32;
+                    for dict in list {
+                        dict_list.push(dict);
+                    }
+                } else { // no dicts to list, reset the state
+                    dict_token = None;
+                    dict_list.clear();
                 }
                 req.code = PddbRequestCode::NoErr;
                 buffer.replace(req).unwrap();

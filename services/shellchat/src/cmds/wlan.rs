@@ -34,7 +34,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
         env: &mut CommonEnv,
     ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status]";
+        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status] [save]";
         let mut show_help = false;
 
         let mut tokens = args.as_str().unwrap().split(' ');
