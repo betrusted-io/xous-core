@@ -188,8 +188,9 @@ fn xmain() -> ! {
     let cm_cid = xous::connect(cm_sid).unwrap();
     let activity_interval = Arc::new(AtomicU32::new(0));
     thread::spawn({
+        let activity_interval = activity_interval.clone();
         move || {
-            connection_manager::connection_manager(cm_sid, activity_interval.clone());
+            connection_manager::connection_manager(cm_sid, activity_interval);
         }
     });
 
@@ -623,6 +624,7 @@ fn xmain() -> ! {
                             }
                         },
                         ComIntSources::WlanRxReady => {
+                            activity_interval.store(0, Ordering::Relaxed); // reset the activity interval to 0
                             if let Some(_config) = net_config {
                                 if let Some(rxlen) = maybe_rxlen {
                                     match iface.device_mut().push_rx_avail(rxlen) {
