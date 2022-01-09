@@ -60,13 +60,13 @@ There is one wart, where the [font maps are defined](https://github.com/betruste
 + 2097_FFFF |   Extended fonts in PDDB               |
 +-----------+----------------------------------------+
 + 2098_0000 |   Xous kernel plus                     |
-+ 20F7_FFFF |   Initial/trusted server set           |
++ 2138_3FFF |   Initial/trusted server set           |
 +-----------+----------------------------------------+
-+ 20F8_0000 |   Reserved                             |
-+ 20FF_FFFF |                                        |
++ 2138_0000 |   Update staging area                  |
++ 21D7_FFFF |   Reserved                             |
 +-----------+----------------------------------------+
-+ 2100_0000 |   PDDB 'filesystem'                    |
-+ 27F7_FFFF |                                        |
++ 21D8_0000 |   PDDB 'filesystem'                    |
++ 27F7_FFFF |   98MiB, ~97.5MiB usable               |
 +-----------+----------------------------------------+
 + 27F8_0000 |   512k reserved space for EC image     |
 + 27FF_FFFF |   Split into 300k wf200 + 200k EC fw   |
