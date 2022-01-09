@@ -16,6 +16,8 @@ use std::io::Write;
 pub use smoltcp::wire::Icmpv4DstUnreachable;
 
 pub(crate) const SERVER_NAME_NET: &str     = "_Middleware Network Server_";
+#[allow(dead_code)]
+pub const AP_DICT_NAME: &'static str = "wlan_ap_list";
 
 /// Dispatch opcodes to the Net crate main loop.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

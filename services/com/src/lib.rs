@@ -380,27 +380,25 @@ impl Com {
         )
     }
 
-    pub fn wlan_set_ssid(&mut self, s: &String<1024>) -> Result<xous::Result, xous::Error> {
+    pub fn wlan_set_ssid(&mut self, s: &str) -> Result<xous::Result, xous::Error> {
         use core::fmt::Write;
         // Enforce WF200 driver API length limit
-        const WF200_SSID_MAX_LEN: usize = 32;
-        if s.len() > WF200_SSID_MAX_LEN {
+        if s.len() > api::WF200_SSID_MAX_LEN {
             return Err(xous::Error::InvalidString);
         }
-        let mut copy: String::<WF200_SSID_MAX_LEN> = String::new();
+        let mut copy: String::<{api::WF200_SSID_MAX_LEN}> = String::new();
         let _ = write!(copy, "{}", s);
         let buf = Buffer::into_buf(copy).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::WlanSetSSID.to_u32().unwrap())
     }
 
-    pub fn wlan_set_pass(&mut self, s: &String<1024>) -> Result<xous::Result, xous::Error> {
+    pub fn wlan_set_pass(&mut self, s: &str) -> Result<xous::Result, xous::Error> {
         use core::fmt::Write;
         // Enforce WF200 driver API length limit
-        const WF200_PASS_MAX_LEN: usize = 64;
-        if s.len() > WF200_PASS_MAX_LEN {
+        if s.len() > api::WF200_PASS_MAX_LEN {
             return Err(xous::Error::InvalidString);
         }
-        let mut copy: String::<WF200_PASS_MAX_LEN> = String::new();
+        let mut copy: String::<{api::WF200_PASS_MAX_LEN}> = String::new();
         let _ = write!(copy, "{}", s);
         let buf = Buffer::into_buf(copy).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::WlanSetPass.to_u32().unwrap())
@@ -421,14 +419,14 @@ impl Com {
         )
     }
 
-    pub fn wlan_status(&mut self) -> Result<String<160>, xous::Error> {
+    pub fn wlan_status(&mut self) -> Result<std::string::String, xous::Error> {
         // TODO: how to make this return IP, netmask, gateway, DNS server, and STA MAC?
         const STATUS_MAX_LEN: usize = 160;
         let status = xous_ipc::String::<STATUS_MAX_LEN>::new();
         let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::WlanStatus.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let response = buf.to_original::<xous_ipc::String::<STATUS_MAX_LEN>, _>().unwrap();
-        Ok(response)
+        Ok(std::string::String::from(response.as_str().expect("status contained non-utf8 characters")))
     }
 
     pub fn wlan_get_config(&self) -> Result<Ipv4Conf, xous::Error> {

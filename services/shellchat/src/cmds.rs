@@ -127,6 +127,7 @@ pub struct CmdEnv {
     jtag_cmd: JtagCmd,
     net_cmd: NetCmd,
     pddb_cmd: PddbCmd,
+    wlan_cmd: Wlan,
 
     //fcc_cmd: Fcc,
 }
@@ -181,6 +182,7 @@ impl CmdEnv {
             jtag_cmd: JtagCmd::new(&xns),
             net_cmd: NetCmd::new(&xns),
             pddb_cmd: PddbCmd::new(&xns),
+            wlan_cmd: Wlan::new(),
 
             //fcc_cmd: fcc,
         }
@@ -190,7 +192,6 @@ impl CmdEnv {
         let mut ret = String::<1024>::new();
 
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
-        let mut wlan_cmd = Wlan {};
         let mut ver_cmd = Ver{};
         let mut backlight_cmd = Backlight{};
         let mut accel_cmd = Accel{};
@@ -217,7 +218,7 @@ impl CmdEnv {
             &mut console_cmd,
             // &mut self.memtest_cmd,
             &mut self.keys_cmd,
-            &mut wlan_cmd,
+            &mut self.wlan_cmd,
             &mut self.jtag_cmd,
             &mut self.net_cmd,
             &mut self.pddb_cmd,

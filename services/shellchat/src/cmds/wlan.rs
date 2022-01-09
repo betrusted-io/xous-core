@@ -1,9 +1,18 @@
 use crate::{CommonEnv, ShellCmdApi};
 use core::fmt::Write;
+use std::io::Write as PddbWrite;
 use xous_ipc::String;
 
 #[derive(Debug)]
-pub struct Wlan {}
+pub struct Wlan {
+    current_ssid: Option<std::string::String>,
+    current_pass: Option<std::string::String>,
+}
+impl Wlan {
+    pub fn new() -> Self {
+        Wlan { current_ssid: None, current_pass: None }
+    }
+}
 
 /**
 wlan shell command:
@@ -25,7 +34,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
         env: &mut CommonEnv,
     ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status]";
+        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status] [save]";
         let mut show_help = false;
 
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -49,19 +58,61 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     if val.len() == 0 {
                         let _ = write!(ret, "Error: SSID too short");
                     } else {
-                        let _ = match env.com.wlan_set_ssid(&val) {
-                            Ok(_) => write!(ret, "wlan setssid {}", val),
-                            Err(_) => write!(ret, "Error: SSID too long for WF200"),
+                        let _ = match env.com.wlan_set_ssid(val.as_str().expect("not valid utf-8")) {
+                            Ok(_) => {
+                                self.current_ssid = Some(std::string::String::from(val.as_str().unwrap()));
+                                write!(ret, "wlan setssid {}", val).unwrap()
+                            },
+                            Err(_) => write!(ret, "Error: SSID too long for WF200").unwrap(),
                         };
                     }
                 }
                 "setpass" => {
                     let mut val = String::<1024>::new();
                     join_tokens(&mut val, &mut tokens);
-                    let _ = match env.com.wlan_set_pass(&val) {
-                        Ok(_) => write!(ret, "wlan setpass {}", val),
-                        Err(_) => write!(ret, "Error: passphrase too long for WF200"),
+                    let _ = match env.com.wlan_set_pass(val.as_str().expect("not valid utf-8")) {
+                        Ok(_) => {
+                            self.current_pass = Some(std::string::String::from(val.as_str().unwrap()));
+                            write!(ret, "wlan setpass {}", val).unwrap()
+                        },
+                        Err(_) => write!(ret, "Error: passphrase too long for WF200").unwrap(),
                     };
+                }
+                "save" => {
+                    let mut pddb = pddb::Pddb::new();
+                    if let Some(ssid) = &self.current_ssid {
+                        if let Some(pass) = &self.current_pass {
+                            match pddb.get(
+                                net::AP_DICT_NAME, &ssid, None,
+                                true, true, Some(com::api::WF200_PASS_MAX_LEN), Some(||{})) {
+                                Ok(mut entry) => {
+                                    match entry.write(&pass.as_bytes()) {
+                                        Ok(len) => {
+                                            if len != pass.len() {
+                                                write!(ret, "PDDB wrote only {} of {} bytes of password", len, pass.len()).unwrap();
+                                            } else {
+                                                // for now, we should always call flush at the end of a routine; perhaps in the
+                                                // future we'll have a timer that automatically syncs the pddb
+                                                entry.flush().expect("couldn't sync pddb cache");
+                                                write!(ret, "SSID/pass combo saved to PDDB").unwrap();
+                                            }
+                                        }
+                                        Err(e) => {
+                                            write!(ret, "PDDB error storing key: {:?}", e).unwrap();
+                                        }
+                                    }
+                                },
+                                Err(e) => {
+                                    write!(ret, "PDDB error creating key: {:?}", e).unwrap();
+                                }
+                            }
+                        } else {
+                            write!(ret, "No password currently set").unwrap();
+                        }
+                    } else {
+                        write!(ret, "No SSID currently set").unwrap();
+                    }
+
                 }
                 "join" => {
                     let _ = match env.com.wlan_join() {
