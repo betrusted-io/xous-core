@@ -27,7 +27,7 @@ pub const LOADER_FONT_LEN: u32 = 0x0045_0000; // length of font region only
 pub const LOADER_TOTAL_LEN: u32 = LOADER_CODE_LEN + LOADER_FONT_LEN; // code + font
 
 pub const KERNEL_LOC: u32 = 0x0098_0000; // kernel start
-pub const KERNEL_LEN: u32 = 0x0068_0000; // max kernel length
+pub const KERNEL_LEN: u32 = 0x0148_0000; // max kernel length = 0xA0_0000 * 2 => half the area for backup kernel & updates
 
 pub const EC_REGION_LOC: u32 = 0x07F8_0000; // EC update staging area. Must be aligned to a 64k-address.
 pub const EC_WF200_PKG_LOC: u32 = 0x07F8_0000;
@@ -36,7 +36,7 @@ pub const EC_FW_PKG_LOC: u32 = 0x07FC_E000;
 pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
 pub const EC_REGION_LEN: u32 = 0x0008_0000;
 
-pub const PDDB_LOC: u32 = 0x0100_0000; // PDDB start
+pub const PDDB_LOC: u32 = 0x01D8_0000; // PDDB start
 pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC; // must be 64k-aligned (bulk erase block size) for proper function.
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
