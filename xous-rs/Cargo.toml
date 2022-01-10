@@ -9,9 +9,9 @@ repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
 [dependencies]
-bitflags = {version = "1", optional = true }
+bitflags = {version = "1.2.1", optional = true }
 xous-macros = { path = "../macros", version = "0.1.0", optional = true }
-log = { version = "0.4", optional = true }
+log = { version = "0.4.14", optional = true }
 core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
 compiler_builtins = { version = '0.1.0', optional = true }
 
@@ -38,6 +38,6 @@ processes-as-threads = []
 default = ["bit-flags", "xous-macros"]
 
 [target.'cfg(any(windows,unix))'.dependencies]
-lazy_static = "1.4"
-hex = "0.4"
-debug-here = "*"
+lazy_static = "1.4.0"
+hex = "0.4.3"
+debug-here = "0.2.2"

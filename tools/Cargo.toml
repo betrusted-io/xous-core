@@ -9,13 +9,13 @@ version = "0.1.0"
 
 [dependencies]
 bitflags = "1.2.1"
-clap = "2.33"
+clap = "2.33.3"
 crc = "1.8.1"
-csv = "1.1"
+csv = "1.1.5"
 ring = "0.16.20"
-env_logger = "0.7"
+env_logger = "0.7.1"
 log = "0.4.14"
-pem = "0.8"
+pem = "0.8.3"
 svd2utra = {path = "../svd2utra"}
 xmas-elf = "0.7.0"
 

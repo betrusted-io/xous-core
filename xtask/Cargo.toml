@@ -6,8 +6,8 @@ authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 
 [dependencies]
-curl = "0.4"
-atty = "0.2"
-filetime = "0.2"
-rustc_version = "0.4"
-zip = "0.5"
+curl = "0.4.35"
+atty = "0.2.14"
+filetime = "0.2.14"
+rustc_version = "0.4.0"
+zip = "0.5.13"
