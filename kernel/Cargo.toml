@@ -42,7 +42,7 @@ crossbeam-channel = "0.5"
 debug-here = "0.2.2"
 hex = "0.4"
 lazy_static = "1.4"
-rand = "0.8.4"
+rand = "0.7.3"
 rand_chacha = "0.3.1"
 
 [profile.release]
