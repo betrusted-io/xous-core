@@ -1,5 +1,6 @@
-use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
+use rand_chacha::rand_core::RngCore;
+use rand_chacha::rand_core::SeedableRng;
 use crate::*;
 use core::sync::atomic::{AtomicU64, Ordering};
 use std::collections::{BTreeSet, HashSet};
@@ -13,10 +14,12 @@ static RNG_LOCAL_STATE: AtomicU64 = AtomicU64::new(3);
 fn gen_key(dictname: &str, keynum: usize, lower_size_bound: usize, upper_size_bound: usize) -> (String, Vec::<u8>) {
     let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst) + xous::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
     // we want roughly half our keys to be in the small bin, and half in the large bin
-    let keylen = if rng.gen_bool(0.5) {
-        rng.gen_range(lower_size_bound..VPAGE_SIZE)
+    let keylen = if rng.next_u32() < (u32::MAX / 2) {
+        ((rng.next_u64() as usize) % (VPAGE_SIZE - lower_size_bound)) + lower_size_bound
+        //rng.gen_range(lower_size_bound..VPAGE_SIZE) // older API used to minimize crate count
     } else {
-        rng.gen_range(VPAGE_SIZE..upper_size_bound)
+        ((rng.next_u64() as usize) % (upper_size_bound - VPAGE_SIZE)) + VPAGE_SIZE
+        //rng.gen_range(VPAGE_SIZE..upper_size_bound) // older API used to minimize crate count
     };
     // record the owning dictionary name & length with the key. This isn't mandatory for a key name,
     // but it helps the test checking program check things.
