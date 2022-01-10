@@ -6,8 +6,9 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
 [dependencies]
-quick-xml = "0.19"
-clap = "2"
-anyhow = "1.0"
-convert_case = "0.4"
+quick-xml = "0.19.0"
+clap = "2.33.3"
+anyhow = "1.0.43"
+convert_case = "0.4.0"

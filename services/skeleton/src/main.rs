@@ -95,7 +95,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(codec_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     loop {
         let msg = xous::receive_message(codec_sid).unwrap();

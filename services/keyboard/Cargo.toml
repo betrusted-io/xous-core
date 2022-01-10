@@ -5,6 +5,7 @@ edition = "2018"
 name = "keyboard"
 version = "0.1.0"
 
+# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
 [dependencies]
 log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
 log-server = {path = "../log-server"}
@@ -15,8 +16,8 @@ xous-names = {path = "../xous-names"}
 llio = {path = "../llio"}
 susres = {path = "../susres"}
 
-num-derive = {version = "0.3", default-features = false}
-num-traits = {version = "0.2", default-features = false}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

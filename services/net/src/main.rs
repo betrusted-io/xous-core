@@ -181,7 +181,7 @@ fn xmain() -> ! {
     log::trace!("ready to accept requests");
     // register a suspend/resume listener
     let sr_cid = xous::connect(net_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     // kick off the connection manager thread
     let cm_sid = xous::create_server().expect("couldn't create connection manager server");

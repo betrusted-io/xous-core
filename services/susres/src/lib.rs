@@ -18,7 +18,7 @@ pub struct Susres {
 }
 impl Susres {
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
+    pub fn new(order: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
         let execution_gate_conn = xns.request_connection_blocking(api::SERVER_NAME_EXEC_GATE).expect("Can't connect to the execution gate");
@@ -30,6 +30,7 @@ impl Susres {
             sid: sid_tuple,
             id: cb_discriminant,
             cid,
+            order: order.unwrap_or(SuspendOrder::Normal),
         };
         let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
         buf.lend(conn, Opcode::SuspendEventSubscribe.to_u32().unwrap())?;

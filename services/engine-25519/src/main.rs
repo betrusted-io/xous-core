@@ -749,7 +749,7 @@ fn susres_thread(engine_arg: usize) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(susres_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     log::trace!("starting engine25519 suspend/resume manager loop");
     loop {

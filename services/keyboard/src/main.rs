@@ -833,7 +833,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let self_cid = xous::connect(kbd_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, Opcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
 
     // start a thread that can ping the keyboard loop when a key is held down
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();

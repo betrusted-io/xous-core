@@ -284,7 +284,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let main_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, main_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, main_cid).expect("couldn't create suspend/resume object");
 
     // create a policy menu object
     let mut policy_menu = gam::menu::Menu::new(crate::ROOTKEY_MENU_NAME);

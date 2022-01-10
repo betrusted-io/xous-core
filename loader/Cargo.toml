@@ -5,6 +5,7 @@ authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 description = "Initial kernel loader for Xous"
 
+# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
 [dependencies]
 utralib = { path = "utralib" }
 
@@ -14,7 +15,7 @@ branch = "main"
 
 [dependencies.curve25519-dalek]
 package = "curve25519-dalek"
-version = "3"
+version = "3.1.0"
 default-features = false
 features = ["u32e_backend"]
 
@@ -25,7 +26,6 @@ default-features = false
 
 [dev-dependencies]
 lazy_static = "1.4.0"
-#rand = "0.7.3"
 
 [features]
 debug-print = []

@@ -5,15 +5,16 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Manager of suspend/resume operations"
 
+# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
 [dependencies]
 xous = { path = "../../xous-rs" }
 log-server = { path = "../log-server" }
 xous-names = { path = "../xous-names" }
-log = "0.4"
+log = "0.4.14"
 
 xous-ipc = {path="../../xous-ipc"}
-num-derive = {version = "0.3", default-features = false}
-num-traits = {version = "0.2", default-features = false}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 
