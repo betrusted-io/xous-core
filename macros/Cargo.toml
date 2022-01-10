@@ -15,7 +15,7 @@ edition = "2018"
 [lib]
 proc-macro = true
 
-# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
+# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 quote = "1.0"
 proc-macro2 = "1.0"
