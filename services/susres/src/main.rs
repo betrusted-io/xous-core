@@ -459,6 +459,7 @@ struct ScalarCallback {
     ready_to_suspend: bool,
     token: u32,
     failed_to_suspend: bool,
+    order: crate::api::SuspendOrder,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -598,6 +599,7 @@ fn xmain() -> ! {
     let mut allow_suspend = true;
 
     let mut suspend_subscribers: [Option<ScalarCallback>; 32] = [None; 32];
+    let mut current_op_order = crate::api::SuspendOrder::Early;
     loop {
         let msg = xous::receive_message(susres_sid).unwrap();
         if reboot_requested {
@@ -648,14 +650,17 @@ fn xmain() -> ! {
                         let mut all_ready = true;
                         for maybe_sub in suspend_subscribers.iter() {
                             if let Some(sub) = maybe_sub {
-                                if sub.ready_to_suspend == false {
-                                    log::trace!("not ready: {}", sub.token);
-                                    all_ready = false;
-                                    break;
+                                if sub.order == current_op_order {
+                                    if sub.ready_to_suspend == false {
+                                        log::trace!("not ready: {}", sub.token);
+                                        all_ready = false;
+                                        break;
+                                    }
                                 }
                             };
                         }
-                        if all_ready {
+                        // note: we must have at least one `Last` subscriber for this logic to work!
+                        if all_ready && current_op_order == crate::api::SuspendOrder::Last {
                             log::trace!("all callbacks reporting in, doing suspend");
                             timeout_pending = false;
                             //susres_hw.debug_delay(500);
@@ -670,6 +675,17 @@ fn xmain() -> ! {
                             log::trace!("low-level resume done, restoring execution");
                             RESUME_EXEC.store(true, Ordering::Relaxed);
                             susres_hw.restore_wfi();
+                        } else if all_ready {
+                            // the current order is finished, send the next tranche
+                            current_op_order = current_op_order.next();
+                            let mut at_least_one_event_sent = false;
+                            while !at_least_one_event_sent {
+                                let (send_success, next_op_order) = send_event(&suspend_subscribers, current_op_order);
+                                if !send_success {
+                                    current_op_order = next_op_order;
+                                }
+                                at_least_one_event_sent = send_success;
+                            }
                         } else {
                             log::trace!("still waiting on callbacks, returning to main loop");
                         }
@@ -699,7 +715,15 @@ fn xmain() -> ! {
                             Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
                         ).expect("couldn't initiate timeout before suspend!");
 
-                        send_event(&suspend_subscribers);
+                        current_op_order = crate::api::SuspendOrder::Early;
+                        let mut at_least_one_event_sent = false;
+                        while !at_least_one_event_sent {
+                            let (send_success, next_op_order) = send_event(&suspend_subscribers, current_op_order);
+                            if !send_success {
+                                current_op_order = next_op_order;
+                            }
+                            at_least_one_event_sent = send_success;
+                        }
                     } else {
                         log::warn!("suspend requested, but the system was not allowed to suspend. Ignoring request.")
                     }
@@ -781,6 +805,7 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
         ready_to_suspend: false,
         token: 0,
         failed_to_suspend: false,
+        order: hookdata.order,
     };
     for i in 0..cb_conns.len() {
         if cb_conns[i].is_none() {
@@ -802,13 +827,18 @@ fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
         *entry = None;
     }
 }
-fn send_event(cb_conns: &[Option<ScalarCallback>; 32]) {
+fn send_event(cb_conns: &[Option<ScalarCallback>; 32], order: crate::api::SuspendOrder) -> (bool, crate::api::SuspendOrder) {
+    let mut at_least_one_event_sent = false;
     for entry in cb_conns.iter() {
         if let Some(scb) = entry {
-            xous::send_message(scb.server_to_cb_cid,
-                xous::Message::new_scalar(SuspendEventCallback::Event.to_usize().unwrap(),
-                   scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, scb.token as usize, 0)
-            ).unwrap();
+            if scb.order == order {
+                at_least_one_event_sent = true;
+                xous::send_message(scb.server_to_cb_cid,
+                    xous::Message::new_scalar(SuspendEventCallback::Event.to_usize().unwrap(),
+                    scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, scb.token as usize, 0)
+                ).unwrap();
+            }
         };
     }
+    (at_least_one_event_sent, order.next())
 }

@@ -6,6 +6,29 @@ use utralib::generated::*;
 pub(crate) const SERVER_NAME_SUSRES: &str     = "_Suspend/resume manager_";
 pub(crate) const SERVER_NAME_EXEC_GATE: &str  = "_Suspend/resume execution gate_";
 
+/// Note: there must be at least one subscriber to the `Last` suspend order event, otherwise
+/// the logic will never terminate. There may be multiple `Last` subscribers, but the order at
+/// which they finish would be indeterminate. Currently, the `Last` subscriber is the `spinor`
+/// block, which is last because you want to make sure all the PDDB commits and other saved
+/// data are flushed before turning off access to the SPINOR.
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, PartialEq, Eq)]
+pub enum SuspendOrder {
+    Early,
+    Normal,
+    Late,
+    Last,
+}
+impl SuspendOrder {
+    pub fn next(&self) -> SuspendOrder {
+        match self {
+            SuspendOrder::Early => SuspendOrder::Normal,
+            SuspendOrder::Normal => SuspendOrder::Late,
+            SuspendOrder::Late => SuspendOrder::Last,
+            SuspendOrder::Last => SuspendOrder::Last,
+        }
+    }
+}
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// requests a suspend
@@ -45,6 +68,7 @@ pub(crate) struct ScalarHook {
     pub sid: (u32, u32, u32, u32),
     pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
     pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
+    pub order: SuspendOrder,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

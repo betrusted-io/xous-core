@@ -342,7 +342,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(com_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     // create an array to track return connections for battery stats
     let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];

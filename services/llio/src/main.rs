@@ -606,7 +606,7 @@ fn i2c_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     let mut suspend_pending_token: Option<usize> = None;
     log::trace!("starting i2c main loop");
@@ -724,7 +724,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
     let mut latest_activity = 0;
 
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
