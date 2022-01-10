@@ -5,6 +5,7 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Content Canvas Plugin Common APIs"
 
+# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
 [dependencies]
 xous = { path = "../../xous-rs" }
 rkyv = { version = "0.4.3", default_features = false }

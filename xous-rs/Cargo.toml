@@ -8,6 +8,7 @@ description = "System call interface for Xous"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
+# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
 [dependencies]
 bitflags = {version = "1.2.1", optional = true }
 xous-macros = { path = "../macros", version = "0.1.0", optional = true }
