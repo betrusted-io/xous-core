@@ -12,27 +12,27 @@ xous-ipc = { path = "../../xous-ipc" }
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
-log = "0.4"
-num-derive = {version = "0.3", default-features = false}
-num-traits = {version = "0.2", default-features = false}
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
 susres = {path = "../susres"}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 trng = {path = "../trng"}
 spinor = {path = "../spinor"}
 aes = {path="../aes"}
-rand_core = "0.5"
+rand_core = "0.5.1"
 root-keys = {path="../root-keys"}
-cipher = "0.3"
+cipher = "0.3.0"
 bitfield = "0.13.2"
 aes-gcm-siv = "0.10.3"
 llio = {path="../llio"}
 
 # passwords
 sha2 = {path = "../engine-sha512"}
-digest = "0.9"
+digest = "0.9.0"
 
 # bcrypt
-blowfish = { version = "0.8", features = ["bcrypt"] }
+blowfish = { version = "0.8.0", features = ["bcrypt"] }
 
 # UX (for password entry and notifications)
 gam = {path="../gam"}

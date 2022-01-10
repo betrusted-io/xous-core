@@ -9,9 +9,9 @@ description = "sha2 hardware accelerator engine"
 utralib = {path = "../utralib"}
 
 # Rust-standard digest API dependencies
-digest = "0.9"
-block-buffer = "0.9"
-opaque-debug = "0.3" # prevents internal hash state leakage from debug structures
+digest = "0.9.0"
+block-buffer = "0.9.0"
+opaque-debug = "0.3.0" # prevents internal hash state leakage from debug structures
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../utralib"}

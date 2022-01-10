@@ -10,5 +10,5 @@ xous = { path = "../../xous-rs" }
 rkyv = { version = "0.4.3", default_features = false }
 graphics-server = { path="../graphics-server"} # this is used by the IMEF portion of the API
 xous-names = {path="../xous-names"} # used by the IMEF for registering listeners
-log = "0.4"
+log = "0.4.14"
 

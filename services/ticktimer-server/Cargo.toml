@@ -6,11 +6,11 @@ name = "ticktimer-server"
 version = "0.1.0"
 
 [dependencies]
-log = "0.4"
+log = "0.4.14"
 log-server = {path = "../log-server"}
 xous = {path = "../../xous-rs"}
-num-derive = {version = "0.3", default-features = false}
-num-traits = {version = "0.2", default-features = false}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
 susres = {path = "../susres"}
 xous-names = {path = "../xous-names"}
 

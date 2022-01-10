@@ -9,7 +9,7 @@ description = "Program to test various aspects of the kernel"
 xous = { path = "../../xous-rs" }
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
-log = "0.4"
+log = "0.4.14"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

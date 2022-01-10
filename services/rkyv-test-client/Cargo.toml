@@ -6,7 +6,7 @@ name = "rkyv-test-client"
 version = "0.1.0"
 
 [dependencies]
-log = "0.4"
+log = "0.4.14"
 log-server = {path = "../log-server"}
 rkyv-test-server = {path = "../rkyv-test-server"}
 ticktimer-server = {path = "../ticktimer-server"}

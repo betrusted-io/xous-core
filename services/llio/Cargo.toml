@@ -6,7 +6,7 @@ name = "llio"
 version = "0.1.0"
 
 [dependencies]
-log = "0.4"
+log = "0.4.14"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
@@ -14,8 +14,8 @@ xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 susres = {path = "../susres"}
 
-num-derive = {version = "0.3", default-features = false}
-num-traits = {version = "0.2", default-features = false}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

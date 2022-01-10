@@ -15,8 +15,8 @@ xous-names = {path = "../xous-names"}
 llio = {path = "../llio"}
 susres = {path = "../susres"}
 
-num-derive = {version = "0.3", default-features = false}
-num-traits = {version = "0.2", default-features = false}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

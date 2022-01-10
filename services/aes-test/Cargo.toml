@@ -6,9 +6,9 @@ name = "aes-test"
 version = "0.1.0"
 
 [dependencies]
-log = "0.4"
+log = "0.4.14"
 log-server = {path = "../log-server"}
-hex-literal = "0.3"
+hex-literal = "0.3.1"
 xous = {path = "../../xous-rs"}
 
 [features]

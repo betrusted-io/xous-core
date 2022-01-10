@@ -10,19 +10,19 @@ xous = { path = "../../xous-rs" }
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
-log = "0.4"
+log = "0.4.14"
 susres = {path = "../susres"}
 trng = { path = "../trng" }
 
 xous-ipc = { path = "../../xous-ipc" }
-num-derive = {version = "0.3", default-features = false}
-num-traits = {version = "0.2", default-features = false}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 # Rust-standard digest API dependencies
-digest = "0.9"
-block-buffer = "0.9"
-opaque-debug = "0.3" # prevents internal hash state leakage from debug structures
+digest = "0.9.0"
+block-buffer = "0.9.0"
+opaque-debug = "0.3.0" # prevents internal hash state leakage from debug structures
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
