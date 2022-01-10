@@ -3,7 +3,7 @@ name = "wycheproof-import"
 version = "0.1.0"
 edition = "2018"
 
-# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
+# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 eyre = "0.6.5"
 serde = { version = "1.0.129", features = ["derive"] }
