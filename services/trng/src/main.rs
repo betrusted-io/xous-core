@@ -467,8 +467,9 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
-    use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;
+    use rand_chacha::rand_core::SeedableRng;
+    use rand_chacha::rand_core::RngCore;
     use crate::api::{HealthTests, TrngBuf, TrngErrors};
 
     pub struct Trng {
@@ -502,7 +503,9 @@ mod implementation {
             }
             self.msgcount += 1;
             let mut data = [0; 1024];
-            self.rng.fill(&mut data);
+            for d in data.iter_mut() {
+                *d = self.rng.next_u32();
+            }
             TrngBuf {
                 data,
                 len,
