@@ -20,6 +20,8 @@ use llio::Weekday;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+
 #[cfg_attr(
     not(any(target_os = "none", target_os = "xous")),
     allow(unused_imports)
@@ -71,16 +73,18 @@ pub fn dt_callback(dt: llio::DateTime) {
     }
 }
 
-pub fn pump_thread(conn: usize) {
+pub fn pump_thread(conn: usize, pump_run: Arc<AtomicBool>) {
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     loop {
-        match send_message(
-            conn as u32,
-            Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
-        ) {
-            Err(xous::Error::ServerNotFound) => break,
-            Ok(xous::Result::Ok) => {}
-            _ => panic!("unhandled error in status pump thread"),
+        if pump_run.load(Ordering::Relaxed) {
+            match send_message(
+                conn as u32,
+                Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+            ) {
+                Err(xous::Error::ServerNotFound) => break,
+                Ok(xous::Result::Ok) => {}
+                _ => panic!("unhandled error in status pump thread"),
+            }
         }
         ticktimer.sleep_ms(1000).unwrap();
     }
@@ -125,8 +129,14 @@ fn xmain() -> ! {
         .expect("|status: can't register server");
     // create a connection for callback hooks
     unsafe { CB_TO_MAIN_CONN = Some(xous::connect(status_sid).unwrap()) };
+    let pump_run = Arc::new(AtomicBool::new(true));
     let pump_conn = xous::connect(status_sid).unwrap();
-    xous::create_thread_1(pump_thread, pump_conn as _).expect("couldn't create pump thread");
+    let _ = thread::spawn({
+        let pump_run = pump_run.clone();
+        move || {
+            pump_thread(pump_conn as _, pump_run);
+        }
+    });
 
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
@@ -501,6 +511,7 @@ fn xmain() -> ! {
                 datetime = Some(dt);
             }
             Some(StatusOpcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
+                pump_run.store(false, Ordering::Relaxed); // stop status updates while we do this
                 let secs: u8;
                 let mins: u8;
                 let hours: u8;
@@ -584,6 +595,7 @@ fn xmain() -> ! {
                     weekday
                 };
                 rtc.set_rtc(dt).expect("couldn't set the current time");
+                pump_run.store(true, Ordering::Relaxed); // stop status updates while we do this
             }),
             Some(StatusOpcode::Quit) => {
                 break;

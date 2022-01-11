@@ -698,10 +698,10 @@ fn xmain() -> ! {
 
     // create the I2C handler thread
     // - codec
-    // - rtc xx -> this is now handed off directly in the spawn of the sub command
+    // - rtc
     // - shellchat
     // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(2)).expect("can't register I2C thread");
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let _ = thread::spawn({
         let i2c_sid = i2c_sid.clone();
