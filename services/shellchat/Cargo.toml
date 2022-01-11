@@ -35,6 +35,7 @@ jtag = {path="../jtag"}
 net = {path="../net"}
 dns = {path="../dns"}
 pddb = {path="../pddb"}
+modals = {path="../modals"}
 
 trng = {path = "../trng"}
 

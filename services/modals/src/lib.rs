@@ -177,6 +177,40 @@ impl Modals {
         Ok(ret)
     }
 
+    pub fn dynamic_notification(&self, title: Option<&str>, text: Option<&str>) -> Result<(), xous::Error> {
+        self.lock();
+        let spec = DynamicNotification {
+            token: self.token,
+            title: if let Some(t) = title {Some(xous_ipc::String::from_str(t))} else {None},
+            text: if let Some(t) = text {Some(xous_ipc::String::from_str(t))} else {None},
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DynamicNotification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+    pub fn dynamic_notification_update(&self, title: Option<&str>, text: Option<&str>) -> Result<(), xous::Error> {
+        let spec = DynamicNotification {
+            token: self.token,
+            title: if let Some(t) = title {Some(xous_ipc::String::from_str(t))} else {None},
+            text: if let Some(t) = text {Some(xous_ipc::String::from_str(t))} else {None},
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::UpdateDynamicNotification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+    pub fn dynamic_notification_close(&self) -> Result<(), xous::Error> {
+        self.lock();
+        send_message(self.conn,
+            Message::new_scalar(Opcode::CloseDynamicNotification.to_usize().unwrap(),
+            self.token[0] as usize,
+            self.token[1] as usize,
+            self.token[2] as usize,
+            self.token[3] as usize,
+            )
+        ).expect("couldn't stop progress");
+        Ok(())
+    }
+
     /// busy-wait until we have acquired a mutex on the Modals server
     fn lock(&self) {
         while !self.try_get_mutex() {

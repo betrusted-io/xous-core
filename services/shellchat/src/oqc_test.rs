@@ -1,5 +1,4 @@
 use num_traits::*;
-use gam::modal::*;
 use keyboard::{RowCol, KeyRawStates};
 use core::sync::atomic::{AtomicU32, Ordering, AtomicBool};
 use std::sync::Arc;
@@ -38,21 +37,9 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
     );
     let com = com::Com::new(&xns).unwrap();
     let llio = llio::Llio::new(&xns);
+    let gam = gam::Gam::new(&xns).unwrap();
 
-    let test_cid = xous::connect(oqc_sid).unwrap();
-    let mut test_action = Notification::new(
-        test_cid,
-        OqcOp::UxGutter.to_u32().unwrap()
-    );
-    test_action.manual_dismiss = false;
-    let mut test_modal = Modal::new(
-        "test modal",
-        ActionType::Notification(test_action),
-        None,
-        Some("Initializing..."),
-        GlyphStyle::Small,
-        8
-    );
+    let modal = modals::Modals::new(&xns).unwrap();
     let mut test_run = false;
     let mut remaining = populate_vectors();
     let mut bot_str = String::new();
@@ -69,15 +56,9 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(OqcOp::Trigger) => xous::msg_blocking_scalar_unpack!(msg, timeout_set, _, _, _, {
                 if !test_run {
-                    test_modal.spawn_helper(oqc_sid, test_modal.sid,
-                        OqcOp::ModalRedraw.to_u32().unwrap(),
-                        OqcOp::ModalKeys.to_u32().unwrap(),
-                        OqcOp::ModalDrop.to_u32().unwrap(),
-                    );
-
                     // test the screen
                     com.set_backlight(255, 255).unwrap();
-                    test_modal.gam.selftest(8_000); // 12_000 by default
+                    gam.selftest(8_000); // 12_000 by default
 
                     // now start the keyboard test
                     timeout = if timeout_set > 120_000 {
@@ -89,11 +70,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                     last_redraw_time = start_time;
                     log::info!("raising modal");
                     render_string(&mut bot_str, &remaining, timeout - (ticktimer.elapsed_ms() - start_time));
-                    test_modal.modify(None, None, false,
-                        Some(bot_str.as_str()), false, None);
-                    test_modal.activate();
-                    test_modal.redraw();
-                    test_modal.gam.set_vibe(true).unwrap();
+                    modal.dynamic_notification(None, Some(bot_str.as_str())).expect("couldn't raise test modal");
 
                     // start a thread that advances the timer when not hitting keys
                     xous::create_thread_2(ping_thread, xous::connect(oqc_sid).unwrap() as usize, timeout as usize).unwrap();
@@ -137,9 +114,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                             }
                             if elapsed - last_redraw_time > 100 { // rate limit redraws to 10Hz
                                 render_string(&mut bot_str, &remaining, timeout - (elapsed - start_time));
-                                test_modal.modify(None, None, false,
-                                    Some(bot_str.as_str()), false, None);
-                                test_modal.redraw();
+                                modal.dynamic_notification_update(None, Some(bot_str.as_str())).expect("couldn't update test modal");
                                 last_redraw_time = elapsed;
                                 llio.vibe(llio::VibePattern::Short).unwrap();
                             }
@@ -156,7 +131,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                         if finished {
                             passing = Some(true);
                             com.set_backlight(0, 0).unwrap();
-                            test_modal.gam.relinquish_focus().unwrap();
+                            modal.dynamic_notification_close().unwrap();
                             log::info!("all keys hit, exiting");
                             test_finished = true;
                         }
@@ -164,7 +139,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                         // timeout
                         passing = Some(false);
                         com.set_backlight(0, 0).unwrap();
-                        test_modal.gam.relinquish_focus().unwrap();
+                        modal.dynamic_notification_close().unwrap();
                         log::info!("test done, relinquishing focus");
                         test_finished = true;
                     }

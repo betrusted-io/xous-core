@@ -30,6 +30,7 @@ enum RendererState {
     ResponseText(TextEntryPayload),
     ResponseRadio(ItemName),
     ResponseCheckBox(CheckBoxPayload),
+    RunDynamicNotification(DynamicNotification),
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -45,10 +46,14 @@ pub(crate) enum RendererOp {
 
     AddModalItem,
 
+    UpdateDynamicNotification,
+    CloseDynamicNotification,
+
     ModalRedraw,
     ModalKeypress,
     ModalDrop,
     Quit,
+    Gutter,
 }
 
 #[xous::xous_main]
@@ -85,6 +90,11 @@ fn xmain() -> ! {
                 renderer_cid,
                 RendererOp::NotificationReturn.to_u32().unwrap()
             );
+            let mut gutter = gam::modal::Notification::new(
+                renderer_cid,
+                RendererOp::Gutter.to_u32().unwrap()
+            );
+            gutter.set_manual_dismiss(false);
             let mut progress_action = Slider::new(renderer_cid, RendererOp::NotificationReturn.to_u32().unwrap(),
                 0, 100, 1, Some("%"), 0, true, true
             );
@@ -111,18 +121,18 @@ fn xmain() -> ! {
                 log::debug!("renderer message: {:?}", msg);
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(RendererOp::InitiateOp) => {
-                        log::info!("InitiateOp called");
+                        log::debug!("InitiateOp called");
                         let mutex_op = op.lock().unwrap();
                         match *mutex_op {
                             RendererState::RunText(config) => {
-                                log::info!("initiating text entry modal");
+                                log::debug!("initiating text entry modal");
                                 renderer_modal.modify(
                                     Some(ActionType::TextEntry(text_action)),
                                     Some(config.prompt.as_str().unwrap()), false,
                                     None, true, None
                                 );
                                 renderer_modal.activate();
-                                log::info!("should be active!");
+                                log::debug!("should be active!");
                             },
                             RendererState::RunNotification(config) => {
                                 renderer_modal.modify(
@@ -137,7 +147,7 @@ fn xmain() -> ! {
                                 end_work = config.end_work;
                                 last_percentage = compute_checked_percentage(
                                     config.current_work, start_work, end_work);
-                                log::info!("init percentage: {}, current: {}, start: {}, end: {}", last_percentage, config.current_work, start_work, end_work);
+                                log::debug!("init percentage: {}, current: {}, start: {}, end: {}", last_percentage, config.current_work, start_work, end_work);
                                 progress_action.set_state(last_percentage);
 
                                 renderer_modal.modify(
@@ -179,6 +189,23 @@ fn xmain() -> ! {
                                 );
                                 renderer_modal.activate();
                             },
+                            RendererState::RunDynamicNotification(config) => {
+                                let mut top_text = String::new();
+                                if let Some(title) = config.title {
+                                    top_text.push_str(title.as_str().unwrap());
+                                }
+                                let mut bot_text = String::new();
+                                if let Some(text) = config.text {
+                                    bot_text.push_str(text.as_str().unwrap());
+                                }
+                                renderer_modal.modify(
+                                    Some(ActionType::Notification(gutter)),
+                                    Some(&top_text), config.title.is_none(),
+                                    Some(&bot_text), config.text.is_none(),
+                                    None
+                                );
+                                renderer_modal.activate();
+                            },
                             RendererState::None => {
                                 log::error!("Operation initiated with no argument specified. Ignoring request.");
                                 continue;
@@ -207,6 +234,35 @@ fn xmain() -> ! {
                         }
                     }),
                     Some(RendererOp::FinishProgress) => {
+                        renderer_modal.gam.relinquish_focus().unwrap();
+                    },
+                    Some(RendererOp::UpdateDynamicNotification) => {
+                        let mutex_op = op.lock().unwrap();
+                        match *mutex_op {
+                            RendererState::RunDynamicNotification(config) => {
+                                let mut top_text = String::new();
+                                if let Some(title) = config.title {
+                                    top_text.push_str(title.as_str().unwrap());
+                                }
+                                let mut bot_text = String::new();
+                                if let Some(text) = config.text {
+                                    bot_text.push_str(text.as_str().unwrap());
+                                }
+                                renderer_modal.modify(
+                                    None,
+                                    Some(&top_text), config.title.is_none(),
+                                    Some(&bot_text), config.text.is_none(),
+                                    None
+                                );
+                                renderer_modal.redraw();
+                            }
+                            _ => {
+                                log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                                panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                            }
+                        }
+                    },
+                    Some(RendererOp::CloseDynamicNotification) => {
                         renderer_modal.gam.relinquish_focus().unwrap();
                     },
                     Some(RendererOp::TextEntryReturn) => {
@@ -257,6 +313,9 @@ fn xmain() -> ! {
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
                             }
                         }
+                    },
+                    Some(RendererOp::Gutter) => {
+                        log::info!("gutter op, doing nothing");
                     },
                     Some(RendererOp::AddModalItem) => {
                         let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -499,6 +558,44 @@ fn xmain() -> ! {
                 let fwd_buf = Buffer::into_buf(manageditem.item).unwrap();
                 fwd_buf.lend(renderer_cid, RendererOp::AddModalItem.to_u32().unwrap()).expect("couldn't add item");
             }
+            Some(Opcode::DynamicNotification) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let spec = buffer.to_original::<DynamicNotification, _>().unwrap();
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                *op.lock().unwrap() = RendererState::RunDynamicNotification(spec);
+                send_message(
+                renderer_cid,
+                    Message::new_scalar(RendererOp::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate UX op");
+            },
+            Some(Opcode::UpdateDynamicNotification) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let spec = buffer.to_original::<DynamicNotification, _>().unwrap();
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                *op.lock().unwrap() = RendererState::RunDynamicNotification(spec);
+                send_message(
+                    renderer_cid,
+                        Message::new_scalar(RendererOp::UpdateDynamicNotification.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate UX op");
+            },
+            Some(Opcode::CloseDynamicNotification) => msg_scalar_unpack!(msg, t0, t1, t2, t3, {
+                let token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
+                if token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(RendererOp::CloseDynamicNotification.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't close dynamic notification");
+                token_lock = None;
+            }),
             Some(Opcode::Quit) => {
                 log::warn!("Shared modal UX handler exiting.");
                 break
