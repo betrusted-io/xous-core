@@ -1,6 +1,15 @@
 use bitfield::bitfield;
 use std::num::NonZeroU32;
 
+// on the "[allow(dead_code)]" directives: these constants are used to define the PDDB, and are
+// sometimes used by both `bin` (main.rs) and `lib` (lib.rs) views, but also, sometimes used
+// by only one. The API view is included in both, and if a constant is not used in both views it
+// triggers an unused code warning. However, it feels really weird to split these constants into
+// bin/lib/api views and shuffle them back and forth depending upon any given particular need
+// to access them (especially given that some are more useful for debugging and testing and thus
+// get configured out in some builds). Thus, we tell clippy to just shut up and stick them all
+// here, because sometimes, clippy just can't see the big picture.
+
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.
