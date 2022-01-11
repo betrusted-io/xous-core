@@ -19,7 +19,7 @@ pub(crate) enum OqcOp {
 }
 
 static SERVER_STARTED: AtomicBool = AtomicBool::new(false);
-pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>) {
+pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
     // only start the server once!
     if SERVER_STARTED.load(Ordering::SeqCst) {
         return
@@ -31,7 +31,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>) {
     let oqc_sid = xns.register_name(SERVER_NAME_OQC, None).expect("can't register server");
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+    //let kbd = keyboard::Keyboard::new(&xns).unwrap();
     kbd.register_raw_listener(
         SERVER_NAME_OQC,
         OqcOp::KeyCode.to_usize().unwrap()
