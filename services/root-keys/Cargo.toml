@@ -16,7 +16,6 @@ susres = {path = "../susres"}
 trng = {path= "../trng"}
 spinor = {path="../spinor"}
 llio = {path="../llio"}
-rtc = {path="../rtc"}
 com = {path="../com"}
 
 xous-ipc = {path = "../../xous-ipc"}

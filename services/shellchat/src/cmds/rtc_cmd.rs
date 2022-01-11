@@ -3,7 +3,7 @@ use xous_ipc::String;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static SHELLCONN: AtomicU32 = AtomicU32::new(0);
-pub fn dt_callback(dt: rtc::DateTime) {
+pub fn dt_callback(dt: llio::DateTime) {
     let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
     log::trace!("SHELLCONN: {}", SHELLCONN.load(Ordering::Relaxed));
     buf.send(SHELLCONN.load(Ordering::Relaxed), 0xdead_beef).unwrap(); // send an "unknown ID" so it's routed to the callback handler
@@ -32,10 +32,6 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                "ux" => {
-                    env.rtc.lock().unwrap().set_rtc_ux().expect("couldn't send set UX message");
-                    write!(ret, "{}", "UX time set launched").unwrap();
-                }
                 "get" => {
                     write!(ret, "{}", "Requesting DateTime from RTC...").unwrap();
                     env.rtc.lock().unwrap().hook_rtc_callback(dt_callback).unwrap();
@@ -49,7 +45,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                     let mut day: u8 = 0;
                     let mut month: u8 = 0;
                     let mut year: u8 = 0;
-                    let mut weekday: rtc::Weekday = rtc::Weekday::Sunday;
+                    let mut weekday: llio::Weekday = llio::Weekday::Sunday;
 
                     if let Some(tok_str) = tokens.next() {
                         hour = if let Ok(n) = tok_str.parse::<u8>() { n } else { success = false; 0 }
@@ -89,13 +85,13 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
 
                     if let Some(tok_str) = tokens.next() {
                         match tok_str {
-                            "mon" => weekday = rtc::Weekday::Monday,
-                            "tue" => weekday = rtc::Weekday::Tuesday,
-                            "wed" => weekday = rtc::Weekday::Wednesday,
-                            "thu" => weekday = rtc::Weekday::Thursday,
-                            "fri" => weekday = rtc::Weekday::Friday,
-                            "sat" => weekday = rtc::Weekday::Saturday,
-                            "sun" => weekday = rtc::Weekday::Sunday,
+                            "mon" => weekday = llio::Weekday::Monday,
+                            "tue" => weekday = llio::Weekday::Tuesday,
+                            "wed" => weekday = llio::Weekday::Wednesday,
+                            "thu" => weekday = llio::Weekday::Thursday,
+                            "fri" => weekday = llio::Weekday::Friday,
+                            "sat" => weekday = llio::Weekday::Saturday,
+                            "sun" => weekday = llio::Weekday::Sunday,
                             _ => success = false,
                         }
                     } else {
@@ -104,7 +100,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                     if !success {
                         write!(ret, "{}", "usage: rtc set hh mm ss MM DD YY day\n'day' is three-day code, eg. mon tue").unwrap();
                     } else {
-                        let dt = rtc::DateTime {
+                        let dt = llio::DateTime {
                             seconds: sec,
                             minutes: min,
                             hours: hour,
@@ -132,7 +128,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         use core::fmt::Write;
 
         let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-        let dt = buffer.to_original::<rtc::DateTime, _>().unwrap();
+        let dt = buffer.to_original::<llio::DateTime, _>().unwrap();
 
         let mut ret = String::<1024>::new();
         write!(ret, "{}:{:02}:{:02}, {}/{}/{}, {:?}", dt.hours, dt.minutes, dt.seconds, dt.months, dt.days, dt.years, dt.weekday).unwrap();

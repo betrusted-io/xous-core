@@ -42,6 +42,8 @@ use xous_ipc::{String, Buffer};
 mod cmds;
 use cmds::*;
 
+mod oqc_test;
+
 #[derive(Debug)]
 struct History {
     // the history record

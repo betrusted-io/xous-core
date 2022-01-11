@@ -1,3 +1,4 @@
+use crate::oqc_test::OqcOp;
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 use xous::{MessageEnvelope, Message};
@@ -6,9 +7,11 @@ use llio::I2cStatus;
 use codec::*;
 use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
 use spectrum_analyzer::windows::hann_window;
-use rtc::{DateTime, Weekday};
+use llio::{DateTime, Weekday};
 use core::fmt::Write;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
+use std::sync::Arc;
+use num_traits::*;
 
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
 
@@ -31,8 +34,6 @@ pub struct Test {
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
-    //kbd: Arc<Mutex<keyboard::Keyboard>>,
-    oqc: oqc_test::Oqc,
     oqc_start: u64,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     jtag: jtag::Jtag,
@@ -67,8 +68,6 @@ impl Test {
             end_time: None,
             start_elapsed: None,
             end_elapsed: None,
-            //kbd: Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap())),
-            oqc: oqc_test::Oqc::new(&xns).unwrap(),
             oqc_start: 0,
             #[cfg(any(target_os = "none", target_os = "xous"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
@@ -399,6 +398,19 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
+                    let oqc_cid = Arc::new(AtomicU32::new(0));
+                    // start the OQC thread
+                    let _ = std::thread::spawn({
+                        let oqc_cid = oqc_cid.clone();
+                        move || {
+                            crate::oqc_test::oqc_test(oqc_cid);
+                        }
+                    });
+                    // wait until the OQC thread has connected itself
+                    while oqc_cid.load(Ordering::SeqCst) == 0 {
+                        env.ticktimer.sleep_ms(200).unwrap();
+                    }
+
                     if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
                         // if power is plugged in, deny powerdown request
                         write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
@@ -434,10 +446,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                     susres.initiate_suspend().unwrap();
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
-                    self.oqc.trigger(60_000);
+                    let timeout = 60_0000;
+                    xous::send_message(oqc_cid.load(Ordering::SeqCst),
+                        xous::Message::new_blocking_scalar(OqcOp::Trigger.to_usize().unwrap(), timeout, 0, 0, 0,)
+                    ).expect("couldn't trigger self test");
 
                     loop {
-                        match self.oqc.status() {
+                        match oqc_status(oqc_cid.load(Ordering::SeqCst)) {
                             Some(true) => {
                                 let ssid_str = env.com.ssid_fetch_as_string().unwrap();
                                 use std::str::FromStr;
@@ -844,5 +859,25 @@ fn rtc_get(i2c: &mut llio::I2c) -> Option<DateTime> {
             }
         }
         _ => None
+    }
+}
+
+fn oqc_status(conn: xous::CID) -> Option<bool> { // None if still running or not yet run; Some(true) if pass; Some(false) if fail
+    let result = xous::send_message(conn,
+        xous::Message::new_blocking_scalar(OqcOp::Status.to_usize().unwrap(), 0, 0, 0, 0)
+    ).expect("couldn't query test status");
+    match result {
+        xous::Result::Scalar1(val) => {
+            match val {
+                0 => return None,
+                1 => return Some(true),
+                2 => return Some(false),
+                _ => return Some(false),
+            }
+        }
+        _ => {
+            log::error!("internal error");
+            panic!("improper result code on oqc status query");
+        }
     }
 }

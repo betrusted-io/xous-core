@@ -43,7 +43,7 @@ use trng::*;
 pub struct CommonEnv {
     llio: llio::Llio,
     i2c: llio::I2c,
-    rtc: Arc<Mutex<rtc::Rtc>>,
+    rtc: Arc<Mutex<llio::Rtc>>,
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
@@ -140,7 +140,7 @@ impl CmdEnv {
         let mut common = CommonEnv {
             llio: llio::Llio::new(&xns),
             i2c: llio::I2c::new(&xns),
-            rtc: Arc::new(Mutex::new(rtc::Rtc::new(&xns))),
+            rtc: Arc::new(Mutex::new(llio::Rtc::new(&xns))),
             com: com::Com::new(&xns).expect("could't connect to COM"),
             ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
