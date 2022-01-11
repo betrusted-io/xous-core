@@ -1,7 +1,7 @@
 use num_traits::*;
 use gam::modal::*;
 use keyboard::{RowCol, KeyRawStates};
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering, AtomicBool};
 use std::sync::Arc;
 
 pub(crate) const SERVER_NAME_OQC: &str     = "_Outgoing Quality Check Test Program_";
@@ -18,7 +18,14 @@ pub(crate) enum OqcOp {
     Quit,
 }
 
+static SERVER_STARTED: AtomicBool = AtomicBool::new(false);
 pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>) {
+    // only start the server once!
+    if SERVER_STARTED.load(Ordering::SeqCst) {
+        return
+    }
+    SERVER_STARTED.store(true, Ordering::SeqCst);
+
     let xns = xous_names::XousNames::new().unwrap();
     // we allow any connections because this server is not spawned until it is needed
     let oqc_sid = xns.register_name(SERVER_NAME_OQC, None).expect("can't register server");
@@ -190,10 +197,11 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>) {
             Some(OqcOp::ModalDrop) => {
                 log::error!("test modal quit unexpectedly");
             }
-            Some(OqcOp::Quit) => {
+            Some(OqcOp::Quit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 log::warn!("Quit received on OQC");
+                xous::return_scalar(msg.sender, 1).unwrap();
                 break;
-            }
+            }),
             None => {
                 log::error!("couldn't convert OqcOp: {:?}", msg);
             }
@@ -203,8 +211,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>) {
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(oqc_sid).unwrap();
     xous::destroy_server(oqc_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
+    log::trace!("quitting oqc server");
 }
 
 fn populate_vectors() -> Vec::<(RowCol, bool)> {

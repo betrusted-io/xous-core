@@ -94,7 +94,6 @@ mod backlight; use backlight::*;
 mod accel;    use accel::*;
 mod sha;      use sha::*;
 mod ecup;     use ecup::*;
-mod aes_cmd;  use aes_cmd::*;
 mod trng_cmd; use trng_cmd::*;
 mod engine;   use engine::*;
 mod console;  use console::*;
@@ -105,6 +104,10 @@ mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
 
+#[cfg(feature="benchmarks")]
+mod aes_cmd;
+#[cfg(feature="benchmarks")]
+use aes_cmd::*;
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
 

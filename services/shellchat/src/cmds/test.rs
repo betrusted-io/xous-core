@@ -34,6 +34,7 @@ pub struct Test {
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
+    oqc_cid: Option<xous::CID>,
     oqc_start: u64,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     jtag: jtag::Jtag,
@@ -68,6 +69,7 @@ impl Test {
             end_time: None,
             start_elapsed: None,
             end_elapsed: None,
+            oqc_cid: None,
             oqc_start: 0,
             #[cfg(any(target_os = "none", target_os = "xous"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
@@ -398,24 +400,32 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
-                    let oqc_cid = Arc::new(AtomicU32::new(0));
-                    // start the OQC thread
-                    let _ = std::thread::spawn({
-                        let oqc_cid = oqc_cid.clone();
-                        move || {
-                            crate::oqc_test::oqc_test(oqc_cid);
-                        }
-                    });
-                    // wait until the OQC thread has connected itself
-                    while oqc_cid.load(Ordering::SeqCst) == 0 {
-                        env.ticktimer.sleep_ms(200).unwrap();
-                    }
-
                     if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
                         // if power is plugged in, deny powerdown request
                         write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
                         return Ok(Some(ret));
                     }
+                    // start the server if it isn't started already, but only allow it to start once. Note that the CID stays the same between calls,
+                    // because the SID is stable between calls and we're calling from the same process each time.
+                    let oqc_cid = if let Some(oc) = self.oqc_cid {
+                        oc
+                    } else {
+                        let oqc_cid = Arc::new(AtomicU32::new(0));
+                        // start the OQC thread
+                        let _ = std::thread::spawn({
+                            let oqc_cid = oqc_cid.clone();
+                            move || {
+                                crate::oqc_test::oqc_test(oqc_cid);
+                            }
+                        });
+                        // wait until the OQC thread has connected itself
+                        while oqc_cid.load(Ordering::SeqCst) == 0 {
+                            env.ticktimer.sleep_ms(200).unwrap();
+                        }
+                        self.oqc_cid = Some(oqc_cid.load(Ordering::SeqCst));
+                        oqc_cid.load(Ordering::SeqCst)
+                    };
+
                     let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
                     env.llio.wfi_override(true).unwrap();
                     // activate SSID scanning while the test runs
@@ -446,13 +456,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                     susres.initiate_suspend().unwrap();
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
-                    let timeout = 60_0000;
-                    xous::send_message(oqc_cid.load(Ordering::SeqCst),
+                    let timeout = 60_000;
+                    xous::send_message(oqc_cid,
                         xous::Message::new_blocking_scalar(OqcOp::Trigger.to_usize().unwrap(), timeout, 0, 0, 0,)
                     ).expect("couldn't trigger self test");
 
                     loop {
-                        match oqc_status(oqc_cid.load(Ordering::SeqCst)) {
+                        match oqc_status(oqc_cid) {
                             Some(true) => {
                                 let ssid_str = env.com.ssid_fetch_as_string().unwrap();
                                 use std::str::FromStr;
