@@ -1,12 +1,8 @@
-#![cfg_attr(target_os = "none", no_std)]
-
-pub mod api;
-
-pub use api::*;
-use api::{Return, Opcode};
+use crate::api::{Return, RtcOpcode};
 use xous::{send_message, CID, Message};
 use xous_ipc::Buffer;
 use num_traits::{ToPrimitive, FromPrimitive};
+use crate::*;
 
 #[derive(Debug)]
 pub struct Rtc {
@@ -17,32 +13,22 @@ static mut RTC_CB: Option<fn(DateTime)> = None;
 impl Rtc {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
-        let conn = xns.request_connection_blocking(api::SERVER_NAME_RTC).expect("Can't connect to RTC");
+        let conn = xns.request_connection_blocking(crate::api::SERVER_NAME_RTC).expect("Can't connect to RTC");
         Rtc {
           conn,
           callback_sid: None,
         }
     }
-    pub fn conn(&self) -> CID {self.conn}
-    pub fn getop_set_ux(&self) -> u32 {Opcode::UxSetTime.to_u32().unwrap()}
-
-    pub fn set_rtc_ux(&self) -> Result<(), xous::Error> {
-        xous::send_message(self.conn,
-            Message::new_scalar(Opcode::UxSetTime.to_usize().unwrap(),
-            0, 0, 0, 0
-            )
-        ).map(|_| ())
-    }
     pub fn set_rtc(&self, dt: DateTime) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::SetDateTime.to_u32().unwrap()).map(|_| ())
+        buf.lend(self.conn, RtcOpcode::SetDateTime.to_u32().unwrap()).map(|_| ())
     }
     pub fn unhook_rtc_callback(&mut self) -> Result<(), xous::Error> {
         unsafe{RTC_CB = None};
         if let Some(sid) = self.callback_sid {
             let sid_tuple = sid.to_u32();
             xous::send_message(self.conn,
-            Message::new_scalar(Opcode::UnregisterDateTimeCallback.to_usize().unwrap(),
+            Message::new_scalar(RtcOpcode::UnregisterDateTimeCallback.to_usize().unwrap(),
             sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
             )).unwrap();
         }
@@ -64,7 +50,7 @@ impl Rtc {
             xous::create_thread_4(rtc_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
         }
         xous::send_message(self.conn,
-            Message::new_scalar(Opcode::RegisterDateTimeCallback.to_usize().unwrap(),
+            Message::new_scalar(RtcOpcode::RegisterDateTimeCallback.to_usize().unwrap(),
             sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
         )).unwrap();
         Ok(())
@@ -72,29 +58,29 @@ impl Rtc {
 
     pub fn request_datetime(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_scalar(Opcode::RequestDateTime.to_usize().unwrap(), 0, 0, 0, 0)
+            Message::new_scalar(RtcOpcode::RequestDateTime.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
     /// wakeup alarm will force the system on if it is off, but does not trigger an interrupt on the CPU
     pub fn set_wakeup_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::SetWakeupAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
+            Message::new_blocking_scalar(RtcOpcode::SetWakeupAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
         ).map(|_|())
     }
     pub fn clear_wakeup_alarm(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ClearWakeupAlarm.to_usize().unwrap(), 0, 0, 0, 0)
+            Message::new_blocking_scalar(RtcOpcode::ClearWakeupAlarm.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
     /// the rtc alarm will not turn the system on, but it will trigger an interrupt on the CPU
     pub fn set_rtc_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::SetRtcAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
+            Message::new_blocking_scalar(RtcOpcode::SetRtcAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
         ).map(|_|())
     }
     pub fn clear_rtc_alarm(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
+            Message::new_blocking_scalar(RtcOpcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
 }

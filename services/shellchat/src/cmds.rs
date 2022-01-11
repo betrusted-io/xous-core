@@ -3,6 +3,7 @@ use xous_ipc::String;
 use core::fmt::Write;
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
@@ -42,6 +43,7 @@ use trng::*;
 pub struct CommonEnv {
     llio: llio::Llio,
     i2c: llio::I2c,
+    rtc: Arc<Mutex<rtc::Rtc>>,
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
@@ -138,8 +140,9 @@ impl CmdEnv {
         let mut common = CommonEnv {
             llio: llio::Llio::new(&xns),
             i2c: llio::I2c::new(&xns),
+            rtc: Arc::new(Mutex::new(rtc::Rtc::new(&xns))),
             com: com::Com::new(&xns).expect("could't connect to COM"),
-            ticktimer: ticktimer,
+            ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             cb_registrations: HashMap::new(),
             trng: Trng::new(&xns).unwrap(),

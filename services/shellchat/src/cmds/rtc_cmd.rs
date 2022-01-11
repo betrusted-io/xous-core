@@ -11,22 +11,19 @@ pub fn dt_callback(dt: rtc::DateTime) {
 
 #[derive(Debug)]
 pub struct RtcCmd {
-    rtc: rtc::Rtc,
 }
 impl RtcCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
         SHELLCONN.store(callback_conn, Ordering::Relaxed);
-        let rtc = rtc::Rtc::new(&xns).unwrap();
         RtcCmd {
-            rtc,
         }
     }
 }
 impl<'a> ShellCmdApi<'a> for RtcCmd {
     cmd_api!(rtc);
 
-    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         let helpstring = "rtc options: set, get";
@@ -36,13 +33,13 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "ux" => {
-                    self.rtc.set_rtc_ux().expect("couldn't send set UX message");
+                    env.rtc.lock().unwrap().set_rtc_ux().expect("couldn't send set UX message");
                     write!(ret, "{}", "UX time set launched").unwrap();
                 }
                 "get" => {
                     write!(ret, "{}", "Requesting DateTime from RTC...").unwrap();
-                    self.rtc.hook_rtc_callback(dt_callback).unwrap();
-                    self.rtc.request_datetime().unwrap();
+                    env.rtc.lock().unwrap().hook_rtc_callback(dt_callback).unwrap();
+                    env.rtc.lock().unwrap().request_datetime().unwrap();
                 },
                 "set" => {
                     let mut success = true;
@@ -117,7 +114,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                             weekday,
                         };
                         write!(ret, "Setting {}:{:02}:{:02}, {}/{}/{}, {:?}", hour, min, sec, month, day, year, weekday).unwrap();
-                        self.rtc.set_rtc(dt).unwrap();
+                        env.rtc.lock().unwrap().set_rtc(dt).unwrap();
                     }
                 },
                 _ => {
@@ -131,7 +128,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &xous::MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &xous::MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -140,7 +137,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         let mut ret = String::<1024>::new();
         write!(ret, "{}:{:02}:{:02}, {}/{}/{}, {:?}", dt.hours, dt.minutes, dt.seconds, dt.months, dt.days, dt.years, dt.weekday).unwrap();
 
-        self.rtc.unhook_rtc_callback().expect("can't unhook callback after completion");
+        env.rtc.lock().unwrap().unhook_rtc_callback().expect("can't unhook callback after completion");
         Ok(Some(ret))
     }
 

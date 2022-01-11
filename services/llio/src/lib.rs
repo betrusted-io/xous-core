@@ -9,3 +9,5 @@ pub mod i2c_lib;
 pub use i2c_lib::I2c;
 pub mod llio_lib;
 pub use llio_lib::Llio;
+pub mod rtc_lib;
+pub use rtc_lib::Rtc;

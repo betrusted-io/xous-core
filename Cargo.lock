@@ -1140,6 +1140,9 @@ dependencies = [
 name = "llio"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
+ "chrono",
+ "locales",
  "log",
  "log-server",
  "num-derive",
@@ -2139,11 +2142,11 @@ dependencies = [
  "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "rkyv",
  "root-keys",
- "rtc",
  "susres",
  "ticktimer-server",
  "trng",

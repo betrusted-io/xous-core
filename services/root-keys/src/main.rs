@@ -276,7 +276,7 @@ fn xmain() -> ! {
 
     // create the servers necessary to coordinate an auto-reboot sequence...
     let llio = llio::Llio::new(&xns);
-    let rtc = rtc::Rtc::new(&xns).unwrap();
+    let rtc = rtc::Rtc::new(&xns);
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     let com = com::Com::new(&xns).unwrap();
 

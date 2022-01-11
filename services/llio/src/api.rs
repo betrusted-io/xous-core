@@ -2,9 +2,11 @@ mod llio_api;
 pub use llio_api::*;
 mod i2c_api;
 pub use i2c_api::*;
+mod rtc_api;
+pub use rtc_api::*;
 
 // ///////////////////// UART TYPE
-#[allow(dead_code)]  // we actually use this constant, but clippy insists that we don't
+#[allow(dead_code)]  // we use this constant, but only in the `bin` view (not `lib`), so clippy complains, but this seems more discoverable here.
 pub(crate) const BOOT_UART: u32 = UartType::Log as u32;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Eq)]

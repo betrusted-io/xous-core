@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "keyboard",
         "trng",
         "llio",
-        "rtc",
+        //"rtc",
         "susres",
         "codec",
         "sha2",
