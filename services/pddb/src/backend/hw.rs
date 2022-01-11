@@ -1238,7 +1238,18 @@ impl PddbOs {
                         modals.update_progress(offset as u32).expect("couldn't update progress bar");
                     }
                 }
-                self.spinor.bulk_erase(offset, SPINOR_BULK_ERASE_SIZE).expect("couldn't erase memory");
+                // do a blank check first to see if the sector really needs erasing
+                let mut blank = true;
+                let slice_start = (offset - xous::PDDB_LOC) as usize / size_of::<u32>();
+                for word in self.pddb_mr.as_slice::<u32>()[slice_start..slice_start + SPINOR_BULK_ERASE_SIZE as usize / size_of::<u32>()].iter() {
+                    if *word != 0xFFFF_FFFF {
+                        blank = false;
+                        break;
+                    }
+                }
+                if !blank {
+                    self.spinor.bulk_erase(offset, SPINOR_BULK_ERASE_SIZE).expect("couldn't erase memory");
+                }
             }
             if let Some(modals) = progress {
                 modals.update_progress(xous::PDDB_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
