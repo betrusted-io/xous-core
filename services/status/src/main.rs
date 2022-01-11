@@ -199,7 +199,7 @@ fn xmain() -> ! {
 
     rtc.hook_rtc_callback(dt_callback).unwrap();
     let mut datetime: Option<rtc::DateTime> = None;
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
 
     log::debug!("usb unlock notice...");
     let (dl, _) = llio.debug_usb(None).unwrap();

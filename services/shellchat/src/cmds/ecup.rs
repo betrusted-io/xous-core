@@ -182,7 +182,7 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let xns = xous_names::XousNames::new().unwrap();
     let mut com = com::Com::new(&xns).unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
     let gam = gam::Gam::new(&xns).unwrap();
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
     let mut susres = susres::Susres::new_without_hook(&xns).unwrap();

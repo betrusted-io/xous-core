@@ -20,7 +20,7 @@ mod implementation {
     use bitflags::*;
     use crate::CB_TO_MAIN_CONN;
     use core::sync::atomic::Ordering;
-    use llio::{I2cStatus, I2cTransaction, Llio};
+    use llio::{I2cStatus, I2cTransaction, I2c};
     use crate::api::{Opcode, DateTime, Weekday};
     use xous_ipc::Buffer;
     use num_traits::ToPrimitive;
@@ -247,7 +247,7 @@ mod implementation {
     }
 
     pub struct Rtc {
-        llio: Llio,
+        i2c: I2c,
         rtc_alarm_enabled: bool,
         wakeup_alarm_enabled: bool,
         ticktimer: ticktimer_server::Ticktimer,
@@ -256,9 +256,9 @@ mod implementation {
     impl Rtc {
         pub fn new(xns: &xous_names::XousNames) -> Rtc {
             log::trace!("hardware initialized");
-            let llio = Llio::new(xns).expect("can't connect to LLIO");
+            let i2c = I2c::new(xns);
             Rtc {
-                llio,
+                i2c,
                 rtc_alarm_enabled: false,
                 wakeup_alarm_enabled: false,
                 ticktimer: ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer"),
@@ -298,7 +298,7 @@ mod implementation {
             txbuf[6] = to_bcd(months);
             txbuf[7] = to_bcd(years);
 
-            match self.llio.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
+            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseWriteOk => Ok(true),
@@ -312,7 +312,7 @@ mod implementation {
 
         pub fn rtc_get(&mut self) -> Result<(), xous::Error> {
             let mut rxbuf = [0; 7];
-            match self.llio.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, Some(i2c_callback)) {
+            match self.i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, Some(i2c_callback)) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseInProgress => Ok(()),
@@ -324,7 +324,7 @@ mod implementation {
             }
         }
         pub fn rtc_get_ack(&mut self) {
-            self.llio.i2c_async_done();
+            self.i2c.i2c_async_done();
         }
 
         // the awkward array syntax is a legacy of a port from a previous implementation
@@ -332,7 +332,7 @@ mod implementation {
         // blocking_i2c_write2(adr: u8, data: u8) -> bool
         // but need to make sure we don't bork any of the constants later on in this code :P
         fn blocking_i2c_write2(&mut self, adr: u8, data: u8) -> bool {
-            match self.llio.i2c_write(ABRTCMC_I2C_ADR, adr, &[data], None) {
+            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, adr, &[data], None) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseWriteOk => true,

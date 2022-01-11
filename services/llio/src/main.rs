@@ -1,10 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-#![cfg_attr(not(target_os = "none"), allow(dead_code))]
-#![cfg_attr(not(target_os = "none"), allow(unused_imports))]
-#![cfg_attr(not(target_os = "none"), allow(unused_variables))]
-
 mod api;
 use api::*;
 mod i2c;
@@ -696,18 +692,17 @@ fn xmain() -> ! {
     // - rootkeys (for reboots)
     // - oqc-test (for testing the vibe motor)
     // - net (for COM interrupt dispatch)
-    // - problem: `sleep killbounce` allocates a connection. That would bring us to 10 normally, but 11 when that function is needed.
-    //   for now we're going to leave the total server count as "None" (open-ended) but we probably want to rethink this as
-    //   the I2C access is in this crate. Perhaps we should split I2C out, so that the RTC can be protected and not grouped
-    //   into the same severe security restrictions as the other LLIO items?
     // - pddb also allocates a connection, but then releases it, to read the DNA field.
-    let num_conns = 10;
+    // We've migrated the I2C function out (which is arguably the most sensitive bit), so we can now set this more safely to unrestriced connection counts.
     let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
     // create the I2C handler thread
-    // each connection to llio also creates an i2c connection, so it has the same expectation list
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, None).expect("can't register I2C thread");
+    // - codec
+    // - rtc
+    // - shellchat
+    // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
     xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");

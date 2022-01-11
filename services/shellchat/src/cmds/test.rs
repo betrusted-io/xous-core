@@ -107,12 +107,12 @@ impl<'a> ShellCmdApi<'a> for Test {
             match sub_cmd {
                 "factory" => {
                     // force a specified time to make sure the elapsed time computation later on works
-                    if !rtc_set(&mut env.llio, 0, 0, 10, 1, 6, 21) {
+                    if !rtc_set(&mut env.i2c, 0, 0, 10, 1, 6, 21) {
                         log::info!("{}|RTC|FAIL|SET|", SENTINEL);
                     }
 
                     self.start_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.start_time = rtc_get(&mut env.llio);
+                    self.start_time = rtc_get(&mut env.i2c);
 
                     // set uart MUX, and turn off WFI so UART reports are "clean" (no stuck characters when CPU is in WFI)
                     env.llio.set_uart_mux(llio::UartType::Log).unwrap();
@@ -217,7 +217,7 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     env.ticktimer.sleep_ms(4000).unwrap(); // wait so we have some realistic delta on the datetime function
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.end_time = rtc_get(&mut env.llio);
+                    self.end_time = rtc_get(&mut env.i2c);
 
                     let exact_time_secs = ((self.end_elapsed.unwrap() - self.start_elapsed.unwrap()) / 1000) as i32;
                     if let Some(end_dt) = self.end_time {
@@ -798,7 +798,7 @@ const ABRTCMC_SECONDS: u8 = 0x3;
 // vendor in the RTC code -- the RTC system was not architected to do our test sets
 // in particular we need a synchronous callback on the date/time, which is not terribly useful in most other contexts
 // so instead of burdening the OS with it, we just incorprate it specifically into this test function
-fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8) -> bool {
+fn rtc_set(i2c: &mut llio::I2c, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8) -> bool {
     let mut txbuf: [u8; 8] = [0; 8];
 
     // convert enum to bitfields
@@ -814,7 +814,7 @@ fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, month
     txbuf[6] = to_bcd(months);
     txbuf[7] = to_bcd(years);
 
-    match llio.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
+    match i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
         Ok(status) => {
             match status {
                 I2cStatus::ResponseWriteOk => true,
@@ -825,9 +825,9 @@ fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, month
         _ => {log::error!("try_send_i2c unhandled error"); false}
     }
 }
-fn rtc_get(llio: &mut llio::Llio) -> Option<DateTime> {
+fn rtc_get(i2c: &mut llio::I2c) -> Option<DateTime> {
     let mut rxbuf = [0; 7];
-    match llio.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None) {
+    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None) {
         Ok(status) => {
             match status {
                 I2cStatus::ResponseReadOk => {

@@ -41,6 +41,7 @@ use trng::*;
 #[derive(Debug)]
 pub struct CommonEnv {
     llio: llio::Llio,
+    i2c: llio::I2c,
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
@@ -135,7 +136,8 @@ impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         let mut common = CommonEnv {
-            llio: llio::Llio::new(&xns).expect("couldn't connect to LLIO"),
+            llio: llio::Llio::new(&xns),
+            i2c: llio::I2c::new(&xns),
             com: com::Com::new(&xns).expect("could't connect to COM"),
             ticktimer: ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),

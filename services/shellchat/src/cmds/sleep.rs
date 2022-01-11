@@ -20,7 +20,7 @@ fn kill_thread(bounce: usize) {
     log::info!("Self destruct thread active.");
 
     let xns = xous_names::XousNames::new().unwrap();
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
     let com = com::Com::new(&xns).unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     ticktimer.sleep_ms(3000).unwrap();

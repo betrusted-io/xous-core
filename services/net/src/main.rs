@@ -91,7 +91,7 @@ fn xmain() -> ! {
     log::trace!("registered with NS -- {:?}", net_sid);
 
     // hook the COM interrupt listener
-    let mut llio = llio::Llio::new(&xns).unwrap();
+    let mut llio = llio::Llio::new(&xns);
     let net_cid = xous::connect(net_sid).unwrap();
     llio.hook_com_event_callback(Opcode::ComInterrupt.to_u32().unwrap(), net_cid).unwrap();
     llio.com_event_enable(true).unwrap();

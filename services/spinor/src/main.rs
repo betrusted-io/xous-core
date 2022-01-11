@@ -623,7 +623,7 @@ fn xmain() -> ! {
     let (sid0, sid1, sid2, sid3) = susres_mgr_sid.to_u32();
     xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start susres handler thread");
 
-    let llio = llio::Llio::new(&xns).expect("couldn't connect to LLIO");
+    let llio = llio::Llio::new(&xns);
 
     let mut client_id: Option<[u32; 4]> = None;
     let mut soc_token: Option<[u32; 4]> = None;

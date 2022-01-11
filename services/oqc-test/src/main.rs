@@ -26,7 +26,7 @@ fn xmain() -> ! {
         Opcode::KeyCode.to_usize().unwrap()
     );
     let com = com::Com::new(&xns).unwrap();
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
 
     let test_cid = xous::connect(oqc_sid).unwrap();
     let mut test_action = Notification::new(

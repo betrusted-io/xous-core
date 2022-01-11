@@ -275,7 +275,7 @@ fn xmain() -> ! {
     log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());
 
     // create the servers necessary to coordinate an auto-reboot sequence...
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
     let rtc = rtc::Rtc::new(&xns).unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     let com = com::Com::new(&xns).unwrap();
