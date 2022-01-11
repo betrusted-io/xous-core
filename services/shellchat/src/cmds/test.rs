@@ -35,6 +35,7 @@ pub struct Test {
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
     oqc_cid: Option<xous::CID>,
+    kbd: Option<keyboard::Keyboard>,
     oqc_start: u64,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     jtag: jtag::Jtag,
@@ -70,6 +71,7 @@ impl Test {
             start_elapsed: None,
             end_elapsed: None,
             oqc_cid: None,
+            kbd: Some(keyboard::Keyboard::new(&xns).unwrap()), // allocate and save for use in the oqc_tester, so that the xous_names table is fully allocated
             oqc_start: 0,
             #[cfg(any(target_os = "none", target_os = "xous"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
@@ -411,11 +413,12 @@ impl<'a> ShellCmdApi<'a> for Test {
                         oc
                     } else {
                         let oqc_cid = Arc::new(AtomicU32::new(0));
+                        let kbd = self.kbd.take().expect("someone took the keyboard server before we could use it!");
                         // start the OQC thread
                         let _ = std::thread::spawn({
                             let oqc_cid = oqc_cid.clone();
                             move || {
-                                crate::oqc_test::oqc_test(oqc_cid);
+                                crate::oqc_test::oqc_test(oqc_cid, kbd);
                             }
                         });
                         // wait until the OQC thread has connected itself

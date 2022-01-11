@@ -84,7 +84,7 @@ mod echo;     use echo::*;
 mod test;     use test::*;
 mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
-mod callback; use callback::*;
+// mod callback; use callback::*;
 mod rtc_cmd;  use rtc_cmd::*;
 mod vibe;     use vibe::*;
 mod ssid;     use ssid::*;
@@ -92,10 +92,8 @@ mod ver;      use ver::*;
 //mod audio;    use audio::*; // this command is currently contra-indicated with PDDB, as the test audio currently overlaps the PDDB space. We'll fix this eventually, but for now, let's switch to PDDB mode.
 mod backlight; use backlight::*;
 mod accel;    use accel::*;
-mod sha;      use sha::*;
 mod ecup;     use ecup::*;
 mod trng_cmd; use trng_cmd::*;
-mod engine;   use engine::*;
 mod console;  use console::*;
 //mod memtest;  use memtest::*;
 mod keys;     use keys::*;
@@ -104,6 +102,14 @@ mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
 
+#[cfg(feature="benchmarks")]
+mod engine;
+#[cfg(feature="benchmarks")]
+use engine::*;
+#[cfg(feature="benchmarks")]
+mod sha;
+#[cfg(feature="benchmarks")]
+use sha::*;
 #[cfg(feature="benchmarks")]
 mod aes_cmd;
 #[cfg(feature="benchmarks")]
@@ -118,16 +124,13 @@ pub struct CmdEnv {
     test_cmd: Test,
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
-    callback_cmd: CallBack,
+    //callback_cmd: CallBack,
     rtc_cmd: RtcCmd,
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
     //audio_cmd: Audio,
-    sha_cmd: Sha,
     ecup_cmd: EcUpdate,
-    aes_cmd: Aes,
     trng_cmd: TrngCmd,
-    engine_cmd: Engine,
     //memtest_cmd: Memtest,
     keys_cmd: Keys,
     jtag_cmd: JtagCmd,
@@ -135,6 +138,12 @@ pub struct CmdEnv {
     pddb_cmd: PddbCmd,
     wlan_cmd: Wlan,
 
+    #[cfg(feature="benchmarks")]
+    sha_cmd: Sha,
+    #[cfg(feature="benchmarks")]
+    aes_cmd: Aes,
+    #[cfg(feature="benchmarks")]
+    engine_cmd: Engine,
     //fcc_cmd: Fcc,
 }
 impl CmdEnv {
@@ -152,10 +161,13 @@ impl CmdEnv {
             xns: xous_names::XousNames::new().unwrap(),
         };
         //let fcc = Fcc::new(&mut common);
+        #[cfg(feature="benchmarks")]
         let sha = Sha::new(&xns, &mut common);
+        #[cfg(feature="benchmarks")]
         let aes = Aes::new(&xns, &mut common);
-        let ecup = EcUpdate::new(&mut common);
+        #[cfg(feature="benchmarks")]
         let engine = Engine::new(&xns, &mut common);
+        let ecup = EcUpdate::new(&mut common);
         //let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
@@ -175,16 +187,13 @@ impl CmdEnv {
             test_cmd: Test::new(&xns),
             sleep_cmd: Sleep::new(&xns),
             sensors_cmd: Sensors::new(),
-            callback_cmd: CallBack::new(),
+            //callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
             vibe_cmd: Vibe::new(),
             ssid_cmd: Ssid::new(),
             //audio_cmd: Audio::new(&xns),
-            sha_cmd: sha,
             ecup_cmd: ecup,
-            aes_cmd: aes,
             trng_cmd: TrngCmd::new(),
-            engine_cmd: engine,
             //memtest_cmd: memtest,
             keys_cmd: Keys::new(&xns),
             jtag_cmd: JtagCmd::new(&xns),
@@ -192,6 +201,12 @@ impl CmdEnv {
             pddb_cmd: PddbCmd::new(&xns),
             wlan_cmd: Wlan::new(),
 
+            #[cfg(feature="benchmarks")]
+            sha_cmd: sha,
+            #[cfg(feature="benchmarks")]
+            aes_cmd: aes,
+            #[cfg(feature="benchmarks")]
+            engine_cmd: engine,
             //fcc_cmd: fcc,
         }
     }
@@ -210,7 +225,7 @@ impl CmdEnv {
             &mut self.test_cmd,
             &mut self.sleep_cmd,
             &mut self.sensors_cmd,
-            &mut self.callback_cmd,
+            //&mut self.callback_cmd,
             &mut self.rtc_cmd,
             &mut self.vibe_cmd,
             &mut self.ssid_cmd,
@@ -218,11 +233,8 @@ impl CmdEnv {
             //&mut self.audio_cmd,
             &mut backlight_cmd,
             &mut accel_cmd,
-            &mut self.sha_cmd,
             &mut self.ecup_cmd,
-            &mut self.aes_cmd,
             &mut self.trng_cmd,
-            &mut self.engine_cmd,
             &mut console_cmd,
             // &mut self.memtest_cmd,
             &mut self.keys_cmd,
@@ -231,6 +243,12 @@ impl CmdEnv {
             &mut self.net_cmd,
             &mut self.pddb_cmd,
 
+            #[cfg(feature="benchmarks")]
+            &mut self.sha_cmd,
+            #[cfg(feature="benchmarks")]
+            &mut self.aes_cmd,
+            #[cfg(feature="benchmarks")]
+            &mut self.engine_cmd,
             //&mut self.fcc_cmd,
         ];
 
