@@ -1,15 +1,7 @@
-#![cfg_attr(target_os = "none", no_std)]
-#![cfg_attr(target_os = "none", no_main)]
-
-mod api;
-use api::*;
-
+use crate::api::*;
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous_ipc::Buffer;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
-
-use locales::t;
-use gam::modal::*;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
@@ -18,10 +10,10 @@ static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
 mod implementation {
     #![allow(dead_code)]
     use bitflags::*;
-    use crate::CB_TO_MAIN_CONN;
+    use crate::rtc::CB_TO_MAIN_CONN;
     use core::sync::atomic::Ordering;
-    use llio::{I2cStatus, I2cTransaction, Llio};
-    use crate::api::{Opcode, DateTime, Weekday};
+    use llio::{I2cStatus, I2cTransaction, I2c};
+    use crate::api::{RtcOpcode, DateTime, Weekday};
     use xous_ipc::Buffer;
     use num_traits::ToPrimitive;
 
@@ -236,7 +228,7 @@ mod implementation {
                         years: to_binary(rxbuf[6]),
                     };
                     let buf = Buffer::into_buf(dt).unwrap();
-                    buf.send(cb_to_main_conn, Opcode::ResponseDateTime.to_u32().unwrap()).unwrap();
+                    buf.send(cb_to_main_conn, RtcOpcode::ResponseDateTime.to_u32().unwrap()).unwrap();
                 } else {
                     log::error!("i2c_callback: no rx data to unpack!")
                 }
@@ -247,7 +239,7 @@ mod implementation {
     }
 
     pub struct Rtc {
-        llio: Llio,
+        i2c: I2c,
         rtc_alarm_enabled: bool,
         wakeup_alarm_enabled: bool,
         ticktimer: ticktimer_server::Ticktimer,
@@ -256,9 +248,9 @@ mod implementation {
     impl Rtc {
         pub fn new(xns: &xous_names::XousNames) -> Rtc {
             log::trace!("hardware initialized");
-            let llio = Llio::new(xns).expect("can't connect to LLIO");
+            let i2c = I2c::new(xns);
             Rtc {
-                llio,
+                i2c,
                 rtc_alarm_enabled: false,
                 wakeup_alarm_enabled: false,
                 ticktimer: ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer"),
@@ -298,7 +290,7 @@ mod implementation {
             txbuf[6] = to_bcd(months);
             txbuf[7] = to_bcd(years);
 
-            match self.llio.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
+            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseWriteOk => Ok(true),
@@ -312,7 +304,7 @@ mod implementation {
 
         pub fn rtc_get(&mut self) -> Result<(), xous::Error> {
             let mut rxbuf = [0; 7];
-            match self.llio.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, Some(i2c_callback)) {
+            match self.i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, Some(i2c_callback)) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseInProgress => Ok(()),
@@ -324,7 +316,7 @@ mod implementation {
             }
         }
         pub fn rtc_get_ack(&mut self) {
-            self.llio.i2c_async_done();
+            self.i2c.i2c_async_done();
         }
 
         // the awkward array syntax is a legacy of a port from a previous implementation
@@ -332,7 +324,7 @@ mod implementation {
         // blocking_i2c_write2(adr: u8, data: u8) -> bool
         // but need to make sure we don't bork any of the constants later on in this code :P
         fn blocking_i2c_write2(&mut self, adr: u8, data: u8) -> bool {
-            match self.llio.i2c_write(ABRTCMC_I2C_ADR, adr, &[data], None) {
+            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, adr, &[data], None) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseWriteOk => true,
@@ -450,7 +442,7 @@ mod implementation {
 mod implementation {
     use crate::api::Weekday;
     use chrono::prelude::*;
-    use crate::CB_TO_MAIN_CONN;
+    use crate::rtc::CB_TO_MAIN_CONN;
     use core::sync::atomic::Ordering;
     use num_traits::ToPrimitive;
 
@@ -484,7 +476,7 @@ mod implementation {
                     weekday: wday,
                 };
                 let buf = xous_ipc::Buffer::into_buf(dt).unwrap();
-                buf.send(cb_to_main_conn, crate::api::Opcode::ResponseDateTime.to_u32().unwrap()).unwrap();
+                buf.send(cb_to_main_conn, crate::api::RtcOpcode::ResponseDateTime.to_u32().unwrap()).unwrap();
             }
         }
     }
@@ -520,80 +512,11 @@ mod implementation {
     }
 }
 
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum ValidatorOp {
-    UxMonth,
-    UxDay,
-    UxYear,
-    UxHour,
-    UxMinute,
-    UxSeconds,
-}
-
-fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<ValidatorErr> {
-    let text_str = input.as_str();
-    let input_int = match text_str.parse::<u32>() {
-        Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
-    };
-    log::trace!("validating input {}, parsed as {} for opcode {}", text_str, input_int, opcode);
-    match FromPrimitive::from_u32(opcode) {
-        Some(ValidatorOp::UxMonth) => {
-            if input_int < 1 || input_int > 12 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxDay) => {
-            if input_int < 1 || input_int > 31 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxYear) => {
-            if input_int > 99 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxHour) => {
-            if input_int > 23 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxMinute) => {
-            if input_int > 59 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxSeconds) => {
-            if input_int > 59 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        _ => {
-            log::error!("internal error: invalid opcode was sent to validator: {:?}", opcode);
-            panic!("internal error: invalid opcode was sent to validator");
-        }
-    }
-    None
-}
-
-#[xous::xous_main]
-fn xmain() -> ! {
-    use crate::implementation::Rtc;
-
-    log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+pub(crate) fn rtc_server(rtc_sid: xous::SID) {
+    use crate::rtc::implementation::Rtc;
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    // expected connections:
-    // - GAM
-    // - shellchat/rtc
-    // - shellchat/sleep x2
-    // - factory test
-    // - UX thread (self, created without xns, so does not count)
-    // - rootkeys (for coordinating reboot)
-    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(5)).expect("can't register server");
-    log::trace!("registered with NS -- {:?}", rtc_sid);
     CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -602,25 +525,14 @@ fn xmain() -> ! {
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let mut rtc = Rtc::new(&xns);
 
-    let day_of_week_list = [
-        t!("rtc.monday", xous::LANG),
-        t!("rtc.tuesday", xous::LANG),
-        t!("rtc.wednesday", xous::LANG),
-        t!("rtc.thursday", xous::LANG),
-        t!("rtc.friday", xous::LANG),
-        t!("rtc.saturday", xous::LANG),
-        t!("rtc.sunday", xous::LANG),
-    ];
-
     let ticktimer = ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer");
     let mut dt_cb_conns: [bool; xous::MAX_CID] = [false; xous::MAX_CID];
-    let modals = modals::Modals::new(&xns).unwrap();
     log::trace!("ready to accept requests");
     loop {
         let msg = xous::receive_message(rtc_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::SetDateTime) => {
+            Some(RtcOpcode::SetDateTime) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = buffer.to_original::<DateTime, _>().unwrap();
                 let mut sent = false;
@@ -649,7 +561,7 @@ fn xmain() -> ! {
                 }
                 log::trace!("rtc_set of {:?} successful", dt);
             },
-            Some(Opcode::RegisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+            Some(RtcOpcode::RegisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                 let cid = xous::connect(sid).unwrap();
                 if (cid as usize) < dt_cb_conns.len() {
@@ -659,7 +571,7 @@ fn xmain() -> ! {
                     log::error!("RegisterDateTimeCallback received a CID out of range");
                 }
             }),
-            Some(Opcode::UnregisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+            Some(RtcOpcode::UnregisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                 let cid = xous::connect(sid).unwrap();
                 if (cid as usize) < dt_cb_conns.len() {
@@ -669,7 +581,7 @@ fn xmain() -> ! {
                 }
                 unsafe{xous::disconnect(cid).unwrap()};
             }),
-            Some(Opcode::ResponseDateTime) => {
+            Some(RtcOpcode::ResponseDateTime) => {
                 rtc.rtc_get_ack(); // let the async callback interface know we returned
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
@@ -692,7 +604,7 @@ fn xmain() -> ! {
                 }
                 log::trace!("ResponeDateTime done");
             },
-            Some(Opcode::RequestDateTime) => {
+            Some(RtcOpcode::RequestDateTime) => {
                 let mut sent = false;
                 while !sent {
                     match rtc.rtc_get() {
@@ -710,99 +622,24 @@ fn xmain() -> ! {
                 }
                 log::trace!("RequestDateTime completed");
             }
-            Some(Opcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
+            Some(RtcOpcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.wakeup_alarm(delay as u8); // this will block until finished, no callbacks used
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
-            Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            Some(RtcOpcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_wakeup_alarm(); // blocks until transaction is finished
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
-             Some(Opcode::SetRtcAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
+             Some(RtcOpcode::SetRtcAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.rtc_alarm(delay as u8); // this will block until finished, no callbacks used
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
-            Some(Opcode::ClearRtcAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            Some(RtcOpcode::ClearRtcAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_rtc_alarm(); // blocks until transaction is finished
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
-            Some(Opcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
-                let secs: u8;
-                let mins: u8;
-                let hours: u8;
-                let months: u8;
-                let days: u8;
-                let years: u8;
-                let weekday: Weekday;
 
-                months = modals.get_text(
-                    t!("rtc.month", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap())
-                ).expect("couldn't get month").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got months {}", months);
-
-                days = modals.get_text(
-                    t!("rtc.day", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap())
-                ).expect("couldn't get month").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got days {}", days);
-
-                years = modals.get_text(
-                    t!("rtc.year", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap())
-                ).expect("couldn't get month").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got years {}", years);
-
-                for dow in day_of_week_list.iter() {
-                    modals.add_list_item(dow).expect("couldn't build day of week list");
-                }
-                let payload = modals.get_radiobutton(t!("rtc.day_of_week", xous::LANG)).expect("couldn't get day of week");
-                weekday =
-                    if payload.as_str() == t!("rtc.monday", xous::LANG) {
-                        Weekday::Monday
-                    } else if payload.as_str() == t!("rtc.tuesday", xous::LANG) {
-                        Weekday::Tuesday
-                    } else if payload.as_str() == t!("rtc.wednesday", xous::LANG) {
-                        Weekday::Wednesday
-                    } else if payload.as_str() == t!("rtc.thursday", xous::LANG) {
-                        Weekday::Thursday
-                    } else if payload.as_str() == t!("rtc.friday", xous::LANG) {
-                        Weekday::Friday
-                    } else if payload.as_str() == t!("rtc.saturday", xous::LANG) {
-                        Weekday::Saturday
-                    } else {
-                        Weekday::Sunday
-                    };
-                log::debug!("got weekday {:?}", weekday);
-
-                hours = modals.get_text(
-                    t!("rtc.hour", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap())
-                ).expect("couldn't get hour").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got hours {}", hours);
-
-                mins = modals.get_text(
-                    t!("rtc.minute", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap())
-                ).expect("couldn't get minutes").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got minutes {}", mins);
-
-                secs = modals.get_text(
-                    t!("rtc.seconds", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap())
-                ).expect("couldn't get seconds").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got seconds {}", secs);
-
-                log::info!("Setting time: {}/{}/{} {}:{}:{} {:?}", months, days, years, hours, mins, secs, weekday);
-                rtc.rtc_set(secs, mins, hours, days, months, years, weekday).expect("couldn't set the current time");
-            }),
-            Some(Opcode::Quit) => {
+            Some(RtcOpcode::Quit) => {
                 log::error!("Quitting RTC server");
                 break;
             },
@@ -831,5 +668,4 @@ fn xmain() -> ! {
     xns.unregister_server(rtc_sid).unwrap();
     xous::destroy_server(rtc_sid).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(0)
 }

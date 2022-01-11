@@ -3,6 +3,7 @@ use xous_ipc::String;
 use core::fmt::Write;
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
@@ -41,6 +42,8 @@ use trng::*;
 #[derive(Debug)]
 pub struct CommonEnv {
     llio: llio::Llio,
+    i2c: llio::I2c,
+    rtc: Arc<Mutex<llio::Rtc>>,
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
@@ -91,7 +94,6 @@ mod backlight; use backlight::*;
 mod accel;    use accel::*;
 mod sha;      use sha::*;
 mod ecup;     use ecup::*;
-mod aes_cmd;  use aes_cmd::*;
 mod trng_cmd; use trng_cmd::*;
 mod engine;   use engine::*;
 mod console;  use console::*;
@@ -102,6 +104,10 @@ mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
 
+#[cfg(feature="benchmarks")]
+mod aes_cmd;
+#[cfg(feature="benchmarks")]
+use aes_cmd::*;
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
 
@@ -135,9 +141,11 @@ impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         let mut common = CommonEnv {
-            llio: llio::Llio::new(&xns).expect("couldn't connect to LLIO"),
+            llio: llio::Llio::new(&xns),
+            i2c: llio::I2c::new(&xns),
+            rtc: Arc::new(Mutex::new(llio::Rtc::new(&xns))),
             com: com::Com::new(&xns).expect("could't connect to COM"),
-            ticktimer: ticktimer,
+            ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             cb_registrations: HashMap::new(),
             trng: Trng::new(&xns).unwrap(),

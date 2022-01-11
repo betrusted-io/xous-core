@@ -844,7 +844,7 @@ fn xmain() -> ! {
     let mut raw_listener_op: Option<u32> = None;
 
     let mut vibe = false;
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
     /*{
         log::warn!("kbd server is overriding WFI for debugging, remember to disable for production");
         llio.wfi_override(true).unwrap();

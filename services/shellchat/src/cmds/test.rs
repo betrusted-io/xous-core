@@ -1,3 +1,4 @@
+use crate::oqc_test::OqcOp;
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 use xous::{MessageEnvelope, Message};
@@ -6,9 +7,11 @@ use llio::I2cStatus;
 use codec::*;
 use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
 use spectrum_analyzer::windows::hann_window;
-use rtc::{DateTime, Weekday};
+use llio::{DateTime, Weekday};
 use core::fmt::Write;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
+use std::sync::Arc;
+use num_traits::*;
 
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
 
@@ -27,13 +30,11 @@ pub struct Test {
     right_play: bool,
     speaker_play: bool,
     freq: f32,
-    //rtc: rtc::Rtc,
     start_time: Option<DateTime>,
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
-    //kbd: Arc<Mutex<keyboard::Keyboard>>,
-    oqc: oqc_test::Oqc,
+    oqc_cid: Option<xous::CID>,
     oqc_start: u64,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     jtag: jtag::Jtag,
@@ -64,13 +65,11 @@ impl Test {
             right_play: true,
             speaker_play: true,
             freq: 440.0,
-            //rtc: rtc::Rtc::new(&xns).unwrap(),
             start_time: None,
             end_time: None,
             start_elapsed: None,
             end_elapsed: None,
-            //kbd: Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap())),
-            oqc: oqc_test::Oqc::new(&xns).unwrap(),
+            oqc_cid: None,
             oqc_start: 0,
             #[cfg(any(target_os = "none", target_os = "xous"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
@@ -107,12 +106,12 @@ impl<'a> ShellCmdApi<'a> for Test {
             match sub_cmd {
                 "factory" => {
                     // force a specified time to make sure the elapsed time computation later on works
-                    if !rtc_set(&mut env.llio, 0, 0, 10, 1, 6, 21) {
+                    if !rtc_set(&mut env.i2c, 0, 0, 10, 1, 6, 21) {
                         log::info!("{}|RTC|FAIL|SET|", SENTINEL);
                     }
 
                     self.start_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.start_time = rtc_get(&mut env.llio);
+                    self.start_time = rtc_get(&mut env.i2c);
 
                     // set uart MUX, and turn off WFI so UART reports are "clean" (no stuck characters when CPU is in WFI)
                     env.llio.set_uart_mux(llio::UartType::Log).unwrap();
@@ -217,7 +216,7 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     env.ticktimer.sleep_ms(6000).unwrap(); // wait so we have some realistic delta on the datetime function
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.end_time = rtc_get(&mut env.llio);
+                    self.end_time = rtc_get(&mut env.i2c);
 
                     let exact_time_secs = ((self.end_elapsed.unwrap() - self.start_elapsed.unwrap()) / 1000) as i32;
                     if let Some(end_dt) = self.end_time {
@@ -406,6 +405,27 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
                         return Ok(Some(ret));
                     }
+                    // start the server if it isn't started already, but only allow it to start once. Note that the CID stays the same between calls,
+                    // because the SID is stable between calls and we're calling from the same process each time.
+                    let oqc_cid = if let Some(oc) = self.oqc_cid {
+                        oc
+                    } else {
+                        let oqc_cid = Arc::new(AtomicU32::new(0));
+                        // start the OQC thread
+                        let _ = std::thread::spawn({
+                            let oqc_cid = oqc_cid.clone();
+                            move || {
+                                crate::oqc_test::oqc_test(oqc_cid);
+                            }
+                        });
+                        // wait until the OQC thread has connected itself
+                        while oqc_cid.load(Ordering::SeqCst) == 0 {
+                            env.ticktimer.sleep_ms(200).unwrap();
+                        }
+                        self.oqc_cid = Some(oqc_cid.load(Ordering::SeqCst));
+                        oqc_cid.load(Ordering::SeqCst)
+                    };
+
                     let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
                     env.llio.wfi_override(true).unwrap();
                     // activate SSID scanning while the test runs
@@ -436,10 +456,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                     susres.initiate_suspend().unwrap();
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
-                    self.oqc.trigger(60_000);
+                    let timeout = 60_000;
+                    xous::send_message(oqc_cid,
+                        xous::Message::new_blocking_scalar(OqcOp::Trigger.to_usize().unwrap(), timeout, 0, 0, 0,)
+                    ).expect("couldn't trigger self test");
 
                     loop {
-                        match self.oqc.status() {
+                        match oqc_status(oqc_cid) {
                             Some(true) => {
                                 let ssid_str = env.com.ssid_fetch_as_string().unwrap();
                                 use std::str::FromStr;
@@ -798,7 +821,7 @@ const ABRTCMC_SECONDS: u8 = 0x3;
 // vendor in the RTC code -- the RTC system was not architected to do our test sets
 // in particular we need a synchronous callback on the date/time, which is not terribly useful in most other contexts
 // so instead of burdening the OS with it, we just incorprate it specifically into this test function
-fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8) -> bool {
+fn rtc_set(i2c: &mut llio::I2c, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8) -> bool {
     let mut txbuf: [u8; 8] = [0; 8];
 
     // convert enum to bitfields
@@ -814,7 +837,7 @@ fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, month
     txbuf[6] = to_bcd(months);
     txbuf[7] = to_bcd(years);
 
-    match llio.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
+    match i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
         Ok(status) => {
             match status {
                 I2cStatus::ResponseWriteOk => true,
@@ -825,9 +848,9 @@ fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, month
         _ => {log::error!("try_send_i2c unhandled error"); false}
     }
 }
-fn rtc_get(llio: &mut llio::Llio) -> Option<DateTime> {
+fn rtc_get(i2c: &mut llio::I2c) -> Option<DateTime> {
     let mut rxbuf = [0; 7];
-    match llio.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None) {
+    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None) {
         Ok(status) => {
             match status {
                 I2cStatus::ResponseReadOk => {
@@ -846,5 +869,25 @@ fn rtc_get(llio: &mut llio::Llio) -> Option<DateTime> {
             }
         }
         _ => None
+    }
+}
+
+fn oqc_status(conn: xous::CID) -> Option<bool> { // None if still running or not yet run; Some(true) if pass; Some(false) if fail
+    let result = xous::send_message(conn,
+        xous::Message::new_blocking_scalar(OqcOp::Status.to_usize().unwrap(), 0, 0, 0, 0)
+    ).expect("couldn't query test status");
+    match result {
+        xous::Result::Scalar1(val) => {
+            match val {
+                0 => return None,
+                1 => return Some(true),
+                2 => return Some(false),
+                _ => return Some(false),
+            }
+        }
+        _ => {
+            log::error!("internal error");
+            panic!("improper result code on oqc status query");
+        }
     }
 }

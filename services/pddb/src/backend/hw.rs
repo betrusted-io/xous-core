@@ -118,7 +118,7 @@ impl PddbOs {
         let fscb_phys_base = PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
         log::debug!("fscb_phys_base: {:x?}", fscb_phys_base);
 
-        let llio = llio::Llio::new(&xns).unwrap();
+        let llio = llio::Llio::new(&xns);
         // native hardware
         #[cfg(any(target_os = "none", target_os = "xous"))]
         let ret = PddbOs {

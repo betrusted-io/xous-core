@@ -1,16 +1,15 @@
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
+use std::sync::Arc;
+use std::thread;
 
 #[derive(Debug)]
 pub struct Sleep {
-    rtc: rtc::Rtc,
     susres: susres::Susres,
 }
 impl Sleep {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        let rtc = rtc::Rtc::new(&xns).unwrap();
         Sleep {
-            rtc,
             susres: susres::Susres::new_without_hook(&xns).unwrap(),
         }
     }
@@ -20,7 +19,7 @@ fn kill_thread(bounce: usize) {
     log::info!("Self destruct thread active.");
 
     let xns = xous_names::XousNames::new().unwrap();
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
     let com = com::Com::new(&xns).unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     ticktimer.sleep_ms(3000).unwrap();
@@ -37,27 +36,6 @@ fn kill_thread(bounce: usize) {
         com.power_off_soc().unwrap();
         ticktimer.sleep_ms(1000).unwrap();
         log::info!("If you can read this, we failed to destroy ourselves!");
-    }
-}
-
-fn susres_loop() {
-    log::info!("suspend/resume stress test active");
-
-    let xns = xous_names::XousNames::new().unwrap();
-    let susres = susres::Susres::new_without_hook(&xns).unwrap();
-    let rtc = rtc::Rtc::new(&xns).unwrap();
-    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-
-    ticktimer.sleep_ms(1500).unwrap();
-
-    let mut iters = 0;
-    loop {
-        log::info!("suspend/resume cycle: {}", iters);
-        rtc.set_wakeup_alarm(4).unwrap();
-        susres.initiate_suspend().unwrap();
-
-        ticktimer.sleep_ms(8000).unwrap();
-        iters += 1;
     }
 }
 
@@ -92,7 +70,25 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     write!(ret, "Resumed from sleep!").unwrap();
                 }
                 "stress" => {
-                    xous::create_thread_0(susres_loop).unwrap();
+                    let _ = thread::spawn({
+                        let rtc = Arc::clone(&env.rtc);
+                        move || {
+                            log::info!("suspend/resume stress test active");
+
+                            let xns = xous_names::XousNames::new().unwrap();
+                            let susres = susres::Susres::new_without_hook(&xns).unwrap();
+                            let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+                            ticktimer.sleep_ms(1500).unwrap();
+                            let mut iters = 0;
+                            loop {
+                                log::info!("suspend/resume cycle: {}", iters);
+                                rtc.lock().unwrap().set_wakeup_alarm(4).unwrap();
+                                susres.initiate_suspend().unwrap();
+                                ticktimer.sleep_ms(8000).unwrap();
+                                iters += 1;
+                            }
+                        }
+                    });
                     write!(ret, "Starting suspend/resume stress test. Hard reboot required to exit.").unwrap();
                 }
                 "now" => {
@@ -160,7 +156,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
 
                             // set a wakeup alarm a couple seconds from now -- this is the coldboot
-                            self.rtc.set_wakeup_alarm(4).unwrap();
+                            env.rtc.lock().unwrap().set_wakeup_alarm(4).unwrap();
 
                             // allow EC to snoop, so that it can wake up the system
                             env.llio.allow_ec_snoop(true).unwrap();

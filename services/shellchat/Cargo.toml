@@ -14,7 +14,6 @@ graphics-server = {path = "../graphics-server"}
 ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
 llio = {path = "../llio"}
-rtc = {path = "../rtc"}
 log = "0.4.14"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
@@ -45,8 +44,6 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 # for audio self-test analysis
 spectrum-analyzer = "0.5.2"
-# for outgoing quality check
-oqc-test = {path="../oqc-test"}
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
@@ -75,7 +72,8 @@ utralib = {path = "../../utralib"}
 [features]
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
-default = [] # "debugprint"
+benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
+default = ["benchmarks"] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]
 debug-here = "*"

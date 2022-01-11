@@ -1,22 +1,27 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+mod mainmenu;
+use mainmenu::*;
+
 use com::api::BattStats;
 use log::info;
 
-use core::fmt::Write;
-
 use blitstr_ref as blitstr;
+use core::fmt::Write;
 
 use num_traits::*;
 use xous::{msg_scalar_unpack, send_message, Message, CID};
-use xous_ipc::String;
 
 use graphics_server::*;
 use locales::t;
+use gam::modal::*;
+use llio::Weekday;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+
 #[cfg_attr(
     not(any(target_os = "none", target_os = "xous")),
     allow(unused_imports)
@@ -28,13 +33,14 @@ const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum StatusOpcode {
-    // for passing battstats on to the main thread from the callback
+    /// for passing battstats on to the main thread from the callback
     BattStats,
-    // for passing DateTime
+    /// for passing DateTime
     DateTime,
-    // indicates time for periodic update of the status bar
+    /// indicates time for periodic update of the status bar
     Pump,
-    // exists to make clippy happy about unreachable code
+    /// Pulls up the time setting UI
+    UxSetTime,
     Quit,
 }
 
@@ -56,7 +62,7 @@ fn battstats_cb(stats: BattStats) {
     }
 }
 
-pub fn dt_callback(dt: rtc::DateTime) {
+pub fn dt_callback(dt: llio::DateTime) {
     //log::info!("dt_callback received with {:?}", dt);
     if let Some(cb_to_main_conn) = unsafe { CB_TO_MAIN_CONN } {
         let buf = xous_ipc::Buffer::into_buf(dt)
@@ -67,16 +73,18 @@ pub fn dt_callback(dt: rtc::DateTime) {
     }
 }
 
-pub fn pump_thread(conn: usize) {
+pub fn pump_thread(conn: usize, pump_run: Arc<AtomicBool>) {
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     loop {
-        match send_message(
-            conn as u32,
-            Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
-        ) {
-            Err(xous::Error::ServerNotFound) => break,
-            Ok(xous::Result::Ok) => {}
-            _ => panic!("unhandled error in status pump thread"),
+        if pump_run.load(Ordering::Relaxed) {
+            match send_message(
+                conn as u32,
+                Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+            ) {
+                Err(xous::Error::ServerNotFound) => break,
+                Ok(xous::Result::Ok) => {}
+                _ => panic!("unhandled error in status pump thread"),
+            }
         }
         ticktimer.sleep_ms(1000).unwrap();
     }
@@ -121,8 +129,14 @@ fn xmain() -> ! {
         .expect("|status: can't register server");
     // create a connection for callback hooks
     unsafe { CB_TO_MAIN_CONN = Some(xous::connect(status_sid).unwrap()) };
+    let pump_run = Arc::new(AtomicBool::new(true));
     let pump_conn = xous::connect(status_sid).unwrap();
-    xous::create_thread_1(pump_thread, pump_conn as _).expect("couldn't create pump thread");
+    let _ = thread::spawn({
+        let pump_run = pump_run.clone();
+        move || {
+            pump_thread(pump_conn as _, pump_run);
+        }
+    });
 
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
@@ -192,14 +206,14 @@ fn xmain() -> ! {
         .expect("Can't get battery stats from COM");
 
     log::debug!("initializing RTC...");
-    let mut rtc = rtc::Rtc::new(&xns).unwrap();
+    let mut rtc = llio::Rtc::new(&xns);
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
     rtc.clear_wakeup_alarm().unwrap(); // clear any wakeup alarm state, if it was set
 
     rtc.hook_rtc_callback(dt_callback).unwrap();
-    let mut datetime: Option<rtc::DateTime> = None;
-    let llio = llio::Llio::new(&xns).unwrap();
+    let mut datetime: Option<llio::DateTime> = None;
+    let llio = llio::Llio::new(&xns);
 
     log::debug!("usb unlock notice...");
     let (dl, _) = llio.debug_usb(None).unwrap();
@@ -291,24 +305,24 @@ fn xmain() -> ! {
     let mut needs_redraw = false;
 
     log::debug!("starting main menu thread");
-    let keys_init;
-    let keys_op;
-    if keys.lock().unwrap().is_initialized().unwrap() {
-        keys_init = 1;
-        keys_op = keys.lock().unwrap().get_update_gateware_op();
-    } else {
-        keys_init = 0;
-        keys_op = keys.lock().unwrap().get_try_init_keys_op();
-    }
-    let sign_op = keys.lock().unwrap().get_try_selfsign_op();
-    xous::create_thread_4(
-        main_menu_thread,
-        keys_init,
-        keys.lock().unwrap().conn() as usize,
-        keys_op as usize,
-        sign_op as usize,
-    )
-    .expect("couldn't create menu thread");
+    let _ = thread::spawn({
+        let keys = keys.clone();
+        move || {
+            main_menu_thread(keys, status_sid);
+        }
+    });
+
+    // some RTC UX structures
+    let modals = modals::Modals::new(&xns).unwrap();
+    let day_of_week_list = [
+        t!("rtc.monday", xous::LANG),
+        t!("rtc.tuesday", xous::LANG),
+        t!("rtc.wednesday", xous::LANG),
+        t!("rtc.thursday", xous::LANG),
+        t!("rtc.friday", xous::LANG),
+        t!("rtc.saturday", xous::LANG),
+        t!("rtc.sunday", xous::LANG),
+    ];
 
     info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
     loop {
@@ -413,7 +427,7 @@ fn xmain() -> ! {
                     {
                         log::trace!("hosted request of date time - short circuiting server call");
                         use chrono::prelude::*;
-                        use rtc::Weekday;
+                        use llio::Weekday;
                         let now = Local::now();
                         let wday: Weekday = match now.weekday() {
                             chrono::Weekday::Mon => Weekday::Monday,
@@ -424,7 +438,7 @@ fn xmain() -> ! {
                             chrono::Weekday::Sat => Weekday::Saturday,
                             chrono::Weekday::Sun => Weekday::Sunday,
                         };
-                        datetime = Some(rtc::DateTime {
+                        datetime = Some(llio::DateTime {
                             seconds: now.second() as u8,
                             minutes: now.minute() as u8,
                             hours: now.hour() as u8,
@@ -443,13 +457,13 @@ fn xmain() -> ! {
                 {
                     let dt = datetime.unwrap();
                     let day = match dt.weekday {
-                        rtc::Weekday::Monday => "Mon",
-                        rtc::Weekday::Tuesday => "Tue",
-                        rtc::Weekday::Wednesday => "Wed",
-                        rtc::Weekday::Thursday => "Thu",
-                        rtc::Weekday::Friday => "Fri",
-                        rtc::Weekday::Saturday => "Sat",
-                        rtc::Weekday::Sunday => "Sun",
+                        llio::Weekday::Monday => "Mon",
+                        llio::Weekday::Tuesday => "Tue",
+                        llio::Weekday::Wednesday => "Wed",
+                        llio::Weekday::Thursday => "Thu",
+                        llio::Weekday::Friday => "Fri",
+                        llio::Weekday::Saturday => "Sat",
+                        llio::Weekday::Sunday => "Sun",
                     };
                     uptime_tv.clear_str();
                     write!(
@@ -493,9 +507,96 @@ fn xmain() -> ! {
                 let buffer = unsafe {
                     xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
                 };
-                let dt = buffer.to_original::<rtc::DateTime, _>().unwrap();
+                let dt = buffer.to_original::<llio::DateTime, _>().unwrap();
                 datetime = Some(dt);
             }
+            Some(StatusOpcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
+                pump_run.store(false, Ordering::Relaxed); // stop status updates while we do this
+                let secs: u8;
+                let mins: u8;
+                let hours: u8;
+                let months: u8;
+                let days: u8;
+                let years: u8;
+                let weekday: Weekday;
+
+                months = modals.get_text(
+                    t!("rtc.month", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap())
+                ).expect("couldn't get month").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got months {}", months);
+
+                days = modals.get_text(
+                    t!("rtc.day", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap())
+                ).expect("couldn't get month").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got days {}", days);
+
+                years = modals.get_text(
+                    t!("rtc.year", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap())
+                ).expect("couldn't get month").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got years {}", years);
+
+                for dow in day_of_week_list.iter() {
+                    modals.add_list_item(dow).expect("couldn't build day of week list");
+                }
+                let payload = modals.get_radiobutton(t!("rtc.day_of_week", xous::LANG)).expect("couldn't get day of week");
+                weekday =
+                    if payload.as_str() == t!("rtc.monday", xous::LANG) {
+                        Weekday::Monday
+                    } else if payload.as_str() == t!("rtc.tuesday", xous::LANG) {
+                        Weekday::Tuesday
+                    } else if payload.as_str() == t!("rtc.wednesday", xous::LANG) {
+                        Weekday::Wednesday
+                    } else if payload.as_str() == t!("rtc.thursday", xous::LANG) {
+                        Weekday::Thursday
+                    } else if payload.as_str() == t!("rtc.friday", xous::LANG) {
+                        Weekday::Friday
+                    } else if payload.as_str() == t!("rtc.saturday", xous::LANG) {
+                        Weekday::Saturday
+                    } else {
+                        Weekday::Sunday
+                    };
+                log::debug!("got weekday {:?}", weekday);
+
+                hours = modals.get_text(
+                    t!("rtc.hour", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap())
+                ).expect("couldn't get hour").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got hours {}", hours);
+
+                mins = modals.get_text(
+                    t!("rtc.minute", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap())
+                ).expect("couldn't get minutes").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got minutes {}", mins);
+
+                secs = modals.get_text(
+                    t!("rtc.seconds", xous::LANG),
+                    Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap())
+                ).expect("couldn't get seconds").as_str()
+                .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                log::debug!("got seconds {}", secs);
+
+                log::info!("Setting time: {}/{}/{} {}:{}:{} {:?}", months, days, years, hours, mins, secs, weekday);
+                let dt = llio::DateTime {
+                    seconds: secs,
+                    minutes: mins,
+                    hours,
+                    days,
+                    months,
+                    years,
+                    weekday
+                };
+                rtc.set_rtc(dt).expect("couldn't set the current time");
+                pump_run.store(true, Ordering::Relaxed); // stop status updates while we do this
+            }),
             Some(StatusOpcode::Quit) => {
                 break;
             }
@@ -519,132 +620,59 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-use gam::*;
-// this is the provider for the main menu, it's built into the GAM so we always have at least this
-// root-level menu available
-pub fn main_menu_thread(keys_init: usize, key_conn: usize, key_op: usize, selfsign_op: usize) {
-    let mut menu = Menu::new(gam::api::MAIN_MENU_NAME);
+// RTC helper functions
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum ValidatorOp {
+    UxMonth,
+    UxDay,
+    UxYear,
+    UxHour,
+    UxMinute,
+    UxSeconds,
+}
 
-    let xns = xous_names::XousNames::new().unwrap();
-    let susres = susres::Susres::new_without_hook(&xns).unwrap();
-    let com = com::Com::new(&xns).unwrap();
-    let rtc = rtc::Rtc::new(&xns).unwrap();
-
-    let blon_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.backlighton", xous::LANG)),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
-        close_on_select: true,
+fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+    let input_int = match text_str.parse::<u32>() {
+        Ok(input_int) => input_int,
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
     };
-    menu.add_item(blon_item);
-
-    let bloff_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.backlightoff", xous::LANG)),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(bloff_item);
-
-    let sleep_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.sleep", xous::LANG)),
-        action_conn: susres.conn(),
-        action_opcode: susres.getop_suspend(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(sleep_item);
-
-    if keys_init == 0 {
-        let initkeys_item = MenuItem {
-            name: String::<64>::from_str(t!("mainmenu.init_keys", xous::LANG)),
-            action_conn: key_conn as u32,
-            action_opcode: key_op as u32,
-            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-            close_on_select: true,
-        };
-        menu.add_item(initkeys_item);
-    } else {
-        let provision_item = MenuItem {
-            name: String::<64>::from_str(t!("mainmenu.provision_gateware", xous::LANG)),
-            action_conn: key_conn as u32,
-            action_opcode: key_op as u32, // this op is changed from init to provision when keys_init is 0...
-            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-            close_on_select: true,
-        };
-        menu.add_item(provision_item);
-
-        let selfsign_item = MenuItem {
-            name: String::<64>::from_str(t!("mainmenu.selfsign", xous::LANG)),
-            action_conn: key_conn as u32,
-            action_opcode: selfsign_op as u32,
-            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-            close_on_select: true,
-        };
-        menu.add_item(selfsign_item);
-    }
-
-    let setrtc_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.set_rtc", xous::LANG)),
-        action_conn: rtc.conn(),
-        action_opcode: rtc.getop_set_ux(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(setrtc_item);
-
-    let close_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.closemenu", xous::LANG)),
-        action_conn: menu.gam.conn(),
-        action_opcode: menu.gam.getop_revert_focus(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: false, // don't close because we're already closing
-    };
-    menu.add_item(close_item);
-
-    loop {
-        let msg = xous::receive_message(menu.sid).unwrap();
-        log::trace!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(MenuOpcode::Redraw) => {
-                menu.redraw();
-            }
-            Some(MenuOpcode::Rawkeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
-                let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k2 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k3 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k4 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                ];
-                menu.key_event(keys);
-            }),
-            Some(MenuOpcode::Quit) => {
-                break;
-            }
-            None => {
-                log::error!("unknown opcode {:?}", msg.body.id());
+    log::trace!("validating input {}, parsed as {} for opcode {}", text_str, input_int, opcode);
+    match FromPrimitive::from_u32(opcode) {
+        Some(ValidatorOp::UxMonth) => {
+            if input_int < 1 || input_int > 12 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
             }
         }
+        Some(ValidatorOp::UxDay) => {
+            if input_int < 1 || input_int > 31 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxYear) => {
+            if input_int > 99 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxHour) => {
+            if input_int > 23 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxMinute) => {
+            if input_int > 59 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxSeconds) => {
+            if input_int > 59 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        _ => {
+            log::error!("internal error: invalid opcode was sent to validator: {:?}", opcode);
+            panic!("internal error: invalid opcode was sent to validator");
+        }
     }
-    log::trace!("menu thread exit, destroying servers");
-    // do we want to add a deregister_ux call to the system?
-    xous::destroy_server(menu.sid).unwrap();
+    None
 }

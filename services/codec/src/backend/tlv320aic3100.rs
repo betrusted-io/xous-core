@@ -15,6 +15,7 @@ pub struct Codec {
     fifo: MemoryRange,
     susres_manager: RegManager<{utra::audio::AUDIO_NUMREGS}>,
     llio: llio::Llio,
+    i2c: llio::I2c,
     ticktimer: ticktimer_server::Ticktimer,
     play_buffer: FrameRing,
     play_frames_dropped: u32,
@@ -115,13 +116,15 @@ impl Codec {
         )
         .expect("couldn't map Audio CSR range");
 
-        let llio = llio::Llio::new(xns).expect("can't connect to LLIO");
+        let llio = llio::Llio::new(xns);
+        let i2c = llio::I2c::new(xns);
 
         let mut codec = Codec {
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
             susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
             fifo,
             llio,
+            i2c,
             ticktimer: ticktimer_server::Ticktimer::new().expect("can't connect to the ticktimer"),
             play_buffer: FrameRing::new(),
             play_frames_dropped: 0,
@@ -254,7 +257,7 @@ impl Codec {
 
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {
         //log::trace!("writing to 0x{:x}, {:x?}", adr, data);
-        match self.llio.i2c_write(TLV320AIC3100_I2C_ADR, adr, data, None) {
+        match self.i2c.i2c_write(TLV320AIC3100_I2C_ADR, adr, data, None) {
             Ok(status) => {
                 //log::trace!("write returned with status {:?}", status);
                 match status {
@@ -267,7 +270,7 @@ impl Codec {
         }
     }
     fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
-        match self.llio.i2c_read(TLV320AIC3100_I2C_ADR, adr, data, None) {
+        match self.i2c.i2c_read(TLV320AIC3100_I2C_ADR, adr, data, None) {
             Ok(status) => {
                 match status {
                     I2cStatus::ResponseReadOk => true,
