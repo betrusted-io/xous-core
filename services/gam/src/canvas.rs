@@ -207,10 +207,8 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
                         }
                         // rand >>= 1;
 
-                        x = x % width;
-                        y = y % height;
-                        delta_x = delta_x % width;
-                        delta_y = delta_y % width;
+                        x = remap_rand(width as _, x as _, 0xfff);
+                        y = remap_rand(height as _, y as _, 0xfff);
 
                         gfx.draw_line_clipped_xor(
                             Line::new_with_style(
@@ -228,6 +226,19 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
         }
     }
     defaced
+}
+fn remap_rand(end_range: i32, rand: i16, source_range: i32) -> i16 {
+    // x is a number from 0 through 2^12 -1 = 4095
+    // we want to take 0<->4095 and renormalize to a range of -width/2 <-> width/2 and
+    // then add it to width/2 to get a somewhat regular distribution (a modulus would
+    // tend to bias lines "away" from the lower and right edges since both points of
+    // the line would have to, by chance, be just up to the width but not larger than that)
+    (
+        (((end_range as i32 * rand as i32 * 100i32) / source_range) // remap to 0:end_range*100
+        - (end_range as i32 * 100i32) / 2i32) // remap to -end_range*100/2:end_range*100/2
+        / 100i32 // remap to -end_range/2:end_range/2
+        + (end_range as i32 / 2) // remap to 0:end_range
+    ) as i16
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
