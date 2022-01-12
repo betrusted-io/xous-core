@@ -64,6 +64,11 @@
         "zh": "设置时间",
         "en-audio": "Set time"
     },
+    "mainmenu.reboot": {
+        "en": "Reboot",
+        "zh": "重启",
+        "en-audio": "Reboot"
+    },
     "mainmenu.closemenu": {
         "en": "Close menu",
         "zh": "关闭功能表",

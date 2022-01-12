@@ -84,6 +84,15 @@ pub fn main_menu_thread(keys: Arc<Mutex<RootKeys>>, status_sid: xous::SID) {
     };
     menu.add_item(setrtc_item);
 
+    let reboot_item = MenuItem {
+        name: String::<64>::from_str(t!("mainmenu.reboot", xous::LANG)),
+        action_conn: status_conn,
+        action_opcode: StatusOpcode::Reboot.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    };
+    menu.add_item(reboot_item);
+
     let close_item = MenuItem {
         name: String::<64>::from_str(t!("mainmenu.closemenu", xous::LANG)),
         action_conn: menu.gam.conn(),
