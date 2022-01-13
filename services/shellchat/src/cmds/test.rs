@@ -467,17 +467,26 @@ impl<'a> ShellCmdApi<'a> for Test {
                     loop {
                         match oqc_status(oqc_cid) {
                             Some(true) => {
-                                let ssid_str = env.com.ssid_fetch_as_string().unwrap();
-                                use std::str::FromStr;
-                                let ssid = std::string::String::from_str(ssid_str.as_str().unwrap()).unwrap();
-                                let ssid_short = ssid.replace(".", "");
-                                let mut lines = ssid_short.lines();
-                                let _ = lines.next(); // skip the banner
-                                write!(ret, "SSID {}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
-                                    lines.next().unwrap() // just the first SSID result
+                                log::info!("wrapping up: fetching SSID list");
+                                let ssid_str = env.com.ssid_fetch_as_list().unwrap();
+                                let mut min = 255u8;
+                                let mut min_index = 0;
+                                for (index, (rssi, name)) in ssid_str.iter().enumerate() {
+                                    if name.len() > 0 {
+                                        if *rssi < min {
+                                            min = *rssi;
+                                            min_index = index;
+                                        }
+                                    }
+                                }
+                                let (rssi, name) = &ssid_str[min_index];
+                                log::info!("strongest AP: -{}dBm, {}", *rssi, name);
+                                write!(ret, "SSID (-{}):{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
+                                    *rssi, name // just the first SSID result
                                 ).unwrap();
                                 let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
                                 write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
+                                log::info!("finished status update");
                                 break;
                             }
                             Some(false) => {

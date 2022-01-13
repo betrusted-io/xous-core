@@ -20,7 +20,9 @@ impl<'a> ShellCmdApi<'a> for Ver {
                 "ec" => {
                     let (rev, dirty) = env.com.get_ec_git_rev().unwrap();
                     let dirtystr = if dirty { "dirty" } else { "clean" };
-                    write!(ret, "EC git commit: {:x}, {}", rev, dirtystr).unwrap();
+                    write!(ret, "EC gateware commit: {:x}, {}\n", rev, dirtystr).unwrap();
+                    let (maj, min, rev, commit) = env.com.get_ec_sw_tag().unwrap();
+                    log::info!("EC sw tag: {}.{}.{}+{}", maj, min, rev, commit);
                 }
                 "wf200" => {
                     let (maj, min, rev) = env.com.get_wf200_fw_rev().unwrap();

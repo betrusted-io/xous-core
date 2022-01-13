@@ -44,7 +44,7 @@ impl Into<[usize; 2]> for BattStats {
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum FlashOp {
+pub(crate) enum FlashOp {
     /// erase a region defined by (address, len)
     Erase(u32, u32),
     /// Send up to 1kiB of data at a time. This reduces messaging overhead and makes
@@ -54,16 +54,37 @@ pub enum FlashOp {
     Program(u32, [Option<[u8; 256]>; 4])
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum FlashResult {
+pub(crate) enum FlashResult {
     Pass,
     Fail,
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct FlashRecord {
+pub(crate) struct FlashRecord {
     /// identifier to validate that we're authorized to do this
     pub id: [u32; 4],
     /// operation
     pub op: FlashOp,
+}
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct SsidRecord {
+    pub name: xous_ipc::String::<32>,
+    pub rssi: u8,
+}
+impl Default for SsidRecord {
+    fn default() -> Self {
+        SsidRecord { name: xous_ipc::String::<32>::new(), rssi: 0 }
+    }
+}
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct SsidReturn {
+    pub list: [SsidRecord; 8],
+}
+impl Default for SsidReturn {
+    fn default() -> Self {
+        SsidReturn {
+            list: [SsidRecord::default(); 8],
+        }
+    }
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -131,9 +152,12 @@ pub(crate) enum Opcode {
 
     /// Return the latest SSID list
     SsidFetchAsString,
+    SsidFetchAsStringV2,
 
     /// Fetch the git ID of the EC
     EcGitRev,
+    /// Fetch the SW tag of the EC as a {00|maj|min|rev} u32
+    EcSwTag,
 
     /// Fetch the firmware rev of the WF200
     Wf200Rev,

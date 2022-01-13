@@ -176,9 +176,12 @@ impl CmdEnv {
         log::info!("SoC DNA: 0x{:x}", common.llio.soc_dna().unwrap());
         let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };
-        log::info!("EC git commit: {:x}, {}", rev, dirtystr);
+        log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);
+        let (maj, min, rev, commit) = common.com.get_ec_sw_tag().unwrap();
+        log::info!("EC sw tag: {}.{}.{}+{}", maj, min, rev, commit);
         let (maj, min, rev) = common.com.get_wf200_fw_rev().unwrap();
         log::info!("WF200 fw rev {}.{}.{}", maj, min, rev);
+
 
         CmdEnv {
             common_env: common,
