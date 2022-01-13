@@ -502,42 +502,31 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let mut net_up = false;
                     let mut dhcp_ok = false;
                     let mut ssid_ok = false;
-                    let mut rssi_pass = false;
                     let mut wifi_tries = 0;
                     loop {
                         // parse and see if we connected from the first attempt (called before this loop)
-                        if let Ok(msg) = env.com.wlan_status() {
-                            let mut elements = msg.as_str().split(' ');
-                            rssi_pass = if let Some(_rssi_str) = elements.next() {
-                                //rssi_str.parse::<i32>().unwrap() < -10
-                                // for now always pass, don't use RSSI as it's not reliable
-                                true
-                            } else {
-                                false
-                            };
-                            net_up = if let Some(up_str) = elements.next() {
-                                up_str == "up"
-                            } else {
-                                false
-                            };
-                            dhcp_ok = if let Some(dhcp_str) = elements.next() {
-                                dhcp_str == "dhcpBound"
-                            } else {
-                                false
-                            };
-                            ssid_ok = if let Some(ssid_str) = elements.next() {
-                                ssid_str == "\nprecursortest"
+                        log::info!("polling WLAN status");
+                        if let Ok(status) = env.com.wlan_status() {
+                            log::info!("got status: {:?}", status);
+                            net_up = status.link_state == com_rs_ref::LinkState::Connected;
+                            dhcp_ok = status.ipv4.dhcp == com_rs_ref::DhcpState::Bound;
+                            ssid_ok = if let Some(ssid) = status.ssid {
+                                log::info!("got ssid: {}", ssid.name.as_str().unwrap_or("invalid"));
+                                ssid.name.as_str().unwrap_or("invalid") == "precursortest"
                             } else {
                                 false
                             };
                             // if connected, break
-                            if rssi_pass && net_up && dhcp_ok && ssid_ok {
-                                write!(ret, "WLAN OK: {}\n", msg.as_str()).unwrap();
+                            if net_up && dhcp_ok && ssid_ok {
+                                log::info!("WLAN is OK");
+                                write!(ret, "WLAN OK\n").unwrap();
                                 break;
                             } else {
-                                write!(ret, "WLAN TRY: {}", msg.as_str()).unwrap();
+                                log::info!("WLAN is TRY");
+                                write!(ret, "WLAN TRY\n").unwrap();
                             }
                         } else {
+                            log::info!("WLAN couldn't get status");
                             write!(ret, "WLAN TRY: Couldn't get status!\n").unwrap();
                         }
                         if wifi_tries < 3 {
@@ -551,16 +540,16 @@ impl<'a> ShellCmdApi<'a> for Test {
                             env.com.wlan_join().unwrap();
                             env.ticktimer.sleep_ms(8000).unwrap();
                         } else {
-                            if !rssi_pass {
-                                write!(ret, "WLAN FAIL: rssi weak\n").unwrap();
-                            }
                             if !net_up {
+                                log::info!("connection failed");
                                 write!(ret, "WLAN FAIL: connection failed\n").unwrap();
                             }
                             if !dhcp_ok {
+                                log::info!("dhcp failed");
                                 write!(ret, "WLAN FAIL: dhcp fail\n").unwrap();
                             }
                             if !ssid_ok {
+                                log::info!("ssid mismatch");
                                 write!(ret, "WLAN FAIL: ssid mismatch\n").unwrap();
                             }
                             return Ok(Some(ret));

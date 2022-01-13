@@ -128,7 +128,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 }
                 "status" => {
                     let _ = match env.com.wlan_status() {
-                        Ok(msg) => write!(ret, "{}", msg),
+                        Ok(msg) => write!(ret, "{:?}", msg),
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
                 }

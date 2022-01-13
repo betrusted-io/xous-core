@@ -450,14 +450,12 @@ impl Com {
         )
     }
 
-    pub fn wlan_status(&mut self) -> Result<std::string::String, xous::Error> {
-        // TODO: how to make this return IP, netmask, gateway, DNS server, and STA MAC?
-        const STATUS_MAX_LEN: usize = 160;
-        let status = xous_ipc::String::<STATUS_MAX_LEN>::new();
+    pub fn wlan_status(&mut self) -> Result<WlanStatus, xous::Error> {
+        let status = WlanStatusIpc::default();
         let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::WlanStatus.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-        let response = buf.to_original::<xous_ipc::String::<STATUS_MAX_LEN>, _>().unwrap();
-        Ok(std::string::String::from(response.as_str().expect("status contained non-utf8 characters")))
+        let response = buf.to_original::<WlanStatusIpc, _>().unwrap();
+        Ok(WlanStatus::from_ipc(response))
     }
 
     pub fn wlan_get_config(&self) -> Result<Ipv4Conf, xous::Error> {

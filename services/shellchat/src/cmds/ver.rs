@@ -23,6 +23,7 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "EC gateware commit: {:x}, {}\n", rev, dirtystr).unwrap();
                     let (maj, min, rev, commit) = env.com.get_ec_sw_tag().unwrap();
                     log::info!("EC sw tag: {}.{}.{}+{}", maj, min, rev, commit);
+                    write!(ret, "EC sw tag: {}.{}.{}+{}", maj, min, rev, commit).unwrap();
                 }
                 "wf200" => {
                     let (maj, min, rev) = env.com.get_wf200_fw_rev().unwrap();

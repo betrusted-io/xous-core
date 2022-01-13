@@ -10,10 +10,12 @@ use log::{error, info, trace};
 
 use com_rs_ref as com_rs;
 use com_rs::*;
-use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, STR_64_U8_SIZE, StringSer, StringDes, Ipv4Conf};
+use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, StringSer, Ipv4Conf};
 
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
+
+use core::convert::TryInto;
 
 const LEGACY_REV: u32 = 0x8b5b_8e50; // this is the git rev shipped before we went to version tagging
 const LEGACY_TAG: u32 = 0x00_09_05_00; // this is corresponding tag
@@ -742,7 +744,8 @@ fn xmain() -> ! {
                 let mut ssid_ret = buffer.to_original::<SsidReturn, _>().expect("couldn't convert incoming storage");
                 for (raw, ssid_rec) in ssid_list.iter().zip(ssid_ret.list.iter_mut()) {
                     ssid_rec.rssi = raw[0];
-                    let ssid_str = core::str::from_utf8(&raw[2..2 + raw[1] as usize]).unwrap_or("UTF-8 parse error");
+                    let len = if raw[1] < 32 {raw[1] as usize} else {32};
+                    let ssid_str = core::str::from_utf8(&raw[2..2 + len as usize]).unwrap_or("UTF-8 parse error");
                     ssid_rec.name.clear(); // should be pre-cleared, but let's just be safe about it
                     ssid_rec.name.append(ssid_str).ok(); // don't panic if we truncate
                 }
@@ -797,31 +800,47 @@ fn xmain() -> ! {
                 com.txrx(ComState::WLAN_LEAVE.verb);
             }
             Some(Opcode::WlanStatus) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                com.txrx(ComState::WLAN_STATUS.verb);
-                let mut rx_buf: [u16; STR_64_WORDS] = [0; STR_64_WORDS];
-                for dest in rx_buf.iter_mut() {
-                    *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                }
-                let mut des = StringDes::<STR_64_WORDS, STR_64_U8_SIZE>::new();
-                match des.decode_u16(&rx_buf) {
-                    Ok(status) => {
-                        log::debug!("status: {}", status);
-                        let status_str = String::<STR_64_U8_SIZE>::from_str(&status);
-                        let _ = buffer.replace(status_str);
+                if ec_tag == LEGACY_TAG {
+                    log::warn!("Legacy EC detected. Ignoring status request update");
+                } else {
+                    let mut buffer = unsafe {
+                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                    };
+                    com.txrx(ComState::WLAN_BIN_STATUS.verb);
+                    let maybe_rssi = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    let rssi = if (maybe_rssi >> 8) & 0xff != 0 {
+                        None
+                    } else {
+                        Some(maybe_rssi & 0xff)
+                    };
+                    let link_state = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    let mut ipv4_raw = Ipv4Conf::default().encode_u16();
+                    for dest in ipv4_raw.iter_mut() {
+                        *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                     }
-                    _ => {
-                        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-                        {
-                            let status_str = String::<STR_64_U8_SIZE>::from_str("down");
-                            let _ = buffer.replace(status_str);
-                            log::info!("replacing status with bogus data");
-                        }
-                        info!("status decode failed");
-                    },
-                };
+                    let mut ssid_buf = [0u8; 34];
+                    for w in ssid_buf.chunks_mut(2) {
+                        let word = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)).to_le_bytes();
+                        w[0] = word[0];
+                        w[1] = word[1];
+                    }
+                    let ssid_len = u16::from_le_bytes(ssid_buf[0..2].try_into().unwrap()) as usize;
+                    let ssid_checked_len = if ssid_len < 32 {ssid_len} else {32};
+                    let ssid_str = core::str::from_utf8(&ssid_buf[2..2+ssid_checked_len]).unwrap_or("Invalid SSID");
+                    let status = WlanStatusIpc {
+                        ssid: if let Some(rssi) = rssi {
+                            Some(SsidRecord {
+                                rssi: rssi as u8,
+                                name: xous_ipc::String::<32>::from_str(ssid_str)
+                            })
+                        } else {
+                            None
+                        },
+                        link_state,
+                        ipv4: ipv4_raw,
+                    };
+                    buffer.replace(status).unwrap();
+                }
             }
             Some(Opcode::WlanGetConfig) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };

@@ -66,7 +66,7 @@ pub(crate) struct FlashRecord {
     pub op: FlashOp,
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct SsidRecord {
+pub struct SsidRecord {
     pub name: xous_ipc::String::<32>,
     pub rssi: u8,
 }
@@ -83,6 +83,37 @@ impl Default for SsidReturn {
     fn default() -> Self {
         SsidReturn {
             list: [SsidRecord::default(); 8],
+        }
+    }
+}
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct WlanStatusIpc {
+    pub ssid: Option<SsidRecord>,
+    pub link_state: u16, // this is slung around as a u16 to avoid pulling rkyv into the EC dependency tree
+    pub ipv4: [u16; com_rs_ref::ComState::WLAN_GET_IPV4_CONF.r_words as usize],
+}
+impl Default for WlanStatusIpc {
+    fn default() -> Self {
+        WlanStatusIpc {
+            ssid: None,
+            link_state: com_rs_ref::LinkState::Unknown as u16,
+            ipv4: [0u16; com_rs_ref::ComState::WLAN_GET_IPV4_CONF.r_words as usize],
+        }
+    }
+}
+#[derive(Debug, Copy, Clone)]
+pub struct WlanStatus {
+    pub ssid: Option<SsidRecord>,
+    pub link_state: com_rs_ref::LinkState, // converted back into LinkState once it's across the IPC boundary
+    pub ipv4: Ipv4Conf,
+}
+impl WlanStatus {
+    #[allow(dead_code)]
+    pub(crate) fn from_ipc(status: WlanStatusIpc) -> Self {
+        WlanStatus {
+            ssid: status.ssid,
+            link_state: com_rs_ref::LinkState::decode_u16(status.link_state),
+            ipv4: com_rs_ref::serdes::Ipv4Conf::decode_u16(&status.ipv4),
         }
     }
 }
