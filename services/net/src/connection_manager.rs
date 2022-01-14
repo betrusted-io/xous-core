@@ -1,6 +1,7 @@
 use crate::api::*;
 use std::sync::Arc;
 use core::sync::atomic::{AtomicU32, Ordering};
+use net::MIN_EC_REV;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
 use num_traits::*;
 use std::io::Read;
@@ -19,12 +20,22 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     let xns = xous_names::XousNames::new().unwrap();
     let mut com = com::Com::new(&xns).unwrap();
+    let netmgr = net::NetManager::new();
     let mut pddb = pddb::Pddb::new();
     let self_cid = xous::connect(sid).unwrap();
     // give the system some time to boot before trying to run this
     tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
 
-    let mut run = true;
+    // check that the EC rev meets the minimum version for this service to function
+    // otherwise, we could crash the EC before it can update itself.
+    let (maj, min, rev, commits) = com.get_ec_sw_tag().unwrap();
+    let ec_rev = (maj as u32) << 24 | (min as u32) << 16 | (rev as u32) << 8 | commits as u32;
+    let rev_ok = ec_rev >= MIN_EC_REV;
+    if !rev_ok {
+        log::warn!("EC firmware is too old to interoperate with the connection manager.");
+    }
+
+    let mut run = rev_ok;
     send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), POLL_INTERVAL_MS, 0, 0, 0)).expect("couldn't kick off next poll");
     loop {
         let msg = xous::receive_message(sid).unwrap();
@@ -40,13 +51,30 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 if activity_interval.fetch_add(POLL_INTERVAL_MS as u32, Ordering::SeqCst) > POLL_INTERVAL_MS as u32 {
                     log::info!("wlan activity interval timeout");
                     // if the pddb isn't mounted, don't even bother checking -- we can't connect until we have a place to get keys
-                    if pddb.is_mounted() {
+                    if pddb.is_mounted() && rev_ok {
                         // the status check code is going to get refactored, so this is a "bare minimum" check
                         let status = com.wlan_status().unwrap();
-                        if status.contains("down") {
+                        let config = netmgr.get_ipv4_config();
+                        let needs_reconnect =
+                            if status.link_state == com_rs_ref::LinkState::Connected {
+                                if let Some(config) = config { // check that the EC's view of the world is synchronized with our view
+                                    // is it enough to just check that the address is the same?
+                                    if config.addr != status.ipv4.addr {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    true
+                                }
+                            } else {
+                                true
+                            };
+                        if needs_reconnect {
                             log::info!("wlan is not connected, attempting auto-reconnect to known AP list");
                             if let Ok(ap_list) = pddb.list_keys(AP_DICT_NAME, None) {
                                 com.wlan_leave().expect("couldn't issue leave command"); // leave the previous config to reset state
+                                netmgr.reset();
                                 // TODO: add an SSID scan phase, so we only try to connect to SSIDs that are currently visible.
                                 // for now, just try every single one as a brute force approach.
                                 for ap in ap_list {
@@ -60,7 +88,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     }
                                     // this needs to not be a dead-wait loop, but for now the WLAN API doesn't support anything better
                                     tt.sleep_ms(5_000).unwrap();
-                                    if !com.wlan_status().unwrap().contains("down") {
+                                    if com.wlan_status().unwrap().link_state == com_rs_ref::LinkState::Connected {
                                         break;
                                     }
                                 }

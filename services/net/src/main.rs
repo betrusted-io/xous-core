@@ -950,6 +950,38 @@ fn xmain() -> ! {
                     }
                 }
             }
+            Some(Opcode::GetIpv4Config) => {
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                let ser = if let Some(config) = net_config {
+                    Some(config.encode_u16())
+                } else {
+                    None
+                };
+                buffer.replace(ser).expect("couldn't return config");
+            },
+            Some(Opcode::Reset) => {
+                net_config = None;
+                let neighbor_cache = NeighborCache::new(BTreeMap::new());
+                let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
+                let routes = Routes::new(BTreeMap::new());
+                let device = device::NetPhy::new(&xns);
+                let medium = device.capabilities().medium;
+                let mut builder = InterfaceBuilder::new(device)
+                    .ip_addrs(ip_addrs)
+                    .routes(routes);
+                if medium == Medium::Ethernet {
+                    builder = builder
+                        .ethernet_addr(EthernetAddress::from_bytes(&[0; 6]))
+                        .neighbor_cache(neighbor_cache);
+                }
+                iface = builder.finalize();
+                iface.routes_mut().remove_default_ipv4_route();
+                dns_allclear_hook.notify();
+                // question: do we need to clear the UDP and ICMP states?
+                xous::return_scalar(msg.sender, 1).unwrap();
+            }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 // handle an suspend/resume state stuff here. right now, it's a NOP
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");

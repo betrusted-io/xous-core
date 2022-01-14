@@ -41,6 +41,8 @@ enum StatusOpcode {
     Pump,
     /// Pulls up the time setting UI
     UxSetTime,
+    /// Initiates a reboot
+    Reboot,
     Quit,
 }
 
@@ -141,6 +143,7 @@ fn xmain() -> ! {
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
+    let susres = susres::Susres::new_without_hook(&xns).unwrap();
 
     log::trace!("|status: getting screen size");
     let screensize = gam
@@ -597,6 +600,25 @@ fn xmain() -> ! {
                 rtc.set_rtc(dt).expect("couldn't set the current time");
                 pump_run.store(true, Ordering::Relaxed); // stop status updates while we do this
             }),
+            Some(StatusOpcode::Reboot) => {
+                if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    // power plugged in, do a reboot using a warm boot method
+                    susres.reboot(true).expect("couldn't issue reboot command");
+                } else {
+                    // ensure the self-boosting facility is turned off, this interferes with a cold boot
+                    com.set_boost(false).ok();
+                    llio.boost_on(false).ok();
+                    // do a full cold-boot if the power is cut. This will force a re-load of the SoC contents.
+                    gam.shipmode_blank_request().ok();
+                    ticktimer.sleep_ms(500).ok(); // screen redraw time after the blank request
+                    rtc.set_wakeup_alarm(4).expect("couldn't set wakeup alarm");
+                    llio.allow_ec_snoop(true).ok();
+                    llio.allow_power_off(true).ok();
+                    com.power_off_soc().ok();
+                    ticktimer.sleep_ms(4000).ok();
+                    panic!("system did not reboot");
+                }
+            }
             Some(StatusOpcode::Quit) => {
                 break;
             }

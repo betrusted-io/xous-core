@@ -459,7 +459,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=b3bf4aebe1d3c91e77dae5d3832d17e717c5669b#b3bf4aebe1d3c91e77dae5d3832d17e717c5669b"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=1effb7eaebbec59f7fda4a678e2d36efafc2e673#1effb7eaebbec59f7fda4a678e2d36efafc2e673"
 
 [[package]]
 name = "com_rs-ref"
@@ -1279,6 +1279,7 @@ version = "0.1.0"
 dependencies = [
  "byteorder",
  "com",
+ "com_rs-ref",
  "llio",
  "log",
  "log-server",
@@ -1961,6 +1962,7 @@ dependencies = [
  "cipher",
  "codec",
  "com",
+ "com_rs-ref",
  "content-plugin-api",
  "curve25519-dalek",
  "debug-here",

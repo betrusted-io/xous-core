@@ -10,12 +10,17 @@ use log::{error, info, trace};
 
 use com_rs_ref as com_rs;
 use com_rs::*;
-use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, STR_64_U8_SIZE, StringSer, StringDes, Ipv4Conf};
+use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, StringSer, Ipv4Conf};
 
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
 
+use core::convert::TryInto;
+
+const LEGACY_REV: u32 = 0x8b5b_8e50; // this is the git rev shipped before we went to version tagging
+const LEGACY_TAG: u32 = 0x00_09_05_00; // this is corresponding tag
 const STD_TIMEOUT: u32 = 100;
+
 #[derive(Debug, Copy, Clone)]
 pub struct WorkRequest {
     work: ComSpec,
@@ -367,6 +372,22 @@ fn xmain() -> ! {
         }
     }
 
+    // determine the version of the COM that we're talking to
+    let mut ec_git_rev = {
+        com.txrx(ComState::EC_GIT_REV.verb);
+        let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+        let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+        let _dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+        ((rev_msb as u32) << 16) | (rev_lsb as u32)
+    };
+    let mut ec_tag = {
+        if ec_git_rev == LEGACY_REV {
+            LEGACY_TAG
+        } else {
+            parse_version(&mut com)
+        }
+    };
+
     trace!("starting main loop");
     loop {
         let mut msg = xous::receive_message(com_sid).unwrap();
@@ -610,12 +631,27 @@ fn xmain() -> ! {
                 let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
                 let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
                 let dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                ec_git_rev = ((rev_msb as u32) << 16) | (rev_lsb as u32);
                 xous::return_scalar2(
                     msg.sender,
-                    ((rev_msb as usize) << 16) | (rev_lsb as usize),
+                    ec_git_rev as usize,
                     dirty as usize
                 )
                 .expect("couldn't return WF200 firmware rev");
+            }
+            Some(Opcode::EcSwTag) => {
+                if ec_git_rev == LEGACY_REV { // this corresponds to a 0.9.5 tag -- the last tag shipped that lacked detailed versioning
+                    xous::return_scalar(
+                        msg.sender,
+                        0x00_09_05_00
+                    ).expect("couldn't return WF200 revision tag");
+                } else {
+                    ec_tag = parse_version(&mut com);
+                    xous::return_scalar(
+                        msg.sender,
+                        ec_tag as usize,
+                    ).expect("couldn't return WF200 revision tag");
+                }
             }
             Some(Opcode::Wf200Reset) => {
                 com.txrx(ComState::WF200_RESET.verb);
@@ -639,46 +675,81 @@ fn xmain() -> ! {
                 ).expect("couldn't return SsidCheckUpdate");
             },
             Some(Opcode::SsidFetchAsString) => {
-                use core::fmt::Write;
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                if ec_tag == LEGACY_TAG {
+                    // this is kept around because the original firmware shipped with units don't support software tagging
+                    // and the SSID API was modified. This allows the SOC to interop with older versions of the EC for SSID scanning.
+                    // If it's 2023 and you're looking at this comment and thinking about removing this code, it might actually be
+                    // ok to do that. Just check that the factory test infrastructure is fully updated to match a modern EC rev.
+                    use core::fmt::Write;
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
 
-                com.txrx(ComState::SSID_FETCH.verb);
-                let mut ssid_list: [[u8; 32]; 6] = [[0; 32]; 6]; // index as ssid_list[6][32]
-                for i in 0..16 * 6 {
-                    let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-                    let lsb : u8 = (data & 0xff) as u8;
-                    let msb : u8 = ((data >> 8) & 0xff) as u8;
-                    //if lsb == 0 { lsb = 0x20; }
-                    //if msb == 0 { msb = 0x20; }
-                    ssid_list[i / 16][(i % 16) * 2] = lsb;
-                    ssid_list[i / 16][(i % 16) * 2 + 1] = msb;
-                }
-                // this is a questionably useful return format -- maybe it's actually more useful to return the raw characters??
-                // for now, this is good enough for human eyes, but a scrollable list of SSIDs might be more useful with the raw u8 representation
-                let mut ssid_str = xous_ipc::String::<256>::from_str("Top 6 SSIDs:\n");
-                let mut itemized = xous_ipc::String::<256>::new();
-                for i in 0..6 {
-                    let mut stop = 0;
-                    // truncate the nulls
-                    for l in 0..ssid_list[i].len() {
-                        stop = l;
-                        if ssid_list[i][l] == 0 {
-                            break;
+                    com.txrx(ComState::SSID_FETCH.verb);
+                    let mut ssid_list: [[u8; 32]; 6] = [[0; 32]; 6]; // index as ssid_list[6][32]
+                    for i in 0..16 * 6 {
+                        let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+                        let lsb : u8 = (data & 0xff) as u8;
+                        let msb : u8 = ((data >> 8) & 0xff) as u8;
+                        //if lsb == 0 { lsb = 0x20; }
+                        //if msb == 0 { msb = 0x20; }
+                        ssid_list[i / 16][(i % 16) * 2] = lsb;
+                        ssid_list[i / 16][(i % 16) * 2 + 1] = msb;
+                    }
+                    // this is a questionably useful return format -- maybe it's actually more useful to return the raw characters??
+                    // for now, this is good enough for human eyes, but a scrollable list of SSIDs might be more useful with the raw u8 representation
+                    let mut ssid_str = xous_ipc::String::<256>::from_str("Top 6 SSIDs:\n");
+                    let mut itemized = xous_ipc::String::<256>::new();
+                    for i in 0..6 {
+                        let mut stop = 0;
+                        // truncate the nulls
+                        for l in 0..ssid_list[i].len() {
+                            stop = l;
+                            if ssid_list[i][l] == 0 {
+                                break;
+                            }
+                        }
+                        let ssid = core::str::from_utf8(&ssid_list[i][0..stop]);
+                        match ssid {
+                            Ok(textid) => {
+                                itemized.clear();
+                                write!(itemized, "{}. {}\n", i+1, textid).unwrap();
+                                ssid_str.append(itemized.as_str().unwrap()).unwrap();
+                            },
+                            _ => {
+                                ssid_str.append("-Parse Error-\n").unwrap();
+                            },
                         }
                     }
-                    let ssid = core::str::from_utf8(&ssid_list[i][0..stop]);
-                    match ssid {
-                        Ok(textid) => {
-                            itemized.clear();
-                            write!(itemized, "{}. {}\n", i+1, textid).unwrap();
-                            ssid_str.append(itemized.as_str().unwrap()).unwrap();
-                        },
-                        _ => {
-                            ssid_str.append("-Parse Error-\n").unwrap();
-                        },
+                    buffer.replace(ssid_str).unwrap();
+                } else {
+                    log::error!("This API is not implemented for this EC firmware revision");
+                }
+            }
+            Some(Opcode::SsidFetchAsStringV2) => {
+                if ec_tag == LEGACY_TAG {
+                    log::error!("This API is not implemented for legacy EC revs");
+                    continue;
+                }
+                com.txrx(ComState::SSID_FETCH_STR.verb);
+                // these sizes are hard-coded constants from the EC firmware. We don't have a good cross-code base method for
+                // sharing these yet, so they are just magic numbers.
+                let mut ssid_list: [[u8; 34]; 8] = [[0; 34]; 8];
+                for record in ssid_list.iter_mut() {
+                    for word in record.chunks_mut(2) {
+                        let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+                        word[0] = (data & 0xff) as u8;
+                        word[1] = ((data >> 8) & 0xff) as u8;
                     }
                 }
-                buffer.replace(ssid_str).unwrap();
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut ssid_ret = buffer.to_original::<SsidReturn, _>().expect("couldn't convert incoming storage");
+                for (raw, ssid_rec) in ssid_list.iter().zip(ssid_ret.list.iter_mut()) {
+                    ssid_rec.rssi = raw[0];
+                    let len = if raw[1] < 32 {raw[1] as usize} else {32};
+                    let ssid_str = core::str::from_utf8(&raw[2..2 + len as usize]).unwrap_or("UTF-8 parse error");
+                    ssid_rec.name.clear(); // should be pre-cleared, but let's just be safe about it
+                    ssid_rec.name.append(ssid_str).ok(); // don't panic if we truncate
+                }
+                buffer.replace(ssid_ret).unwrap();
             }
             Some(Opcode::WlanOn) => {
                 info!("TODO: implement WlanOn");
@@ -729,31 +800,47 @@ fn xmain() -> ! {
                 com.txrx(ComState::WLAN_LEAVE.verb);
             }
             Some(Opcode::WlanStatus) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                com.txrx(ComState::WLAN_STATUS.verb);
-                let mut rx_buf: [u16; STR_64_WORDS] = [0; STR_64_WORDS];
-                for dest in rx_buf.iter_mut() {
-                    *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                }
-                let mut des = StringDes::<STR_64_WORDS, STR_64_U8_SIZE>::new();
-                match des.decode_u16(&rx_buf) {
-                    Ok(status) => {
-                        log::debug!("status: {}", status);
-                        let status_str = String::<STR_64_U8_SIZE>::from_str(&status);
-                        let _ = buffer.replace(status_str);
+                if ec_tag == LEGACY_TAG {
+                    log::warn!("Legacy EC detected. Ignoring status request update");
+                } else {
+                    let mut buffer = unsafe {
+                        Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                    };
+                    com.txrx(ComState::WLAN_BIN_STATUS.verb);
+                    let maybe_rssi = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    let rssi = if (maybe_rssi >> 8) & 0xff != 0 {
+                        None
+                    } else {
+                        Some(maybe_rssi & 0xff)
+                    };
+                    let link_state = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    let mut ipv4_raw = Ipv4Conf::default().encode_u16();
+                    for dest in ipv4_raw.iter_mut() {
+                        *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                     }
-                    _ => {
-                        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-                        {
-                            let status_str = String::<STR_64_U8_SIZE>::from_str("down");
-                            let _ = buffer.replace(status_str);
-                            log::info!("replacing status with bogus data");
-                        }
-                        info!("status decode failed");
-                    },
-                };
+                    let mut ssid_buf = [0u8; 34];
+                    for w in ssid_buf.chunks_mut(2) {
+                        let word = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)).to_le_bytes();
+                        w[0] = word[0];
+                        w[1] = word[1];
+                    }
+                    let ssid_len = u16::from_le_bytes(ssid_buf[0..2].try_into().unwrap()) as usize;
+                    let ssid_checked_len = if ssid_len < 32 {ssid_len} else {32};
+                    let ssid_str = core::str::from_utf8(&ssid_buf[2..2+ssid_checked_len]).unwrap_or("Invalid SSID");
+                    let status = WlanStatusIpc {
+                        ssid: if let Some(rssi) = rssi {
+                            Some(SsidRecord {
+                                rssi: rssi as u8,
+                                name: xous_ipc::String::<32>::from_str(ssid_str)
+                            })
+                        } else {
+                            None
+                        },
+                        link_state,
+                        ipv4: ipv4_raw,
+                    };
+                    buffer.replace(status).unwrap();
+                }
             }
             Some(Opcode::WlanGetConfig) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -842,6 +929,38 @@ fn xmain() -> ! {
                         .expect("couldn't return IntFetchVector");
                 }
             }),
+            Some(Opcode::WlanDebug) => {
+                com.txrx(ComState::WLAN_GET_ERRCOUNTS.verb);
+                let mut tx_errs_16 = [0u16; 2];
+                let mut drops_16 = [0u16; 2];
+                tx_errs_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                tx_errs_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                drops_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                drops_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                com.txrx(ComState::WF200_DEBUG.verb);
+                let mut config_16 = [0u16; 2];
+                config_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                config_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let control = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let mut alloc_fail_16 = [0u16; 2];
+                alloc_fail_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                alloc_fail_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let mut alloc_oversize_16 = [0u16; 2];
+                alloc_oversize_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                alloc_oversize_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let alloc_free_count = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let debug = WlanDebug {
+                    tx_errs: from_le_words(tx_errs_16),
+                    drops: from_le_words(drops_16),
+                    config: from_le_words(config_16),
+                    control,
+                    alloc_fail: from_le_words(alloc_fail_16),
+                    alloc_oversize: from_le_words(alloc_oversize_16),
+                    alloc_free_count,
+                };
+                buffer.replace(debug).unwrap();
+            },
             None => {error!("unknown opcode"); break},
         }
 
@@ -861,4 +980,43 @@ fn xmain() -> ! {
     xous::destroy_server(com_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
+    com.txrx(ComState::EC_SW_TAG.verb);
+    let mut rev_ret = [0u16; ComState::EC_SW_TAG.r_words as usize];
+    for w in rev_ret.iter_mut() {
+        *w = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+    }
+    // unpack u16 words into u8 array
+    let mut rev_bytes = [0u8; (ComState::EC_SW_TAG.r_words as usize - 1) * 2];
+    for (src, dst) in rev_ret[1..].iter().zip(rev_bytes.chunks_mut(2)) {
+        dst[0] = src.to_le_bytes()[0];
+        dst[1] = src.to_le_bytes()[1];
+    }
+    // translate u8 array into &str
+    let len_checked = if rev_ret[0] as usize <= rev_bytes.len() { rev_ret[0] as usize} else {rev_bytes.len()};
+    let revstr = core::str::from_utf8(&rev_bytes[..len_checked]).unwrap_or("v0.0.0-0-xxxxxxx"); // fake version number for hosted mode
+    // parse &str -- we do it here not in the EC, because the EC is memory-constrained
+    // v0.9.5-2-gb3e2868 exemplar template
+    let hyphenstr: Vec<&str> = revstr[1..].split('-').collect(); // drop the leading 'v' by doing [1..]
+    let revcodes: Vec<&str> = hyphenstr[0].split('.').collect();
+    let major = revcodes[0].parse::<u8>().unwrap_or(0);
+    let minor = revcodes[1].parse::<u8>().unwrap_or(0);
+    let rev = revcodes[2].parse::<u8>().unwrap_or(0);
+    let commit = if hyphenstr.len() > 2 { // extra commits beyond the tag
+        // version-extra-commit
+        hyphenstr[1].parse::<u8>().unwrap_or(0)
+    } else {
+        // I think the "extra" might disappear in the case that there is no extra beyond the tag. In this case, we would have just
+        // v0.9.6-gxxxxxx only, not v0.9.6-0-gxxxxxx. I'm actually not 100% sure, but also, I can't seem to find a definitive
+        // answer right now and I don't want to fuck up the tag state of my repo just to find out. Either way, this
+        // logic will cause the right thing to happen (a 0 for the extra commits)
+        0
+    };
+    (commit & 0xff) as u32 | ((rev & 0xff) as u32) << 8 | (((minor & 0xff) as u32) << 16) | (((major & 0xff) as u32) << 24)
+}
+
+fn from_le_words(words: [u16; 2]) -> u32 {
+    words[0] as u32 | (words[1] as u32) << 16
 }
