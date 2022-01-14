@@ -585,7 +585,7 @@ fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
         &["kernel"],
         debug,
         Some(KERNEL_TARGET),
-        Some("kernel".into()),
+        None,
         None, None,
     )?;
     path.push("kernel");

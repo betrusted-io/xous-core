@@ -22,7 +22,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 [dependencies.engine25519-as]
 git="https://github.com/betrusted-io/engine25519-as.git"
-rev="6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3"
+rev="274b82899d28535ac6d4b7869e26eef2039578d5"
 default-features = false
 features = []
 

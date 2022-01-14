@@ -90,6 +90,7 @@ members = [
   "services/net",
   "services/dns",
   "services/modals",
+  "kernel",
 ]
 resolver = "2"
 
@@ -98,7 +99,6 @@ resolver = "2"
 # packages to be rebuilt every time they were touched.
 # Keep them out of the main workspace.
 exclude = [
-  "kernel",
   "loader",
   "utralib",  # Exclude UTRA, since it is machine-generated.
   "locales",  # exclude because it is machine-generated
