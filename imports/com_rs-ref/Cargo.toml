@@ -7,7 +7,7 @@ description = "com_rs import package"
 
 # Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
-com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "a8f282291cbc54ea9c6d6195caab029a1c7abd57" }
+com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "1effb7eaebbec59f7fda4a678e2d36efafc2e673" }
 #com_rs = { path = "../../../betrusted-ec/sw/com_rs" }
 
 

@@ -49,6 +49,10 @@ pub(crate) enum Opcode {
     PingSetTimeout,
     PingGetTimeout,
 
+    /// Link Management,
+    GetIpv4Config,
+    Reset,
+
     /// [Internal] com llio interrupt callback
     ComInterrupt,
     /// [Internal] run the network stack code

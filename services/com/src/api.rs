@@ -118,6 +118,19 @@ impl WlanStatus {
     }
 }
 
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
+pub struct WlanDebug {
+    pub tx_errs: u32,
+    pub drops: u32,
+    // config(2) - control - alloc_fail(2) - alloc_oversize(2) - alloc_count
+    pub config: u32,
+    pub control: u16,
+    pub alloc_fail: u32,
+    pub alloc_oversize: u32,
+    pub alloc_free_count: u16,
+}
+
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     /// Reset the COM link - useful after an EC reset
@@ -243,6 +256,9 @@ pub(crate) enum Opcode {
 
     /// wlan: send net packet
     WlanSendPacket,
+
+    /// wlan: debug infos
+    WlanDebug,
 
     /// sets the EC-side com interrupt mask
     IntSetMask,

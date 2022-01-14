@@ -132,6 +132,10 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
                 }
+                "debug" => {
+                    let debug = env.com.wlan_debug().expect("couldn't issue debug command");
+                    write!(ret, "{:x?}", debug).unwrap();
+                }
                 _ => {
                     show_help = true;
                 }

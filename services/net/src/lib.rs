@@ -1,7 +1,10 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use xous::CID;
+use com::Ipv4Conf;
+use xous::{CID, send_message, Message};
+use xous_ipc::Buffer;
+use num_traits::*;
 
 pub mod protocols;
 pub use protocols::*;
@@ -40,5 +43,34 @@ impl Drop for NetConn {
         }
         // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
         // de-allocate those items here. They don't need a reference count because they are object-specific
+    }
+}
+
+pub struct NetManager {
+    netconn: NetConn,
+}
+impl NetManager {
+    pub fn new() -> NetManager {
+        NetManager {
+            netconn: NetConn::new(&xous_names::XousNames::new().unwrap()).expect("can't connect to Net Server"),
+        }
+    }
+    pub fn get_ipv4_config(&self) -> Option<Ipv4Conf> {
+        let storage = Some(Ipv4Conf::default().encode_u16());
+        let mut buf = Buffer::into_buf(storage).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.netconn.conn(), Opcode::GetIpv4Config.to_u32().unwrap()).expect("Couldn't execute GetIpv4Config opcode");
+        let maybe_config = buf.to_original().expect("couldn't restore config structure");
+        if let Some(config) = maybe_config {
+            let ipv4 = Ipv4Conf::decode_u16(&config);
+            Some(ipv4)
+        } else {
+            None
+        }
+    }
+    pub fn reset(&self) {
+        send_message(
+            self.netconn.conn(),
+            Message::new_blocking_scalar(Opcode::Reset.to_usize().unwrap(), 0, 0, 0, 0),
+        ).expect("couldn't send reset");
     }
 }

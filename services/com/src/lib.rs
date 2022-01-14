@@ -467,6 +467,14 @@ impl Com {
         Ok(config)
     }
 
+    pub fn wlan_debug(&self) -> Result<WlanDebug, xous::Error> {
+        let prealloc = WlanDebug::default();
+        let mut buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::WlanDebug.to_u32().expect("WlanDebug failed")).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original().expect("Couldn't convert WlanDebug buffer");
+        Ok(response)
+    }
+
     pub fn wlan_fetch_packet(&self, pkt: &mut [u8]) -> Result<(), xous::Error> {
         if pkt.len() > NET_MTU {
             return Err(xous::Error::OutOfMemory)

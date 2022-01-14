@@ -929,6 +929,38 @@ fn xmain() -> ! {
                         .expect("couldn't return IntFetchVector");
                 }
             }),
+            Some(Opcode::WlanDebug) => {
+                com.txrx(ComState::WLAN_GET_ERRCOUNTS.verb);
+                let mut tx_errs_16 = [0u16; 2];
+                let mut drops_16 = [0u16; 2];
+                tx_errs_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                tx_errs_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                drops_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                drops_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                com.txrx(ComState::WF200_DEBUG.verb);
+                let mut config_16 = [0u16; 2];
+                config_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                config_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let control = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let mut alloc_fail_16 = [0u16; 2];
+                alloc_fail_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                alloc_fail_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let mut alloc_oversize_16 = [0u16; 2];
+                alloc_oversize_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                alloc_oversize_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let alloc_free_count = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let debug = WlanDebug {
+                    tx_errs: from_le_words(tx_errs_16),
+                    drops: from_le_words(drops_16),
+                    config: from_le_words(config_16),
+                    control,
+                    alloc_fail: from_le_words(alloc_fail_16),
+                    alloc_oversize: from_le_words(alloc_oversize_16),
+                    alloc_free_count,
+                };
+                buffer.replace(debug).unwrap();
+            },
             None => {error!("unknown opcode"); break},
         }
 
@@ -963,7 +995,8 @@ fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
         dst[1] = src.to_le_bytes()[1];
     }
     // translate u8 array into &str
-    let revstr = core::str::from_utf8(&rev_bytes[..rev_ret[0] as usize]).expect("gitrev is not valid utf-8");
+    let len_checked = if rev_ret[0] as usize <= rev_bytes.len() { rev_ret[0] as usize} else {rev_bytes.len()};
+    let revstr = core::str::from_utf8(&rev_bytes[..len_checked]).unwrap_or("v0.0.0-0-xxxxxxx"); // fake version number for hosted mode
     // parse &str -- we do it here not in the EC, because the EC is memory-constrained
     // v0.9.5-2-gb3e2868 exemplar template
     let hyphenstr: Vec<&str> = revstr[1..].split('-').collect(); // drop the leading 'v' by doing [1..]
@@ -982,4 +1015,8 @@ fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
         0
     };
     (commit & 0xff) as u32 | ((rev & 0xff) as u32) << 8 | (((minor & 0xff) as u32) << 16) | (((major & 0xff) as u32) << 24)
+}
+
+fn from_le_words(words: [u16; 2]) -> u32 {
+    words[0] as u32 | (words[1] as u32) << 16
 }

@@ -20,6 +20,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     let xns = xous_names::XousNames::new().unwrap();
     let mut com = com::Com::new(&xns).unwrap();
+    let netmgr = net::NetManager::new();
     let mut pddb = pddb::Pddb::new();
     let self_cid = xous::connect(sid).unwrap();
     // give the system some time to boot before trying to run this
@@ -53,10 +54,27 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     if pddb.is_mounted() && rev_ok {
                         // the status check code is going to get refactored, so this is a "bare minimum" check
                         let status = com.wlan_status().unwrap();
-                        if status.link_state != com_rs_ref::LinkState::Connected {
+                        let config = netmgr.get_ipv4_config();
+                        let needs_reconnect =
+                            if status.link_state == com_rs_ref::LinkState::Connected {
+                                if let Some(config) = config { // check that the EC's view of the world is synchronized with our view
+                                    // is it enough to just check that the address is the same?
+                                    if config.addr != status.ipv4.addr {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    true
+                                }
+                            } else {
+                                true
+                            };
+                        if needs_reconnect {
                             log::info!("wlan is not connected, attempting auto-reconnect to known AP list");
                             if let Ok(ap_list) = pddb.list_keys(AP_DICT_NAME, None) {
                                 com.wlan_leave().expect("couldn't issue leave command"); // leave the previous config to reset state
+                                netmgr.reset();
                                 // TODO: add an SSID scan phase, so we only try to connect to SSIDs that are currently visible.
                                 // for now, just try every single one as a brute force approach.
                                 for ap in ap_list {
