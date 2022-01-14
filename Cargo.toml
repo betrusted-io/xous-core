@@ -104,6 +104,7 @@ exclude = [
 codegen-units = 1 # 1 better optimizations
 debug = true # symbols are nice and they don't increase the size on Flash
 lto = "fat"
+incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
 #opt-level = 'z'  # Optimize for size instead of performance
 
