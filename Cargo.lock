@@ -474,7 +474,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=b3bf4aebe1d3c91e77dae5d3832d17e717c5669b#b3bf4aebe1d3c91e77dae5d3832d17e717c5669b"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=1effb7eaebbec59f7fda4a678e2d36efafc2e673#1effb7eaebbec59f7fda4a678e2d36efafc2e673"
 
 [[package]]
 name = "com_rs-ref"
@@ -1221,6 +1221,9 @@ dependencies = [
 name = "llio"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
+ "chrono",
+ "locales",
  "log",
  "log-server",
  "num-derive",
@@ -1357,6 +1360,7 @@ version = "0.1.0"
 dependencies = [
  "byteorder",
  "com",
+ "com_rs-ref",
  "llio",
  "log",
  "log-server",
@@ -1480,25 +1484,6 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "oqc-test"
-version = "0.1.0"
-dependencies = [
- "com",
- "gam",
- "keyboard",
- "llio",
- "log",
- "log-server",
- "num-derive",
- "num-traits",
- "ticktimer-server",
- "utralib",
- "xous",
- "xous-ipc",
- "xous-names",
 ]
 
 [[package]]
@@ -1893,7 +1878,6 @@ dependencies = [
  "num-traits",
  "rand_core 0.5.1",
  "rkyv",
- "rtc",
  "sha2",
  "spinor",
  "susres",
@@ -1904,28 +1888,6 @@ dependencies = [
  "xous-ipc",
  "xous-names",
  "zeroize",
-]
-
-[[package]]
-name = "rtc"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "chrono",
- "gam",
- "llio",
- "locales",
- "log",
- "log-server",
- "modals",
- "num-derive",
- "num-traits",
- "rkyv",
- "ticktimer-server",
- "utralib",
- "xous",
- "xous-ipc",
- "xous-names",
 ]
 
 [[package]]
@@ -2119,6 +2081,7 @@ dependencies = [
  "cipher",
  "codec",
  "com",
+ "com_rs-ref",
  "content-plugin-api",
  "curve25519-dalek",
  "debug-here",
@@ -2136,15 +2099,14 @@ dependencies = [
  "llio",
  "log",
  "log-server",
+ "modals",
  "net",
  "num-derive",
  "num-traits",
- "oqc-test",
  "pddb",
  "rand_core 0.5.1",
  "rkyv",
  "root-keys",
- "rtc",
  "sha2",
  "spectrum-analyzer",
  "spinor",
@@ -2264,11 +2226,11 @@ dependencies = [
  "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "rkyv",
  "root-keys",
- "rtc",
  "susres",
  "ticktimer-server",
  "trng",

@@ -1,3 +1,4 @@
+use crate::oqc_test::OqcOp;
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 use xous::{MessageEnvelope, Message};
@@ -6,9 +7,11 @@ use llio::I2cStatus;
 use codec::*;
 use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
 use spectrum_analyzer::windows::hann_window;
-use rtc::{DateTime, Weekday};
+use llio::{DateTime, Weekday};
 use core::fmt::Write;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
+use std::sync::Arc;
+use num_traits::*;
 
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
 
@@ -27,13 +30,12 @@ pub struct Test {
     right_play: bool,
     speaker_play: bool,
     freq: f32,
-    //rtc: rtc::Rtc,
     start_time: Option<DateTime>,
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
-    //kbd: Arc<Mutex<keyboard::Keyboard>>,
-    oqc: oqc_test::Oqc,
+    oqc_cid: Option<xous::CID>,
+    kbd: Option<keyboard::Keyboard>,
     oqc_start: u64,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     jtag: jtag::Jtag,
@@ -64,13 +66,12 @@ impl Test {
             right_play: true,
             speaker_play: true,
             freq: 440.0,
-            //rtc: rtc::Rtc::new(&xns).unwrap(),
             start_time: None,
             end_time: None,
             start_elapsed: None,
             end_elapsed: None,
-            //kbd: Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap())),
-            oqc: oqc_test::Oqc::new(&xns).unwrap(),
+            oqc_cid: None,
+            kbd: Some(keyboard::Keyboard::new(&xns).unwrap()), // allocate and save for use in the oqc_tester, so that the xous_names table is fully allocated
             oqc_start: 0,
             #[cfg(any(target_os = "none", target_os = "xous"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
@@ -107,12 +108,12 @@ impl<'a> ShellCmdApi<'a> for Test {
             match sub_cmd {
                 "factory" => {
                     // force a specified time to make sure the elapsed time computation later on works
-                    if !rtc_set(&mut env.llio, 0, 0, 10, 1, 6, 21) {
+                    if !rtc_set(&mut env.i2c, 0, 0, 10, 1, 6, 21) {
                         log::info!("{}|RTC|FAIL|SET|", SENTINEL);
                     }
 
                     self.start_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.start_time = rtc_get(&mut env.llio);
+                    self.start_time = rtc_get(&mut env.i2c);
 
                     // set uart MUX, and turn off WFI so UART reports are "clean" (no stuck characters when CPU is in WFI)
                     env.llio.set_uart_mux(llio::UartType::Log).unwrap();
@@ -217,7 +218,7 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     env.ticktimer.sleep_ms(6000).unwrap(); // wait so we have some realistic delta on the datetime function
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.end_time = rtc_get(&mut env.llio);
+                    self.end_time = rtc_get(&mut env.i2c);
 
                     let exact_time_secs = ((self.end_elapsed.unwrap() - self.start_elapsed.unwrap()) / 1000) as i32;
                     if let Some(end_dt) = self.end_time {
@@ -406,6 +407,28 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
                         return Ok(Some(ret));
                     }
+                    // start the server if it isn't started already, but only allow it to start once. Note that the CID stays the same between calls,
+                    // because the SID is stable between calls and we're calling from the same process each time.
+                    let oqc_cid = if let Some(oc) = self.oqc_cid {
+                        oc
+                    } else {
+                        let oqc_cid = Arc::new(AtomicU32::new(0));
+                        let kbd = self.kbd.take().expect("someone took the keyboard server before we could use it!");
+                        // start the OQC thread
+                        let _ = std::thread::spawn({
+                            let oqc_cid = oqc_cid.clone();
+                            move || {
+                                crate::oqc_test::oqc_test(oqc_cid, kbd);
+                            }
+                        });
+                        // wait until the OQC thread has connected itself
+                        while oqc_cid.load(Ordering::SeqCst) == 0 {
+                            env.ticktimer.sleep_ms(200).unwrap();
+                        }
+                        self.oqc_cid = Some(oqc_cid.load(Ordering::SeqCst));
+                        oqc_cid.load(Ordering::SeqCst)
+                    };
+
                     let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
                     env.llio.wfi_override(true).unwrap();
                     // activate SSID scanning while the test runs
@@ -436,22 +459,34 @@ impl<'a> ShellCmdApi<'a> for Test {
                     susres.initiate_suspend().unwrap();
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
-                    self.oqc.trigger(60_000);
+                    let timeout = 60_000;
+                    xous::send_message(oqc_cid,
+                        xous::Message::new_blocking_scalar(OqcOp::Trigger.to_usize().unwrap(), timeout, 0, 0, 0,)
+                    ).expect("couldn't trigger self test");
 
                     loop {
-                        match self.oqc.status() {
+                        match oqc_status(oqc_cid) {
                             Some(true) => {
-                                let ssid_str = env.com.ssid_fetch_as_string().unwrap();
-                                use std::str::FromStr;
-                                let ssid = std::string::String::from_str(ssid_str.as_str().unwrap()).unwrap();
-                                let ssid_short = ssid.replace(".", "");
-                                let mut lines = ssid_short.lines();
-                                let _ = lines.next(); // skip the banner
-                                write!(ret, "SSID {}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
-                                    lines.next().unwrap() // just the first SSID result
+                                log::info!("wrapping up: fetching SSID list");
+                                let ssid_str = env.com.ssid_fetch_as_list().unwrap();
+                                let mut min = 255u8;
+                                let mut min_index = 0;
+                                for (index, (rssi, name)) in ssid_str.iter().enumerate() {
+                                    if name.len() > 0 {
+                                        if *rssi < min {
+                                            min = *rssi;
+                                            min_index = index;
+                                        }
+                                    }
+                                }
+                                let (rssi, name) = &ssid_str[min_index];
+                                log::info!("strongest AP: -{}dBm, {}", *rssi, name);
+                                write!(ret, "SSID (-{}):{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
+                                    *rssi, name // just the first SSID result
                                 ).unwrap();
                                 let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
                                 write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
+                                log::info!("finished status update");
                                 break;
                             }
                             Some(false) => {
@@ -467,42 +502,31 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let mut net_up = false;
                     let mut dhcp_ok = false;
                     let mut ssid_ok = false;
-                    let mut rssi_pass = false;
                     let mut wifi_tries = 0;
                     loop {
                         // parse and see if we connected from the first attempt (called before this loop)
-                        if let Ok(msg) = env.com.wlan_status() {
-                            let mut elements = msg.as_str().split(' ');
-                            rssi_pass = if let Some(_rssi_str) = elements.next() {
-                                //rssi_str.parse::<i32>().unwrap() < -10
-                                // for now always pass, don't use RSSI as it's not reliable
-                                true
-                            } else {
-                                false
-                            };
-                            net_up = if let Some(up_str) = elements.next() {
-                                up_str == "up"
-                            } else {
-                                false
-                            };
-                            dhcp_ok = if let Some(dhcp_str) = elements.next() {
-                                dhcp_str == "dhcpBound"
-                            } else {
-                                false
-                            };
-                            ssid_ok = if let Some(ssid_str) = elements.next() {
-                                ssid_str == "\nprecursortest"
+                        log::info!("polling WLAN status");
+                        if let Ok(status) = env.com.wlan_status() {
+                            log::info!("got status: {:?}", status);
+                            net_up = status.link_state == com_rs_ref::LinkState::Connected;
+                            dhcp_ok = status.ipv4.dhcp == com_rs_ref::DhcpState::Bound;
+                            ssid_ok = if let Some(ssid) = status.ssid {
+                                log::info!("got ssid: {}", ssid.name.as_str().unwrap_or("invalid"));
+                                ssid.name.as_str().unwrap_or("invalid") == "precursortest"
                             } else {
                                 false
                             };
                             // if connected, break
-                            if rssi_pass && net_up && dhcp_ok && ssid_ok {
-                                write!(ret, "WLAN OK: {}\n", msg.as_str()).unwrap();
+                            if net_up && dhcp_ok && ssid_ok {
+                                log::info!("WLAN is OK");
+                                write!(ret, "WLAN OK\n").unwrap();
                                 break;
                             } else {
-                                write!(ret, "WLAN TRY: {}", msg.as_str()).unwrap();
+                                log::info!("WLAN is TRY");
+                                write!(ret, "WLAN TRY\n").unwrap();
                             }
                         } else {
+                            log::info!("WLAN couldn't get status");
                             write!(ret, "WLAN TRY: Couldn't get status!\n").unwrap();
                         }
                         if wifi_tries < 3 {
@@ -516,16 +540,16 @@ impl<'a> ShellCmdApi<'a> for Test {
                             env.com.wlan_join().unwrap();
                             env.ticktimer.sleep_ms(8000).unwrap();
                         } else {
-                            if !rssi_pass {
-                                write!(ret, "WLAN FAIL: rssi weak\n").unwrap();
-                            }
                             if !net_up {
+                                log::info!("connection failed");
                                 write!(ret, "WLAN FAIL: connection failed\n").unwrap();
                             }
                             if !dhcp_ok {
+                                log::info!("dhcp failed");
                                 write!(ret, "WLAN FAIL: dhcp fail\n").unwrap();
                             }
                             if !ssid_ok {
+                                log::info!("ssid mismatch");
                                 write!(ret, "WLAN FAIL: ssid mismatch\n").unwrap();
                             }
                             return Ok(Some(ret));
@@ -798,7 +822,7 @@ const ABRTCMC_SECONDS: u8 = 0x3;
 // vendor in the RTC code -- the RTC system was not architected to do our test sets
 // in particular we need a synchronous callback on the date/time, which is not terribly useful in most other contexts
 // so instead of burdening the OS with it, we just incorprate it specifically into this test function
-fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8) -> bool {
+fn rtc_set(i2c: &mut llio::I2c, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8) -> bool {
     let mut txbuf: [u8; 8] = [0; 8];
 
     // convert enum to bitfields
@@ -814,7 +838,7 @@ fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, month
     txbuf[6] = to_bcd(months);
     txbuf[7] = to_bcd(years);
 
-    match llio.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
+    match i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
         Ok(status) => {
             match status {
                 I2cStatus::ResponseWriteOk => true,
@@ -825,9 +849,9 @@ fn rtc_set(llio: &mut llio::Llio, secs: u8, mins: u8, hours: u8, days: u8, month
         _ => {log::error!("try_send_i2c unhandled error"); false}
     }
 }
-fn rtc_get(llio: &mut llio::Llio) -> Option<DateTime> {
+fn rtc_get(i2c: &mut llio::I2c) -> Option<DateTime> {
     let mut rxbuf = [0; 7];
-    match llio.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None) {
+    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None) {
         Ok(status) => {
             match status {
                 I2cStatus::ResponseReadOk => {
@@ -846,5 +870,25 @@ fn rtc_get(llio: &mut llio::Llio) -> Option<DateTime> {
             }
         }
         _ => None
+    }
+}
+
+fn oqc_status(conn: xous::CID) -> Option<bool> { // None if still running or not yet run; Some(true) if pass; Some(false) if fail
+    let result = xous::send_message(conn,
+        xous::Message::new_blocking_scalar(OqcOp::Status.to_usize().unwrap(), 0, 0, 0, 0)
+    ).expect("couldn't query test status");
+    match result {
+        xous::Result::Scalar1(val) => {
+            match val {
+                0 => return None,
+                1 => return Some(true),
+                2 => return Some(false),
+                _ => return Some(false),
+            }
+        }
+        _ => {
+            log::error!("internal error");
+            panic!("improper result code on oqc status query");
+        }
     }
 }

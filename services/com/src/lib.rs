@@ -4,7 +4,7 @@
 /// are calling these functions inside a different process.
 pub mod api;
 
-pub use api::BattStats;
+pub use api::*;
 use api::{Callback, ComIntSources, NET_MTU, Opcode};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
@@ -111,6 +111,7 @@ impl Com {
         }
     }
 
+    /// this is the Git rev of the *soc*, not the firmware.
     pub fn get_ec_git_rev(&self) -> Result<(u32, bool), Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::EcGitRev.to_usize().unwrap(), 0, 0, 0, 0))?;
@@ -122,6 +123,22 @@ impl Com {
                 dirtybool = true;
             }
             Ok((rev as u32, dirtybool))
+        } else {
+            panic!("unexpected return value: {:#?}", response);
+        }
+    }
+
+    /// this is the rev of the firmware, as (maj, min, rev, +commit)
+    pub fn get_ec_sw_tag(&self) -> Result<(u8, u8, u8, u8), Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::EcSwTag.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(rev) = response {
+            Ok((
+                ((rev >> 24) & 0xff) as u8,
+                ((rev >> 16) & 0xff) as u8,
+                ((rev >> 8) & 0xff) as u8,
+                ((rev >> 0) & 0xff) as u8,
+            ))
         } else {
             panic!("unexpected return value: {:#?}", response);
         }
@@ -232,12 +249,26 @@ impl Com {
             Err(xous::Error::InternalError)
         }
     }
+    // superceded by ssid_fetch_as_list in versions later 0.9.5 (non-inclusive)
+    #[deprecated]
     pub fn ssid_fetch_as_string(&self) -> Result<xous_ipc::String::<256>, xous::Error> {
         let ssid_list = xous_ipc::String::<256>::new();
         let mut buf = Buffer::into_buf(ssid_list).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::SsidFetchAsString.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let response = buf.to_original::<xous_ipc::String::<256>, _>().unwrap();
         Ok(response)
+    }
+    /// returns a vector of `(u8, String)` tuples that represent rssi + AP name
+    pub fn ssid_fetch_as_list(&self) -> Result<Vec<(u8, std::string::String)>, xous::Error> {
+        let ssid_alloc = SsidReturn::default();
+        let mut buf = Buffer::into_buf(ssid_alloc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::SsidFetchAsStringV2.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original::<SsidReturn, _>().unwrap();
+        let mut ret = Vec::<(u8, std::string::String)>::new();
+        for ssid in response.list {
+            ret.push((ssid.rssi, std::string::String::from(ssid.name.as_str().unwrap_or("UTF-8 Parse Error"))));
+        }
+        Ok(ret)
     }
 
     pub fn get_standby_current(&self) -> Result<Option<i16>, xous::Error> {
@@ -419,14 +450,12 @@ impl Com {
         )
     }
 
-    pub fn wlan_status(&mut self) -> Result<std::string::String, xous::Error> {
-        // TODO: how to make this return IP, netmask, gateway, DNS server, and STA MAC?
-        const STATUS_MAX_LEN: usize = 160;
-        let status = xous_ipc::String::<STATUS_MAX_LEN>::new();
+    pub fn wlan_status(&mut self) -> Result<WlanStatus, xous::Error> {
+        let status = WlanStatusIpc::default();
         let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::WlanStatus.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-        let response = buf.to_original::<xous_ipc::String::<STATUS_MAX_LEN>, _>().unwrap();
-        Ok(std::string::String::from(response.as_str().expect("status contained non-utf8 characters")))
+        let response = buf.to_original::<WlanStatusIpc, _>().unwrap();
+        Ok(WlanStatus::from_ipc(response))
     }
 
     pub fn wlan_get_config(&self) -> Result<Ipv4Conf, xous::Error> {
@@ -436,6 +465,14 @@ impl Com {
         let response = buf.to_original().expect("Couldn't convert WlanGetConfig buffer");
         let config = Ipv4Conf::decode_u16(&response);
         Ok(config)
+    }
+
+    pub fn wlan_debug(&self) -> Result<WlanDebug, xous::Error> {
+        let prealloc = WlanDebug::default();
+        let mut buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::WlanDebug.to_u32().expect("WlanDebug failed")).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original().expect("Couldn't convert WlanDebug buffer");
+        Ok(response)
     }
 
     pub fn wlan_fetch_packet(&self, pkt: &mut [u8]) -> Result<(), xous::Error> {

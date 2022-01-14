@@ -5,7 +5,7 @@ edition = "2018"
 name = "shellchat"
 version = "0.1.0"
 
-# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
+# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 com = {path = "../com"}
 content-plugin-api = {path = "../content-plugin-api"}# all content canvas providers must provide this API
@@ -14,7 +14,6 @@ graphics-server = {path = "../graphics-server"}
 ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
 llio = {path = "../llio"}
-rtc = {path = "../rtc"}
 log = "0.4.14"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
@@ -36,6 +35,7 @@ jtag = {path="../jtag"}
 net = {path="../net"}
 dns = {path="../dns"}
 pddb = {path="../pddb"}
+modals = {path="../modals"}
 
 trng = {path = "../trng"}
 
@@ -45,8 +45,8 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 # for audio self-test analysis
 spectrum-analyzer = "0.5.2"
-# for outgoing quality check
-oqc-test = {path="../oqc-test"}
+# used to parse net connectivity results
+com_rs-ref = {path = "../../imports/com_rs-ref"}
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
@@ -75,6 +75,7 @@ utralib = {path = "../../utralib"}
 [features]
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
+benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
 default = [] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]

@@ -5,7 +5,7 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Network middleware"
 
-# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
+# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 xous = { path = "../../xous-rs" }
 xous-ipc = {path="../../xous-ipc"}
@@ -22,6 +22,7 @@ llio = {path = "../llio"}
 com = {path = "../com"}
 byteorder = { version = "1.0", default-features = false }
 trng = {path = "../trng"}
+com_rs-ref = {path = "../../imports/com_rs-ref"}
 
 # for automatic SSID management and AP list storage
 pddb = {path = "../pddb"}

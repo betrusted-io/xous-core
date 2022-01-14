@@ -1,47 +1,45 @@
-#![cfg_attr(target_os = "none", no_std)]
-#![cfg_attr(target_os = "none", no_main)]
-
-mod api;
-use api::*;
 use num_traits::*;
-use gam::modal::*;
 use keyboard::{RowCol, KeyRawStates};
+use core::sync::atomic::{AtomicU32, Ordering, AtomicBool};
+use std::sync::Arc;
 
-#[xous::xous_main]
-fn xmain() -> ! {
-    log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
-    log::info!("my PID is {}", xous::process::id());
+pub(crate) const SERVER_NAME_OQC: &str     = "_Outgoing Quality Check Test Program_";
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum OqcOp {
+    Trigger,
+    KeyCode,
+    Status,
+    UxGutter,
+    ModalRedraw,
+    ModalKeys,
+    ModalDrop,
+    Quit,
+}
+
+static SERVER_STARTED: AtomicBool = AtomicBool::new(false);
+pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
+    // only start the server once!
+    if SERVER_STARTED.load(Ordering::SeqCst) {
+        return
+    }
+    SERVER_STARTED.store(true, Ordering::SeqCst);
 
     let xns = xous_names::XousNames::new().unwrap();
-    // one connection expected:
-    //   - shellchat program initiator
-    //   - keyboard callback
-    let oqc_sid = xns.register_name(api::SERVER_NAME_OQC, Some(2)).expect("can't register server");
+    // we allow any connections because this server is not spawned until it is needed
+    let oqc_sid = xns.register_name(SERVER_NAME_OQC, None).expect("can't register server");
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+    //let kbd = keyboard::Keyboard::new(&xns).unwrap();
     kbd.register_raw_listener(
         SERVER_NAME_OQC,
-        Opcode::KeyCode.to_usize().unwrap()
+        OqcOp::KeyCode.to_usize().unwrap()
     );
     let com = com::Com::new(&xns).unwrap();
-    let llio = llio::Llio::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns);
+    let gam = gam::Gam::new(&xns).unwrap();
 
-    let test_cid = xous::connect(oqc_sid).unwrap();
-    let mut test_action = Notification::new(
-        test_cid,
-        Opcode::UxGutter.to_u32().unwrap()
-    );
-    test_action.manual_dismiss = false;
-    let mut test_modal = Modal::new(
-        "test modal",
-        ActionType::Notification(test_action),
-        None,
-        Some("Initializing..."),
-        GlyphStyle::Small,
-        8
-    );
+    let modal = modals::Modals::new(&xns).unwrap();
     let mut test_run = false;
     let mut remaining = populate_vectors();
     let mut bot_str = String::new();
@@ -51,20 +49,16 @@ fn xmain() -> ! {
     let mut test_finished = false;
     let mut last_redraw_time = 0;
 
+    // this connection unblocks the calling thread
+    oqc_cid.store(xous::connect(oqc_sid).unwrap(), Ordering::SeqCst);
     loop {
         let msg = xous::receive_message(oqc_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::Trigger) => xous::msg_blocking_scalar_unpack!(msg, timeout_set, _, _, _, {
+            Some(OqcOp::Trigger) => xous::msg_blocking_scalar_unpack!(msg, timeout_set, _, _, _, {
                 if !test_run {
-                    test_modal.spawn_helper(oqc_sid, test_modal.sid,
-                        Opcode::ModalRedraw.to_u32().unwrap(),
-                        Opcode::ModalKeys.to_u32().unwrap(),
-                        Opcode::ModalDrop.to_u32().unwrap(),
-                    );
-
                     // test the screen
                     com.set_backlight(255, 255).unwrap();
-                    test_modal.gam.selftest(8_000); // 12_000 by default
+                    gam.selftest(8_000); // 12_000 by default
 
                     // now start the keyboard test
                     timeout = if timeout_set > 120_000 {
@@ -76,11 +70,7 @@ fn xmain() -> ! {
                     last_redraw_time = start_time;
                     log::info!("raising modal");
                     render_string(&mut bot_str, &remaining, timeout - (ticktimer.elapsed_ms() - start_time));
-                    test_modal.modify(None, None, false,
-                        Some(bot_str.as_str()), false, None);
-                    test_modal.activate();
-                    test_modal.redraw();
-                    test_modal.gam.set_vibe(true).unwrap();
+                    modal.dynamic_notification(None, Some(bot_str.as_str())).expect("couldn't raise test modal");
 
                     // start a thread that advances the timer when not hitting keys
                     xous::create_thread_2(ping_thread, xous::connect(oqc_sid).unwrap() as usize, timeout as usize).unwrap();
@@ -90,7 +80,7 @@ fn xmain() -> ! {
                 }
                 test_run = true;
             }),
-            Some(Opcode::KeyCode) => {
+            Some(OqcOp::KeyCode) => {
                 if test_run {
                     if test_finished {
                         // we'll continue to get keycodes, but ignore them once the test is finished
@@ -121,25 +111,10 @@ fn xmain() -> ! {
                                         *hit = true;
                                     }
                                 }
-                                /*
-                                match remaining.get(&key) {
-                                    Some(_hit) => {
-                                        log::info!("got {}", map_codes(key));
-                                        remaining.insert(key, true);
-                                    },
-                                    None => {
-                                        if key.r != 254 { // 254 is (ab)used by the tester thread to create a ping event
-                                            log::warn!("got unexpected r/c: {:?}", key)
-                                        }
-                                    },
-                                };
-                                */
                             }
                             if elapsed - last_redraw_time > 100 { // rate limit redraws to 10Hz
                                 render_string(&mut bot_str, &remaining, timeout - (elapsed - start_time));
-                                test_modal.modify(None, None, false,
-                                    Some(bot_str.as_str()), false, None);
-                                test_modal.redraw();
+                                modal.dynamic_notification_update(None, Some(bot_str.as_str())).expect("couldn't update test modal");
                                 last_redraw_time = elapsed;
                                 llio.vibe(llio::VibePattern::Short).unwrap();
                             }
@@ -156,7 +131,7 @@ fn xmain() -> ! {
                         if finished {
                             passing = Some(true);
                             com.set_backlight(0, 0).unwrap();
-                            test_modal.gam.relinquish_focus().unwrap();
+                            modal.dynamic_notification_close().unwrap();
                             log::info!("all keys hit, exiting");
                             test_finished = true;
                         }
@@ -164,7 +139,7 @@ fn xmain() -> ! {
                         // timeout
                         passing = Some(false);
                         com.set_backlight(0, 0).unwrap();
-                        test_modal.gam.relinquish_focus().unwrap();
+                        modal.dynamic_notification_close().unwrap();
                         log::info!("test done, relinquishing focus");
                         test_finished = true;
                     }
@@ -175,34 +150,35 @@ fn xmain() -> ! {
                     // squat the unused port...
                 }
             },
-            Some(Opcode::Status) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            Some(OqcOp::Status) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let _ = match passing {
                     None => xous::return_scalar(msg.sender, 0),
                     Some(true) => xous::return_scalar(msg.sender, 1),
                     Some(false) => xous::return_scalar(msg.sender, 2),
                 };
             }),
-            Some(Opcode::UxGutter) => {
+            Some(OqcOp::UxGutter) => {
                 // log::info!("gutter");
                 // an intentional NOP for UX actions that require a destintation but need no action
             },
-            Some(Opcode::ModalRedraw) => {
+            Some(OqcOp::ModalRedraw) => {
                 // log::info!("modal redraw handler");
                 // test_modal.redraw();
             },
-            Some(Opcode::ModalKeys) => xous::msg_scalar_unpack!(msg, _k1, _k2, _k3, _k4, {
+            Some(OqcOp::ModalKeys) => xous::msg_scalar_unpack!(msg, _k1, _k2, _k3, _k4, {
                 // log::info!("modal keys message, ignoring");
                 // ignore keys, we have our own key routine
             }),
-            Some(Opcode::ModalDrop) => {
+            Some(OqcOp::ModalDrop) => {
                 log::error!("test modal quit unexpectedly");
             }
-            Some(Opcode::Quit) => {
+            Some(OqcOp::Quit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 log::warn!("Quit received on OQC");
+                xous::return_scalar(msg.sender, 1).unwrap();
                 break;
-            }
+            }),
             None => {
-                log::error!("couldn't convert opcode: {:?}", msg);
+                log::error!("couldn't convert OqcOp: {:?}", msg);
             }
         }
     }
@@ -210,8 +186,7 @@ fn xmain() -> ! {
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(oqc_sid).unwrap();
     xous::destroy_server(oqc_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
+    log::trace!("quitting oqc server");
 }
 
 fn populate_vectors() -> Vec::<(RowCol, bool)> {
@@ -389,6 +364,6 @@ fn ping_thread(conn: usize, timeout: usize) {
     while tt.elapsed_ms() - start < timeout as u64 {
         tt.sleep_ms(2000).unwrap();
         let buf = xous_ipc::Buffer::into_buf(krs_ser).or(Err(xous::Error::InternalError)).expect("couldn't serialize krs buffer");
-        buf.send(conn as xous::CID, Opcode::KeyCode.to_u32().unwrap()).expect("couldn't send raw scancodes");
+        buf.send(conn as xous::CID, OqcOp::KeyCode.to_u32().unwrap()).expect("couldn't send raw scancodes");
     }
 }

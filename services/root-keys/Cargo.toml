@@ -5,7 +5,7 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Xous root keys server"
 
-# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
+# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 xous = { path = "../../xous-rs" }
 log-server = { path = "../log-server" }
@@ -16,7 +16,6 @@ susres = {path = "../susres"}
 trng = {path= "../trng"}
 spinor = {path="../spinor"}
 llio = {path="../llio"}
-rtc = {path="../rtc"}
 com = {path="../com"}
 
 xous-ipc = {path = "../../xous-ipc"}

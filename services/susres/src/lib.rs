@@ -47,7 +47,7 @@ impl Susres {
     // different and have a lot of overhead; it seems like the system goes into a form of deadlock
     // during boot when all the hosted mode servers try to connect. This isn't an issue on real hardware.
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
+    pub fn new(_ordering: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         Ok(Susres {
             conn: 0,
@@ -115,6 +115,23 @@ impl Susres {
         }
     }
 
+    /// Passing `true` causes the whole SOC including peripherals to receive a reset signal
+    /// `false` causes only the CPU to reboot, while the peripherals retain state. Generally you want `true`.
+    pub fn reboot(&self, whole_soc: bool) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RebootRequest.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_|())?;
+
+        if whole_soc {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::RebootSocConfirm.to_usize().unwrap(), 0, 0, 0, 0)
+            ).map(|_|())
+        } else {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::RebootCpuConfirm.to_usize().unwrap(), 0, 0, 0, 0)
+            ).map(|_|())
+        }
+    }
 }
 fn drop_conn(sid: xous::SID) {
     let cid = xous::connect(sid).unwrap();

@@ -1,19 +1,16 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-#![cfg_attr(not(target_os = "none"), allow(dead_code))]
-#![cfg_attr(not(target_os = "none"), allow(unused_imports))]
-#![cfg_attr(not(target_os = "none"), allow(unused_variables))]
-
 mod api;
 use api::*;
 mod i2c;
+mod rtc;
 
-use log::{error, info};
-
-use num_traits::{ToPrimitive, FromPrimitive};
+use num_traits::*;
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+
+use std::thread;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
@@ -502,7 +499,6 @@ mod implementation {
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use llio::api::*;
-    use log::{error, info};
 
     #[derive(Copy, Clone, Debug)]
     pub struct Llio {
@@ -597,8 +593,7 @@ mod implementation {
     }
 }
 
-fn i2c_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let i2c_sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+fn i2c_thread(i2c_sid: xous::SID) {
     let xns = xous_names::XousNames::new().unwrap();
 
     let handler_conn = xous::connect(i2c_sid).expect("couldn't make handler connection for i2c");
@@ -682,7 +677,7 @@ fn xmain() -> ! {
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
-    info!("my PID is {}", xous::process::id());
+    log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
     // connections expected:
@@ -696,21 +691,37 @@ fn xmain() -> ! {
     // - rootkeys (for reboots)
     // - oqc-test (for testing the vibe motor)
     // - net (for COM interrupt dispatch)
-    // - problem: `sleep killbounce` allocates a connection. That would bring us to 10 normally, but 11 when that function is needed.
-    //   for now we're going to leave the total server count as "None" (open-ended) but we probably want to rethink this as
-    //   the I2C access is in this crate. Perhaps we should split I2C out, so that the RTC can be protected and not grouped
-    //   into the same severe security restrictions as the other LLIO items?
     // - pddb also allocates a connection, but then releases it, to read the DNA field.
-    let num_conns = 10;
+    // We've migrated the I2C function out (which is arguably the most sensitive bit), so we can now set this more safely to unrestriced connection counts.
     let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
     // create the I2C handler thread
-    // each connection to llio also creates an i2c connection, so it has the same expectation list
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, None).expect("can't register I2C thread");
+    // - codec
+    // - rtc
+    // - shellchat
+    // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
-    let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
-    xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");
+    let _ = thread::spawn({
+        let i2c_sid = i2c_sid.clone();
+        move || {
+            i2c_thread(i2c_sid);
+        }
+    });
+    log::trace!("spawning RTC server");
+    // expected connections:
+    // - status (for setting time)
+    // - shellchat (for testing)
+    // - rootkeys (for coordinating self-reboot)
+    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(3)).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", rtc_sid);
+    let _ = thread::spawn({
+        let rtc_sid = rtc_sid.clone();
+        move || {
+            crate::rtc::rtc_server(rtc_sid);
+        }
+    });
 
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
@@ -986,10 +997,15 @@ fn xmain() -> ! {
                 xous::send_message(dropconn,
                     xous::Message::new_scalar(I2cOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
                 unsafe{xous::disconnect(dropconn).unwrap();}
+
+                let dropconn = xous::connect(i2c_sid).unwrap();
+                xous::send_message(dropconn,
+                    xous::Message::new_scalar(RtcOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                unsafe{xous::disconnect(dropconn).unwrap();}
                 break;
             }
             None => {
-                error!("couldn't convert opcode: {:?}", msg);
+                log::error!("couldn't convert opcode: {:?}", msg);
             }
         }
     }
@@ -1022,7 +1038,7 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
         }
     }
     if !found {
-        error!("ran out of space registering callback");
+        log::error!("ran out of space registering callback");
     }
 }
 fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {

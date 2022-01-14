@@ -5,7 +5,7 @@ edition = "2018"
 name = "status"
 version = "0.1.0"
 
-# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
+# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 blitstr-ref = {path = "../../imports/blitstr-ref"}
 com = {path = "../com"}
@@ -14,7 +14,6 @@ log = "0.4.14"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 trng = {path = "../trng"}
-rtc = {path = "../rtc"}
 llio = {path = "../llio"}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
@@ -24,6 +23,7 @@ gam = {path = "../gam"}
 locales = {path = "../../locales"}
 susres = {path = "../susres"}
 root-keys = {path = "../root-keys"}
+modals = {path = "../modals"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}

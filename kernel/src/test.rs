@@ -29,13 +29,14 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
         "XOUS_SERVER environment variable must be unset to run tests"
     );
 
-    use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;
+    use rand_chacha::rand_core::SeedableRng;
+    use rand_chacha::rand_core::RngCore;
     let mut pid1_key = [0u8; 16];
     let mut rng = ChaCha8Rng::seed_from_u64(RNG_LOCAL_STATE.load(Ordering::SeqCst) + xous_kernel::TESTING_RNG_SEED.load(core::sync::atomic::Ordering::SeqCst));
     //let mut rng = thread_rng();
     for b in pid1_key.iter_mut() {
-        *b = rng.gen();
+        *b = rng.next_u32() as u8;
     }
     RNG_LOCAL_STATE.store(rng.next_u64(), Ordering::SeqCst);
     xous_kernel::arch::set_process_key(&pid1_key);

@@ -51,6 +51,16 @@ pub struct ManagedProgress {
     pub current_work: u32,
 }
 
+/// This isn't a terribly useful notification -- it's basically read-only, no interactivity,
+/// but you can animate the text. Mainly used for testing routines. Might be modifiable
+/// into something more useful with a bit of thought, but for now, MVP.
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct DynamicNotification {
+    pub token: [u32; 4],
+    pub title: Option<xous_ipc::String::<1024>>,
+    pub text: Option<xous_ipc::String::<2048>>,
+}
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     // these are blocking calls
@@ -62,10 +72,12 @@ pub(crate) enum Opcode {
     PromptWithTextResponse,
     /// simple notification
     Notification,
+    /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically updated
+    DynamicNotification,
 
     // these are non-blocking calls
     /// add an item to the radio box or check box. Note that all added items
-    /// are cleared after the relevant "action" call happens (PrmoptWith[Fixed,Multi]Response)
+    /// are cleared after the relevant "action" call happens (PromptWith[Fixed,Multi]Response)
     AddModalItem,
     /// raise a progress bar
     StartProgress,
@@ -73,6 +85,10 @@ pub(crate) enum Opcode {
     UpdateProgress,
     /// lower a progress bar
     StopProgress,
+    /// update a dynamic notification's text
+    UpdateDynamicNotification,
+    /// close dynamic notification
+    CloseDynamicNotification,
 
     GetMutex,
 

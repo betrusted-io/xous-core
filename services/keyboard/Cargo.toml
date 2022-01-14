@@ -5,7 +5,7 @@ edition = "2018"
 name = "keyboard"
 version = "0.1.0"
 
-# Dependency policy: nail down all dependencies to the minor version number, so that changes to the code base are deliberate acts.
+# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
 log-server = {path = "../log-server"}
