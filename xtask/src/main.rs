@@ -812,7 +812,7 @@ fn build_hw_image(
         &["loader"],
         debug,
         Some(KERNEL_TARGET),
-        Some("loader".into()),
+        None,
         None,
         loader_features,
     )?;
