@@ -84,7 +84,7 @@ impl InputTracker {
             insertion: 0,
             last_height: 0,
             was_grown: false,
-            pred_options: [None, None, None, None], // this has to be manually inferred because String doesn't implement "copy" and can't be None-init automatically
+            pred_options: Default::default(),
         }
     }
     pub fn set_gam_token(&mut self, token: [u32; 4]) {
