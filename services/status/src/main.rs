@@ -202,6 +202,10 @@ fn xmain() -> ! {
     )
     .expect("|status: Can't draw border line");
 
+    // the EC gets reset by the Net crate on boot to ensure that the state machines are synced up
+    // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
+    // the status bar reads "booting up..." during this period.
+    ticktimer.sleep_ms(4000).unwrap();
     com.hook_batt_stats(battstats_cb)
         .expect("|status: couldn't hook callback for events from COM");
     // prime the loop

@@ -90,13 +90,21 @@ fn xmain() -> ! {
     let net_conn = xous::connect(net_sid).unwrap();
     log::trace!("registered with NS -- {:?}", net_sid);
 
-    // hook the COM interrupt listener
+    // bring the EC into a sane state for the network -- that is, reset the EC
     let mut llio = llio::Llio::new(&xns);
+    let com = com::Com::new(&xns).unwrap();
+    let timer = ticktimer_server::Ticktimer::new().unwrap();
+
+    llio.ec_reset().unwrap();
+    timer.sleep_ms(3500).unwrap();
+    com.link_reset().unwrap();
+    com.reseed_ec_trng().unwrap();
+
+    // hook the COM interrupt listener
     let net_cid = xous::connect(net_sid).unwrap();
     llio.hook_com_event_callback(Opcode::ComInterrupt.to_u32().unwrap(), net_cid).unwrap();
     llio.com_event_enable(true).unwrap();
     // setup the interrupt masks
-    let com = com::Com::new(&xns).unwrap();
     let mut com_int_list: Vec::<ComIntSources> = vec![];
     com.ints_get_active(&mut com_int_list);
     log::debug!("COM initial pending interrupts: {:?}", com_int_list);
@@ -150,7 +158,6 @@ fn xmain() -> ! {
     let mut udp_clones = HashMap::<u16, HashMap::<[u32; 4], CID>>::new(); // additional clones for UDP responders
 
     // other link storage
-    let timer = ticktimer_server::Ticktimer::new().unwrap();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
     let routes = Routes::new(BTreeMap::new());
