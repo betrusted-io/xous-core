@@ -73,5 +73,10 @@
         "en": "Close menu",
         "zh": "关闭功能表",
         "en-audio": "Close menu"
+    },
+    "mainmenu.cant_sleep": {
+        "en": "Can't sleep while charging",
+        "zh": "充电时睡不着",
+        "en-audio": "Can't sleep while charging"
     }
 }

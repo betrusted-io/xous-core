@@ -15,7 +15,6 @@ pub fn main_menu_thread(keys: Arc<Mutex<RootKeys>>, status_sid: xous::SID) {
     let mut menu = Menu::new(gam::api::MAIN_MENU_NAME);
 
     let xns = xous_names::XousNames::new().unwrap();
-    let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let com = com::Com::new(&xns).unwrap();
 
     let blon_item = MenuItem {
@@ -38,8 +37,8 @@ pub fn main_menu_thread(keys: Arc<Mutex<RootKeys>>, status_sid: xous::SID) {
 
     let sleep_item = MenuItem {
         name: String::<64>::from_str(t!("mainmenu.sleep", xous::LANG)),
-        action_conn: susres.conn(),
-        action_opcode: susres.getop_suspend(),
+        action_conn: status_conn,
+        action_opcode: StatusOpcode::TrySuspend.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     };

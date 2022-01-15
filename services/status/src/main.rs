@@ -43,6 +43,8 @@ enum StatusOpcode {
     UxSetTime,
     /// Initiates a reboot
     Reboot,
+    /// Suspend handler from the main menu
+    TrySuspend,
     Quit,
 }
 
@@ -623,6 +625,13 @@ fn xmain() -> ! {
                     panic!("system did not reboot");
                 }
             }
+            Some(StatusOpcode::TrySuspend) => {
+                if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG)).expect("couldn't notify that power is plugged in");
+                } else {
+                    susres.initiate_suspend().expect("couldn't initiate suspend op");
+                }
+            },
             Some(StatusOpcode::Quit) => {
                 break;
             }
