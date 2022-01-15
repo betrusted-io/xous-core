@@ -1,5 +1,3 @@
-use xous_ipc::String;
-
 /*
     Authentication tokens to the GAM are created on a first-come, first-serve basis,
     under the following assumptions:
@@ -24,10 +22,10 @@ const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = [
     "shared modal",
 ];
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct NamedToken {
     token: [u32; 4],
-    name: String::<128>,
+    name: String,
 }
 pub(crate) struct TokenManager {
     tokens: [Option<NamedToken>; TOKEN_SLOTS],
@@ -36,7 +34,7 @@ pub(crate) struct TokenManager {
 impl<'a> TokenManager {
     pub(crate) fn new(xns: &xous_names::XousNames) -> TokenManager {
         TokenManager {
-            tokens: [None; TOKEN_SLOTS],
+            tokens: Default::default(),
             trng: trng::Trng::new(&xns).unwrap(),
         }
     }
@@ -78,7 +76,7 @@ impl<'a> TokenManager {
         for maybe_token in self.tokens.iter() {
             match maybe_token {
                 Some(token) => {
-                    if name.eq(token.name.as_str().unwrap()) {
+                    if name.eq(token.name.as_str()) {
                         registered = true;
                     }
                 }
@@ -96,7 +94,7 @@ impl<'a> TokenManager {
             if maybe_token.is_none() {
                 *maybe_token = Some(NamedToken {
                     token,
-                    name: String::<128>::from_str(name),
+                    name: String::from(name),
                 });
                 log::trace!("token table after registration is {:x?}", self.tokens);
                 return Some(token)
@@ -123,7 +121,7 @@ impl<'a> TokenManager {
     pub(crate) fn find_token(&self, name: &str) -> Option<[u32; 4]> {
         for maybe_token in self.tokens.iter() {
             if let Some(token) = maybe_token {
-                if token.name == String::<128>::from_str(name) {
+                if token.name == String::from(name) {
                     return Some(token.token)
                 }
             }
