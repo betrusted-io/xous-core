@@ -14,7 +14,7 @@ use blitstr_ref as blitstr;
 use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
 use num_traits::{ToPrimitive,FromPrimitive};
-use xous_ipc::{String, Buffer};
+use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack};
 
 use core::fmt::Write;
@@ -40,19 +40,19 @@ struct InputTracker {
     /// our current prediction engine
     predictor: Option<PredictionPlugin>,
     /// the name & token of our engine, so we can disconnect later on
-    pub predictor_conn: Option<(String::<64>, [u32; 4])>,
+    pub predictor_conn: Option<(xous_ipc::String::<64>, [u32; 4])>,
     /// cached copy of the predictor's triggers for predictions. Only valid if predictor is not None
     pred_triggers: Option<PredictionTriggers>,
     /// set if we're in a state where a backspace should trigger an unpredict
     can_unpick: bool, // note: untested as of Mar 7 2021
     /// the predictor string -- this is different from the input line, because it can be broken up by spaces and punctuatino
-    pred_phrase: String::<4000>, // note: untested as of Mar 7 2021
+    pred_phrase: String, // note: untested as of Mar 7 2021
     /// character position of the last prediction trigger -- this is where the prediction overwrite starts
     /// if None, it means we were unable to determine the trigger (e.g., we went back and edited text manually)
     last_trigger_char: Option<usize>,
 
     /// track the progress of our input line
-    line: String::<4000>,
+    line: String,
     /// length of the line in *characters*, not bytes (which is what .len() returns), used to index char_locs
     characters: usize,
     /// the insertion point, 0 is inserting characters before the first, 1 inserts characters after the first, etc.
@@ -62,8 +62,8 @@ struct InputTracker {
     /// keep track if our box was grown
     was_grown: bool,
 
-    /// render the predictions
-    pred_options: [Option<String::<4000>>; MAX_PREDICTION_OPTIONS],
+    /// render the predictions. Slightly awkward because this code comes from before we had libstd
+    pred_options: [Option<String>; MAX_PREDICTION_OPTIONS],
 }
 
 impl InputTracker {
@@ -77,14 +77,14 @@ impl InputTracker {
             pred_triggers: None,
             gam_token: None,
             can_unpick: false,
-            pred_phrase: String::<4000>::new(),
+            pred_phrase: String::new(),
             last_trigger_char: Some(0),
-            line: String::<4000>::new(),
+            line: String::new(),
             characters: 0,
             insertion: 0,
             last_height: 0,
             was_grown: false,
-            pred_options: [None; MAX_PREDICTION_OPTIONS],
+            pred_options: [None, None, None, None], // this has to be manually inferred because String doesn't implement "copy" and can't be None-init automatically
         }
     }
     pub fn set_gam_token(&mut self, token: [u32; 4]) {
@@ -169,7 +169,7 @@ impl InputTracker {
     fn insert_prediction(&mut self, index: usize) {
         let debug1 = false;
         if debug1{info!("IMEF|insert_prediction index {}", index);}
-        let pred_str = match self.pred_options[index] {
+        let pred_str = match &self.pred_options[index] {
             Some(s) => s,
             _ => return // if the index doesn't exist for some reason, do nothing without throwing an error
         };
@@ -177,8 +177,7 @@ impl InputTracker {
         if let Some(offset) = self.last_trigger_char {
             if offset < self.characters {
                 // copy the bytes in the original string, up to the offset; and then copy the bytes in the selected predictor
-                let tempbytes: [u8; 4000] = self.line.as_bytes();
-                let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.line.len()]) }.clone();
+                let tempstr = self.line.to_string();
                 self.line.clear();
                 let mut chars = 0;
                 let mut c_iter = tempstr.chars();
@@ -187,15 +186,15 @@ impl InputTracker {
                         break;
                     }
                     if let Some(c) = c_iter.next() {
-                        self.line.push(c).unwrap(); // this should be infallible
+                        self.line.push(c);
                         chars += 1;
                     } else {
                         break;
                     }
                 }
                 // now push the characters in the predicted options onto the line
-                for c in pred_str.as_str().unwrap().chars() {
-                    self.line.push(c).expect("ran out of space inserting prediction");
+                for c in pred_str.as_str().chars() {
+                    self.line.push(c);
                     chars += 1;
                 }
                 // forward until we find the next prediction trigger in the original string
@@ -204,7 +203,7 @@ impl InputTracker {
                         if trigger.whitespace && c.is_ascii_whitespace() ||
                            trigger.punctuation && c.is_ascii_punctuation() {
                                // include the trigger that was found
-                               self.line.push(c).expect("ran out of space inserting prediction");
+                               self.line.push(c);
                                chars += 1;
                                break;
                         }
@@ -216,14 +215,14 @@ impl InputTracker {
                 self.last_trigger_char = Some(chars);
                 // copy the remainder of the line, if any
                 while let Some(c) = c_iter.next() {
-                    self.line.push(c).expect("ran out of space inserting prediction");
+                    self.line.push(c);
                     chars += 1;
                 }
                 self.characters = chars;
             } else {
                 // just append the prediction to the line
-                for c in pred_str.as_str().unwrap().chars() {
-                    self.line.push(c).expect("ran out of space inserting prediction");
+                for c in pred_str.as_str().chars() {
+                    self.line.push(c);
                     self.characters += 1;
                 }
                 self.last_trigger_char = Some(self.insertion);
@@ -232,10 +231,10 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool) -> Result<Option<String::<4000>>, xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool) -> Result<Option<xous_ipc::String::<4000>>, xous::Error> {
         let debug1= false;
         let mut update_predictor = false;
-        let mut retstring: Option<String::<4000>> = None;
+        let mut retstring: Option<xous_ipc::String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("updating input area");}
             let ic_bounds: Point = self.gam.get_canvas_bounds(ic).expect("Couldn't get input canvas bounds");
@@ -323,8 +322,7 @@ impl InputTracker {
                             if debug1{info!("mid-string backspace case")}
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
-                            let tempbytes: [u8; 4000] = self.line.as_bytes();
-                            let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.line.len()]) }.clone();
+                            let tempstr = self.line.to_string();
                             // clear the string
                             self.line.clear();
 
@@ -346,7 +344,7 @@ impl InputTracker {
                                         }
                                     }
                                     if debug1{info!("copying char {}", c);}
-                                    self.line.push(c).expect("ran out of space inserting orignial characters into input line");
+                                    self.line.push(c);
                                 }
                                 i += 1;
                             }
@@ -358,15 +356,17 @@ impl InputTracker {
                         }
                     }
                     '\u{000d}' => { // carriage return
-                        let mut ret = String::<4000>::new();
-                        write!(ret, "{}", self.line.as_str().expect("couldn't convert input line")).expect("couldn't copy input ilne to output");
+                        let mut ret = xous_ipc::String::<4000>::new();
+                        write!(ret, "{}", self.line.as_str()).expect("couldn't copy input ilne to output");
                         retstring = Some(ret);
 
                         if let Some(trigger) = self.pred_triggers {
                             if trigger.newline {
-                                self.predictor.unwrap().feedback_picked(self.line).expect("couldn't send feedback to predictor");
+                                self.predictor.unwrap().feedback_picked(
+                                    xous_ipc::String::<4000>::from_str(&self.line)).expect("couldn't send feedback to predictor");
                             } else if trigger.punctuation {
-                                self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("couldn't send feedback to predictor");
+                                self.predictor.unwrap().feedback_picked(
+                                    xous_ipc::String::<4000>::from_str(&self.pred_phrase)).expect("couldn't send feedback to predictor");
                             }
                         }
                         self.can_unpick = false;
@@ -400,7 +400,8 @@ impl InputTracker {
                         if let Some(trigger) = self.pred_triggers {
                             if trigger.whitespace && k.is_ascii_whitespace() {
                                 if self.pred_phrase.len() > 0 {
-                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("couldn't send feedback to predictor");
+                                    self.predictor.unwrap().feedback_picked(
+                                        xous_ipc::String::<4000>::from_str(&self.pred_phrase)).expect("couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
                                     update_predictor = true;
@@ -409,7 +410,8 @@ impl InputTracker {
                             }
                             if trigger.punctuation && k.is_ascii_punctuation() {
                                 if self.pred_phrase.len() > 0 {
-                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("couldn't send feedback to predictor");
+                                    self.predictor.unwrap().feedback_picked(
+                                        xous_ipc::String::<4000>::from_str(&self.pred_phrase)).expect("couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
                                     update_predictor = true;
@@ -418,11 +420,11 @@ impl InputTracker {
                             }
                         }
                         if self.insertion == self.characters {
-                            self.line.push(k).expect("ran out of space pushing character into input line");
+                            self.line.push(k);
                             if let Some(trigger) = self.pred_triggers {
                                 if !(trigger.punctuation && k.is_ascii_punctuation() ||
                                     trigger.whitespace  && k.is_ascii_whitespace() ) {
-                                    self.pred_phrase.push(k).expect("ran out of space pushing character into prediction phrase");
+                                    self.pred_phrase.push(k);
                                     update_predictor = true;
                                 }
                             }
@@ -444,8 +446,7 @@ impl InputTracker {
                             if debug1{info!("handling case of inserting characters. insertion: {}", self.insertion)};
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
-                            let tempbytes: [u8; 4000] = self.line.as_bytes();
-                            let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.line.len()]) }.clone();
+                            let tempstr =self.line.to_string();
                             // clear the string
                             self.line.clear();
 
@@ -455,11 +456,11 @@ impl InputTracker {
                                 if debug1{info!("checking index {}", i);}
                                 if i == self.insertion {
                                     if debug1{info!("inserting char {}", k);}
-                                    self.line.push(k).expect("ran out of space inserting new character into input line");
-                                    self.line.push(c).expect("ran out of space inserting orignial characters into input line");
+                                    self.line.push(k);
+                                    self.line.push(c);
                                 } else {
                                     if debug1{info!("copying char {}", c);}
-                                    self.line.push(c).expect("ran out of space inserting orignial characters into input line");
+                                    self.line.push(c);
                                 }
                                 i += 1;
                             }
@@ -474,7 +475,7 @@ impl InputTracker {
             input_tv.insertion = Some(self.insertion as _);
             if debug1{info!("insertion point is {}, characters in string {}", self.insertion, self.characters);}
             if do_redraw || force_redraw {
-                write!(input_tv.text, "{}", self.line.as_str().expect("couldn't convert str")).expect("couldn't update TextView string in input canvas");
+                write!(input_tv.text, "{}", self.line.as_str()).expect("couldn't update TextView string in input canvas");
                 self.gam.post_textview(&mut input_tv).expect("can't draw input TextView");
                 if debug1{info!("got computed cursor of {:?}", input_tv.cursor);}
 
@@ -525,14 +526,20 @@ impl InputTracker {
             if update_predictor {
                 if self.pred_phrase.len() > 0 {
                     if let Some(pred) = self.predictor {
-                        pred.set_input(self.pred_phrase).expect("couldn't update predictor with current input");
+                        pred.set_input(
+                            xous_ipc::String::<4000>::from_str(&self.pred_phrase)).expect("couldn't update predictor with current input");
                     }
                 }
 
                 // Query the prediction engine for the latest predictions
                 if let Some(pred) = self.predictor {
                     for i in 0..self.pred_options.len() {
-                        self.pred_options[i] = pred.get_prediction(i as u32).expect("couldn't query prediction engine");
+                        let p = if let Some(prediction) = pred.get_prediction(i as u32).expect("couldn't query prediction engine") {
+                            Some(String::from(prediction.as_str().unwrap_or("UTF-8 Error")))
+                        } else {
+                            None
+                        };
+                        self.pred_options[i] = p;
                     }
                 }
             }
@@ -658,7 +665,7 @@ fn xmain() -> ! {
                         Ok((pc, token)) => {
                             tracker.set_predictor( Some(ime_plugin_api::PredictionPlugin {connection: Some(pc)}) );
                             tracker.predictor_conn = Some(
-                                (String::<64>::from_str(s.as_str().unwrap()),
+                                (xous_ipc::String::<64>::from_str(s.as_str().unwrap()),
                                 token.expect("didn't get the disconnect token!"))
                             );
                         },
