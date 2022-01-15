@@ -36,7 +36,7 @@ use core::fmt::Write;
 use gam::UxRegistration;
 use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, GlyphStyle, PixelColor};
 use xous::MessageEnvelope;
-use xous_ipc::{String, Buffer};
+use xous_ipc::Buffer;
 
 #[doc = include_str!("../README.md")]
 mod cmds;
@@ -47,7 +47,7 @@ mod oqc_test;
 #[derive(Debug)]
 struct History {
     // the history record
-    pub text: String<1024>,
+    pub text: String,
     // if true, this was input from the user; if false, it's a response from the shell
     pub is_input: bool,
 }
@@ -56,7 +56,7 @@ struct History {
 struct Repl {
     // optional structures that indicate new input to the Repl loop per iteration
     // an input string
-    input: Option<String<1024>>,
+    input: Option<String>,
     // messages from other servers
     msg: Option<MessageEnvelope>,
 
@@ -85,9 +85,9 @@ impl Repl{
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
         let token = gam.register_ux(UxRegistration {
-            app_name: String::<128>::from_str(APP_NAME_SHELLCHAT),
+            app_name: xous_ipc::String::<128>::from_str(APP_NAME_SHELLCHAT),
             ux_type: gam::UxType::Chat,
-            predictor: Some(String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
+            predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
             listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
             redraw_id: ShellOpcode::Redraw.to_u32().unwrap(),
             gotinput_id: Some(ShellOpcode::Line.to_u32().unwrap()),
@@ -122,10 +122,7 @@ impl Repl{
 
     /// accept a new input string
     fn input(&mut self, line: &str) -> Result<(), xous::Error> {
-        let mut local = String::<1024>::new();
-        write!(local, "{}", line).expect("line too long for history buffer");
-
-        self.input = Some(local);
+        self.input = Some(String::from(line));
 
         Ok(())
     }
@@ -145,9 +142,9 @@ impl Repl{
     fn update(&mut self, was_callback: bool) -> Result<(), xous::Error> {
         let debug1 = false;
         // if we had an input string, do something
-        if let Some(local) = self.input {
+        if let Some(local) = &self.input {
             let input_history = History {
-                text: local,
+                text: local.to_string(),
                 is_input: true,
             };
             self.circular_push(input_history);
@@ -164,13 +161,11 @@ impl Repl{
 
         let mut dirty = true;
         // take the input and pass it on to the various command parsers, and attach result
-        if let Some(mut local) = self.input {
+        if let Some(local) = &self.input {
             log::trace!("processing line: {}", local);
-            if let Some(res) = self.env.dispatch(Some(&mut local), None).expect("command dispatch failed") {
-                let mut response = String::<1024>::new();
-                write!(response, "{}", res).expect("can't copy result to history");
+            if let Some(res) = self.env.dispatch(Some(&mut xous_ipc::String::<1024>::from_str(&local)), None).expect("command dispatch failed") {
                 let output_history = History {
-                    text: response,
+                    text: String::from(res.as_str().unwrap_or("UTF-8 Error")),
                     is_input: false
                 };
                 self.circular_push(output_history);
@@ -180,10 +175,8 @@ impl Repl{
         } else if let Some(msg) = &self.msg {
             log::trace!("processing callback msg: {:?}", msg);
             if let Some(res) = self.env.dispatch(None, Some(msg)).expect("callback failed") {
-                let mut response = String::<1024>::new();
-                write!(response, "{}", res).expect("can't copy result to history");
                 let output_history = History {
-                    text: response,
+                    text: String::from(res.as_str().unwrap_or("UTF-8 Error")),
                     is_input: false
                 };
                 self.circular_push(output_history);
@@ -252,7 +245,7 @@ impl Repl{
             bubble_tv.style = GlyphStyle::Small;
             bubble_tv.margin = self.bubble_margin;
             bubble_tv.ellipsis = false; bubble_tv.insertion = None;
-            write!(bubble_tv.text, "{}", h.text.as_str().expect("couldn't convert history text")).expect("couldn't write history text to TextView");
+            write!(bubble_tv.text, "{}", h.text.as_str()).expect("couldn't write history text to TextView");
             log::trace!("posting {}", bubble_tv.text);
             self.gam.post_textview(&mut bubble_tv).expect("couldn't render bubble textview");
 
@@ -314,7 +307,7 @@ fn xmain() -> ! {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<String<4000>, _>().unwrap();
+                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
                 log::trace!("shell got input line: {}", s.as_str());
                 repl.input(s.as_str()).expect("REPL couldn't accept input string");
                 update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
