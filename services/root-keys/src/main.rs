@@ -4,11 +4,15 @@
 mod api;
 use api::*;
 use xous::{msg_scalar_unpack, send_message, msg_blocking_scalar_unpack};
-use xous_ipc::{String, Buffer};
+#[cfg(feature = "policy-menu")]
+use xous_ipc::String;
+
+use xous_ipc::Buffer;
 
 use num_traits::*;
 
 use gam::modal::*;
+#[cfg(feature = "policy-menu")]
 use gam::{MenuItem, MenuPayload};
 
 use locales::t;
@@ -287,30 +291,35 @@ fn xmain() -> ! {
     let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, main_cid).expect("couldn't create suspend/resume object");
 
     // create a policy menu object
-    let mut menu_items = Vec::<MenuItem>::new();
-    menu_items.push(MenuItem {
-        name: String::from_str(t!("rootkeys.policy_keep", xous::LANG)),
-        action_conn: Some(main_cid),
-        action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysKeep.to_u32().unwrap(), 0, 0, 0,]),
-        close_on_select: true,
-    });
-    menu_items.push(MenuItem {
-        name: String::from_str(t!("rootkeys.policy_suspend", xous::LANG)),
-        action_conn: Some(main_cid),
-        action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::EraseOnSuspend.to_u32().unwrap(), 0, 0, 0,]),
-        close_on_select: true,
-    });
-    menu_items.push(MenuItem {
-        name: String::from_str(t!("rootkeys.policy_clear", xous::LANG)),
-        action_conn: Some(main_cid),
-        action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysPurge.to_u32().unwrap(), 0, 0, 0,]),
-        close_on_select: true,
-    });
-    gam::menu_matic(menu_items, crate::ROOTKEY_MENU_NAME, None);
-    let mut policy_followup_action: Option<usize> = None;
+    #[cfg(feature = "policy-menu")]
+    {
+        let mut menu_items = Vec::<MenuItem>::new();
+        menu_items.push(MenuItem {
+            name: String::from_str(t!("rootkeys.policy_keep", xous::LANG)),
+            action_conn: Some(main_cid),
+            action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
+            action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysKeep.to_u32().unwrap(), 0, 0, 0,]),
+            close_on_select: true,
+        });
+        menu_items.push(MenuItem {
+            name: String::from_str(t!("rootkeys.policy_suspend", xous::LANG)),
+            action_conn: Some(main_cid),
+            action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
+            action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::EraseOnSuspend.to_u32().unwrap(), 0, 0, 0,]),
+            close_on_select: true,
+        });
+        menu_items.push(MenuItem {
+            name: String::from_str(t!("rootkeys.policy_clear", xous::LANG)),
+            action_conn: Some(main_cid),
+            action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
+            action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysPurge.to_u32().unwrap(), 0, 0, 0,]),
+            close_on_select: true,
+        });
+        gam::menu_matic(menu_items, crate::ROOTKEY_MENU_NAME, None);
+        let mut policy_followup_action: Option<usize> = None;
+    }
+    // this is the basic default policy of high-security keys -- they stick around until the next suspend
+    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
 
     // create our very own password modal -- so that critical passwords aren't being shuffled between servers left and right
     let mut password_action = TextEntry {
@@ -340,6 +349,7 @@ fn xmain() -> ! {
 
     // a modals manager for less-secure, run-of-the-mill operations
     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
+    #[cfg(feature = "policy-menu")]
     let gam = gam::Gam::new(&xns).expect("couldn't establish connection to GAM");
 
     let mut reboot_initiated = false;
@@ -682,16 +692,19 @@ fn xmain() -> ! {
                 // this is a bit of legacy code to handle a return from a menu that would set our password policy.
                 // for now, this is short-circuited because every branch that leads into here selects "policy_suspend",
                 // which is a 99% correct but 100% more user-friendly policy
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
-                if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
-                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
-                } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
-                    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
-                } else if payload.as_str() == "no change" {
-                    // don't change the policy
-                } else {
-                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                #[cfg(feature = "policy-menu")]
+                {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                    if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
+                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
+                    } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                        keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                    } else if payload.as_str() == "no change" {
+                        // don't change the policy
+                    } else {
+                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                    }
                 }
                 keys.set_ux_password_type(None);
 
@@ -751,17 +764,19 @@ fn xmain() -> ! {
                 .map(|_| ()).expect("couldn't send action message");
             },
             Some(Opcode::UxSignXousRun) => {
-                // legacy code to set policy, if it were to be inserted in the flow
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
-                if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
-                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
-                } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
-                    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
-                } else if payload.as_str() == "no change" {
-                    // don't change the policy
-                } else {
-                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                #[cfg(feature = "policy-menu")]
+                {// legacy code to set policy, if it were to be inserted in the flow
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                    if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
+                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
+                    } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                        keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                    } else if payload.as_str() == "no change" {
+                        // don't change the policy
+                    } else {
+                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                    }
                 }
                 keys.set_ux_password_type(None);
 
@@ -848,7 +863,7 @@ fn xmain() -> ! {
                 rootkeys_modal.activate();
             },
             Some(Opcode::UxAesEnsureReturn) => {
-                /*
+                #[cfg(feature = "policy-menu")]
                 { // in case we want to bring back the policy check
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
@@ -861,7 +876,7 @@ fn xmain() -> ! {
                     } else {
                         keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
                     }
-                }*/
+                }
                 {
                     let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
@@ -996,9 +1011,11 @@ fn xmain() -> ! {
                 // dummy test for now
                 xous::return_scalar(msg.sender, 1234).unwrap();
             }),
+            #[cfg(feature = "policy-menu")]
             Some(Opcode::UxGetPolicy) => {
                 gam.raise_menu(ROOTKEY_MENU_NAME).expect("couldn't raise policy menu");
             }
+            #[cfg(feature = "policy-menu")]
             Some(Opcode::UxPolicyReturn) => msg_scalar_unpack!(msg, policy_code, _, _, _, {
                 keys.update_policy(FromPrimitive::from_usize(policy_code));
                 if let Some(action) = policy_followup_action {

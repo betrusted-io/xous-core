@@ -53,7 +53,9 @@ pub(crate) enum Opcode {
 
     // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
+    #[cfg(feature = "policy-menu")]
     UxGetPolicy,
+    #[cfg(feature = "policy-menu")]
     UxPolicyReturn,
     UxTryReboot,
     UxDoReboot,
