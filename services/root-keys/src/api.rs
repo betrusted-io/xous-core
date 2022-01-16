@@ -28,25 +28,17 @@ pub(crate) enum Opcode {
 
     /// attempt to initialize keys on a brand new system. Does nothing if the keys are already provisioned.
     UxTryInitKeys,
-    UxConfirmInitKeys,
-    UxConfirmation,
-    UxInitRequestPassword,
-    UxInitPasswordReturn,
+    UxInitBootPasswordReturn,
+    UxInitUpdatePasswordReturn,
 
     /// provision a gateware update with our secret data
     UxUpdateGateware,
-    UxUpdateGwCheckSig,
-    UxUpdateGwShowInfo,
-    UxUpdateGwShowLog,
-    UxUpdateGwShowStatus,
-    UxUpdateGwConfirm,
-    UxUpdateGwDecidePassword,
-    UxUpdateGwPasswordPolicy,
+    UxUpdateGwPasswordReturn,
     UxUpdateGwRun,
 
     /// self-sign kernel/loader
     UxSelfSignXous,
-    UxSignXousPasswordPolicy,
+    UxSignXousPasswordReturn,
     UxSignXousRun,
 
     /// Ux AES calls
@@ -55,7 +47,6 @@ pub(crate) enum Opcode {
     UxAesEnsureReturn,
 
     /// Ux BBRAM flow
-    UxBbramCheckHelper,
     UxBbramCheckReturn,
     UxBbramPasswordReturn,
     UxBbramRun,
@@ -68,9 +59,6 @@ pub(crate) enum Opcode {
     UxDoReboot,
 
     /// UX opcodes
-    MenuRedraw,
-    MenuKeys,
-    MenuDrop,
     ModalRedraw,
     ModalKeys,
     ModalDrop,

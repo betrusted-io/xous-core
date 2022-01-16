@@ -31,6 +31,8 @@ blowfish = { version = "0.8.0", features = ["bcrypt"] }
 # password modals - keep them in this crate to minimize plaintext password manipulations
 gam = {path = "../gam"}
 locales = {path = "../../locales"}
+# non-password modals are outsourced to a common crate
+modals = {path = "../modals"}
 
 # to access font maps for signing verification
 graphics-server = {path = "../graphics-server"}

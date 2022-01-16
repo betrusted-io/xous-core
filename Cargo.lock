@@ -2141,6 +2141,7 @@ dependencies = [
  "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "rand_core 0.5.1",

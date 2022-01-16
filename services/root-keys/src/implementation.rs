@@ -636,6 +636,7 @@ impl<'a> RootKeys {
         self.cur_password_type = cur_type;
     }
     /// Called by the UX layer to check which password request is in progress
+    #[allow(dead_code)]
     pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.cur_password_type}
 
     pub fn is_initialized(&mut self) -> bool {
