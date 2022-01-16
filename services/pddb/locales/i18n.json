@@ -98,5 +98,10 @@
         "en": "List unlocked bases",
         "zh": "基础列表",
         "en-audio": "List unlocked bases"
+    },
+    "pddb.menu.listbasis_response": {
+        "en": "Unlocked bases:\n",
+        "zh": "透露列表:\n",
+        "en-audio": "Unlocked bases:"
     }
 }

@@ -1022,7 +1022,12 @@ fn xmain() -> ! {
                 };
             }),
             Some(Opcode::MenuListBasis) => {
-                unimplemented!();
+                let bases = basis_cache.basis_list();
+                let mut note = String::from(t!("pddb.menu.listbasis_response", xous::LANG));
+                for basis in bases.iter() {
+                    note.push_str(basis);
+                }
+                modals.show_notification(&note).expect("couldn't show basis list");
             },
             Some(Opcode::Quit) => {
                 log::warn!("quitting the PDDB server");

@@ -64,6 +64,11 @@
         "zh": "设置时间",
         "en-audio": "Set time"
     },
+    "mainmenu.pddb": {
+        "en": "PDDB Submenu",
+        "zh": "PDDB子菜单",
+        "en-audio": "PDDB submenu"
+    },
     "mainmenu.reboot": {
         "en": "Reboot",
         "zh": "重启",

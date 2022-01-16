@@ -72,6 +72,8 @@ pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWA
 
 #[allow(dead_code)]
 pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
+#[allow(dead_code)]
+pub const PDDB_MENU_NAME: &'static str = "pddb menu";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {

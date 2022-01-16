@@ -17,6 +17,7 @@ use gam::modal::*;
 
 use num_traits::*;
 
+#[derive(Debug)]
 enum RendererState {
     /// idle state
     None,
@@ -309,7 +310,7 @@ fn xmain() -> ! {
                         match *mutex_op {
                             RendererState::RunNotification(_) => *mutex_op = RendererState::None,
                             _ => {
-                                log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                                log::error!("UX return opcode does not match our current operation in flight: {:?}", mutex_op);
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
                             }
                         }

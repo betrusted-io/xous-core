@@ -43,6 +43,8 @@ enum StatusOpcode {
     UxSetTime,
     /// Initiates a reboot
     Reboot,
+    /// Raise the PDDB menu
+    SubmenuPddb,
     /// Suspend handler from the main menu
     TrySuspend,
     Quit,
@@ -620,6 +622,9 @@ fn xmain() -> ! {
                     panic!("system did not reboot");
                 }
             }
+            Some(StatusOpcode::SubmenuPddb) => {
+                gam.raise_menu(pddb::PDDB_MENU_NAME).expect("couldn't raise PDDB submenu");
+            },
             Some(StatusOpcode::TrySuspend) => {
                 if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG)).expect("couldn't notify that power is plugged in");

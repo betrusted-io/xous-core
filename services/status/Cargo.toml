@@ -24,6 +24,7 @@ locales = {path = "../../locales"}
 susres = {path = "../susres"}
 root-keys = {path = "../root-keys"}
 modals = {path = "../modals"}
+pddb = {path = "../pddb"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
