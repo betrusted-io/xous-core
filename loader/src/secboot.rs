@@ -230,7 +230,7 @@ impl Keyrom {
         }
         true
     }
-    fn read_ed25519(&mut self, key_base: KeyLoc) -> Result<ed25519_dalek::PublicKey, &'static str> {
+    fn read_ed25519(&mut self, key_base: KeyLoc) -> Result<ed25519_dalek_loader::PublicKey, &'static str> {
         let mut pk_bytes: [u8; 32] = [0; 32];
         for (offset, pk_word) in pk_bytes.chunks_exact_mut(4).enumerate() {
             self.csr.wfo(utra::keyrom::ADDRESS_ADDRESS, key_base as u32 + offset as u32);
@@ -239,7 +239,7 @@ impl Keyrom {
                 *dst_byte = src_byte;
             }
         }
-        ed25519_dalek::PublicKey::from_bytes(&pk_bytes).or(Err("invalid public key"))
+        ed25519_dalek_loader::PublicKey::from_bytes(&pk_bytes).or(Err("invalid public key"))
     }
 }
 
@@ -375,8 +375,8 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
             die();
         }
 
-        let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
-        use ed25519_dalek::Verifier;
+        let ed25519_signature = ed25519_dalek_loader::Signature::from(sig.signature);
+        use ed25519_dalek_loader::Verifier;
         if pubkey.verify(image, &ed25519_signature).is_ok() {
             gfx.msg("Signature check passed\n\r", &mut cursor);
             println!("Signature check passed");
