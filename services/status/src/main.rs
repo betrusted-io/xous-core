@@ -314,12 +314,7 @@ fn xmain() -> ! {
     let mut needs_redraw = false;
 
     log::debug!("starting main menu thread");
-    let _ = thread::spawn({
-        let keys = keys.clone();
-        move || {
-            main_menu_thread(keys, status_sid);
-        }
-    });
+    create_main_menu(keys, xous::connect(status_sid).unwrap(), &com);
 
     // some RTC UX structures
     let modals = modals::Modals::new(&xns).unwrap();

@@ -11,24 +11,6 @@ use num_traits::*;
 
 use graphics_server::api::{PixelColor, TextBounds, DrawStyle};
 
-#[allow(dead_code)] // here until Memory types are implemented
-#[derive(Debug, Copy, Clone)]
-pub enum MenuPayload {
-    /// memorized scalar payload
-    Scalar([u32; 4]),
-    /// this a nebulous-but-TBD maybe way of bodging in a more complicated record, which would involve
-    /// casting this memorized, static payload into a Buffer and passing it on. Let's not worry too much about it for now, it's mostly apirational...
-    Memory(([u8; 256], usize)),
-}
-#[derive(Debug, Copy, Clone)]
-pub struct MenuItem {
-    pub name: String::<64>,
-    pub action_conn: xous::CID,
-    pub action_opcode: u32,
-    pub action_payload: MenuPayload,
-    pub close_on_select: bool,
-}
-
 #[derive(Debug)]
 pub struct Menu<'a> {
     pub sid: xous::SID,
@@ -137,6 +119,32 @@ impl<'a> Menu<'a> {
         };
         log::debug!("add_item requesting bounds of {:?}", new_bounds);
         self.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+    }
+    // note: this routine has yet to be tested. (remove this comment once it has been actually used by something)
+    pub fn delete_item(&mut self, item: &str) -> bool {
+        let len_before = self.items.len();
+        self.items.retain(|&candidate| candidate.name.as_str().unwrap() != item);
+
+        // now, recompute the height
+        let mut total_items = self.num_items();
+        if total_items == 0 {
+            total_items = 1; // just so we see a blank menu at least, and have a clue how to debug
+        }
+        let current_bounds = self.gam.get_canvas_bounds(self.canvas).expect("couldn't get current bounds");
+        let mut new_bounds = SetCanvasBoundsRequest {
+            requested: Point::new(current_bounds.x, total_items as i16 * self.line_height + self.margin * 2),
+            granted: None,
+            token_type: TokenType::App,
+            token: self.authtoken,
+        };
+        log::debug!("add_item requesting bounds of {:?}", new_bounds);
+        self.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+
+        if len_before > self.items.len() {
+            true
+        } else {
+            false
+        }
     }
     pub fn draw_item(&self, index: i16, with_marker: bool) {
         use core::fmt::Write;
@@ -252,16 +260,18 @@ impl<'a> Menu<'a> {
                     if mi.close_on_select {
                         self.gam.relinquish_focus().unwrap();
                     }
-                    log::debug!("doing menu action for {}", mi.name);
-                    match mi.action_payload {
-                        MenuPayload::Scalar(args) => {
-                            xous::send_message(mi.action_conn,
-                                xous::Message::new_scalar(mi.action_opcode as usize,
-                                    args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize)
-                            ).expect("couldn't send menu action");
-                        },
-                        MenuPayload::Memory((_buf, _len)) => {
-                            unimplemented!("menu buffer targets are a future feature");
+                    if let Some(action) = mi.action_conn {
+                        log::debug!("doing menu action for {}", mi.name);
+                        match mi.action_payload {
+                            MenuPayload::Scalar(args) => {
+                                xous::send_message(action,
+                                    xous::Message::new_scalar(mi.action_opcode as usize,
+                                        args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize)
+                                ).expect("couldn't send menu action");
+                            },
+                            MenuPayload::Memory((_buf, _len)) => {
+                                unimplemented!("menu buffer targets are a future feature");
+                            }
                         }
                     }
                     self.index = 0; // reset the index to 0
@@ -286,5 +296,165 @@ impl<'a> Menu<'a> {
                 _ => {}
             }
         }
+    }
+}
+
+pub struct MenuMatic {
+    cid: xous::CID,
+}
+impl MenuMatic {
+    pub fn add_item(&self, item: MenuItem) -> bool {
+        let mm = MenuManagement {
+            item,
+            op: MenuMgrOp::AddItem,
+        };
+        let mut buf = Buffer::into_buf(mm).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.cid, 0).expect("Couldn't issue management opcode");
+        let ret = buf.to_original::<MenuManagement, _>().unwrap();
+        if ret.op == MenuMgrOp::Ok {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn delete_item(&self, item_name: &str) -> bool {
+        let mm = MenuManagement {
+            item: MenuItem {
+                name: String::from_str(item_name),
+                // the rest are ignored
+                action_conn: None,
+                action_opcode: 0,
+                action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+                close_on_select: false
+            },
+            op: MenuMgrOp::DeleteItem,
+        };
+        let mut buf = Buffer::into_buf(mm).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.cid, 0).expect("Couldn't issue management opcode");
+        let ret = buf.to_original::<MenuManagement, _>().unwrap();
+        if ret.op == MenuMgrOp::Ok {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn quit(&self) {
+        let mm = MenuManagement {
+            item: MenuItem {
+                // dummy record
+                name: String::new(),
+                action_conn: None,
+                action_opcode: 0,
+                action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+                close_on_select: false
+            },
+            op: MenuMgrOp::Quit,
+        };
+        let mut buf = Buffer::into_buf(mm).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.cid, 0).expect("Couldn't issue management opcode");
+    }
+}
+use std::thread;
+use std::sync::{Arc, Mutex};
+/// Builds a menu that is described by a vector of MenuItems, and then manages it.
+/// If you want to modify the menu, pass it a Some(xous::SID) which is the private server
+/// address of the management interface.
+pub fn menu_matic(items: Vec::<MenuItem>, menu_name: &'static str, maybe_manager: Option<xous::SID>) -> Option<MenuMatic> {
+    let menu = Arc::new(Mutex::new(Menu::new(menu_name)));
+    for item in items {
+        menu.lock().unwrap().add_item(item);
+    }
+    let _ = thread::spawn({
+        let menu = menu.clone();
+        move || {
+            loop {
+                let msg = xous::receive_message(menu.lock().unwrap().sid).unwrap();
+                log::trace!("message: {:?}", msg);
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(MenuOpcode::Redraw) => {
+                        menu.lock().unwrap().redraw();
+                    },
+                    Some(MenuOpcode::Rawkeys) => xous::msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                        let keys = [
+                            if let Some(a) = core::char::from_u32(k1 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                            if let Some(a) = core::char::from_u32(k2 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                            if let Some(a) = core::char::from_u32(k3 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                            if let Some(a) = core::char::from_u32(k4 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                        ];
+                        menu.lock().unwrap().key_event(keys);
+                    }),
+                    Some(MenuOpcode::Quit) => {
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                        break;
+                    },
+                    None => {
+                        log::error!("unknown opcode {:?}", msg.body.id());
+                    }
+                }
+            }
+            log::trace!("menu thread exit, destroying servers");
+            // do we want to add a deregister_ux call to the system?
+            xous::destroy_server(menu.lock().unwrap().sid).unwrap();
+        }
+    });
+    if let Some(manager) = maybe_manager {
+        let _ = std::thread::spawn({
+            let menu = menu.clone();
+            move || {
+                loop {
+                    let mut msg = xous::receive_message(manager).unwrap();
+                    // this particular manager only expcets/handles memory messages, so its loop is a bit different than the others
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let mut mgmt = buffer.to_original::<MenuManagement, _>().expect("menu manager received unexpected message type");
+                    match mgmt.op {
+                        MenuMgrOp::AddItem => {
+                            menu.lock().unwrap().add_item(mgmt.item);
+                            mgmt.op = MenuMgrOp::Ok;
+                            buffer.replace(mgmt).unwrap();
+                        }
+                        MenuMgrOp::DeleteItem => {
+                            if !menu.lock().unwrap().delete_item(mgmt.item.name.as_str().unwrap()) {
+                                mgmt.op = MenuMgrOp::Err;
+                            } else {
+                                mgmt.op = MenuMgrOp::Ok;
+                            }
+                            buffer.replace(mgmt).unwrap();
+                        }
+                        MenuMgrOp::Quit => {
+                            mgmt.op = MenuMgrOp::Ok;
+                            buffer.replace(mgmt).unwrap();
+                            break;
+                        }
+                        _ => {
+                            log::error!("Unhandled opcode: {:?}", mgmt.op);
+                        }
+                    }
+                }
+                xous::destroy_server(manager).unwrap();
+            }
+        });
+        Some(
+            MenuMatic {
+                cid: xous::connect(manager).unwrap(),
+            }
+        )
+    } else {
+        None
     }
 }

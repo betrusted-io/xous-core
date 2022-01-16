@@ -617,17 +617,16 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    // only two connections allowed: GAM, and my emoji menu service
-    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(2)).expect("can't register server");
+    // only one public connection allowed: GAM
+    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(1)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", imef_sid);
 
     let mut tracker = InputTracker::new(&xns);
 
     let mut listeners: [Option<CID>; 32] = [None; 32];
 
-    // an explicit, separate emoji menu handler is created, because the Ux opcodes for the emoji menu should not
-    // be conflacted with the ImefOpcode API.
-    xous::create_thread_0(emoji_menu_thread).expect("can't start emoji handler menu");
+    // create the emoji menu handler
+    emoji_menu(xous::connect(imef_sid).unwrap());
 
     log::trace!("Initialized but still waiting for my canvas Gids");
     loop {

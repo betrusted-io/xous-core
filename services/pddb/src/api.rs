@@ -107,6 +107,9 @@ pub(crate) enum Opcode {
     /// drops any connection state associated with a given key
     KeyDrop,
 
+    /// Menu opcodes
+    MenuListBasis,
+
     /// Suspend/resume callback
     SuspendResume,
     /// quit the server

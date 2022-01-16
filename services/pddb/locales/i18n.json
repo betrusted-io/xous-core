@@ -93,5 +93,10 @@
         "en": "Basis Password:",
         "zh": "基础密码",
         "en-audio": "Enter password for Basis"
+    },
+    "pddb.menu.listbasis": {
+        "en": "List unlocked bases",
+        "zh": "基础列表",
+        "en-audio": "List unlocked bases"
     }
 }

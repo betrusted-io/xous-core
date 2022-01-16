@@ -9,7 +9,7 @@ use xous_ipc::{String, Buffer};
 use num_traits::*;
 
 use gam::modal::*;
-use gam::menu::*;
+use gam::{MenuItem, MenuPayload};
 
 use locales::t;
 use std::format;
@@ -289,22 +289,22 @@ fn xmain() -> ! {
     // create a policy menu object
     let mut policy_menu = gam::menu::Menu::new(crate::ROOTKEY_MENU_NAME);
     policy_menu.add_item(MenuItem {
-        name: String::<64>::from_str(t!("rootkeys.policy_keep", xous::LANG)),
-        action_conn: main_cid,
+        name: String::from_str(t!("rootkeys.policy_keep", xous::LANG)),
+        action_conn: Some(main_cid),
         action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysKeep.to_u32().unwrap(), 0, 0, 0,]),
         close_on_select: true,
     });
     policy_menu.add_item(MenuItem {
-        name: String::<64>::from_str(t!("rootkeys.policy_suspend", xous::LANG)),
-        action_conn: main_cid,
+        name: String::from_str(t!("rootkeys.policy_suspend", xous::LANG)),
+        action_conn: Some(main_cid),
         action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::EraseOnSuspend.to_u32().unwrap(), 0, 0, 0,]),
         close_on_select: true,
     });
     policy_menu.add_item(MenuItem {
-        name: String::<64>::from_str(t!("rootkeys.policy_clear", xous::LANG)),
-        action_conn: main_cid,
+        name: String::from_str(t!("rootkeys.policy_clear", xous::LANG)),
+        action_conn: Some(main_cid),
         action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysPurge.to_u32().unwrap(), 0, 0, 0,]),
         close_on_select: true,

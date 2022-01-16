@@ -171,3 +171,40 @@ pub(crate) enum Return {
 // small wart -- we have to reset the size of a modal to max size for resize computations
 // reveal the max size globally, since it's a constant
 pub const MODAL_Y_MAX: i16 = 350; // in absolute screen coords, not relative to top pad
+
+#[derive(Debug, Eq, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) enum MenuMgrOp {
+    // incoming is one of these ops
+    AddItem,
+    DeleteItem,
+    Quit,
+    // response must be one of these
+    Ok,
+    Err,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct MenuManagement {
+    pub(crate) item: MenuItem,
+    pub(crate) op: MenuMgrOp,
+}
+
+#[allow(dead_code)] // here until Memory types are implemented
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum MenuPayload {
+    /// memorized scalar payload
+    Scalar([u32; 4]),
+    /// this a nebulous-but-TBD maybe way of bodging in a more complicated record, which would involve
+    /// casting this memorized, static payload into a Buffer and passing it on. Let's not worry too much about it for now, it's mostly apirational...
+    Memory(([u8; 256], usize)),
+}
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct MenuItem {
+    pub name: String::<64>,
+    /// if action_conn is None, this is a NOP menu item (it just does nothing and closes the menu)
+    pub action_conn: Option<xous::CID>,
+    pub action_opcode: u32, // this is ignored if action_conn is None
+    pub action_payload: MenuPayload,
+    pub close_on_select: bool,
+}
+

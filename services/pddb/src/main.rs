@@ -370,6 +370,8 @@ mod backend;
 use backend::*;
 mod ux;
 use ux::*;
+mod menu;
+use menu::*;
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod tests;
@@ -450,6 +452,13 @@ fn xmain() -> ! {
                 xous::connect(pddb_sid).unwrap(),
                 pw_sid
             )
+        }
+    });
+    // our menu handler
+    let _ = thread::spawn({
+        let my_cid = xous::connect(pddb_sid).unwrap();
+        move || {
+            pddb_menu(my_cid);
         }
     });
     // try to mount the PDDB automatically before starting the server
@@ -1012,6 +1021,9 @@ fn xmain() -> ! {
                     }
                 };
             }),
+            Some(Opcode::MenuListBasis) => {
+                unimplemented!();
+            },
             Some(Opcode::Quit) => {
                 log::warn!("quitting the PDDB server");
                 send_message(
