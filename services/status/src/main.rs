@@ -623,6 +623,7 @@ fn xmain() -> ! {
                 }
             }
             Some(StatusOpcode::SubmenuPddb) => {
+                ticktimer.sleep_ms(100).ok();
                 gam.raise_menu(pddb::PDDB_MENU_NAME).expect("couldn't raise PDDB submenu");
             },
             Some(StatusOpcode::TrySuspend) => {
