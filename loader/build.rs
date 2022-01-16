@@ -20,6 +20,7 @@ fn main() {
         println!("cargo:rerun-if-changed=bin/{}.a", target);
         println!("cargo:rustc-link-arg=-Tlink.x");
     }
+    println!("cargo:rustc-link-arg=-Map=loader.map");
 
     // Put the linker script somewhere the linker can find it
     fs::File::create(out_dir.join("link.x"))
