@@ -6,6 +6,19 @@ use gam::*;
 
 use crate::EMOJI_MENU_NAME;
 
+// imef_conn must come from outside the scope of the macro because of hygeine rules.
+macro_rules! emoji_item {
+    ($emoji: expr, $imef_conn: ident) => {
+        MenuItem {
+            name: String::from_str(&$emoji.to_string()),
+            action_conn: Some($imef_conn),
+            action_opcode: ImefOpcode::ProcessKeys.to_u32().unwrap(),
+            action_payload: MenuPayload::Scalar([$emoji.into(), '\u{0000}'.into(), '\u{0000}'.into(), '\u{0000}'.into(), ]),
+            close_on_select: true,
+        }
+    }
+}
+
 // clearly, this does not scale. but, it's a good demo of the menu system.
 // probably what this will need to turn into is a menu-of-menus....
 pub(crate) fn emoji_menu(imef_conn: xous::CID) {
@@ -15,41 +28,11 @@ pub(crate) fn emoji_menu(imef_conn: xous::CID) {
         move || {
             menu_matic(
                 vec![
-                    MenuItem {
-                        name: String::from_str("😃"),
-                        action_conn: Some(imef_conn),
-                        action_opcode: ImefOpcode::ProcessKeys.to_u32().unwrap(),
-                        action_payload: MenuPayload::Scalar(['😃'.into(), '\u{0000}'.into(), '\u{0000}'.into(), '\u{0000}'.into(), ]),
-                        close_on_select: true,
-                    },
-                    MenuItem {
-                        name: String::from_str("😒"),
-                        action_conn: Some(imef_conn),
-                        action_opcode: ImefOpcode::ProcessKeys.to_u32().unwrap(),
-                        action_payload: MenuPayload::Scalar(['😒'.into(), '\u{0000}'.into(), '\u{0000}'.into(), '\u{0000}'.into(), ]),
-                        close_on_select: true,
-                    },
-                    MenuItem {
-                        name: String::from_str("🤔"),
-                        action_conn: Some(imef_conn),
-                        action_opcode: ImefOpcode::ProcessKeys.to_u32().unwrap(),
-                        action_payload: MenuPayload::Scalar(['🤔'.into(), '\u{0000}'.into(), '\u{0000}'.into(), '\u{0000}'.into(), ]),
-                        close_on_select: true,
-                    },
-                    MenuItem {
-                        name: String::from_str("😅"),
-                        action_conn: Some(imef_conn),
-                        action_opcode: ImefOpcode::ProcessKeys.to_u32().unwrap(),
-                        action_payload: MenuPayload::Scalar(['😅'.into(), '\u{0000}'.into(), '\u{0000}'.into(), '\u{0000}'.into(), ]),
-                        close_on_select: true,
-                    },
-                    MenuItem {
-                        name: String::from_str("🤣"),
-                        action_conn: Some(imef_conn),
-                        action_opcode: ImefOpcode::ProcessKeys.to_u32().unwrap(),
-                        action_payload: MenuPayload::Scalar(['🤣'.into(), '\u{0000}'.into(), '\u{0000}'.into(), '\u{0000}'.into(), ]),
-                        close_on_select: true,
-                    },
+                    emoji_item!('😃', imef_conn),
+                    emoji_item!('😒', imef_conn),
+                    emoji_item!('🤔', imef_conn),
+                    emoji_item!('😅', imef_conn),
+                    emoji_item!('🤣', imef_conn),
                     MenuItem {
                         name: String::from_str("Close Menu"),
                         action_conn: None,
