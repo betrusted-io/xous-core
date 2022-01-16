@@ -22,7 +22,7 @@ travis-ci = { repository = "dalek-cryptography/ed25519-dalek", branch = "master"
 features = ["nightly", "batch"]
 
 [dependencies]
-curve25519-dalek-loader = { path = "../curve25519-dalek-loader", default-features = false }
+curve25519-dalek-loader = { path = "../curve25519-dalek-loader", default-features = false, features = ["u32e_backend"] }
 ed25519 = { version = "1", default-features = false }
 merlin = { version = "2", default-features = false, optional = true }
 rand = { version = "0.7", default-features = false, optional = true }
@@ -49,16 +49,16 @@ harness = false
 # required-features = ["batch"]
 
 [features]
-default = ["std", "rand", "u64_backend"]
-std = ["curve25519-dalek-loader/std", "ed25519/std", "serde_crate/std", "rand/std"]
-alloc = ["curve25519-dalek-loader/alloc", "rand/alloc", "zeroize/alloc"]
-nightly = ["curve25519-dalek-loader/nightly"]
-serde = ["serde_crate", "serde_bytes", "ed25519/serde"]
-batch = ["merlin", "rand"]
+default = ["u32_backend"]
+#std = ["curve25519-dalek-loader/std", "ed25519/std", "serde_crate/std", "rand/std"]
+#alloc = ["curve25519-dalek-loader/alloc", "rand/alloc", "zeroize/alloc"]
+#nightly = ["curve25519-dalek-loader/nightly"]
+#serde = ["serde_crate", "serde_bytes", "ed25519/serde"]
+#batch = ["merlin", "rand"]
 # This feature enables deterministic batch verification.
-batch_deterministic = ["merlin", "rand", "rand_core"]
+#batch_deterministic = ["merlin", "rand", "rand_core"]
 # This features turns off stricter checking for scalar malleability in signatures
 legacy_compatibility = []
-u64_backend = ["curve25519-dalek-loader/u64_backend"]
-u32_backend = ["curve25519-dalek-loader/u32_backend"]
-simd_backend = ["curve25519-dalek-loader/simd_backend"]
+#u64_backend = ["curve25519-dalek-loader/u64_backend"]
+u32_backend = ["curve25519-dalek-loader/u32e_backend"]
+#simd_backend = ["curve25519-dalek-loader/simd_backend"]

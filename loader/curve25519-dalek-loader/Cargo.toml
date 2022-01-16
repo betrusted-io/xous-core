@@ -80,25 +80,25 @@ optional = true
 # rev = "274b82899d28535ac6d4b7869e26eef2039578d5"
 
 [features]
-nightly = ["subtle/nightly"]
-default = ["std", "u32_backend"]
-std = ["alloc", "subtle/std", "rand_core/std"]
-alloc = ["zeroize/alloc"]
+# nightly = ["subtle/nightly"]
+default = ["u32e_backend"]
+#std = ["alloc", "subtle/std", "rand_core/std"]
+#alloc = ["zeroize/alloc"]
 
 # The u32 backend uses u32s with u64 products.
-u32_backend = []
+#u32_backend = []
 # The u32e backend uses u32s with u64 products + field25519 accelerator.
 u32e_backend = ["engine25519-as", "utralib"]
 # The u64 backend uses u64s with u128 products.
-u64_backend = []
+#u64_backend = []
 # fiat-u64 backend (with formally-verified field arith) uses u64s with u128 products.
-fiat_u64_backend = ["fiat-crypto"]
+#fiat_u64_backend = ["fiat-crypto"]
 # fiat-u32 backend (with formally-verified field arith) uses u32s with u64 products.
-fiat_u32_backend = ["fiat-crypto"]
+#fiat_u32_backend = ["fiat-crypto"]
 # The SIMD backend uses parallel formulas, using either AVX2 or AVX512-IFMA.
-simd_backend = ["nightly", "u64_backend", "packed_simd"]
+#simd_backend = ["nightly", "u64_backend", "packed_simd"]
 # DEPRECATED: this is now an alias for `simd_backend` and may be removed
 # in some future release.
-avx2_backend = ["simd_backend"]
+#avx2_backend = ["simd_backend"]
 # the betrusted backend uses the curve25519 hardware accelerator in betrusted-soc
 betrusted = ["engine-25519", "engine25519-as", "log"]

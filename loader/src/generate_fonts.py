@@ -73,7 +73,7 @@ def main():
         mapfile.write("#![allow(dead_code)]\n")
         # Python iterators are deterministic, right......? so if I used the same iterator to make the link order it'll be the same here....right?
         offset = 0
-        mapfile.write("pub const FONT_BASE: usize = 0x{:08x};\n".format(0x20530000))
+        mapfile.write("pub const FONT_BASE: usize = 0x{:08x};\n".format(0x20520000))
         for k,v in fontdict.items():
             length = int(v) * 4
             mapfile.write("pub const {}_OFFSET: usize = 0x{:08x};\n".format(k.upper(), offset))
