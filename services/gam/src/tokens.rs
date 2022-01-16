@@ -10,14 +10,14 @@
 */
 
 // if you add more UxContexts, and you want them authorized by the GAM, add their names here.
-const TOKEN_SLOTS: usize = 9;
+const TOKEN_SLOTS: usize = 8;
 const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = [
     "shellchat",
     "main menu",
     "status",
     "emoji menu",
     "rootkeys modal",
-    "rootkeys menu",
+    //"rootkeys menu",
     "pddb modal",
     "shared modal",
     "pddb menu",
