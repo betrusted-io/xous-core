@@ -44,8 +44,8 @@ fn main() {
             .unwrap();
         println!("cargo:rustc-link-search={}", out_dir.display());
         println!("cargo:rerun-if-changed=link.x");
+        println!("cargo:rustc-link-arg=-Map=kernel.map");
     }
-    println!("cargo:rustc-link-arg=-Map=kernel.map");
 
     println!("cargo:rerun-if-changed=build.rs");
 
