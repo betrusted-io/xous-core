@@ -377,6 +377,7 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
 
         let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
         use ed25519_dalek::Verifier;
+        gfx.msg("Checking signature...\n\r", &mut cursor);
         if pubkey.verify(image, &ed25519_signature).is_ok() {
             gfx.msg("Signature check passed\n\r", &mut cursor);
             println!("Signature check passed");

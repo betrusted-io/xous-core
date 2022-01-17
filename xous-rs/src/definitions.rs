@@ -21,9 +21,9 @@ pub const SOC_STAGING_GW_LOC: u32 = 0x0028_0000; // gateware - staging copy
 pub const SOC_STAGING_GW_LEN: u32 = 0x0028_0000;
 
 pub const LOADER_LOC: u32 = 0x0050_0000; // loader - base
-pub const LOADER_CODE_LEN: u32 = 0x0002_0000; // code region only
-pub const LOADER_FONT_LOC: u32 = 0x0052_0000; // should be the same as graphics-server/src/fontmap.rs/FONT_BASE
-pub const LOADER_FONT_LEN: u32 = 0x0046_0000; // length of font region only
+pub const LOADER_CODE_LEN: u32 = 0x0003_0000; // code region only
+pub const LOADER_FONT_LOC: u32 = 0x0053_0000; // should be the same as graphics-server/src/fontmap.rs/FONT_BASE
+pub const LOADER_FONT_LEN: u32 = 0x0045_0000; // length of font region only
 pub const LOADER_TOTAL_LEN: u32 = LOADER_CODE_LEN + LOADER_FONT_LEN; // code + font
 
 pub const KERNEL_LOC: u32 = 0x0098_0000; // kernel start
