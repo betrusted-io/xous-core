@@ -474,6 +474,7 @@ name = "com"
 version = "0.1.0"
 dependencies = [
  "com_rs-ref",
+ "llio",
  "log",
  "log-server",
  "num-derive",

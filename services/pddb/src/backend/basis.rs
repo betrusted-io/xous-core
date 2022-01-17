@@ -957,6 +957,7 @@ impl BasisCache {
             }
         }
         for basis in lock_list {
+            log::info!("unmounting basis on sleep: {}", &basis);
             self.basis_unmount(hw, &basis).ok();
         }
     }

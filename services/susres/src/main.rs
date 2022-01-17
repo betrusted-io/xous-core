@@ -598,7 +598,7 @@ fn xmain() -> ! {
     let mut reboot_requested: bool = false;
     let mut allow_suspend = true;
 
-    let mut suspend_subscribers: [Option<ScalarCallback>; 32] = [None; 32];
+    let mut suspend_subscribers = Vec::<ScalarCallback>::new();
     let mut current_op_order = crate::api::SuspendOrder::Early;
     loop {
         let msg = xous::receive_message(susres_sid).unwrap();
@@ -634,63 +634,62 @@ fn xmain() -> ! {
                 Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
                     //log::trace!("suspendready with token {}", token);
                     if !suspend_requested {
-                        log::error!("received a SuspendReady message when a suspend wasn't pending. Ignoring.");
+                        log::error!("received a SuspendReady message when a suspend wasn't pending from token {}", token);
                         continue;
                     }
                     if token >= suspend_subscribers.len() {
                         panic!("received a SuspendReady token that's out of range");
                     }
-                    if let Some(mut scb) = suspend_subscribers[token] {
-                        if scb.ready_to_suspend {
-                            log::error!("received a duplicate SuspendReady token: {} from {:?}", token, scb);
-                        }
-                        scb.ready_to_suspend = true;
-                        suspend_subscribers[token] = Some(scb);
+                    let scb = &mut suspend_subscribers[token];
+                    if scb.ready_to_suspend {
+                        log::error!("received a duplicate SuspendReady token: {} from {:?}", token, scb);
+                        continue;
+                    }
+                    scb.ready_to_suspend = true;
 
-                        let mut all_ready = true;
-                        for maybe_sub in suspend_subscribers.iter() {
-                            if let Some(sub) = maybe_sub {
-                                if sub.order == current_op_order {
-                                    if sub.ready_to_suspend == false {
-                                        log::trace!("not ready: {}", sub.token);
-                                        all_ready = false;
-                                        break;
-                                    }
-                                }
-                            };
-                        }
-                        // note: we must have at least one `Last` subscriber for this logic to work!
-                        if all_ready && current_op_order == crate::api::SuspendOrder::Last {
-                            log::trace!("all callbacks reporting in, doing suspend");
-                            timeout_pending = false;
-                            //susres_hw.debug_delay(500);
-                            susres_hw.do_suspend(false);
-                            // when do_suspend() returns, it means we've resumed
-                            suspend_requested = false;
-                            log_server::resume(); // log server is a special case, in order to avoid circular dependencies
-                            if susres_hw.do_resume() {
-                                log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
+                    let mut all_ready = true;
+                    for sub in suspend_subscribers.iter() {
+                        if sub.order == current_op_order {
+                            if !sub.ready_to_suspend {
+                                log::trace!("not ready: {}", sub.token);
+                                all_ready = false;
+                                break;
                             }
-                            // this now allows all other threads to commence
-                            log::trace!("low-level resume done, restoring execution");
-                            RESUME_EXEC.store(true, Ordering::Relaxed);
-                            susres_hw.restore_wfi();
-                        } else if all_ready {
-                            // the current order is finished, send the next tranche
-                            current_op_order = current_op_order.next();
-                            let mut at_least_one_event_sent = false;
-                            while !at_least_one_event_sent {
-                                let (send_success, next_op_order) = send_event(&suspend_subscribers, current_op_order);
-                                if !send_success {
-                                    current_op_order = next_op_order;
-                                }
-                                at_least_one_event_sent = send_success;
-                            }
-                        } else {
-                            log::trace!("still waiting on callbacks, returning to main loop");
                         }
+                    }
+                    // note: we must have at least one `Last` subscriber for this logic to work!
+                    if all_ready && current_op_order == crate::api::SuspendOrder::Last {
+                        log::info!("all callbacks reporting in, doing suspend");
+                        timeout_pending = false;
+                        // susres_hw.debug_delay(500); // let the messages print
+                        susres_hw.do_suspend(false);
+                        // when do_suspend() returns, it means we've resumed
+                        suspend_requested = false;
+                        log_server::resume(); // log server is a special case, in order to avoid circular dependencies
+                        if susres_hw.do_resume() {
+                            log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
+                        }
+                        // this now allows all other threads to commence
+                        log::trace!("low-level resume done, restoring execution");
+                        RESUME_EXEC.store(true, Ordering::Relaxed);
+                        susres_hw.restore_wfi();
+                    } else if all_ready {
+                        log::debug!("finished with {:?} going to next round", current_op_order);
+                        // the current order is finished, send the next tranche
+                        current_op_order = current_op_order.next();
+                        let mut at_least_one_event_sent = false;
+                        while !at_least_one_event_sent {
+                            let (send_success, next_op_order) = send_event(&suspend_subscribers, current_op_order);
+                            if !send_success {
+                                current_op_order = next_op_order;
+                            }
+                            at_least_one_event_sent = send_success;
+                        }
+                        log::debug!("Now waiting on {:?} stage", current_op_order);
+                        // let the events fire
+                        xous::yield_slice();
                     } else {
-                        panic!("received an invalid token that does not map to a registered suspend listener");
+                        log::trace!("still waiting on callbacks, returning to main loop");
                     }
                 }),
                 Some(Opcode::SuspendRequest) => {
@@ -703,11 +702,9 @@ fn xmain() -> ! {
                         SHOULD_RESUME.store(false, Ordering::Relaxed);
                         RESUME_EXEC.store(false, Ordering::Relaxed);
                         // clear the ready to suspend flag and failed to suspend flag
-                        for maybe_sub in suspend_subscribers.iter_mut() {
-                            if let Some(sub) = maybe_sub {
-                                sub.ready_to_suspend = false;
-                                sub.failed_to_suspend = false;
-                            };
+                        for sub in suspend_subscribers.iter_mut() {
+                            sub.ready_to_suspend = false;
+                            sub.failed_to_suspend = false;
                         }
                         // do we want to start the timeout before or after sending the notifications? hmm. 🤔
                         timeout_pending = true;
@@ -724,6 +721,8 @@ fn xmain() -> ! {
                             }
                             at_least_one_event_sent = send_success;
                         }
+                        // let the events fire
+                        xous::yield_slice();
                     } else {
                         log::warn!("suspend requested, but the system was not allowed to suspend. Ignoring request.")
                     }
@@ -732,12 +731,12 @@ fn xmain() -> ! {
                     if timeout_pending {
                         log::info!("suspend call has timed out, forcing a suspend");
                         // record which tokens had not reported in
-                        for maybe_sub in suspend_subscribers.iter_mut() {
-                            if let Some(sub) = maybe_sub {
-                                sub.failed_to_suspend = !sub.ready_to_suspend;
-                            }
+                        for sub in suspend_subscribers.iter_mut() {
+                            sub.failed_to_suspend = !sub.ready_to_suspend;
                         }
                         timeout_pending = false;
+                        log::warn!("Suspend timed out, forcing an unclean suspend");
+                        // susres_hw.debug_delay(500); // let the messages print
                         // force a suspend
                         susres_hw.do_suspend(true);
                         // when do_suspend() returns, it means we've resumed
@@ -757,11 +756,9 @@ fn xmain() -> ! {
                 }
                 Some(Opcode::WasSuspendClean) => msg_blocking_scalar_unpack!(msg, token, _, _, _, {
                     let mut clean = true;
-                    for maybe_sub in suspend_subscribers.iter_mut() {
-                        if let Some(sub) = maybe_sub {
-                            if sub.token == token as u32 && sub.failed_to_suspend {
-                                clean = false;
-                            }
+                    for sub in suspend_subscribers.iter() {
+                        if sub.token == token as u32 && sub.failed_to_suspend {
+                            clean = false;
                         }
                     }
                     if clean {
@@ -794,51 +791,42 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
+fn do_hook(hookdata: ScalarHook, cb_conns: &mut Vec::<ScalarCallback>) {
     let (s0, s1, s2, s3) = hookdata.sid;
     let sid = xous::SID::from_u32(s0, s1, s2, s3);
     let server_to_cb_cid = xous::connect(sid).unwrap();
-    let mut cb_dat = ScalarCallback {
+    let cb_dat = ScalarCallback {
         server_to_cb_cid,
         cb_to_client_cid: hookdata.cid,
         cb_to_client_id: hookdata.id,
         ready_to_suspend: false,
-        token: 0,
+        token: cb_conns.len() as u32,
         failed_to_suspend: false,
         order: hookdata.order,
     };
-    for i in 0..cb_conns.len() {
-        if cb_conns[i].is_none() {
-            cb_dat.token = i as u32;
-            cb_conns[i] = Some(cb_dat);
-            return;
-        }
-    }
-    log::error!("ran out of space registering callback");
+    log::trace!("hooking {:?}", cb_dat);
+    cb_conns.push(cb_dat);
 }
-fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
-    for entry in cb_conns.iter_mut() {
-        if let Some(scb) = entry {
-            xous::send_message(scb.server_to_cb_cid,
-                xous::Message::new_blocking_scalar(SuspendEventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)
-            ).unwrap();
-            unsafe{xous::disconnect(scb.server_to_cb_cid).unwrap();}
-        }
-        *entry = None;
+fn unhook(cb_conns: &mut Vec::<ScalarCallback>) {
+    for scb in cb_conns.iter() {
+        xous::send_message(scb.server_to_cb_cid,
+            xous::Message::new_blocking_scalar(SuspendEventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)
+        ).unwrap();
+        unsafe{xous::disconnect(scb.server_to_cb_cid).unwrap();}
     }
+    cb_conns.clear();
 }
-fn send_event(cb_conns: &[Option<ScalarCallback>; 32], order: crate::api::SuspendOrder) -> (bool, crate::api::SuspendOrder) {
+fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder) -> (bool, crate::api::SuspendOrder) {
     let mut at_least_one_event_sent = false;
-    for entry in cb_conns.iter() {
-        if let Some(scb) = entry {
-            if scb.order == order {
-                at_least_one_event_sent = true;
-                xous::send_message(scb.server_to_cb_cid,
-                    xous::Message::new_scalar(SuspendEventCallback::Event.to_usize().unwrap(),
-                    scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, scb.token as usize, 0)
-                ).unwrap();
-            }
-        };
+    log::info!("Sending suspend to {:?} stage", order);
+    for scb in cb_conns.iter() {
+        if scb.order == order {
+            at_least_one_event_sent = true;
+            xous::send_message(scb.server_to_cb_cid,
+                xous::Message::new_scalar(SuspendEventCallback::Event.to_usize().unwrap(),
+                scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, scb.token as usize, 0)
+            ).unwrap();
+        }
     }
     (at_least_one_event_sent, order.next())
 }

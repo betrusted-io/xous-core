@@ -309,6 +309,7 @@ fn xmain() -> ! {
                         let mut mutex_op = op.lock().unwrap();
                         match *mutex_op {
                             RendererState::RunNotification(_) => *mutex_op = RendererState::None,
+                            RendererState::None => log::info!("Notification got multiple key hits to close the dialog box"),
                             _ => {
                                 log::error!("UX return opcode does not match our current operation in flight: {:?}", mutex_op);
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");

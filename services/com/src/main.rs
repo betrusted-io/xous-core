@@ -344,12 +344,20 @@ fn xmain() -> ! {
 
     // Create a new com object
     let mut com = XousCom::new();
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+
+    // reset the EC so we're in sync at boot on state
+    { // scope the llio object to a block -- we shouldn't be using it later in this code
+        let llio = llio::Llio::new(&xns);
+        llio.ec_reset().unwrap();
+        ticktimer.sleep_ms(3500).unwrap();
+    }
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(com_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
-    // create an array to track return connections for battery stats
+    // create an array to track return connections for battery stats TODO: refactor this to use a Vec instead of static allocations
     let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];
     // other future notification vectors shall go here
 
@@ -360,7 +368,6 @@ fn xmain() -> ! {
     const FLASH_LEN: u32 = 0x10_0000;
     const FLASH_TIMEOUT: u32 = 250;
 
-    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     // initial seed of the COM trng
     let trng = trng::Trng::new(&xns).expect("couldn't connect to TRNG");
     com.txrx(ComState::TRNG_SEED.verb);
@@ -996,14 +1003,17 @@ fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
     }
     // translate u8 array into &str
     let len_checked = if rev_ret[0] as usize <= rev_bytes.len() { rev_ret[0] as usize} else {rev_bytes.len()};
+    if len_checked < 2 { // something is very wrong if our length is too short
+        return 0;
+    }
     let revstr = core::str::from_utf8(&rev_bytes[..len_checked]).unwrap_or("v0.0.0-0-xxxxxxx"); // fake version number for hosted mode
     // parse &str -- we do it here not in the EC, because the EC is memory-constrained
     // v0.9.5-2-gb3e2868 exemplar template
     let hyphenstr: Vec<&str> = revstr[1..].split('-').collect(); // drop the leading 'v' by doing [1..]
     let revcodes: Vec<&str> = hyphenstr[0].split('.').collect();
     let major = revcodes[0].parse::<u8>().unwrap_or(0);
-    let minor = revcodes[1].parse::<u8>().unwrap_or(0);
-    let rev = revcodes[2].parse::<u8>().unwrap_or(0);
+    let minor = if revcodes.len() > 1 {revcodes[1].parse::<u8>().unwrap_or(0)} else {0};
+    let rev = if revcodes.len() > 2 {revcodes[2].parse::<u8>().unwrap_or(0)} else {0};
     let commit = if hyphenstr.len() > 2 { // extra commits beyond the tag
         // version-extra-commit
         hyphenstr[1].parse::<u8>().unwrap_or(0)

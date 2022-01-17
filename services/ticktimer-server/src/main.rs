@@ -421,6 +421,7 @@ mod implementation {
 }
 
 use implementation::*;
+use susres::SuspendOrder;
 
 fn recalculate_sleep(
     ticktimer: &mut XousTickTimer,
@@ -487,7 +488,7 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let sr_cid =
         xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, sr_cid)
+    let mut susres = susres::Susres::new(Some(SuspendOrder::Last), &xns, api::Opcode::SuspendResume as u32, sr_cid)
         .expect("couldn't create suspend/resume object");
 
     loop {

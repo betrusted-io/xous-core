@@ -32,6 +32,7 @@ impl Susres {
             cid,
             order: order.unwrap_or(SuspendOrder::Normal),
         };
+        log::debug!("hooking {:?}", hookdata);
         let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
         buf.lend(conn, Opcode::SuspendEventSubscribe.to_u32().unwrap())?;
 

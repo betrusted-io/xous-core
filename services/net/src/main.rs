@@ -95,11 +95,6 @@ fn xmain() -> ! {
     let com = com::Com::new(&xns).unwrap();
     let timer = ticktimer_server::Ticktimer::new().unwrap();
 
-    llio.ec_reset().unwrap();
-    timer.sleep_ms(3500).unwrap();
-    com.link_reset().unwrap();
-    com.reseed_ec_trng().unwrap();
-
     // hook the COM interrupt listener
     let net_cid = xous::connect(net_sid).unwrap();
     llio.hook_com_event_callback(Opcode::ComInterrupt.to_u32().unwrap(), net_cid).unwrap();
