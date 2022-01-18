@@ -2,6 +2,7 @@ use crate::api::{Gid, Point, Rectangle};
 use blitstr::{Cursor, GlyphStyle};
 use blitstr_ref as blitstr;
 use xous_ipc::String;
+use core::ops::Add;
 
 /// coordinates are local to the canvas, not absolute to the screen
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -14,6 +15,25 @@ pub enum TextBounds {
     GrowableFromTl(Point, u16),
     // fixed width, grows up from bottom left
     GrowableFromBl(Point, u16),
+}
+impl TextBounds {
+    pub fn translate(&self, by: Point) -> TextBounds {
+        match *self {
+            TextBounds::BoundingBox(mut r) => {
+                r.translate(by);
+                TextBounds::BoundingBox(r)
+            }
+            TextBounds::GrowableFromBr(origin, width) => {
+                TextBounds::GrowableFromBr(origin.add(by), width)
+            }
+            TextBounds::GrowableFromTl(origin, width) => {
+                TextBounds::GrowableFromTl(origin.add(by), width)
+            }
+            TextBounds::GrowableFromBl(origin, width) => {
+                TextBounds::GrowableFromBl(origin.add(by), width)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq)]
@@ -60,7 +80,7 @@ pub struct TextView {
     // offsets for text drawing -- exactly one of the following options should be specified
     // note that the TextBounds coordinate system is local to the canvas, not the screen
     pub bounds_hint: TextBounds,
-    pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
+    pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified. This is local to the canvas.
     pub overflow: Option<bool>, // indicates if the text has overflowed the canvas, set by the drawing routine
     dry_run: bool, // callers should not set; use TexOp to select. gam-side bookkeepping, set to true if no drawing is desired and we just want to compute the bounds
 

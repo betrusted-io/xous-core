@@ -216,6 +216,13 @@ impl Rectangle {
             self.br.y = midpoint;
         }
     }
+    // this "margins out" on all sides
+    pub fn margin_out(&mut self, margin: Point) {
+        self.tl.x -= margin.x;
+        self.tl.y -= margin.y;
+        self.br.x += margin.x;
+        self.br.y += margin.y;
+    }
 
     /// Make a rectangle of the full screen size
     pub fn full_screen() -> Rectangle {
