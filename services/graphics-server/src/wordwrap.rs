@@ -30,6 +30,7 @@ use crate::style_macros::*;
 /// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,
 /// defined by its `bb` record. The intention is that this abstract representation can be passed directly to
 /// a rasterizer for rendering.
+#[derive(Debug)]
 pub struct TypesetWord {
     pub gs: Vec::<GlyphSprite>,
     pub origin: Pt,
@@ -56,6 +57,7 @@ impl TypesetWord {
     pub fn push(&mut self, gs: GlyphSprite) {
         self.width += gs.wide as usize;
         self.height = self.height.max(gs.high as usize);
+        self.gs.push(gs);
     }
     /// offset has to take an explicit x/y set because Pt is defined as a usize, so we can't do negative offsets
     pub fn offset(&mut self, x: i16, y: i16) {
@@ -141,7 +143,8 @@ pub fn fit_str_to_clip(
             // the origin point is 0,0, because we will translate it to the correct spot later
             let mut tsw = TypesetWord::new(Pt::new(0, 0));
             for ch in word.chars() {
-                tsw.push(style_glyph(ch, base_style));
+                let gs = style_glyph(ch, base_style);
+                tsw.push(gs);
             }
             // there are five cases from here:
             // 1. The word fits in the remaining space on the line.

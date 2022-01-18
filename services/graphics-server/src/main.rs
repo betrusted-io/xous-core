@@ -342,6 +342,7 @@ fn xmain() -> ! {
                                         line, Some(clear_rect), tv.invert);
                                 }
                             }
+                            // log::info!("drawing {:?} at {:?}", glyph, p);
                             blitstr2::xor_glyph(display.native_buffer(), &p, *glyph, tv.invert);
                             p.x += glyph.wide as usize; // words after word-wrapping are guaranteed to be on the same line
                             insert_point += 1;
