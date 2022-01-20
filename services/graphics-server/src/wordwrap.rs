@@ -268,13 +268,13 @@ impl Typesetter {
                 self.cursor
             );
         }
-        if self.bb.max.y - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) {
+        /*if self.bb.max.y - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) {
             log::error!("Words cannot be typset because the height of the typset region is too low.");
             return ComposedType::new(composition,
                 ClipRect::new(self.bb.min.x, self.bb.min.y, self.bb.min.x, self.bb.min.y),
                 self.cursor
             );
-        }
+        }*/
         // algorithm:
         // - If not a whitespace or newline:
         //   1. append a character to the current word (candidate)
