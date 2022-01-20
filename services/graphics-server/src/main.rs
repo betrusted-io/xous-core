@@ -35,6 +35,9 @@ use api::BulkRead;
 use crate::wordwrap::*;
 use core::ops::Add;
 
+#[cfg(feature = "testing")]
+mod testing;
+
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(&poweron::LOGO_MAP);
 }
@@ -149,6 +152,9 @@ fn xmain() -> ! {
         .expect("couldn't create suspend/resume object");
 
     let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read
+
+    #[cfg(feature = "testing")]
+    testing::tests();
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
         log::trace!("Message: {:?}", msg);
@@ -202,6 +208,8 @@ fn xmain() -> ! {
 
                 // this is the clipping rectangle of the canvas in screen coordinates
                 let clip_rect = tv.clip_rect.unwrap();
+                // this is the translation vector to and from screen space
+                let screen_offset: Point = tv.clip_rect.unwrap().tl;
 
                 let typeset_extent = match tv.bounds_hint {
                     TextBounds::BoundingBox(r) =>
@@ -236,20 +244,36 @@ fn xmain() -> ! {
                     TextBounds::BoundingBox(r) =>
                         r.tl().add(tv.margin),
                     TextBounds::GrowableFromBr(br, _width) =>
-                        Point::new(br.x - composition.bb_width() as i16 + tv.margin.x,
-                        br.y + composition.bb_height() as i16 + tv.margin.y),
+                        Point::new(br.x - (composition.bb_width() as i16 + tv.margin.x),
+                        br.y - (composition.bb_height() as i16 + tv.margin.y)),
                     TextBounds::GrowableFromBl(bl, _width) =>
-                        Point::new(bl.x + tv.margin.x, bl.y + composition.bb_height() as i16 + tv.margin.y),
+                        Point::new(bl.x + tv.margin.x, bl.y - (composition.bb_height() as i16 + tv.margin.y)),
                     TextBounds::GrowableFromTl(tl, _width) =>
                         tl.add(tv.margin)
-                };
-                // compute the clear rectangle -- the border is already in screen coordinates, just add the margin around it
-                let mut clear_rect = Rectangle::new(
-                    composition_top_left,
-                    composition_top_left.add(Point::new(composition.bb_width() as _, composition.bb_height() as _))
-                );
-                clear_rect.margin_out(tv.margin);
+                }
+                .add(screen_offset);
 
+                // compute the clear rectangle -- the border is already in screen coordinates, just add the margin around it
+                let mut clear_rect = match tv.bounds_hint {
+                   TextBounds::BoundingBox(mut r)  => {
+                        r.translate(screen_offset);
+                        r
+                   }
+                   _ => {
+                       // composition_top_left already had a screen_offset added when it was computed. just margin it out
+                        let mut r = Rectangle::new(
+                            composition_top_left,
+                            composition_top_left.add(Point::new(composition.bb_width() as _, composition.bb_height() as _))
+                        );
+                        r.margin_out(tv.margin);
+                        r
+                    }
+                };
+
+                log::info!("clip_rect: {:?}", clip_rect);
+                log::info!("composition_top_left: {:?}", composition_top_left);
+                log::info!("clear_rect: {:?}", clear_rect);
+                // draw the bubble/border and/or clear the background area
                 let bordercolor = if tv.draw_border {
                     Some(PixelColor::Dark)
                 } else {
@@ -286,7 +310,7 @@ fn xmain() -> ! {
                         op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
                     }
                 }
-
+                // for now, if we're in braille mode, emit all text to the debug log so we can see it
                 if cfg!(feature = "braille") {
                     log::info!("{}", tv);
                 }

@@ -135,6 +135,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "status",
         */
     ];
+    let gfx_dev_pkgs = [
+        "ticktimer-server",
+        "log-server",
+        "xous-names",
+        "trng",
+        "llio",
+        "susres",
+        "com",
+        "graphics-server",
+        "keyboard",
+    ];
 
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
     let mut args = env::args();
@@ -163,6 +174,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?,
         Some("hw-image") => {
             build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None, &[])?
+        }
+        Some("gfx-dev") => {
+            run(true, &gfx_dev_pkgs, Some(&["--features", "graphics-server/testing"]))?
         }
         Some("pddb-dev") => build_hw_image(
             false,

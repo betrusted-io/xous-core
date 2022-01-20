@@ -30,8 +30,8 @@ func (f FontSpec) TrimLimits(row int, col int) [4]int {
 		// No trim for CJK
 		return [4]int{0, 0, 0, 0}
 	} else if f.GlyphTrim == "monospace" {
-		// Monospace gets 2 left, 3 right, none top & bottom
-		return [4]int{0, 2, 0, 3}
+		// Monospace gets 4 left, 4 right, none top & bottom
+		return [4]int{0, 4, 0, 4}
 	}
 	// Everything else gets max trim
 	return [4]int{f.Size, f.Size, f.Size, f.Size}

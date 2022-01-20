@@ -63,7 +63,7 @@ func (m Matrix) Trim(font FontSpec, row int, col int) Matrix {
 	m = m.trimLeadingEmptyRows(trblTrimLimit[3])
 	// Trim right whitespace
 	m = m.reverseRows()
-	m = m.trimLeadingEmptyRows(trblTrimLimit[3])
+	m = m.trimLeadingEmptyRows(trblTrimLimit[1])
 	m = m.reverseRows()
 	m = m.transpose()
 	// Don't trim top whitespace

@@ -13,6 +13,7 @@ pub const NULL_GLYPH_SPRITE: fonts::GlyphSprite = fonts::GlyphSprite {
     glyph: &NULL_GLYPH,
     wide: 8u8,
     high: 12u8,
+    kern: 1,
     ch: '\u{0}',
     invert: false,
     insert: false,
@@ -181,7 +182,7 @@ pub fn paint_str_latin_bold(fb: &mut FrBuf, clip: ClipRect, c: &mut Cursor, s: &
 
 /// XOR blit a string using latin mono glyphs with specified clip rect, starting at cursor
 pub fn paint_str_latin_mono(fb: &mut FrBuf, clip: ClipRect, c: &mut Cursor, s: &str) {
-    const KERN: usize = 0;
+    const KERN: usize = 1;
     for ch in s.chars() {
         if ch == '\n' {
             newline(clip, c);

@@ -11,6 +11,8 @@ pub mod regular;
 pub mod small;
 pub mod zh;
 
+const DEFAULT_KERN: u8 = 1;
+
 // Font data is stored as CODEPOINTS and GLYPHS arrays. CODEPOINTS holds sorted
 // Unicode codepoints for characters included in the font, and GLYPHS holds
 // 16*16px sprites (pixels packed in row-major order, LSB of first word is top
@@ -27,6 +29,7 @@ pub struct GlyphSprite {
     pub glyph: &'static [u32],
     pub wide: u8,
     pub high: u8,
+    pub kern: u8,
     // the original character
     pub ch: char,
     // invert rendering for the character - for copy/paste selection regions
@@ -45,6 +48,7 @@ pub fn small_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &small::GLYPHS[offset..end],
                     wide: small::WIDTHS[n],
                     high: small::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,
@@ -66,6 +70,7 @@ pub fn regular_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &regular::GLYPHS[offset..end],
                     wide: regular::WIDTHS[n],
                     high: regular::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,
@@ -87,6 +92,7 @@ pub fn bold_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &bold::GLYPHS[offset..end],
                     wide: bold::WIDTHS[n],
                     high: bold::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,
@@ -108,6 +114,7 @@ pub fn mono_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &mono::GLYPHS[offset..end],
                     wide: mono::WIDTHS[n],
                     high: mono::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,
@@ -129,6 +136,7 @@ pub fn emoji_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &emoji::GLYPHS[offset..end],
                     wide: emoji::MAX_HEIGHT, // yes, use height for wide
                     high: emoji::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,
@@ -150,6 +158,7 @@ pub fn zh_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &zh::GLYPHS[offset..end],
                     wide: zh::MAX_HEIGHT, // yes, use height for wide
                     high: zh::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,
@@ -171,6 +180,7 @@ pub fn ja_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &ja::GLYPHS[offset..end],
                     wide: ja::MAX_HEIGHT, // yes, use height for wide
                     high: ja::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,
@@ -192,6 +202,7 @@ pub fn kr_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     glyph: &kr::GLYPHS[offset..end],
                     wide: kr::MAX_HEIGHT, // yes, use height for wide
                     high: kr::MAX_HEIGHT,
+                    kern: DEFAULT_KERN,
                     ch,
                     invert: false,
                     insert: false,

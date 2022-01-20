@@ -72,14 +72,14 @@ impl TypesetWord {
         }
     }
     pub fn push(&mut self, gs: GlyphSprite) {
-        self.width += gs.wide as usize;
+        self.width += (gs.wide + gs.kern) as usize;
         self.height = self.height.max(gs.high as usize);
         self.gs.push(gs);
     }
     /// if the pop is invalid, we'll return an invalid character. Just...don't do that. k?
     pub fn pop(&mut self) -> GlyphSprite {
         let gs = self.gs.pop().unwrap_or(NULL_GLYPH_SPRITE);
-        self.width -= gs.wide as usize;
+        self.width -= (gs.wide + gs.kern) as usize;
         // we can't undo any height transformations, unfortunately, because we don't know what the previous state was
         // but it's fairly minor if text is set funny on a line because text overflowed and had e.g. emoji buried amongst
         // small font text...
@@ -148,7 +148,7 @@ impl ComposedType {
                 if maybe_y < 0 || maybe_y > FB_LINES as i16 as i16 {
                     renderable = false;
                 }
-                point.x += glyph.wide as usize; // keep scorekeeping on this, because it could eventually become renderable
+                point.x += (glyph.wide + glyph.kern) as usize; // keep scorekeeping on this, because it could eventually become renderable
                 if !renderable {
                     continue;
                 } else {
@@ -166,8 +166,8 @@ impl ComposedType {
                         // draw the insertion point after the glyph's position
                         crate::op::line(frbuf,
                             crate::api::Line::new(
-                                crate::api::Point::new(point.x as _, point.y as _),
-                                crate::api::Point::new(point.x as _, point.y as i16 + glyph.high as i16)
+                                crate::api::Point::new(point.x as i16 - 1, point.y as _),
+                                crate::api::Point::new(point.x as i16 - 1, point.y as i16 + glyph.high as i16)
                             ),
                             None,
                             invert
@@ -223,14 +223,17 @@ impl Typesetter {
         insertion_point: Option<usize>,
     ) -> Self {
         let bb = ClipRect::new(0, 0, extent.x, extent.y);
-        // now initialize the Typesetter to the "top left" of the bb space.
+        let mut space = style_glyph(' ', base_style);
+        space.kern = 0;
+        let mut ellipsis = find_glyph_latin_small('…');
+        ellipsis.kern = 0;
         Typesetter {
             charpos: 0,
             cursor: Cursor::new(0, 0, 0),
             candidate: TypesetWord::new(Pt::new(0, 0), 0), // first word candidate starts at the top left corner
             bb,
-            space: style_glyph(' ', base_style),
-            ellipsis: find_glyph_latin_small('…'),
+            space,
+            ellipsis,
             base_style: base_style.clone(),
             s: String::from(s),
             insertion_point,
@@ -412,6 +415,9 @@ impl Typesetter {
                 }
             }
         }
+        if self.candidate.gs.len() > 0 {
+            self.commit_candidate_word(&mut composition);
+        }
         let ret = ComposedType::new(composition,
             ClipRect::new(
                 self.bb.min.x, self.bb.min.y,
@@ -513,6 +519,7 @@ impl Typesetter {
         if (self.cursor.pt.x + self.space.wide as usize) < self.bb.max.x {
             // our candidate word is "just as space"
             self.candidate.push(self.space.clone());
+            self.cursor.line_height = self.cursor.line_height.max(self.space.high as usize);
             // if we're at the beginning of a line, mark the candidate word (that just contains a space) as non-drawable
             if self.cursor.pt.x == self.bb.min.x {
                 self.candidate.non_drawable = true;
