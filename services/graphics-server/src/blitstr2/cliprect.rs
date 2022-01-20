@@ -14,7 +14,7 @@ pub struct ClipRect {
     pub min: Pt,
     pub max: Pt,
 }
-
+#[allow(dead_code)]
 impl ClipRect {
     /// Initialize a rectangle using automatic min/max fixup for corner points
     pub fn new(min_x: usize, min_y: usize, max_x: usize, max_y: usize) -> ClipRect {

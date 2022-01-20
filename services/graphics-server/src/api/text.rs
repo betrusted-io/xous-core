@@ -15,6 +15,8 @@ pub enum TextBounds {
     GrowableFromTl(Point, u16),
     // fixed width, grows up from bottom left
     GrowableFromBl(Point, u16),
+    // fixed width, grows down from top right
+    GrowableFromTr(Point, u16),
 }
 impl TextBounds {
     pub fn translate(&self, by: Point) -> TextBounds {
@@ -31,6 +33,9 @@ impl TextBounds {
             }
             TextBounds::GrowableFromBl(origin, width) => {
                 TextBounds::GrowableFromBl(origin.add(by), width)
+            }
+            TextBounds::GrowableFromTr(origin, width) => {
+                TextBounds::GrowableFromTr(origin.add(by), width)
             }
         }
     }

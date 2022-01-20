@@ -102,7 +102,6 @@ fn map_fonts() -> MemoryRange {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    let debugtv = false;
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
@@ -219,7 +218,9 @@ fn xmain() -> ! {
                     TextBounds::GrowableFromBl(bl, width) =>
                         blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, bl.y as usize - tv.margin.y as usize * 2),
                     TextBounds::GrowableFromTl(tl, width) =>
-                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y) as usize - tv.margin.y as usize * 2),
+                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - tl.y) as usize - tv.margin.y as usize * 2),
+                    TextBounds::GrowableFromTr(tr, width) =>
+                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - tr.y) as usize - tv.margin.y as usize * 2),
                 };
                 let base_style = match tv.style { // a connector for now, we'll eventually depricate the old API
                     GlyphStyle::Small => blitstr2::GlyphStyle::Small,
@@ -249,7 +250,9 @@ fn xmain() -> ! {
                     TextBounds::GrowableFromBl(bl, _width) =>
                         Point::new(bl.x + tv.margin.x, bl.y - (composition.bb_height() as i16 + tv.margin.y)),
                     TextBounds::GrowableFromTl(tl, _width) =>
-                        tl.add(tv.margin)
+                        tl.add(tv.margin),
+                    TextBounds::GrowableFromTr(tr, _width) =>
+                        Point::new(tr.x - (composition.bb_width() as i16 + tv.margin.x), tr.y + tv.margin.y),
                 }
                 .add(screen_offset);
 
@@ -270,9 +273,9 @@ fn xmain() -> ! {
                     }
                 };
 
-                log::info!("clip_rect: {:?}", clip_rect);
-                log::info!("composition_top_left: {:?}", composition_top_left);
-                log::info!("clear_rect: {:?}", clear_rect);
+                log::trace!("clip_rect: {:?}", clip_rect);
+                log::trace!("composition_top_left: {:?}", composition_top_left);
+                log::trace!("clear_rect: {:?}", clear_rect);
                 // draw the bubble/border and/or clear the background area
                 let bordercolor = if tv.draw_border {
                     Some(PixelColor::Dark)
@@ -304,7 +307,7 @@ fn xmain() -> ! {
                         op::rounded_rectangle(
                             display.native_buffer(),
                             RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _),
-                            Some(clear_rect),
+                            tv.clip_rect,
                         );
                     } else {
                         op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
@@ -316,7 +319,7 @@ fn xmain() -> ! {
                 }
 
                 if !tv.dry_run() {
-                    composition.render(display.native_buffer(), composition_top_left, tv.invert);
+                    composition.render(display.native_buffer(), composition_top_left, tv.invert, tv.clip_rect.unwrap());
                 }
                 // type mismatch for now, replace this with a simple equals once we sort that out
                 tv.cursor.pt.x = composition.final_cursor().pt.x as i32;
@@ -326,7 +329,7 @@ fn xmain() -> ! {
                 tv.bounds_computed = Some(
                     clear_rect
                 );
-                log::info!("cursor ret {:?}, bounds ret {:?}", tv.cursor, tv.bounds_computed);
+                log::trace!("cursor ret {:?}, bounds ret {:?}", tv.cursor, tv.bounds_computed);
                 // pack our data back into the buffer to return
                 buffer.replace(tv).unwrap();
             }

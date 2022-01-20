@@ -10,7 +10,9 @@ enum TestType {
     LowerRight = 1,
     LowerLeft = 2,
     TopLeft = 3,
-    End = 4,
+    TopRight = 4,
+    Overflow = 5,
+    End = 6,
 }
 pub fn tests() {
     let _ = std::thread::spawn({
@@ -19,7 +21,7 @@ pub fn tests() {
             let gfx = graphics_server::Gfx::new(&xns).unwrap();
             let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-            for index in 0..TestType::End.to_usize().unwrap() {
+            for index in TestType::BoundingBox.to_usize().unwrap()..TestType::End.to_usize().unwrap() {
                 // show a black screen
                 ticktimer.sleep_ms(1000).unwrap();
                 // draw a black screen
@@ -34,11 +36,12 @@ pub fn tests() {
 
                 // start the test
                 ticktimer.sleep_ms(1000).unwrap();
-                let clipping_area = Rectangle::new_coords(50, 50, 250, 450);
+                let clipping_area = Rectangle::new_coords(50, 50, 290, 450);
 
                 let text_bounds = Rectangle::new_coords(10, 10, 240, 300);
 
-                let mut checkbound = text_bounds.clone();
+                //let mut checkbound = clipping_area.clone(); // this checks against the final clipping area.
+                let mut checkbound = text_bounds.clone(); // this is just around the bounds specified by the TV
                 checkbound.translate(clipping_area.tl());
                 checkbound.margin_out(Point::new(1, 1));
                 checkbound.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
@@ -118,6 +121,55 @@ pub fn tests() {
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
                         ticktimer.sleep_ms(1000).unwrap();
+                    }
+                    Some(TestType::TopRight) => {
+                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
+                        TextBounds::GrowableFromTr(
+                            Point::new(text_bounds.tr().x - 4, text_bounds.tl().y + 4),
+                            ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16 + 30
+                        ));
+                        tv.clip_rect = Some(clipping_area);
+                        tv.style = GlyphStyle::Regular;
+                        tv.ellipsis = false;
+                        tv.rounded_border = None;
+                        write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        log::info!("rendering: {:?}", tv);
+                        tv.insertion = Some(21);
+                        gfx.draw_textview(&mut tv).unwrap();
+                        gfx.flush().unwrap();
+                        log::info!("rendered: {:?}", tv);
+                        ticktimer.sleep_ms(1000).unwrap();
+                    }
+                    Some(TestType::Overflow) => {
+                        //gfx.draw_rectangle(blackout).unwrap();
+                        //gfx.flush().unwrap();
+
+                        for x_off in 0..32 {
+                            let clipping_area = Rectangle::new_coords(100, 100, 200, 200);
+                            let text_bounds = Rectangle::new_coords(-20 + x_off, -20 + x_off, 150, 150);
+
+                            let mut checkbound = clipping_area.clone(); // this checks against the final clipping area.
+                            checkbound.margin_out(Point::new(1, 1));
+                            checkbound.style = DrawStyle::new(PixelColor::Light, PixelColor::Dark, 1);
+                            gfx.draw_rectangle(checkbound).unwrap();
+                            gfx.flush().unwrap();
+
+                            let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
+                            TextBounds::BoundingBox(
+                                text_bounds
+                            ));
+                            tv.clip_rect = Some(clipping_area);
+                            tv.style = GlyphStyle::Regular;
+                            tv.ellipsis = false;
+                            tv.rounded_border = None;
+                            write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                            log::info!("rendering: {:?}", tv);
+                            tv.insertion = Some(21);
+                            gfx.draw_textview(&mut tv).unwrap();
+                            gfx.flush().unwrap();
+                            log::info!("rendered: {:?}", tv);
+                            ticktimer.sleep_ms(200).unwrap();
+                        }
                     }
                     _ => {}
                 }

@@ -32,4 +32,4 @@ minifb = {version = "0.19.2", git = "https://github.com/xobs/rust_minifb.git", r
 debugprint = []
 braille = []
 testing = []
-default = ["testing"]
+default = []

@@ -14,7 +14,7 @@ pub struct Cursor {
     pub pt: Pt,
     pub line_height: usize,
 }
-
+#[allow(dead_code)]
 impl Cursor {
     // Make a new Cursor. When in doubt, set line_height = 0.
     pub fn new(x: usize, y: usize, line_height: usize) -> Cursor {

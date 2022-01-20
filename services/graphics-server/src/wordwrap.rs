@@ -1,5 +1,6 @@
-use crate::api::{Point, TextBounds};
+use crate::api::{Point, Rectangle};
 
+#[allow(unused_imports)]
 use crate::backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_LINES};
 /// Wordwrap stratgey
 ///
@@ -85,19 +86,6 @@ impl TypesetWord {
         // small font text...
         gs
     }
-    /// offset has to take an explicit x/y set because Pt is defined as a usize, so we can't do negative offsets
-    pub fn offset(&mut self, x: i16, y: i16) {
-        let ox = self.origin.x as i16 + x;
-        let oy = self.origin.y as i16 + y;
-        self.origin.x = if ox > 0 { ox as usize } else { 0 };
-        self.origin.y = if oy > 0 { oy as usize } else { 0 };
-    }
-    /// sets the y coordinate to the given value. Returns the y coordinate of the next line based on just this word's height.
-    /// multi-word lines will want to track the return value and pick the maximum one as the overall line height
-    pub fn set_y(&mut self, y: usize) -> usize {
-        self.origin.y = y;
-        self.origin.y + self.height
-    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -109,6 +97,13 @@ pub enum OverflowStrategy {
     /// render exactly one line of text; reset the renderer for a new line at the top left of the max bb area
     /// This will yield only whole words if the next word could fit in a single line; otherwise, it will split
     /// a longer-than-one-line word unceremoniously into multiple lines
+    ///
+    /// This is intended for implementing e.g. scrollable text, where a text area is split
+    /// into multiple lines of typeset text, and then we can selectively render a range of text at a
+    /// given offset to simulate scrolling.
+    ///
+    /// The function hasn't been tested at all, however.
+    #[allow(dead_code)] // it's true, we haven't tested this mode yet. Remove this once we have tested it.
     OneLineIterator,
 }
 
@@ -133,7 +128,10 @@ impl ComposedType {
     pub fn bb_height(&self) -> usize {
         self.bounding_box.max.y - self.bounding_box.min.y
     }
-    pub fn render(&self, frbuf: &mut [u32; FB_SIZE], offset: Point, invert: bool) {
+    /// Note: it is up to the caller to ensure that clip_rect is within the renderable screen area. We do no
+    /// additional checks around this.
+    pub fn render(&self, frbuf: &mut [u32; FB_SIZE], offset: Point, invert: bool, clip_rect: Rectangle) {
+        const MAX_GLYPH_MARGIN: i16 = 16;
         for word in self.words.iter() {
             let mut point = word.origin.clone();
             for glyph in word.gs.iter() {
@@ -142,25 +140,30 @@ impl ComposedType {
                 let maybe_x = offset.x + point.x as i16;
                 let maybe_y = offset.y + point.y as i16;
                 let mut renderable = true;
-                if maybe_x < 0 || maybe_x > FB_WIDTH_PIXELS as i16 {
+                // allow MAX_GLYPH_MARGIN so we can get partial rendering of text that's slightly off screen
+                if maybe_x < (clip_rect.tl().x - MAX_GLYPH_MARGIN) || maybe_x > clip_rect.br().x {
+                    log::trace!("not renderable maybe_x: {}, {:?}", maybe_x, clip_rect);
                     renderable = false;
                 }
-                if maybe_y < 0 || maybe_y > FB_LINES as i16 as i16 {
+                if maybe_y < (clip_rect.tl().y - MAX_GLYPH_MARGIN)|| maybe_y > clip_rect.br().y {
+                    log::trace!("not renderable maybe_y: {}, {:?}", maybe_y, clip_rect);
                     renderable = false;
                 }
                 point.x += (glyph.wide + glyph.kern) as usize; // keep scorekeeping on this, because it could eventually become renderable
                 if !renderable {
+                    // quickly short circuit over any text that is definitely outside of our clipping rectangle
                     continue;
                 } else {
-                    // note: I am pretty sure we're going to throw an error for stuff that goes off screen to the
-                    // right and left with the current implemntation, but that clipping should happen within the
-                    // xor_glyph engine and not chekced up here -- because what we want is a partial character to
-                    // render, not have a margin of no-mans land a character width from the edge.
+                    let cr = ClipRect::new(
+                        clip_rect.tl().x as usize, clip_rect.tl().y as usize,
+                        clip_rect.br().x as usize, clip_rect.br().y as usize
+                    );
                     blitstr2::xor_glyph(
                         frbuf,
-                        &Pt::new(maybe_x as usize, maybe_y as usize),
+                        &Point::new(maybe_x, maybe_y),
                         *glyph,
-                        glyph.invert ^ invert
+                        glyph.invert ^ invert,
+                        cr
                     );
                     if glyph.insert {
                         // draw the insertion point after the glyph's position
@@ -242,9 +245,6 @@ impl Typesetter {
         }
     }
 
-    pub fn last_line_height(&self) -> usize {
-        self.cursor.line_height
-    }
     /// Wrap the words in the string until the space overflows, leaving ellipsis at the end.
     /// Any prior result in self.words is overwritten.
     ///
