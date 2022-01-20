@@ -164,7 +164,7 @@ fn xmain() -> ! {
         )),
     );
     uptime_tv.untrusted = false;
-    uptime_tv.style = blitstr::GlyphStyle::Small;
+    uptime_tv.style = blitstr::GlyphStyle::Regular;
     uptime_tv.draw_border = false;
     uptime_tv.margin = Point::new(3, 0);
     write!(uptime_tv, "Booting up...").expect("|status: couldn't init uptime text");
@@ -181,7 +181,7 @@ fn xmain() -> ! {
             Point::new(screensize.x, screensize.y / 2 - 1),
         )),
     );
-    battstats_tv.style = blitstr::GlyphStyle::Small;
+    battstats_tv.style = blitstr::GlyphStyle::Regular;
     battstats_tv.draw_border = false;
     battstats_tv.margin = Point::new(0, 0);
     gam.post_textview(&mut battstats_tv)
@@ -237,7 +237,7 @@ fn xmain() -> ! {
             Point::new(screensize.x, screensize.y - 1),
         )),
     );
-    security_tv.style = blitstr::GlyphStyle::Small;
+    security_tv.style = blitstr::GlyphStyle::Regular;
     security_tv.draw_border = false;
     security_tv.margin = Point::new(0, 0);
     security_tv.token = gam.claim_token("status").expect("couldn't request token"); // this is a shared magic word to identify this process

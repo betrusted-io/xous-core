@@ -13,6 +13,9 @@ pub const NULL_GLYPH_SPRITE: fonts::GlyphSprite = fonts::GlyphSprite {
     glyph: &NULL_GLYPH,
     wide: 8u8,
     high: 12u8,
+    ch: '\u{0}',
+    invert: false,
+    insert: false,
 };
 
 /// Unicode replacement character

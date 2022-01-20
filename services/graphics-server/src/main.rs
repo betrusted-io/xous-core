@@ -32,6 +32,9 @@ use xous_ipc::Buffer;
 mod fontmap;
 use api::BulkRead;
 
+use crate::wordwrap::*;
+use core::ops::Add;
+
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(&poweron::LOGO_MAP);
 }
@@ -199,92 +202,52 @@ fn xmain() -> ! {
 
                 // this is the clipping rectangle of the canvas in screen coordinates
                 let clip_rect = tv.clip_rect.unwrap();
-                // the bounds hint is given in relative coordinates from the textview's origin. Translate it to screen coordinates.
-                let bounds_hint_screen = tv.bounds_hint.translate(clip_rect.tl());
 
-                let mut border = if let Some(mut precomputed) = tv.bounds_computed {
-                    // preferentially use a pre-computed bounds, if there is one
-                    // translate the precomputed rectangle to screen coordinates
-                    precomputed.translate(clip_rect.tl());
-                    blitstr2::ClipRect::new(
-                        precomputed.tl().x as usize,
-                        precomputed.tl().y as usize,
-                        precomputed.br().x as usize,
-                        precomputed.br().y as usize)
-                } else {
-                    match bounds_hint_screen {
-                        // bounding box is literally this box, no other margining to be considered
-                        TextBounds::BoundingBox(r) => {
-                            blitstr2::ClipRect::new(
-                                r.tl().x as usize,
-                                r.tl().y as usize,
-                                r.br().x as usize,
-                                r.br().y as usize,
-                            )
-                        }
-                        TextBounds::GrowableFromBr(br, width) => {
-                            if !clip_rect.intersects_point(br) {
-                                continue;
-                            }
-                            blitstr2::ClipRect::new(
-                                if (br.x - width as i16) > (clip_rect.tl().x + tv.margin.x) {
-                                    (br.x - width as i16) as usize
-                                } else {
-                                    (clip_rect.tl().x + tv.margin.x) as usize
-                                },
-                                (clip_rect.tl().y + tv.margin.y) as usize,
-                                (br.x - tv.margin.x) as usize,
-                                (br.y - tv.margin.y) as usize,
-                            )
-                        }
-                        TextBounds::GrowableFromTl(tl, width) => {
-                            if !clip_rect.intersects_point(tl) {
-                                continue;
-                            }
-                            blitstr2::ClipRect::new(
-                                (tl.x + tv.margin.x) as usize,
-                                (tl.y + tv.margin.y) as usize,
-                                if (tl.x + width as i16 + 2 * tv.margin.x) < clip_rect.br().x {
-                                    (tl.x + width as i16 + tv.margin.x) as usize
-                                } else {
-                                    (clip_rect.br.x - tv.margin.x) as usize
-                                },
-                                (clip_rect.br.y - tv.margin.y) as usize
-                            )
-                        }
-                        TextBounds::GrowableFromBl(bl, width) => {
-                            blitstr2::ClipRect::new(
-                                (bl.x + tv.margin.x) as usize,
-                                (clip_rect.tl.y + tv.margin.y) as usize,
-                                if (bl.x + width as i16 + 2 * tv.margin.x) < clip_rect.br().x {
-                                    (bl.x + width as i16 + tv.margin.x) as usize
-                                } else {
-                                    (clip_rect.br().x - tv.margin.x) as usize
-                                },
-                                (bl.y - tv.margin.y) as usize
-                            )
-                        }
-                    }
+                let typeset_extent = match tv.bounds_hint {
+                    TextBounds::BoundingBox(r) =>
+                        blitstr2::Pt::new((r.br().x - r.tl().x - tv.margin.x * 2) as usize, (r.br().y - r.tl().y - tv.margin.y * 2) as usize),
+                    TextBounds::GrowableFromBr(br, width) =>
+                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, br.y as usize - tv.margin.y as usize * 2),
+                    TextBounds::GrowableFromBl(bl, width) =>
+                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, bl.y as usize - tv.margin.y as usize * 2),
+                    TextBounds::GrowableFromTl(tl, width) =>
+                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y) as usize - tv.margin.y as usize * 2),
                 };
-                let mut overflow = false;
-                log::info!("typesetting {} border {:?}, bounds {:?}", tv.text, border, bounds_hint_screen);
                 let base_style = match tv.style { // a connector for now, we'll eventually depricate the old API
                     GlyphStyle::Small => blitstr2::GlyphStyle::Small,
                     GlyphStyle::Regular => blitstr2::GlyphStyle::Regular,
                     GlyphStyle::Bold => blitstr2::GlyphStyle::Bold,
                 };
-                let typeset_words = wordwrap::fit_str_to_clip(
-                    tv.text.as_str().unwrap_or("UTF-8 error"),
-                    &mut border,
-                    &bounds_hint_screen,
-                    /*&tv.style,*/ &base_style,
-                    &mut tv.cursor,
-                    &mut overflow);
+                let mut typesetter = Typesetter::setup(
+                    tv.to_str(),
+                    &typeset_extent,
+                    &base_style,
+                    if let Some(i) = tv.insertion { Some(i as usize) } else { None }
+                );
+                let composition = typesetter.typeset(
+                    if tv.ellipsis {
+                        OverflowStrategy::Ellipsis
+                    } else {
+                        OverflowStrategy::Abort
+                    }
+                );
 
-                log::info!("wrapped to {:?}", border);
-
+                let composition_top_left = match tv.bounds_hint {
+                    TextBounds::BoundingBox(r) =>
+                        r.tl().add(tv.margin),
+                    TextBounds::GrowableFromBr(br, _width) =>
+                        Point::new(br.x - composition.bb_width() as i16 + tv.margin.x,
+                        br.y + composition.bb_height() as i16 + tv.margin.y),
+                    TextBounds::GrowableFromBl(bl, _width) =>
+                        Point::new(bl.x + tv.margin.x, bl.y + composition.bb_height() as i16 + tv.margin.y),
+                    TextBounds::GrowableFromTl(tl, _width) =>
+                        tl.add(tv.margin)
+                };
                 // compute the clear rectangle -- the border is already in screen coordinates, just add the margin around it
-                let mut clear_rect = border.to_rect();
+                let mut clear_rect = Rectangle::new(
+                    composition_top_left,
+                    composition_top_left.add(Point::new(composition.bb_width() as _, composition.bb_height() as _))
+                );
                 clear_rect.margin_out(tv.margin);
 
                 let bordercolor = if tv.draw_border {
@@ -327,30 +290,19 @@ fn xmain() -> ! {
                 if cfg!(feature = "braille") {
                     log::info!("{}", tv);
                 }
-                if !tv.dry_run() {
-                    let mut insert_point = 0;
-                    for word in typeset_words.iter() {
-                        let mut p = word.origin.clone();
-                        for glyph in word.gs.iter() {
-                            /// TODO: need to redo the word wrap algorithm to not skip over whitespace entries so that insertion points work with multiple spaces
-                            if let Some(ipoint) = tv.insertion {
-                                if ipoint == insert_point {
-                                    let top = Point::new(p.x as _, p.y as _);
-                                    let bot = Point::new(p.x as _, (p.y + word.height) as _);
-                                    let line = Line::new(top, bot);
-                                    op::line(display.native_buffer(),
-                                        line, Some(clear_rect), tv.invert);
-                                }
-                            }
-                            // log::info!("drawing {:?} at {:?}", glyph, p);
-                            blitstr2::xor_glyph(display.native_buffer(), &p, *glyph, tv.invert);
-                            p.x += glyph.wide as usize; // words after word-wrapping are guaranteed to be on the same line
-                            insert_point += 1;
-                        }
-                    }
-                }
 
-                log::info!("(TV): returning cursor of {:?}", tv.cursor);
+                if !tv.dry_run() {
+                    composition.render(display.native_buffer(), composition_top_left, tv.invert);
+                }
+                // type mismatch for now, replace this with a simple equals once we sort that out
+                tv.cursor.pt.x = composition.final_cursor().pt.x as i32;
+                tv.cursor.pt.y = composition.final_cursor().pt.y as i32;
+                tv.cursor.line_height = composition.final_cursor().line_height as i32;
+
+                tv.bounds_computed = Some(
+                    clear_rect
+                );
+                log::info!("cursor ret {:?}, bounds ret {:?}", tv.cursor, tv.bounds_computed);
                 // pack our data back into the buffer to return
                 buffer.replace(tv).unwrap();
             }
@@ -401,11 +353,11 @@ fn xmain() -> ! {
                     .expect("couldn't return ScreenSize request");
             }),
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
-                let glyph = GlyphStyle::from(style);
+                let glyph = blitstr2::GlyphStyle::from(style);
                 xous::return_scalar2(
                     msg.sender,
                     glyph.into(),
-                    blitstr::glyph_to_height_hint(glyph),
+                    blitstr2::glyph_to_height_hint(glyph),
                 )
                 .expect("could not return QueryGlyphProps request");
             }),

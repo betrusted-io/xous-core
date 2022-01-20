@@ -48,21 +48,6 @@ impl Cursor {
             line_height: self.line_height.max(other.line_height)
         }
     }
-
-    // adds a space or newline to the cursor depending on if it would fit in the
-    // max width. Returns `true` if a space is added. Resets the cursor to
-    // the carriage return "x" specified by `cr_x` if a newline is done.
-    pub fn space_or_newline(&mut self, space: &GlyphSprite, maxwidth: usize, cr_x: usize) -> bool {
-        if (self.pt.x + space.wide as usize) < maxwidth {
-            self.pt.x += space.wide as usize;
-            true
-        } else {
-            self.pt.x = cr_x;
-            self.pt.y += self.line_height;
-            self.line_height = 0;
-            false
-        }
-    }
 }
 
 #[cfg(test)]
