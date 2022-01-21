@@ -201,6 +201,29 @@ pub fn emoji_glyph(ch: char) -> Result<GlyphSprite, usize> {
     }
 }
 
+pub fn emoji_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
+    match emoji::CODEPOINTS.binary_search(&(ch as u32)) {
+        Ok(n) => {
+            let offset = n << 3;
+            let end = offset + 8;
+            match end <= emoji::GLYPHS.len() {
+                true => Ok(GlyphSprite {
+                    glyph: &emoji::GLYPHS[offset..end],
+                    wide: emoji::MAX_HEIGHT * 2, // yes, use height for wide
+                    high: emoji::MAX_HEIGHT * 2,
+                    kern: DEFAULT_KERN,
+                    ch,
+                    invert: false,
+                    insert: false,
+                    double: true,
+                }),
+                false => Err(0),
+            }
+        }
+        _ => Err(1),
+    }
+}
+
 pub fn zh_glyph(ch: char) -> Result<GlyphSprite, usize> {
     match zh::CODEPOINTS.binary_search(&(ch as u32)) {
         Ok(n) => {
