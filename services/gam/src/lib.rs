@@ -14,7 +14,7 @@ pub use menu::*;
 use graphics_server::api::{TextOp, TextView};
 
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
-pub use graphics_server::GlyphStyle;
+pub use graphics_server::api::GlyphStyle;
 
 use api::Opcode; // if you prefer to map the api into your local namespace
 use xous::{send_message, CID, Message};

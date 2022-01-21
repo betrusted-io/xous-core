@@ -1,4 +1,4 @@
-use crate::api::{Point, Rectangle};
+use crate::api::{Point, Rectangle, GlyphStyle, glyph_to_height_hint};
 
 #[allow(unused_imports)]
 use crate::backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_LINES};
@@ -262,19 +262,14 @@ impl Typesetter {
         let mut composition = Vec::<TypesetWord>::new();
 
         if self.bb.max.x - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) {
+            // we flag this because the typesetter algorithm may never converge if it can't set any characters
+            // because the region is just too narrow.
             log::error!("Words cannot be typset because the width of the typset region is too narrow.");
             return ComposedType::new(composition,
                 ClipRect::new(self.bb.min.x, self.bb.min.y, self.bb.min.x, self.bb.min.y),
                 self.cursor
             );
         }
-        /*if self.bb.max.y - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) {
-            log::error!("Words cannot be typset because the height of the typset region is too low.");
-            return ComposedType::new(composition,
-                ClipRect::new(self.bb.min.x, self.bb.min.y, self.bb.min.x, self.bb.min.y),
-                self.cursor
-            );
-        }*/
         // algorithm:
         // - If not a whitespace or newline:
         //   1. append a character to the current word (candidate)
@@ -317,7 +312,7 @@ impl Typesetter {
                         }
                     }
                 }
-            } else if ch.is_whitespace() {
+            } else if ch.is_whitespace() && (ch != '\t') {
                 if self.candidate.gs.len() > 0 { // this test is here in case we have multiple spaces or newlines in a row
                     self.commit_candidate_word(&mut composition);
                 }
@@ -540,20 +535,6 @@ impl Typesetter {
         }
     }
 }
-/*
-/// This iterator will go through the string and return successive lines that fit
-/// within the width of the bb region. Each time the line is typeset to
-/// have its origin snapped to the top left of the bb region. This iterator
-/// is useful for doing a multi-line text buffer where lines that don't fit within
-/// the bb region "pop off the top"; the lines can be kept in a vector, and
-/// then directly rendered later on, line-by-line, as needed.
-impl Iterator for Typesetter {
-    type Item = Vec::<TypesetWord>;
-    fn next(&mut self) -> Option<Self::Item> {
-        None
-    }
-}
-*/
 
 /// Find glyph for char using latin regular, emoji, ja, zh, and kr font data
 pub fn style_glyph(ch: char, base_style: &GlyphStyle) -> GlyphSprite {

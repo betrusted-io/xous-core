@@ -22,7 +22,7 @@ use crate::Gam;
 use crate::MsgForwarder;
 
 use graphics_server::api::*;
-pub use graphics_server::GlyphStyle;
+pub use graphics_server::api::GlyphStyle;
 
 use xous_ipc::{String, Buffer};
 use num_traits::*;

@@ -1,4 +1,4 @@
-
+use graphics_server::api::GlyphStyle;
 use crate::*;
 
 /// This is an extention to the Slider struct that allows it to be used as a progress bar

@@ -115,7 +115,7 @@ impl XousDisplay {
     }
 
     fn emulated_to_native(&mut self) {
-        const DEVBOOT_LINE: usize = 12;
+        const DEVBOOT_LINE: usize = 7;
         let mut row = 0;
         for (dest_row, src_row) in self
             .native_buffer

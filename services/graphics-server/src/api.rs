@@ -22,6 +22,8 @@ pub mod shapes;
 pub use shapes::*;
 pub mod text;
 pub use text::*;
+pub mod glyphstyle;
+pub use glyphstyle::*;
 
 use std::hash::{Hash, Hasher};
 

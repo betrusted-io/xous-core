@@ -1,5 +1,5 @@
+use graphics_server::api::GlyphStyle;
 use crate::*;
-
 use graphics_server::api::*;
 
 use xous_ipc::{String, Buffer};

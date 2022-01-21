@@ -7,13 +7,13 @@ use mainmenu::*;
 use com::api::BattStats;
 use log::info;
 
-use blitstr_ref as blitstr;
 use core::fmt::Write;
 
 use num_traits::*;
 use xous::{msg_scalar_unpack, send_message, Message, CID};
 
 use graphics_server::*;
+use graphics_server::api::GlyphStyle;
 use locales::t;
 use gam::modal::*;
 use llio::Weekday;
@@ -164,7 +164,7 @@ fn xmain() -> ! {
         )),
     );
     uptime_tv.untrusted = false;
-    uptime_tv.style = blitstr::GlyphStyle::Regular;
+    uptime_tv.style = GlyphStyle::Regular;
     uptime_tv.draw_border = false;
     uptime_tv.margin = Point::new(3, 0);
     write!(uptime_tv, "Booting up...").expect("|status: couldn't init uptime text");
@@ -181,7 +181,7 @@ fn xmain() -> ! {
             Point::new(screensize.x, screensize.y / 2 - 1),
         )),
     );
-    battstats_tv.style = blitstr::GlyphStyle::Regular;
+    battstats_tv.style = GlyphStyle::Regular;
     battstats_tv.draw_border = false;
     battstats_tv.margin = Point::new(0, 0);
     gam.post_textview(&mut battstats_tv)
@@ -237,7 +237,7 @@ fn xmain() -> ! {
             Point::new(screensize.x, screensize.y - 1),
         )),
     );
-    security_tv.style = blitstr::GlyphStyle::Regular;
+    security_tv.style = GlyphStyle::Regular;
     security_tv.draw_border = false;
     security_tv.margin = Point::new(0, 0);
     security_tv.token = gam.claim_token("status").expect("couldn't request token"); // this is a shared magic word to identify this process

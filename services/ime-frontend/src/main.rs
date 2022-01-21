@@ -10,7 +10,7 @@ use ime_plugin_api::{ImefCallback, ImefDescriptor, ImefOpcode};
 use log::{error, info};
 
 use graphics_server::{Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView, DrawStyle};
-use blitstr_ref as blitstr;
+use gam::GlyphStyle;
 use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
 use num_traits::{ToPrimitive,FromPrimitive};
@@ -591,7 +591,7 @@ impl InputTracker {
                         p_tv.border_width = 1;
                         p_tv.clear_area = false;
                         p_tv.ellipsis = true;
-                        p_tv.style = blitstr::GlyphStyle::Small;
+                        p_tv.style = GlyphStyle::Small;
                         write!(p_tv.text, "{}", pred_str).expect("can't write the prediction string");
                         log::trace!("posting string with length {}", p_tv.text.as_str().unwrap().len());
                         self.gam.post_textview(&mut p_tv).expect("couldn't post prediction text");

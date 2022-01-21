@@ -1,5 +1,5 @@
-use crate::api::{Gid, Point, Rectangle};
-use blitstr::{Cursor, GlyphStyle};
+use crate::api::{Gid, Point, Rectangle, GlyphStyle};
+use blitstr::Cursor;
 use blitstr_ref as blitstr;
 use xous_ipc::String;
 use core::ops::Add;

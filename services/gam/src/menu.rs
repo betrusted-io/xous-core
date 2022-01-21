@@ -9,7 +9,7 @@ pub use graphics_server::*;
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
-use graphics_server::api::{PixelColor, TextBounds, DrawStyle};
+use graphics_server::api::{PixelColor, TextBounds, DrawStyle, GlyphStyle};
 
 #[derive(Debug)]
 pub struct Menu<'a> {
@@ -55,7 +55,7 @@ impl<'a> Menu<'a> {
         assert!(authtoken.is_some(), "Couldn't register menu. Did you remember to add the app_name to the tokens.rs expected boot contexts list?");
         log::debug!("requesting content canvas for menu");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
-        let line_height = gam.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16;
+        let line_height = gam.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height hint") as i16;
         Menu {
             sid,
             gam,
@@ -159,13 +159,13 @@ impl<'a> Menu<'a> {
             )));
 
         if with_marker {
-            write!(item_tv.text, " • ").unwrap();
+            write!(item_tv.text, "\t•\t").unwrap();
         } else {
-            write!(item_tv.text, "    ").unwrap();
+            write!(item_tv.text, "\t\t\t\t").unwrap();
         }
         write!(item_tv.text, "{}", item.name.as_str().unwrap()).unwrap();
         item_tv.draw_border = false;
-        item_tv.style = GlyphStyle::Small;
+        item_tv.style = GlyphStyle::Regular;
         item_tv.margin = Point::new(0, 0);
         item_tv.ellipsis = true;
 

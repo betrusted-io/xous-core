@@ -34,7 +34,8 @@ use log::info;
 use core::fmt::Write;
 
 use gam::UxRegistration;
-use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, GlyphStyle, PixelColor};
+use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, PixelColor};
+use graphics_server::api::GlyphStyle;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
 

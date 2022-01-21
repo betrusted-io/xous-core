@@ -8,8 +8,6 @@ mod cursor;
 pub use cursor::*;
 mod pt;
 pub use pt::*;
-mod glyphstyle;
-pub use glyphstyle::*;
 
 const LINES: usize = crate::backend::FB_LINES;
 const WIDTH: usize = crate::backend::FB_WIDTH_PIXELS;

@@ -12,12 +12,7 @@ mod logo;
 mod poweron;
 mod sleep_note;
 
-use api::{
-    Circle, DrawStyle, Line, PixelColor, Point, Rectangle, RoundedRectangle, TextBounds, TextView,
-};
-use api::{ClipObject, ClipObjectType, Opcode};
-use blitstr::GlyphStyle;
-use blitstr_ref as blitstr;
+use api::*;
 
 mod blitstr2;
 mod wordwrap;
@@ -222,15 +217,10 @@ fn xmain() -> ! {
                     TextBounds::GrowableFromTr(tr, width) =>
                         blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - tr.y) as usize - tv.margin.y as usize * 2),
                 };
-                let base_style = match tv.style { // a connector for now, we'll eventually depricate the old API
-                    GlyphStyle::Small => blitstr2::GlyphStyle::Small,
-                    GlyphStyle::Regular => blitstr2::GlyphStyle::Regular,
-                    GlyphStyle::Bold => blitstr2::GlyphStyle::Bold,
-                };
                 let mut typesetter = Typesetter::setup(
                     tv.to_str(),
                     &typeset_extent,
-                    &base_style,
+                    &tv.style,
                     if let Some(i) = tv.insertion { Some(i as usize) } else { None }
                 );
                 let composition = typesetter.typeset(
@@ -380,11 +370,11 @@ fn xmain() -> ! {
                     .expect("couldn't return ScreenSize request");
             }),
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
-                let glyph = blitstr2::GlyphStyle::from(style);
+                let glyph = GlyphStyle::from(style);
                 xous::return_scalar2(
                     msg.sender,
                     glyph.into(),
-                    blitstr2::glyph_to_height_hint(glyph),
+                    glyph_to_height_hint(glyph),
                 )
                 .expect("could not return QueryGlyphProps request");
             }),

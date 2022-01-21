@@ -1,5 +1,4 @@
-use graphics_server::GlyphStyle;
-
+use graphics_server::api::GlyphStyle;
 use graphics_server::*;
 use core::fmt::Write;
 use num_traits::*;
