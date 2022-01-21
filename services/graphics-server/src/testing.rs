@@ -79,7 +79,7 @@ pub fn tests() {
                         tv.rounded_border = Some(8);
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
-                        tv.insertion = Some(8);
+                        tv.insertion = Some(0);
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -98,7 +98,7 @@ pub fn tests() {
                         tv.invert = true;
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
-                        tv.insertion = Some(0);
+                        tv.insertion = Some(3);
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -116,7 +116,7 @@ pub fn tests() {
                         tv.rounded_border = Some(12);
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
-                        tv.insertion = Some(20);
+                        tv.insertion = Some(4);
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -134,7 +134,7 @@ pub fn tests() {
                         tv.rounded_border = None;
                         write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
-                        tv.insertion = Some(21);
+                        tv.insertion = Some(5);
                         gfx.draw_textview(&mut tv).unwrap();
                         gfx.flush().unwrap();
                         log::info!("rendered: {:?}", tv);
@@ -164,7 +164,7 @@ pub fn tests() {
                             tv.rounded_border = None;
                             write!(tv, "This is a test of basic word wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                             log::info!("rendering: {:?}", tv);
-                            tv.insertion = Some(21);
+                            tv.insertion = Some(x_off as i32 + 10);
                             gfx.draw_textview(&mut tv).unwrap();
                             gfx.flush().unwrap();
                             log::info!("rendered: {:?}", tv);

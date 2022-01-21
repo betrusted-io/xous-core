@@ -179,10 +179,10 @@ impl ComposedType {
                         // draw the insertion point after the glyph's position
                         crate::op::line(frbuf,
                             crate::api::Line::new(
-                                crate::api::Point::new(point.x as i16 - 1, point.y as _),
-                                crate::api::Point::new(point.x as i16 - 1, point.y as i16 + glyph.high as i16)
+                                crate::api::Point::new(maybe_x as i16 - 1, maybe_y as _),
+                                crate::api::Point::new(maybe_x as i16 - 1, maybe_y as i16 + glyph.high as i16)
                             ),
-                            None,
+                            Some(clip_rect),
                             invert
                         );
                     }
