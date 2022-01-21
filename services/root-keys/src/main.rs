@@ -188,7 +188,7 @@ mod implementation {
             SignatureResult::DevKeyOk
         }
         pub fn is_pcache_update_password_valid(&self) -> bool {
-            true
+            false
         }
         pub fn is_pcache_boot_password_valid(&self) -> bool {
             true
@@ -338,7 +338,7 @@ fn xmain() -> ! {
         ActionType::TextEntry(password_action),
         Some(t!("rootkeys.bootpass", xous::LANG)),
         None,
-        GlyphStyle::Small,
+        GlyphStyle::Regular,
         8
     );
     rootkeys_modal.spawn_helper(keys_sid, rootkeys_modal.sid,
@@ -427,23 +427,21 @@ fn xmain() -> ! {
                         keys.set_ux_password_type(None);
                         continue;
                     } else {
-                        modals.show_notification(t!("rootkeys.setup", xous::LANG)).expect("modals error");
-                    }
-
-                    modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
-                    modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
-                    match modals.get_radiobutton(t!("rootkeys.confirm", xous::LANG)) {
-                        Ok(response) => {
-                            if response == t!("rootkeys.confirm.no", xous::LANG) {
-                                continue;
-                            } else if response != t!("rootkeys.confirm.yes", xous::LANG) {
-                                log::error!("Got unexpected response: {:?}", response);
-                                continue;
-                            } else {
-                                // do nothing, this is the forward path
+                        modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
+                        match modals.get_radiobutton(t!("rootkeys.confirm", xous::LANG)) {
+                            Ok(response) => {
+                                if response == t!("rootkeys.confirm.no", xous::LANG) {
+                                    continue;
+                                } else if response != t!("rootkeys.confirm.yes", xous::LANG) {
+                                    log::error!("Got unexpected response: {:?}", response);
+                                    continue;
+                                } else {
+                                    // do nothing, this is the forward path
+                                }
                             }
+                            _ => log::error!("get_radiobutton failed"),
                         }
-                        _ => log::error!("get_radiobutton failed"),
                     }
                     // setup_key_init() prepares the salt and other items necessary to receive a password safely
                     keys.setup_key_init();
@@ -472,10 +470,10 @@ fn xmain() -> ! {
 
                 keys.set_ux_password_type(Some(PasswordType::Update));
                 // pop up our private password dialog box
-                password_action.set_action_opcode(Opcode::UxInitBootPasswordReturn.to_u32().unwrap());
+                password_action.set_action_opcode(Opcode::UxInitUpdatePasswordReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
                     Some(ActionType::TextEntry(password_action)),
-                    Some(t!("rootkeys.bootpass", xous::LANG)), false,
+                    Some(t!("rootkeys.updatepass", xous::LANG)), false,
                     None, true, None
                 );
                 rootkeys_modal.activate();

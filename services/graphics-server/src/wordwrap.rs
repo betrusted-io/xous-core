@@ -226,6 +226,7 @@ pub(crate) struct Typesetter {
     bb: ClipRect,
     space: GlyphSprite,
     ellipsis: GlyphSprite,
+    large_space: GlyphSprite,
     insertion_point: Option<usize>,
     s: String,
     base_style: GlyphStyle,
@@ -245,6 +246,8 @@ impl Typesetter {
         space.kern = 0;
         let mut ellipsis = style_glyph('…', base_style);
         ellipsis.kern = 0;
+        let mut large_space = style_glyph(' ', &GlyphStyle::Cjk);
+        large_space.wide = glyph_to_height_hint(GlyphStyle::Cjk) as u8;
         Typesetter {
             charpos: 0,
             cursor: Cursor::new(0, 0, 0),
@@ -252,6 +255,7 @@ impl Typesetter {
             bb,
             space,
             ellipsis,
+            large_space,
             base_style: base_style.clone(),
             s: String::from(s),
             insertion_point,
@@ -359,7 +363,11 @@ impl Typesetter {
                 // 3. The evolving word is longer than a single line, and there are no more lines available.
                 // 4. The evolving word fits a line but doesn't fit this line, and there is space on a new line for it.
                 // 5. The evolving word fits a line but doesn't fit this line, and there is no more space at all.
-                let mut gs = style_glyph(ch, &self.base_style);
+                let mut gs = if ch != '\t' {
+                    style_glyph(ch, &self.base_style)
+                } else {
+                    self.large_space.clone()
+                };
                 if self.is_insert_point() {
                     gs.insert = true;
                 }

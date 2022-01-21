@@ -55,7 +55,7 @@ impl<'a> Menu<'a> {
         assert!(authtoken.is_some(), "Couldn't register menu. Did you remember to add the app_name to the tokens.rs expected boot contexts list?");
         log::debug!("requesting content canvas for menu");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
-        let line_height = gam.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height hint") as i16;
+        let line_height = gam.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height hint") as i16 + 2;
         Menu {
             sid,
             gam,
@@ -64,7 +64,7 @@ impl<'a> Menu<'a> {
             index: 0,
             canvas,
             authtoken: authtoken.unwrap(),
-            margin: 4,
+            margin: 8,
             divider_margin: 20,
             line_height,
             canvas_width: None,
@@ -159,9 +159,9 @@ impl<'a> Menu<'a> {
             )));
 
         if with_marker {
-            write!(item_tv.text, "\t•\t").unwrap();
+            write!(item_tv.text, "\u{25B6}").unwrap();
         } else {
-            write!(item_tv.text, "\t\t\t\t").unwrap();
+            write!(item_tv.text, "\t").unwrap();
         }
         write!(item_tv.text, "{}", item.name.as_str().unwrap()).unwrap();
         item_tv.draw_border = false;
@@ -173,14 +173,16 @@ impl<'a> Menu<'a> {
     }
     // draw a dividing line above the indexed item
     pub fn draw_divider(&self, index: i16) {
-        if let Some(canvas_width) = self.canvas_width {
-            self.gam.draw_line(self.canvas, Line::new_with_style(
-                Point::new(self.divider_margin, index * self.line_height + self.margin/2),
-                Point::new(canvas_width - self.divider_margin, index * self.line_height + self.margin/2),
-                DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
-                ).expect("couldn't draw dividing line")
-        } else {
-            log::debug!("cant draw divider because our canvas width was not initialized. Ignoring request.");
+        if false { // aesthetically, we don't need this
+            if let Some(canvas_width) = self.canvas_width {
+                self.gam.draw_line(self.canvas, Line::new_with_style(
+                    Point::new(self.divider_margin, index * self.line_height + self.margin/2),
+                    Point::new(canvas_width - self.divider_margin, index * self.line_height + self.margin/2),
+                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
+                    ).expect("couldn't draw dividing line")
+            } else {
+                log::debug!("cant draw divider because our canvas width was not initialized. Ignoring request.");
+            }
         }
     }
     pub fn prev_item(&mut self) {

@@ -160,7 +160,7 @@ fn xmain() -> ! {
         status_gid,
         TextBounds::BoundingBox(Rectangle::new(
             Point::new(0, 0),
-            Point::new(screensize.x / 2, screensize.y / 2 - 1),
+            Point::new(screensize.x / 2, screensize.y / 2),
         )),
     );
     uptime_tv.untrusted = false;
@@ -178,7 +178,7 @@ fn xmain() -> ! {
         status_gid,
         TextBounds::BoundingBox(Rectangle::new(
             Point::new(screensize.x / 2, 0),
-            Point::new(screensize.x, screensize.y / 2 - 1),
+            Point::new(screensize.x, screensize.y / 2),
         )),
     );
     battstats_tv.style = GlyphStyle::Regular;
@@ -234,7 +234,7 @@ fn xmain() -> ! {
         status_gid,
         TextBounds::BoundingBox(Rectangle::new(
             Point::new(0, screensize.y / 2),
-            Point::new(screensize.x, screensize.y - 1),
+            Point::new(screensize.x, screensize.y),
         )),
     );
     security_tv.style = GlyphStyle::Regular;

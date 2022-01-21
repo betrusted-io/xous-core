@@ -591,7 +591,7 @@ impl InputTracker {
                         p_tv.border_width = 1;
                         p_tv.clear_area = false;
                         p_tv.ellipsis = true;
-                        p_tv.style = GlyphStyle::Small;
+                        p_tv.style = GlyphStyle::Regular;
                         write!(p_tv.text, "{}", pred_str).expect("can't write the prediction string");
                         log::trace!("posting string with length {}", p_tv.text.as_str().unwrap().len());
                         self.gam.post_textview(&mut p_tv).expect("couldn't post prediction text");

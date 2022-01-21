@@ -97,7 +97,7 @@ fn shell_main() -> ! {
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
 
     let font_h: i16 = gfx
-        .glyph_height_hint(GlyphStyle::Small)
+        .glyph_height_hint(GlyphStyle::Regular)
         .expect("couldn't get glyph height") as i16;
 
     let status_clipregion = Rectangle::new_coords_with_style(
@@ -125,7 +125,7 @@ fn shell_main() -> ! {
     result_tv.set_op(TextOp::Render);
     result_tv.clip_rect = Some(status_clipregion.into());
     result_tv.untrusted = false;
-    result_tv.style = blitstr::GlyphStyle::Small;
+    result_tv.style = blitstr::GlyphStyle::Regular;
     result_tv.draw_border = false;
     result_tv.margin = Point::new(3, 0);
     write!(result_tv, "Initializing...").expect("couldn't init text");

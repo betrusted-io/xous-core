@@ -10,7 +10,7 @@
         "en-audio": "Enter day one through 31"
     },
     "rtc.year": {
-        "en": "Enter last two digits of\nyear",
+        "en": "Enter last two digits of year",
         "zh": "输入年份 (最后两位数)",
         "en-audio": "Enter last two digits of year"
     },
@@ -70,7 +70,7 @@
         "en-audio": "Sunday"
     },
     "rtc.integer_err": {
-        "en": "Error: entry was not\nnumeric",
+        "en": "Error: entry was not numeric",
         "zh": "错误：输入不是数字",
         "en-audio": "Error: entry was not numeric"
     },

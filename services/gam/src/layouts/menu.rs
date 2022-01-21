@@ -31,7 +31,7 @@ impl MenuLayout {
         };
 
         const MENU_Y_PAD: i16 = 100;
-        const MENU_X_PAD: i16 = 28;
+        const MENU_X_PAD: i16 = 35;
         // build for an initial size of 1 entry
         // base trust - 1 so that status bar can always ride on top
         let menu_canvas = Canvas::new(

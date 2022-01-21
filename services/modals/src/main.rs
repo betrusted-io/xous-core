@@ -108,7 +108,7 @@ fn xmain() -> ! {
                     ActionType::TextEntry(text_action),
                     Some("Placeholder"),
                     None,
-                    GlyphStyle::Small,
+                    GlyphStyle::Regular,
                     8
                 );
             renderer_modal.spawn_helper(renderer_sid, renderer_modal.sid,

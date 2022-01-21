@@ -101,7 +101,7 @@ pub(crate) fn password_ux_manager(
                     ActionType::TextEntry(password_action),
                     Some(t!("pddb.password", xous::LANG)),
                     None,
-                    GlyphStyle::Small,
+                    GlyphStyle::Regular,
                     8
                 );
             pddb_modal.spawn_helper(renderer_sid, pddb_modal.sid,

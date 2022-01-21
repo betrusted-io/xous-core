@@ -25,12 +25,12 @@
         "en-audio": "Incorrect password. Try again?"
     },
     "pddb.checkpass": {
-        "en": "Press any key, then\nre-enter your password\nfor setup confirmation.",
+        "en": "Press any key, then re-enter your password for setup confirmation.",
         "zh": "第一次使用，再次输入密码",
         "en-audio": "First-time setup: Enter password again."
     },
     "pddb.checkpass_fail": {
-        "en": "Password mismatch!\nPlease try again.",
+        "en": "Password mismatch!\n\nPlease try again.",
         "zh": "密码不匹配，请重试.",
         "en-audio": "Password mismatch! Please try again."
     },
@@ -40,7 +40,7 @@
         "en-audio": "Incorrect password. Please try again."
     },
     "pddb.requestformat": {
-        "en": "The PDDB storage needs\nformatting. This takes\nabout 15 minutes and can't\nbe interrupted.\n\nProceed?\n",
+        "en": "The PDDB storage needs formatting. This takes about 15 minutes and can't be interrupted.\n\nProceed?",
         "zh": "存储需要格式化。这需要8分钟。继续？",
         "en-audio": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?"
     },

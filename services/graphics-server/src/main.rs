@@ -30,6 +30,8 @@ use api::BulkRead;
 use crate::wordwrap::*;
 use core::ops::Add;
 
+use blitstr_ref as blitstr;
+
 #[cfg(feature = "testing")]
 mod testing;
 

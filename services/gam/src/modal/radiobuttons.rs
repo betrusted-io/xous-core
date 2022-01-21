@@ -83,7 +83,7 @@ impl ActionApi for RadioButtons {
                 tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                     Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
                 ));
-                write!(tv, "»").unwrap();
+                write!(tv, "\u{25B6}").unwrap();
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
                 do_okay = false;
             }
@@ -116,7 +116,7 @@ impl ActionApi for RadioButtons {
             tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                 Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
             ));
-            write!(tv, "»").unwrap(); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
+            write!(tv, "\u{25B6}").unwrap(); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
         }
         // draw the "OK" line

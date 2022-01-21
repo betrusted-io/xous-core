@@ -243,7 +243,7 @@ impl Repl{
             bubble_tv.draw_border = true;
             bubble_tv.clear_area = true;
             bubble_tv.rounded_border = Some(self.bubble_radius);
-            bubble_tv.style = GlyphStyle::Small;
+            bubble_tv.style = GlyphStyle::Regular;
             bubble_tv.margin = self.bubble_margin;
             bubble_tv.ellipsis = false; bubble_tv.insertion = None;
             write!(bubble_tv.text, "{}", h.text.as_str()).expect("couldn't write history text to TextView");

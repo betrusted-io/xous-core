@@ -414,6 +414,7 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", pddb_sid);
+    #[cfg(not(any(windows, unix)))] // avoid errors in hosted mode
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     log::trace!("ready to accept requests");
@@ -462,7 +463,7 @@ fn xmain() -> ! {
         }
     });
     // try to mount the PDDB automatically before starting the server
-    #[cfg(any(windows, unix))] // skip this step if running in hosted mode, for now...
+    #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode, for now...
     if pddb_os.rootkeys_initialized() {
         tt.sleep_ms(1000).unwrap(); // wait 1 second after boot before attempting to mount, to let the boot screen finish redrawing (cometic issue).
         if ensure_password(&modals, &mut pddb_os) {
