@@ -309,7 +309,10 @@ fn xmain() -> ! {
                 }
 
                 if !tv.dry_run() {
-                    composition.render(display.native_buffer(), composition_top_left, tv.invert, tv.clip_rect.unwrap());
+                    // note: make the clip rect `tv.clip_rect.unwrap()` if you want to debug wordwrapping artifacts; otherwise smallest_rect masks some problems
+                    let smallest_rect = clear_rect.clip_with(tv.clip_rect.unwrap())
+                        .unwrap_or(Rectangle::new(Point::new(0, 0), Point::new(0, 0,)));
+                    composition.render(display.native_buffer(), composition_top_left, tv.invert, smallest_rect);
                 }
                 // type mismatch for now, replace this with a simple equals once we sort that out
                 tv.cursor.pt.x = composition.final_cursor().pt.x as i32;

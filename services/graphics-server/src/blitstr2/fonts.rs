@@ -36,6 +36,8 @@ pub struct GlyphSprite {
     pub invert: bool,
     // drawn an insertion point after this character
     pub insert: bool,
+    // 2x flag for the back-end rendering (wide/high should be pre-computed to match this)
+    pub double: bool,
 }
 
 pub fn small_glyph(ch: char) -> Result<GlyphSprite, usize> {
@@ -52,6 +54,7 @@ pub fn small_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
                 }),
                 false => Err(0),
             }
@@ -74,6 +77,53 @@ pub fn regular_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
+                }),
+                false => Err(0),
+            }
+        }
+        _ => Err(1),
+    }
+}
+
+pub fn large_glyph(ch: char) -> Result<GlyphSprite, usize> {
+    match small::CODEPOINTS.binary_search(&(ch as u32)) {
+        Ok(n) => {
+            let offset = n << 3;
+            let end = offset + 8;
+            match end <= small::GLYPHS.len() {
+                true => Ok(GlyphSprite {
+                    glyph: &small::GLYPHS[offset..end],
+                    wide: small::WIDTHS[n] * 2,
+                    high: small::MAX_HEIGHT * 2,
+                    kern: DEFAULT_KERN,
+                    ch,
+                    invert: false,
+                    insert: false,
+                    double: true,
+                }),
+                false => Err(0),
+            }
+        }
+        _ => Err(1),
+    }
+}
+
+pub fn extra_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
+    match regular::CODEPOINTS.binary_search(&(ch as u32)) {
+        Ok(n) => {
+            let offset = n << 3;
+            let end = offset + 8;
+            match end <= regular::GLYPHS.len() {
+                true => Ok(GlyphSprite {
+                    glyph: &regular::GLYPHS[offset..end],
+                    wide: regular::WIDTHS[n] * 2,
+                    high: regular::MAX_HEIGHT * 2,
+                    kern: DEFAULT_KERN,
+                    ch,
+                    invert: false,
+                    insert: false,
+                    double: true,
                 }),
                 false => Err(0),
             }
@@ -96,6 +146,7 @@ pub fn bold_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
                 }),
                 false => Err(0),
             }
@@ -118,6 +169,7 @@ pub fn mono_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
                 }),
                 false => Err(0),
             }
@@ -140,6 +192,7 @@ pub fn emoji_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
                 }),
                 false => Err(0),
             }
@@ -162,6 +215,7 @@ pub fn zh_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
                 }),
                 false => Err(0),
             }
@@ -184,6 +238,7 @@ pub fn ja_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
                 }),
                 false => Err(0),
             }
@@ -206,6 +261,7 @@ pub fn kr_glyph(ch: char) -> Result<GlyphSprite, usize> {
                     ch,
                     invert: false,
                     insert: false,
+                    double: false,
                 }),
                 false => Err(0),
             }

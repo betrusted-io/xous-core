@@ -12,6 +12,12 @@ macro_rules! style_wrapper {
             GlyphStyle::Monospace => {
                 $rule!(mono_glyph, $ch)
             }
+            GlyphStyle::Large => {
+                $rule!(large_glyph, $ch)
+            }
+            GlyphStyle::ExtraLarge => {
+                $rule!(extra_large_glyph, $ch)
+            }
             // default to regular
             _ => {
                 $rule!(regular_glyph, $ch)

@@ -13,6 +13,7 @@ enum TestType {
     Overflow = 5,
     End = 6,
 }
+const TEST_STYLE: GlyphStyle = GlyphStyle::Large;
 pub fn tests() {
     let _ = std::thread::spawn({
         move || {
@@ -54,7 +55,7 @@ pub fn tests() {
                             text_bounds
                         ));
                         tv.clip_rect = Some(clipping_area);
-                        tv.style = GlyphStyle::Regular;
+                        tv.style = TEST_STYLE;
                         tv.ellipsis = true;
                         tv.rounded_border = Some(4);
                         write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
@@ -73,7 +74,7 @@ pub fn tests() {
                             ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16
                         ));
                         tv.clip_rect = Some(clipping_area);
-                        tv.style = GlyphStyle::Regular;
+                        tv.style = TEST_STYLE;
                         tv.ellipsis = true;
                         tv.rounded_border = Some(8);
                         write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
@@ -91,7 +92,7 @@ pub fn tests() {
                             ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16
                         ));
                         tv.clip_rect = Some(clipping_area);
-                        tv.style = GlyphStyle::Regular;
+                        tv.style = TEST_STYLE;
                         tv.ellipsis = true;
                         tv.rounded_border = None;
                         tv.invert = true;
@@ -110,7 +111,7 @@ pub fn tests() {
                             ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16 + 20
                         ));
                         tv.clip_rect = Some(clipping_area);
-                        tv.style = GlyphStyle::Regular;
+                        tv.style = TEST_STYLE;
                         tv.ellipsis = false;
                         tv.rounded_border = Some(12);
                         write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
@@ -128,7 +129,7 @@ pub fn tests() {
                             ((text_bounds.br().x - text_bounds.tl().x) / 2) as u16 + 30
                         ));
                         tv.clip_rect = Some(clipping_area);
-                        tv.style = GlyphStyle::Regular;
+                        tv.style = TEST_STYLE;
                         tv.ellipsis = false;
                         tv.rounded_border = None;
                         write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
@@ -158,7 +159,7 @@ pub fn tests() {
                                 text_bounds
                             ));
                             tv.clip_rect = Some(clipping_area);
-                            tv.style = GlyphStyle::Regular;
+                            tv.style = TEST_STYLE;
                             tv.ellipsis = false;
                             tv.rounded_border = None;
                             write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();

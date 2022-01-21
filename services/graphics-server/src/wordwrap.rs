@@ -158,13 +158,23 @@ impl ComposedType {
                         clip_rect.tl().x as usize, clip_rect.tl().y as usize,
                         clip_rect.br().x as usize, clip_rect.br().y as usize
                     );
-                    blitstr2::xor_glyph(
-                        frbuf,
-                        &Point::new(maybe_x, maybe_y),
-                        *glyph,
-                        glyph.invert ^ invert,
-                        cr
-                    );
+                    if !glyph.double {
+                        blitstr2::xor_glyph(
+                            frbuf,
+                            &Point::new(maybe_x, maybe_y),
+                            *glyph,
+                            glyph.invert ^ invert,
+                            cr
+                        );
+                    } else {
+                        blitstr2::xor_glyph_2x(
+                            frbuf,
+                            &Point::new(maybe_x, maybe_y),
+                            *glyph,
+                            glyph.invert ^ invert,
+                            cr
+                        );
+                    }
                     if glyph.insert {
                         // draw the insertion point after the glyph's position
                         crate::op::line(frbuf,
@@ -217,6 +227,7 @@ pub(crate) struct Typesetter {
     base_style: GlyphStyle,
     overflow: bool,
     max_width: usize,
+    last_line_height: usize, // scorecarding for the very last line on the loop exit
 }
 impl Typesetter {
     pub fn setup(
@@ -228,7 +239,7 @@ impl Typesetter {
         let bb = ClipRect::new(0, 0, extent.x, extent.y);
         let mut space = style_glyph(' ', base_style);
         space.kern = 0;
-        let mut ellipsis = find_glyph_latin_small('…');
+        let mut ellipsis = style_glyph('…', base_style);
         ellipsis.kern = 0;
         Typesetter {
             charpos: 0,
@@ -242,6 +253,7 @@ impl Typesetter {
             insertion_point,
             overflow: false,
             max_width: 0,
+            last_line_height: 0,
         }
     }
 
@@ -416,7 +428,7 @@ impl Typesetter {
         let ret = ComposedType::new(composition,
             ClipRect::new(
                 self.bb.min.x, self.bb.min.y,
-                self.max_width, self.cursor.pt.y + self.cursor.line_height,
+                self.max_width, self.cursor.pt.y + self.last_line_height,
             ),
             self.cursor
         );
@@ -430,10 +442,18 @@ impl Typesetter {
                 // other states "start where they left off"
             }
         }
+        log::info!("bb: {:?}", ret.bounding_box);
         ret
     }
     fn is_newline_available(&self) -> bool {
-        self.candidate.height + self.cursor.pt.y + self.cursor.line_height < self.bb.max.y
+        // repeated, bare newlines will have a candidate height of 0, as it contains no glyphs. correct for that.
+        let corrected_height = if self.candidate.height == 0 {
+            self.cursor.line_height
+        } else {
+            self.candidate.height
+        };
+        log::info!("{} < {}", corrected_height + self.cursor.pt.y + self.cursor.line_height, self.bb.max.y);
+        corrected_height + self.cursor.pt.y + self.cursor.line_height < self.bb.max.y
     }
     fn does_word_fit_on_line(&self) -> bool {
         self.candidate.width + self.cursor.pt.x < self.bb.max.x
@@ -457,7 +477,9 @@ impl Typesetter {
             self.max_width = self.max_width.max(self.candidate.width + self.candidate.origin.x);
             self.cursor.pt.x += self.candidate.width;
             self.cursor.line_height = self.cursor.line_height.max(self.candidate.height);
+            self.last_line_height = self.cursor.line_height;
         }
+        tsw_debug(&self.candidate);
         self.charpos += 1;
         composition.push(
             std::mem::replace(
@@ -480,6 +502,7 @@ impl Typesetter {
     }
     fn move_candidate_to_newline(&mut self) {
         // advance the rendering line, without inserting a newline placeholder
+        self.last_line_height = self.cursor.line_height;
         self.cursor.pt.y += self.cursor.line_height;
         self.cursor.pt.x = self.bb.min.x;
         self.cursor.line_height = self.candidate.height;
@@ -534,6 +557,15 @@ impl Typesetter {
             self.cursor.line_height = glyph_to_height_hint(GlyphStyle::Regular);
         }
     }
+}
+
+#[allow(dead_code)]
+fn tsw_debug(tsw: &TypesetWord) {
+    let mut s = String::new();
+    for gs in tsw.gs.iter() {
+        s.push(gs.ch);
+    }
+    log::info!("{} @ {},{}+{}={}", &s, tsw.origin.x, tsw.origin.y, tsw.height, tsw.origin.y + tsw.height);
 }
 
 /// Find glyph for char using latin regular, emoji, ja, zh, and kr font data
