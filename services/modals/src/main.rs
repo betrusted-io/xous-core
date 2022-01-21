@@ -299,6 +299,7 @@ fn xmain() -> ! {
                                     *mutex_op = RendererState::ResponseText(text);
                                 }
                             }
+                            RendererState::None => log::info!("Text entry got multiple key hits to close the dialog box"),
                             _ => {
                                 log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");

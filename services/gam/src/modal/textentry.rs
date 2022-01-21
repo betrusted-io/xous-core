@@ -142,108 +142,70 @@ impl ActionApi for TextEntry {
             }
         }
         if self.is_password {
-            // draw the visibility selection area
-            if false {
-                // "<👀🤫✴️>" coded explicitly. Pasting unicode into vscode yields extra cruft that we can't parse (e.g. skin tones and color mods).
-                let prompt = "\u{2b05} \u{1f440}\u{1f576}\u{26d4} \u{27a1}";
-                let select_index = match self.visibility {
-                    TextEntryVisibility::Visible => 2,
-                    TextEntryVisibility::LastChars => 3,
-                    TextEntryVisibility::Hidden => 4,
-                };
-                let spacing = 38; // fixed width spacing for the array
-                let emoji_width = 36;
-                // center the prompt nicely, if possible
-                let left_edge = if modal.canvas_width > prompt.chars().count() as i16 * spacing {
-                    (modal.canvas_width - prompt.chars().count() as i16 * spacing) / 2
-                } else {
-                    0
-                };
-                for (i, ch) in prompt.chars().enumerate() {
-                    let mut tv = TextView::new(
-                        modal.canvas,
-                        TextBounds::BoundingBox(Rectangle::new(
-                            Point::new(left_edge + i as i16 * spacing, at_height + modal.line_height + modal.margin * 4),
-                            Point::new(left_edge + i as i16 * spacing + emoji_width, at_height + modal.line_height + 34 + modal.margin * 4))
-                    ));
-                    tv.style = GlyphStyle::Large;
-                    tv.margin = Point::new(0, 0);
-                    tv.draw_border = false;
-                    if i == select_index {
-                        tv.invert = !self.is_password;
-                    } else {
-                        tv.invert = self.is_password;
-                    }
-                    tv.text.clear();
-                    write!(tv.text, "{}", ch).unwrap();
-                    log::trace!("tv.text: {} : {}/{}", i, tv.text, ch);
-                    modal.gam.post_textview(&mut tv).expect("couldn't post textview");
-                }
-            } else {
-                let select_index = match self.visibility {
-                    TextEntryVisibility::Visible => 0,
-                    TextEntryVisibility::LastChars => 1,
-                    TextEntryVisibility::Hidden => 2,
-                };
-                let prompt_width = glyph_to_height_hint(GlyphStyle::Monospace) as i16 * 4;
-                let lr_margin = (modal.canvas_width - prompt_width * 3) / 2;
-                let left_edge = lr_margin;
+            let select_index = match self.visibility {
+                TextEntryVisibility::Visible => 0,
+                TextEntryVisibility::LastChars => 1,
+                TextEntryVisibility::Hidden => 2,
+            };
+            let prompt_width = glyph_to_height_hint(GlyphStyle::Monospace) as i16 * 4;
+            let lr_margin = (modal.canvas_width - prompt_width * 3) / 2;
+            let left_edge = lr_margin;
 
+            let mut tv = TextView::new(
+                modal.canvas,
+                TextBounds::GrowableFromTl(
+                    Point::new(modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
+                    lr_margin as u16
+                ));
+            tv.style = GlyphStyle::Large;
+            tv.margin = Point::new(0, 0);
+            tv.invert = self.is_password;
+            tv.draw_border = false;
+            tv.text.clear();
+            write!(tv.text, "\u{2b05}").unwrap();
+            modal.gam.post_textview(&mut tv).expect("couldn't post textview");
+
+            for i in 0..3 {
                 let mut tv = TextView::new(
                     modal.canvas,
                     TextBounds::GrowableFromTl(
-                        Point::new(modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
-                        lr_margin as u16
-                    ));
-                tv.style = GlyphStyle::Large;
-                tv.margin = Point::new(0, 0);
-                tv.invert = self.is_password;
-                tv.draw_border = false;
-                tv.text.clear();
-                write!(tv.text, "\u{2b05}").unwrap();
-                modal.gam.post_textview(&mut tv).expect("couldn't post textview");
-
-                for i in 0..3 {
-                    let mut tv = TextView::new(
-                        modal.canvas,
-                        TextBounds::GrowableFromTl(
-                            Point::new(left_edge + i * prompt_width, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
-                            prompt_width as u16)
-                        );
-                    tv.style = GlyphStyle::Monospace;
-                    tv.margin = Point::new(8, 8);
-                    if i == select_index {
-                        tv.invert = !self.is_password;
-                        tv.draw_border = true;
-                        tv.rounded_border = Some(6);
-                    } else {
-                        tv.invert = self.is_password;
-                        tv.draw_border = false;
-                        tv.rounded_border = None;
-                    }
-                    tv.text.clear();
-                    match i {
-                        0 => write!(tv.text, "abcd").unwrap(),
-                        1 => write!(tv.text, "ab**").unwrap(),
-                        _ => write!(tv.text, "****").unwrap(),
-                    }
-                    modal.gam.post_textview(&mut tv).expect("couldn't post textview");
+                        Point::new(left_edge + i * prompt_width, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
+                        prompt_width as u16)
+                    );
+                tv.style = GlyphStyle::Monospace;
+                tv.margin = Point::new(8, 8);
+                if i == select_index {
+                    tv.invert = !self.is_password;
+                    tv.draw_border = true;
+                    tv.rounded_border = Some(6);
+                } else {
+                    tv.invert = self.is_password;
+                    tv.draw_border = false;
+                    tv.rounded_border = None;
                 }
-
-                let mut tv = TextView::new(
-                    modal.canvas,
-                    TextBounds::GrowableFromTr(
-                        Point::new(modal.canvas_width - modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
-                        lr_margin as u16
-                    ));
-                tv.style = GlyphStyle::Large;
-                tv.margin = Point::new(0, 0);
-                tv.invert = self.is_password;
-                tv.draw_border = false;
                 tv.text.clear();
-                write!(tv.text, "\u{27a1} ").unwrap(); // minor bug - needs a trailing space on the right to make this render. it's an issue in the word wrapper.
+                match i {
+                    0 => write!(tv.text, "abcd").unwrap(),
+                    1 => write!(tv.text, "ab**").unwrap(),
+                    _ => write!(tv.text, "****").unwrap(),
+                }
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             }
+
+            let mut tv = TextView::new(
+                modal.canvas,
+                TextBounds::GrowableFromTr(
+                    Point::new(modal.canvas_width - modal.margin, at_height + glyph_to_height_hint(GlyphStyle::Monospace) as i16 + modal.margin),
+                    lr_margin as u16
+                ));
+            tv.style = GlyphStyle::Large;
+            tv.margin = Point::new(0, 0);
+            tv.invert = self.is_password;
+            tv.draw_border = false;
+            tv.text.clear();
+            // minor bug - needs a trailing space on the right to make this emoji render. it's an issue in the word wrapper, but it's too late at night for me to figure this out right now.
+            write!(tv.text, "\u{27a1} ").unwrap();
+            modal.gam.post_textview(&mut tv).expect("couldn't post textview");
         }
 
         // draw a line for where text gets entered (don't use a box, fitting could be awkward)
