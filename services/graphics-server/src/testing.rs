@@ -13,7 +13,7 @@ enum TestType {
     Overflow = 5,
     End = 6,
 }
-const TEST_STYLE: GlyphStyle = GlyphStyle::Large;
+const TEST_STYLE: GlyphStyle = GlyphStyle::Regular;
 pub fn tests() {
     let _ = std::thread::spawn({
         move || {
@@ -58,8 +58,8 @@ pub fn tests() {
                         tv.style = TEST_STYLE;
                         tv.ellipsis = true;
                         tv.rounded_border = Some(4);
-                        write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
-                        write!(tv, "Let's add more text until it overflows this is just another test with https://github.com/samblenny/blitstr2/commit/bb7d4ab6a2d8913dcb520895a3c242c933413aae more words and words and words and whatever.").unwrap();
+                        write!(tv, "This is a test of basic word wrapping 自动换行 inside a 😃 bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        write!(tv, "Let's add more text😃 until it overflows this is just another test with https://github.com/samblenny/blitstr2/commit/bb7d4ab6a2d8913dcb520895a3c242c933413aae more words and words and words and whatever.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = None;
                         gfx.draw_textview(&mut tv).unwrap();
@@ -77,7 +77,7 @@ pub fn tests() {
                         tv.style = TEST_STYLE;
                         tv.ellipsis = true;
                         tv.rounded_border = Some(8);
-                        write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(8);
                         gfx.draw_textview(&mut tv).unwrap();
@@ -96,7 +96,7 @@ pub fn tests() {
                         tv.ellipsis = true;
                         tv.rounded_border = None;
                         tv.invert = true;
-                        write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(0);
                         gfx.draw_textview(&mut tv).unwrap();
@@ -114,7 +114,7 @@ pub fn tests() {
                         tv.style = TEST_STYLE;
                         tv.ellipsis = false;
                         tv.rounded_border = Some(12);
-                        write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(20);
                         gfx.draw_textview(&mut tv).unwrap();
@@ -132,7 +132,7 @@ pub fn tests() {
                         tv.style = TEST_STYLE;
                         tv.ellipsis = false;
                         tv.rounded_border = None;
-                        write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        write!(tv, "This is a test of basic word😃 wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                         log::info!("rendering: {:?}", tv);
                         tv.insertion = Some(21);
                         gfx.draw_textview(&mut tv).unwrap();
@@ -162,7 +162,7 @@ pub fn tests() {
                             tv.style = TEST_STYLE;
                             tv.ellipsis = false;
                             tv.rounded_border = None;
-                            write!(tv, "This is a test of basic word wrapping inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                            write!(tv, "This is a test of basic word wrapping 自动换行 inside a bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
                             log::info!("rendering: {:?}", tv);
                             tv.insertion = Some(21);
                             gfx.draw_textview(&mut tv).unwrap();

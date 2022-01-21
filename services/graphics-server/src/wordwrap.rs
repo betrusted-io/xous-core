@@ -442,7 +442,6 @@ impl Typesetter {
                 // other states "start where they left off"
             }
         }
-        log::info!("bb: {:?}", ret.bounding_box);
         ret
     }
     fn is_newline_available(&self) -> bool {
@@ -452,7 +451,7 @@ impl Typesetter {
         } else {
             self.candidate.height
         };
-        log::info!("{} < {}", corrected_height + self.cursor.pt.y + self.cursor.line_height, self.bb.max.y);
+        log::trace!("{} < {}", corrected_height + self.cursor.pt.y + self.cursor.line_height, self.bb.max.y);
         corrected_height + self.cursor.pt.y + self.cursor.line_height < self.bb.max.y
     }
     fn does_word_fit_on_line(&self) -> bool {
@@ -479,7 +478,7 @@ impl Typesetter {
             self.cursor.line_height = self.cursor.line_height.max(self.candidate.height);
             self.last_line_height = self.cursor.line_height;
         }
-        tsw_debug(&self.candidate);
+        if false {tsw_debug(&self.candidate)};
         self.charpos += 1;
         composition.push(
             std::mem::replace(

@@ -213,9 +213,9 @@ fn xmain() -> ! {
                     TextBounds::GrowableFromBl(bl, width) =>
                         blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, bl.y as usize - tv.margin.y as usize * 2),
                     TextBounds::GrowableFromTl(tl, width) =>
-                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - tl.y) as usize - tv.margin.y as usize * 2),
+                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) as usize - tv.margin.y as usize * 2),
                     TextBounds::GrowableFromTr(tr, width) =>
-                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - tr.y) as usize - tv.margin.y as usize * 2),
+                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) as usize - tv.margin.y as usize * 2),
                 };
                 let mut typesetter = Typesetter::setup(
                     tv.to_str(),
