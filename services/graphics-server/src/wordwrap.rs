@@ -132,9 +132,12 @@ impl ComposedType {
     /// additional checks around this.
     pub fn render(&self, frbuf: &mut [u32; FB_SIZE], offset: Point, invert: bool, clip_rect: Rectangle) {
         const MAX_GLYPH_MARGIN: i16 = 16;
+        // let mut strpos; // just for debugging insertion points
         for word in self.words.iter() {
+            // strpos = word.strpos;
             let mut point = word.origin.clone();
             for glyph in word.gs.iter() {
+                // strpos += 1;
                 // the offset can actually be negative for good reasons, e.g., we're doing a scrollable buffer,
                 // but the blitstr2 was written assuming only positive offsets. Handle this here.
                 let maybe_x = offset.x + point.x as i16;
@@ -176,6 +179,7 @@ impl ComposedType {
                         );
                     }
                     if glyph.insert {
+                        // log::info!("insert at {},{}", glyph.ch, strpos - 1);
                         // draw the insertion point after the glyph's position
                         crate::op::line(frbuf,
                             crate::api::Line::new(
@@ -479,7 +483,6 @@ impl Typesetter {
             self.last_line_height = self.cursor.line_height;
         }
         if false {tsw_debug(&self.candidate)};
-        self.charpos += 1;
         composition.push(
             std::mem::replace(
                 &mut self.candidate,
@@ -535,7 +538,12 @@ impl Typesetter {
         assert!(self.candidate.gs.len() == 0, "self.candidate was not set to a new state prior to this call");
         if (self.cursor.pt.x + self.space.wide as usize) < self.bb.max.x {
             // our candidate word is "just as space"
-            self.candidate.push(self.space.clone());
+            let mut candidate_space = self.space.clone();
+            if self.is_insert_point() {
+                candidate_space.insert = true;
+            }
+            self.candidate.push(candidate_space);
+            self.commit_candidate_glyph(&candidate_space);
             self.cursor.line_height = self.cursor.line_height.max(self.space.high as usize);
             // if we're at the beginning of a line, mark the candidate word (that just contains a space) as non-drawable
             if self.cursor.pt.x == self.bb.min.x {

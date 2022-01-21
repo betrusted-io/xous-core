@@ -11,7 +11,8 @@ enum TestType {
     TopLeft = 3,
     TopRight = 4,
     Overflow = 5,
-    End = 6,
+    Insert = 6,
+    End = 7,
 }
 const TEST_STYLE: GlyphStyle = GlyphStyle::Regular;
 pub fn tests() {
@@ -171,6 +172,31 @@ pub fn tests() {
                             ticktimer.sleep_ms(200).unwrap();
                         }
                     }
+                    Some(TestType::Insert) => {
+                        gfx.draw_rectangle(blackout).unwrap();
+                        gfx.flush().unwrap();
+                        gfx.draw_rectangle(checkbound).unwrap();
+                        gfx.flush().unwrap();
+
+                        let mut tv = TextView::new(Gid::new([0, 0, 0, 0]),
+                        TextBounds::BoundingBox(
+                            text_bounds
+                        ));
+                        tv.clip_rect = Some(clipping_area);
+                        tv.style = TEST_STYLE;
+                        tv.ellipsis = true;
+                        tv.rounded_border = Some(4);
+                        write!(tv, "This is a test of basic 自动换行 inside\na\n\n😃 bounding box.\nThis should be a new line.\n\nTwo new lines.\nNew line\n with a leading space.\nDone.").unwrap();
+                        write!(tv, "Let's add more text😃 until it overflows this is just another test with https://github.com/samblenny/blitstr2/commit/bb7d4ab6a2d8913dcb520895a3c242c933413aae more words and words and words and whatever.").unwrap();
+                        for i in 20..60 {
+                            log::info!("insertion point at {},{:?}", i, tv.to_str().chars().skip(i).next());
+                            tv.insertion = Some(i as i32);
+                            gfx.draw_textview(&mut tv).unwrap();
+                            gfx.flush().unwrap();
+                            ticktimer.sleep_ms(250).unwrap();
+                        }
+                    }
+
                     _ => {}
                 }
             }
