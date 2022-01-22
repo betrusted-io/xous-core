@@ -1,8 +1,10 @@
 use crate::api::*;
 use std::sync::Arc;
 use core::sync::atomic::{AtomicU32, Ordering};
+use com::{WlanStatus, WlanStatusIpc};
 use net::MIN_EC_REV;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use xous_ipc::Buffer;
 use num_traits::*;
 use std::io::Read;
 
@@ -11,12 +13,9 @@ pub(crate) enum ConnectionManagerOpcode {
     Run,
     Poll,
     Stop,
+    WifiStatus,
     Quit,
 }
-#[allow(dead_code)]
-const POLL_INTERVAL_MS: usize = 20_151; // stagger slightly off of an integer-seconds interval to even out loads
-#[allow(dead_code)]
-const BOOT_POLL_INTERVAL_MS: usize = 5_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
 
 pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU32>) {
     let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -25,7 +24,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let netmgr = net::NetManager::new();
     let mut pddb = pddb::Pddb::new();
     let self_cid = xous::connect(sid).unwrap();
-    // give the system some time to boot before trying to run this
+    // give the system some time to boot before trying to run a check on the EC minimum version, as it is in reset on boot
     tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
 
     // check that the EC rev meets the minimum version for this service to function
@@ -40,9 +39,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let mut run = rev_ok;
     let mut mounted = false;
     let mut current_interval = BOOT_POLL_INTERVAL_MS;
+    let mut wifi_stats_cache: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
     send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), current_interval, 0, 0, 0)).expect("couldn't kick off next poll");
     loop {
-        let msg = xous::receive_message(sid).unwrap();
+        let mut msg = xous::receive_message(sid).unwrap();
         log::debug!("got msg: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ConnectionManagerOpcode::Run) => msg_scalar_unpack!(msg, _, _, _, _, {
@@ -58,19 +58,19 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     if pddb.is_mounted() && rev_ok {
                         mounted = true;
                         // the status check code is going to get refactored, so this is a "bare minimum" check
-                        let status = com.wlan_status().unwrap();
+                        wifi_stats_cache = com.wlan_status().unwrap();
                         let config = netmgr.get_ipv4_config();
-                        if status.link_state == com_rs_ref::LinkState::WFXError {
+                        if wifi_stats_cache.link_state == com_rs_ref::LinkState::WFXError {
                             com.wlan_leave().expect("couldn't issue leave command"); // this may not be received by the wf200, *but* it will also re-init the DHCP stack on the EC
                             netmgr.reset(); // this will clear our internal net state
                             // the wfx chip is wedged. kick it. This call has a built-in 2 second delay.
                             com.wifi_reset().expect("couldn't reset the wf200 chip");
                         }
                         let needs_reconnect =
-                            if status.link_state == com_rs_ref::LinkState::Connected {
+                            if wifi_stats_cache.link_state == com_rs_ref::LinkState::Connected {
                                 if let Some(config) = config { // check that the EC's view of the world is synchronized with our view
                                     // is it enough to just check that the address is the same?
-                                    if config.addr != status.ipv4.addr {
+                                    if config.addr != wifi_stats_cache.ipv4.addr {
                                         true
                                     } else {
                                         false
@@ -99,7 +99,8 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     }
                                     // this needs to not be a dead-wait loop, but for now the WLAN API doesn't support anything better
                                     tt.sleep_ms(5_000).unwrap();
-                                    if com.wlan_status().unwrap().link_state == com_rs_ref::LinkState::Connected {
+                                    wifi_stats_cache = com.wlan_status().unwrap();
+                                    if wifi_stats_cache.link_state == com_rs_ref::LinkState::Connected {
                                         break;
                                     }
                                 }
@@ -122,6 +123,12 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                 }
             }),
+            Some(ConnectionManagerOpcode::WifiStatus) => {
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                buffer.replace(com::WlanStatusIpc::from_status(wifi_stats_cache)).unwrap();
+            },
             // stop is blocking because we need to ensure the previous poll has finished before moving on, otherwise,
             // we could get a double-run condition
             Some(ConnectionManagerOpcode::Stop) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {

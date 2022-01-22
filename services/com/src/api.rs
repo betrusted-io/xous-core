@@ -87,10 +87,20 @@ impl Default for SsidReturn {
     }
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct WlanStatusIpc {
+pub struct WlanStatusIpc {
     pub ssid: Option<SsidRecord>,
     pub link_state: u16, // this is slung around as a u16 to avoid pulling rkyv into the EC dependency tree
     pub ipv4: [u16; com_rs_ref::ComState::WLAN_GET_IPV4_CONF.r_words as usize],
+}
+impl WlanStatusIpc {
+    #[allow(dead_code)]
+    pub fn from_status(status: WlanStatus) -> Self {
+        WlanStatusIpc {
+            ssid: status.ssid,
+            link_state: status.link_state as u16,
+            ipv4: status.ipv4.encode_u16(),
+        }
+    }
 }
 impl Default for WlanStatusIpc {
     fn default() -> Self {
@@ -109,7 +119,7 @@ pub struct WlanStatus {
 }
 impl WlanStatus {
     #[allow(dead_code)]
-    pub(crate) fn from_ipc(status: WlanStatusIpc) -> Self {
+    pub fn from_ipc(status: WlanStatusIpc) -> Self {
         WlanStatus {
             ssid: status.ssid,
             link_state: com_rs_ref::LinkState::decode_u16(status.link_state),

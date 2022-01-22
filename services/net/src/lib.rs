@@ -73,4 +73,14 @@ impl NetManager {
             Message::new_blocking_scalar(Opcode::Reset.to_usize().unwrap(), 0, 0, 0, 0),
         ).expect("couldn't send reset");
     }
+    /// This is the function that the system should be using to check the wifi state -- it will read
+    /// the cached value from the connection manager. The direct call to the COM could cause too much
+    /// congestion.
+    pub fn read_wifi_state(&self) -> Result<com::WlanStatus, xous::Error> {
+        let status = com::WlanStatusIpc::default();
+        let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.netconn.conn(), Opcode::GetWifiStats.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original::<com::WlanStatusIpc, _>().unwrap();
+        Ok(com::WlanStatus::from_ipc(response))
+    }
 }

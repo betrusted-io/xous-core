@@ -12,6 +12,12 @@ use std::fmt;
 use std::fmt::Debug;
 use std::io::Write;
 
+#[allow(dead_code)]
+pub(crate) const BOOT_POLL_INTERVAL_MS: usize = 5_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
+/// this is shared externally so other functions (e.g. in status bar) that want to query the net manager know how long to back off, otherwise the status query will block
+#[allow(dead_code)]
+pub const POLL_INTERVAL_MS: usize = 20_151; // stagger slightly off of an integer-seconds interval to even out loads
+
 // republish this so we can decode the icmpv4 error codes
 pub use smoltcp::wire::Icmpv4DstUnreachable;
 
@@ -52,6 +58,7 @@ pub(crate) enum Opcode {
     /// Link Management,
     GetIpv4Config,
     Reset,
+    GetWifiStats,
 
     /// [Internal] com llio interrupt callback
     ComInterrupt,

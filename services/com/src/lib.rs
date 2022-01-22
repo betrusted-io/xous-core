@@ -449,7 +449,9 @@ impl Com {
             Message::new_scalar(Opcode::WlanLeave.to_usize().unwrap(), 0, 0, 0, 0),
         )
     }
-
+    /// Note: applications should poll the `NetManager::read_wifi_state()` call for wifi status information, not the COM directly.
+    /// This is because the `wlan_status` call is fairly heavy weight, and the `NetManager::read_wifi_state()` will cache
+    /// this information making the status check lighter-weight overall.
     pub fn wlan_status(&mut self) -> Result<WlanStatus, xous::Error> {
         let status = WlanStatusIpc::default();
         let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;

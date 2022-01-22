@@ -963,6 +963,13 @@ fn xmain() -> ! {
                 };
                 buffer.replace(ser).expect("couldn't return config");
             },
+            Some(Opcode::GetWifiStats) => {
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                buffer.lend_mut(cm_cid, connection_manager::ConnectionManagerOpcode::WifiStatus.to_u32().unwrap()).expect("couldn't retrieve stats cache");
+                // no need to call replace, because it's already been mutated by the caller
+            },
             Some(Opcode::Reset) => {
                 net_config = None;
                 let neighbor_cache = NeighborCache::new(BTreeMap::new());

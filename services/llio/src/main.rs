@@ -578,6 +578,7 @@ mod implementation {
         }
         pub fn debug_wakeup(&mut self, _ena: bool) {
         }
+        #[allow(dead_code)]
         pub fn activity_get_period(&mut self) -> u32 {
             12_000_000
         }
@@ -957,9 +958,19 @@ fn xmain() -> ! {
                 latest_activity = activity as u32;
             }),
             Some(Opcode::GetActivity) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                let period = llio.activity_get_period() as u32;
-                log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
-                xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
+                #[cfg(any(target_os = "none", target_os = "xous"))]
+                {
+                    let period = llio.activity_get_period() as u32;
+                    // log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
+                    xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
+                }
+                #[cfg(not(any(target_os = "none", target_os = "xous")))] // fake an activity
+                {
+                    let period = 12_000;
+                    xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
+                    latest_activity += period / 20;
+                    latest_activity %= period;
+                }
             }),
             Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, update_req, new_state, _, _, {
                 if update_req != 0 {

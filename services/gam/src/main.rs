@@ -550,15 +550,9 @@ fn xmain() -> ! {
     let mut canvases: HashMap<Gid, Canvas> = HashMap::new();
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
-    let small_height: i16 = if xous::LANG != "zh" {
-        gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16
-    } else {
-        gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16
-    };
-
     // the status canvas is special -- there can only be one, and it is ultimately trusted
     let status_canvas = Canvas::new(
-        Rectangle::new_coords(0, 0, screensize.x, small_height * 2),
+        Rectangle::new_coords(0, 0, screensize.x, gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16 * 2),
         255, &trng, None
     ).expect("couldn't create status canvas");
     canvases.insert(status_canvas.gid(), status_canvas);

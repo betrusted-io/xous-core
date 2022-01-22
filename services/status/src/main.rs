@@ -4,7 +4,7 @@
 mod mainmenu;
 use mainmenu::*;
 
-use com::api::BattStats;
+use com::api::*;
 use log::info;
 
 use core::fmt::Write;
@@ -148,20 +148,35 @@ fn xmain() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
+    let netmgr = net::NetManager::new();
 
-    log::trace!("|status: getting screen size");
     let screensize = gam
         .get_canvas_bounds(status_gid)
         .expect("|status: Couldn't get canvas size");
+    // layout: 336 px wide
+    // 0                   150 150 200
+    // Feb 05 15:00 (00:06:23) xxxx     3.72V/-100mA/99%
+    const CPU_BAR_WIDTH: i16 = 50;
+    let time_rect = Rectangle::new(
+        Point::new(0, 0),
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, screensize.y / 2 - 1)
+    );
+    let cpuload_rect = Rectangle::new_with_style(
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, 0),
+        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2, screensize.y / 2 + 1),
+        DrawStyle::new(PixelColor::Light, PixelColor::Dark, 1),
+    );
+    let stats_rect = Rectangle::new_with_style(
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, 0),
+        Point::new(screensize.x, screensize.y / 2 - 1),
+        DrawStyle::new(PixelColor::Light, PixelColor::Light, 0),
+    );
 
     log::trace!("|status: building textview objects");
     // build uptime text view: left half of status bar
     let mut uptime_tv = TextView::new(
         status_gid,
-        TextBounds::BoundingBox(Rectangle::new(
-            Point::new(0, 0),
-            Point::new(screensize.x / 2, screensize.y / 2),
-        )),
+        TextBounds::GrowableFromTl(time_rect.tl(), time_rect.width() as _),
     );
     uptime_tv.untrusted = false;
     uptime_tv.style = GlyphStyle::Regular;
@@ -176,10 +191,7 @@ fn xmain() -> ! {
     // build battstats text view: right half of status bar
     let mut battstats_tv = TextView::new(
         status_gid,
-        TextBounds::BoundingBox(Rectangle::new(
-            Point::new(screensize.x / 2, 0),
-            Point::new(screensize.x, screensize.y / 2),
-        )),
+        TextBounds::GrowableFromTr(stats_rect.tr(), stats_rect.width() as _),
     );
     battstats_tv.style = GlyphStyle::Regular;
     battstats_tv.draw_border = false;
@@ -195,6 +207,7 @@ fn xmain() -> ! {
         remaining_capacity: 650,
     };
 
+    /*
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     gam.draw_line(
         status_gid,
@@ -205,6 +218,7 @@ fn xmain() -> ! {
         ),
     )
     .expect("|status: Can't draw border line");
+    */
 
     // the EC gets reset by the Net crate on boot to ensure that the state machines are synced up
     // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
@@ -233,7 +247,7 @@ fn xmain() -> ! {
     let mut security_tv = TextView::new(
         status_gid,
         TextBounds::BoundingBox(Rectangle::new(
-            Point::new(0, screensize.y / 2),
+            Point::new(0, screensize.y / 2 + 1),
             Point::new(screensize.x, screensize.y),
         )),
     );
@@ -313,7 +327,6 @@ fn xmain() -> ! {
         secnotes_interval = 4;
     }
     let mut battstats_phase = true;
-    let mut needs_redraw = false;
 
     log::debug!("starting main menu thread");
     create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com);
@@ -330,6 +343,7 @@ fn xmain() -> ! {
         t!("rtc.sunday", xous::LANG),
     ];
 
+    let mut wifi_status: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
     info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -338,24 +352,34 @@ fn xmain() -> ! {
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
                 battstats_tv.clear_str();
+                gam.draw_rectangle(status_gid, stats_rect).ok();
                 // toggle between two views of the data every time we have a status update
                 if battstats_phase {
-                    write!(&mut battstats_tv, "{}mV {}mA", stats.voltage, stats.current)
+                    write!(&mut battstats_tv, "{}mA {:.2}V {}%", stats.current, stats.voltage as f32 / 1000.0, stats.soc)
                         .expect("|status: can't write string");
                 } else {
-                    write!(
-                        &mut battstats_tv,
-                        "{}mAh {}%",
-                        stats.remaining_capacity, stats.soc
-                    )
-                    .expect("|status: can't write string");
+                    if let Some(ssid) = wifi_status.ssid {
+                        write!(
+                            &mut battstats_tv,
+                            "{} -{}dBm",
+                            ssid.name.as_str().unwrap_or("UTF-8 Erorr"),
+                            ssid.rssi,
+                        )
+                        .expect("|status: can't write string");
+                    } else {
+                        write!(
+                            &mut battstats_tv,
+                            "Not connected"
+                        )
+                        .expect("|status: can't write string");
+                    }
                 }
                 gam.post_textview(&mut battstats_tv)
                     .expect("|status: can't draw battery stats");
                 battstats_phase = !battstats_phase;
-                needs_redraw = true;
             }),
             Some(StatusOpcode::Pump) => {
+                let elapsed_time = ticktimer.elapsed_ms();
                 let (is_locked, force_update) = llio.debug_usb(None).unwrap();
                 if (debug_locked != is_locked)
                     || force_update
@@ -401,13 +425,16 @@ fn xmain() -> ! {
 
                     // only post the view if something has actually changed
                     gam.post_textview(&mut security_tv).unwrap();
-                    needs_redraw = true;
                 }
                 if (stats_phase % batt_interval) == (batt_interval - 1) {
                     com.req_batt_stats()
                         .expect("Can't get battery stats from COM");
                 }
-
+                if (stats_phase % stats_interval) == 2 {
+                    if elapsed_time > net::POLL_INTERVAL_MS as u64 { // The EC has to come out of reset, etc before the net connection manager can unblock.
+                        wifi_status = netmgr.read_wifi_state().expect("couldn't get wifi state");
+                    }
+                }
                 if (stats_phase % charger_pump_interval) == 1 {
                     // stagger periodic tasks
                     // confirm that the charger is in the right state.
@@ -455,56 +482,50 @@ fn xmain() -> ! {
                         });
                     }
                 }
-                // date/time only redraws once every stats_interval period; but if needs_redraw is triggered (e.g. due to resume), force a redraw
-                if (needs_redraw
-                    || ((stats_phase % stats_interval == 0)
-                        && ((stats_phase % (stats_interval * 2)) == stats_interval)))
-                    && datetime.is_some()
-                {
-                    let dt = datetime.unwrap();
-                    let day = match dt.weekday {
-                        llio::Weekday::Monday => "Mon",
-                        llio::Weekday::Tuesday => "Tue",
-                        llio::Weekday::Wednesday => "Wed",
-                        llio::Weekday::Thursday => "Thu",
-                        llio::Weekday::Friday => "Fri",
-                        llio::Weekday::Saturday => "Sat",
-                        llio::Weekday::Sunday => "Sun",
-                    };
+
+                { // update the time field
                     uptime_tv.clear_str();
-                    write!(
-                        &mut uptime_tv,
-                        "{:02}:{:02} {} {}/{}",
-                        dt.hours, dt.minutes, day, dt.months, dt.days
-                    )
-                    .unwrap();
-                    gam.post_textview(&mut uptime_tv)
-                        .expect("|status: can't draw uptime");
-                    needs_redraw = true;
-                } else if (stats_phase % (stats_interval * 2)) < stats_interval {
-                    uptime_tv.clear_str();
-                    let (latest_activity, period) = llio
-                        .activity_instantaneous()
-                        .expect("couldn't get CPU activity");
+                    if let Some(dt) = datetime {
+                        write!(
+                            &mut uptime_tv,
+                            "{:02}:{:02} {}/{}",
+                            dt.hours, dt.minutes, dt.months, dt.days
+                        )
+                        .unwrap();
+                    } else {
+                        write!(
+                            &mut uptime_tv,
+                            "Invalid RTC"
+                        ).unwrap();
+                    }
                     // use ticktimer, not stats_phase, because stats_phase encodes some phase drift due to task-switching overhead
-                    let elapsed_time = ticktimer.elapsed_ms();
                     write!(
                         &mut uptime_tv,
-                        "Up {}:{:02}:{:02} {:.0}%",
+                        " Up {}:{:02}:{:02}",
                         (elapsed_time / 3_600_000),
                         (elapsed_time / 60_000) % 60,
                         (elapsed_time / 1000) % 60,
-                        ((latest_activity as f32) / (period as f32)) * 100.0
                     )
                     .expect("|status: can't write string");
                     gam.post_textview(&mut uptime_tv)
                         .expect("|status: can't draw uptime");
-                    needs_redraw = true;
                 }
-                if needs_redraw {
-                    gam.redraw().expect("|status: couldn't redraw");
-                    needs_redraw = false;
+                { // update the CPU load bar
+                    gam.draw_rectangle(status_gid, cpuload_rect).ok();
+                    let (latest_activity, period) = llio
+                        .activity_instantaneous()
+                        .expect("couldn't get CPU activity");
+                    let activity_to_width = ((latest_activity as f32) / (period as f32)) * (cpuload_rect.width() - 4) as f32;
+                    gam.draw_rectangle(status_gid,
+                        Rectangle::new_coords_with_style(
+                            cpuload_rect.tl().x + 2,
+                            cpuload_rect.tl().y + 2,
+                            cpuload_rect.tl().x + 2 + activity_to_width as i16,
+                            cpuload_rect.br().y - 2,
+                            DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 0))
+                    ).ok();
                 }
+                gam.redraw().expect("|status: couldn't redraw");
 
                 stats_phase = stats_phase.wrapping_add(1);
             }

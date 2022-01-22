@@ -177,6 +177,12 @@ impl Rectangle {
     pub fn y1(&self) -> u32 {
         self.br.y as u32
     }
+    pub fn width(&self) -> u32 {
+        (self.br.x - self.tl.x) as u32
+    }
+    pub fn height(&self) -> u32 {
+        (self.br.y - self.tl.y) as u32
+    }
     pub fn translate(&mut self, offset: Point) {
         self.tl.x += offset.x;
         self.br.x += offset.x;
