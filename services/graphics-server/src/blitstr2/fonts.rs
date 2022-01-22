@@ -45,9 +45,9 @@ pub fn small_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= small::GLYPHS.len() {
+            match end <= small::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &small::GLYPHS[offset..end],
+                    glyph: &small::glyphs()[offset..end],
                     wide: small::WIDTHS[n],
                     high: small::MAX_HEIGHT,
                     kern: DEFAULT_KERN,
@@ -68,9 +68,9 @@ pub fn regular_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= regular::GLYPHS.len() {
+            match end <= regular::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &regular::GLYPHS[offset..end],
+                    glyph: &regular::glyphs()[offset..end],
                     wide: regular::WIDTHS[n],
                     high: regular::MAX_HEIGHT,
                     kern: DEFAULT_KERN,
@@ -91,9 +91,9 @@ pub fn large_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= small::GLYPHS.len() {
+            match end <= small::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &small::GLYPHS[offset..end],
+                    glyph: &small::glyphs()[offset..end],
                     wide: small::WIDTHS[n] * 2,
                     high: small::MAX_HEIGHT * 2,
                     kern: DEFAULT_KERN,
@@ -114,9 +114,9 @@ pub fn extra_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= regular::GLYPHS.len() {
+            match end <= regular::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &regular::GLYPHS[offset..end],
+                    glyph: &regular::glyphs()[offset..end],
                     wide: regular::WIDTHS[n] * 2,
                     high: regular::MAX_HEIGHT * 2,
                     kern: DEFAULT_KERN,
@@ -137,9 +137,9 @@ pub fn bold_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= bold::GLYPHS.len() {
+            match end <= bold::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &bold::GLYPHS[offset..end],
+                    glyph: &bold::glyphs()[offset..end],
                     wide: bold::WIDTHS[n],
                     high: bold::MAX_HEIGHT,
                     kern: DEFAULT_KERN,
@@ -160,9 +160,9 @@ pub fn mono_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= mono::GLYPHS.len() {
+            match end <= mono::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &mono::GLYPHS[offset..end],
+                    glyph: &mono::glyphs()[offset..end],
                     wide: mono::WIDTHS[n],
                     high: mono::MAX_HEIGHT,
                     kern: DEFAULT_KERN,
@@ -183,9 +183,9 @@ pub fn emoji_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= emoji::GLYPHS.len() {
+            match end <= emoji::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &emoji::GLYPHS[offset..end],
+                    glyph: &emoji::glyphs()[offset..end],
                     wide: emoji::MAX_HEIGHT, // yes, use height for wide
                     high: emoji::MAX_HEIGHT,
                     kern: DEFAULT_KERN,
@@ -206,9 +206,9 @@ pub fn emoji_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= emoji::GLYPHS.len() {
+            match end <= emoji::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &emoji::GLYPHS[offset..end],
+                    glyph: &emoji::glyphs()[offset..end],
                     wide: emoji::MAX_HEIGHT * 2, // yes, use height for wide
                     high: emoji::MAX_HEIGHT * 2,
                     kern: DEFAULT_KERN,
@@ -229,9 +229,9 @@ pub fn zh_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= zh::GLYPHS.len() {
+            match end <= zh::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &zh::GLYPHS[offset..end],
+                    glyph: &zh::glyphs()[offset..end],
                     wide: zh::MAX_HEIGHT, // yes, use height for wide
                     high: zh::MAX_HEIGHT,
                     kern: DEFAULT_KERN,
@@ -252,9 +252,9 @@ pub fn ja_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= ja::GLYPHS.len() {
+            match end <= ja::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &ja::GLYPHS[offset..end],
+                    glyph: &ja::glyphs()[offset..end],
                     wide: ja::MAX_HEIGHT, // yes, use height for wide
                     high: ja::MAX_HEIGHT,
                     kern: DEFAULT_KERN,
@@ -275,9 +275,9 @@ pub fn kr_glyph(ch: char) -> Result<GlyphSprite, usize> {
         Ok(n) => {
             let offset = n << 3;
             let end = offset + 8;
-            match end <= kr::GLYPHS.len() {
+            match end <= kr::glyphs().len() {
                 true => Ok(GlyphSprite {
-                    glyph: &kr::GLYPHS[offset..end],
+                    glyph: &kr::glyphs()[offset..end],
                     wide: kr::MAX_HEIGHT, // yes, use height for wide
                     high: kr::MAX_HEIGHT,
                     kern: DEFAULT_KERN,

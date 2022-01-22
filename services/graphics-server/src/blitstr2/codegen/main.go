@@ -4,13 +4,18 @@
 package main
 
 import (
+	"blitstr2/codegen/lib"
 	. "blitstr2/codegen/lib"
 	"fmt"
 	"image"
 	"image/png"
 	"io/ioutil"
 	"os"
+	"strings"
 )
+
+// Location of the font base in the loader
+const font_base = 0x2053_0000
 
 // Command line switch to confirm intent of writing output files
 const confirm = "--write"
@@ -40,6 +45,13 @@ func main() {
 func codegen() {
 	conf := NewConfig("config.json")
 	fsList := conf.Fonts()
+	var fdir []FontSummary
+	var offsets []FontMap
+	var cur_address int = 0
+	offsets = append(offsets, lib.FontMap{
+		Name: "FONT_BASE",
+		Len:  fmt.Sprintf("%x", font_base),
+	})
 	for _, f := range fsList {
 		// Find all the glyphs and pack them into a list of blit pattern objects
 		pl := patternListFromSpriteSheet(f)
@@ -49,7 +61,42 @@ func codegen() {
 		code := RenderFontFileTemplate(f, gs)
 		fmt.Println("Writing to", f.RustOut)
 		ioutil.WriteFile(f.RustOut, []byte(code), 0644)
+		loader := RenderLoaderFileTemplate(f, gs)
+		fmt.Println("Writing to", f.LoaderOut)
+		ioutil.WriteFile(f.LoaderOut, []byte(loader), 0644)
+		summary := lib.FontSummary{
+			Name: strings.ToLower(f.Name),
+			Len:  gs.GlyphsLen,
+		}
+		fdir = append(fdir, summary)
+
+		offset := lib.FontMap{
+			Name: strings.ToUpper(f.Name) + "_OFFSET",
+			Len:  fmt.Sprintf("%x", cur_address),
+		}
+		offsets = append(offsets, offset)
+		length := lib.FontMap{
+			Name: strings.ToUpper(f.Name) + "_LEN",
+			Len:  fmt.Sprintf("%x", gs.GlyphsLen*4),
+		}
+		offsets = append(offsets, length)
+		cur_address = cur_address + gs.GlyphsLen*4
 	}
+	total := lib.FontMap{
+		Name: "FONT_TOTAL_LEN",
+		Len:  fmt.Sprintf("%x", cur_address),
+	}
+	offsets = append(offsets, total)
+	for _, fs := range fdir {
+		fmt.Println(fs)
+	}
+	loadermod := RenderLoadermodTemplate(fdir)
+	fmt.Println("Writing to", conf.GetLoaderMod())
+	ioutil.WriteFile(conf.GetLoaderMod(), []byte(loadermod), 0644)
+
+	fontmap := RenderFontmapTemplate(offsets)
+	fmt.Println("Writing to", conf.GetFontMap())
+	ioutil.WriteFile(conf.GetFontMap(), []byte(fontmap), 0644)
 }
 
 // Extract glyph sprites from a PNG grid and pack them into a list of blit pattern objects
@@ -84,4 +131,6 @@ func usage() {
 	fsList := conf.Fonts()
 	u := RenderUsageTemplate(confirm, debug, fsList)
 	fmt.Println(u)
+	fmt.Println("Metafile: ", conf.GetLoaderMod())
+	fmt.Println("Metafile: ", conf.GetFontMap())
 }

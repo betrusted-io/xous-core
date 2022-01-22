@@ -13,6 +13,8 @@ import (
 // Holds data from top level of JSON config file
 type Config struct {
 	Comment   []string
+	LoaderMod []string
+	FontMap   []string
 	GlyphSets []ConfigGlyphSet
 }
 
@@ -29,6 +31,7 @@ type ConfigGlyphSet struct {
 	IndexType string
 	GlyphTrim string
 	RustOut   string
+	LoaderOut string
 }
 
 // Holds data parsed from a json index file
@@ -51,6 +54,13 @@ func NewConfig(configFile string) Config {
 	return config
 }
 
+func (c Config) GetLoaderMod() string {
+	return c.LoaderMod[0]
+}
+func (c Config) GetFontMap() string {
+	return c.FontMap[0]
+}
+
 // Generate font glyph set specifications with character maps, aliases, etc.
 func (c Config) Fonts() []FontSpec {
 	list := []FontSpec{}
@@ -60,6 +70,7 @@ func (c Config) Fonts() []FontSpec {
 			gs.readLegal(),
 			gs.codepointMap(),
 			gs.RustOut, gs.GlyphTrim,
+			gs.LoaderOut,
 		}
 		list = append(list, fs)
 	}

@@ -15,6 +15,7 @@ type FontSpec struct {
 	CSList    []CharSpec // Map of grapheme clusters to glyph grid coordinates
 	RustOut   string     // Where should the generated rust source code go?
 	GlyphTrim string     // How should bitmap glyphs be trimmed (proportional or CJK)?
+	LoaderOut string     // Path to the split of the glyph data into the loader, to reduce the RAM load
 }
 
 // Look up trim limits based on row & column in glyph grid

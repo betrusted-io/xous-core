@@ -22,6 +22,12 @@ config = {
   comment: [
     "Config for use with main.go. Before making changes here, see config_editor.rb.",
   ],
+  loadermod: [
+    "../../../../../loader/src/fonts.rs",
+  ],
+  fontmap: [
+    "../../fontmap.rs",
+  ],
   glyphSets: [
     {
       name: "Emoji",
@@ -31,6 +37,7 @@ config = {
       indexType: "txt-row-major",
       glyphTrim: "CJK",
       rustout: "../fonts/emoji.rs",
+      loaderout: "../../../../../loader/src/fonts/emoji.rs",
     },
     {
       name: "zh",
@@ -40,6 +47,7 @@ config = {
       indexType: "txt-row-major",
       glyphTrim: "CJK",
       rustout: "../fonts/zh.rs",
+      loaderout: "../../../../../loader/src/fonts/zh.rs",
     },
     {
       name: "ja",
@@ -49,6 +57,7 @@ config = {
       indexType: "txt-row-major",
       glyphTrim: "CJK",
       rustout: "../fonts/ja.rs",
+      loaderout: "../../../../../loader/src/fonts/ja.rs",
     },
     {
       name: "kr",
@@ -58,6 +67,7 @@ config = {
       indexType: "txt-row-major",
       glyphTrim: "CJK",
       rustout: "../fonts/kr.rs",
+      loaderout: "../../../../../loader/src/fonts/kr.rs",
     },
     {
       name: "Bold",
@@ -67,6 +77,7 @@ config = {
       indexType: "json-grid-coord",
       glyphTrim: "proportional",
       rustout: "../fonts/bold.rs",
+      loaderout: "../../../../../loader/src/fonts/bold.rs",
     },
     {
       name: "Mono",
@@ -76,6 +87,7 @@ config = {
       indexType: "json-grid-coord",
       glyphTrim: "monospace",
       rustout: "../fonts/mono.rs",
+      loaderout: "../../../../../loader/src/fonts/mono.rs",
     },
     {
       name: "Regular",
@@ -85,6 +97,7 @@ config = {
       indexType: "json-grid-coord",
       glyphTrim: "proportional",
       rustout: "../fonts/regular.rs",
+      loaderout: "../../../../../loader/src/fonts/regular.rs",
     },
     {
       name: "Small",
@@ -94,6 +107,7 @@ config = {
       indexType: "json-grid-coord",
       glyphTrim: "proportional",
       rustout: "../fonts/small.rs",
+      loaderout: "../../../../../loader/src/fonts/small.rs",
     }
   ]
 }

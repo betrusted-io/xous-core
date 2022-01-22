@@ -2,6 +2,12 @@
   "comment": [
     "Config for use with main.go. Before making changes here, see config_editor.rb."
   ],
+  "loadermod": [
+    "../../../../../loader/src/fonts.rs"
+  ],
+  "fontmap": [
+    "../../fontmap.rs"
+  ],
   "glyphSets": [
     {
       "name": "Emoji",
@@ -14,7 +20,8 @@
       "index": "src_data/basic_emoji.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/emoji.rs"
+      "rustout": "../fonts/emoji.rs",
+      "loaderout": "../../../../../loader/src/fonts/emoji.rs"
     },
     {
       "name": "zh",
@@ -27,7 +34,8 @@
       "index": "src_data/hanzi.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/zh.rs"
+      "rustout": "../fonts/zh.rs",
+      "loaderout": "../../../../../loader/src/fonts/zh.rs"
     },
     {
       "name": "ja",
@@ -40,7 +48,8 @@
       "index": "src_data/Izumi16.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/ja.rs"
+      "rustout": "../fonts/ja.rs",
+      "loaderout": "../../../../../loader/src/fonts/ja.rs"
     },
     {
       "name": "kr",
@@ -53,7 +62,8 @@
       "index": "src_data/neodgm.codepoints",
       "indexType": "txt-row-major",
       "glyphTrim": "CJK",
-      "rustout": "../fonts/kr.rs"
+      "rustout": "../fonts/kr.rs",
+      "loaderout": "../../../../../loader/src/fonts/kr.rs"
     },
     {
       "name": "Bold",
@@ -66,7 +76,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
-      "rustout": "../fonts/bold.rs"
+      "rustout": "../fonts/bold.rs",
+      "loaderout": "../../../../../loader/src/fonts/bold.rs"
     },
     {
       "name": "Mono",
@@ -79,7 +90,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "monospace",
-      "rustout": "../fonts/mono.rs"
+      "rustout": "../fonts/mono.rs",
+      "loaderout": "../../../../../loader/src/fonts/mono.rs"
     },
     {
       "name": "Regular",
@@ -92,7 +104,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
-      "rustout": "../fonts/regular.rs"
+      "rustout": "../fonts/regular.rs",
+      "loaderout": "../../../../../loader/src/fonts/regular.rs"
     },
     {
       "name": "Small",
@@ -105,7 +118,8 @@
       "index": "src_data/latin_index.json",
       "indexType": "json-grid-coord",
       "glyphTrim": "proportional",
-      "rustout": "../fonts/small.rs"
+      "rustout": "../fonts/small.rs",
+      "loaderout": "../../../../../loader/src/fonts/small.rs"
     }
   ]
 }

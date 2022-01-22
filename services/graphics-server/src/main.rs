@@ -30,8 +30,6 @@ use api::BulkRead;
 use crate::wordwrap::*;
 use core::ops::Add;
 
-use blitstr_ref as blitstr;
-
 #[cfg(feature = "testing")]
 mod testing;
 
@@ -67,6 +65,17 @@ fn map_fonts() -> MemoryRange {
         "mapping regular font to 0x{:08x}",
         fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize
     );
+    use core::sync::atomic::Ordering;
+    blitstr2::fonts::bold::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::emoji::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::ja::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::JA_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::kr::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::KR_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::mono::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::MONO_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::regular::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::small::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET as usize) as u32, Ordering::SeqCst);
+    blitstr2::fonts::zh::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::ZH_OFFSET as usize) as u32, Ordering::SeqCst);
+
+    /*
     blitstr::map_font(blitstr::GlyphData::Emoji(
         (fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET) as usize,
     ));
@@ -82,7 +91,7 @@ fn map_fonts() -> MemoryRange {
     blitstr::map_font(blitstr::GlyphData::Bold(
         (fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET) as usize,
     ));
-
+    */
     fontregion
 }
 
