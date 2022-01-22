@@ -218,15 +218,15 @@ fn xmain() -> ! {
 
                 let typeset_extent = match tv.bounds_hint {
                     TextBounds::BoundingBox(r) =>
-                        blitstr2::Pt::new((r.br().x - r.tl().x - tv.margin.x * 2) as usize, (r.br().y - r.tl().y - tv.margin.y * 2) as usize),
+                        Pt::new((r.br().x - r.tl().x - tv.margin.x * 2) as usize, (r.br().y - r.tl().y - tv.margin.y * 2) as usize),
                     TextBounds::GrowableFromBr(br, width) =>
-                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, br.y as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as usize - tv.margin.x as usize * 2, br.y as usize - tv.margin.y as usize * 2),
                     TextBounds::GrowableFromBl(bl, width) =>
-                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, bl.y as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as usize - tv.margin.x as usize * 2, bl.y as usize - tv.margin.y as usize * 2),
                     TextBounds::GrowableFromTl(tl, width) =>
-                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) as usize - tv.margin.y as usize * 2),
                     TextBounds::GrowableFromTr(tr, width) =>
-                        blitstr2::Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) as usize - tv.margin.y as usize * 2),
                 };
                 let mut typesetter = Typesetter::setup(
                     tv.to_str(),
@@ -326,9 +326,9 @@ fn xmain() -> ! {
                     composition.render(display.native_buffer(), composition_top_left, tv.invert, smallest_rect);
                 }
                 // type mismatch for now, replace this with a simple equals once we sort that out
-                tv.cursor.pt.x = composition.final_cursor().pt.x as i32;
-                tv.cursor.pt.y = composition.final_cursor().pt.y as i32;
-                tv.cursor.line_height = composition.final_cursor().line_height as i32;
+                tv.cursor.pt.x = composition.final_cursor().pt.x;
+                tv.cursor.pt.y = composition.final_cursor().pt.y;
+                tv.cursor.line_height = composition.final_cursor().line_height;
 
                 tv.bounds_computed = Some(
                     clear_rect

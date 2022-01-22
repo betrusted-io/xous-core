@@ -7,7 +7,6 @@ version = "0.1.0"
 
 # Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
-blitstr-ref = {path = "../../imports/blitstr-ref"}
 com = {path = "../com"} # used by the backlight setting on the main menu thread
 content-plugin-api = {path = "../content-plugin-api"}
 graphics-server = {path = "../graphics-server"}

@@ -3,7 +3,7 @@
 //
 
 /// Point specifies a pixel coordinate
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Pt {
     pub x: usize,
     pub y: usize,

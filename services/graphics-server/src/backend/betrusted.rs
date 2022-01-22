@@ -2,12 +2,14 @@ use crate::api::Point;
 use susres::{ManagedMem, RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 use xous::MemoryRange;
+use crate::api::{LINES, WIDTH};
 
 pub const FB_WIDTH_WORDS: usize = 11;
-pub const FB_WIDTH_PIXELS: usize = 336;
-pub const FB_LINES: usize = 536;
+pub const FB_WIDTH_PIXELS: usize = WIDTH;
+pub const FB_LINES: usize = LINES;
 pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
+
 
 pub struct XousDisplay {
     fb: MemoryRange,

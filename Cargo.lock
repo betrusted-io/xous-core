@@ -140,7 +140,6 @@ name = "benchmark"
 version = "0.1.0"
 dependencies = [
  "benchmark-target",
- "blitstr-ref",
  "graphics-server",
  "log",
  "log-server",
@@ -209,22 +208,6 @@ name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
-
-[[package]]
-name = "blitstr"
-version = "0.5.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=89675bf468fa51baaf0de94e806b85c92466ae64#89675bf468fa51baaf0de94e806b85c92466ae64"
-dependencies = [
- "log",
- "rkyv",
-]
-
-[[package]]
-name = "blitstr-ref"
-version = "0.1.0"
-dependencies = [
- "blitstr",
-]
 
 [[package]]
 name = "block-buffer"
@@ -881,7 +864,6 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 name = "gam"
 version = "0.1.0"
 dependencies = [
- "blitstr-ref",
  "com",
  "content-plugin-api",
  "enum_dispatch",
@@ -974,7 +956,6 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 name = "graphics-server"
 version = "0.1.0"
 dependencies = [
- "blitstr-ref",
  "keyboard",
  "log",
  "log-server",
@@ -1037,7 +1018,6 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 name = "ime-frontend"
 version = "0.1.0"
 dependencies = [
- "blitstr-ref",
  "gam",
  "graphics-server",
  "ime-plugin-api",
@@ -2218,7 +2198,6 @@ checksum = "a260c96bf26273969f360c2fc2e2c7732acc2ce49d939c7243c7230c2ad179d0"
 name = "status"
 version = "0.1.0"
 dependencies = [
- "blitstr-ref",
  "chrono",
  "com",
  "content-plugin-api",

@@ -7,7 +7,6 @@ version = "0.1.0"
 
 # Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
-blitstr-ref = {path = "../../imports/blitstr-ref"}
 gam = {path = "../gam"}
 graphics-server = {path = "../graphics-server"}
 ime-plugin-api = {path = "../ime-plugin-api"}

@@ -1,4 +1,4 @@
-use crate::api::{Point, Rectangle, GlyphStyle, glyph_to_height_hint};
+use crate::api::{Point, Rectangle, GlyphStyle, glyph_to_height_hint, GlyphSprite, TypesetWord, Pt, Cursor};
 
 #[allow(unused_imports)]
 use crate::backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_LINES};
@@ -31,26 +31,6 @@ use crate::backend::{FB_SIZE, FB_WIDTH_PIXELS, FB_LINES};
 use crate::blitstr2::{self, *};
 use crate::style_macros::*;
 
-/// A TypesetWord is a Word that has beet turned into sprites and placed at a specific location on the canvas,
-/// defined by its `bb` record. The intention is that this abstract representation can be passed directly to
-/// a rasterizer for rendering.
-#[derive(Debug)]
-pub struct TypesetWord {
-    /// glyph data to directly render the word
-    pub gs: Vec::<GlyphSprite>,
-    /// top left origin point for rendering of the glyphs
-    pub origin: Pt,
-    /// width of the word
-    pub width: usize,
-    /// overall height for the word
-    pub height: usize,
-    /// set if this `word` is not drawable, e.g. a newline placeholder.
-    /// *however* the Vec<GlyphSprite> should still be checked for an insertion point, so that
-    /// successive newlines properly get their insertion point drawn
-    pub non_drawable: bool,
-    /// the position in the originating abstract string of the first character in the word
-    pub strpos: usize,
-}
 impl TypesetWord {
     pub fn new(origin: Pt, strpos: usize) -> Self {
         TypesetWord {

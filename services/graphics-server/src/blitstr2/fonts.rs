@@ -11,34 +11,9 @@ pub mod regular;
 pub mod small;
 pub mod zh;
 
+use crate::GlyphSprite;
+
 const DEFAULT_KERN: u8 = 1;
-
-// Font data is stored as CODEPOINTS and GLYPHS arrays. CODEPOINTS holds sorted
-// Unicode codepoints for characters included in the font, and GLYPHS holds
-// 16*16px sprites (pixels packed in row-major order, LSB of first word is top
-// left pixel of sprite). The order of codepoints and glyphs is the same, but,
-// each codepoint is one u32 word long while each glyph is eight u32 words
-// long. So, to find a glyph we do:
-//  1. Binary search CODEPOINTS for the codepoint of interest
-//  2. Multiply the codepoint index by 8, yielding an offset into GLYPHS
-//  3. Slice 8 u32 words from GLYPHS starting at the offset
-
-/// Struct to hold sprite pixel reference and associated metadata for glyphs
-#[derive(Copy, Clone, Debug)]
-pub struct GlyphSprite {
-    pub glyph: &'static [u32],
-    pub wide: u8,
-    pub high: u8,
-    pub kern: u8,
-    // the original character
-    pub ch: char,
-    // invert rendering for the character - for copy/paste selection regions
-    pub invert: bool,
-    // drawn an insertion point after this character
-    pub insert: bool,
-    // 2x flag for the back-end rendering (wide/high should be pre-computed to match this)
-    pub double: bool,
-}
 
 pub fn small_glyph(ch: char) -> Result<GlyphSprite, usize> {
     match small::CODEPOINTS.binary_search(&(ch as u32)) {

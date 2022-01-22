@@ -13,7 +13,6 @@ ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log-server = { path = "../log-server" }
 log = "0.4.14"
-blitstr-ref = { path = "../../imports/blitstr-ref" }
 benchmark-target = { path = "../benchmark-target" }
 
 xous-ipc = {path = "../../xous-ipc"}

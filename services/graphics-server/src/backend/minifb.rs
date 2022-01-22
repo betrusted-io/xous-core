@@ -2,14 +2,14 @@
 
 use crate::api::Point;
 use minifb::{Key, Window, WindowOptions};
+use crate::api::{LINES, WIDTH};
 
-const WIDTH: usize = 336;
-const HEIGHT: usize = 536;
+const HEIGHT: usize = LINES;
 
 /// Width of the screen in 32-bit words
 const WIDTH_WORDS: usize = 11;
 pub const FB_WIDTH_WORDS: usize = WIDTH_WORDS;
-pub const FB_WIDTH_PIXELS: usize = 336;
+pub const FB_WIDTH_PIXELS: usize = WIDTH;
 pub const FB_LINES: usize = HEIGHT;
 pub const FB_SIZE: usize = WIDTH_WORDS * HEIGHT; // 44 bytes by 536 lines
 

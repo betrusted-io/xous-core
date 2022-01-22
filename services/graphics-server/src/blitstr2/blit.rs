@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 use super::cliprect::ClipRect;
-use super::fonts;
+use crate::GlyphSprite;
 #[allow(unused_imports)]
 use super::{LINES, WORDS_PER_LINE, WIDTH, FrBuf};
 use crate::api::Point;
 
 /// Null glyph to use when everything else fails
 pub const NULL_GLYPH: [u32; 8] = [0, 0x5500AA, 0x5500AA, 0x5500AA, 0x5500AA, 0x5500AA, 0, 0];
-pub const NULL_GLYPH_SPRITE: fonts::GlyphSprite = fonts::GlyphSprite {
+pub const NULL_GLYPH_SPRITE: GlyphSprite = GlyphSprite {
     glyph: &NULL_GLYPH,
     wide: 8u8,
     high: 12u8,
@@ -29,7 +29,7 @@ pub const REPLACEMENT: char = '\u{FFFD}';
 /// 1. Fits in word: xr:1..7   => (data[0].bit_30)->(data[0].bit_26), mask:0x7c00_0000
 /// 2. Spans words:  xr:30..36 => (data[0].bit_01)->(data[1].bit_29), mask:[0x0000_0003,0xe000_000]
 ///
-pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: fonts::GlyphSprite, xor: bool, cr: ClipRect) {
+pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: ClipRect) {
     const SPRITE_PX: i16 = 16;
     const SPRITE_WORDS: i16 = 8;
     if gs.glyph.len() < SPRITE_WORDS as usize {
@@ -119,7 +119,7 @@ pub fn xor_glyph(fb: &mut FrBuf, p: &Point, gs: fonts::GlyphSprite, xor: bool, c
 /// This is similar to xor_glyph(). But, instead of using 16px sprites for input
 /// and output, this takes 16px sprites as input and blits 32px sprites as output.
 ///
-pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: fonts::GlyphSprite, xor: bool, cr: ClipRect) {
+pub fn xor_glyph_2x(fb: &mut FrBuf, p: &Point, gs: GlyphSprite, xor: bool, cr: ClipRect) {
     const SPRITE_PX: i16 = 16;
     const SPRITE_WORDS: i16 = 8;
     if gs.glyph.len() < SPRITE_WORDS as usize {

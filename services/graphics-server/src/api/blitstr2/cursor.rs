@@ -4,12 +4,12 @@
 use super::cliprect::ClipRect;
 use super::pt::Pt;
 use super::GlyphSprite;
-use crate::wordwrap::TypesetWord;
+use super::TypesetWord;
 
 /// Cursor specifies a drawing position along a line of text. Lines of text can
 /// be different heights. Line_height is for keeping track of the tallest
 /// character that has been drawn so far on the current line.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Cursor {
     pub pt: Pt,
     pub line_height: usize,
@@ -37,7 +37,7 @@ impl Cursor {
         self.line_height = self.line_height.max(glyph.high as usize);
     }
 
-    pub fn update_word(&mut self, word: &TypesetWord) {
+    pub(crate) fn update_word(&mut self, word: &TypesetWord) {
         self.pt.x += word.width;
         self.line_height = self.line_height.max(word.height);
     }

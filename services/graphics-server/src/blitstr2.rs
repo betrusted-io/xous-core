@@ -4,10 +4,6 @@ mod cliprect;
 pub use cliprect::*;
 pub(crate) mod fonts;
 pub(crate) use fonts::*;
-mod cursor;
-pub use cursor::*;
-mod pt;
-pub use pt::*;
 
 const LINES: usize = crate::backend::FB_LINES;
 const WIDTH: usize = crate::backend::FB_WIDTH_PIXELS;

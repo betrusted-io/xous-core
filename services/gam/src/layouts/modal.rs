@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
-use crate::Canvas;
+use crate::{Canvas, GlyphStyle};
 
-use blitstr_ref as blitstr;
-use blitstr::GlyphStyle;
 use graphics_server::*;
 
 use crate::{LayoutApi, LayoutBehavior};

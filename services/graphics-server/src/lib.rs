@@ -4,10 +4,8 @@
 pub mod api;
 pub use api::{
     Circle, ClipObject, ClipObjectType, DrawStyle, Gid, Line, PixelColor, Point, Rectangle,
-    RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim,
+    RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle
 };
-pub use blitstr::{ClipRect, Cursor, GlyphStyle};
-use blitstr_ref as blitstr;
 pub mod op;
 
 pub mod fontmap;

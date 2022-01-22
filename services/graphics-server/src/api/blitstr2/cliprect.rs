@@ -1,7 +1,7 @@
 // Copyright (c) 2022 Sam Blenny
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-use super::{LINES, WIDTH};
+use crate::api::{LINES, WIDTH};
 use crate::api::Pt;
 
 /// ClipRect specifies a region of pixels. X and y pixel ranges are inclusive of
@@ -9,7 +9,7 @@ use crate::api::Pt;
 /// Coordinate System Notes:
 /// - (0,0) is top left
 /// - Increasing Y moves downward on the screen, increasing X moves right
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ClipRect {
     pub min: Pt,
     pub max: Pt,

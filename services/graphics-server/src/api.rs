@@ -24,8 +24,13 @@ pub mod text;
 pub use text::*;
 pub mod glyphstyle;
 pub use glyphstyle::*;
+pub mod blitstr2;
+pub use blitstr2::*;
 
 use std::hash::{Hash, Hasher};
+
+pub const LINES: usize = 536;
+pub const WIDTH: usize = 336;
 
 //////////////// IPC APIs
 #[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
