@@ -5,13 +5,9 @@ mod mainmenu;
 use mainmenu::*;
 
 use com::api::*;
-use log::info;
-
 use core::fmt::Write;
-
 use num_traits::*;
 use xous::{msg_scalar_unpack, send_message, Message, CID};
-
 use graphics_server::*;
 use graphics_server::api::GlyphStyle;
 use locales::t;
@@ -47,6 +43,8 @@ enum StatusOpcode {
     SubmenuPddb,
     /// Suspend handler from the main menu
     TrySuspend,
+    /// for returning wifi stats
+    WifiStats,
     Quit,
 }
 
@@ -134,7 +132,8 @@ fn xmain() -> ! {
         .register_name(SERVER_NAME_STATUS, Some(0))
         .expect("|status: can't register server");
     // create a connection for callback hooks
-    unsafe { CB_TO_MAIN_CONN = Some(xous::connect(status_sid).unwrap()) };
+    let cb_cid = xous::connect(status_sid).unwrap();
+    unsafe { CB_TO_MAIN_CONN = Some(cb_cid) };
     let pump_run = Arc::new(AtomicBool::new(true));
     let pump_conn = xous::connect(status_sid).unwrap();
     let _ = thread::spawn({
@@ -148,7 +147,7 @@ fn xmain() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
-    let netmgr = net::NetManager::new();
+    let mut netmgr = net::NetManager::new();
 
     let screensize = gam
         .get_canvas_bounds(status_gid)
@@ -206,19 +205,6 @@ fn xmain() -> ! {
         current: 0,
         remaining_capacity: 650,
     };
-
-    /*
-    let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
-    gam.draw_line(
-        status_gid,
-        Line::new_with_style(
-            Point::new(0, screensize.y),
-            Point::new(screensize.x, screensize.y),
-            style_dark,
-        ),
-    )
-    .expect("|status: Can't draw border line");
-    */
 
     // the EC gets reset by the Net crate on boot to ensure that the state machines are synced up
     // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
@@ -313,16 +299,13 @@ fn xmain() -> ! {
 
     let dt_pump_interval = 15;
     let charger_pump_interval = 180;
-    let stats_interval;
     let batt_interval;
     let secnotes_interval;
     if cfg!(feature = "braille") {
         // lower the status output rate for braille mode, debugging, etc.
-        stats_interval = 30;
         batt_interval = 60;
         secnotes_interval = 30;
     } else {
-        stats_interval = 4;
         batt_interval = 4;
         secnotes_interval = 4;
     }
@@ -342,9 +325,9 @@ fn xmain() -> ! {
         t!("rtc.saturday", xous::LANG),
         t!("rtc.sunday", xous::LANG),
     ];
-
+    netmgr.wifi_state_subscribe(cb_cid, StatusOpcode::WifiStats.to_u32().unwrap()).unwrap();
     let mut wifi_status: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
-    info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
+    log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
         log::trace!("|status: Message: {:?}", msg);
@@ -378,6 +361,12 @@ fn xmain() -> ! {
                     .expect("|status: can't draw battery stats");
                 battstats_phase = !battstats_phase;
             }),
+            Some(StatusOpcode::WifiStats) => {
+                let buffer = unsafe {
+                    xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                };
+                wifi_status = WlanStatus::from_ipc(buffer.to_original::<com::WlanStatusIpc, _>().unwrap());
+            },
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
                 let (is_locked, force_update) = llio.debug_usb(None).unwrap();
@@ -429,11 +418,6 @@ fn xmain() -> ! {
                 if (stats_phase % batt_interval) == (batt_interval - 1) {
                     com.req_batt_stats()
                         .expect("Can't get battery stats from COM");
-                }
-                if (stats_phase % stats_interval) == 2 {
-                    if elapsed_time > net::POLL_INTERVAL_MS as u64 { // The EC has to come out of reset, etc before the net connection manager can unblock.
-                        wifi_status = netmgr.read_wifi_state().expect("couldn't get wifi state");
-                    }
                 }
                 if (stats_phase % charger_pump_interval) == 1 {
                     // stagger periodic tasks

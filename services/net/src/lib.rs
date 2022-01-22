@@ -48,11 +48,15 @@ impl Drop for NetConn {
 
 pub struct NetManager {
     netconn: NetConn,
+    wifi_state_cid: Option<CID>,
+    wifi_state_sid: Option<xous::SID>,
 }
 impl NetManager {
     pub fn new() -> NetManager {
         NetManager {
             netconn: NetConn::new(&xous_names::XousNames::new().unwrap()).expect("can't connect to Net Server"),
+            wifi_state_cid: None,
+            wifi_state_sid: None,
         }
     }
     pub fn get_ipv4_config(&self) -> Option<Ipv4Conf> {
@@ -76,11 +80,75 @@ impl NetManager {
     /// This is the function that the system should be using to check the wifi state -- it will read
     /// the cached value from the connection manager. The direct call to the COM could cause too much
     /// congestion.
-    pub fn read_wifi_state(&self) -> Result<com::WlanStatus, xous::Error> {
-        let status = com::WlanStatusIpc::default();
-        let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.netconn.conn(), Opcode::GetWifiStats.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-        let response = buf.to_original::<com::WlanStatusIpc, _>().unwrap();
-        Ok(com::WlanStatus::from_ipc(response))
+    pub fn wifi_state_subscribe(&mut self, return_cid: CID, opcode: u32) -> Result<(), xous::Error> {
+        if self.wifi_state_cid.is_none() {
+            let onetime_sid = xous::create_server().unwrap();
+            let sub = WifiStateSubscription {
+                sid: onetime_sid.to_array(),
+                opcode
+            };
+            let buf = Buffer::into_buf(sub).or(Err(xous::Error::InternalError))?;
+            buf.send(self.netconn.conn(), Opcode::SubscribeWifiStats.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+            self.wifi_state_cid = Some(xous::connect(onetime_sid).unwrap());
+            self.wifi_state_sid = Some(onetime_sid);
+            let _ = std::thread::spawn({
+                let onetime_sid = onetime_sid.clone();
+                let opcode = opcode.clone();
+                move || {
+                    loop {
+                        let msg = xous::receive_message(onetime_sid).unwrap();
+                        match FromPrimitive::from_usize(msg.body.id()) {
+                            Some(WifiStateCallback::Update) => {
+                                let buffer = unsafe {
+                                    Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                                };
+                                log::debug!("got state_subscribe callback {} {}", return_cid, opcode);
+                                // have to transform it through the local memory space because you can't re-lend pages
+                                let sub = buffer.to_original::<com::WlanStatusIpc, _>().unwrap();
+                                let buf = Buffer::into_buf(sub).expect("couldn't convert to memory message");
+                                buf.lend(return_cid, opcode).expect("couldn't forward state update");
+                            }
+                            Some(WifiStateCallback::Drop) => {
+                                xous::return_scalar(msg.sender, 1).unwrap();
+                                break;
+                            }
+                            _ => {
+                                log::error!("got unknown opcode: {:?}", msg);
+                            }
+                        }
+                    }
+                    log::info!("destroying callback server");
+                    xous::destroy_server(onetime_sid).unwrap();
+                }
+            });
+            Ok(())
+        } else {
+            // you can only hook this once per object
+            Err(xous::Error::ServerExists)
+        }
+    }
+    /// If we're not already subscribed, returns without error.
+    pub fn wifi_state_unsubscribe(&mut self) -> Result<(), xous::Error> {
+        if let Some(handler) = self.wifi_state_cid.take() {
+            if let Some(sid) = self.wifi_state_sid.take() {
+                let s = sid.to_array();
+                send_message(self.netconn.conn(),
+                    Message::new_blocking_scalar(Opcode::UnsubWifiStats.to_usize().unwrap(),
+                    s[0] as usize,
+                    s[1] as usize,
+                    s[2] as usize,
+                    s[3] as usize,
+                    )
+                ).expect("couldn't unsubscribe");
+            }
+            send_message(handler, Message::new_blocking_scalar(WifiStateCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+            unsafe{xous::disconnect(handler).ok()};
+        }
+        Ok(())
+    }
+}
+impl Drop for NetManager {
+    fn drop(&mut self) {
+        self.wifi_state_unsubscribe().unwrap();
     }
 }

@@ -7,13 +7,21 @@ use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message}
 use xous_ipc::Buffer;
 use num_traits::*;
 use std::io::Read;
+use std::collections::HashMap;
+
+#[allow(dead_code)]
+const BOOT_POLL_INTERVAL_MS: usize = 5_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
+/// this is shared externally so other functions (e.g. in status bar) that want to query the net manager know how long to back off, otherwise the status query will block
+#[allow(dead_code)]
+const POLL_INTERVAL_MS: usize = 20_151; // stagger slightly off of an integer-seconds interval to even out loads
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum ConnectionManagerOpcode {
     Run,
     Poll,
     Stop,
-    WifiStatus,
+    SubscribeWifiStats,
+    UnsubWifiStats,
     Quit,
 }
 
@@ -40,9 +48,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let mut mounted = false;
     let mut current_interval = BOOT_POLL_INTERVAL_MS;
     let mut wifi_stats_cache: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
+    let mut status_subscribers = HashMap::<xous::CID, WifiStateSubscription>::new();
     send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), current_interval, 0, 0, 0)).expect("couldn't kick off next poll");
     loop {
-        let mut msg = xous::receive_message(sid).unwrap();
+        let msg = xous::receive_message(sid).unwrap();
         log::debug!("got msg: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ConnectionManagerOpcode::Run) => msg_scalar_unpack!(msg, _, _, _, _, {
@@ -58,7 +67,17 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     if pddb.is_mounted() && rev_ok {
                         mounted = true;
                         // the status check code is going to get refactored, so this is a "bare minimum" check
-                        wifi_stats_cache = com.wlan_status().unwrap();
+                        let new_state = com.wlan_status().unwrap();
+                        if wifi_stats_cache.link_state != new_state.link_state ||
+                        wifi_stats_cache.ssid.unwrap_or(com::SsidRecord::default()).name != new_state.ssid.unwrap_or(com::SsidRecord::default()).name ||
+                        wifi_stats_cache.ssid.unwrap_or(com::SsidRecord::default()).rssi != new_state.ssid.unwrap_or(com::SsidRecord::default()).rssi
+                        {
+                            for &sub in status_subscribers.keys() {
+                                let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
+                                buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                            }
+                        }
+                        wifi_stats_cache = new_state;
                         let config = netmgr.get_ipv4_config();
                         if wifi_stats_cache.link_state == com_rs_ref::LinkState::WFXError {
                             com.wlan_leave().expect("couldn't issue leave command"); // this may not be received by the wf200, *but* it will also re-init the DHCP stack on the EC
@@ -104,6 +123,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                         break;
                                     }
                                 }
+                                for &sub in status_subscribers.keys() {
+                                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
+                                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                                }
                             } else {
                                 log::warn!("Connection manager couldn't access {}, but continuing to poll.", AP_DICT_NAME);
                             }
@@ -123,12 +146,29 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                 }
             }),
-            Some(ConnectionManagerOpcode::WifiStatus) => {
-                let mut buffer = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+            Some(ConnectionManagerOpcode::SubscribeWifiStats) => {
+                let buffer = unsafe {
+                    Buffer::from_memory_message(msg.body.memory_message().unwrap())
                 };
-                buffer.replace(com::WlanStatusIpc::from_status(wifi_stats_cache)).unwrap();
+                let sub = buffer.to_original::<WifiStateSubscription, _>().unwrap();
+                let sub_cid = xous::connect(xous::SID::from_array(sub.sid)).expect("couldn't connect to wifi subscriber callback");
+                status_subscribers.insert(sub_cid, sub);
             },
+            Some(ConnectionManagerOpcode::UnsubWifiStats) => msg_blocking_scalar_unpack!(msg, s0, s1, s2, s3, {
+                // note: this routine largely untested, could have some errors around the ordering of the blocking return vs the disconnect call.
+                let sid = [s0 as u32, s1 as u32, s2 as u32, s3 as u32];
+                let mut valid_sid: Option<xous::CID> = None;
+                for (&cid, &sub) in status_subscribers.iter() {
+                    if sub.sid == sid {
+                        valid_sid = Some(cid)
+                    }
+                }
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack unsub");
+                if let Some(cid) = valid_sid {
+                    status_subscribers.remove(&cid);
+                    unsafe{xous::disconnect(cid).expect("couldn't remove wifi status subscriber from our CID list that is limited to 32 items total. Suspect issue with ordering of disconnect vs blocking return...");}
+                }
+            }),
             // stop is blocking because we need to ensure the previous poll has finished before moving on, otherwise,
             // we could get a double-run condition
             Some(ConnectionManagerOpcode::Stop) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
