@@ -97,7 +97,7 @@ pub(crate) fn password_ux_manager(
 
             let mut pddb_modal =
                 Modal::new(
-                    crate::api::PDDB_MODAL_NAME,
+                    gam::PDDB_MODAL_NAME,
                     ActionType::TextEntry(password_action),
                     Some(t!("pddb.password", xous::LANG)),
                     None,

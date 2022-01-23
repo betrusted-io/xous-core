@@ -5,7 +5,6 @@ mod api;
 use api::*;
 mod canvas;
 use canvas::*;
-
 mod tokens;
 use tokens::*;
 mod layouts;
@@ -13,18 +12,15 @@ use layouts::*;
 
 use graphics_server::*;
 use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
-
-use log::info;
-
-use std::collections::HashMap;
-
-use num_traits::*;
 use xous_ipc::{Buffer, String};
 use api::Opcode;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
+use gam::MAIN_MENU_NAME;
 
+use log::info;
+use std::collections::HashMap;
+use num_traits::*;
 use core::{sync::atomic::{AtomicU32, Ordering}};
-
 use enum_dispatch::enum_dispatch;
 
 //// todo:

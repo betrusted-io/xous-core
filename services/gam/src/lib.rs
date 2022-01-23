@@ -4,18 +4,14 @@
 
 pub mod api;
 pub use api::*;
-
 pub mod modal;
 pub use modal::*;
-
 pub mod menu;
 pub use menu::*;
 
 use graphics_server::api::{TextOp, TextView};
-
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
 pub use graphics_server::api::GlyphStyle;
-
 use api::Opcode; // if you prefer to map the api into your local namespace
 use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
@@ -23,8 +19,32 @@ use num_traits::*;
 
 use ime_plugin_api::ImefCallback;
 
-
 #[doc = include_str!("../README.md")]
+
+// Add names here and insert them into the EXPECTED_BOOT_CONTEXTS structure below.
+pub const MAIN_MENU_NAME: &'static str = "main menu";
+pub const PDDB_MODAL_NAME: &'static str = "pddb modal";
+pub const PDDB_MENU_NAME: &'static str = "pddb menu";
+pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
+pub const EMOJI_MENU_NAME: &'static str = "emoji menu";
+pub const SHARED_MODAL_NAME: &'static str = "shared modal";
+pub const STATUS_BAR_NAME: &'static str = "status";
+pub const APP_NAME_SHELLCHAT: &'static str = "shellchat";
+pub const APP_MENU_NAME: &'static str = "app menu";
+
+/// UX context registry. Names here are authorized by the GAM to have Canvases.
+pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
+    APP_NAME_SHELLCHAT,
+    MAIN_MENU_NAME,
+    STATUS_BAR_NAME,
+    EMOJI_MENU_NAME,
+    ROOTKEY_MODAL_NAME,
+    PDDB_MODAL_NAME,
+    SHARED_MODAL_NAME,
+    PDDB_MENU_NAME,
+    //"user app menu",
+];
+
 #[derive(Debug)]
 pub struct Gam {
     /// The Gam structure exists on the client-side. This is the connection ID to the GAM server, local to this client.

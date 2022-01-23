@@ -104,7 +104,7 @@ fn xmain() -> ! {
             let mut end_work: u32 = 100;
             let mut renderer_modal =
                 Modal::new(
-                    crate::api::SHARED_MODAL_NAME,
+                    gam::SHARED_MODAL_NAME,
                     ActionType::TextEntry(text_action),
                     Some("Placeholder"),
                     None,

@@ -86,7 +86,7 @@ impl Repl{
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
         let token = gam.register_ux(UxRegistration {
-            app_name: xous_ipc::String::<128>::from_str(APP_NAME_SHELLCHAT),
+            app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_SHELLCHAT),
             ux_type: gam::UxType::Chat,
             predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
             listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
@@ -284,7 +284,6 @@ enum ShellOpcode {
 
 // nothing prevents the two from being the same, other than naming conventions
 pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_"; // used internally by xous-names
-pub(crate) const APP_NAME_SHELLCHAT: &str = "shellchat"; // the user-facing name
 
 #[xous::xous_main]
 fn xmain() -> ! {

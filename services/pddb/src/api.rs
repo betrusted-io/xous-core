@@ -70,11 +70,6 @@ pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
 pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
 
-#[allow(dead_code)]
-pub(crate) const PDDB_MODAL_NAME: &'static str = "pddb modal";
-#[allow(dead_code)]
-pub const PDDB_MENU_NAME: &'static str = "pddb menu";
-
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     IsMounted,

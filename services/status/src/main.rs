@@ -240,7 +240,7 @@ fn xmain() -> ! {
     security_tv.style = GlyphStyle::Regular;
     security_tv.draw_border = false;
     security_tv.margin = Point::new(0, 0);
-    security_tv.token = gam.claim_token("status").expect("couldn't request token"); // this is a shared magic word to identify this process
+    security_tv.token = gam.claim_token(gam::STATUS_BAR_NAME).expect("couldn't request token"); // this is a shared magic word to identify this process
     security_tv.clear_area = true;
     security_tv.invert = true;
     write!(&mut security_tv, "{}", t!("secnote.startup", xous::LANG)).unwrap();
@@ -629,7 +629,7 @@ fn xmain() -> ! {
             }
             Some(StatusOpcode::SubmenuPddb) => {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
-                gam.raise_menu(pddb::PDDB_MENU_NAME).expect("couldn't raise PDDB submenu");
+                gam.raise_menu(gam::PDDB_MENU_NAME).expect("couldn't raise PDDB submenu");
             },
             Some(StatusOpcode::TrySuspend) => {
                 if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {

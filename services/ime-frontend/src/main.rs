@@ -23,7 +23,6 @@ use locales::t;
 
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
-pub(crate) const EMOJI_MENU_NAME: &'static str = "emoji menu";
 
 struct InputTracker {
     /// connection for handling graphical update requests
@@ -112,7 +111,7 @@ impl InputTracker {
         self.input_canvas.is_some() && self.pred_canvas.is_some() && self.predictor.is_some()
     }
     pub fn activate_emoji(&self) {
-        self.gam.raise_menu(EMOJI_MENU_NAME).expect("couldn't activate emoji menu");
+        self.gam.raise_menu(gam::EMOJI_MENU_NAME).expect("couldn't activate emoji menu");
     }
 
     pub fn clear_area(&mut self) -> Result<(), xous::Error> {

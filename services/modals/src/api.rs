@@ -1,7 +1,6 @@
 use gam::modal::*;
 
 pub(crate) const SERVER_NAME_MODALS: &str     = "_Modal Dialog Server_";
-pub const SHARED_MODAL_NAME: &str = "shared modal";
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct Validation {

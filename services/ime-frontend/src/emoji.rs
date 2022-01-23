@@ -4,8 +4,6 @@ use xous_ipc::String;
 
 use gam::*;
 
-use crate::EMOJI_MENU_NAME;
-
 // imef_conn must come from outside the scope of the macro because of hygeine rules.
 macro_rules! emoji_item {
     ($emoji: expr, $imef_conn: ident) => {
@@ -41,7 +39,7 @@ pub(crate) fn emoji_menu(imef_conn: xous::CID) {
                         close_on_select: true,
                     },
                 ],
-                EMOJI_MENU_NAME,
+                gam::EMOJI_MENU_NAME,
                 None
             );
         }

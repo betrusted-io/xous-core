@@ -334,7 +334,7 @@ fn xmain() -> ! {
     dismiss_modal_action.set_is_password(true);
 
     let mut rootkeys_modal = Modal::new(
-        crate::api::ROOTKEY_MODAL_NAME,
+        gam::ROOTKEY_MODAL_NAME,
         ActionType::TextEntry(password_action),
         Some(t!("rootkeys.bootpass", xous::LANG)),
         None,
