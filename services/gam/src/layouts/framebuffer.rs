@@ -1,10 +1,7 @@
 use std::collections::HashMap;
-
-use crate::{Canvas, GlyphStyle};
-
 use graphics_server::*;
 
-use crate::{LayoutApi, LayoutBehavior};
+use crate::{Canvas, LayoutApi, LayoutBehavior};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Framebuffer {
