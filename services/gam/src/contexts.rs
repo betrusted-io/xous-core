@@ -56,8 +56,6 @@ pub(crate) struct UxContext {
     pub app_token: [u32; 4], // shared with the app, can be used for other auths to other servers (e.g. audio codec)
     /// a token associated with the UxContext, but private to the GAM (not shared with the app). [currently no use for this, just seems like a good idea...]
     pub gam_token: [u32; 4],
-    /// sets a trust level, 255 is the highest (status bar); 254 is a boot-validated context. Less trusted content canvases default to 127.
-    pub _trust_level: u8, // this value is immediately put into the canvases and not read back, so adding an _ to prevent warnings
     /// set to true if keyboard vibrate is turned on
     pub vibe: bool,
 
@@ -147,7 +145,6 @@ impl ContextManager {
                         predictor: registration.predictor,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
-                        _trust_level: trust_level,
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: registration.gotinput_id,
@@ -169,7 +166,6 @@ impl ContextManager {
                         predictor: None,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
-                        _trust_level: trust_level,
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
@@ -197,7 +193,6 @@ impl ContextManager {
                         predictor: None,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
-                        _trust_level: trust_level,
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
@@ -218,7 +213,6 @@ impl ContextManager {
                         predictor: None,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
-                        _trust_level: trust_level,
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
