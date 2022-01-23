@@ -256,6 +256,9 @@ fn xmain() -> ! {
     security_tv.invert = true;
     write!(&mut security_tv, "{}", t!("secnote.startup", xous::LANG)).unwrap();
     gam.post_textview(&mut security_tv).unwrap();
+    gam.draw_line(status_gid, Line::new_with_style(
+        Point::new(0, screensize.y), screensize,
+        DrawStyle::new(PixelColor::Light, PixelColor::Light, 1))).unwrap();
     gam.redraw().unwrap(); // initial boot redraw
 
     let sec_notes = Arc::new(Mutex::new(HashMap::new()));
@@ -426,6 +429,9 @@ fn xmain() -> ! {
 
                     // only post the view if something has actually changed
                     gam.post_textview(&mut security_tv).unwrap();
+                    gam.draw_line(status_gid, Line::new_with_style(
+                        Point::new(0, screensize.y), screensize,
+                        DrawStyle::new(PixelColor::Light, PixelColor::Light, 1))).unwrap();
                 }
                 if (stats_phase % batt_interval) == (batt_interval - 1) {
                     com.req_batt_stats()
