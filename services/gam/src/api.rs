@@ -51,6 +51,7 @@ pub enum UxType {
     Chat,
     Menu,
     Modal,
+    Framebuffer,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UxRegistration {

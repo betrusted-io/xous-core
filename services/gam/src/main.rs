@@ -55,6 +55,7 @@ pub(crate) enum UxLayout {
     ChatLayout,
     MenuLayout,
     ModalLayout,
+    Framebuffer,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -203,6 +204,26 @@ impl ContextManager {
                     log::debug!("debug modal layout: {:?}", modallayout);
                     let ux_context = UxContext {
                         layout: UxLayout::ModalLayout(modallayout),
+                        predictor: None,
+                        app_token: token,
+                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        _trust_level: trust_level,
+                        listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
+                        redraw_id: registration.redraw_id,
+                        gotinput_id: None,
+                        audioframe_id: None,
+                        rawkeys_id: registration.rawkeys_id,
+                        vibe: false,
+                    };
+                    self.contexts.insert(token, ux_context);
+                }
+                UxType::Framebuffer => {
+                    let mut raw_fb = Framebuffer::init(&gfx, &trng,
+                        trust_level, canvases).expect("couldn't create raw fb layout");
+                    raw_fb.set_visibility_state(false, canvases);
+                    log::debug!("debug raw fb layout: {:?}", raw_fb);
+                    let ux_context = UxContext {
+                        layout: UxLayout::Framebuffer(raw_fb),
                         predictor: None,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
@@ -931,6 +952,12 @@ fn xmain() -> ! {
                     }
                 } else if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
                     if modal_token == switchapp.token {
+                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                        }
+                    }
+                } else if let Some(token) = context_mgr.find_app_token_by_name(gam::STATUS_BAR_NAME) {
+                    if token == switchapp.token {
                         if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
                         }

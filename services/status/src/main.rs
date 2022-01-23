@@ -3,6 +3,8 @@
 
 mod mainmenu;
 use mainmenu::*;
+mod appmenu;
+use appmenu::*;
 
 use com::api::*;
 use core::fmt::Write;
@@ -39,8 +41,17 @@ enum StatusOpcode {
     UxSetTime,
     /// Initiates a reboot
     Reboot,
+
     /// Raise the PDDB menu
     SubmenuPddb,
+    /// Raise the App menu
+    SubmenuApp,
+
+    /// Raise the Shellchat app
+    SwitchToShellchat,
+    /// Raise the Ball app
+    SwitchToBall,
+
     /// Suspend handler from the main menu
     TrySuspend,
     /// for returning wifi stats
@@ -313,6 +324,7 @@ fn xmain() -> ! {
 
     log::debug!("starting main menu thread");
     create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com);
+    create_app_menu(xous::connect(status_sid).unwrap());
 
     // some RTC UX structures
     let modals = modals::Modals::new(&xns).unwrap();
@@ -630,6 +642,18 @@ fn xmain() -> ! {
             Some(StatusOpcode::SubmenuPddb) => {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::PDDB_MENU_NAME).expect("couldn't raise PDDB submenu");
+            },
+            Some(StatusOpcode::SubmenuApp) => {
+                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
+                gam.raise_menu(gam::APP_MENU_NAME).expect("couldn't raise App submenu");
+            },
+            Some(StatusOpcode::SwitchToShellchat) => {
+                ticktimer.sleep_ms(100).ok();
+                gam.switch_to_app(gam::APP_NAME_SHELLCHAT, security_tv.token.unwrap()).expect("couldn't raise shellchat");
+            },
+            Some(StatusOpcode::SwitchToBall) => {
+                ticktimer.sleep_ms(100).ok();
+                gam.switch_to_app(gam::APP_NAME_BALL, security_tv.token.unwrap()).expect("couldn't raise ball demo");
             },
             Some(StatusOpcode::TrySuspend) => {
                 if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {

@@ -69,6 +69,11 @@
         "zh": "PDDB子菜单",
         "en-audio": "PDDB submenu"
     },
+    "mainmenu.app": {
+        "en": "Switch to App...",
+        "zh": "APP子菜单",
+        "en-audio": "Switch to app"
+    },
     "mainmenu.reboot": {
         "en": "Reboot",
         "zh": "重启",
@@ -83,5 +88,15 @@
         "en": "Can't sleep while charging",
         "zh": "充电时睡不着",
         "en-audio": "Can't sleep while charging"
+    },
+    "appmenu.ball": {
+        "en": "Simple ball demo",
+        "zh": "简单的球演示",
+        "en-audio": "Simple ball demo"
+    },
+    "appmenu.shellchat": {
+        "en": "Shellchat",
+        "zh": "外壳聊天",
+        "en-audio": "Shellchat"
     }
 }

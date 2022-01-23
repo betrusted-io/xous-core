@@ -12,6 +12,7 @@ pub use menu::*;
 use graphics_server::api::{TextOp, TextView};
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
 pub use graphics_server::api::GlyphStyle;
+pub use graphics_server::api::PixelColor;
 use api::Opcode; // if you prefer to map the api into your local namespace
 use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
@@ -31,6 +32,7 @@ pub const SHARED_MODAL_NAME: &'static str = "shared modal";
 pub const STATUS_BAR_NAME: &'static str = "status";
 pub const APP_NAME_SHELLCHAT: &'static str = "shellchat";
 pub const APP_MENU_NAME: &'static str = "app menu";
+pub const APP_NAME_BALL: &'static str = "ball app";
 
 /// UX context registry. Names here are authorized by the GAM to have Canvases.
 pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
@@ -42,7 +44,8 @@ pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
     PDDB_MODAL_NAME,
     SHARED_MODAL_NAME,
     PDDB_MENU_NAME,
-    //"user app menu",
+    APP_MENU_NAME,
+    APP_NAME_BALL,
 ];
 
 #[derive(Debug)]

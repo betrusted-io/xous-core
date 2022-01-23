@@ -121,6 +121,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ball"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "ticktimer-server",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "bare-metal"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

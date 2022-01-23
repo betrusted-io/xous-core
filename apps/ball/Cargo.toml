@@ -1,0 +1,21 @@
+[package]
+name = "ball"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Ball demo app"
+
+# Dependency policy: fully specify dependencies to the minor version number
+[dependencies]
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+xous = { path = "../../xous-rs" }
+xous-ipc = { path = "../../xous-ipc" }
+log-server = { path = "../../services/log-server" }
+ticktimer-server = { path = "../../services/ticktimer-server" }
+xous-names = { path = "../../services/xous-names" }
+gam = {path = "../../services/gam" }
+
+[features]
+default = []
