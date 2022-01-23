@@ -16,6 +16,8 @@ log-server = { path = "../../services/log-server" }
 ticktimer-server = { path = "../../services/ticktimer-server" }
 xous-names = { path = "../../services/xous-names" }
 gam = {path = "../../services/gam" }
+trng = {path = "../../services/trng"}
+com = {path = "../../services/com"} # for the gyro read
 
 [features]
 default = []

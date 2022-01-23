@@ -1,4 +1,4 @@
-use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Circle, Point};
+use graphics_server::api::{Rectangle, TextView, Line, RoundedRectangle, Circle, Point, Gid};
 use xous_ipc::String;
 
 pub(crate) const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
@@ -210,3 +210,31 @@ pub struct MenuItem {
     pub close_on_select: bool,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CanvasType {
+    ChatContent,
+    ChatInput,
+    ChatPreditive,
+    Framebuffer,
+    Modal,
+    Menu,
+    Status,
+}
+impl CanvasType {
+    pub fn is_content(&self) -> bool {
+        match &self {
+            CanvasType::ChatContent |
+            CanvasType::Framebuffer |
+            CanvasType::Modal |
+            CanvasType::Menu |
+            CanvasType::Status => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct GidRecord {
+    pub gid: Gid,
+    pub canvas_type: CanvasType,
+}

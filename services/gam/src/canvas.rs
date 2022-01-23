@@ -25,24 +25,23 @@ pub enum CanvasState {
 pub struct Canvas {
     // unique, random identifier for the Canvas
     gid: Gid,
-
     // screen coordinates of the clipping region
     clip_rect: Rectangle,
-
     // trust level, 255 is most trusted
     trust_level: u8,
-
     // enables scroll/pan of objects within a region
     pan_offset: Point,
-
     // track the drawing state of the canvas
     state: CanvasState,
+    // The type of canvas. Useful for debugging, don't remove it.
+    #[allow(dead_code)]
+    canvas_type: crate::api::CanvasType,
 }
 
 #[allow(dead_code)]
 impl Canvas {
     pub fn new(clip_rect: Rectangle, trust_level: u8,
-        trng: &trng::Trng, pan_offset: Option<Point>) -> Result<Canvas, xous::Error> {
+        trng: &trng::Trng, pan_offset: Option<Point>, canvas_type: crate::api::CanvasType) -> Result<Canvas, xous::Error> {
 
         let mut gid: [u32; 4] = [0; 4];
         let g: u64 = trng.get_u64()?;
@@ -54,11 +53,13 @@ impl Canvas {
 
         Ok(if pan_offset.is_some() {
             Canvas {
-                clip_rect, trust_level, state: CanvasState::Created, gid: Gid::new(gid), pan_offset: pan_offset.unwrap()
+                clip_rect, trust_level, state: CanvasState::Created, gid: Gid::new(gid), pan_offset: pan_offset.unwrap(),
+                canvas_type,
             }
         } else {
             Canvas {
-                clip_rect, trust_level, state: CanvasState::Created, gid: Gid::new(gid), pan_offset: Point::new(0, 0)
+                clip_rect, trust_level, state: CanvasState::Created, gid: Gid::new(gid), pan_offset: Point::new(0, 0),
+                canvas_type,
             }
         })
     }
@@ -67,6 +68,7 @@ impl Canvas {
     pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; self.state = CanvasState::Created }
     pub fn gid(&self) -> Gid { self.gid }
     pub fn trust_level(&self) -> u8 { self.trust_level }
+    pub fn set_trust_level(&mut self, level: u8) {self.trust_level = level;}
     pub fn state(&self) -> CanvasState { self.state }
     pub fn is_drawable(&self) -> bool {
         if self.state == CanvasState::DrawableDirty || self.state == CanvasState::DrawableDrawn {
@@ -243,7 +245,7 @@ fn remap_rand(end_range: i32, rand: i16, source_range: i32) -> i16 {
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
 pub fn recompute_canvases(canvases: &HashMap<Gid, Canvas>, screen: Rectangle) -> HashMap<Gid, Canvas> {
-    let debug = false;
+    let debug = false; // keep this around, it's really convenient for turning off just this specific subset of debug messages
     // first, sort canvases by trust_level. Canvas implements ord/eq based on the trust_level attribute
     // so jush pushing it into a max binary heap does the trick.
     if debug { info!("CANVAS: recompute canvas"); }

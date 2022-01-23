@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use graphics_server::*;
 
+use crate::api::CanvasType;
 use crate::{Canvas, LayoutApi, LayoutBehavior};
+use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
+const TRUST_OFFSET: u8 = 4;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Framebuffer {
@@ -10,19 +13,20 @@ pub(crate) struct Framebuffer {
     visible: bool,
 }
 impl Framebuffer {
-    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8, canvases: &mut HashMap<Gid, Canvas>) -> Result<Framebuffer, xous::Error> {
+    pub fn init(
+        gfx: &graphics_server::Gfx,
+        trng: &trng::Trng,
+        status_canvas: &Canvas,
+        canvases: &mut HashMap<Gid, Canvas>
+    ) -> Result<Framebuffer, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
 
-        let checked_base_trust = if base_trust < 3 {
-            3
-        } else {
-            base_trust
-        };
-
+        log::info!("got screensize {:?}", screensize);
         let fb_canvas = Canvas::new(
-            Rectangle::new_coords(0, 0, screensize.x, screensize.y),
-            checked_base_trust, &trng, None
+            Rectangle::new(Point::new(0, status_canvas.clip_rect().br().y + 1), screensize),
+            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::Framebuffer
         ).expect("couldn't create modal canvas");
+        log::info!("canvas: {:?}", fb_canvas);
         canvases.insert(fb_canvas.gid(), fb_canvas);
 
         Ok(Framebuffer {
@@ -52,8 +56,13 @@ impl LayoutApi for Framebuffer {
         fb_canvas.set_clip(fb_clip_rect);
         Ok(fb_clip_rect.br)
     }
-    fn get_content_canvas(&self) -> Gid {
-        self.gid
+    fn get_gids(&self) ->Vec<crate::api::GidRecord> {
+        vec![
+            crate::api::GidRecord {
+                gid: self.gid,
+                canvas_type: CanvasType::Framebuffer
+            }
+        ]
     }
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
         log::debug!("raw fb entering set_visibilty_state, self.visible {}, onscreen {}", self.visible, onscreen);

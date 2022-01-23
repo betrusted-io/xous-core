@@ -124,12 +124,12 @@ impl Iterator for CircleIterator {
             let mut item = None;
 
             if self.clip.is_none() || // short-circuit evaluation makes this safe
-               (self.clip.unwrap().intersects_point(self.p))
+               (self.clip.unwrap().intersects_point(self.p + self.center))
             {
                 let t = self.p;
                 let len = t.x * t.x + t.y * t.y;
 
-                let is_border = len > radius_sq - radius && len < outer_radius_sq + radius;
+                let is_border = len > (radius_sq - radius) && len < (outer_radius_sq + radius);
 
                 let is_fill = len <= outer_radius_sq + 1;
 
@@ -167,12 +167,13 @@ impl Iterator for CircleIterator {
 }
 
 pub fn circle(fb: &mut LcdFB, circle: Circle, clip: Option<Rectangle>) {
+    let radius = circle.radius.abs() as u16;
     let c = CircleIterator {
         center: circle.center,
-        radius: circle.radius as _,
+        radius,
         style: circle.style,
-        p: Point::new(-(circle.radius as i16), -(circle.radius as i16)),
-        clip: clip,
+        p: Point::new(-(radius as i16), -(radius as i16)),
+        clip,
     };
 
     for pixel in c {

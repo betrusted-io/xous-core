@@ -124,12 +124,14 @@ dependencies = [
 name = "ball"
 version = "0.1.0"
 dependencies = [
+ "com",
  "gam",
  "log",
  "log-server",
  "num-derive",
  "num-traits",
  "ticktimer-server",
+ "trng",
  "xous",
  "xous-ipc",
  "xous-names",

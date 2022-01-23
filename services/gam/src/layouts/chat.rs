@@ -6,6 +6,9 @@ use graphics_server::*;
 
 use crate::{LayoutApi, LayoutBehavior};
 
+use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
+const TRUST_OFFSET: u8 = 2;
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct ChatLayout {
     // a set of GIDs to track the elements of the chat layout
@@ -23,7 +26,7 @@ pub(crate) struct ChatLayout {
 }
 impl ChatLayout {
     // pass in the status canvas so we can size around it, but we can't draw on it
-    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8,
+    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng,
         status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<ChatLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
@@ -31,31 +34,25 @@ impl ChatLayout {
         let regular_height: i16 = gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16;
         let margin = 4;
 
-        let checked_base_trust = if base_trust < 4 {
-            4
-        } else {
-            base_trust
-        };
-
         // allocate canvases in structures, and record their GID for future reference
         // base trust - 2 so that main menu + status bar always ride on top
         let predictive_canvas = Canvas::new(
             Rectangle::new_coords(0, screensize.y - regular_height - margin*2, screensize.x, screensize.y),
-            checked_base_trust - 2,
-            &trng, None
+            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET,
+            &trng, None, crate::api::CanvasType::ChatPreditive
         ).expect("couldn't create predictive text canvas");
         canvases.insert(predictive_canvas.gid(), predictive_canvas);
 
         let min_input_height = regular_height + margin*2;
         let input_canvas = Canvas::new(
             Rectangle::new_v_stack(predictive_canvas.clip_rect(), -min_input_height),
-         checked_base_trust - 2, &trng, None
+            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::ChatInput
         ).expect("couldn't create input text canvas");
         canvases.insert(input_canvas.gid(), input_canvas);
 
         let content_canvas = Canvas::new(
             Rectangle::new_v_span(status_canvas.clip_rect(), input_canvas.clip_rect()),
-            checked_base_trust / 2, &trng, None
+            (MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET) / 2, &trng, None, crate::api::CanvasType::ChatContent
         ).expect("couldn't create content canvas");
         canvases.insert(content_canvas.gid(), content_canvas);
 
@@ -125,14 +122,21 @@ impl LayoutApi for ChatLayout {
             Ok(input_canvas.clip_rect().br)
         }
     }
-    fn get_input_canvas(&self) -> Option<Gid> {
-        Some(self.input)
-    }
-    fn get_prediction_canvas(&self) -> Option<Gid> {
-        Some(self.predictive)
-    }
-    fn get_content_canvas(&self) -> Gid {
-        self.content
+    fn get_gids(&self) ->Vec<crate::api::GidRecord> {
+        vec![
+            crate::api::GidRecord {
+                gid: self.content,
+                canvas_type: crate::api::CanvasType::ChatContent
+            },
+            crate::api::GidRecord {
+                gid: self.input,
+                canvas_type: crate::api::CanvasType::ChatInput
+            },
+            crate::api::GidRecord {
+                gid: self.predictive,
+                canvas_type: crate::api::CanvasType::ChatPreditive
+            },
+        ]
     }
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
         log::debug!("request modal to onscreen {} from self.visible {}", onscreen, self.visible);

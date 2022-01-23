@@ -3,6 +3,9 @@ use gam::*;
 use gam::menu::*;
 use gam::menu::api::DrawStyle;
 
+const BALL_RADIUS: i16 = 10;
+const MOMENTUM_LIMIT: i32 = 8;
+const BORDER_WIDTH: i16 = 5;
 pub(crate) struct Ball {
     gam: gam::Gam,
     xns: xous_names::XousNames,
@@ -10,6 +13,9 @@ pub(crate) struct Ball {
     screensize: Point,
     // our security token for making changes to our record on the GAM
     token: [u32; 4],
+    ball: Circle,
+    momentum: Point,
+    trng: trng::Trng,
 }
 
 impl Ball {
@@ -19,7 +25,7 @@ impl Ball {
 
         let token = gam.register_ux(UxRegistration {
             app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_BALL),
-            ux_type: gam::UxType::Chat,
+            ux_type: gam::UxType::Framebuffer,
             predictor: None,
             listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
             redraw_id: AppOp::Redraw.to_u32().unwrap(),
@@ -31,22 +37,133 @@ impl Ball {
 
         let gid = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
         let screensize = gam.get_canvas_bounds(gid).expect("couldn't get dimensions of content canvas");
+
+        gam.draw_rectangle(gid,
+            Rectangle::new_coords_with_style(0, 0, screensize.x, screensize.y,
+                DrawStyle::new(PixelColor::Light, PixelColor::Dark, 2))
+        ).expect("couldn't draw our rectangle");
+
+        let trng = trng::Trng::new(&xns).unwrap();
+        let x = ((trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
+        let y = ((trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
+
+        let mut ball = Circle::new(Point::new(screensize.x / 2, screensize.y / 2), BALL_RADIUS);
+        ball.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
+        gam.draw_circle(gid, ball).expect("couldn't erase ball's previous position");
+
         Ball {
             gid,
             xns,
             gam,
             screensize,
             token: token.unwrap(),
+            ball,
+            momentum: Point::new(x as i16, y as i16),
+            trng,
         }
     }
-    pub(crate) fn redraw(&mut self) {
-        // just grief the UX for now
+    pub(crate) fn update(&mut self) {
+        // clear the previous location of the ball
+        self.ball.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
+        self.gam.draw_circle(self.gid, self.ball).expect("couldn't erase ball's previous position");
+        // update the ball position based on the momentum vector
+        self.ball.translate(self.momentum);
+        // check if the ball hits the wall, if so, snap its position to the wall
+        let mut hit_right = false;
+        let mut hit_left = false;
+        let mut hit_top = false;
+        let mut hit_bott = false;
+        if self.ball.center.x + (BALL_RADIUS + BORDER_WIDTH) >= self.screensize.x {
+            hit_right = true;
+            self.ball.center.x = self.screensize.x - (BALL_RADIUS + BORDER_WIDTH);
+        }
+        if self.ball.center.x - (BALL_RADIUS + BORDER_WIDTH) <= 0 {
+            hit_left = true;
+            self.ball.center.x = BALL_RADIUS + BORDER_WIDTH;
+        }
+        if self.ball.center.y + (BALL_RADIUS + BORDER_WIDTH) >= self.screensize.y {
+            hit_bott = true;
+            self.ball.center.y = self.screensize.y - (BALL_RADIUS + BORDER_WIDTH);
+        }
+        if self.ball.center.y - (BALL_RADIUS + BORDER_WIDTH) <= 0 {
+            hit_top = true;
+            self.ball.center.y = BALL_RADIUS + BORDER_WIDTH;
+        }
+        if hit_right || hit_left || hit_bott || hit_top {
+            let mut x = ((self.trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
+            let mut y = ((self.trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
+            if hit_right {
+                x = - x.abs();
+            }
+            if hit_left {
+                x = x.abs();
+            }
+            if hit_top {
+                y = y.abs();
+            }
+            if hit_bott {
+                y = - y.abs();
+            }
+            self.momentum = Point::new(x as i16, y as i16);
+        }
+        // draw the new location for the ball
+        self.ball.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
+        self.gam.draw_circle(self.gid, self.ball).expect("couldn't erase ball's previous position");
+        self.gam.redraw().unwrap();
+    }
+    pub(crate) fn focus(&mut self) {
+        // draw the background entirely
         self.gam.draw_rectangle(self.gid,
             Rectangle::new_coords_with_style(0, 0, self.screensize.x, self.screensize.y,
-                DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
-            ).expect("couldn't draw our rectangle");
+                DrawStyle::new(PixelColor::Light, PixelColor::Dark, BORDER_WIDTH))
+        ).expect("couldn't draw our rectangle");
     }
     pub(crate) fn rawkeys(&mut self, keys: [char; 4]) {
         log::info!("got rawkey {:?}", keys);
     }
+}
+
+pub(crate) fn ball_pump_thread(cid_to_main: xous::CID, pump_sid: xous::SID) {
+    let _ = std::thread::spawn({
+        let cid_to_main = cid_to_main; // kind of redundant but I like making the closure captures explicit
+        let sid = pump_sid;
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            let cid_to_self = xous::connect(sid).unwrap();
+            let mut run = true;
+            loop {
+                // this blocks the process until a message is received, descheduling it from the run queue
+                let msg = xous::receive_message(sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PumpOp::Run) => {
+                        run = true;
+                        xous::send_message(
+                            cid_to_self,
+                            Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't pump the main loop event thread");
+                    },
+                    Some(PumpOp::Stop) => run = false,
+                    Some(PumpOp::Pump) => {
+                        xous::send_message(
+                            cid_to_main,
+                            Message::new_blocking_scalar(AppOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't pump the main loop event thread");
+                        if run {
+                            tt.sleep_ms(BALL_UPDATE_RATE_MS).unwrap();
+                            xous::send_message(
+                                cid_to_self,
+                                Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)
+                            ).expect("couldn't pump the main loop event thread");
+                        }
+                    }
+                    Some(PumpOp::Quit) => {
+                        xous::return_scalar(msg.sender, 1).expect("couldn't ack the quit message");
+                        break;
+                    }
+                    _ => log::error!("Got unrecognized message: {:?}", msg),
+                }
+            }
+            xous::destroy_server(sid).ok();
+        }
+    });
 }

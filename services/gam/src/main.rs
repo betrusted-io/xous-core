@@ -58,7 +58,7 @@ fn xmain() -> ! {
     // the status canvas is special -- there can only be one, and it is ultimately trusted
     let status_canvas = Canvas::new(
         Rectangle::new_coords(0, 0, screensize.x, gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16 * 2),
-        255, &trng, None
+        255, &trng, None, crate::api::CanvasType::Status
     ).expect("couldn't create status canvas");
     canvases.insert(status_canvas.gid(), status_canvas);
     canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
@@ -192,7 +192,7 @@ fn xmain() -> ! {
                             // BOOT_CONTEXT_TRUSTLEVEL is reserved for the "status bar"
                             // BOOT_CONTEXT_TRUSTLEVEL - 1 is where e.g. password modal dialog boxes end up
                             if tv.invert & (canvas.trust_level() < BOOT_CONTEXT_TRUSTLEVEL - 1) {
-                                log::error!("Attempt to draw inverted text without sufficient trust level. Aborting.");
+                                log::error!("Attempt to draw inverted text without sufficient trust level: {}. Aborting.", canvas.trust_level());
                                 continue;
                             }
                             // first, figure out if we should even be drawing to this canvas.
@@ -355,7 +355,7 @@ fn xmain() -> ! {
                 // note that we are currently assigning all Ux registrations a trust level consistent with a boot context (ultimately trusted)
                 // this needs to be modified later on once we allow post-boot apps to be created
                 let token = context_mgr.register(&gfx, &trng, &status_canvas, &mut canvases,
-                    BOOT_CONTEXT_TRUSTLEVEL, registration);
+                    registration);
 
                 // compute what canvases are drawable
                 // this _replaces_ the original canvas structure, to avoid complications of tracking mutable references through compound data structures
@@ -431,7 +431,7 @@ fn xmain() -> ! {
             Some(Opcode::SwitchToApp) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let switchapp = buffer.to_original::<SwitchToApp, _>().unwrap();
-                log::info!("trying to switch to {:?} with token {:?}", switchapp.app_name.as_str().unwrap(), switchapp.token);
+                log::debug!("trying to switch to {:?} with token {:?}", switchapp.app_name.as_str().unwrap(), switchapp.token);
 
                 if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
                     if let Some(menu_token) = context_mgr.find_app_token_by_name(MAIN_MENU_NAME) {
@@ -447,9 +447,7 @@ fn xmain() -> ! {
                         }
                     }
                     if let Some(token) = context_mgr.find_app_token_by_name(gam::STATUS_BAR_NAME) {
-                        log::info!("status token: {:?}", token);
                         if token == switchapp.token {
-                            log::info!("matched status token");
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, true);
                             continue;
                         }

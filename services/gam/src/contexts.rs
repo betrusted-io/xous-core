@@ -1,4 +1,3 @@
-
 use crate::*;
 use graphics_server::*;
 use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
@@ -10,8 +9,10 @@ use log::info;
 use std::collections::HashMap;
 use enum_dispatch::enum_dispatch;
 
-//// todo:
+// todo:
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
+
+pub (crate) const MISC_CONTEXT_DEFAULT_TRUST: u8 = 127;
 
 #[derive(PartialEq, Eq)]
 pub(crate) enum LayoutBehavior {
@@ -26,9 +27,10 @@ pub(crate) trait LayoutApi {
     fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut HashMap<Gid, Canvas>) -> Result<(), xous::Error>;
     // for Chats, this resizes the height of the input area; for menus, it resizes the overall height
     fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error>;
-    fn get_input_canvas(&self) -> Option<Gid> { None }
-    fn get_prediction_canvas(&self) -> Option<Gid> { None }
-    fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
+    fn get_gids(&self) -> Vec<GidRecord>;
+    //fn get_input_canvas(&self) -> Option<Gid> { None }
+    //fn get_prediction_canvas(&self) -> Option<Gid> { None }
+    //fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
     // when the argument is true, the context is moved "onscreen" by moving the canvases into the screen clipping rectangle
     // when false, the context is moved "offscreen" by moving the canvases outside the screen clipping rectangle
     // note that this visibility state is an independent variable from the trust level draw-ability
@@ -72,7 +74,6 @@ pub(crate) struct UxContext {
     /// opcode ID for focus change
     pub focuschange_id: Option<u32>,
 }
-// const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub(crate) const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
 /*
@@ -129,7 +130,6 @@ impl ContextManager {
                 trng: &trng::Trng,
                 status_canvas: &Canvas,
                 canvases: &mut HashMap<Gid, Canvas>,
-                trust_level: u8,
                 registration: UxRegistration)
             -> Option<[u32; 4]> {
         let maybe_token = self.tm.claim_token(registration.app_name.as_str().unwrap());
@@ -137,7 +137,7 @@ impl ContextManager {
             match registration.ux_type {
                 UxType::Chat => {
                     let mut chatlayout = ChatLayout::init(&gfx, &trng,
-                        trust_level, &status_canvas, canvases).expect("couldn't create chat layout");
+                        &status_canvas, canvases).expect("couldn't create chat layout");
                     // default to off-screen for all layouts
                     chatlayout.set_visibility_state(false, canvases);
                         let ux_context = UxContext {
@@ -157,7 +157,7 @@ impl ContextManager {
                 },
                 UxType::Menu => {
                     let mut menulayout = MenuLayout::init(&gfx, &trng,
-                        trust_level, canvases).expect("couldn't create menu layout");
+                        canvases).expect("couldn't create menu layout");
                     // default to off-screen for all layouts
                     menulayout.set_visibility_state(false, canvases);
                     log::debug!("debug menu layout: {:?}", menulayout);
@@ -184,7 +184,7 @@ impl ContextManager {
                 }
                 UxType::Modal => {
                     let mut modallayout = ModalLayout::init(&gfx, &trng,
-                        trust_level, canvases).expect("couldn't create modal layout");
+                        canvases).expect("couldn't create modal layout");
                     // default to off-screen for all layouts
                     modallayout.set_visibility_state(false, canvases);
                     log::debug!("debug modal layout: {:?}", modallayout);
@@ -202,10 +202,17 @@ impl ContextManager {
                         vibe: false,
                     };
                     self.contexts.insert(token, ux_context);
+                    // this check gives permissions to password boxes to render inverted text
+                    if registration.app_name.as_str().unwrap() == gam::ROOTKEY_MODAL_NAME
+                    || registration.app_name.as_str().unwrap() == gam::PDDB_MODAL_NAME {
+                        if !self.set_context_trust_level(token, BOOT_CONTEXT_TRUSTLEVEL - 1, canvases) {
+                            log::error!("Couldn't set password box trust levels to fully trusted");
+                        }
+                    }
                 }
                 UxType::Framebuffer => {
                     let mut raw_fb = Framebuffer::init(&gfx, &trng,
-                        trust_level, canvases).expect("couldn't create raw fb layout");
+                        &status_canvas, canvases).expect("couldn't create raw fb layout");
                     raw_fb.set_visibility_state(false, canvases);
                     log::debug!("debug raw fb layout: {:?}", raw_fb);
                     let ux_context = UxContext {
@@ -233,9 +240,30 @@ impl ContextManager {
 
         maybe_token
     }
+    /// private function to set a trust level. should only be done on contexts that we ... trust. returns true if the token is found, false if not.
+    fn set_context_trust_level(&self, token: [u32; 4], level: u8, canvases: &mut HashMap<Gid, Canvas>) -> bool {
+        if let Some(context) = self.contexts.get(&token) {
+            let mut success = true;
+            for gr in context.layout.get_gids().iter() {
+                if let Some(canvas) = canvases.get_mut(&gr.gid) {
+                    canvas.set_trust_level(level);
+                } else {
+                    success = false;
+                }
+            }
+            success
+        } else {
+            false
+        }
+    }
     pub(crate) fn get_content_canvas(&self, token: [u32; 4]) -> Option<Gid> {
         if let Some(context) = self.contexts.get(&token) {
-            return Some(context.layout.get_content_canvas());
+            let gids = context.layout.get_gids();
+            if let Some(gr) = gids.iter().filter(|&gr| gr.canvas_type.is_content()).next() {
+                Some(gr.gid)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -346,8 +374,22 @@ impl ContextManager {
                 if context.predictor.is_some() {
                     // only hook up the IMEF if a predictor is selected for this context
                     let descriptor = ImefDescriptor {
-                        input_canvas: context.layout.get_input_canvas(),
-                        prediction_canvas: context.layout.get_prediction_canvas(),
+                        input_canvas:
+                            if let Some(gr) =
+                            context.layout.get_gids().iter().filter(|&gr| gr.canvas_type == CanvasType::ChatInput)
+                            .next() {
+                                Some(gr.gid)
+                            } else {
+                                None
+                            },
+                        prediction_canvas:
+                            if let Some(gr) =
+                            context.layout.get_gids().iter().filter(|&gr| gr.canvas_type == CanvasType::ChatPreditive)
+                            .next() {
+                                Some(gr.gid)
+                            } else {
+                                None
+                            },
                         predictor: context.predictor,
                         token: context.gam_token,
                     };

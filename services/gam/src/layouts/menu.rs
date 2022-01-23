@@ -6,6 +6,9 @@ use graphics_server::*;
 
 use crate::{LayoutApi, LayoutBehavior};
 
+use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
+const TRUST_OFFSET: u8 = 0;
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct MenuLayout {
     pub menu: Gid,
@@ -17,24 +20,17 @@ pub(crate) struct MenuLayout {
     visible: bool,
 }
 impl MenuLayout {
-    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8, canvases: &mut HashMap<Gid, Canvas>) -> Result<MenuLayout, xous::Error> {
+    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut HashMap<Gid, Canvas>) -> Result<MenuLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
         let height: i16 = gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16;
 
-        let checked_base_trust = if base_trust < 4 {
-            4
-        } else {
-            base_trust
-        };
-
         const MENU_Y_PAD: i16 = 100;
         const MENU_X_PAD: i16 = 35;
         // build for an initial size of 1 entry
-        // base trust - 1 so that status bar can always ride on top
         let menu_canvas = Canvas::new(
             Rectangle::new_coords(MENU_X_PAD, MENU_Y_PAD, screensize.x - MENU_X_PAD, MENU_Y_PAD + height),
-            checked_base_trust - 1, &trng, None
+            MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::Menu
         ).expect("couldn't create menu canvas");
         canvases.insert(menu_canvas.gid(), menu_canvas);
 
@@ -78,8 +74,13 @@ impl LayoutApi for MenuLayout {
         // gfx.draw_rectangle(menu_clip_rect).expect("can't clear menu");
         Ok(menu_clip_rect.br)
     }
-    fn get_content_canvas(&self) -> Gid {
-        self.menu
+    fn get_gids(&self) ->Vec<crate::api::GidRecord> {
+        vec![
+            crate::api::GidRecord {
+                gid: self.menu,
+                canvas_type: crate::api::CanvasType::Menu
+            },
+        ]
     }
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
         log::debug!("menu entering set_visibilty_state, self.visible {}, onscreen {}", self.visible, onscreen);

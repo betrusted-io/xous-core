@@ -69,7 +69,7 @@ impl<'a> TokenManager {
     }
     pub(crate) fn find_token(&self, name: &str) -> Option<[u32; 4]> {
         if let Some(i) = self.tokens.iter().position(|namedtoken| namedtoken.name == name) {
-            log::info!("found {}:{:?}", name, self.tokens[i].token);
+            log::debug!("found {}:{:?}", name, self.tokens[i].token);
             Some(self.tokens[i].token)
         } else {
             None
