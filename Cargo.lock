@@ -126,8 +126,10 @@ version = "0.1.0"
 dependencies = [
  "com",
  "gam",
+ "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "ticktimer-server",

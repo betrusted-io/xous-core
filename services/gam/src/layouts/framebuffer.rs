@@ -21,12 +21,10 @@ impl Framebuffer {
     ) -> Result<Framebuffer, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
 
-        log::info!("got screensize {:?}", screensize);
         let fb_canvas = Canvas::new(
             Rectangle::new(Point::new(0, status_canvas.clip_rect().br().y + 1), screensize),
             MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::Framebuffer
         ).expect("couldn't create modal canvas");
-        log::info!("canvas: {:?}", fb_canvas);
         canvases.insert(fb_canvas.gid(), fb_canvas);
 
         Ok(Framebuffer {

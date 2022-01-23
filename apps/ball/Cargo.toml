@@ -17,7 +17,9 @@ ticktimer-server = { path = "../../services/ticktimer-server" }
 xous-names = { path = "../../services/xous-names" }
 gam = {path = "../../services/gam" }
 trng = {path = "../../services/trng"}
+modals = {path = "../../services/modals"}
 com = {path = "../../services/com"} # for the gyro read
+locales = {path = "../../locales"}
 
 [features]
 default = []

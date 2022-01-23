@@ -2,20 +2,29 @@ use super::*;
 use gam::*;
 use gam::menu::*;
 use gam::menu::api::DrawStyle;
+use locales::t;
+
+#[derive(PartialEq, Eq)]
+enum BallMode {
+    Random,
+    Tilt
+}
 
 const BALL_RADIUS: i16 = 10;
 const MOMENTUM_LIMIT: i32 = 8;
 const BORDER_WIDTH: i16 = 5;
 pub(crate) struct Ball {
     gam: gam::Gam,
-    xns: xous_names::XousNames,
     gid: Gid,
     screensize: Point,
     // our security token for making changes to our record on the GAM
-    token: [u32; 4],
+    _token: [u32; 4],
     ball: Circle,
     momentum: Point,
     trng: trng::Trng,
+    modals: modals::Modals,
+    mode: BallMode,
+    com: com::Com,
 }
 
 impl Ball {
@@ -50,24 +59,42 @@ impl Ball {
         let mut ball = Circle::new(Point::new(screensize.x / 2, screensize.y / 2), BALL_RADIUS);
         ball.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         gam.draw_circle(gid, ball).expect("couldn't erase ball's previous position");
-
+        let modals = modals::Modals::new(&xns).unwrap();
+        let com = com::Com::new(&xns).unwrap();
         Ball {
             gid,
-            xns,
             gam,
             screensize,
-            token: token.unwrap(),
+            _token: token.unwrap(),
             ball,
             momentum: Point::new(x as i16, y as i16),
             trng,
+            modals,
+            mode: BallMode::Random,
+            com,
         }
     }
     pub(crate) fn update(&mut self) {
         // clear the previous location of the ball
         self.ball.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
         self.gam.draw_circle(self.gid, self.ball).expect("couldn't erase ball's previous position");
+        if self.mode == BallMode::Tilt {
+            let (x, y, _z, _id) = self.com.gyro_read_blocking().unwrap();
+            let ix = x as i16;
+            let iy = y as i16;
+            log::debug!("x: {}, y: {}", ix, iy);
+            // negative x => tilt to right
+            // positive x => tilt to left
+            // negative y => tilt toward top
+            // positive y => tilt toward bottom
+            self.momentum = Point::new(
+                -(ix / 200),
+                iy / 200
+            );
+        }
         // update the ball position based on the momentum vector
         self.ball.translate(self.momentum);
+
         // check if the ball hits the wall, if so, snap its position to the wall
         let mut hit_right = false;
         let mut hit_left = false;
@@ -89,7 +116,8 @@ impl Ball {
             hit_top = true;
             self.ball.center.y = BALL_RADIUS + BORDER_WIDTH;
         }
-        if hit_right || hit_left || hit_bott || hit_top {
+
+        if (hit_right || hit_left || hit_bott || hit_top) && (self.mode == BallMode::Random) {
             let mut x = ((self.trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
             let mut y = ((self.trng.get_u32().unwrap() / 2) as i32) % (MOMENTUM_LIMIT * 2) - MOMENTUM_LIMIT;
             if hit_right {
@@ -106,6 +134,7 @@ impl Ball {
             }
             self.momentum = Point::new(x as i16, y as i16);
         }
+
         // draw the new location for the ball
         self.ball.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         self.gam.draw_circle(self.gid, self.ball).expect("couldn't erase ball's previous position");
@@ -119,7 +148,25 @@ impl Ball {
         ).expect("couldn't draw our rectangle");
     }
     pub(crate) fn rawkeys(&mut self, keys: [char; 4]) {
-        log::info!("got rawkey {:?}", keys);
+        log::debug!("got rawkey {:?}", keys); // you could use the raw keypresses, but modals are easier...
+        let mut note = String::new();
+        use std::fmt::Write;
+        write!(note, "{}'{}'.\n\n{}",
+            t!("ballapp.notification_a", xous::LANG),
+            keys[0],
+            t!("ballapp.notification_b", xous::LANG),
+        ).unwrap();
+        self.modals.show_notification(&note).unwrap();
+        self.modals.add_list_item(t!("ballapp.random", xous::LANG)).unwrap();
+        self.modals.add_list_item(t!("ballapp.tilt", xous::LANG)).unwrap();
+        let mode = self.modals.get_radiobutton(t!("ballapp.mode_prompt", xous::LANG)).unwrap();
+        if mode == t!("ballapp.random", xous::LANG) {
+            self.mode = BallMode::Random;
+        } else if mode == t!("ballapp.tilt", xous::LANG) {
+            self.mode = BallMode::Tilt;
+        } else {
+            log::warn!("got an unexpected response from the radio button function: {}", mode);
+        }
     }
 }
 

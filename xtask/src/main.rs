@@ -280,7 +280,7 @@ burn-kernel             invoke the `usb_update.py` utility to burn the kernel
 burn-loader             invoke the `usb_update.py` utility to burn the loader
 burn-soc                invoke the `usb_update.py` utility to stage the SoC gateware, which must then be provisioned with secret material using the Precursor device.
 nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
-generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
+generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
 wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
 pddb-dev                PDDB testing only for live hardware
 pddb-hosted             PDDB testing in a hosted environment
@@ -964,11 +964,22 @@ fn project_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Force the locales to be regenerated. This simply `touches`
-/// the `build.rs` for locales, causing a rebuild next time.
+/// Regenerate the locales files. This is only done when the command is explicitly run.
 fn generate_locales() -> Result<(), std::io::Error> {
     let ts = filetime::FileTime::from_system_time(std::time::SystemTime::now());
-    filetime::set_file_mtime("locales/src/lib.rs", ts)
+    filetime::set_file_mtime("locales/src/lib.rs", ts)?;
+    let status = Command::new(cargo())
+        .current_dir(project_root())
+        .args(&[
+            "build",
+            "--package",
+            "locales",
+        ])
+        .status()?;
+    if !status.success() {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Couldn't generate the locales"));
+    }
+    return Ok(());
 }
 
 fn whycheproof_import() -> Result<(), DynError> {
