@@ -75,23 +75,6 @@ fn map_fonts() -> MemoryRange {
     blitstr2::fonts::small::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET as usize) as u32, Ordering::SeqCst);
     blitstr2::fonts::zh::GLYPH_LOCATION.store((fontregion.as_ptr() as usize + fontmap::ZH_OFFSET as usize) as u32, Ordering::SeqCst);
 
-    /*
-    blitstr::map_font(blitstr::GlyphData::Emoji(
-        (fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET) as usize,
-    ));
-    blitstr::map_font(blitstr::GlyphData::Hanzi(
-        (fontregion.as_ptr() as usize + fontmap::HANZI_OFFSET) as usize,
-    ));
-    blitstr::map_font(blitstr::GlyphData::Regular(
-        (fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET) as usize,
-    ));
-    blitstr::map_font(blitstr::GlyphData::Small(
-        (fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET) as usize,
-    ));
-    blitstr::map_font(blitstr::GlyphData::Bold(
-        (fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET) as usize,
-    ));
-    */
     fontregion
 }
 
