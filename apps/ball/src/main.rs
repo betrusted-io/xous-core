@@ -13,6 +13,8 @@ pub(crate) enum AppOp {
     Redraw,
     /// handle raw key input
     Rawkeys,
+    /// handle focus change
+    FocusChange,
     /// exit the application
     Quit,
 }
@@ -42,6 +44,10 @@ fn xmain() -> ! {
                     core::char::from_u32(k4 as u32).unwrap_or('\u{0000}'),
                 ];
                 ball.rawkeys(keys);
+            }),
+            Some(AppOp::FocusChange) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
+                let new_state = gam::FocusState::convert_focus_change(new_state_code);
+                log::info!("got focus change with new state: {:?}", new_state);
             }),
             Some(AppOp::Quit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 xous::return_scalar(msg.sender, 1).expect("couldn't acknowledge quit message");

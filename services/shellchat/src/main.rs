@@ -94,6 +94,7 @@ impl Repl{
             gotinput_id: Some(ShellOpcode::Line.to_u32().unwrap()),
             audioframe_id: None,
             rawkeys_id: None,
+            focuschange_id: None, // shellchat will keep running in the background even if it has lost focus
         }).expect("couldn't register Ux context for shellchat");
 
         // we should be the first app running, so get the focus

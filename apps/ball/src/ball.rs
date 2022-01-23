@@ -25,6 +25,7 @@ impl Ball {
             redraw_id: AppOp::Redraw.to_u32().unwrap(),
             gotinput_id: None,
             audioframe_id: None,
+            focuschange_id: Some(AppOp::FocusChange.to_u32().unwrap()),
             rawkeys_id: Some(AppOp::Rawkeys.to_u32().unwrap()),
         }).expect("couldn't register Ux context for shellchat");
 

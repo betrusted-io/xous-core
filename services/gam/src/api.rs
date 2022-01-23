@@ -72,6 +72,8 @@ pub struct UxRegistration {
     pub audioframe_id: Option<u32>,
     /// optional opcode ID for raw keystrokes. They are passed on to the caller in real-time.
     pub rawkeys_id: Option<u32>,
+    /// optional opcode ID code for focus change notifications. Most applications will want to provide this to stop hogging resources when backgrounded
+    pub focuschange_id: Option<u32>,
 }
 
 

@@ -84,6 +84,8 @@ pub(crate) struct UxContext {
     pub rawkeys_id: Option<u32>,
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
+    /// opcode ID for focus change
+    pub focuschange_id: Option<u32>,
 }
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
@@ -164,6 +166,7 @@ impl ContextManager {
                         redraw_id: registration.redraw_id,
                         gotinput_id: registration.gotinput_id,
                         audioframe_id: registration.audioframe_id,
+                        focuschange_id: registration.focuschange_id,
                         rawkeys_id: None,
                         vibe: false,
                     };
@@ -185,6 +188,7 @@ impl ContextManager {
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
                         audioframe_id: None,
+                        focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                     };
@@ -212,6 +216,7 @@ impl ContextManager {
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
                         audioframe_id: None,
+                        focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                     };
@@ -232,6 +237,7 @@ impl ContextManager {
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
                         audioframe_id: None,
+                        focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                     };
@@ -344,6 +350,10 @@ impl ContextManager {
         {
             // let all the previous operations go out of scope, so we can "check out" the old copy and modify it
             if self.focused_context.is_some() {
+                // immutable borrow here can't be combined with mutable borrow below
+                if let Some(old_context) = self.get_context_by_token(self.focused_context.unwrap()) {
+                    self.notify_focus_change_to(gam::FocusState::Background, old_context).unwrap();
+                }
                 if let Some(old_context) = self.get_context_by_token_mut(self.focused_context.unwrap()) {
                     old_context.layout.set_visibility_state(leaving_visibility, canvases);
                 }
@@ -376,6 +386,7 @@ impl ContextManager {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
             if let Some(context) = maybe_new_focus {
+                self.notify_focus_change_to(gam::FocusState::Foreground, context).unwrap();
                 if clear {
                     context.layout.clear(gfx, canvases).expect("can't clear on context activation");
                 }
@@ -407,6 +418,15 @@ impl ContextManager {
         if let Some(last) = self.last_context {
             self.activate(gfx, canvases, last, false);
         }
+    }
+    fn notify_focus_change_to(&self, new_state: gam::FocusState, context: &UxContext) -> Result<(), xous::Error> {
+        if let Some(focuschange_id) = context.focuschange_id {
+            log::trace!("focus change {:?} msg to {}, id {}", new_state, context.listener, context.redraw_id);
+            return xous::send_message(context.listener,
+                xous::Message::new_scalar(focuschange_id as usize, new_state as usize, 0, 0, 0)
+            ).map(|_| ())
+        }
+        Ok(())
     }
     pub(crate) fn redraw(&self) -> Result<(), xous::Error> { // redraws the currently focused context
         if let Some(token) = self.focused_app() {
@@ -943,23 +963,27 @@ fn xmain() -> ! {
             Some(Opcode::SwitchToApp) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let switchapp = buffer.to_original::<SwitchToApp, _>().unwrap();
+                log::info!("trying to switch to {:?} with token {:?}", switchapp.app_name.as_str().unwrap(), switchapp.token);
 
-                if let Some(menu_token) = context_mgr.find_app_token_by_name(MAIN_MENU_NAME) {
-                    if menu_token == switchapp.token {
-                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                    if let Some(menu_token) = context_mgr.find_app_token_by_name(MAIN_MENU_NAME) {
+                        if menu_token == switchapp.token {
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                            continue;
                         }
                     }
-                } else if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
-                    if modal_token == switchapp.token {
-                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                    if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
+                        if modal_token == switchapp.token {
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                            continue;
                         }
                     }
-                } else if let Some(token) = context_mgr.find_app_token_by_name(gam::STATUS_BAR_NAME) {
-                    if token == switchapp.token {
-                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
-                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                    if let Some(token) = context_mgr.find_app_token_by_name(gam::STATUS_BAR_NAME) {
+                        log::info!("status token: {:?}", token);
+                        if token == switchapp.token {
+                            log::info!("matched status token");
+                            context_mgr.activate(&gfx, &mut canvases, new_app_token, true);
+                            continue;
                         }
                     }
                 }

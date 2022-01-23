@@ -65,12 +65,11 @@ impl<'a> TokenManager {
         return Some(token)
     }
     pub(crate) fn is_token_valid(&self, token: [u32; 4]) -> bool {
-        log::trace!("checking for validity of token {:x?}", token);
-        log::trace!("token table is {:x?}", self.tokens);
         self.tokens.iter().find(|&namedtoken| namedtoken.token == token).is_some()
     }
     pub(crate) fn find_token(&self, name: &str) -> Option<[u32; 4]> {
         if let Some(i) = self.tokens.iter().position(|namedtoken| namedtoken.name == name) {
+            log::info!("found {}:{:?}", name, self.tokens[i].token);
             Some(self.tokens[i].token)
         } else {
             None

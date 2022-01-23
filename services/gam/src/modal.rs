@@ -279,6 +279,7 @@ impl<'a> Modal<'a> {
                 redraw_id: ModalOpcode::Redraw.to_u32().unwrap(),
                 gotinput_id: None,
                 audioframe_id: None,
+                focuschange_id: None,
                 rawkeys_id: Some(ModalOpcode::Rawkeys.to_u32().unwrap()),
             }
         ).expect("couldn't register my Ux element with GAM");

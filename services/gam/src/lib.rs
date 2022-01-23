@@ -48,6 +48,23 @@ pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
     APP_NAME_BALL,
 ];
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[repr(u32)]
+pub enum FocusState {
+    Background = 0,
+    Foreground = 1,
+}
+impl FocusState {
+    pub fn convert_focus_change(code: usize) -> FocusState {
+        if code != 0 {
+            FocusState::Foreground
+        } else {
+            FocusState::Background
+        }
+    }
+}
+
+
 #[derive(Debug)]
 pub struct Gam {
     /// The Gam structure exists on the client-side. This is the connection ID to the GAM server, local to this client.

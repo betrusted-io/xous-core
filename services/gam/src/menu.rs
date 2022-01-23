@@ -49,6 +49,7 @@ impl<'a> Menu<'a> {
                 redraw_id: MenuOpcode::Redraw.to_u32().unwrap(),
                 gotinput_id: None,
                 audioframe_id: None,
+                focuschange_id: None,
                 rawkeys_id: Some(MenuOpcode::Rawkeys.to_u32().unwrap()),
             }
         ).expect("couldn't register my Ux element with GAM");
