@@ -86,7 +86,7 @@ pub(crate) const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 */
 pub(crate) struct ContextManager {
     tm: TokenManager,
-    contexts: HashMap::<[u32; 4], UxContext>, // historical note: we used to limit the number of contexts to prevent rogue UX elements, but now we track valid ones in 'tokens.rs', allowing context storage allocations to grow on-demand.
+    contexts: HashMap::<[u32; 4], UxContext>,
     focused_context: Option<[u32; 4]>, // app_token of the app that has I/O focus, if any
     last_context: Option<[u32; 4]>, // previously focused context, if any
     imef: ime_plugin_api::ImeFrontEnd,
