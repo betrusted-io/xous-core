@@ -36,6 +36,14 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
         close_on_select: true,
     });
 
+    menuitems.push(MenuItem {
+        name: String::from_str(t!("mainmenu.app", xous::LANG)),
+        action_conn: Some(status_conn),
+        action_opcode: StatusOpcode::SubmenuApp.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+
     let key_init = keys.lock().unwrap().is_initialized().unwrap();
     if !key_init {
         menuitems.push(MenuItem {
@@ -83,14 +91,6 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
         name: String::from_str(t!("mainmenu.pddb", xous::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::SubmenuPddb.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    });
-
-    menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.app", xous::LANG)),
-        action_conn: Some(status_conn),
-        action_opcode: StatusOpcode::SubmenuApp.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
