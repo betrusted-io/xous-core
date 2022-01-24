@@ -50,9 +50,9 @@ impl<'a> ShellCmdApi<'a> for Audio {
                         440.0
                     };
                     let mut duration: f32 = if let Some(duration_str) = tokens.next() {
-                        duration_str.parse::<f32>().unwrap_or(2.0)
+                        duration_str.parse::<f32>().unwrap_or(0.5)
                     } else {
-                        2.0
+                        0.5
                     };
                     if duration > 10.0 {
                         duration = 10.0; // sanity check the duration so we don't go nuts

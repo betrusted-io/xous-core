@@ -55,7 +55,7 @@ impl Repl{
             gotinput_id: Some(ReplOp::Line.to_u32().unwrap()),
             audioframe_id: None,
             rawkeys_id: None,
-            focuschange_id: Some(ReplOp::Redraw.to_u32().unwrap()),
+            focuschange_id: Some(ReplOp::ChangeFocus.to_u32().unwrap()),
         }).expect("couldn't register Ux context for repl");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");

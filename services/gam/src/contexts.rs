@@ -363,6 +363,7 @@ impl ContextManager {
                 // immutable borrow here can't be combined with mutable borrow below
                 if let Some(old_context) = self.get_context_by_token(self.focused_context.unwrap()) {
                     self.notify_focus_change_to(gam::FocusState::Background, old_context).unwrap();
+                    log::trace!("lowered focus to: {:?}", old_context);
                 }
                 if let Some(old_context) = self.get_context_by_token_mut(self.focused_context.unwrap()) {
                     old_context.layout.set_visibility_state(leaving_visibility, canvases);
@@ -426,7 +427,7 @@ impl ContextManager {
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
 
                 self.notify_focus_change_to(gam::FocusState::Foreground, context).unwrap();
-                log::debug!("raised focus to: {:?}", context);
+                log::trace!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
