@@ -161,9 +161,6 @@ pub(crate) enum Opcode {
     RevertFocus,
     RevertFocusNb, // non-blocking version
 
-    /// request an app to take the focus
-    RequestFocus,
-
     /// pass-through to get glyph heights to assist with layout planning, without having to create a gfx connection
     QueryGlyphProps,
 

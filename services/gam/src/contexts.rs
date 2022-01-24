@@ -408,7 +408,6 @@ impl ContextManager {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
             if let Some(context) = maybe_new_focus {
-                self.notify_focus_change_to(gam::FocusState::Foreground, context).unwrap();
                 if clear {
                     context.layout.clear(gfx, canvases).expect("can't clear on context activation");
                 }
@@ -422,6 +421,7 @@ impl ContextManager {
                 // revert the keyboard vibe state
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
 
+                self.notify_focus_change_to(gam::FocusState::Foreground, context).unwrap();
                 log::debug!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
                 self.last_context = self.focused_context;

@@ -21,7 +21,10 @@ use gam::{MAIN_MENU_NAME, ROOTKEY_MODAL_NAME};
 use log::info;
 use std::collections::HashMap;
 use num_traits::*;
-use core::{sync::atomic::{AtomicU32, Ordering}};
+use core::sync::atomic::{AtomicU32, Ordering};
+
+/// This sets the initial app focus on boot
+const INITIAL_APP_FOCUS: &'static str = gam::APP_NAME_SHELLCHAT;
 
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
 fn imef_cb(s: String::<4000>) {
@@ -35,7 +38,7 @@ fn imef_cb(s: String::<4000>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -77,6 +80,9 @@ fn xmain() -> ! {
         status_gid[0] as usize, status_gid[1] as usize, status_gid[2] as usize, status_gid[3] as usize
         )
     ).expect("couldn't set status GID");
+
+    // a random number we can use to identify ourselves between API calls
+    let gam_token = [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap()];
 
     let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer.elapsed_ms();
@@ -396,6 +402,11 @@ fn xmain() -> ! {
                 let mut buffer = unsafe{ Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let registration = buffer.to_original::<UxRegistration, _>().unwrap();
 
+                let init_focus_found = if registration.app_name.as_str().unwrap_or("UTF-8 error") == INITIAL_APP_FOCUS {
+                    true
+                } else {
+                    false
+                };
                 // note that we are currently assigning all Ux registrations a trust level consistent with a boot context (ultimately trusted)
                 // this needs to be modified later on once we allow post-boot apps to be created
                 let token = context_mgr.register(&gfx, &trng, &status_canvas, &mut canvases,
@@ -407,6 +418,22 @@ fn xmain() -> ! {
                 canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
                 buffer.replace(Return::UxToken(token)).unwrap();
+
+                // fire off a thread that deals with activating the initial boot context. You need this because this call has to complete before the context can respond to activation events.
+                if token.is_some() & init_focus_found {
+                    std::thread::spawn({
+                        let gam_token = gam_token.clone();
+                        let conn = CB_TO_MAIN_CONN.load(Ordering::SeqCst);
+                        move || {
+                            let switchapp = SwitchToApp {
+                                token: gam_token,
+                                app_name: String::<128>::from_str(INITIAL_APP_FOCUS),
+                            };
+                            let buf = Buffer::into_buf(switchapp).or(Err(xous::Error::InternalError))?;
+                            buf.send(conn, Opcode::SwitchToApp.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_|())
+                        }
+                    });
+                }
             },
             Some(Opcode::SetAudioOpcode) => {
                 let buffer = unsafe{ Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -457,6 +484,7 @@ fn xmain() -> ! {
             Some(Opcode::RevertFocusNb) => {
                 context_mgr.revert_focus(&gfx, &mut canvases);
             },
+            /*
             Some(Opcode::RequestFocus) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
                 // TODO: add some limitations around who can request focus
                 // for now, it's the boot set so we just trust the requestor
@@ -464,7 +492,7 @@ fn xmain() -> ! {
 
                 // this is a blocking scalar, so return /something/ so we know to move on
                 xous::return_scalar(msg.sender, 1).expect("couldn't confirm focus activation");
-            }),
+            }), */
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
                 let height = gfx.glyph_height_hint(GlyphStyle::from(style)).expect("couldn't query glyph height from gfx");
                 xous::return_scalar(msg.sender, height).expect("could not return QueryGlyphProps request");
@@ -495,6 +523,10 @@ fn xmain() -> ! {
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, true);
                             continue;
                         }
+                    }
+                    // this message came from ourselves
+                    if gam_token == switchapp.token {
+                        context_mgr.activate(&gfx, &mut canvases, new_app_token, true);
                     }
                 }
             },

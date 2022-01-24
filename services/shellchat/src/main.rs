@@ -94,11 +94,8 @@ impl Repl{
             gotinput_id: Some(ShellOpcode::Line.to_u32().unwrap()),
             audioframe_id: None,
             rawkeys_id: None,
-            focuschange_id: None, // shellchat will keep running in the background even if it has lost focus
+            focuschange_id: Some(ShellOpcode::ChangeFocus.to_u32().unwrap()),
         }).expect("couldn't register Ux context for shellchat");
-
-        // we should be the first app running, so get the focus
-        gam.request_focus(token.unwrap()).expect("couldn't take focus");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
         log::trace!("content canvas {:?}", content);
@@ -278,6 +275,8 @@ enum ShellOpcode {
     Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
     /// redraw our UI
     Redraw,
+    /// change focus
+    ChangeFocus,
     /// exit the application
     Quit,
 }
@@ -301,6 +300,7 @@ fn xmain() -> ! {
     let mut update_repl = false;
     let mut was_callback = false;
 
+    let mut allow_redraw = true;
     log::trace!("starting main loop");
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
@@ -315,9 +315,21 @@ fn xmain() -> ! {
                 was_callback = false;
             }
             Some(ShellOpcode::Redraw) => {
-                log::trace!("got Redraw");
-                repl.redraw().expect("REPL couldn't redraw");
+                if allow_redraw {
+                    repl.redraw().expect("REPL couldn't redraw");
+                }
             }
+            Some(ShellOpcode::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
+                let new_state = gam::FocusState::convert_focus_change(new_state_code);
+                match new_state {
+                    gam::FocusState::Background => {
+                        allow_redraw = false;
+                    }
+                    gam::FocusState::Foreground => {
+                        allow_redraw = true;
+                    }
+                }
+            }),
             Some(ShellOpcode::Quit) => {
                 log::error!("got Quit");
                 break;

@@ -315,12 +315,6 @@ impl Gam {
             0, 0, 0, 0,)
         ).map(|_| ())
     }
-    pub fn request_focus(&self, token: [u32; 4]) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::RequestFocus.to_usize().unwrap(),
-            token[0] as usize, token[1] as usize, token[2] as usize, token[3] as usize,)
-        ).map(|_| ())
-    }
 
     pub fn glyph_height_hint(&self, glyph: GlyphStyle) -> Result<usize, xous::Error> {
         let response = send_message(self.conn,
