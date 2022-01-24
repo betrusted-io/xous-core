@@ -6,19 +6,17 @@ use core::fmt::Write;
 use locales::t;
 
 #[derive(Debug)]
-pub struct Beep {
+pub struct Audio {
     callback_id: Option<u32>,
     callback_conn: u32,
     framecount: u32,
     play_sample: f32, // count of play samples generated. in f32 to avoid int<->f32 conversions
     freq: f32,
 }
-impl Beep {
+impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        log::info!("initializing beep");
         let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_REPL).unwrap();
-        log::info!("beep init returning");
-        Beep {
+        Audio {
             callback_id: None,
             callback_conn,
             framecount: 0,
@@ -32,12 +30,12 @@ const STOP_ID: usize = 1;
 const SAMPLE_RATE_HZ: f32 = 8000.0;
 // note to self: A4 = 440.0, E4 = 329.63, C4 = 261.63
 
-impl<'a> ShellCmdApi<'a> for Beep {
-    cmd_api!(beep);
+impl<'a> ShellCmdApi<'a> for Audio {
+    cmd_api!(audio);
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = t!("replapp.beep.help", xous::LANG);
+        let helpstring = t!("replapp.audio.help", xous::LANG);
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
@@ -88,7 +86,7 @@ impl<'a> ShellCmdApi<'a> for Beep {
                             xous::send_message(conn, Message::new_scalar(cb_id as usize, 0, 0, 0, STOP_ID)).unwrap();
                         }
                     });
-                    write!(ret, "{}", t!("replapp.beep.start", xous::LANG)).unwrap();
+                    write!(ret, "{}", t!("replapp.audio.start", xous::LANG)).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
@@ -134,9 +132,9 @@ impl<'a> ShellCmdApi<'a> for Beep {
                     let mut ret = String::<1024>::new();
                     env.codec.pause().unwrap(); // this should stop callbacks from occurring too.
                     write!(ret, "{} {} {}.",
-                        t!("replapp.beep.completion_a", xous::LANG),
+                        t!("replapp.audio.completion_a", xous::LANG),
                         self.framecount,
-                        t!("replapp.beep.completion_b", xous::LANG),
+                        t!("replapp.audio.completion_b", xous::LANG),
                     ).unwrap();
                     self.framecount = 0;
                     self.play_sample = 0.0;
