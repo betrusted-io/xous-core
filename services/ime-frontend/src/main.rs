@@ -622,7 +622,7 @@ fn xmain() -> ! {
 
     let mut tracker = InputTracker::new(&xns);
 
-    let mut listeners: [Option<CID>; 32] = [None; 32];
+    let mut listener: Option<CID> = None;
 
     // create the emoji menu handler
     emoji_menu(xous::connect(imef_sid).unwrap());
@@ -676,15 +676,9 @@ fn xmain() -> ! {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                 let cid = Some(xous::connect(sid).unwrap());
                 log::trace!("listener registered: {:?}", sid);
-                let mut found = false;
-                for entry in listeners.iter_mut() {
-                    if *entry == None {
-                        *entry = cid;
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
+                if listener.is_none() {
+                    listener = cid;
+                } else {
                     error!("RegisterCallback listener ran out of space registering callback");
                 }
             }),
@@ -719,25 +713,23 @@ fn xmain() -> ! {
                         } else {
                             if let Some(line) = tracker.update(keys, false).expect("couldn't update input tracker with latest key presses") {
                                 if dbglistener{info!("sending listeners {:?}", line);}
-                                for maybe_conn in listeners.iter_mut() {
-                                    if let Some(conn) = maybe_conn {
-                                        if dbglistener{info!("sending to conn {:?}", conn);}
-                                        let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
-                                        match buf.send(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
-                                            Err(xous::Error::ServerNotFound) => {
-                                                *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
-                                            },
-                                            Ok(xous::Result::Ok) => {},
-                                            Ok(xous::Result::MemoryReturned(offset, valid)) => {
-                                                // ignore anything that's returned, but note it in case we're debugging
-                                                log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
-                                            },
-                                            Err(e) => {
-                                                log::error!("unhandled error in callback processing: {:?}", e);
-                                            }
-                                            Ok(e) => {
-                                                log::error!("unexpected result in callback processing: {:?}", e);
-                                            }
+                                if let Some(conn) = listener {
+                                    if dbglistener{info!("sending to conn {:?}", conn);}
+                                    let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
+                                    match buf.send(conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
+                                        Err(xous::Error::ServerNotFound) => {
+                                            listener = None; // the listener went away, free up our slot so a new one can register
+                                        },
+                                        Ok(xous::Result::Ok) => {},
+                                        Ok(xous::Result::MemoryReturned(offset, valid)) => {
+                                            // ignore anything that's returned, but note it in case we're debugging
+                                            log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
+                                        },
+                                        Err(e) => {
+                                            log::error!("unhandled error in callback processing: {:?}", e);
+                                        }
+                                        Ok(e) => {
+                                            log::error!("unexpected result in callback processing: {:?}", e);
                                         }
                                     }
                                 }
