@@ -3,7 +3,16 @@
 A simple demo application that mainly demonstrates how to integrate into the Xous framework,
 but without much emphasis on I/O.
 
-## Integration
+![screenshot](ball_screenshot.png)
+
+A ball bounces around, changing directions randomly whenever it hits a border. Pressing
+any key will pop up a modal dialog box that informs you of the key pressed, and then
+gives you an option to change the behavior into a "tilt" driven mode where the gyro
+is read and used to control the ball's motion.
+
+This is a fairly "raw iron" demo, and would be a reasonable starting point for someone who,
+for example, wants to write a video game.
+## Copying This App
 
 1. Add a UX context by editing `services/gam/src/lib.rs/EXPECTED_BOOT_CONTEXTS`
 2. Copy this demo application, and rename the relevant structures in its `Cargo.toml` and `main.rs`.
