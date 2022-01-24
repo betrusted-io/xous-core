@@ -4,7 +4,7 @@
 pub mod api;
 pub use api::{
     Circle, ClipObject, ClipObjectType, DrawStyle, Gid, Line, PixelColor, Point, Rectangle,
-    RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle
+    RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle, ClipObjectList
 };
 pub mod op;
 
@@ -205,6 +205,15 @@ impl Gfx {
         };
         let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap())
+            .map(|_| ())
+    }
+
+    pub fn draw_object_list_clipped(
+        &self,
+        list: ClipObjectList,
+    ) -> Result<(), xous::Error> {
+        let buf = Buffer::into_buf(list).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObjectList.to_u32().unwrap())
             .map(|_| ())
     }
 

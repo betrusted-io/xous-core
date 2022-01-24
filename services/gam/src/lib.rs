@@ -194,6 +194,11 @@ impl Gam {
         let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
     }
+    pub fn draw_list(&self, list: GamObjectList) -> Result<(), xous::Error> {
+        let buf = Buffer::into_buf(list).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::RenderObjectList.to_u32().unwrap())
+            .map(|_| ())
+    }
 
     pub fn get_canvas_bounds(&self, gid: Gid) -> Result<Point, xous::Error> {
         log::trace!("GAM_API: get_canvas_bounds");

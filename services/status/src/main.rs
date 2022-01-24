@@ -14,6 +14,7 @@ use graphics_server::*;
 use graphics_server::api::GlyphStyle;
 use locales::t;
 use gam::modal::*;
+use gam::{GamObjectList, GamObjectType};
 use llio::Weekday;
 
 use std::collections::HashMap;
@@ -513,19 +514,21 @@ fn xmain() -> ! {
                         .expect("|status: can't draw uptime");
                 }
                 { // update the CPU load bar
-                    gam.draw_rectangle(status_gid, cpuload_rect).ok();
+                    let mut draw_list = GamObjectList::new(status_gid);
+                    draw_list.push(GamObjectType::Rect(cpuload_rect)).unwrap();
                     let (latest_activity, period) = llio
                         .activity_instantaneous()
                         .expect("couldn't get CPU activity");
                     let activity_to_width = ((latest_activity as f32) / (period as f32)) * (cpuload_rect.width() - 4) as f32;
-                    gam.draw_rectangle(status_gid,
+                    draw_list.push(GamObjectType::Rect(
                         Rectangle::new_coords_with_style(
                             cpuload_rect.tl().x + 2,
                             cpuload_rect.tl().y + 2,
                             cpuload_rect.tl().x + 2 + activity_to_width as i16,
                             cpuload_rect.br().y - 2,
                             DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 0))
-                    ).ok();
+                    )).unwrap();
+                    gam.draw_list(draw_list).expect("couldn't draw object list");
                 }
                 gam.redraw().expect("|status: couldn't redraw");
 

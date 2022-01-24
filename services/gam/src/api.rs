@@ -16,6 +16,30 @@ pub struct GamObject {
     pub canvas: Gid,
     pub obj: GamObjectType,
 }
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct GamObjectList {
+    pub canvas: Gid,
+    pub list: [Option<GamObjectType>; 32],
+    free: usize,
+}
+impl GamObjectList {
+    pub fn new(canvas: Gid) -> GamObjectList {
+        GamObjectList {
+            canvas,
+            list: Default::default(),
+            free: 0,
+        }
+    }
+    pub fn push(&mut self, item: GamObjectType) -> Result<(), GamObjectType> {
+        if self.free < self.list.len() {
+            self.list[self.free] = Some(item);
+            self.free += 1;
+            Ok(())
+        } else {
+            Err(item)
+        }
+    }
+}
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
 pub enum TokenType {
@@ -91,6 +115,7 @@ pub(crate) enum Opcode {
 
     // draws an object
     RenderObject, //(GamObject),
+    RenderObjectList,
 
     // renders a TextView
     RenderTextView, //(TextView),

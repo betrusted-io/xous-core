@@ -335,6 +335,50 @@ fn xmain() -> ! {
                 }
                 log::trace!("leaving RenderObject");
             }
+            Some(Opcode::RenderObjectList) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let obj_ipc = buffer.to_original::<GamObjectList, _>().unwrap();
+                if let Some(canvas) = canvases.get_mut(&obj_ipc.canvas) {
+                    // first, figure out if we should even be drawing to this canvas.
+                    if canvas.is_drawable() {
+                        let mut obj_list = ClipObjectList::default();
+                        for item in obj_ipc.list.iter() {
+                            if let Some(obj) = item {
+                                match obj {
+                                    GamObjectType::Line(mut line) => {
+                                        line.translate(canvas.clip_rect().tl);
+                                        line.translate(canvas.pan_offset());
+                                        obj_list.push(ClipObjectType::Line(line), canvas.clip_rect()).unwrap();
+                                    },
+                                    GamObjectType::Circ(mut circ) => {
+                                        circ.translate(canvas.clip_rect().tl);
+                                        circ.translate(canvas.pan_offset());
+                                        obj_list.push(ClipObjectType::Circ(circ), canvas.clip_rect()).unwrap();
+                                    },
+                                    GamObjectType::Rect(mut rect) => {
+                                        rect.translate(canvas.clip_rect().tl);
+                                        rect.translate(canvas.pan_offset());
+                                        obj_list.push(ClipObjectType::Rect(rect), canvas.clip_rect()).unwrap();
+                                    },
+                                    GamObjectType::RoundRect(mut rr) => {
+                                        rr.translate(canvas.clip_rect().tl);
+                                        rr.translate(canvas.pan_offset());
+                                        obj_list.push(ClipObjectType::RoundRect(rr), canvas.clip_rect()).unwrap();
+                                    }
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                        gfx.draw_object_list_clipped(obj_list).expect("couldn't draw object list");
+                        canvas.do_drawn().expect("couldn't set canvas to drawn");
+                    } else {
+                        log::debug!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj_ipc);
+                    }
+                } else {
+                    info!("bogus GID in Object, not doing anything in response to draw request.");
+                }
+            }
             Some(Opcode::ClaimToken) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut tokenclaim = buffer.to_original::<TokenClaim, _>().unwrap();

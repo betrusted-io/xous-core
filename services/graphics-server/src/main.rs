@@ -184,6 +184,35 @@ fn xmain() -> ! {
                     }
                 }
             }
+            Some(Opcode::DrawClipObjectList) => {
+                let buffer =
+                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let list_ipc = buffer.to_original::<ClipObjectList, _>().unwrap();
+                for maybe_item in list_ipc.list.iter() {
+                    if let Some(obj) = maybe_item {
+                        match obj.obj {
+                            ClipObjectType::Line(line) => {
+                                op::line(display.native_buffer(), line, Some(obj.clip), false);
+                            }
+                            ClipObjectType::XorLine(line) => {
+                                op::line(display.native_buffer(), line, Some(obj.clip), true);
+                            }
+                            ClipObjectType::Circ(circ) => {
+                                op::circle(display.native_buffer(), circ, Some(obj.clip));
+                            }
+                            ClipObjectType::Rect(rect) => {
+                                op::rectangle(display.native_buffer(), rect, Some(obj.clip));
+                            }
+                            ClipObjectType::RoundRect(rr) => {
+                                op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
+                            }
+                        }
+                    } else {
+                        // stop at the first None entry -- if the sender packed the list with a hole in it, that's their bad
+                        break;
+                    }
+                }
+            }
             Some(Opcode::DrawTextView) => {
                 let mut buffer = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())

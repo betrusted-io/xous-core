@@ -88,6 +88,7 @@ pub(crate) enum Opcode {
 
     /// draws an object that requires clipping
     DrawClipObject, //(ClipObject),
+    DrawClipObjectList,
 
     /// draws the sleep screen; assumes requests are vetted by GAM/xous-names
     DrawSleepScreen,
@@ -124,6 +125,31 @@ pub enum ClipObjectType {
 pub struct ClipObject {
     pub clip: Rectangle,
     pub obj: ClipObjectType,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct ClipObjectList {
+    // ClipObject is 28 bytes, so 32 of these takes 896 bytes, which is less than a 4k page (the minimum amount that gets remapped)
+    // we limit the length to 32 so we can use the Default initializer to set the None's on the array, otherwise it gets a bit painful.
+    pub list: [Option::<ClipObject>; 32],
+    free: usize,
+}
+impl ClipObjectList {
+    pub fn default() -> ClipObjectList {
+        ClipObjectList {
+            list: Default::default(),
+            free: 0,
+        }
+    }
+    pub fn push(&mut self, item: ClipObjectType, clip: Rectangle) -> Result<(), ClipObjectType> {
+        if self.free < self.list.len() {
+            self.list[self.free] = Some(ClipObject {clip, obj: item});
+            self.free += 1;
+            Ok(())
+        } else {
+            Err(item)
+        }
+    }
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]

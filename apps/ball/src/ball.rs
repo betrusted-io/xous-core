@@ -75,9 +75,12 @@ impl Ball {
         }
     }
     pub(crate) fn update(&mut self) {
+        // send a list of objects to draw to the GAM, to avoid race conditions in between operations
+        let mut draw_list = GamObjectList::new(self.gid);
+
         // clear the previous location of the ball
         self.ball.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
-        self.gam.draw_circle(self.gid, self.ball).expect("couldn't erase ball's previous position");
+        draw_list.push(GamObjectType::Circ(self.ball)).unwrap();
         if self.mode == BallMode::Tilt {
             let (x, y, _z, _id) = self.com.gyro_read_blocking().unwrap();
             let ix = x as i16;
@@ -137,7 +140,8 @@ impl Ball {
 
         // draw the new location for the ball
         self.ball.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
-        self.gam.draw_circle(self.gid, self.ball).expect("couldn't erase ball's previous position");
+        draw_list.push(GamObjectType::Circ(self.ball)).unwrap();
+        self.gam.draw_list(draw_list).expect("couldn't execute draw list");
         self.gam.redraw().unwrap();
     }
     pub(crate) fn focus(&mut self) {
