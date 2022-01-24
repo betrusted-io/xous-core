@@ -23,6 +23,14 @@ It implements the basic envisioned structure of a Xous application, namely:
  - Text input comes via the `ime-frontend`
  - Graphical output is rendered via the `gam`
 
+The one demo command provisioned in the `repl` app plays a tone via
+the `codec` service. This was chosen because it is about one of the most complicated
+and comprehensive things you can do in the `repl` environment, as it requires
+real-time callbacks to fill the audio buffer with new samples. If you have
+specific questions about how the callbacks work, we encourage you to open
+an issue in this repo and ask your question. Your questions will help us
+direct effort toward building the documentation base.
+
 To make your own command, copy the `audio.rs` template
 in the `apps/repl/src/cmds/` directory, or use this very basic `echo`
 template:
