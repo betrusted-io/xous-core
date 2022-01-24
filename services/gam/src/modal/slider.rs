@@ -146,12 +146,13 @@ impl ActionApi for Slider {
         }
 
         // the actual slider
+        let mut draw_list = GamObjectList::new(modal.canvas);
         let outer_rect = Rectangle::new_with_style(
             Point::new(modal.margin * 2, modal.margin + modal.line_height + at_height),
             Point::new(modal.canvas_width - modal.margin * 2, modal.margin + modal.line_height * 2 + at_height),
             DrawStyle::new(fill_color, color, 2)
         );
-        modal.gam.draw_rectangle(modal.canvas, outer_rect).expect("couldn't draw outer rectangle");
+        draw_list.push(GamObjectType::Rect(outer_rect)).unwrap();
         let total_width = modal.canvas_width - modal.margin * 4;
         let slider_point = (total_width * (self.action_payload - self.min) as i16) / (self.max - self.min) as i16;
         let inner_rect = Rectangle::new_with_style(
@@ -159,7 +160,8 @@ impl ActionApi for Slider {
             Point::new(modal.margin * 2 + slider_point, modal.margin + modal.line_height * 2 + at_height),
             DrawStyle::new(color, color, 1)
         );
-        modal.gam.draw_rectangle(modal.canvas, inner_rect).expect("couldn't draw inner rectangle");
+        draw_list.push(GamObjectType::Rect(inner_rect)).unwrap();
+        modal.gam.draw_list(draw_list).expect("couldn't execute draw list");
     }
     fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);

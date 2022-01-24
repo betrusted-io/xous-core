@@ -170,7 +170,7 @@ fn xmain() -> ! {
     const CPU_BAR_WIDTH: i16 = 50;
     let time_rect = Rectangle::new(
         Point::new(0, 0),
-        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, screensize.y / 2 - 1)
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1, screensize.y / 2 - 1)
     );
     let cpuload_rect = Rectangle::new_with_style(
         Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, 0),
@@ -178,7 +178,7 @@ fn xmain() -> ! {
         DrawStyle::new(PixelColor::Light, PixelColor::Dark, 1),
     );
     let stats_rect = Rectangle::new_with_style(
-        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, 0),
+        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2 + 1, 0),
         Point::new(screensize.x, screensize.y / 2 - 1),
         DrawStyle::new(PixelColor::Light, PixelColor::Light, 0),
     );
@@ -351,6 +351,7 @@ fn xmain() -> ! {
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
                 battstats_tv.clear_str();
+                // have to clear the entire rectangle area, because the SSID has a variable width and can be much wider or shorter than battstats
                 gam.draw_rectangle(status_gid, stats_rect).ok();
                 // toggle between two views of the data every time we have a status update
                 if battstats_phase {
@@ -385,6 +386,25 @@ fn xmain() -> ! {
             },
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
+                { // update the CPU load bar
+                    let mut draw_list = GamObjectList::new(status_gid);
+                    draw_list.push(GamObjectType::Rect(cpuload_rect)).unwrap();
+                    let (latest_activity, period) = llio
+                        .activity_instantaneous()
+                        .expect("couldn't get CPU activity");
+                    let activity_to_width = ((latest_activity as f32) / (period as f32)) * (cpuload_rect.width() - 4) as f32;
+                    draw_list.push(GamObjectType::Rect(
+                        Rectangle::new_coords_with_style(
+                            cpuload_rect.tl().x + 2,
+                            cpuload_rect.tl().y + 2,
+                            cpuload_rect.tl().x + 2 + activity_to_width as i16,
+                            cpuload_rect.br().y - 2,
+                            DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 0))
+                    )).unwrap();
+                    gam.draw_list(draw_list).expect("couldn't draw object list");
+                }
+
+                // update the security status, if any
                 let (is_locked, force_update) = llio.debug_usb(None).unwrap();
                 if (debug_locked != is_locked)
                     || force_update
@@ -512,23 +532,6 @@ fn xmain() -> ! {
                     .expect("|status: can't write string");
                     gam.post_textview(&mut uptime_tv)
                         .expect("|status: can't draw uptime");
-                }
-                { // update the CPU load bar
-                    let mut draw_list = GamObjectList::new(status_gid);
-                    draw_list.push(GamObjectType::Rect(cpuload_rect)).unwrap();
-                    let (latest_activity, period) = llio
-                        .activity_instantaneous()
-                        .expect("couldn't get CPU activity");
-                    let activity_to_width = ((latest_activity as f32) / (period as f32)) * (cpuload_rect.width() - 4) as f32;
-                    draw_list.push(GamObjectType::Rect(
-                        Rectangle::new_coords_with_style(
-                            cpuload_rect.tl().x + 2,
-                            cpuload_rect.tl().y + 2,
-                            cpuload_rect.tl().x + 2 + activity_to_width as i16,
-                            cpuload_rect.br().y - 2,
-                            DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 0))
-                    )).unwrap();
-                    gam.draw_list(draw_list).expect("couldn't draw object list");
                 }
                 gam.redraw().expect("|status: couldn't redraw");
 
