@@ -4,6 +4,7 @@ use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, Pi
 use graphics_server::api::GlyphStyle;
 use xous::MessageEnvelope;
 use core::fmt::Write;
+use locales::t;
 
 #[derive(Debug)]
 struct History {
@@ -54,7 +55,7 @@ impl Repl{
             gotinput_id: Some(ReplOp::Line.to_u32().unwrap()),
             audioframe_id: None,
             rawkeys_id: None,
-            focuschange_id: None, // repl will keep running in the background even if it has lost focus
+            focuschange_id: Some(ReplOp::Redraw.to_u32().unwrap()),
         }).expect("couldn't register Ux context for repl");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
@@ -62,7 +63,7 @@ impl Repl{
         Repl {
             input: None,
             msg: None,
-            history: Vec::new(),
+            history: vec![History{text: String::from(t!("replapp.greeting", xous::LANG)), is_input: false}],
             history_len: 10,
             content,
             gam,
@@ -208,7 +209,6 @@ impl Repl{
             }
         }
         self.gam.redraw().expect("couldn't redraw screen");
-        // self.gam.request_ime_redraw().expect("couldn't redraw the IME area");
         Ok(())
     }
 }

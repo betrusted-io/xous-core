@@ -81,7 +81,6 @@ fn xmain() -> ! {
             }),
             Some(AppOp::FocusChange) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
-                log::info!("got focus change with new state: {:?}", new_state);
                 match new_state {
                     gam::FocusState::Background => {
                         allow_redraw = false; // this instantly terminates future updates, even if Pump messages are in our input queue

@@ -89,6 +89,7 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+        log::info!("creating CommonEnv");
         let common = CommonEnv {
             llio: llio::Llio::new(&xns),
             com: com::Com::new(&xns).expect("could't connect to COM"),
@@ -99,7 +100,7 @@ impl CmdEnv {
             trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
         };
-
+        log::info!("done creating CommonEnv");
         CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),

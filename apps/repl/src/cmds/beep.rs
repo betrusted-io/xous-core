@@ -15,8 +15,9 @@ pub struct Beep {
 }
 impl Beep {
     pub fn new(xns: &xous_names::XousNames) -> Self {
+        log::info!("initializing beep");
         let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_REPL).unwrap();
-
+        log::info!("beep init returning");
         Beep {
             callback_id: None,
             callback_conn,
@@ -27,6 +28,7 @@ impl Beep {
     }
 }
 
+const STOP_ID: usize = 1;
 const SAMPLE_RATE_HZ: f32 = 8000.0;
 // note to self: A4 = 440.0, E4 = 329.63, C4 = 261.63
 
@@ -75,17 +77,18 @@ impl<'a> ShellCmdApi<'a> for Beep {
 
                     env.codec.resume().unwrap();
 
-                    env.ticktimer.sleep_ms((duration * 1000.0) as usize).unwrap();
-
-                    env.codec.pause().unwrap(); // this should stop callbacks from occurring too.
-                    write!(ret, "{} {} {}.",
-                        t!("replapp.beep.completion_a", xous::LANG),
-                        self.framecount,
-                        t!("replapp.beep.completion_b", xous::LANG),
-                    ).unwrap();
-                    self.framecount = 0;
-                    self.play_sample = 0.0;
-                    env.codec.power_off().unwrap();
+                    // kick off a thread that stops the playback, after the designated delay
+                    std::thread::spawn({
+                        let cb_id = self.callback_id.unwrap().clone();
+                        let conn = self.callback_conn.clone();
+                        let duration = duration.clone();
+                        move || {
+                            let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+                            ticktimer.sleep_ms((duration * 1000.0) as usize).unwrap();
+                            xous::send_message(conn, Message::new_scalar(cb_id as usize, 0, 0, 0, STOP_ID)).unwrap();
+                        }
+                    });
+                    write!(ret, "{}", t!("replapp.beep.start", xous::LANG)).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
@@ -100,32 +103,46 @@ impl<'a> ShellCmdApi<'a> for Beep {
         const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {
-            Message::Scalar(xous::ScalarMessage{id: _, arg1: free_play, arg2: _avail_rec, arg3: _, arg4: _}) => {
-                let mut frames: FrameRing = FrameRing::new();
-                let frames_to_push = if frames.writeable_count() < *free_play {
-                    frames.writeable_count()
-                } else {
-                    *free_play
-                };
-                self.framecount += frames_to_push as u32;
+            Message::Scalar(xous::ScalarMessage{id: _, arg1: free_play, arg2: _avail_rec, arg3: _, arg4: routing_id}) => {
+                if *routing_id == codec::AUDIO_CB_ROUTING_ID {
+                    let mut frames: FrameRing = FrameRing::new();
+                    let frames_to_push = if frames.writeable_count() < *free_play {
+                        frames.writeable_count()
+                    } else {
+                        *free_play
+                    };
+                    self.framecount += frames_to_push as u32;
 
-                log::debug!("f{} p{}", self.framecount, frames_to_push);
-                for _ in 0..frames_to_push {
-                    let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
-                    // put the "expensive" f32 comparison outside the cosine wave table computation loop
-                    let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
-                    for sample in frame.iter_mut() {
-                        let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
-                        let left = raw_sine as u16;
-                        let right = raw_sine as u16;
-                        *sample = right as u32 | (left as u32) << 16;
-                        self.play_sample += 1.0;
+                    log::debug!("f{} p{}", self.framecount, frames_to_push);
+                    for _ in 0..frames_to_push {
+                        let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
+                        // put the "expensive" f32 comparison outside the cosine wave table computation loop
+                        let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
+                        for sample in frame.iter_mut() {
+                            let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
+                            let left = raw_sine as u16;
+                            let right = raw_sine as u16;
+                            *sample = right as u32 | (left as u32) << 16;
+                            self.play_sample += 1.0;
+                        }
+
+                        frames.nq_frame(frame).unwrap();
+
                     }
-
-                    frames.nq_frame(frame).unwrap();
-
+                    env.codec.swap_frames(&mut frames).unwrap();
+                } else if *routing_id == STOP_ID {
+                    let mut ret = String::<1024>::new();
+                    env.codec.pause().unwrap(); // this should stop callbacks from occurring too.
+                    write!(ret, "{} {} {}.",
+                        t!("replapp.beep.completion_a", xous::LANG),
+                        self.framecount,
+                        t!("replapp.beep.completion_b", xous::LANG),
+                    ).unwrap();
+                    self.framecount = 0;
+                    self.play_sample = 0.0;
+                    env.codec.power_off().unwrap();
+                    return Ok(Some(ret));
                 }
-                env.codec.swap_frames(&mut frames).unwrap();
             },
             Message::Move(_mm) => {
                 log::error!("received memory message when not expected")

@@ -323,6 +323,7 @@ impl ContextManager {
                 None
             };
             let maybe_new_focus = self.get_context_by_token_mut(token);
+            log::trace!("resolving visibility rules");
             if let Some(context) = maybe_new_focus {
                 if let Some(leaving_focused_context) = maybe_leaving_focused_context {
                     if token != leaving_focused_context.app_token {
@@ -355,6 +356,7 @@ impl ContextManager {
                 }
             }
         }
+        log::trace!("hiding old context");
         {
             // let all the previous operations go out of scope, so we can "check out" the old copy and modify it
             if self.focused_context.is_some() {
@@ -367,6 +369,7 @@ impl ContextManager {
                 }
             }
         }
+        log::trace!("rewiring IMEF and recomputing canvases");
         {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
@@ -404,6 +407,7 @@ impl ContextManager {
                 *canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
             }
         }
+        log::trace!("foregrounding new context");
         {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
@@ -427,6 +431,7 @@ impl ContextManager {
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
             }
+            log::trace!("defacing old canvases prior to redraw");
             // run the defacement before we redraw all the canvases
             deface(gfx, &self.trng, canvases);
             log::trace!("activate redraw");

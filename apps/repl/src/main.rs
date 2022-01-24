@@ -14,6 +14,8 @@ pub(crate) enum ReplOp {
     Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
     /// redraw our UI
     Redraw,
+    /// change focus
+    ChangeFocus,
     /// exit the application
     Quit,
 }
@@ -29,12 +31,13 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // unlimited connections allowed, this is a user app and it's up to the app to decide its policy
     let sid = xns.register_name(SERVER_NAME_REPL, None).expect("can't register server");
-    //log::trace!("registered with NS -- {:?}", sid);
+    log::trace!("registered with NS -- {:?}", sid);
 
     let mut repl = Repl::new(&xns, sid);
-    let mut update_repl = false;
+    let mut update_repl = true;
     let mut was_callback = false;
-
+    let mut allow_redraw = false;
+    log::trace!("entering main loop");
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
@@ -48,9 +51,22 @@ fn xmain() -> ! {
                 was_callback = false;
             }
             Some(ReplOp::Redraw) => {
-                log::trace!("got Redraw");
-                repl.redraw().expect("REPL couldn't redraw");
+                if allow_redraw {
+                    repl.redraw().expect("REPL couldn't redraw");
+                }
             }
+            Some(ReplOp::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
+                let new_state = gam::FocusState::convert_focus_change(new_state_code);
+                match new_state {
+                    gam::FocusState::Background => {
+                        allow_redraw = false;
+                    }
+                    gam::FocusState::Foreground => {
+                        allow_redraw = true;
+                        update_repl = true;
+                    }
+                }
+            }),
             Some(ReplOp::Quit) => {
                 log::error!("got Quit");
                 break;

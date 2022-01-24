@@ -1,4 +1,14 @@
 {
+    "replapp.greeting": {
+        "en": "Welcome to the simple REPL demo.",
+        "zh": "简单的 repl 演示活动",
+        "en-audio": "Welcome to the simple REPL demo."
+    },
+    "replapp.beep.start": {
+        "en": "beep started...",
+        "zh": "哔声开始...",
+        "en-audio": "beep started..."
+    },
     "replapp.beep.help": {
         "en": "beep [tone [freq [duration]]]",
         "zh": "beep [tone [音频 [时长]]]",

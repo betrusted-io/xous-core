@@ -6,6 +6,8 @@ use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
 pub use api::*;
 
+/// This is a keyword reserved for the "arg4" slot of a scalar callback, where args are numbered 1-4.
+pub const AUDIO_CB_ROUTING_ID: usize = 0;
 #[derive(Debug)]
 pub struct Codec {
     conn: CID,
@@ -145,7 +147,7 @@ fn frame_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             Some(EventCallback::Event) => xous::msg_scalar_unpack!(msg, cid, id, free_play, avail_rec, {
                 // directly pass the scalar message onto the CID with the ID memorized in the original hook
                 send_message(cid as u32,
-                    Message::new_scalar(id, free_play, avail_rec, 0, 0)
+                    Message::new_scalar(id, free_play, avail_rec, 0, AUDIO_CB_ROUTING_ID)
                 ).unwrap();
             }),
             Some(EventCallback::Drop) => {

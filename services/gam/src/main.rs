@@ -38,7 +38,7 @@ fn imef_cb(s: String::<4000>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -484,15 +484,6 @@ fn xmain() -> ! {
             Some(Opcode::RevertFocusNb) => {
                 context_mgr.revert_focus(&gfx, &mut canvases);
             },
-            /*
-            Some(Opcode::RequestFocus) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
-                // TODO: add some limitations around who can request focus
-                // for now, it's the boot set so we just trust the requestor
-                context_mgr.activate(&gfx, &mut canvases, [t0 as u32, t1 as u32, t2 as u32, t3 as u32], true);
-
-                // this is a blocking scalar, so return /something/ so we know to move on
-                xous::return_scalar(msg.sender, 1).expect("couldn't confirm focus activation");
-            }), */
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
                 let height = gfx.glyph_height_hint(GlyphStyle::from(style)).expect("couldn't query glyph height from gfx");
                 xous::return_scalar(msg.sender, height).expect("could not return QueryGlyphProps request");
