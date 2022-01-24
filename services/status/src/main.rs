@@ -52,6 +52,8 @@ enum StatusOpcode {
     SwitchToShellchat,
     /// Raise the Ball app
     SwitchToBall,
+    /// Raise the REPL demo app
+    SwitchToRepl,
 
     /// Suspend handler from the main menu
     TrySuspend,
@@ -666,6 +668,10 @@ fn xmain() -> ! {
             Some(StatusOpcode::SwitchToBall) => {
                 ticktimer.sleep_ms(100).ok();
                 gam.switch_to_app(gam::APP_NAME_BALL, security_tv.token.unwrap()).expect("couldn't raise ball demo");
+            },
+            Some(StatusOpcode::SwitchToRepl) => {
+                ticktimer.sleep_ms(100).ok();
+                gam.switch_to_app(gam::APP_NAME_REPL, security_tv.token.unwrap()).expect("couldn't raise repl demo");
             },
             Some(StatusOpcode::TrySuspend) => {
                 if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {

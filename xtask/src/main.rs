@@ -35,6 +35,7 @@ impl std::error::Error for BuildError {}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hw_pkgs = [
+        // core OS services
         "gam",
         "status",
         "shellchat",
@@ -59,7 +60,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "dns",
         "pddb",
         "modals",
+        // apps
         "ball",
+        "repl",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -968,8 +971,10 @@ fn project_root() -> PathBuf {
 fn generate_locales() -> Result<(), std::io::Error> {
     let ts = filetime::FileTime::from_system_time(std::time::SystemTime::now());
     filetime::set_file_mtime("locales/src/lib.rs", ts)?;
+    let mut path = project_root();
+    path.push("locales");
     let status = Command::new(cargo())
-        .current_dir(project_root())
+        .current_dir(path)
         .args(&[
             "build",
             "--package",

@@ -94,6 +94,11 @@
         "zh": "简单的球演示",
         "en-audio": "Simple ball demo"
     },
+    "appmenu.repl": {
+        "en": "Basic REPL demo",
+        "zh": "基本 REPL 演示",
+        "en-audio": "Basic REPL demo"
+    },
     "appmenu.shellchat": {
         "en": "Shellchat",
         "zh": "外壳聊天",

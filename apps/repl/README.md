@@ -1,7 +1,6 @@
-# Ball
+# REPL
 
-A simple demo application that mainly demonstrates how to integrate into the Xous framework,
-but without much emphasis on I/O.
+A simple demo application that provides a bare-bones REPL framework.
 
 ## Integration
 

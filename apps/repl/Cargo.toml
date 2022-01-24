@@ -1,0 +1,30 @@
+[package]
+name = "repl"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "REPL demo app"
+
+# Dependency policy: fully specify dependencies to the minor version number
+[dependencies]
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+xous = { path = "../../xous-rs" }
+xous-ipc = { path = "../../xous-ipc" }
+log-server = { path = "../../services/log-server" }
+ticktimer-server = { path = "../../services/ticktimer-server" }
+xous-names = { path = "../../services/xous-names" }
+gam = {path = "../../services/gam" }
+graphics-server = {path = "../../services/graphics-server" }
+trng = {path = "../../services/trng"}
+locales = {path = "../../locales"}
+ime-plugin-api = {path = "../../services/ime-plugin-api"}
+ime-plugin-shell = {path = "../../services/ime-plugin-shell"}
+content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
+com = {path = "../../services/com"}
+llio = {path = "../../services/llio"}
+codec = {path = "../../services/codec"}
+
+[features]
+default = []

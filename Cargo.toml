@@ -36,6 +36,7 @@ default-members = [
   "services/dns",
   "services/modals",
   "apps/ball",
+  "apps/repl",
 ]
 members = [
   "xous-ipc",
@@ -86,6 +87,7 @@ members = [
   "services/dns",
   "services/modals",
   "apps/ball",
+  "apps/repl",
   "kernel",
 ]
 resolver = "2"

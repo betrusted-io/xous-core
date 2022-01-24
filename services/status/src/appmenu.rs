@@ -24,6 +24,14 @@ pub fn create_app_menu(status_conn: xous::CID) {
     });
 
     menu_items.push(MenuItem {
+        name: xous_ipc::String::from_str(t!("appmenu.repl", xous::LANG)),
+        action_conn: Some(status_conn),
+        action_opcode: StatusOpcode::SwitchToRepl.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+
+    menu_items.push(MenuItem {
         name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
         action_conn: None,
         action_opcode: 0,

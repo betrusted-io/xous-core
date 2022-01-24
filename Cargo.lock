@@ -1780,6 +1780,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "repl"
+version = "0.1.0"
+dependencies = [
+ "codec",
+ "com",
+ "content-plugin-api",
+ "gam",
+ "graphics-server",
+ "ime-plugin-api",
+ "ime-plugin-shell",
+ "llio",
+ "locales",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "ticktimer-server",
+ "trng",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "ring"
 version = "0.16.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"

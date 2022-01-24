@@ -1,0 +1,17 @@
+{
+    "replapp.beep.help": {
+        "en": "beep [tone [freq [duration]]]",
+        "zh": "beep [tone [音频 [时长]]]",
+        "en-audio": "beep tone, then optional frequency plus optional duration."
+    },
+    "replapp.beep.completion_a": {
+        "en": "Playback stopped at",
+        "zh": "播放停止在",
+        "en-audio": "Playback stopped at"
+    },
+    "replapp.beep.completion_b": {
+        "en": "frames",
+        "zh": "帧",
+        "en-audio": "frames"
+    }
+}
