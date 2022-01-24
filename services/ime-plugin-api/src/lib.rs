@@ -290,7 +290,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
     }
     fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap())
+        buf.send(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))
             .map(|_| ())
     }
