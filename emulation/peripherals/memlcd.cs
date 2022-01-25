@@ -187,7 +187,7 @@ namespace Antmicro.Renode.Peripherals.Video
             ;
         }
 
-        private const int devBootLine = 12;
+        private const int devBootLine = 7;
         private bool devBoot = false;
         private bool updateDirty = false;
         private bool updateAll = false;
