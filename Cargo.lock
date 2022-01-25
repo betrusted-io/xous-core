@@ -1304,7 +1304,7 @@ dependencies = [
 [[package]]
 name = "minifb"
 version = "0.19.3"
-source = "git+https://github.com/xobs/rust_minifb.git?rev=1717ec60830c1f9592b77ce875e492afef1aa533#1717ec60830c1f9592b77ce875e492afef1aa533"
+source = "git+https://github.com/betrusted-io/rust_minifb.git?rev=1717ec60830c1f9592b77ce875e492afef1aa533#1717ec60830c1f9592b77ce875e492afef1aa533"
 dependencies = [
  "cc",
  "orbclient",
