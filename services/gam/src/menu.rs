@@ -203,6 +203,14 @@ impl<'a> Menu<'a> {
             if self.index < self.num_items() - 2 {
                 self.draw_divider(self.index as i16 + 2);
             }
+        } else if self.index == 0 {
+            // wipe out the current marker
+            self.draw_item(self.index as i16, false);
+            self.index = self.num_items() - 1;
+            // add the marker to the last item
+            self.draw_item(self.index as i16, true);
+
+            // NOTE: if we bring back the dividers, we will need to add them to this edge case here as well.
         }
     }
     pub fn next_item(&mut self) {
@@ -220,6 +228,14 @@ impl<'a> Menu<'a> {
             if self.index < self.num_items() - 1 {
                 self.draw_divider(self.index as i16 + 1);
             }
+        } else if self.index == (self.num_items() - 1) {
+            // wipe out the current marker
+            self.draw_item(self.index as i16, false);
+            self.index = 0;
+            // add the marker to the first item
+            self.draw_item(self.index as i16, true);
+
+            // NOTE: if we bring back the dividers, we will need to add them to this edge case here as well.
         }
     }
     pub fn redraw(&mut self) {
