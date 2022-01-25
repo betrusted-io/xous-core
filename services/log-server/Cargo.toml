@@ -13,9 +13,6 @@ num-traits = {version = "0.2.14", default-features = false}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 
-#[build-dependencies]
-#vergen = "3"
-
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 
