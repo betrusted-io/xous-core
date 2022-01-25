@@ -11,7 +11,7 @@ impl<'a> ShellCmdApi<'a> for Ver {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "ver options: ec, wf200, soc, dna";
+        let helpstring = "ver options: ec, wf200, soc, dna, xous";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -35,6 +35,13 @@ impl<'a> ShellCmdApi<'a> for Ver {
                 }
                 "dna" => {
                     write!(ret, "SoC silicon DNA: 0x{:x}", env.llio.soc_dna().unwrap()).unwrap();
+                }
+                "xous" => {
+                    write!(ret, "{}\n{}\n{}\n{}",
+                        env!("VERGEN_SEMVER"),
+                        env!("VERGEN_BRANCH"),
+                        env!("VERGEN_SHA_SHORT"),
+                        env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

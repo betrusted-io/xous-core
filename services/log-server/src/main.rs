@@ -379,19 +379,17 @@ fn reader_thread(arg: usize) {
         env!("VERGEN_SHA")
     )
     .unwrap();
-    // time stamp isn't actually the time stamp of the build, unfortunately. It's the time stamp of the
-    // last time you managed to force a rebuild that also causes log-server to be rebuilt, not necessarily
-    // capturing the build time of the very most recent change!
-    // writeln!(output, "LOG: *** Built: {:49} ***", env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
+    writeln!(output, "LOG: *** Built: {:49} ***", env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
+    writeln!(output, "LOG: *** Semver: {:48} ***", env!("VERGEN_SEMVER")).unwrap();
     writeln!(
         output,
         "LOG: ****************************************************************"
     )
     .unwrap();
-    println!("LOG: my PID is {}", xous::process::id());
     let server_addr = xous::create_server_with_address(b"xous-log-server ").unwrap();
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
 
+    println!("LOG: my PID is {}", xous::process::id());
     let mut counter: usize = 0;
     loop {
         if counter.trailing_zeros() >= 12 {
