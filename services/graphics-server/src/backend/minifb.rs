@@ -146,7 +146,10 @@ impl XousKeyboardHandler {
         let shift = self.left_shift || self.right_shift;
         let base: char = if shift == false {
             match k {
-                Key::A => 'a',
+                // key maps are commented out so we can use the add_char routine for all the characters natively handled by mini_fb
+                // this allows us to apply the native keyboard map to all the typed characters, while still passing through the special
+                // keys needed to emulate the special buttons on the device.
+                /* Key::A => 'a',
                 Key::B => 'b',
                 Key::C => 'c',
                 Key::D => 'd',
@@ -181,18 +184,18 @@ impl XousKeyboardHandler {
                 Key::Key6 => '6',
                 Key::Key7 => '7',
                 Key::Key8 => '8',
-                Key::Key9 => '9',
+                Key::Key9 => '9',*/
                 Key::Left => '←',
                 Key::Right => '→',
                 Key::Up => '↑',
                 Key::Down => '↓',
                 Key::Home => '∴',
-                Key::Backspace => '\u{0008}',
-                Key::Delete => '\u{0008}',
-                Key::Enter => 0xd_u8.into(),
-                Key::Space => ' ',
-                Key::Comma => ',',
-                Key::Period => '.',
+                //Key::Backspace => '\u{0008}',
+                //Key::Delete => '\u{0008}',
+                //Key::Enter => 0xd_u8.into(),
+                //Key::Space => ' ',
+                //Key::Comma => ',',
+                //Key::Period => '.',
                 Key::F1 => 0x11_u8.into(),
                 Key::F2 => 0x12_u8.into(),
                 Key::F3 => 0x13_u8.into(),
@@ -203,7 +206,7 @@ impl XousKeyboardHandler {
             }
         } else {
             match k {
-                Key::A => 'A',
+                /* Key::A => 'A',
                 Key::B => 'B',
                 Key::C => 'C',
                 Key::D => 'D',
@@ -238,17 +241,17 @@ impl XousKeyboardHandler {
                 Key::Key6 => '^',
                 Key::Key7 => '&',
                 Key::Key8 => '*',
-                Key::Key9 => '(',
+                Key::Key9 => '(', */
                 Key::Left => '←',
                 Key::Right => '→',
                 Key::Up => '↑',
                 Key::Down => '↓',
                 Key::Home => '∴',
-                Key::Backspace => '\u{0008}',
-                Key::Delete => '\u{0008}',
-                Key::Space => ' ',
-                Key::Comma => '<',
-                Key::Period => '>',
+                //Key::Backspace => '\u{0008}',
+                //Key::Delete => '\u{0008}',
+                //Key::Space => ' ',
+                //Key::Comma => '<',
+                //Key::Period => '>',
                 _ => '\u{0000}',
             }
         };
@@ -257,7 +260,9 @@ impl XousKeyboardHandler {
 }
 
 impl minifb::InputCallback for XousKeyboardHandler {
-    fn add_char(&mut self, _uni_char: u32) {}
+    fn add_char(&mut self, uni_char: u32) {
+        self.kbd.hostmode_inject_key( char::from_u32(uni_char).unwrap_or('\u{0000}') );
+    }
 
     fn set_key_state(&mut self, key: minifb::Key, state: bool) {
         if key == Key::LeftShift {
