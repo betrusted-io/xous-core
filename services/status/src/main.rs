@@ -367,7 +367,7 @@ fn xmain() -> ! {
                 };
                 wattage = wattage.abs();
                 if battstats_phase {
-                    write!(&mut battstats_tv, "{}W{}{:.2}V {}%", wattage, sign, stats.voltage as f32 / 1000.0, stats.soc)
+                    write!(&mut battstats_tv, "{:.3}W{}{:.2}V {}%", wattage, sign, stats.voltage as f32 / 1000.0, stats.soc)
                         .expect("|status: can't write string");
                 } else {
                     if let Some(ssid) = wifi_status.ssid {
