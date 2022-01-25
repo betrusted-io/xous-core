@@ -163,6 +163,7 @@ fn xmain() -> ! {
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
 
+    // screensize is controlled by the GAM, it's set in main.rs near the top
     let screensize = gam
         .get_canvas_bounds(status_gid)
         .expect("|status: Couldn't get canvas size");
@@ -356,8 +357,17 @@ fn xmain() -> ! {
                 // have to clear the entire rectangle area, because the SSID has a variable width and can be much wider or shorter than battstats
                 gam.draw_rectangle(status_gid, stats_rect).ok();
                 // toggle between two views of the data every time we have a status update
+                let mut wattage = stats.current as f32 / 1000.0 * stats.voltage as f32 / 1000.0;
+                let sign = if wattage > 0.005 {
+                    '\u{2b06}' // up arrow
+                } else if wattage < -0.005 {
+                    '\u{2b07}' // down arrow
+                } else {
+                    '\u{1f50b}' // battery icon (fully charged)
+                };
+                wattage = wattage.abs();
                 if battstats_phase {
-                    write!(&mut battstats_tv, "{}mA {:.2}V {}%", stats.current, stats.voltage as f32 / 1000.0, stats.soc)
+                    write!(&mut battstats_tv, "{}W{}{:.2}V {}%", wattage, sign, stats.voltage as f32 / 1000.0, stats.soc)
                         .expect("|status: can't write string");
                 } else {
                     if let Some(ssid) = wifi_status.ssid {
