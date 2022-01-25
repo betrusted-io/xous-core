@@ -85,7 +85,12 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                     list.len()
                                 };
                                 for i in 0..checked_len {
-                                    match write!(ret, "{}, ", list[i]) {
+                                    let sep = if i != checked_len - 1 {
+                                        ", "
+                                    } else {
+                                        ""
+                                    };
+                                    match write!(ret, "{}{}", list[i], sep) {
                                         Ok(_) => (),
                                         Err(_) => break, // overflowed return buffer
                                     }
@@ -107,7 +112,12 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                 list.len()
                             };
                             for i in 0..checked_len {
-                                match write!(ret, "{}, ", list[i]) {
+                                let sep = if i != checked_len - 1 {
+                                    ", "
+                                } else {
+                                    ""
+                                };
+                                match write!(ret, "{}{}", list[i], sep) {
                                     Ok(_) => (),
                                     Err(_) => break, // overflowed return buffer
                                 }
