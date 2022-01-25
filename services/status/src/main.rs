@@ -171,9 +171,10 @@ fn xmain() -> ! {
     // 0                   150 150 200
     // Feb 05 15:00 (00:06:23) xxxx     3.72V/-100mA/99%
     const CPU_BAR_WIDTH: i16 = 50;
-    let time_rect = Rectangle::new(
+    let time_rect = Rectangle::new_with_style(
         Point::new(0, 0),
-        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1, screensize.y / 2 - 1)
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1, screensize.y / 2 - 1),
+        DrawStyle::new(PixelColor::Light, PixelColor::Light, 0)
     );
     let cpuload_rect = Rectangle::new_with_style(
         Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, 0),
@@ -519,6 +520,8 @@ fn xmain() -> ! {
                 }
 
                 { // update the time field
+                    // have to clear the entire rectangle area, because the text has a variable width and dirty text will remain if the text is shortened
+                    gam.draw_rectangle(status_gid, time_rect).ok();
                     uptime_tv.clear_str();
                     if let Some(dt) = datetime {
                         write!(
