@@ -18,7 +18,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "pddb [basislist]";
+        let helpstring = "pddb [basislist] [dictlist] [keylist] [query]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -37,6 +37,84 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                             xous::send_message(cid, xous::Message::new_scalar(0, counter as usize, 0, 0, 0)).expect("couldn't send");
                         }})
                     ).unwrap();*/
+                }
+                "query" => {
+                    if let Some(descriptor) = tokens.next() {
+                        if let Some((dict, keyname)) = descriptor.split_once(':') {
+                            match self.pddb.get(dict, keyname, None,
+                                false, false, None, None::<fn()>) {
+                                Ok(mut key) => {
+                                    use std::io::Read;
+                                    let mut readbuf = [0u8; 512]; // up to the first 512 chars of the key
+                                    match key.read(&mut readbuf) {
+                                        Ok(len) => {
+                                            match std::string::String::from_utf8(readbuf[..len].to_vec()) {
+                                                Ok(s) => {
+                                                    write!(ret, "{}", s).unwrap();
+                                                }
+                                                _ => {
+                                                    for &b in readbuf[..len].iter() {
+                                                        match write!(ret, "{:02x} ", b) {
+                                                            Ok(_) => (),
+                                                            Err(_) => break, // we can overflow our return buffer returning hex chars
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        _ => write!(ret, "Error encountered reading {}:{}", dict, keyname).unwrap()
+                                    }
+                                }
+                                _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
+                            }
+                        } else {
+                            write!(ret, "Query is of form 'dict:key'").unwrap();
+                        }
+                    } else {
+                        write!(ret, "Missing query of form 'dict:key'").unwrap();
+                    }
+                }
+                "keylist" => {
+                    if let Some(dict) = tokens.next() {
+                        match self.pddb.list_keys(dict, None) {
+                            Ok(list) => {
+                                let checked_len = if list.len() > 6 {
+                                    write!(ret, "First 6 keys of {}:", list.len()).unwrap();
+                                    6
+                                } else {
+                                    list.len()
+                                };
+                                for i in 0..checked_len {
+                                    match write!(ret, "{}, ", list[i]) {
+                                        Ok(_) => (),
+                                        Err(_) => break, // overflowed return buffer
+                                    }
+                                }
+                            }
+                            Err(_) => write!(ret, "{} does not exist or other error", dict).ok().unwrap_or(()),
+                        }
+                    } else {
+                        write!(ret, "Missing dictionary name").unwrap();
+                    }
+                }
+                "dictlist" => {
+                    match self.pddb.list_dict(None) {
+                        Ok(list) => {
+                            let checked_len = if list.len() > 6 {
+                                write!(ret, "First 6 dicts of {}:", list.len()).unwrap();
+                                6
+                            } else {
+                                list.len()
+                            };
+                            for i in 0..checked_len {
+                                match write!(ret, "{}, ", list[i]) {
+                                    Ok(_) => (),
+                                    Err(_) => break, // overflowed return buffer
+                                }
+                            }
+                        }
+                        Err(_) => write!(ret, "Error encountered listing dictionaries").ok().unwrap_or(()),
+                    }
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
