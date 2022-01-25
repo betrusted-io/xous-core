@@ -363,7 +363,7 @@ fn xmain() -> ! {
                 } else if wattage < -0.005 {
                     '\u{2b07}' // down arrow
                 } else {
-                    '\u{1f50b}' // battery icon (fully charged)
+                    '\u{1f50c}' // plugged in icon (e.g., fully charged, running on wall power now)
                 };
                 wattage = wattage.abs();
                 if battstats_phase {
