@@ -121,19 +121,22 @@ namespace Antmicro.Renode.Peripherals.Video
 
         protected override void Repaint()
         {
-            var newbuf = new Byte[44 * Height];
             for (int y = 0; y < Height; y++)
             {
                 // We should redraw the line if:
                 // 1) The `updateDirty` bit is set and the current line is dirty, or
                 // 2) The `updateAll` bit is set.
                 bool shouldRedrawLine = updateAll;
-                foreach (int i in Enumerable.Range(41, 22))
+                foreach (int i in Enumerable.Range(41, 2))
                 {
                     if (shouldRedrawLine)
                     {
                         break;
                     }
+                    // A line is considered "dirty" if any bit following the pixel data is
+                    // nonzero. Because each line is 336 pixels wide (which yields 42 bytes
+                    // of data per line), the remaining 2 bytes indicate whether the line
+                    // is dirty or not.
                     if (updateDirty && (this.videoRam.data[y * 44 + i] != 0))
                     {
                         shouldRedrawLine = true;
