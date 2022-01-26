@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <PlatformTarget>AMD64</PlatformTarget>
     <RenodePath>$PATH_TO_RENODE</RenodePath>
   </PropertyGroup>
