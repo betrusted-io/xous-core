@@ -270,6 +270,12 @@ pub(crate) enum Opcode {
     /// wlan: debug infos
     WlanDebug,
 
+    /// wlan: get RSSI
+    WlanRssi,
+
+    /// wlan: sync state (for resume)
+    WlanSyncState,
+
     /// sets the EC-side com interrupt mask
     IntSetMask,
 
@@ -296,10 +302,13 @@ pub(crate) enum Callback {
 pub enum ComIntSources {
     WlanRxReady,
     WlanIpConfigUpdate,
-    WlanSsidScanDone,
+    WlanSsidScanUpdate,
+    WlanSsidScanFinished,
     BatteryCritical,
     WlanTxErr,
     WlanRxErr,
+    Disconnect,
+    Connect,
     Invalid,
 }
 impl From<u16> for ComIntSources {
@@ -307,10 +316,13 @@ impl From<u16> for ComIntSources {
         match n {
             com_rs_ref::INT_WLAN_RX_READY => ComIntSources::WlanRxReady,
             com_rs_ref::INT_WLAN_IPCONF_UPDATE => ComIntSources::WlanIpConfigUpdate,
-            com_rs_ref::INT_WLAN_SSID_UPDATE => ComIntSources::WlanSsidScanDone,
+            com_rs_ref::INT_WLAN_SSID_UPDATE => ComIntSources::WlanSsidScanUpdate,
+            com_rs_ref::INT_WLAN_SSID_FINISHED => ComIntSources::WlanSsidScanFinished,
             com_rs_ref::INT_BATTERY_CRITICAL => ComIntSources::BatteryCritical,
             com_rs_ref::INT_WLAN_TX_ERROR => ComIntSources::WlanTxErr,
             com_rs_ref::INT_WLAN_RX_ERROR => ComIntSources::WlanRxErr,
+            com_rs_ref::INT_WLAN_DISCONNECT => ComIntSources::Disconnect,
+            com_rs_ref::INT_WLAN_CONNECT_EVENT => ComIntSources::Connect,
             _ => ComIntSources::Invalid,
         }
     }
@@ -320,10 +332,13 @@ impl From<ComIntSources> for u16 {
         match cis {
             ComIntSources::BatteryCritical => com_rs_ref::INT_BATTERY_CRITICAL,
             ComIntSources::WlanIpConfigUpdate => com_rs_ref::INT_WLAN_IPCONF_UPDATE,
-            ComIntSources::WlanSsidScanDone => com_rs_ref::INT_WLAN_SSID_UPDATE,
+            ComIntSources::WlanSsidScanUpdate => com_rs_ref::INT_WLAN_SSID_UPDATE,
+            ComIntSources::WlanSsidScanFinished => com_rs_ref::INT_WLAN_SSID_FINISHED,
             ComIntSources::WlanRxReady => com_rs_ref::INT_WLAN_RX_READY,
             ComIntSources::WlanTxErr => com_rs_ref::INT_WLAN_TX_ERROR,
             ComIntSources::WlanRxErr => com_rs_ref::INT_WLAN_RX_ERROR,
+            ComIntSources::Connect => com_rs_ref::INT_WLAN_CONNECT_EVENT,
+            ComIntSources::Disconnect => com_rs_ref::INT_WLAN_DISCONNECT,
             ComIntSources::Invalid => 0,
         }
     }

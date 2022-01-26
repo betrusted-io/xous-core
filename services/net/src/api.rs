@@ -21,7 +21,7 @@ pub const AP_DICT_NAME: &'static str = "wlan_ap_list";
 
 #[allow(dead_code)]
 /// minimum revision required for compatibility with Net crate
-pub const MIN_EC_REV: u32 = 0x00_09_05_07;
+pub const MIN_EC_REV: u32 = 0x00_09_05_0F;
 
 /// Dispatch opcodes to the Net crate main loop.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

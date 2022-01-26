@@ -6,6 +6,7 @@ pub mod api;
 
 pub use api::*;
 use api::{Callback, ComIntSources, NET_MTU, Opcode};
+use com_rs_ref::{DhcpState, LinkState};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
@@ -237,6 +238,8 @@ impl Com {
             send_message(self.conn, Message::new_scalar(Opcode::ScanOff.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
         }
     }
+    // this function no longer works, must rely on the event-based response via ComInt mechanism
+    #[deprecated]
     pub fn ssid_scan_updated(&self) -> Result<bool, xous::Error> {
         if let xous::Result::Scalar1(avail) =
             send_message(self.conn, Message::new_blocking_scalar(Opcode::SsidCheckUpdate.to_usize().unwrap(), 0, 0, 0, 0)).unwrap() {
@@ -436,7 +439,6 @@ impl Com {
     }
 
     pub fn wlan_join(&mut self) -> Result<xous::Result, xous::Error> {
-        // TODO: how to make this return success/fail status from WF200?
         send_message(
             self.conn,
             Message::new_scalar(Opcode::WlanJoin.to_usize().unwrap(), 0, 0, 0, 0),
@@ -509,6 +511,34 @@ impl Com {
         buf.send(self.conn, Opcode::WlanSendPacket.to_u32().expect("WlanSendPacket failed")).or(Err(xous::Error::InternalError))?;
         Ok(())
     }
+    /// signal strength in -dBm (pre-negated, for "proper" reporting, add a - sign)
+    pub fn wlan_get_rssi(&self) -> Result<u8, xous::Error> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::WlanRssi.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send WlanRssi message");
+        if let xous::Result::Scalar1(rssi_usize) = response {
+            if rssi_usize & 0xFF_00 != 0 {
+                log::error!("got an error code in fetching the RSSI data: 0x{:x}", rssi_usize);
+                Err(xous::Error::UnknownError)
+            } else {
+                Ok((rssi_usize & 0xFF) as u8)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn wlan_sync_state(&self) -> Result<(LinkState, DhcpState), xous::Error> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::WlanSyncState.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send WlanRssi message");
+        if let xous::Result::Scalar2(link, dhcp) = response {
+            Ok((LinkState::decode_u16(link as u16), DhcpState::decode_u16(dhcp as u16)))
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
 
     pub fn ints_enable(&self, int_list: &[ComIntSources]) {
         let mut mask_val: u16 = 0;
@@ -549,7 +579,7 @@ impl Com {
             Message::new_blocking_scalar(Opcode::IntAck.to_usize().unwrap(), ack_val as usize, 0, 0, 0)
         ).expect("couldn't send IntSetMask message");
     }
-    pub fn ints_get_active(&self, int_list: &mut Vec::<ComIntSources>) -> Option<u16> {
+    pub fn ints_get_active(&self, int_list: &mut Vec::<ComIntSources>) -> (Option<u16>, usize, usize) {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::IntFetchVector.to_usize().unwrap(), 0, 0, 0, 0))
             .expect("couldn't get IntFetchVector");
@@ -565,16 +595,18 @@ impl Com {
                         rxlen = None;
                     } else {
                         if int_src == ComIntSources::WlanRxReady {
-                            rxlen = Some(maybe_rxlen as u16)
+                            rxlen = Some(maybe_rxlen as u16);
+                        } else if int_src == ComIntSources::Connect {
+                            rxlen = Some(maybe_rxlen as u16);
                         }
                     }
                 }
                 mask_bit <<= 1;
             }
+            (rxlen, ints, maybe_rxlen)
         } else {
             panic!("failed to send IntGetmask message");
         }
-        rxlen
     }
 
 }

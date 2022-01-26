@@ -766,6 +766,18 @@ fn xmain() -> ! {
                 info!("TODO: implement WlanOff");
                 com.txrx(ComState::WLAN_OFF.verb);
             }
+            Some(Opcode::WlanRssi) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::WLAN_GET_RSSI.verb);
+                let maybe_rssi = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                // raw code sent, error interpretation done by lib function
+                xous::return_scalar(msg.sender, maybe_rssi as usize).unwrap();
+            }),
+            Some(Opcode::WlanSyncState) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::WLAN_SYNC_STATE.verb);
+                let link = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let dhcp = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                xous::return_scalar2(msg.sender, link as usize, dhcp as usize).unwrap();
+            }),
             Some(Opcode::WlanSetSSID) => {
                 const WF200_SSID_LEN: usize = 32;
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

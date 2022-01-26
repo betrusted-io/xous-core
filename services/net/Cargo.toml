@@ -23,6 +23,8 @@ com = {path = "../com"}
 byteorder = { version = "1.0", default-features = false }
 trng = {path = "../trng"}
 com_rs-ref = {path = "../../imports/com_rs-ref"}
+modals = {path = "../modals"}
+locales = {path = "../../locales"}
 
 # for automatic SSID management and AP list storage
 pddb = {path = "../pddb"}

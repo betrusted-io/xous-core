@@ -477,7 +477,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=1effb7eaebbec59f7fda4a678e2d36efafc2e673#1effb7eaebbec59f7fda4a678e2d36efafc2e673"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=7df87fd4914eb3d2f74bf630aa0b828123368fce#7df87fd4914eb3d2f74bf630aa0b828123368fce"
 
 [[package]]
 name = "com_rs-ref"
@@ -1355,8 +1355,10 @@ dependencies = [
  "com",
  "com_rs-ref",
  "llio",
+ "locales",
  "log",
  "log-server",
+ "modals",
  "num-derive",
  "num-traits",
  "pddb",

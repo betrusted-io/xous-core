@@ -63,7 +63,7 @@ impl<'a> ShellCmdApi<'a> for Ssid {
                             }
                             if !responded {
                                 xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
-                                    id: cb_id as usize, arg1: ScanResult::Timeout.to_usize().unwrap(), arg2: 0, arg3: 0, arg4: 0,
+                                    id: cb_id as usize, arg1: ScanResult::Ok.to_usize().unwrap(), arg2: 0, arg3: 0, arg4: 0,
                                 })).unwrap();
                             }
                         }

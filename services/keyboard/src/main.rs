@@ -943,7 +943,7 @@ fn xmain() -> ! {
                 };
                 log::trace!("got inject key, listener_conn: {:?}", listener_conn);
                 if let Some(conn) = listener_conn {
-                    info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
+                    log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
                     xous::send_message(conn,
                         xous::Message::new_scalar(listener_op.unwrap(),
                             key as u32 as usize,

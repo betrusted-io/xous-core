@@ -107,6 +107,10 @@ fn xmain() -> ! {
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
     com_int_list.push(ComIntSources::WlanRxReady);
     com_int_list.push(ComIntSources::BatteryCritical);
+    com_int_list.push(ComIntSources::Connect);
+    com_int_list.push(ComIntSources::Disconnect);
+    com_int_list.push(ComIntSources::WlanSsidScanUpdate);
+    com_int_list.push(ComIntSources::WlanSsidScanFinished);
     com.ints_enable(&com_int_list);
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list);
@@ -549,8 +553,23 @@ fn xmain() -> ! {
 
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
-                let maybe_rxlen = com.ints_get_active(&mut com_int_list);
+                let (maybe_rxlen, ints, raw_rxlen) = com.ints_get_active(&mut com_int_list);
                 log::debug!("COM got interrupts: {:?}, {:?}", com_int_list, maybe_rxlen);
+                // forward the interrupt to the connection manager as well
+                match xous::try_send_message(cm_cid, Message::new_scalar(
+                    connection_manager::ConnectionManagerOpcode::ComInt.to_usize().unwrap(),
+                    ints,
+                    raw_rxlen,
+                    0, 0
+                )) {
+                    Ok(_) => {},
+                    Err(xous::Error::ServerQueueFull) => {
+                        log::warn!("Our net queue runneth over, interrupts were dropped.");
+                    },
+                    Err(e) => {
+                        log::error!("Unhandled error forwarding ComInt to the connection manager: {:?}", e);
+                    }
+                };
                 for &pending in com_int_list.iter() {
                     if pending == ComIntSources::Invalid {
                         log::error!("COM interrupt vector had an error, ignoring event.");
@@ -650,11 +669,8 @@ fn xmain() -> ! {
                                 }
                             }
                         },
-                        ComIntSources::WlanSsidScanDone => {
-                            log::info!("got ssid scan done");
-                        },
                         _ => {
-                            log::error!("Invalid interrupt type received");
+                            log::debug!("Unhandled: {:?}", pending);
                         }
                     }
                 }
