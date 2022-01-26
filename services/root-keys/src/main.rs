@@ -318,8 +318,6 @@ fn xmain() -> ! {
         gam::menu_matic(menu_items, crate::ROOTKEY_MENU_NAME, None);
         let mut policy_followup_action: Option<usize> = None;
     }
-    // this is the basic default policy of high-security keys -- they stick around until the next suspend
-    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
 
     // create our very own password modal -- so that critical passwords aren't being shuffled between servers left and right
     let mut password_action = TextEntry {

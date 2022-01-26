@@ -798,7 +798,7 @@ fn xmain() -> ! {
                 const WF200_PASS_LEN: usize = 64;
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let pass = buffer.to_original::<String::<WF200_PASS_LEN>, _>().unwrap();
-                info!("WlanSetPass: {}", pass);
+                info!("WlanSetPass *ssssh!*");
                 let mut str_ser = StringSer::<STR_64_WORDS>::new();
                 match str_ser.encode(&pass.to_str()) {
                     Ok(tx_words) => {
