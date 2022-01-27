@@ -906,7 +906,7 @@ fn xmain() -> ! {
             }),
             Some(Opcode::InjectKey) => msg_scalar_unpack!(msg, k, _, _, _, {
                 // key substitutions to help things work better
-                // 5b31 = home
+                // 5b31 = home (5b7e now that we have things working better?? maybe this is a three-byte sequence and I'm missing a third?)
                 // 5b44 = left
                 // 5b43 = right
                 // 5b41 = up
@@ -923,7 +923,7 @@ fn xmain() -> ! {
                 } else {
                     inject_esc = false;
                     match k {
-                        0x31 => '∴' as u32,
+                        0x7e => '∴' as u32,
                         0x44 => '←' as u32,
                         0x43 => '→' as u32,
                         0x41 => '↑' as u32,

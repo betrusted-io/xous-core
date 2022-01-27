@@ -171,8 +171,17 @@ mod implementation {
         if cfg!(feature = "logging") {
             let mut inject_csr = CSR::new(arg as *mut u32);
             let mut uart_csr = CSR::new(unsafe { crate::debug::DEFAULT_UART_ADDR as *mut u32 });
+            // println!("rxe {}", uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY));
+            while uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) == 0 {
+                // I really rather think this is more readable, than the "Rusty" version below.
+                inject_csr.wfo(utra::keyinject::UART_CHAR_CHAR,
+                    uart_csr.rf(utra::uart::RXTX_RXTX));
+                uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
 
-            loop {
+                // I guess this is how you would do it if you were "really doing Rust"
+                // (except this is checking pending not fifo status for loop termination)
+                // (which was really hard to figure out just looking at this loop)
+                /*
                 let maybe_c = match uart_csr.rf(utra::uart::EV_PENDING_RX) {
                     0 => None,
                     ack => {
@@ -182,14 +191,13 @@ mod implementation {
                     }
                 };
                 if let Some(c) = maybe_c {
-                    // println!("Inject {}", c);
                     inject_csr.wfo(utra::keyinject::UART_CHAR_CHAR, (c & 0xff) as u32);
                 } else {
                     break;
-                }
+                }*/
             }
-            // make sure this doesn't get disabled
-            uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
+            // println!("rxe {}", uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY));
+            // println!("pnd {}", uart_csr.rf(utra::uart::EV_PENDING_RX));
         }
     }
 
@@ -204,7 +212,10 @@ mod implementation {
                 while uart_csr.r(utra::uart::TXFULL) != 0 {}
                 uart_csr.wo(utra::uart::RXTX, c as u32);
 
-                uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
+                // there's a race condition in the handler, if a new character comes in while handling the interrupt,
+                // the pending bit never clears. If the console seems to freeze, uncomment this line.
+                // This kind of works around that, at the expense of maybe losing some Rx characters.
+                // uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
             }
         }
 
