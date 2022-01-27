@@ -100,6 +100,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         let pumping = pumping.clone();
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
+            let pddb = pddb::Pddb::new();
+            while !pddb.is_mounted() {
+                tt.sleep_ms(1103).unwrap(); // don't pump the loop until the PDDB has been mounted, but check back regularly
+            }
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -124,7 +128,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     });
 
     let mut susres = susres::Susres::new(
-        Some(susres::SuspendOrder::Early), &xns,
+        Some(susres::SuspendOrder::Late), &xns,
         ConnectionManagerOpcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
 
     com.set_ssid_scanning(true).unwrap(); // kick off an initial SSID scan, we'll always want this info regardless
@@ -274,11 +278,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 }
             }),
             Some(ConnectionManagerOpcode::Poll) => msg_scalar_unpack!(msg, _, _, _, _, {
-                // heh. this probably should be rewritten to be a bit more thread-safe if we had a multi-core CPU we're running on. but we're single-core so...
-                if activity_interval.fetch_add(current_interval.load(Ordering::SeqCst) as u32, Ordering::SeqCst) > current_interval.load(Ordering::SeqCst) as u32 {
+                let interval = current_interval.load(Ordering::SeqCst) as u32;
+                if activity_interval.fetch_add(interval, Ordering::SeqCst) > interval {
                     log::info!("wlan activity interval timeout");
-                    // if the pddb isn't mounted, don't even bother checking -- we can't connect until we have a place to get keys
-                    if pddb.is_mounted() && rev_ok {
+                    if rev_ok {
                         mounted = true;
 
                         if last_wifi_state == WifiState::Connected && wifi_state != WifiState::Connected {
@@ -313,6 +316,9 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                             com.wlan_join().expect("couldn't issue join command");
                                             wifi_state = WifiState::Connecting;
                                         }
+                                    } else {
+                                        com.set_ssid_scanning(true).unwrap();
+                                        scan_state = SsidScanState::Scanning;
                                     }
                                 }
                                 WifiState::WaitDhcp | WifiState::Connecting => {
