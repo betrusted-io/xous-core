@@ -212,6 +212,7 @@ mod implementation {
 
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
         let kbd = unsafe { &mut *(arg as *mut Keyboard) };
+        let pending = kbd.csr.r(utra::keyboard::EV_PENDING);
         if kbd.csr.rf(utra::keyboard::EV_PENDING_KEYPRESSED) != 0 {
             // scan the entire key matrix and return the list of keys that are currently
             // pressed as key codes. If we missed an interrupt, then we missed the key...
@@ -228,18 +229,18 @@ mod implementation {
                     }
                 }
             }
-            kbd.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1); // clear the interrupt
-
             xous::try_send_message(kbd.conn,
                 xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)).ok();
         }
         if kbd.csr.rf(utra::keyboard::EV_PENDING_INJECT) != 0 {
-            let c = kbd.csr.rf(utra::keyboard::UART_CHAR_CHAR);
-            kbd.csr.wfo(utra::keyboard::EV_PENDING_INJECT, 1); // clear the interrupt
-            xous::try_send_message(kbd.conn,
-                xous::Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(), c as _, 0, 0, 0)
-            ).ok();
+            while kbd.csr.rf(utra::keyboard::UART_CHAR_STB) != 0 {
+                let c = kbd.csr.rf(utra::keyboard::UART_CHAR_CHAR);
+                xous::try_send_message(kbd.conn,
+                    xous::Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(), c as _, 0, 0, 0)
+                ).ok();
+            }
         }
+        kbd.csr.wo(utra::keyboard::EV_PENDING, pending);
     }
     /// get the column activation contents of the given row
     /// row is coded as a binary number, so the result of kbd_rowchange has to be decoded from a binary
@@ -312,7 +313,6 @@ mod implementation {
                 kbd.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1) |
                 kbd.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1)
             );
-            log::trace!("hardware initialized");
 
             kbd.susres.push_fixed_value(RegOrField::Reg(utra::keyboard::EV_PENDING), 0xFFFF_FFFF);
             kbd.susres.push(RegOrField::Reg(utra::keyboard::EV_ENABLE), None);
@@ -366,7 +366,7 @@ mod implementation {
 
         pub(crate) fn poll(&mut self) {
             // disable the interrupt while we're polling, to avoid a race condition...
-            self.csr.wfo(utra::keyboard::EV_ENABLE_KEYPRESSED, 0);
+            self.csr.rmwf(utra::keyboard::EV_ENABLE_KEYPRESSED, 0);
             self.new_state.clear();
             for r in 0..KBD_ROWS {
                 let cols: u16 = kbd_getrow(self, r as u8);
@@ -384,7 +384,7 @@ mod implementation {
                 log::warn!("kbd interrupt was set when we didn't expect it, clearing anyways...");
                 self.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1);
             }
-            self.csr.wfo(utra::keyboard::EV_ENABLE_KEYPRESSED, 1);
+            self.csr.rmwf(utra::keyboard::EV_ENABLE_KEYPRESSED, 1);
         }
 
         pub(crate) fn update(&mut self) -> KeyRawStates {
@@ -941,17 +941,18 @@ fn xmain() -> ! {
                     log::warn!("Uninterpreable key sequence, ignoring: 0x{:x}", k);
                     '\u{0000}'
                 };
-                log::trace!("got inject key, listener_conn: {:?}", listener_conn);
                 if let Some(conn) = listener_conn {
-                    log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
-                    xous::send_message(conn,
-                        xous::Message::new_scalar(listener_op.unwrap(),
-                            key as u32 as usize,
-                            '\u{0000}' as u32 as usize,
-                            '\u{0000}' as u32 as usize,
-                            '\u{0000}' as u32 as usize,
-                       )
-                    ).unwrap();
+                    if key != '\u{0000}' {
+                        log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
+                        xous::send_message(conn,
+                            xous::Message::new_scalar(listener_op.unwrap(),
+                                key as u32 as usize,
+                                '\u{0000}' as u32 as usize,
+                                '\u{0000}' as u32 as usize,
+                                '\u{0000}' as u32 as usize,
+                        )
+                        ).unwrap();
+                    }
                 }
             }),
             Some(Opcode::HandlerTrigger) => {

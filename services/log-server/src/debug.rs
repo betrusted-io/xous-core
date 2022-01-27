@@ -24,6 +24,7 @@ macro_rules! println
 	});
 }
 
+#[allow(dead_code)]
 fn handle_irq(irq_no: usize, arg: *mut usize) {
     print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
 
@@ -60,12 +61,12 @@ impl Uart {
         // core::mem::forget(uart);
 
         println!("Allocating IRQ...");
-        xous::claim_interrupt(
+        /* xous::claim_interrupt(
             utra::console::CONSOLE_IRQ,
             handle_irq,
             core::ptr::null_mut::<usize>(),
         )
-        .expect("unable to allocate IRQ");
+        .expect("unable to allocate IRQ"); */
         self.enable_rx();
     }
 
@@ -84,7 +85,7 @@ impl Uart {
         let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
-
+    #[allow(dead_code)]
     pub fn getc(&self) -> Option<u8> {
         if unsafe { DEFAULT_UART_ADDR } as usize == 0 {
             self.map_uart();

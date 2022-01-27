@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2022-01-27 02:15:42]]></description>
+    <description><![CDATA[Litex SoC 2022-01-28 03:05:30]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -3321,7 +3321,7 @@ checked]]></description>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[current strobe value (for debugging)]]></description>
+                            <description><![CDATA[FIFO has readable characters]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3560,11 +3560,19 @@ checked]]></description>
 is no interlock or FIFO buffering on this, so you can lose characters if you
 inject too fast.]]></description>
                         </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>DISABLE</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
                         <field>
                             <name>disable</name>
-                            <msb>8</msb>
-                            <bitRange>[8:8]</bitRange>
-                            <lsb>8</lsb>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
                             <description><![CDATA[writing a 1 permanently disables the block, until the next cold boot]]></description>
                         </field>
                     </fields>
@@ -3572,7 +3580,7 @@ inject too fast.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x4</size>
+                <size>0x8</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -3585,7 +3593,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x22e343a6</resetValue>
+                    <resetValue>0x6ef8973c</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3600,7 +3608,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x19bfcf31</resetValue>
+                    <resetValue>0x5df014e4</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
