@@ -188,7 +188,7 @@ fn xmain() -> ! {
     log::trace!("ready to accept requests");
     // register a suspend/resume listener
     let sr_cid = xous::connect(net_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     // kick off the connection manager thread
     let cm_sid = xous::create_server().expect("couldn't create connection manager server");
@@ -1023,8 +1023,21 @@ fn xmain() -> ! {
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                // handle an suspend/resume state stuff here. right now, it's a NOP
+                com_int_list.clear();
+                com.ints_enable(&com_int_list); // disable all the interrupts
+
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                // re-enable the interrupts
+                com_int_list.clear();
+                com_int_list.push(ComIntSources::WlanIpConfigUpdate);
+                com_int_list.push(ComIntSources::WlanRxReady);
+                com_int_list.push(ComIntSources::BatteryCritical);
+                com_int_list.push(ComIntSources::Connect);
+                com_int_list.push(ComIntSources::Disconnect);
+                com_int_list.push(ComIntSources::WlanSsidScanUpdate);
+                com_int_list.push(ComIntSources::WlanSsidScanFinished);
+                com_int_list.push(ComIntSources::WfxErr);
+                com.ints_enable(&com_int_list);
             }),
             Some(Opcode::Quit) => {
                 log::warn!("quit received");

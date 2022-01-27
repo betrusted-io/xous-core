@@ -101,6 +101,7 @@ mod implementation {
         pub fn suspend(&mut self) {
             self.susres.suspend();
             self.csr.wo(utra::com::EV_ENABLE, 0);
+            self.csr.wo(utra::com::EV_PENDING, 0xFFFF_FFFF);
         }
         pub fn resume(&mut self) {
             self.susres.resume();

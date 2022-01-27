@@ -13,11 +13,12 @@ use locales::t;
 use crate::ComIntSources;
 
 #[allow(dead_code)]
-const BOOT_POLL_INTERVAL_MS: usize = 3_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
+const BOOT_POLL_INTERVAL_MS: usize = 4_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
 /// this is shared externally so other functions (e.g. in status bar) that want to query the net manager know how long to back off, otherwise the status query will block
 #[allow(dead_code)]
 const POLL_INTERVAL_MS: usize = 7_151; // stagger slightly off of an integer-seconds interval to even out loads. impacts rssi update frequency.
-const INTERVALS_BEFORE_RETRY: usize =  3; // how many poll intervals we'll wait before we give up and try a new AP
+const INTERVALS_BEFORE_RETRY: usize = 3; // how many poll intervals we'll wait before we give up and try a new AP
+const SCAN_COUNT_MAX: usize = 5;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum ConnectionManagerOpcode {
@@ -88,6 +89,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let mut ssid_list = HashSet::<String>::new(); // we're throwing away the RSSI for now and just going by name
     let mut ssid_attempted = HashSet::<String>::new();
     let mut wait_count = 0;
+    let mut scan_count = 0;
 
     let run_sid = xous::create_server().unwrap();
     let run_cid = xous::connect(run_sid).unwrap();
@@ -162,6 +164,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 if scan_state == SsidScanState::Idle {
                                     com.set_ssid_scanning(true).unwrap();
                                     scan_state = SsidScanState::Scanning;
+                                    scan_count = 0; // we only set scan_count to 0 on resumes because we can't be sure what our previous state was
                                 }
                                 send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                             }
@@ -186,6 +189,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 if scan_state == SsidScanState::Idle {
                                     com.set_ssid_scanning(true).unwrap();
                                     scan_state = SsidScanState::Scanning;
+                                    scan_count = 0; // we only set scan_count to 0 on resumes because we can't be sure what our previous state was
                                 }
                             }
                             WifiState::Error => {
@@ -209,7 +213,6 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             log::info!("{:?}", source);
                             wifi_state = match ConnectResult::decode_u16(raw_arg as u16) {
                                 ConnectResult::Success => {
-                                    com.set_ssid_scanning(false).unwrap();
                                     scan_state = SsidScanState::Idle;
                                     activity_interval.store(0, Ordering::SeqCst);
                                     WifiState::WaitDhcp
@@ -221,7 +224,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 ConnectResult::Error => WifiState::Error,
                                 ConnectResult::Pending => WifiState::Error,
                             };
-                            log::debug!("comint new wifi state: {:?}", wifi_state);
+                            log::info!("comint new wifi state: {:?}", wifi_state);
                         }
                         ComIntSources::Disconnect => {
                             log::info!("{:?}", source);
@@ -301,24 +304,27 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             }
                             match wifi_state {
                                 WifiState::Unknown | WifiState::Disconnected | WifiState::InvalidAp | WifiState::InvalidAuth => {
-                                    if scan_state == SsidScanState::Scanning {
-                                        com.set_ssid_scanning(false).unwrap();
-                                        scan_state = SsidScanState::Idle;
-                                    }
-                                    if let Some(ssid) = get_next_ssid(&mut ssid_list, &mut ssid_attempted, ap_list) {
-                                        let mut wpa_pw_file = pddb.get(AP_DICT_NAME, &ssid, None, false, false, None, Some(||{})).expect("couldn't retrieve AP password");
-                                        let mut wp_pw_raw = [0u8; com::api::WF200_PASS_MAX_LEN];
-                                        if let Ok(readlen) = wpa_pw_file.read(&mut wp_pw_raw) {
-                                            let pw = std::str::from_utf8(&wp_pw_raw[..readlen]).expect("password was not valid utf-8");
-                                            log::info!("Attempting wifi connection: {}", ssid);
-                                            com.wlan_set_ssid(&ssid).expect("couldn't set SSID");
-                                            com.wlan_set_pass(pw).expect("couldn't set password");
-                                            com.wlan_join().expect("couldn't issue join command");
-                                            wifi_state = WifiState::Connecting;
+                                    if (scan_state == SsidScanState::Idle) || scan_count > SCAN_COUNT_MAX {
+                                        scan_count = 0;
+                                        // wait until we're done scanning before trying to connect
+                                        if let Some(ssid) = get_next_ssid(&mut ssid_list, &mut ssid_attempted, ap_list) {
+                                            let mut wpa_pw_file = pddb.get(AP_DICT_NAME, &ssid, None, false, false, None, Some(||{})).expect("couldn't retrieve AP password");
+                                            let mut wp_pw_raw = [0u8; com::api::WF200_PASS_MAX_LEN];
+                                            if let Ok(readlen) = wpa_pw_file.read(&mut wp_pw_raw) {
+                                                let pw = std::str::from_utf8(&wp_pw_raw[..readlen]).expect("password was not valid utf-8");
+                                                log::info!("Attempting wifi connection: {}", ssid);
+                                                com.wlan_set_ssid(&ssid).expect("couldn't set SSID");
+                                                com.wlan_set_pass(pw).expect("couldn't set password");
+                                                com.wlan_join().expect("couldn't issue join command");
+                                                wifi_state = WifiState::Connecting;
+                                            }
+                                        } else {
+                                            // no SSIDs available, scan again
+                                            com.set_ssid_scanning(true).unwrap();
+                                            scan_state = SsidScanState::Scanning;
                                         }
                                     } else {
-                                        com.set_ssid_scanning(true).unwrap();
-                                        scan_state = SsidScanState::Scanning;
+                                        scan_count += 1;
                                     }
                                 }
                                 WifiState::WaitDhcp | WifiState::Connecting => {

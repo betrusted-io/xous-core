@@ -227,14 +227,18 @@ mod implementation {
             self.uartmux_cache = self.gpio_csr.rf(UARTSEL_UARTSEL).into();
             self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // set the kernel UART so we can catch KPs on boot
 
-            self.gpio_susres.suspend();
             self.event_susres.suspend();
-            self.power_susres.suspend();
-
             // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values
-            self.gpio_csr.wo(utra::gpio::EV_ENABLE, 0);
             self.event_csr.wo(utra::btevents::EV_ENABLE, 0);
+            self.event_csr.wo(utra::btevents::EV_PENDING, 0xFFFF_FFFF); // really make sure we don't have any spurious events in the queue
+
+            self.gpio_susres.suspend();
+            self.gpio_csr.wo(utra::gpio::EV_ENABLE, 0);
+            self.gpio_csr.wo(utra::gpio::EV_PENDING, 0xFFFF_FFFF);
+
+            self.power_susres.suspend();
             self.power_csr.wo(utra::power::EV_ENABLE, 0);
+            self.power_csr.wo(utra::power::EV_PENDING, 0xFFFF_FFFF);
         }
         pub fn resume(&mut self) {
             self.power_susres.resume();
@@ -736,7 +740,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
     let mut latest_activity = 0;
 
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];

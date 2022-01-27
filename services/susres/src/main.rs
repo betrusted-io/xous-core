@@ -84,7 +84,7 @@ mod implementation {
             if let Some(cf) = sr.cacheflush {
                 let cf_ptr = cf.as_ptr() as *mut u32;
                 for i in 0..(cf.len() / 4) {
-                    unsafe {cf_ptr.add(i).write_volatile(0); }
+                    unsafe {cf_ptr.add(i).write_volatile(0xacdc_acdc); }
                 }
             }
 
@@ -221,26 +221,6 @@ mod implementation {
         }
 
         pub fn do_suspend(&mut self, forced: bool) {
-            // allocate memory for the cache flush
-            if self.cacheflush.is_none() {
-                self.cacheflush = Some (
-                    xous::syscall::map_memory(
-                        None,
-                        None,
-                        512 * 1024, // L2 cache is 128k, but emperically it doesn't fully flush until 512k is written. Maybe has to do with write-back behavior??
-                        xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
-                    ).expect("couldn't allocate RAM for cache flushing")
-                );
-                // the RESERVE flag should pre-allocate the pages, but for good measure
-                // we write all the pages to make sure they are at a defined value
-                if let Some(cf) = self.cacheflush {
-                    let cf_ptr = cf.as_ptr() as *mut u32;
-                    for i in 0..(cf.len() / 4) {
-                        unsafe {cf_ptr.add(i).write_volatile(0); }
-                    }
-                }
-            }
-
             #[cfg(feature = "debugprint")]
             println!("Stopping preemption");
             // stop pre-emption
@@ -342,6 +322,26 @@ mod implementation {
                 unsafe{(*marker)[index + range - 1] = hash;}
                 println!("Clean suspend hash: {:03} <- 0x{:08x}", index + range - 1, hash);
                 index += range;
+            }
+
+            // allocate memory for the cache flush
+            if self.cacheflush.is_none() {
+                self.cacheflush = Some (
+                    xous::syscall::map_memory(
+                        None,
+                        None,
+                        512 * 1024, // L2 cache is 128k, but emperically it doesn't fully flush until 512k is written. Maybe has to do with write-back behavior??
+                        xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
+                    ).expect("couldn't allocate RAM for cache flushing")
+                );
+                // the RESERVE flag should pre-allocate the pages, but for good measure
+                // we write all the pages to make sure they are at a defined value
+                if let Some(cf) = self.cacheflush {
+                    let cf_ptr = cf.as_ptr() as *mut u32;
+                    for i in 0..(cf.len() / 4) {
+                        unsafe {cf_ptr.add(i).write_volatile(0x0bad_0bad); }
+                    }
+                }
             }
 
             #[cfg(feature = "debugprint")]
