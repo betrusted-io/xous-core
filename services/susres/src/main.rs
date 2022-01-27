@@ -469,7 +469,7 @@ enum TimeoutOpcode {
     Drop,
 }
 
-static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(2000);
+static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(5000); // this is gated by the possibility that an EC reset was called just as a suspend was initiated. EC reset takes about 3500ms
 static TIMEOUT_CONN: AtomicU32 = AtomicU32::new(0);
 pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);

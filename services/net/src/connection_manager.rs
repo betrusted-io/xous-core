@@ -1,10 +1,10 @@
 use crate::api::*;
 use std::sync::Arc;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use com::{WlanStatus, WlanStatusIpc};
 use com_rs_ref::{ConnectResult, LinkState};
 use net::MIN_EC_REV;
-use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, try_send_message, Message};
 use xous_ipc::Buffer;
 use num_traits::*;
 use std::io::Read;
@@ -28,6 +28,11 @@ pub(crate) enum ConnectionManagerOpcode {
     UnsubWifiStats,
     ComInt,
     SuspendResume,
+    Quit,
+}
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum PumpOp {
+    Pump,
     Quit,
 }
 
@@ -72,9 +77,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         modals.show_notification(&note).unwrap();
     }
 
-    let mut run = rev_ok;
+    let run = Arc::new(AtomicBool::new(rev_ok));
+    let pumping = Arc::new(AtomicBool::new(false));
     let mut mounted = false;
-    let mut current_interval = BOOT_POLL_INTERVAL_MS;
+    let current_interval = Arc::new(AtomicU32::new(BOOT_POLL_INTERVAL_MS as u32));
     let mut wifi_stats_cache: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
     let mut status_subscribers = HashMap::<xous::CID, WifiStateSubscription>::new();
     let mut wifi_state = WifiState::Unknown;
@@ -83,6 +89,40 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let mut ssid_attempted = HashSet::<String>::new();
     let mut wait_count = 0;
 
+    let run_sid = xous::create_server().unwrap();
+    let run_cid = xous::connect(run_sid).unwrap();
+    let _ = std::thread::spawn({
+        let run = run.clone();
+        let sid = run_sid.clone();
+        let main_cid = self_cid.clone();
+        let self_cid = run_cid.clone();
+        let interval = current_interval.clone();
+        let pumping = pumping.clone();
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            loop {
+                let msg = xous::receive_message(sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PumpOp::Pump) => msg_scalar_unpack!(msg, _, _, _, _, {
+                        if run.load(Ordering::SeqCst) {
+                            pumping.store(true, Ordering::SeqCst);
+                            try_send_message(main_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+                            tt.sleep_ms(interval.load(Ordering::SeqCst) as usize).unwrap();
+                            send_message(self_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                            pumping.store(false, Ordering::SeqCst);
+                        }
+                    }),
+                    Some(PumpOp::Quit) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        xous::return_scalar(msg.sender, 1).ok();
+                        break;
+                    }),
+                    _ => log::error!("Unrecognized message: {:?}", msg),
+                }
+            }
+            xous::destroy_server(sid).unwrap();
+        }
+    });
+
     let mut susres = susres::Susres::new(
         Some(susres::SuspendOrder::Early), &xns,
         ConnectionManagerOpcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
@@ -90,7 +130,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     com.set_ssid_scanning(true).unwrap(); // kick off an initial SSID scan, we'll always want this info regardless
     let mut scan_state = SsidScanState::Scanning;
 
-    send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), current_interval, 0, 0, 0)).expect("couldn't kick off next poll");
+    send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got msg: {:?}", msg);
@@ -119,7 +159,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     com.set_ssid_scanning(true).unwrap();
                                     scan_state = SsidScanState::Scanning;
                                 }
-                                send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), current_interval, 0, 0, 0)).expect("couldn't kick off next poll");
+                                send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                             }
                         }
                     }
@@ -153,12 +193,6 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             }
                         }
                     }
-                }
-            }),
-            Some(ConnectionManagerOpcode::Run) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if !run {
-                    run = true;
-                    send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                 }
             }),
             Some(ConnectionManagerOpcode::ComInt) => msg_scalar_unpack!(msg, ints, raw_arg, 0, 0, {
@@ -231,7 +265,8 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 }
             }),
             Some(ConnectionManagerOpcode::Poll) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if activity_interval.fetch_add(current_interval as u32, Ordering::SeqCst) > current_interval as u32 {
+                // heh. this probably should be rewritten to be a bit more thread-safe if we had a multi-core CPU we're running on. but we're single-core so...
+                if activity_interval.fetch_add(current_interval.load(Ordering::SeqCst) as u32, Ordering::SeqCst) > current_interval.load(Ordering::SeqCst) as u32 {
                     log::info!("wlan activity interval timeout");
                     // if the pddb isn't mounted, don't even bother checking -- we can't connect until we have a place to get keys
                     if pddb.is_mounted() && rev_ok {
@@ -288,18 +323,18 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                         com.set_ssid_scanning(true).unwrap();
                                         scan_state = SsidScanState::Scanning;
                                     }
-                                    send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), current_interval, 0, 0, 0)).expect("couldn't kick off next poll");
+                                    send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                                 }
                                 WifiState::Error => {
                                     log::debug!("got error on connect, resetting wifi chip");
                                     com.wifi_reset().expect("couldn't reset the wf200 chip");
-                                    netmgr.reset();
+                                    netmgr.reset(); // this can result in a suspend failure, but the suspend timeout is currently set long enough to accommodate this possibility
                                     wifi_state = WifiState::Disconnected;
                                     if scan_state == SsidScanState::Idle {
                                         com.set_ssid_scanning(true).unwrap();
                                         scan_state = SsidScanState::Scanning;
                                     }
-                                    send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), current_interval, 0, 0, 0)).expect("couldn't kick off next poll");
+                                    send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                                 }
                                 WifiState::Connected => {
                                     // this is the "rare" path -- it's if we connected and not much is going on, so we timeout and hit this ping
@@ -333,14 +368,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     }
                 }
 
-                if run {
-                    tt.sleep_ms(current_interval).unwrap();
-                    if !mounted {
-                        current_interval = BOOT_POLL_INTERVAL_MS;
-                    } else {
-                        current_interval = POLL_INTERVAL_MS;
-                    }
-                    send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
+                if !mounted {
+                    current_interval.store(BOOT_POLL_INTERVAL_MS as u32, Ordering::SeqCst);
+                } else {
+                    current_interval.store(POLL_INTERVAL_MS as u32, Ordering::SeqCst);
                 }
             }),
             Some(ConnectionManagerOpcode::SubscribeWifiStats) => {
@@ -366,13 +397,19 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     unsafe{xous::disconnect(cid).expect("couldn't remove wifi status subscriber from our CID list that is limited to 32 items total. Suspect issue with ordering of disconnect vs blocking return...");}
                 }
             }),
-            // stop is blocking because we need to ensure the previous poll has finished before moving on, otherwise,
-            // we could get a double-run condition
-            Some(ConnectionManagerOpcode::Stop) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                run = false;
-                xous::return_scalar(msg.sender, 0).expect("couldn't ack stop");
+            Some(ConnectionManagerOpcode::Run) => msg_scalar_unpack!(msg, _, _, _, _, {
+                if !run.swap(true, Ordering::SeqCst) {
+                    if !pumping.load(Ordering::SeqCst) { // avoid having multiple pump messages being sent if a user tries to rapidly toggle the run/stop switch
+                        send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
+                    }
+                }
+            }),
+            Some(ConnectionManagerOpcode::Stop) => msg_scalar_unpack!(msg, _, _, _, _, {
+                run.store(false, Ordering::SeqCst);
             }),
             Some(ConnectionManagerOpcode::Quit) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                send_message(run_cid, Message::new_blocking_scalar(PumpOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't tell Pump to quit");
+                unsafe{xous::disconnect(run_cid).ok()};
                 xous::return_scalar(msg.sender, 0).unwrap();
                 log::warn!("exiting connection manager");
                 break;
