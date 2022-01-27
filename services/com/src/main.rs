@@ -394,6 +394,7 @@ fn xmain() -> ! {
             parse_version(&mut com)
         }
     };
+    let mut desired_int_mask = 0;
 
     trace!("starting main loop");
     loop {
@@ -401,12 +402,19 @@ fn xmain() -> ! {
         trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                com.txrx(ComState::LINK_SET_INTMASK.verb);
+                com.txrx(0); // suppress interrupts on suspend
+
                 if bl_main != 0 || bl_sec != 0 {
                     com.txrx(ComState::BL_START.verb); // this will turn off the backlights
                 }
                 com.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 com.resume();
+
+                com.txrx(ComState::LINK_SET_INTMASK.verb);
+                com.txrx(desired_int_mask); // restore interrupts on resume
+
                 if bl_main != 0 || bl_sec != 0 { // restore the backlight settings, if they are not 0
                     com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
                 }
@@ -917,6 +925,7 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::IntSetMask) => msg_blocking_scalar_unpack!(msg, mask_val, _, _, _, {
+                desired_int_mask = mask_val as u16;
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
                 com.txrx(mask_val as u16);
                 xous::return_scalar(msg.sender, 1)
