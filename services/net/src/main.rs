@@ -111,6 +111,7 @@ fn xmain() -> ! {
     com_int_list.push(ComIntSources::Disconnect);
     com_int_list.push(ComIntSources::WlanSsidScanUpdate);
     com_int_list.push(ComIntSources::WlanSsidScanFinished);
+    com_int_list.push(ComIntSources::WfxErr);
     com.ints_enable(&com_int_list);
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list);

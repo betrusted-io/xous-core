@@ -309,6 +309,7 @@ pub enum ComIntSources {
     WlanRxErr,
     Disconnect,
     Connect,
+    WfxErr,
     Invalid,
 }
 impl From<u16> for ComIntSources {
@@ -323,6 +324,7 @@ impl From<u16> for ComIntSources {
             com_rs_ref::INT_WLAN_RX_ERROR => ComIntSources::WlanRxErr,
             com_rs_ref::INT_WLAN_DISCONNECT => ComIntSources::Disconnect,
             com_rs_ref::INT_WLAN_CONNECT_EVENT => ComIntSources::Connect,
+            com_rs_ref::INT_WLAN_WFX_ERR => ComIntSources::WfxErr,
             _ => ComIntSources::Invalid,
         }
     }
@@ -339,6 +341,7 @@ impl From<ComIntSources> for u16 {
             ComIntSources::WlanRxErr => com_rs_ref::INT_WLAN_RX_ERROR,
             ComIntSources::Connect => com_rs_ref::INT_WLAN_CONNECT_EVENT,
             ComIntSources::Disconnect => com_rs_ref::INT_WLAN_DISCONNECT,
+            ComIntSources::WfxErr => com_rs_ref::INT_WLAN_WFX_ERR,
             ComIntSources::Invalid => 0,
         }
     }

@@ -16,7 +16,7 @@ use crate::ComIntSources;
 const BOOT_POLL_INTERVAL_MS: usize = 3_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
 /// this is shared externally so other functions (e.g. in status bar) that want to query the net manager know how long to back off, otherwise the status query will block
 #[allow(dead_code)]
-const POLL_INTERVAL_MS: usize = 10_151; // stagger slightly off of an integer-seconds interval to even out loads. impacts rssi update frequency.
+const POLL_INTERVAL_MS: usize = 7_151; // stagger slightly off of an integer-seconds interval to even out loads. impacts rssi update frequency.
 const INTERVALS_BEFORE_RETRY: usize =  3; // how many poll intervals we'll wait before we give up and try a new AP
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -199,8 +199,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 log::debug!("debug: {:x}, {:x}", ints, raw_arg);
                 let mut mask_bit: u16 = 1;
                 for _ in 0..16 {
-                    match ComIntSources::from(mask_bit & (ints as u16)) {
+                    let source = ComIntSources::from(mask_bit & (ints as u16));
+                    match source {
                         ComIntSources::Connect => {
+                            log::info!("{:?}", source);
                             wifi_state = match ConnectResult::decode_u16(raw_arg as u16) {
                                 ConnectResult::Success => {
                                     com.set_ssid_scanning(false).unwrap();
@@ -218,12 +220,14 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             log::debug!("comint new wifi state: {:?}", wifi_state);
                         }
                         ComIntSources::Disconnect => {
+                            log::info!("{:?}", source);
                             ssid_list.clear(); // clear the ssid list because a likely cause of disconnect is we've moved out of range
                             com.set_ssid_scanning(true).unwrap();
                             scan_state = SsidScanState::Scanning;
                             wifi_state = WifiState::Disconnected;
                         },
                         ComIntSources::WlanSsidScanUpdate => {
+                            log::info!("{:?}", source);
                             // aggressively pre-fetch results so we can connect as soon as we see an SSID
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
@@ -233,9 +237,9 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 },
                                 _ => continue,
                             }
-                            log::debug!("ssid scan update");
                         },
                         ComIntSources::WlanSsidScanFinished => {
+                            log::info!("{:?}", source);
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
                                     for (_rssi, ssid) in slist.iter() {
@@ -247,6 +251,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             scan_state = SsidScanState::Idle;
                         }
                         ComIntSources::WlanIpConfigUpdate => {
+                            log::info!("{:?}", source);
                             activity_interval.store(0, Ordering::SeqCst);
                             wifi_state = WifiState::Connected;
                             log::debug!("comint new wifi state: {:?}", wifi_state);
@@ -258,6 +263,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
                                 buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
                             }
+                        }
+                        ComIntSources::WfxErr => {
+                            log::info!("{:?}", source);
+                            wifi_state = WifiState::Error;
                         }
                         _ => {}
                     }
