@@ -171,6 +171,12 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         }
                     }
                     LinkState::WFXError => {
+                        // reset the stats cache, and update subscribers that we're disconnected
+                        wifi_stats_cache = WlanStatus::from_ipc(WlanStatusIpc::default());
+                        for &sub in status_subscribers.keys() {
+                            let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
+                            buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                        }
                         wifi_state = WifiState::Error;
                     }
                     _ => { // should approximately be a "disconnected" state.
@@ -484,7 +490,11 @@ fn get_next_ssid(ssid_list: &mut HashSet<String>, ssid_attempted: &mut HashSet<S
             log::debug!("SSID connect attempt: {:?}", candidate);
             Some(candidate.to_string())
         } else {
-            log::info!("No SSID candidates visible");
+            log::info!("No SSID candidates visible. Debug dump:");
+            log::info!("ap_list: {:?}", ap_list);
+            log::info!("ssid_list: {:?}", ssid_list);
+            log::info!("candidate list: {:?}", all_candidate_list);
+            log::info!("untried candidate list: {:?}", untried_candidate_list);
             None
         }
     }

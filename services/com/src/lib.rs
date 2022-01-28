@@ -579,12 +579,16 @@ impl Com {
             Message::new_blocking_scalar(Opcode::IntAck.to_usize().unwrap(), ack_val as usize, 0, 0, 0)
         ).expect("couldn't send IntSetMask message");
     }
-    pub fn ints_get_active(&self, int_list: &mut Vec::<ComIntSources>) -> (Option<u16>, usize, usize) {
+    pub fn ints_get_active(&self, int_list: &mut Vec::<ComIntSources>) -> Result<(Option<u16>, usize, usize), xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::IntFetchVector.to_usize().unwrap(), 0, 0, 0, 0))
             .expect("couldn't get IntFetchVector");
         let mut rxlen: Option<u16> = None;
         if let xous::Result::Scalar2(ints, maybe_rxlen) = response {
+            if ints == 0xDDDD {
+                log::warn!("IntFetchVector: 0xDDDD sentinel returned");
+                return Err(xous::Error::Timeout);
+            }
             let mut mask_bit: u16 = 1;
             for _ in 0..16 {
                 let int_src = ComIntSources::from(mask_bit & ints as u16);
@@ -603,7 +607,7 @@ impl Com {
                 }
                 mask_bit <<= 1;
             }
-            (rxlen, ints, maybe_rxlen)
+            Ok((rxlen, ints, maybe_rxlen))
         } else {
             panic!("failed to send IntGetmask message");
         }
