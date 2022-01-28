@@ -2,6 +2,8 @@ pub(crate) mod udp;
 pub(crate) use udp::*;
 pub(crate) mod ping;
 pub(crate) use ping::*;
+pub(crate) mod tcp;
+pub(crate) use tcp::*;
 pub use ping::NetPingCallback;
 
 use rkyv::{Archive, Deserialize, Serialize};
@@ -32,6 +34,10 @@ pub(crate) enum Opcode {
     UdpTx,
     UdpSetTtl,
     UdpGetTtl,
+
+    /// Calls for TCP implementation
+    TcpConnect,
+    TcpTx,
 
     // The DNS server can hook the Net crate for notifications on config updates
     /// Adds an Ipv4 as a DNS server

@@ -26,7 +26,7 @@ use smoltcp::wire::{
 };
 use byteorder::{ByteOrder, NetworkEndian};
 
-use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer, SocketHandle};
+use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer, SocketHandle, TcpSocket, TcpSocketBuffer};
 use smoltcp::time::Instant;
 use std::thread;
 use std::sync::Arc;
@@ -79,6 +79,17 @@ pub struct PingConnection {
     retop: usize,
 }
 
+#[derive(Hash, PartialEq, Eq)]
+pub struct TcpConnection {
+    remote: IpAddress,
+    remote_port: u16,
+    local_port: u16,
+}
+pub struct TcpState {
+    handle: SocketHandle,
+    cid: CID,
+}
+
 fn set_com_ints(com_int_list: &mut Vec::<ComIntSources>) {
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -106,6 +117,9 @@ fn xmain() -> ! {
     let mut llio = llio::Llio::new(&xns);
     let com = com::Com::new(&xns).unwrap();
     let timer = ticktimer_server::Ticktimer::new().unwrap();
+
+    // we need a trng for port numbers
+    let trng = trng::Trng::new(&xns).unwrap();
 
     // hook the COM interrupt listener
     let net_cid = xous::connect(net_sid).unwrap();
@@ -160,6 +174,9 @@ fn xmain() -> ! {
     // for Rx, copies of a CID,SID tuple are kept for every clone is kept in a HashMap. This
     // allows for the Rx data to be cc:'d to each clone, and identified by SID upon drop
     let mut udp_clones = HashMap::<u16, HashMap::<[u32; 4], CID>>::new(); // additional clones for UDP responders
+
+    // tcp storage
+    let mut tcp_handles = HashMap::<TcpConnection, TcpState>::new();
 
     // other link storage
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -383,6 +400,75 @@ fn xmain() -> ! {
                 dns_allclear_hook.clear();
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack unhook");
             }),
+            Some(Opcode::TcpConnect) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut tcpspec = buf.to_original::<NetTcpConnect, _>().unwrap(); // need to define this
+                let address = IpAddress::from(tcpspec.ip_addr);
+                let remote_port = tcpspec.remote_port;
+
+                // initiates a new connection to a remote server consisting of an (Address:Port) tuple.
+                // multiple connections can exist to a server, and they are furhte differentiated by the return port
+                let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
+                let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
+                let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
+                let local_port = (49152 + trng.get_u32().unwrap() % 16384) as u16;
+                match tcp_socket.connect((address, remote_port), local_port) {
+                    Ok(_) => {
+                        let connection = TcpConnection {
+                            remote: address,
+                            remote_port,
+                            local_port,
+                        };
+                        let handle = sockets.add(tcp_socket);
+                        let sid = tcpspec.cb_sid;
+                        let cid = xous::connect(SID::from_array(sid)).unwrap();
+                        let tcp_cb_state = TcpState {
+                            handle,
+                            cid,
+                        };
+                        tcp_handles.insert(connection, tcp_cb_state);
+                        tcpspec.result = Some(NetMemResponse::Ok);
+                    }
+                    Err(e) => {
+                        match e {
+                            smoltcp::Error::Illegal => {
+                                tcpspec.result = Some(NetMemResponse::SocketInUse);
+                            }
+                            smoltcp::Error::Unaddressable => {
+                                tcpspec.result = Some(NetMemResponse::Invalid);
+                            }
+                            _ => {
+                                tcpspec.result = Some(NetMemResponse::LibraryError);
+                            }
+                        }
+                    }
+                }
+                buf.replace(tcpspec).unwrap();
+            },
+            Some(Opcode::TcpTx) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut tcp_tx = buf.to_original::<NetTcpTransmit, _>().unwrap();
+                let connection = TcpConnection {
+                    remote: IpAddress::from(tcp_tx.remote_addr),
+                    remote_port: tcp_tx.remote_port,
+                    local_port: tcp_tx.local_port,
+                };
+                if let Some(tcp_state) = tcp_handles.get(&connection) {
+                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                    if socket.may_send() {
+                        tcp_tx.result = match socket.send_slice(&tcp_tx.data) {
+                            Ok(_) => Some(NetMemResponse::Ok),
+                            Err(_) => Some(NetMemResponse::LibraryError),
+                        }
+                    } else {
+                        // inform the sender it should retry
+                        tcp_tx.result = Some(NetMemResponse::SocketInUse);
+                    }
+                } else {
+                    tcp_tx.result = Some(NetMemResponse::Invalid);
+                }
+                buf.replace(tcp_tx).unwrap();
+            },
             Some(Opcode::UdpBind) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
@@ -708,6 +794,44 @@ fn xmain() -> ! {
                     Ok(_) => { }
                     Err(e) => {
                         log::debug!("poll error: {}", e);
+                    }
+                }
+
+                // this block handles TCP rx
+                {
+                    for (connection, tcp_state) in tcp_handles.iter() {
+                        let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                        if socket.can_recv() {
+                            match socket
+                                .recv(|data| {
+                                    let mut response = NetTcpResponse {
+                                        remote_ip_addr: NetIpAddr::from(connection.remote),
+                                        remote_port: connection.remote_port,
+                                        len: data.len() as u16,
+                                        data: [0; TCP_BUFFER_SIZE],
+                                    };
+                                    for(&src, dst) in data.iter().zip(response.data.iter_mut()) {
+                                        *dst = src;
+                                    }
+                                    let buf = Buffer::into_buf(response).expect("couldn't convert TCP response to memory message");
+                                    buf.send(tcp_state.cid, NetTcpCallback::RxData.to_u32().unwrap()).expect("couldn't send TCP response");
+                                    (data.len(), ())
+                                }) {
+                                Ok(_) => (),
+                                Err(e) => match e {
+                                    smoltcp::Error::Illegal => {
+                                        log::warn!("TCP fast open not supported");
+                                    },
+                                    smoltcp::Error::Finished => {
+                                        log::warn!("TCP packet received after close");
+                                    },
+                                    _ => {
+                                        log::warn!("Unknown TCP error");
+                                    }
+                                }
+                            }
+
+                        }
                     }
                 }
 
