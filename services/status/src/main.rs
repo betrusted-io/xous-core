@@ -360,7 +360,7 @@ fn xmain() -> ! {
 
                 if stats.current == 0xdddd || stats.current == 0xffff
                 || stats.voltage == 0xdddd || stats.voltage == 0xffff
-                || stats.soc == 0xdddd || stats.soc == 0xffff {
+                || stats.soc == 0xdd || stats.soc == 0xff {
                     write!(&mut battstats_tv, "{}", t!("stats.measuring", xous::LANG)).unwrap();
                 } else {
                     // toggle between two views of the data every time we have a status update
