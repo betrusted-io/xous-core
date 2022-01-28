@@ -854,7 +854,7 @@ fn xmain() -> ! {
                     }
                     let ssid_len = u16::from_le_bytes(ssid_buf[0..2].try_into().unwrap()) as usize;
                     let ssid_checked_len = if ssid_len < 32 {ssid_len} else {32};
-                    let ssid_str = core::str::from_utf8(&ssid_buf[2..2+ssid_checked_len]).unwrap_or("Invalid SSID");
+                    let ssid_str = core::str::from_utf8(&ssid_buf[2..2+ssid_checked_len]).unwrap_or("Disconnected");
                     let status = WlanStatusIpc {
                         ssid: if let Some(rssi) = rssi {
                             Some(SsidRecord {
