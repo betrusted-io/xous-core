@@ -358,7 +358,7 @@ fn xmain() -> ! {
                 // have to clear the entire rectangle area, because the SSID has a variable width and can be much wider or shorter than battstats
                 gam.draw_rectangle(status_gid, stats_rect).ok();
 
-                if stats.current == 0xdddd || stats.current == 0xffff
+                if stats.current == -8739 /* 0xdddd */
                 || stats.voltage == 0xdddd || stats.voltage == 0xffff
                 || stats.soc == 0xdd || stats.soc == 0xff {
                     write!(&mut battstats_tv, "{}", t!("stats.measuring", xous::LANG)).unwrap();
