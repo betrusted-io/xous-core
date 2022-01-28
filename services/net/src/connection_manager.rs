@@ -484,7 +484,11 @@ fn get_next_ssid(ssid_list: &mut HashSet<String>, ssid_attempted: &mut HashSet<S
             log::debug!("SSID connect attempt: {:?}", candidate);
             Some(candidate.to_string())
         } else {
-            log::info!("No SSID candidates visible");
+            log::info!("No SSID candidates visible. Debug dump:");
+            log::info!("ap_list: {:?}", ap_list);
+            log::info!("ssid_list: {:?}", ssid_list);
+            log::info!("candidate list: {:?}", all_candidate_list);
+            log::info!("untried candidate list: {:?}", untried_candidate_list);
             None
         }
     }

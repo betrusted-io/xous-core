@@ -79,6 +79,18 @@ pub struct PingConnection {
     retop: usize,
 }
 
+fn set_com_ints(com_int_list: &mut Vec::<ComIntSources>) {
+    com_int_list.clear();
+    com_int_list.push(ComIntSources::WlanIpConfigUpdate);
+    com_int_list.push(ComIntSources::WlanRxReady);
+    com_int_list.push(ComIntSources::BatteryCritical);
+    com_int_list.push(ComIntSources::Connect);
+    com_int_list.push(ComIntSources::Disconnect);
+    com_int_list.push(ComIntSources::WlanSsidScanUpdate);
+    com_int_list.push(ComIntSources::WlanSsidScanFinished);
+    com_int_list.push(ComIntSources::WfxErr);
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -101,20 +113,12 @@ fn xmain() -> ! {
     llio.com_event_enable(true).unwrap();
     // setup the interrupt masks
     let mut com_int_list: Vec::<ComIntSources> = vec![];
-    com.ints_get_active(&mut com_int_list);
+    com.ints_get_active(&mut com_int_list).ok();
     log::debug!("COM initial pending interrupts: {:?}", com_int_list);
-    com_int_list.clear();
-    com_int_list.push(ComIntSources::WlanIpConfigUpdate);
-    com_int_list.push(ComIntSources::WlanRxReady);
-    com_int_list.push(ComIntSources::BatteryCritical);
-    com_int_list.push(ComIntSources::Connect);
-    com_int_list.push(ComIntSources::Disconnect);
-    com_int_list.push(ComIntSources::WlanSsidScanUpdate);
-    com_int_list.push(ComIntSources::WlanSsidScanFinished);
-    com_int_list.push(ComIntSources::WfxErr);
+    set_com_ints(&mut com_int_list);
     com.ints_enable(&com_int_list);
     com_int_list.clear();
-    com.ints_get_active(&mut com_int_list);
+    com.ints_get_active(&mut com_int_list).ok();
     log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
     const MAX_DELAY_THREADS: u32 = 10; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
     let delay_threads = Arc::new(AtomicU32::new(0));
@@ -554,128 +558,149 @@ fn xmain() -> ! {
 
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
-                let (maybe_rxlen, ints, raw_rxlen) = com.ints_get_active(&mut com_int_list);
-                log::debug!("COM got interrupts: {:?}, {:?}", com_int_list, maybe_rxlen);
-                // forward the interrupt to the connection manager as well
-                match xous::try_send_message(cm_cid, Message::new_scalar(
-                    connection_manager::ConnectionManagerOpcode::ComInt.to_usize().unwrap(),
-                    ints,
-                    raw_rxlen,
-                    0, 0
-                )) {
-                    Ok(_) => {},
-                    Err(xous::Error::ServerQueueFull) => {
-                        log::warn!("Our net queue runneth over, interrupts were dropped.");
-                    },
-                    Err(e) => {
-                        log::error!("Unhandled error forwarding ComInt to the connection manager: {:?}", e);
-                    }
-                };
-                for &pending in com_int_list.iter() {
-                    if pending == ComIntSources::Invalid {
-                        log::error!("COM interrupt vector had an error, ignoring event.");
-                        continue;
-                    }
-                }
-                for &pending in com_int_list.iter() {
-                    match pending {
-                        ComIntSources::BatteryCritical => {
-                            log::warn!("Battery is critical! TODO: go into SHIP mode");
-                        },
-                        ComIntSources::WlanIpConfigUpdate => {
-                            // right now the WLAN implementation only does IPV4. So IPV6 compatibility ends here.
-                            // if IPV6 gets added to the EC/COM bus, ideally this is one of a couple spots in Xous that needs a tweak.
-                            let config = com.wlan_get_config().expect("couldn't retrieve updated ipv4 config");
-                            log::info!("Network config acquired: {:?}", config);
-                            net_config = Some(config);
-                            let mac = EthernetAddress::from_bytes(&config.mac);
-
-                            // we need to clear the ARP cache in case we've migrated base stations (e.g. in a wireless network
-                            // that is coverd by multiple AP), as the host AP's MAC address would have changed, and we wouldn't
-                            // be able to route responses back. I can't seem to find a function in smoltcp 0.7.5 that allows us
-                            // to neatly clear the ARP cache as the BTreeMap that underlies it is moved into the container and
-                            // no "clear" API is exposed, so let's just rebuild the whole interface if we get a DHCP renewal.
-                            let neighbor_cache = NeighborCache::new(BTreeMap::new());
-                            let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-                            let routes = Routes::new(BTreeMap::new());
-                            let device = device::NetPhy::new(&xns);
-                            let medium = device.capabilities().medium;
-                            let mut builder = InterfaceBuilder::new(device)
-                                .ip_addrs(ip_addrs)
-                                .routes(routes);
-                            if medium == Medium::Ethernet {
-                                builder = builder
-                                    .ethernet_addr(mac)
-                                    .neighbor_cache(neighbor_cache);
+                match com.ints_get_active(&mut com_int_list) {
+                    Ok((maybe_rxlen, ints, raw_rxlen)) => {
+                        log::debug!("COM got interrupts: {:?}, {:?}", com_int_list, maybe_rxlen);
+                        // forward the interrupt to the connection manager as well
+                        match xous::try_send_message(cm_cid, Message::new_scalar(
+                            connection_manager::ConnectionManagerOpcode::ComInt.to_usize().unwrap(),
+                            ints,
+                            raw_rxlen,
+                            0, 0
+                        )) {
+                            Ok(_) => {},
+                            Err(xous::Error::ServerQueueFull) => {
+                                log::warn!("Our net queue runneth over, interrupts were dropped.");
+                            },
+                            Err(e) => {
+                                log::error!("Unhandled error forwarding ComInt to the connection manager: {:?}", e);
                             }
-                            iface = builder.finalize();
-
-                            let ip_addr =
-                                Ipv4Cidr::new(Ipv4Address::new(
-                                    config.addr[0],
-                                    config.addr[1],
-                                    config.addr[2],
-                                    config.addr[3],
-                                ), 24);
-                            set_ipv4_addr(&mut iface, ip_addr);
-                            let default_v4_gw = Ipv4Address::new(
-                                config.gtwy[0],
-                                config.gtwy[1],
-                                config.gtwy[2],
-                                config.gtwy[3],
-                            );
-
-                            // reset the default route, in case it has changed
-                            iface.routes_mut().remove_default_ipv4_route();
-                            match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
-                                Ok(route) => log::info!("routing table updated successfully [{:?}]", route),
-                                Err(e) => log::error!("routing table update error: {}", e),
+                        };
+                        for &pending in com_int_list.iter() {
+                            if pending == ComIntSources::Invalid {
+                                log::error!("COM interrupt vector had an error, ignoring event.");
+                                continue;
                             }
-                            dns_allclear_hook.notify();
-                            dns_ipv4_hook.notify_custom_args([
-                                Some(u32::from_be_bytes(config.dns1)),
-                                None, None, None,
-                            ]);
-                            // the current implementation always returns 0.0.0.0 as the second dns,
-                            // ignore this if that's what we've got; otherwise, pass it on.
-                            if config.dns2 != [0, 0, 0, 0] {
-                                dns_ipv4_hook.notify_custom_args([
-                                    Some(u32::from_be_bytes(config.dns2)),
-                                    None, None, None,
-                                ]);
-                            }
-                        },
-                        ComIntSources::WlanRxReady => {
-                            activity_interval.store(0, Ordering::Relaxed); // reset the activity interval to 0
-                            if let Some(_config) = net_config {
-                                if let Some(rxlen) = maybe_rxlen {
-                                    match iface.device_mut().push_rx_avail(rxlen) {
-                                        None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
-                                        Some(_) => log::warn!("Got more packets, but smoltcp didn't drain them in time"),
+                        }
+                        for &pending in com_int_list.iter() {
+                            match pending {
+                                ComIntSources::BatteryCritical => {
+                                    log::warn!("Battery is critical! TODO: go into SHIP mode");
+                                },
+                                ComIntSources::WlanIpConfigUpdate => {
+                                    // right now the WLAN implementation only does IPV4. So IPV6 compatibility ends here.
+                                    // if IPV6 gets added to the EC/COM bus, ideally this is one of a couple spots in Xous that needs a tweak.
+                                    let config = com.wlan_get_config().expect("couldn't retrieve updated ipv4 config");
+                                    log::info!("Network config acquired: {:?}", config);
+                                    net_config = Some(config);
+                                    let mac = EthernetAddress::from_bytes(&config.mac);
+
+                                    // we need to clear the ARP cache in case we've migrated base stations (e.g. in a wireless network
+                                    // that is coverd by multiple AP), as the host AP's MAC address would have changed, and we wouldn't
+                                    // be able to route responses back. I can't seem to find a function in smoltcp 0.7.5 that allows us
+                                    // to neatly clear the ARP cache as the BTreeMap that underlies it is moved into the container and
+                                    // no "clear" API is exposed, so let's just rebuild the whole interface if we get a DHCP renewal.
+                                    let neighbor_cache = NeighborCache::new(BTreeMap::new());
+                                    let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
+                                    let routes = Routes::new(BTreeMap::new());
+                                    let device = device::NetPhy::new(&xns);
+                                    let medium = device.capabilities().medium;
+                                    let mut builder = InterfaceBuilder::new(device)
+                                        .ip_addrs(ip_addrs)
+                                        .routes(routes);
+                                    if medium == Medium::Ethernet {
+                                        builder = builder
+                                            .ethernet_addr(mac)
+                                            .neighbor_cache(neighbor_cache);
                                     }
-                                    match xous::try_send_message(
-                                        net_conn,
-                                        Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)
-                                    ) {
-                                        Ok(_) => {},
-                                        Err(xous::Error::ServerQueueFull) => {
-                                            log::warn!("Our net queue runneth over, packets will be dropped.");
-                                        },
-                                        Err(e) => {
-                                            log::error!("Unhandled error sending NetPump to self: {:?}", e);
+                                    iface = builder.finalize();
+
+                                    let ip_addr =
+                                        Ipv4Cidr::new(Ipv4Address::new(
+                                            config.addr[0],
+                                            config.addr[1],
+                                            config.addr[2],
+                                            config.addr[3],
+                                        ), 24);
+                                    set_ipv4_addr(&mut iface, ip_addr);
+                                    let default_v4_gw = Ipv4Address::new(
+                                        config.gtwy[0],
+                                        config.gtwy[1],
+                                        config.gtwy[2],
+                                        config.gtwy[3],
+                                    );
+
+                                    // reset the default route, in case it has changed
+                                    iface.routes_mut().remove_default_ipv4_route();
+                                    match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
+                                        Ok(route) => log::info!("routing table updated successfully [{:?}]", route),
+                                        Err(e) => log::error!("routing table update error: {}", e),
+                                    }
+                                    dns_allclear_hook.notify();
+                                    dns_ipv4_hook.notify_custom_args([
+                                        Some(u32::from_be_bytes(config.dns1)),
+                                        None, None, None,
+                                    ]);
+                                    // the current implementation always returns 0.0.0.0 as the second dns,
+                                    // ignore this if that's what we've got; otherwise, pass it on.
+                                    if config.dns2 != [0, 0, 0, 0] {
+                                        dns_ipv4_hook.notify_custom_args([
+                                            Some(u32::from_be_bytes(config.dns2)),
+                                            None, None, None,
+                                        ]);
+                                    }
+                                },
+                                ComIntSources::WlanRxReady => {
+                                    activity_interval.store(0, Ordering::Relaxed); // reset the activity interval to 0
+                                    if let Some(_config) = net_config {
+                                        if let Some(rxlen) = maybe_rxlen {
+                                            match iface.device_mut().push_rx_avail(rxlen) {
+                                                None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
+                                                Some(_) => log::warn!("Got more packets, but smoltcp didn't drain them in time"),
+                                            }
+                                            match xous::try_send_message(
+                                                net_conn,
+                                                Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)
+                                            ) {
+                                                Ok(_) => {},
+                                                Err(xous::Error::ServerQueueFull) => {
+                                                    log::warn!("Our net queue runneth over, packets will be dropped.");
+                                                },
+                                                Err(e) => {
+                                                    log::error!("Unhandled error sending NetPump to self: {:?}", e);
+                                                }
+                                            }
+                                        } else {
+                                            log::error!("Got RxReady interrupt but no packet length specified!");
                                         }
                                     }
-                                } else {
-                                    log::error!("Got RxReady interrupt but no packet length specified!");
+                                },
+                                _ => {
+                                    log::debug!("Unhandled: {:?}", pending);
                                 }
                             }
-                        },
-                        _ => {
-                            log::debug!("Unhandled: {:?}", pending);
                         }
+                        com.ints_ack(&com_int_list);
+                    },
+                    Err(xous::Error::Timeout) => {
+                        log::warn!("Interrupt fetch from COM timed out.");
+                        // bread crumb: this is a "normal" error to throw when the EC is being reset,
+                        // or when it is handling the reset of the wifi subsystem, so it's not fatal.
+                        // However, if we see this repeatedly, it might be a good idea to add some sort
+                        // of event counter to log the number of times we've seen this consecutively and
+                        // if it's too much, issue a reset to the EC.
+
+                        // refresh the interrupt list to the EC, just in case it lost the prior list
+                        timer.sleep_ms(1000).unwrap(); // a brief delay because if the EC wasn't responding before, it probably needs /some/ time before being able to handle this next message
+                        set_com_ints(&mut com_int_list);
+                        com.ints_enable(&com_int_list);
+                        com_int_list.clear();
+                    }
+                    _ => {
+                        // not fatal, just report it.
+                        log::error!("Unhanlded error in COM interrupt fetch");
                     }
                 }
-                com.ints_ack(&com_int_list);
             }
             Some(Opcode::NetPump) => {
                 let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
