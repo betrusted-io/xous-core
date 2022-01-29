@@ -1249,6 +1249,10 @@ impl<'a> RootKeys {
             }
         }
 
+        // Question: do we want to re-verify the kernel and loader's devkey sign immediately before
+        // re-signing them? Nominally, they are checked on boot, but there is an opportunity for
+        // a TOCTOU by not re-verifying them.
+
         // sign the kernel
         pb.update_text(t!("rootkeys.init.signing_kernel", xous::LANG));
         pb.set_percentage(35);
@@ -1822,12 +1826,24 @@ impl<'a> RootKeys {
 
     pub fn sign_kernel(&self, signing_key: &Keypair) -> (Signature, u32) {
         let kernel_region = self.kernel();
-        // for the kernel length, we can't know/trust the given length in the signature field, so we sign the entire
-        // length of the region. This will increase the time it takes to verify; however, at the current trend, we'll probably
-        // use most of the available space for the kernel, so by the time we're done maybe only 10-20% of the space is empty.
-        let kernel_len = kernel_region.len() - SIGBLOCK_SIZE as usize;
 
-        // we need to update our actual length because the initial burn doesn't set this
+        // First, find the advertised length in the unchecked header, then, check it against the length in the signed region of the kernel
+        let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
+        let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
+
+        let kernel_len = sig_rec.signed_len as usize; // this length is an unchecked guideline
+        let protected_len = u32::from_le_bytes(
+            kernel_region[
+                SIGBLOCK_SIZE as usize + kernel_len as usize - 4 ..
+                SIGBLOCK_SIZE as usize + kernel_len as usize
+            ].try_into().unwrap());
+
+        // we now have a checked length derived from a region of the kernel that is signed, confirm that it matches the advertised length
+        log::info!("kernel total signed len 0x{:x}, kernel len inside signed region 0x{:x}", kernel_len, protected_len);
+        // throw a panic -- this check should have passed during boot.
+        assert!((kernel_len) - 4 == protected_len as usize, "The advertised kernel length does not match the signed length");
+
+        // force the records to match our measured values
         let mut len_data = [0u8; 8];
         for (&src, dst) in SIG_VERSION.to_le_bytes().iter().zip(len_data[..4].iter_mut()) {
             *dst = src;
@@ -1835,12 +1851,12 @@ impl<'a> RootKeys {
         for (&src, dst) in (kernel_len as u32 - 4).to_le_bytes().iter().zip(len_data[4..].iter_mut()) {
             *dst = src;
         }
-        log::info!("kernel len area before: {:x?}", &(self.kernel()[kernel_region.len()-8..]));
-        self.spinor.patch(self.kernel(), self.kernel_base(), &len_data, kernel_region.len() as u32 - 8)
+        log::info!("kernel len area before: {:x?}", &(self.kernel()[SIGBLOCK_SIZE as usize + kernel_len-8..SIGBLOCK_SIZE as usize + kernel_len]));
+        self.spinor.patch(self.kernel(), self.kernel_base(), &len_data, SIGBLOCK_SIZE + kernel_len as u32 - 8)
             .expect("couldn't patch length area");
-        log::info!("kernel len area after: {:x?}", &(self.kernel()[kernel_region.len()-8..]));
+        log::info!("kernel len area after: {:x?}", &(self.kernel()[SIGBLOCK_SIZE as usize + kernel_len-8..SIGBLOCK_SIZE as usize + kernel_len]));
 
-        (signing_key.sign(&kernel_region[SIGBLOCK_SIZE as usize..]), kernel_len as u32)
+        (signing_key.sign(&kernel_region[SIGBLOCK_SIZE as usize..SIGBLOCK_SIZE as usize + kernel_len]), kernel_len as u32)
     }
 
     /// the public key must already be in the cache -- this version is used by the init routine, before the keys are written
@@ -1876,7 +1892,7 @@ impl<'a> RootKeys {
         log::debug!("verifying with signature {:x?}", sig_rec.signature);
         log::debug!("verifying with pubkey {:x?}", pubkey.to_bytes());
 
-        match pubkey.verify_strict(&kernel_region[SIGBLOCK_SIZE as usize..], &sig) {
+        match pubkey.verify_strict(&kernel_region[SIGBLOCK_SIZE as usize..SIGBLOCK_SIZE as usize + kern_len], &sig) {
             Ok(()) => true,
             Err(e) => {
                 log::error!("error verifying signature: {:?}", e);
