@@ -402,7 +402,7 @@ fn xmain() -> ! {
             }),
             Some(Opcode::TcpConnect) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
-                let mut tcpspec = buf.to_original::<NetTcpConnect, _>().unwrap(); // need to define this
+                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap(); // need to define this
                 let address = IpAddress::from(tcpspec.ip_addr);
                 let remote_port = tcpspec.remote_port;
 
@@ -455,9 +455,12 @@ fn xmain() -> ! {
                 };
                 if let Some(tcp_state) = tcp_handles.get(&connection) {
                     let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                    if socket.may_send() {
+                    if socket.can_send() {
                         tcp_tx.result = match socket.send_slice(&tcp_tx.data) {
-                            Ok(_) => Some(NetMemResponse::Ok),
+                            Ok(octets) => {
+                                tcp_tx.len = octets as u16;
+                                Some(NetMemResponse::Ok)
+                            },
                             Err(_) => Some(NetMemResponse::LibraryError),
                         }
                     } else {
@@ -469,6 +472,28 @@ fn xmain() -> ! {
                 }
                 buf.replace(tcp_tx).unwrap();
             },
+            Some(Opcode::TcpClose) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap(); // need to define this
+                let address = IpAddress::from(tcpspec.ip_addr);
+                let remote_port = tcpspec.remote_port;
+                if let Some(local_port) = tcpspec.local_port {
+                    let connection = TcpConnection {
+                        remote: IpAddress::from(tcpspec.ip_addr),
+                        remote_port: tcpspec.remote_port,
+                        local_port,
+                    };
+                    if let Some(tcp_state) = tcp_handles.remove(&connection) {
+                        sockets.get::<TcpSocket>(tcp_state.handle).close();
+                        tcpspec.result = Some(NetMemResponse::Ok);
+                    } else {
+                        tcpspec.result = Some(NetMemResponse::Invalid);
+                    }
+                } else {
+                    tcpspec.result = Some(NetMemResponse::Invalid);
+                }
+                buf.replace(tcpspec).unwrap();
+            }
             Some(Opcode::UdpBind) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();

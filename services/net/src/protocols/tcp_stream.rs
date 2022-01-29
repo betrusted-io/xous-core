@@ -89,30 +89,6 @@ impl TcpStream {
         unimplemented!()
     }
 
-    pub fn read(&self, _: &mut [u8]) -> io::Result<usize> {
-        unimplemented!()
-    }
-
-    pub fn read_vectored(&self, _: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        unimplemented!()
-    }
-
-    pub fn is_read_vectored(&self) -> bool {
-        unimplemented!()
-    }
-
-    pub fn write(&self, _: &[u8]) -> io::Result<usize> {
-        unimplemented!()
-    }
-
-    pub fn write_vectored(&self, _: &[IoSlice<'_>]) -> io::Result<usize> {
-        unimplemented!()
-    }
-
-    pub fn is_write_vectored(&self) -> bool {
-        unimplemented!()
-    }
-
     pub fn peer_addr(&self) -> io::Result<SocketAddr> {
         unimplemented!()
     }
@@ -167,13 +143,19 @@ impl fmt::Debug for TcpStream {
         unimplemented!()
     }
 }
-/*
+
+impl Drop for TcpStream {
+    // do the close message here
+}
+
 impl Read for TcpStream {
-    
+    fn read(&self, _: &mut [u8]) -> io::Result<usize> {
+        unimplemented!()
+    }
 }
 
 impl Write for TcpStream {
-
-
+    fn write(&self, _: &[u8]) -> io::Result<usize> {
+        unimplemented!()
+    }
 }
-*/

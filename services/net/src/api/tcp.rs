@@ -5,7 +5,7 @@ use com::api::NET_MTU;
 pub(crate) const TCP_BUFFER_SIZE: usize = NET_MTU;
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
-pub(crate) struct NetTcpConnect {
+pub(crate) struct NetTcpManage {
     pub(crate) cb_sid: [u32; 4],
     pub(crate) ip_addr: NetIpAddr,
     pub(crate) remote_port: u16,
@@ -40,7 +40,9 @@ pub(crate) struct NetTcpResponse {
 pub(crate) struct NetTcpTransmit {
     pub remote_addr: NetIpAddr,
     pub remote_port: u16,
-    pub local_port: u16, // this was given back in the connect, we need this to distinguish between multiple connections to the same server
+    // this was given back in the connect, we need this to distinguish between multiple connections to the same server
+    pub local_port: u16,
+    // this is changed to the number of bytes actually sent on return
     pub len: u16,
     pub data: [u8; TCP_BUFFER_SIZE],
     pub result: Option<NetMemResponse>,
