@@ -329,6 +329,7 @@ fn xmain() -> ! {
         secnotes_interval = 4;
     }
     let mut battstats_phase = true;
+    let mut secnotes_force_redraw = false;
 
     log::debug!("starting main menu thread");
     create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com);
@@ -395,6 +396,14 @@ fn xmain() -> ! {
                 }
                 gam.post_textview(&mut battstats_tv)
                     .expect("|status: can't draw battery stats");
+                if let Some(bounds) = battstats_tv.bounds_computed {
+                    if bounds.height() > screensize.y / 2 + 1 {
+                        // the clipping rectangle limits the bounds to the overall height of the status area, so
+                        // the overlap between status and secnotes must be managed within this server
+                        log::info!("Status text overstepped its intended bound. Forcing secnotes redraw.");
+                        secnotes_force_redraw = true;
+                    }
+                }
                 battstats_phase = !battstats_phase;
             }),
             Some(StatusOpcode::WifiStats) => {
@@ -426,7 +435,7 @@ fn xmain() -> ! {
                 // update the security status, if any
                 let (is_locked, force_update) = llio.debug_usb(None).unwrap();
                 if (debug_locked != is_locked)
-                    || force_update
+                    || force_update || secnotes_force_redraw
                     || sec_notes.lock().unwrap().len() != last_sec_note_size
                     || (sec_notes.lock().unwrap().len() > 1)
                         && ((stats_phase % secnotes_interval) == 0)
@@ -467,7 +476,7 @@ fn xmain() -> ! {
                         write!(&mut security_tv, "{}", t!("secnote.allclear", xous::LANG)).unwrap();
                     }
 
-                    // only post the view if something has actually changed
+                    secnotes_force_redraw = false;
                     gam.post_textview(&mut security_tv).unwrap();
                     gam.draw_line(status_gid, Line::new_with_style(
                         Point::new(0, screensize.y), screensize,
