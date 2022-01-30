@@ -226,10 +226,14 @@ impl Com {
         send_message(self.conn, Message::new_scalar(Opcode::Wf200Disable.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
     }
     // as wifi_reset() re-initializes the wifi chip, call this after wifi_disable() to re-enable wifi
-    pub fn wifi_reset(&self) -> Result<(), xous::Error> {
-        send_message(self.conn, Message::new_scalar(Opcode::Wf200Reset.to_usize().unwrap(), 0, 0, 0, 0,)).expect("couldn't send reset opcode");
-        self.ticktimer.sleep_ms(2000).expect("failed in waiting for wifi chip to reset");
-        Ok(())
+    pub fn wifi_reset(&self) -> Result<usize, xous::Error> {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(Opcode::Wf200Reset.to_usize().unwrap(), 0, 0, 0, 0,)).expect("couldn't send reset opcode");
+        if let xous::Result::Scalar1(time) = ret {
+            log::info!("WF200 reset took {}ms", time);
+            Ok(time)
+        } else {
+            Err(xous::Error::Timeout)
+        }
     }
     pub fn set_ssid_scanning(&self, enable: bool) -> Result<(), xous::Error> {
         if enable {

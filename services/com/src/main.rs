@@ -670,8 +670,21 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::Wf200Reset) => {
+                let start = ticktimer.elapsed_ms();
                 com.txrx(ComState::WF200_RESET.verb);
                 com.txrx(0);
+                loop {
+                    com.txrx(ComState::LOOP_TEST.verb);
+                    let ack = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
+                    if (ack & 0xff) != 0x01 {
+                        log::warn!("Wf200 reset took too long, trying to re-establish link sync...");
+                        com.txrx(ComState::LINK_SYNC.verb);
+                        ticktimer.sleep_ms(200).unwrap();
+                    } else {
+                        break;
+                    }
+                }
+                xous::return_scalar(msg.sender, (ticktimer.elapsed_ms() - start) as usize).unwrap();
             }
             Some(Opcode::Wf200Disable) => {
                 com.txrx(ComState::WF200_RESET.verb);
