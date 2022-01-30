@@ -208,6 +208,7 @@ mod implementation {
         /// indicate if the chord has been captured. Once captured, further presses are ignored, until all keys are let up.
         chord_captured: bool,
         susres: RegManager::<{utra::keyboard::KEYBOARD_NUMREGS}>,
+        pub debug: usize,
     }
 
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
@@ -233,11 +234,16 @@ mod implementation {
                 xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)).ok();
         }
         if kbd.csr.rf(utra::keyboard::EV_PENDING_INJECT) != 0 {
-            while kbd.csr.rf(utra::keyboard::UART_CHAR_STB) != 0 {
-                let c = kbd.csr.rf(utra::keyboard::UART_CHAR_CHAR);
-                xous::try_send_message(kbd.conn,
-                    xous::Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(), c as _, 0, 0, 0)
-                ).ok();
+            loop {
+                let char_reg = kbd.csr.r(utra::keyboard::UART_CHAR);
+                if char_reg & kbd.csr.ms(utra::keyboard::UART_CHAR_STB, 1) != 0 {
+                    xous::try_send_message(kbd.conn,
+                        xous::Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(), (char_reg & 0xff) as _, 0, 0, 0)
+                    ).ok();
+                    kbd.debug += 1;
+                } else {
+                    break;
+                }
             }
         }
         kbd.csr.wo(utra::keyboard::EV_PENDING, pending);
@@ -300,6 +306,7 @@ mod implementation {
                 chord_active: 0,
                 chord_captured: false,
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
+                debug: 0,
             };
 
             xous::claim_interrupt(
@@ -757,6 +764,7 @@ mod implementation {
         rate: u32,
         delay: u32,
         chord_interval: u32,
+        pub debug: u32,
     }
 
     impl Keyboard {
@@ -767,6 +775,7 @@ mod implementation {
                 rate: 20,
                 delay: 200,
                 chord_interval: 50,
+                debug: 0,
             }
         }
         pub fn suspend(&self) {
@@ -849,7 +858,8 @@ fn xmain() -> ! {
         log::warn!("kbd server is overriding WFI for debugging, remember to disable for production");
         llio.wfi_override(true).unwrap();
     }*/
-    let mut inject_esc = false;
+    let mut esc_index: Option<usize> = None;
+    let mut esc_chars = [0u8; 16];
 
     log::trace!("starting main loop");
     loop {
@@ -906,41 +916,61 @@ fn xmain() -> ! {
             }),
             Some(Opcode::InjectKey) => msg_scalar_unpack!(msg, k, _, _, _, {
                 // key substitutions to help things work better
-                // 5b31 = home (5b7e now that we have things working better?? maybe this is a three-byte sequence and I'm missing a third?)
-                // 5b44 = left
-                // 5b43 = right
-                // 5b41 = up
-                // 5b42 = down
-                let k_prime = if !inject_esc {
-                    match k {
-                        0x7f => 0x08,
-                        0x5b => {
-                            inject_esc = true;
-                            0x00
+                // 1b5b317e = home
+                // 1b5b44 = left
+                // 1b5b43 = right
+                // 1b5b41 = up
+                // 1b5b42 = down
+                log::trace!("{:x} {}", k, kbd.debug);
+                kbd.debug = 0;
+
+                let key = match esc_index {
+                    Some(i) => {
+                        esc_chars[i] = (k & 0xff) as u8;
+                        match esc_match(&esc_chars[..i + 1]) {
+                            Ok(m) => {
+                                if let Some(code) = m {
+                                    // Ok(Some(code)) is a character found
+                                    esc_chars = [0u8; 16];
+                                    esc_index = None;
+                                    code
+                                } else {
+                                    // Ok(None) means we're still accumulating characters
+                                    if i + 1 < esc_chars.len() {
+                                        esc_index = Some(i + 1);
+                                    } else {
+                                        esc_index = None;
+                                        esc_chars = [0u8; 16];
+                                    }
+                                    '\u{0000}'
+                                }
+                            }
+                            // invalid sequence encountered, abort
+                            Err(_) => {
+                                log::warn!("Unhandled escape sequence: {:x?}", &esc_chars[..i+1]);
+                                esc_chars = [0u8; 16];
+                                esc_index = None;
+                                '\u{0000}'
+                            }
                         }
-                        _ => k as u32
                     }
-                } else {
-                    inject_esc = false;
-                    match k {
-                        0x7e => '∴' as u32,
-                        0x44 => '←' as u32,
-                        0x43 => '→' as u32,
-                        0x41 => '↑' as u32,
-                        0x42 => '↓' as u32,
-                        _ => {
-                            log::warn!("unknown escape sequence, ignoring: 0x5b{:x}", k);
-                            0
+                    _ => {
+                        if k == 0x1b {
+                            esc_index = Some(1);
+                            esc_chars = [0u8; 16]; // clear the full search array with every escape sequence init
+                            esc_chars[0] = 0x1b;
+                            '\u{0000}'
+                        } else {
+                            let bs_del_fix = if k == 0x7f {
+                                0x08
+                            } else {
+                                k
+                            };
+                            core::char::from_u32(bs_del_fix as u32).unwrap_or('\u{0000}')
                         }
                     }
                 };
 
-                let key = if let Some(a) = core::char::from_u32(k_prime) {
-                    a
-                } else {
-                    log::warn!("Uninterpreable key sequence, ignoring: 0x{:x}", k);
-                    '\u{0000}'
-                };
                 if let Some(conn) = listener_conn {
                     if key != '\u{0000}' {
                         log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
@@ -1028,4 +1058,34 @@ fn xmain() -> ! {
     xous::destroy_server(kbd_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+fn esc_match(esc_chars: &[u8]) -> Result<Option<char>, ()> {
+    let mut extended = Vec::<u8>::new();
+    for (i, &c) in esc_chars.iter().enumerate() {
+        match i {
+            0 => if c != 0x1b { return Err(()) },
+            1 => if c != 0x5b { return Err(()) },
+            2 => match c {
+                0x41 => return Ok(Some('↑')),
+                0x42 => return Ok(Some('↓')),
+                0x43 => return Ok(Some('→')),
+                0x44 => return Ok(Some('←')),
+                0x7e => return Err(()), // premature end
+                _ => extended.push(c)
+            }
+            _ => if c == 0x7e {
+                if extended.len() == 1 {
+                    if extended[0] == 0x31 {
+                        return Ok(Some('∴'))
+                    }
+                } else {
+                    return Err(()) // code unrecognized
+                }
+            } else {
+                extended.push(c)
+            }
+        }
+    }
+    Ok(None)
 }

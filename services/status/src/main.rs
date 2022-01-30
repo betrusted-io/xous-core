@@ -357,34 +357,39 @@ fn xmain() -> ! {
                 battstats_tv.clear_str();
                 // have to clear the entire rectangle area, because the SSID has a variable width and can be much wider or shorter than battstats
                 gam.draw_rectangle(status_gid, stats_rect).ok();
-                // toggle between two views of the data every time we have a status update
-                let mut wattage = stats.current as f32 / 1000.0 * stats.voltage as f32 / 1000.0;
-                let sign = if wattage > 0.005 {
-                    '\u{2b06}' // up arrow
-                } else if wattage < -0.005 {
-                    '\u{2b07}' // down arrow
+
+                if stats.current == 0xdddd || stats.current == 0xffff
+                || stats.voltage == 0xdddd || stats.voltage == 0xffff
+                || stats.soc == 0xdddd || stats.soc == 0xffff {
+                    write!(&mut battstats_tv, "{}", t!("stats.measuring", xous::LANG)).unwrap();
                 } else {
-                    '\u{1f50c}' // plugged in icon (e.g., fully charged, running on wall power now)
-                };
-                wattage = wattage.abs();
-                if battstats_phase {
-                    write!(&mut battstats_tv, "{:.3}W{}{:.2}V {}%", wattage, sign, stats.voltage as f32 / 1000.0, stats.soc)
-                        .expect("|status: can't write string");
-                } else {
-                    if let Some(ssid) = wifi_status.ssid {
-                        write!(
-                            &mut battstats_tv,
-                            "{} -{}dBm",
-                            ssid.name.as_str().unwrap_or("UTF-8 Erorr"),
-                            ssid.rssi,
-                        )
-                        .expect("|status: can't write string");
+                    // toggle between two views of the data every time we have a status update
+                    let mut wattage = stats.current as f32 / 1000.0 * stats.voltage as f32 / 1000.0;
+                    let sign = if wattage > 0.005 {
+                        '\u{2b06}' // up arrow
+                    } else if wattage < -0.005 {
+                        '\u{2b07}' // down arrow
                     } else {
-                        write!(
-                            &mut battstats_tv,
-                            "Not connected"
-                        )
-                        .expect("|status: can't write string");
+                        '\u{1f50c}' // plugged in icon (e.g., fully charged, running on wall power now)
+                    };
+                    wattage = wattage.abs();
+                    if battstats_phase {
+                        write!(&mut battstats_tv, "{:.3}W{}{:.2}V {}%", wattage, sign, stats.voltage as f32 / 1000.0, stats.soc).unwrap();
+                    } else {
+                        if let Some(ssid) = wifi_status.ssid {
+                            write!(
+                                &mut battstats_tv,
+                                "{} -{}dBm",
+                                ssid.name.as_str().unwrap_or("UTF-8 Erorr"),
+                                ssid.rssi,
+                            ).unwrap();
+                        } else {
+                            write!(
+                                &mut battstats_tv,
+                                "{}",
+                                t!("stats.disconnected", xous::LANG)
+                            ).unwrap();
+                        }
                     }
                 }
                 gam.post_textview(&mut battstats_tv)
@@ -539,7 +544,8 @@ fn xmain() -> ! {
                     // use ticktimer, not stats_phase, because stats_phase encodes some phase drift due to task-switching overhead
                     write!(
                         &mut uptime_tv,
-                        " Up {}:{:02}:{:02}",
+                        " {}{}:{:02}:{:02}",
+                        t!("stats.uptime", xous::LANG),
                         (elapsed_time / 3_600_000),
                         (elapsed_time / 60_000) % 60,
                         (elapsed_time / 1000) % 60,

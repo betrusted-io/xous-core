@@ -31,8 +31,12 @@ impl<'a> ShellCmdApi<'a> for Ssid {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "force" => {
+                    env.com.set_ssid_scanning(true).unwrap();
+                    write!(ret, "Forcing SSID scan. Warning: could put the connection manager in an inconsistent state.").unwrap();
+                }
                 "scan" => {
-                    // SSID scanning is automatically initiated by the connection manager
+                    // SSID scanning is automatically initiated by the connection manager, so we don't initiate it explicitly, just report results
                     let ssid_list = env.com.ssid_fetch_as_list().unwrap();
                     write!(ret, "RSSI in dBm:\n").unwrap();
                     for (rssi, name) in ssid_list {
