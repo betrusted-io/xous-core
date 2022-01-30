@@ -20,7 +20,7 @@ use core::convert::TryInto;
 const LEGACY_REV: u32 = 0x8b5b_8e50; // this is the git rev shipped before we went to version tagging
 const LEGACY_TAG: u32 = 0x00_09_05_00; // this is corresponding tag
 const STD_TIMEOUT: u32 = 100;
-
+const EC_BOOT_WAIT_MS: usize = 3500;
 #[derive(Debug, Copy, Clone)]
 pub struct WorkRequest {
     work: ComSpec,
@@ -348,11 +348,9 @@ fn xmain() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
 
     // reset the EC so we're in sync at boot on state
-    { // scope the llio object to a block -- we shouldn't be using it later in this code
-        let llio = llio::Llio::new(&xns);
-        llio.ec_reset().unwrap();
-        ticktimer.sleep_ms(3500).unwrap();
-    }
+    let llio = llio::Llio::new(&xns);
+    llio.ec_reset().unwrap();
+    ticktimer.sleep_ms(EC_BOOT_WAIT_MS).unwrap();
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(com_sid).expect("couldn't create suspend callback connection");
@@ -673,14 +671,30 @@ fn xmain() -> ! {
                 let start = ticktimer.elapsed_ms();
                 com.txrx(ComState::WF200_RESET.verb);
                 com.txrx(0);
+                let mut attempts = 0;
                 loop {
                     com.txrx(ComState::LOOP_TEST.verb);
                     let ack = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
                     if (ack & 0xff) != 0x01 {
-                        log::warn!("Wf200 reset took too long, trying to re-establish link sync...");
+                        log::warn!("Wf200 reset took too long, trying to re-establish link sync...{:x}", ack);
                         com.txrx(ComState::LINK_SYNC.verb);
                         ticktimer.sleep_ms(200).unwrap();
+                        attempts += 1;
                     } else {
+                        break;
+                    }
+                    if attempts > 50 {
+                        // something has gone horribly wrong. Reset the EC entirely.
+                        llio.ec_reset().unwrap();
+                        ticktimer.sleep_ms(EC_BOOT_WAIT_MS).unwrap();
+                        com.txrx(ComState::TRNG_SEED.verb);
+                        for _ in 0..2 {
+                            let mut rng = trng.get_u64().expect("couldn't fetch rngs");
+                            for _ in 0..4 {
+                                com.txrx(rng as u16);
+                                rng >>= 16;
+                            }
+                        }
                         break;
                     }
                 }
