@@ -1,106 +1,127 @@
 {
     "secnote.usb_unlock": {
         "en": " USB unlocked",
+        "ja": "USBロック解除",
         "zh": "USB解锁",
         "en-audio": "USB unlocked"
     },
     "secnote.gateware_fail": {
         "en": " Gateware selfsig fail",
+        "ja": "Gateware selfsig 失敗",
         "zh": "比特流签名失败",
         "en-audio": "Gateware self signature failure"
     },
     "secnote.state_fail": {
         "en": " Invalid key state",
+        "ja": "無効なキー状態",
         "zh": "无效的根密钥",
         "en-audio": "Invalid key state"
     },
     "secnote.no_keys": {
         "en": " Root keys uninitialized",
+        "ja": "ルートキーは未初期化",
         "zh": "密钥未初始化",
         "en-audio": "Root keys unitialized"
     },
     "secnote.allclear": {
         "en": " No security warnings",
+        "ja": "セキュリティ警告なし",
         "zh": "没有警告",
         "en-audio": "🔇"
     },
     "secnote.startup": {
         "en": " Starting up...",
+        "ja": "起動中...",
         "zh": "现在开始...",
         "en-audio": "🔇"
     },
     "mainmenu.sleep": {
         "en": "Sleep now",
+        "ja": "今睡眠",
         "zh": "睡眠模式",
         "en-audio": "Sleep now"
     },
     "mainmenu.backlighton": {
         "en": "Backlight on",
+        "ja": "バックライト点灯",
         "zh": "背光开启",
         "en-audio": "🔇"
     },
     "mainmenu.backlightoff": {
         "en": "Backlight off",
+        "ja": "バックライト消灯",
         "zh": "背光关闭",
         "en-audio": "🔇"
     },
     "mainmenu.init_keys": {
         "en": "Initialize root keys",
+        "ja": "ルートキーの初期化",
         "zh": "设置根密码",
         "en-audio": "Initialize root keys"
     },
     "mainmenu.provision_gateware": {
         "en": "Install gateware update",
+        "ja": "ゲートウェアアップデートをインストールする",
         "zh": "安装比特流更新",
         "en-audio": "Install gateware update"
     },
     "mainmenu.selfsign": {
         "en": "Sign Xous update",
+        "ja": "サインXousアップデート",
         "zh": "数字签名Xous",
         "en-audio": "Sign Xous update"
     },
     "mainmenu.set_rtc": {
         "en": "Set time",
+        "ja": "時間設定",
         "zh": "设置时间",
         "en-audio": "Set time"
     },
     "mainmenu.pddb": {
         "en": "PDDB Submenu",
+        "ja": "PDDBサブメニュー",
         "zh": "PDDB子菜单",
         "en-audio": "PDDB submenu"
     },
     "mainmenu.app": {
         "en": "Switch to App...",
+        "ja": "アプリに切り替わる...",
         "zh": "APP子菜单",
         "en-audio": "Switch to app"
     },
     "mainmenu.reboot": {
         "en": "Reboot",
+        "ja": "リブート",
         "zh": "重启",
         "en-audio": "Reboot"
     },
     "mainmenu.closemenu": {
         "en": "Close menu",
+        "ja": "メニューを閉じる",
         "zh": "关闭功能表",
         "en-audio": "Close menu"
     },
     "mainmenu.cant_sleep": {
         "en": "Can't sleep while charging",
+        "ja": "充電中は眠れません",
         "zh": "充电时睡不着",
         "en-audio": "Can't sleep while charging"
     },
     "appmenu.ball": {
         "en": "Simple ball demo",
+        "ja": "シンプルなボールのデモ",
         "zh": "简单的球演示",
         "en-audio": "Simple ball demo"
     },
     "appmenu.repl": {
         "en": "Basic REPL demo",
+        "ja": "シンプルなREPLデモ",
         "zh": "基本 REPL 演示",
         "en-audio": "Basic REPL demo"
     },
     "appmenu.shellchat": {
         "en": "Shellchat",
+        "ja": "Shellchat",
         "zh": "外壳聊天",
         "en-audio": "Shellchat"
     }
