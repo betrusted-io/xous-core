@@ -13,6 +13,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
 use std::io::Write;
+use com::SsidRecord;
 
 // republish this so we can decode the icmpv4 error codes
 pub use smoltcp::wire::Icmpv4DstUnreachable;
@@ -62,6 +63,7 @@ pub(crate) enum Opcode {
     Reset,
     SubscribeWifiStats,
     UnsubWifiStats,
+    FetchSsidList,
 
     /// [Internal] com llio interrupt callback
     ComInterrupt,
@@ -71,6 +73,14 @@ pub(crate) enum Opcode {
     SuspendResume,
     /// Quit the server
     Quit
+}
+
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
+pub(crate) struct SsidList {
+    /// IPC memory structures have to pre-allocate all their memory, but are always allocated in 4096-byte chunks.
+    /// We could allocate up to maybe 100+ return values, but then we'd have to write a default initializer that
+    /// covers a 64-length array. So, we limit at 32. <s>Thanks, Rust!</s> 32 APs should be enough for anyone, right?...
+    pub(crate) list: [Option<SsidRecord>; 32],
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]

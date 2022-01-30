@@ -68,6 +68,7 @@ pub(crate) struct FlashRecord {
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SsidRecord {
     pub name: xous_ipc::String::<32>,
+    /// rssi is reported as the negative of actual rssi in dBm. Example: an rssi of -42dBm is reported as `42u8`.
     pub rssi: u8,
 }
 impl Default for SsidRecord {

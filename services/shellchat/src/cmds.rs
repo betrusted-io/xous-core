@@ -49,6 +49,7 @@ pub struct CommonEnv {
     gam: gam::Gam,
     cb_registrations: HashMap::<u32, String::<256>>,
     trng: Trng,
+    netmgr: net::NetManager,
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
@@ -159,6 +160,7 @@ impl CmdEnv {
             cb_registrations: HashMap::new(),
             trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
+            netmgr: net::NetManager::new(),
         };
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]

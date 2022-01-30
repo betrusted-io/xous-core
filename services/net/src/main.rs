@@ -1202,6 +1202,16 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
+            Some(Opcode::FetchSsidList) => {
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                let ret_storage = SsidList::default();
+                let mut buf = Buffer::into_buf(ret_storage).expect("couldn't convert to memory message");
+                buf.lend_mut(cm_cid, connection_manager::ConnectionManagerOpcode::FetchSsidList.to_u32().unwrap()).expect("couldn't forward ssid list request");
+                let ret_list = buf.to_original::<SsidList, _>();
+                buffer.replace(ret_list).expect("couldn't return config");
+            },
             Some(Opcode::Reset) => {
                 net_config = None;
                 let neighbor_cache = NeighborCache::new(BTreeMap::new());

@@ -1,7 +1,7 @@
 use crate::api::*;
 use std::sync::Arc;
 use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
-use com::{WlanStatus, WlanStatusIpc};
+use com::{WlanStatus, WlanStatusIpc, SsidRecord};
 use com_rs_ref::{ConnectResult, LinkState};
 use net::MIN_EC_REV;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, try_send_message, Message};
@@ -27,6 +27,7 @@ pub(crate) enum ConnectionManagerOpcode {
     Stop,
     SubscribeWifiStats,
     UnsubWifiStats,
+    FetchSsidList,
     ComInt,
     SuspendResume,
     Quit,
@@ -72,7 +73,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let ec_rev = (maj as u32) << 24 | (min as u32) << 16 | (rev as u32) << 8 | commits as u32;
     let rev_ok = ec_rev >= MIN_EC_REV;
     if !rev_ok {
-        log::warn!("EC firmware is too old to interoperate with the connection manager.");
+        log::warn!("EC firmware is too old to interoperate with the connec tion manager.");
         let mut note = String::from(t!("net.ec_rev_old", xous::LANG));
         note.push_str(&format!("\n\n{}{}.{}.{}+{}", t!("net.ec_current_rev", xous::LANG), maj, min, rev, commits));
         modals.show_notification(&note).unwrap();
@@ -86,7 +87,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let mut status_subscribers = HashMap::<xous::CID, WifiStateSubscription>::new();
     let mut wifi_state = WifiState::Unknown;
     let mut last_wifi_state = wifi_state;
-    let mut ssid_list = HashSet::<String>::new(); // we're throwing away the RSSI for now and just going by name
+    let mut ssid_list = HashMap::<String, u8>::new();
     let mut ssid_attempted = HashSet::<String>::new();
     let mut wait_count = 0;
     let mut scan_count = 0;
@@ -244,8 +245,8 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             // aggressively pre-fetch results so we can connect as soon as we see an SSID
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
-                                    for (_rssi, ssid) in slist.iter() {
-                                        ssid_list.insert(ssid.to_string());
+                                    for (rssi, ssid) in slist.iter() {
+                                        ssid_list.insert(ssid.to_string(), rssi);
                                     }
                                 },
                                 _ => continue,
@@ -255,8 +256,8 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             log::info!("{:?}", source);
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
-                                    for (_rssi, ssid) in slist.iter() {
-                                        ssid_list.insert(ssid.to_string());
+                                    for (rssi, ssid) in slist.iter() {
+                                        ssid_list.insert(ssid.to_string(), rssi);
                                     }
                                 },
                                 _ => continue,
@@ -424,6 +425,19 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     unsafe{xous::disconnect(cid).expect("couldn't remove wifi status subscriber from our CID list that is limited to 32 items total. Suspect issue with ordering of disconnect vs blocking return...");}
                 }
             }),
+            Some(Opcode::FetchSsidList) => {
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                let mut ret_list = buffer.to_original::<SsidList, _>();
+                for (i, (ssid, rssi)) in ssid_list.iter().enumerate() {
+                    ret_list[i] = SsidRecord {
+                        name: xous_ipc::String::<32>::from_str(&ssid),
+                        rssi
+                    };
+                }
+                buffer.replace(ret_list).expect("couldn't return config");
+            },
             Some(ConnectionManagerOpcode::Run) => msg_scalar_unpack!(msg, _, _, _, _, {
                 if !run.swap(true, Ordering::SeqCst) {
                     if !pumping.load(Ordering::SeqCst) { // avoid having multiple pump messages being sent if a user tries to rapidly toggle the run/stop switch
@@ -450,11 +464,16 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     xous::destroy_server(sid).unwrap();
 }
 
-fn get_next_ssid(ssid_list: &mut HashSet<String>, ssid_attempted: &mut HashSet<String>, ap_list: HashSet::<String>) -> Option<String> {
+fn get_next_ssid(ssid_list_map: &mut HashMap<String, u8>, ssid_attempted: &mut HashSet<String>, ap_list: HashSet::<String>) -> Option<String> {
     log::trace!("ap_list: {:?}", ap_list);
     log::trace!("ssid_list: {:?}", ssid_list);
+    // 0. convert the HashMap of ssid_list into a HashSet
+    let mut ssid_list = HashSet::<String>::new();
+    for ssid in ssid_list_map.keys() {
+        ssid_list.insert(ssid.to_string());
+    }
     // 1. find the intersection of ap_list and ssid_list to create a candidate_list
-    let all_candidate_list_ref = ap_list.intersection(ssid_list).collect::<HashSet<_>>();
+    let all_candidate_list_ref = ap_list.intersection(&ssid_list).collect::<HashSet<_>>();
     // this copy is required to perform the next set computation
     let mut all_candidate_list = HashSet::<String>::new();
     for c in all_candidate_list_ref {
@@ -492,7 +511,7 @@ fn get_next_ssid(ssid_list: &mut HashSet<String>, ssid_attempted: &mut HashSet<S
         } else {
             log::info!("No SSID candidates visible. Debug dump:");
             log::info!("ap_list: {:?}", ap_list);
-            log::info!("ssid_list: {:?}", ssid_list);
+            log::info!("ssid_list: {:?}", ssid_list_map);
             log::info!("candidate list: {:?}", all_candidate_list);
             log::info!("untried candidate list: {:?}", untried_candidate_list);
             None

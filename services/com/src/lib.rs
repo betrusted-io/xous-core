@@ -262,6 +262,8 @@ impl Com {
         Ok(response)
     }
     /// returns a vector of `(u8, String)` tuples that represent rssi + AP name
+    /// Note: this only returns the very most recent incremental scan results from the wifi chip directly.
+    /// The aggregated results of multiple scan passes are accessible from the connection manager via the NetMgr object.
     pub fn ssid_fetch_as_list(&self) -> Result<Vec<(u8, std::string::String)>, xous::Error> {
         let ssid_alloc = SsidReturn::default();
         let mut buf = Buffer::into_buf(ssid_alloc).or(Err(xous::Error::InternalError))?;

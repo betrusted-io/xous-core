@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use com::Ipv4Conf;
+use com::{Ipv4Conf, SsidRecord};
 use xous::{CID, send_message, Message};
 use xous_ipc::Buffer;
 use num_traits::*;
@@ -145,6 +145,19 @@ impl NetManager {
             unsafe{xous::disconnect(handler).ok()};
         }
         Ok(())
+    }
+    pub fn wifi_get_ssid_list(&self) -> Result<Vec::<SsidRecord>, xous::Error> {
+        let alloc = SsidList::default();
+        let mut buf = Buffer::into_buf(alloc).map_err(|_| xous::Error::InternalError)?;
+        buf.lend_mut(self.netconn.conn(), Opcode::FetchSsidList.to_u32().unwrap())?;
+        let ssid_list = buf.to_original::<SsidList, _>().map_err(|_| xous::Error::InternalError)?;;
+        let mut ret = Vec::<SsidRecord>::new();
+        for maybe_item in ssid_list.list.iter() {
+            if let Some(item) = maybe_item {
+                ret.push(*item);
+            }
+        }
+        Ok(ret)
     }
 }
 impl Drop for NetManager {
