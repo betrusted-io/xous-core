@@ -39,6 +39,7 @@ pub(crate) enum Opcode {
     TcpConnect,
     TcpTx,
     TcpClose,
+    TcpRxShutdown,
 
     // The DNS server can hook the Net crate for notifications on config updates
     /// Adds an Ipv4 as a DNS server

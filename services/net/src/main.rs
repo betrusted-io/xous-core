@@ -27,7 +27,7 @@ use smoltcp::wire::{
 use byteorder::{ByteOrder, NetworkEndian};
 
 use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer, SocketHandle, TcpSocket, TcpSocketBuffer};
-use smoltcp::time::Instant;
+use smoltcp::time::{Instant, Duration};
 use std::thread;
 use std::sync::Arc;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -88,6 +88,7 @@ pub struct TcpConnection {
 pub struct TcpState {
     handle: SocketHandle,
     cid: CID,
+    shutdown_rx: bool,
 }
 
 fn set_com_ints(com_int_list: &mut Vec::<ComIntSources>) {
@@ -411,6 +412,12 @@ fn xmain() -> ! {
                 let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
                 let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
                 let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
+                if let Some(timeout) = tcpspec.timeout_ms {
+                    tcp_socket.set_timeout(Some(Duration::from_millis(timeout)));
+                }
+                if let Some(keepalive) = tcpspec.keepalive_ms {
+                    tcp_socket.set_keep_alive(Some(Duration::from_millis(keepalive)));
+                }
                 let local_port = (49152 + trng.get_u32().unwrap() % 16384) as u16;
                 match tcp_socket.connect((address, remote_port), local_port) {
                     Ok(_) => {
@@ -425,6 +432,7 @@ fn xmain() -> ! {
                         let tcp_cb_state = TcpState {
                             handle,
                             cid,
+                            shutdown_rx: false,
                         };
                         tcp_handles.insert(connection, tcp_cb_state);
                         tcpspec.result = Some(NetMemResponse::Ok);
@@ -445,6 +453,26 @@ fn xmain() -> ! {
                 }
                 buf.replace(tcpspec).unwrap();
             },
+            Some(Opcode::TcpRxShutdown) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap();
+                if let Some(local_port) = tcpspec.local_port {
+                    let connection = TcpConnection {
+                        remote: IpAddress::from(tcpspec.ip_addr),
+                        remote_port: tcpspec.remote_port,
+                        local_port,
+                    };
+                    if let Some(tcp_state) = tcp_handles.get_mut(&connection) {
+                        tcp_state.rx_shutdown = true;
+                        tcpspec.result = Some(NetMemResponse::Ok);
+                    } else {
+                        tcpspec.result = Some(NetMemResponse::Invalid);
+                    }
+                } else {
+                    tcpspec.result = Some(NetMemResponse::Invalid);
+                }
+                buffer.replace(tcpspec).unwrap();
+            }
             Some(Opcode::TcpTx) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let mut tcp_tx = buf.to_original::<NetTcpTransmit, _>().unwrap();
@@ -459,7 +487,7 @@ fn xmain() -> ! {
                         tcp_tx.result = match socket.send_slice(&tcp_tx.data) {
                             Ok(octets) => {
                                 tcp_tx.len = octets as u16;
-                                Some(NetMemResponse::Ok)
+                                Some(NetMemResponse::Sent(octets as u16))
                             },
                             Err(_) => Some(NetMemResponse::LibraryError),
                         }
@@ -825,37 +853,36 @@ fn xmain() -> ! {
                 // this block handles TCP rx
                 {
                     for (connection, tcp_state) in tcp_handles.iter() {
-                        let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                        if socket.can_recv() {
-                            match socket
-                                .recv(|data| {
-                                    let mut response = NetTcpResponse {
-                                        remote_ip_addr: NetIpAddr::from(connection.remote),
-                                        remote_port: connection.remote_port,
-                                        len: data.len() as u16,
-                                        data: [0; TCP_BUFFER_SIZE],
-                                    };
-                                    for(&src, dst) in data.iter().zip(response.data.iter_mut()) {
-                                        *dst = src;
-                                    }
-                                    let buf = Buffer::into_buf(response).expect("couldn't convert TCP response to memory message");
-                                    buf.send(tcp_state.cid, NetTcpCallback::RxData.to_u32().unwrap()).expect("couldn't send TCP response");
-                                    (data.len(), ())
-                                }) {
-                                Ok(_) => (),
-                                Err(e) => match e {
-                                    smoltcp::Error::Illegal => {
-                                        log::warn!("TCP fast open not supported");
-                                    },
-                                    smoltcp::Error::Finished => {
-                                        log::warn!("TCP packet received after close");
-                                    },
-                                    _ => {
-                                        log::warn!("Unknown TCP error");
+                        if !tcp_state.shutdown_rx {
+                            let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                            if socket.can_recv() {
+                                match socket
+                                    .recv(|data| {
+                                        let mut response = NetTcpResponse {
+                                            len: data.len() as u16,
+                                            data: [0; TCP_BUFFER_SIZE],
+                                        };
+                                        for(&src, dst) in data.iter().zip(response.data.iter_mut()) {
+                                            *dst = src;
+                                        }
+                                        let buf = Buffer::into_buf(response).expect("couldn't convert TCP response to memory message");
+                                        buf.send(tcp_state.cid, NetTcpCallback::RxData.to_u32().unwrap()).expect("couldn't send TCP response");
+                                        (data.len(), ())
+                                    }) {
+                                    Ok(_) => (),
+                                    Err(e) => match e {
+                                        smoltcp::Error::Illegal => {
+                                            log::warn!("TCP fast open not supported");
+                                        },
+                                        smoltcp::Error::Finished => {
+                                            log::warn!("TCP packet received after close");
+                                        },
+                                        _ => {
+                                            log::warn!("Unknown TCP error");
+                                        }
                                     }
                                 }
                             }
-
                         }
                     }
                 }

@@ -10,7 +10,10 @@ pub(crate) struct NetTcpManage {
     pub(crate) ip_addr: NetIpAddr,
     pub(crate) remote_port: u16,
     pub(crate) local_port: Option<u16>,
+    pub(crate) timeout_ms: Option<u64>,
+    pub(crate) keepalive_ms: Option<u64>,
     pub(crate) result: Option<NetMemResponse>,
+    pub(crate) rx_shutdown: Option<bool>,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -30,10 +33,8 @@ pub(crate) enum NetTcpCallback {
 /// on the cost to repeatedly zeroize parts of RAM that are never used.
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
 pub(crate) struct NetTcpResponse {
-    pub remote_ip_addr: NetIpAddr,
-    pub remote_port: u16,
-    pub len: u16,
     pub data: [u8; TCP_BUFFER_SIZE],
+    pub len: u16,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
