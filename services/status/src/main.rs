@@ -397,7 +397,7 @@ fn xmain() -> ! {
                 gam.post_textview(&mut battstats_tv)
                     .expect("|status: can't draw battery stats");
                 if let Some(bounds) = battstats_tv.bounds_computed {
-                    if bounds.height() > screensize.y / 2 + 1 {
+                    if bounds.height() as i16 > screensize.y / 2 + 1 {
                         // the clipping rectangle limits the bounds to the overall height of the status area, so
                         // the overlap between status and secnotes must be managed within this server
                         log::info!("Status text overstepped its intended bound. Forcing secnotes redraw.");

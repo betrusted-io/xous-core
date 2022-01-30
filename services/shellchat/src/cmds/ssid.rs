@@ -40,7 +40,7 @@ impl<'a> ShellCmdApi<'a> for Ssid {
                     let ssid_list = env.netmgr.wifi_get_ssid_list().unwrap();
                     write!(ret, "RSSI reported in dBm:\n").unwrap();
                     for ssid in ssid_list {
-                        if name.len() > 0 {
+                        if ssid.name.len() > 0 {
                             write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str().unwrap_or("UTF-8 error")).unwrap();
                         }
                     }

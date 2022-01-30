@@ -44,7 +44,6 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 pub struct Com {
     conn: CID,
     battstats_sid: Option<xous::SID>,
-    ticktimer: ticktimer_server::Ticktimer,
     ec_lock_id: Option<[u32; 4]>,
     ec_acquired: bool,
 }
@@ -55,7 +54,6 @@ impl Com {
         Ok(Com {
             conn,
             battstats_sid: None,
-            ticktimer: ticktimer_server::Ticktimer::new().expect("Can't connect to ticktimer"),
             ec_lock_id: None,
             ec_acquired: false,
         })

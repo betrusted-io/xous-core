@@ -139,7 +139,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
 
     send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
     loop {
-        let msg = xous::receive_message(sid).unwrap();
+        let mut msg = xous::receive_message(sid).unwrap();
         log::debug!("got msg: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ConnectionManagerOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
@@ -246,7 +246,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
                                     for (rssi, ssid) in slist.iter() {
-                                        ssid_list.insert(ssid.to_string(), rssi);
+                                        ssid_list.insert(ssid.to_string(), *rssi);
                                     }
                                 },
                                 _ => continue,
@@ -257,7 +257,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             match com.ssid_fetch_as_list() {
                                 Ok(slist) => {
                                     for (rssi, ssid) in slist.iter() {
-                                        ssid_list.insert(ssid.to_string(), rssi);
+                                        ssid_list.insert(ssid.to_string(), *rssi);
                                     }
                                 },
                                 _ => continue,
@@ -425,16 +425,16 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     unsafe{xous::disconnect(cid).expect("couldn't remove wifi status subscriber from our CID list that is limited to 32 items total. Suspect issue with ordering of disconnect vs blocking return...");}
                 }
             }),
-            Some(Opcode::FetchSsidList) => {
+            Some(ConnectionManagerOpcode::FetchSsidList) => {
                 let mut buffer = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
-                let mut ret_list = buffer.to_original::<SsidList, _>();
+                let mut ret_list = buffer.to_original::<SsidList, _>().unwrap();
                 for (i, (ssid, rssi)) in ssid_list.iter().enumerate() {
-                    ret_list[i] = SsidRecord {
+                    ret_list.list[i] = Some(SsidRecord {
                         name: xous_ipc::String::<32>::from_str(&ssid),
-                        rssi
-                    };
+                        rssi: *rssi,
+                    });
                 }
                 buffer.replace(ret_list).expect("couldn't return config");
             },
@@ -466,7 +466,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
 
 fn get_next_ssid(ssid_list_map: &mut HashMap<String, u8>, ssid_attempted: &mut HashSet<String>, ap_list: HashSet::<String>) -> Option<String> {
     log::trace!("ap_list: {:?}", ap_list);
-    log::trace!("ssid_list: {:?}", ssid_list);
+    log::trace!("ssid_list: {:?}", ssid_list_map);
     // 0. convert the HashMap of ssid_list into a HashSet
     let mut ssid_list = HashSet::<String>::new();
     for ssid in ssid_list_map.keys() {

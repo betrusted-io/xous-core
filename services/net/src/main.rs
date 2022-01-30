@@ -453,7 +453,7 @@ fn xmain() -> ! {
                 }
                 buf.replace(tcpspec).unwrap();
             },
-            Some(Opcode::TcpRxShutdown) => {
+            Some(Opcode::TcpManage) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap();
                 if let Some(local_port) = tcpspec.local_port {
@@ -463,15 +463,72 @@ fn xmain() -> ! {
                         local_port,
                     };
                     if let Some(tcp_state) = tcp_handles.get_mut(&connection) {
-                        tcp_state.rx_shutdown = true;
-                        tcpspec.result = Some(NetMemResponse::Ok);
+                        if let Some(code) = tcpspec.mgmt_code {
+                            match code {
+                                TcpMgmtCode::SetRxShutdown => {
+                                    tcp_state.shutdown_rx = true;
+                                    tcpspec.result = Some(NetMemResponse::Ok);
+                                }
+                                TcpMgmtCode::SetNoDelay(value) => {
+                                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                                    socket.set_nagle_enabled(value);
+                                    tcpspec.result = Some(NetMemResponse::Ok);
+                                }
+                                TcpMgmtCode::GetNoDelay(_) => {
+                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                                    let value = socket.nagle_enabled().is_some();
+                                    tcpspec.mgmt_code = Some(TcpMgmtCode::GetNoDelay(value));
+                                    tcpspec.result = Some(NetMemResponse::Ok);
+                                }
+                                TcpMgmtCode::SetTtl(mut ttl) => {
+                                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                                    if ttl > 255 { ttl = 255; }
+                                    if ttl > 0 {
+                                        socket.set_hop_limit(Some(ttl as u8));
+                                    } else {
+                                        socket.set_hop_limit(None);
+                                    }
+                                    tcpspec.result = Some(NetMemResponse::Ok);
+                                }
+                                TcpMgmtCode::GetTtl(_) => {
+                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                                    let value = socket.hop_limit().unwrap_or(64); // because that's what smoltcp does
+                                    tcpspec.mgmt_code = Some(TcpMgmtCode::GetTtl(value as u32));
+                                    tcpspec.result = Some(NetMemResponse::Ok);
+                                }
+                                TcpMgmtCode::ErrorCheck(_) => {
+                                    /* // I don't think there is actually any error check reporting available? `recv_error_check()` is a private function for smoltcp...
+                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                                    tcpspec.mgmt_code = Some(TcpMgmtCode::ErrorCheck(
+                                        match socket.recv_error_check() {
+                                            Ok(_) => NetMemResponse::Ok,
+                                            Err(smoltcp::Error::Finished) => NetMemResponse::Finished,
+                                            Err(smoltcp::Error::Illegal) => NetMemResponse::Invalid,
+                                            _ => Some(NetMemResponse::LibraryError),
+                                        }
+                                    ));*/
+                                    tcpspec.mgmt_code = Some(TcpMgmtCode::ErrorCheck(NetMemResponse::Ok));
+                                    tcpspec.result = Some(NetMemResponse::Ok);
+                                }
+                                TcpMgmtCode::Flush(_) => {
+                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                                    if socket.send_queue() == 0 {
+                                        tcpspec.mgmt_code = Some(TcpMgmtCode::Flush(true));
+                                    } else {
+                                        tcpspec.mgmt_code = Some(TcpMgmtCode::Flush(false));
+                                    }
+                                }
+                            }
+                        } else {
+                            tcpspec.result = Some(NetMemResponse::Invalid);
+                        }
                     } else {
                         tcpspec.result = Some(NetMemResponse::Invalid);
                     }
                 } else {
                     tcpspec.result = Some(NetMemResponse::Invalid);
                 }
-                buffer.replace(tcpspec).unwrap();
+                buf.replace(tcpspec).unwrap();
             }
             Some(Opcode::TcpTx) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
@@ -503,8 +560,6 @@ fn xmain() -> ! {
             Some(Opcode::TcpClose) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap(); // need to define this
-                let address = IpAddress::from(tcpspec.ip_addr);
-                let remote_port = tcpspec.remote_port;
                 if let Some(local_port) = tcpspec.local_port {
                     let connection = TcpConnection {
                         remote: IpAddress::from(tcpspec.ip_addr),
@@ -852,7 +907,7 @@ fn xmain() -> ! {
 
                 // this block handles TCP rx
                 {
-                    for (connection, tcp_state) in tcp_handles.iter() {
+                    for (_connection, tcp_state) in tcp_handles.iter() {
                         if !tcp_state.shutdown_rx {
                             let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
                             if socket.can_recv() {
@@ -1209,7 +1264,7 @@ fn xmain() -> ! {
                 let ret_storage = SsidList::default();
                 let mut buf = Buffer::into_buf(ret_storage).expect("couldn't convert to memory message");
                 buf.lend_mut(cm_cid, connection_manager::ConnectionManagerOpcode::FetchSsidList.to_u32().unwrap()).expect("couldn't forward ssid list request");
-                let ret_list = buf.to_original::<SsidList, _>();
+                let ret_list = buf.to_original::<SsidList, _>().expect("couldn't restore original");
                 buffer.replace(ret_list).expect("couldn't return config");
             },
             Some(Opcode::Reset) => {

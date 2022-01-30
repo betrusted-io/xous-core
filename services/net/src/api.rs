@@ -40,7 +40,7 @@ pub(crate) enum Opcode {
     TcpConnect,
     TcpTx,
     TcpClose,
-    TcpRxShutdown,
+    TcpManage,
 
     // The DNS server can hook the Net crate for notifications on config updates
     /// Adds an Ipv4 as a DNS server
@@ -121,7 +121,7 @@ pub(crate) enum NetCallback {
     Drop,
 }
 
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum NetMemResponse {
     Ok,
     Sent(u16),
@@ -129,6 +129,7 @@ pub(crate) enum NetMemResponse {
     SocketInUse,
     AccessDenied,
     Invalid,
+    Finished,
     LibraryError,
     AlreadyUsed,
 }

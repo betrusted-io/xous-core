@@ -13,7 +13,19 @@ pub(crate) struct NetTcpManage {
     pub(crate) timeout_ms: Option<u64>,
     pub(crate) keepalive_ms: Option<u64>,
     pub(crate) result: Option<NetMemResponse>,
-    pub(crate) rx_shutdown: Option<bool>,
+    // below is for management functions
+    pub(crate) mgmt_code: Option<TcpMgmtCode>,
+}
+
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum TcpMgmtCode {
+    SetRxShutdown,
+    SetNoDelay(bool),
+    GetNoDelay(bool),
+    SetTtl(u32),
+    GetTtl(u32),
+    ErrorCheck(NetMemResponse),
+    Flush(bool),
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
