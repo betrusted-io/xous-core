@@ -435,6 +435,7 @@ fn xmain() -> ! {
                             shutdown_rx: false,
                         };
                         tcp_handles.insert(connection, tcp_cb_state);
+                        tcpspec.local_port = Some(local_port);
                         tcpspec.result = Some(NetMemResponse::Ok);
                     }
                     Err(e) => {
@@ -540,19 +541,22 @@ fn xmain() -> ! {
                 };
                 if let Some(tcp_state) = tcp_handles.get(&connection) {
                     let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                    if socket.can_send() {
-                        tcp_tx.result = match socket.send_slice(&tcp_tx.data) {
+                    if socket.may_send() {
+                        tcp_tx.result = match socket.send_slice(&tcp_tx.data[..tcp_tx.len as usize]) {
                             Ok(octets) => {
+                                log::trace!("sent {}", octets);
                                 tcp_tx.len = octets as u16;
                                 Some(NetMemResponse::Sent(octets as u16))
                             },
                             Err(_) => Some(NetMemResponse::LibraryError),
                         }
                     } else {
+                        log::trace!("tx can't send, please retry");
                         // inform the sender it should retry
                         tcp_tx.result = Some(NetMemResponse::SocketInUse);
                     }
                 } else {
+                    log::trace!("tx spec invalid");
                     tcp_tx.result = Some(NetMemResponse::Invalid);
                 }
                 buf.replace(tcp_tx).unwrap();

@@ -71,10 +71,21 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         Some(Duration::from_millis(5000)),
                                         None) {
                                             Ok(mut stream) => {
-                                                log::info!("stream open");
-                                                stream.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
+                                                log::trace!("stream open, setting timeouts");
+                                                stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                                stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                                log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().total_millis());
+                                                log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().total_millis());
+                                                log::info!("my socket: {:?}", stream.socket_addr());
+                                                log::info!("peer addr: {:?}", stream.peer_addr());
                                                 log::info!("sending GET request");
-                                                write!(stream, "GET /{} HTTP/1.1\r\n", path).expect("stream error");
+                                                match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
+                                                    Ok(_) => log::trace!("sent GET"),
+                                                    Err(e) => {
+                                                        log::error!("GET err {:?}", e);
+                                                        write!(ret, "Error sending GET: {:?}", e).unwrap();
+                                                    }
+                                                }
                                                 write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
                                                 write!(stream, "Connection: close\r\n").expect("stream error");
                                                 write!(stream, "\r\n").expect("stream error");
@@ -82,13 +93,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 let mut buf = [0u8; 512];
                                                 match stream.read(&mut buf) {
                                                     Ok(len) => {
-                                                        log::info!("raw response ({}): {:?}", len, &buf[..len]);
+                                                        log::trace!("raw response ({}): {:?}", len, &buf[..len]);
                                                         write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).unwrap();
                                                     }
-                                                    _ => write!(ret, "Didn't get response from host").unwrap(),
+                                                    Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
                                                 }
                                             }
-                                            _ => write!(ret, "Couldn't connect to {}:80", host).unwrap(),
+                                            Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
                                         }
                                     }
                                     _ => write!(ret, "Couldn't resolve {}", host).unwrap(),

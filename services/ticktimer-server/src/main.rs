@@ -3,6 +3,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+mod version;
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;

@@ -96,6 +96,7 @@ impl TcpStream {
                         Some(NetTcpCallback::RxData) => {
                             let buffer = unsafe {Buffer::from_memory_message(msg.body.memory_message().unwrap())};
                             let incoming = buffer.as_flat::<NetTcpResponse, _>().unwrap();
+                            log::trace!("rx data({})", incoming.len);
                             { // grab the lock once for better efficiency
                                 let mut rx_locked = rx_buf.lock().unwrap();
                                 for &d in incoming.data[..incoming.len as usize].iter() {
@@ -334,6 +335,7 @@ impl fmt::Debug for TcpStream {
 impl Read for TcpStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.nonblocking {
+            log::trace!("nonblocking");
             if self.rx_buf.lock().unwrap().len() == 0 {
                 return Err(Error::new(ErrorKind::WouldBlock, "Read would block"));
             } else {
@@ -345,24 +347,28 @@ impl Read for TcpStream {
                 return Ok(readlen)
             }
         } else {
+            log::trace!("blocking");
             let start = self.ticktimer.elapsed_ms();
             while self.ticktimer.elapsed_ms() - start <
-                self.read_timeout.unwrap_or(Duration::from_millis(u64::MAX)).millis() {
+                self.read_timeout.unwrap_or(Duration::from_millis(u64::MAX)).total_millis() {
                 if self.rx_buf.lock().unwrap().len() == 0 {
                     // this limits our poll interval frequency. We do this mainly to save power --
                     // we certainly could do a xous::yield_slice(); which would cause this to immediately
                     // and furiously return if the system is busy-waiting, but this will also increase
                     // battery usage by quite a bit.
+                    log::trace!("wait rx retry");
                     self.ticktimer.sleep_ms(RX_POLL_INTERVAL_MS).unwrap();
                 } else {
                     let mut rx_buf = self.rx_buf.lock().unwrap();
                     let readlen = rx_buf.len().min(buf.len());
+                    log::trace!("got {} bytes", readlen);
                     for (src, dst) in rx_buf.drain(..readlen).zip(buf.iter_mut()) {
                         *dst = src;
                     }
                     return Ok(readlen)
                 }
             }
+            log::trace!("timed out");
             // the return code in this case varies by platform. We're going with what the docs say is the "Unix" way.
             return Err(Error::new(ErrorKind::WouldBlock, "Read timed out"));
         }
@@ -411,15 +417,31 @@ impl Write for TcpStream {
                         }
                         if total_tx == 0 && txlen == 0 {
                             if self.nonblocking {
-                                return Err(Error::new(ErrorKind::WouldBlock, "Write would block, and nonblocking is set"));
+                                return Err(Error::new(ErrorKind::WouldBlock, "Write would block, and nonblocking is set (full)"));
                             } else {
                                 if let Some(d) = self.write_timeout {
-                                    if self.ticktimer.elapsed_ms() - start > d.millis() {
-                                        return Err(Error::new(ErrorKind::WouldBlock, "Write would block, and nonblocking is set"));
+                                    if self.ticktimer.elapsed_ms() - start > d.total_millis() {
+                                        return Err(Error::new(ErrorKind::WouldBlock, "Write times out, and nonblocking is set (full)"));
                                     }
                                 }
                                 self.ticktimer.sleep_ms(TX_POLL_INTERVAL_MS).unwrap();
                             }
+                        }
+                    }
+                    rkyv::core_impl::ArchivedOption::Some(ArchivedNetMemResponse::SocketInUse) => {
+                        if total_tx == 0 {
+                            if self.nonblocking {
+                                return Err(Error::new(ErrorKind::WouldBlock, "Write would block, and nonblocking is set (in use)"));
+                            } else {
+                                if let Some(d) = self.write_timeout {
+                                    if self.ticktimer.elapsed_ms() - start > d.total_millis() {
+                                        return Err(Error::new(ErrorKind::WouldBlock, "Write times out, and nonblocking is set (in use)"));
+                                    }
+                                }
+                                self.ticktimer.sleep_ms(TX_POLL_INTERVAL_MS).unwrap();
+                            }
+                        } else {
+                            abort = true; // something was already sent, we can safely abort without error
                         }
                     }
                     _ => return Err(Error::new(ErrorKind::Other, "internal error handling Tx")),
