@@ -764,6 +764,7 @@ mod implementation {
         rate: u32,
         delay: u32,
         chord_interval: u32,
+        pub debug: u32,
     }
 
     impl Keyboard {
@@ -774,6 +775,7 @@ mod implementation {
                 rate: 20,
                 delay: 200,
                 chord_interval: 50,
+                debug: 0,
             }
         }
         pub fn suspend(&self) {
