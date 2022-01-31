@@ -36,8 +36,12 @@ impl<'a> ShellCmdApi<'a> for Ver {
                 "dna" => {
                     write!(ret, "SoC silicon DNA: 0x{:x}", env.llio.soc_dna().unwrap()).unwrap();
                 }
-                "xous" => {
-                    write!(ret, "{}\n{}\n{}\n{}",
+                "shellchat" => {
+                    // note that this only picks up new build info when shellchat is rebuilt
+                    // we don't retrigger a shellchat rebuild every time we rebuild xous because it
+                    // would make small builds take much longer. A fix to this would be to create
+                    // a "version server" that is tiny, fast to re-link, and rebuilt on every build pass.
+                    write!(ret, "Shellchat version info:\n{}\n{}\n{}\n{}",
                         env!("VERGEN_SEMVER"),
                         env!("VERGEN_BRANCH"),
                         env!("VERGEN_SHA_SHORT"),
