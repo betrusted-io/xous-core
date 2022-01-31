@@ -1,11 +1,13 @@
 {
     "radio.select_and_close": {
         "en": "[ Okay ]",
+        "ja": "[ OK ]",
         "zh": "[ 确定 ]",
         "en-audio": "Accept and close radio box"
     },
     "notification.dismiss": {
         "en": "[ Press any key ]",
+        "ja": "[  何かのキーを押してください。]",
         "zh": "[ 按任意键 ]",
         "en-audio": "Press any key"
     }
