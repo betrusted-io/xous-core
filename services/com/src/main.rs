@@ -421,6 +421,28 @@ fn xmain() -> ! {
             Some(Opcode::LinkReset) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::LINK_SYNC.verb);
                 ticktimer.sleep_ms(200).unwrap(); // give some time for the link to reset - the EC does not have a guaranteed latency to respond to a link reset
+                let mut attempts = 0;
+                let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
+                loop {
+                    com.txrx(ComState::LINK_PING.verb);
+                    com.txrx(ping_value);
+                    let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                    let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                    if pong == !ping_value &&
+                       phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                        break;
+                    } else {
+                        log::warn!("Link reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                        com.txrx(ComState::LINK_SYNC.verb);
+                        ticktimer.sleep_ms(200).unwrap();
+                        attempts += 1;
+                    }
+                    if attempts > 50 {
+                        // abort and return failure
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                        continue;
+                    }
+                }
                 xous::return_scalar(msg.sender, 1).unwrap();
             }),
             Some(Opcode::ReseedTrng) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
