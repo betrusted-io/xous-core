@@ -26,7 +26,7 @@ pub struct Engine25519 {
 impl Engine25519 {
     // this is used to set up a system with async callbacks
     pub fn new_async(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_ENGINE25519).expect("Can't connect to Engine25519 server");
 
         let sid = xous::create_server().unwrap();
@@ -41,7 +41,7 @@ impl Engine25519 {
     }
     // typically, we just want synchronous callbacks. This integrates more nicely into single-threaded code.
     pub fn new() -> Self {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn = xns.request_connection_blocking(api::SERVER_NAME_ENGINE25519).expect("Can't connect to Engine25519 server");
 
@@ -149,8 +149,7 @@ static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Engine25519 {
     fn drop(&mut self) {
         // disconnect from the main server, only if there are no more instances active
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
         // disconnect and destroy the callback server that is specific to this instance

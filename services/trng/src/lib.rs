@@ -15,7 +15,7 @@ impl Trng {
         let conn = xns
             .request_connection_blocking(api::SERVER_NAME_TRNG)
             .expect("Can't connect to TRNG server");
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         Ok(Trng {
             conn,
             error_sid: None,
@@ -124,8 +124,7 @@ static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Trng {
     fn drop(&mut self) {
         // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
                 xous::disconnect(self.conn).unwrap();
             }

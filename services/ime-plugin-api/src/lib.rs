@@ -242,7 +242,7 @@ pub struct ImeFrontEnd {
 }
 impl ImeFrontEnd {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns
             .request_connection_blocking(SERVER_NAME_IME_FRONT)
             .expect("Can't connect to IMEF");
@@ -272,8 +272,7 @@ impl Drop for ImeFrontEnd {
             }
             xous::destroy_server(sid).unwrap();
         }
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
                 xous::disconnect(self.cid).unwrap();
             }

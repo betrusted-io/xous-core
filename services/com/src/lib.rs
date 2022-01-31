@@ -49,7 +49,7 @@ pub struct Com {
 }
 impl Com {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_COM).expect("Can't connect to COM server");
         Ok(Com {
             conn,
@@ -635,8 +635,7 @@ impl Drop for Com {
             unsafe{xous::disconnect(cid).unwrap();}
         }
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }

@@ -50,7 +50,7 @@ pub struct Pddb {
 }
 impl Pddb {
     pub fn new() -> Self {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("can't connect to Pddb server");
         let sid = xous::create_server().unwrap();
@@ -294,7 +294,7 @@ impl Pddb {
                     if let Some(cb) = key_changed_cb {
                         self.keys.lock().unwrap().insert(token, Box::new(cb));
                     }
-                    REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+                    REFCOUNT.fetch_add(1, Ordering::Relaxed);
                     let pk = PddbKey {
                         // i think these fields are redundant, let's save the storage and remove them for now...
                         //dict: String::from(dict_name),
@@ -526,8 +526,7 @@ impl Drop for Pddb {
             handle.join().expect("couldn't terminate callback helper thread");
         }
 
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }

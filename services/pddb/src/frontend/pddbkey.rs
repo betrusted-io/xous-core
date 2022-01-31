@@ -152,8 +152,7 @@ impl<'a> Drop for PddbKey<'a> {
         send_message(self.conn, Message::new_blocking_scalar(Opcode::KeyDrop.to_usize().unwrap(),
         self.token[0] as usize, self.token[1] as usize, self.token[2] as usize, 0)).expect("couldn't send KeyDrop message");
 
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }

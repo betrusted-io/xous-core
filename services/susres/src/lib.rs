@@ -19,7 +19,7 @@ pub struct Susres {
 impl Susres {
     #[cfg(any(target_os = "none", target_os = "xous"))]
     pub fn new(order: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
         let execution_gate_conn = xns.request_connection_blocking(api::SERVER_NAME_EXEC_GATE).expect("Can't connect to the execution gate");
 
@@ -49,7 +49,7 @@ impl Susres {
     // during boot when all the hosted mode servers try to connect. This isn't an issue on real hardware.
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn new(_ordering: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         Ok(Susres {
             conn: 0,
             suspend_cb_sid: None,
@@ -147,8 +147,7 @@ impl Drop for Susres {
         if let Some(sid) = self.suspend_cb_sid.take() {
             drop_conn(sid);
         }
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }

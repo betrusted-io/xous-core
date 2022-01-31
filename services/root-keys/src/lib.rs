@@ -29,7 +29,7 @@ pub struct RootKeys {
 }
 impl RootKeys {
     pub fn new(xns: &xous_names::XousNames, key_index: Option<AesRootkeyType>) -> Result<Self, xous::Error> {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_KEYS).expect("Can't connect to Keys server");
         let index = if let Some(ki) = key_index {
             ki
@@ -178,8 +178,7 @@ impl Drop for RootKeys {
         // the connection to the server side must be reference counted, so that multiple instances of this object within
         // a single process do not end up de-allocating the CID on other threads before they go out of scope.
         // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }
