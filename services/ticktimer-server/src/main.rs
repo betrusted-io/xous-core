@@ -3,6 +3,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+mod version;
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -472,6 +473,11 @@ fn xmain() -> ! {
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
+    log::info!("****************************************************************");
+    log::info!("Welcome to Xous {}", version::SEMVER);
+    log::info!("Built at {}", version::TIMESTAMP);
+    log::info!("****************************************************************");
+
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
         .expect("Couldn't create Ticktimer server");
     info!("Server started with SID {:?}", ticktimer_server);
@@ -497,7 +503,7 @@ fn xmain() -> ! {
         //#[cfg(feature = "watchdog")] // for debugging the watchdog
         //ticktimer.check_wdt();
 
-        let msg = xous::receive_message(ticktimer_server).unwrap();
+        let mut msg = xous::receive_message(ticktimer_server).unwrap();
         log::trace!("msg: {:?}", msg);
         match num_traits::FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::ElapsedMs) => {
@@ -531,6 +537,10 @@ fn xmain() -> ! {
             }),
             Some(api::Opcode::PingWdt) => {
                 ticktimer.reset_wdt();
+            }
+            Some(api::Opcode::GetVersion) => {
+                let mut buf = unsafe{xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                buf.replace(version::get_version()).unwrap();
             }
             None => {
                 error!("couldn't convert opcode");

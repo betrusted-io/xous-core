@@ -37,11 +37,7 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "SoC silicon DNA: 0x{:x}", env.llio.soc_dna().unwrap()).unwrap();
                 }
                 "xous" => {
-                    write!(ret, "{}\n{}\n{}\n{}",
-                        env!("VERGEN_SEMVER"),
-                        env!("VERGEN_BRANCH"),
-                        env!("VERGEN_SHA_SHORT"),
-                        env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
+                    write!(ret, "Xous version: {}", env.ticktimer.get_version()).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

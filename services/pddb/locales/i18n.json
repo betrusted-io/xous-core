@@ -41,7 +41,7 @@
     },
     "pddb.requestformat": {
         "en": "The PDDB storage needs formatting. This takes about 15 minutes and can't be interrupted.\n\nProceed?",
-        "zh": "存储需要格式化。这需要8分钟。继续？",
+        "zh": "存储需要格式化。这需要15分钟。继续？",
         "en-audio": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?"
     },
     "pddb.devbypass": {

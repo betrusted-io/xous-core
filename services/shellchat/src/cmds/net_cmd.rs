@@ -47,12 +47,70 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]]";
+        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "tcpget" => {
+                    use std::io::Write;
+                    use std::io::Read;
+                    // note: to keep shellchat lightweight, we do a very minimal parsing of the URL. We assume it always has
+                    // a form such as:
+                    // bunniefoo.com./bunnie/test.txt
+                    // It will break on everything else. The `url` crate is nice but "large" for a demo.
+                    // There is no https support, obvs.
+                    if let Some(url) = tokens.next() {
+                        match url.split_once('/') {
+                            Some((host, path)) => {
+                                match self.dns.lookup(host) {
+                                    Ok(ipaddr) => {
+                                        log::info!("resolved {} to {:?}", host, ipaddr);
+                                        match net::TcpStream::connect_xous((IpAddr::from(ipaddr), 80),
+                                        Some(Duration::from_millis(5000)),
+                                        None) {
+                                            Ok(mut stream) => {
+                                                log::trace!("stream open, setting timeouts");
+                                                stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                                stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                                log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().total_millis());
+                                                log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().total_millis());
+                                                log::info!("my socket: {:?}", stream.socket_addr());
+                                                log::info!("peer addr: {:?}", stream.peer_addr());
+                                                log::info!("sending GET request");
+                                                match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
+                                                    Ok(_) => log::trace!("sent GET"),
+                                                    Err(e) => {
+                                                        log::error!("GET err {:?}", e);
+                                                        write!(ret, "Error sending GET: {:?}", e).unwrap();
+                                                    }
+                                                }
+                                                write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
+                                                write!(stream, "Connection: close\r\n").expect("stream error");
+                                                write!(stream, "\r\n").expect("stream error");
+                                                log::info!("fetching response....");
+                                                let mut buf = [0u8; 512];
+                                                match stream.read(&mut buf) {
+                                                    Ok(len) => {
+                                                        log::trace!("raw response ({}): {:?}", len, &buf[..len]);
+                                                        write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).unwrap();
+                                                    }
+                                                    Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
+                                                }
+                                            }
+                                            Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
+                                        }
+                                    }
+                                    _ => write!(ret, "Couldn't resolve {}", host).unwrap(),
+                                }
+                            }
+                            _ => write!(ret, "Usage: tcpget bunniefoo.com/bunnie/test.txt").unwrap(),
+                        }
+                    } else {
+                        write!(ret, "Usage: tcpget bunniefoo.com/bunnie/test.txt").unwrap();
+                    }
+                }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
                 // to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received

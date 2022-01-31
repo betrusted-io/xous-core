@@ -44,7 +44,6 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 pub struct Com {
     conn: CID,
     battstats_sid: Option<xous::SID>,
-    ticktimer: ticktimer_server::Ticktimer,
     ec_lock_id: Option<[u32; 4]>,
     ec_acquired: bool,
 }
@@ -55,7 +54,6 @@ impl Com {
         Ok(Com {
             conn,
             battstats_sid: None,
-            ticktimer: ticktimer_server::Ticktimer::new().expect("Can't connect to ticktimer"),
             ec_lock_id: None,
             ec_acquired: false,
         })
@@ -226,10 +224,14 @@ impl Com {
         send_message(self.conn, Message::new_scalar(Opcode::Wf200Disable.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
     }
     // as wifi_reset() re-initializes the wifi chip, call this after wifi_disable() to re-enable wifi
-    pub fn wifi_reset(&self) -> Result<(), xous::Error> {
-        send_message(self.conn, Message::new_scalar(Opcode::Wf200Reset.to_usize().unwrap(), 0, 0, 0, 0,)).expect("couldn't send reset opcode");
-        self.ticktimer.sleep_ms(2000).expect("failed in waiting for wifi chip to reset");
-        Ok(())
+    pub fn wifi_reset(&self) -> Result<usize, xous::Error> {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(Opcode::Wf200Reset.to_usize().unwrap(), 0, 0, 0, 0,)).expect("couldn't send reset opcode");
+        if let xous::Result::Scalar1(time) = ret {
+            log::info!("WF200 reset took {}ms", time);
+            Ok(time)
+        } else {
+            Err(xous::Error::Timeout)
+        }
     }
     pub fn set_ssid_scanning(&self, enable: bool) -> Result<(), xous::Error> {
         if enable {
@@ -262,6 +264,8 @@ impl Com {
         Ok(response)
     }
     /// returns a vector of `(u8, String)` tuples that represent rssi + AP name
+    /// Note: this only returns the very most recent incremental scan results from the wifi chip directly.
+    /// The aggregated results of multiple scan passes are accessible from the connection manager via the NetMgr object.
     pub fn ssid_fetch_as_list(&self) -> Result<Vec<(u8, std::string::String)>, xous::Error> {
         let ssid_alloc = SsidReturn::default();
         let mut buf = Buffer::into_buf(ssid_alloc).or(Err(xous::Error::InternalError))?;

@@ -2,6 +2,8 @@ pub(crate) mod udp;
 pub(crate) use udp::*;
 pub(crate) mod ping;
 pub(crate) use ping::*;
+pub(crate) mod tcp;
+pub(crate) use tcp::*;
 pub use ping::NetPingCallback;
 
 use rkyv::{Archive, Deserialize, Serialize};
@@ -11,6 +13,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
 use std::io::Write;
+use com::SsidRecord;
 
 // republish this so we can decode the icmpv4 error codes
 pub use smoltcp::wire::Icmpv4DstUnreachable;
@@ -33,6 +36,12 @@ pub(crate) enum Opcode {
     UdpSetTtl,
     UdpGetTtl,
 
+    /// Calls for TCP implementation
+    TcpConnect,
+    TcpTx,
+    TcpClose,
+    TcpManage,
+
     // The DNS server can hook the Net crate for notifications on config updates
     /// Adds an Ipv4 as a DNS server
     DnsHookAddIpv4,
@@ -54,6 +63,7 @@ pub(crate) enum Opcode {
     Reset,
     SubscribeWifiStats,
     UnsubWifiStats,
+    FetchSsidList,
 
     /// [Internal] com llio interrupt callback
     ComInterrupt,
@@ -63,6 +73,14 @@ pub(crate) enum Opcode {
     SuspendResume,
     /// Quit the server
     Quit
+}
+
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
+pub(crate) struct SsidList {
+    /// IPC memory structures have to pre-allocate all their memory, but are always allocated in 4096-byte chunks.
+    /// We could allocate up to maybe 100+ return values, but then we'd have to write a default initializer that
+    /// covers a 64-length array. So, we limit at 32. <s>Thanks, Rust!</s> 32 APs should be enough for anyone, right?...
+    pub(crate) list: [Option<SsidRecord>; 32],
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
@@ -103,7 +121,7 @@ pub(crate) enum NetCallback {
     Drop,
 }
 
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum NetMemResponse {
     Ok,
     Sent(u16),
@@ -111,6 +129,7 @@ pub(crate) enum NetMemResponse {
     SocketInUse,
     AccessDenied,
     Invalid,
+    Finished,
     LibraryError,
     AlreadyUsed,
 }

@@ -394,25 +394,6 @@ fn handle_opcode(
 fn reader_thread(arg: usize) {
     let output = unsafe { &mut *(arg as *mut implementation::OutputWriter) };
     writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
-
-    writeln!(
-        output,
-        "LOG: ****************************************************************"
-    )
-    .unwrap();
-    writeln!(
-        output,
-        "LOG: *** Welcome to Xous {:40} ***",
-        env!("VERGEN_SHA")
-    )
-    .unwrap();
-    writeln!(output, "LOG: *** Built: {:49} ***", env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
-    writeln!(output, "LOG: *** Semver: {:48} ***", env!("VERGEN_SEMVER")).unwrap();
-    writeln!(
-        output,
-        "LOG: ****************************************************************"
-    )
-    .unwrap();
     let server_addr = xous::create_server_with_address(b"xous-log-server ").unwrap();
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
 
