@@ -5,6 +5,8 @@
 **/*.rs.bk
 /emulation/peripherals.csproj
 /emulation/obj
+# auto-generated
+services/ticktimer-server/src/version.rs
 
 *.map
 

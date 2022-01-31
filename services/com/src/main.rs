@@ -675,6 +675,7 @@ fn xmain() -> ! {
                 loop {
                     com.txrx(ComState::LOOP_TEST.verb);
                     let ack = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
+                    // TODO: offer a more robust sequence than 0x00 for detecting if sync is back...
                     if (ack & 0xff) != 0x00 { //it will read 0xdd or 0xff if the EC is actually still in reset or held up
                         log::warn!("Wf200 reset took too long, trying to re-establish link sync...{:x}", ack);
                         com.txrx(ComState::LINK_SYNC.verb);

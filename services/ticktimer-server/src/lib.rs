@@ -60,6 +60,16 @@ impl Ticktimer {
         )
         .expect("Couldn't send WDT ping");
     }
+
+    pub fn get_version(&self) -> String {
+        let alloc = api::VersionString {
+            version: xous_ipc::String::new(),
+        };
+        let mut buf = xous_ipc::Buffer::into_buf(alloc).expect("couldn't convert version request");
+        buf.lend_mut(self.conn, api::Opcode::GetVersion.to_u32().unwrap()).expect("couldn't get version");
+        let v = buf.to_original::<api::VersionString, _>().expect("couldn't revert buffer");
+        String::from(v.version.as_str().unwrap())
+    }
 }
 use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);

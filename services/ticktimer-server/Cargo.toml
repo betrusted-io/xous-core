@@ -10,6 +10,8 @@ version = "0.1.0"
 log = "0.4.14"
 log-server = {path = "../log-server"}
 xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 susres = {path = "../susres"}

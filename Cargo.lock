@@ -2447,9 +2447,11 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "rkyv",
  "susres",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -2562,17 +2564,6 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
-
-[[package]]
-name = "vergen"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7141e445af09c8919f1d5f8a20dae0b20c3b57a45dee0d5823c6ed5d237f15a"
-dependencies = [
- "bitflags",
- "chrono",
- "rustc_version 0.4.0",
-]
 
 [[package]]
 name = "version-compare"
@@ -2921,10 +2912,10 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "atty",
+ "chrono",
  "curl",
  "filetime",
  "rustc_version 0.4.0",
- "vergen",
  "zip",
 ]
 
