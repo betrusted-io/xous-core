@@ -30,9 +30,10 @@ locales = {path = "../../locales"}
 pddb = {path = "../pddb"}
 
 [dependencies.smoltcp]
-# ugh. have to reference `main` directly because they haven't pushed a new tag in months, and none
-# of the worked examples match the actual documentation now.
-# pin at a commit, at least, so we aren't building on shifting sand
+# ugh. we startd pulling in smoltcp as they were just fixing a bunch of bugs and getting ready for a 0.8.0 release.
+# this is the last commit that doesn't break things for Xous. They pulled in some random crate that isn't compatible
+# with Xous in the commit after this -- we need to look into this and maybe send a PR so we can try to work with
+# the latest smoltcp. But later...let's just get things even working first with what we have.
 git = "https://github.com/smoltcp-rs/smoltcp.git"
 rev = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
 #path = "../../../smoltcp"

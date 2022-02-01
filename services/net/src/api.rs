@@ -41,6 +41,8 @@ pub(crate) enum Opcode {
     TcpTx,
     TcpClose,
     TcpManage,
+    TcpListen,
+    TcpManageListener,
 
     // The DNS server can hook the Net crate for notifications on config updates
     /// Adds an Ipv4 as a DNS server
@@ -290,6 +292,7 @@ impl fmt::Debug for NetIpAddr {
 /// spaces: this is not the right object for passing messages from a remote server
 /// in a potentially hostile foreign process into your local memory space.
 /// See XousPrivateScalarHook for that function.
+#[derive(Debug)]
 pub(crate) struct XousScalarEndpoint {
     cid: Option<xous::CID>,
     op: Option<usize>,
@@ -303,6 +306,9 @@ impl XousScalarEndpoint {
             op: None,
             args: [None; 4]
         }
+    }
+    pub(crate) fn get(&self) -> (Option<xous::CID>, Option<usize>, [Option<usize>; 4]) {
+        (self.cid, self.op, self.args)
     }
     pub(crate) fn set(&mut self, cid: xous::CID, op: usize, args: [Option<usize>; 4]) {
         self.cid = Some(cid);

@@ -6,7 +6,7 @@
         "en-audio": "Measuring..."
     },
     "stats.disconnected": {
-        "ja": "接続されていません",
+        "ja": "接続不可",
         "en": "Not connected",
         "zh": "没有连接",
         "en-audio": "Not connected"
