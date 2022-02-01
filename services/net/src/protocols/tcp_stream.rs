@@ -13,7 +13,6 @@ use xous::{CID, Message, SID, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use crate::NetConn;
 use crate::api::*;
-//use crate::api::udp::*;
 use num_traits::*;
 
 use std::net::Shutdown;
@@ -45,6 +44,33 @@ pub struct TcpStream {
 }
 
 impl TcpStream {
+    /// This is routine that allows a TcpListener to create a TcpStream object. The following must be observed:
+    /// 1. The `cb_sid`, `rx_buf` and `rx_notify` are the memory locations mapped into the already-allocated Rx thread
+    /// 2. These fields are not to be re-used in the Listener object that succeeds the current one
+    pub(crate) fn build_from_listener(
+        net: NetConn,
+        cb_sid: SID,
+        remote: SocketAddr,
+        local_port: u16,
+        rx_buf: Arc::<Mutex::<VecDeque::<u8>>>,
+        rx_notify: Arc<Mutex<XousScalarEndpoint>>,
+    ) -> TcpStream {
+        TcpStream {
+            net,
+            cb_sid,
+            socket_addr: remote,
+            local_port,
+            rx_buf,
+            rx_notify,
+            read_timeout: None,
+            write_timeout: None,
+            ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+            nonblocking: false,
+            rx_shutdown: false,
+            tx_shutdown: false,
+            rx_refcount: Arc::new(AtomicU32::new(1)),
+        }
+    }
     pub fn connect(maybe_socket: io::Result<&SocketAddr>) -> io::Result<TcpStream> {
         TcpStream::connect_inner(maybe_socket, None, None)
     }
@@ -85,38 +111,13 @@ impl TcpStream {
         rx_buf.lock().unwrap().reserve(TCP_BUFFER_SIZE);
         let notify = Arc::new(Mutex::new(XousScalarEndpoint::new()));
 
-        let _handle = thread::spawn({
-            let cb_sid_clone = cb_sid.clone();
-            let rx_buf = Arc::clone(&rx_buf);
-            let notify = Arc::clone(&notify);
-            move || {
-                loop {
-                    let msg = xous::receive_message(cb_sid_clone).unwrap();
-                    match FromPrimitive::from_usize(msg.body.id()) {
-                        Some(NetTcpCallback::RxData) => {
-                            let buffer = unsafe {Buffer::from_memory_message(msg.body.memory_message().unwrap())};
-                            let incoming = buffer.as_flat::<NetTcpResponse, _>().unwrap();
-                            log::trace!("rx data({})", incoming.len);
-                            { // grab the lock once for better efficiency
-                                let mut rx_locked = rx_buf.lock().unwrap();
-                                for &d in incoming.data[..incoming.len as usize].iter() {
-                                    rx_locked.push_back(d);
-                                }
-                            }
-                            notify.lock().unwrap().notify(); // this will only notify if a destination has been set
-                        }
-                        Some(NetTcpCallback::Drop) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                            log::debug!("Drop received, exiting Tcp handler");
-                            xous::return_scalar(msg.sender, 1).unwrap();
-                            break;
-                        }),
-                        None => {
-                            log::error!("got unknown message type on Tcp callback: {:?}", msg);
-                        }
-                    }
-                }
-            }
-        });
+        let _handle = tcp_rx_thread(
+            cb_sid.clone(),
+            Arc::clone(&rx_buf),
+            Arc::clone(&notify),
+            // this is not used by TcpStream
+            Arc::new(Mutex::new(None::<NetTcpListenCallback>)),
+        );
 
         let request = NetTcpManage {
             cb_sid: cb_sid.to_array(),
@@ -321,8 +322,17 @@ impl TcpStream {
         Ok(cloned_stream)
     }
 
-    pub fn peek(&self, _: &mut [u8]) -> io::Result<usize> {
-        unimplemented!()
+    pub fn peek(&self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.rx_buf.lock().unwrap().len() == 0 {
+            return Ok(0)
+        } else {
+            let rx_buf = self.rx_buf.lock().unwrap();
+            let readlen = rx_buf.len().min(buf.len());
+            for (&src, dst) in rx_buf.range(..readlen).zip(buf.iter_mut()) {
+                *dst = src;
+            }
+            return Ok(readlen)
+        }
     }
 }
 
@@ -504,4 +514,50 @@ impl Drop for TcpStream {
             xous::destroy_server(self.cb_sid).ok();
         }
     }
+}
+
+pub(crate) fn tcp_rx_thread(
+    cb_sid_clone: SID,
+    rx_buf: Arc::<Mutex::<VecDeque::<u8>>>,
+    notify: Arc::<Mutex::<XousScalarEndpoint>>,
+    listener: Arc::<Mutex::<Option<NetTcpListenCallback>>>,
+) -> std::thread::JoinHandle<()> {
+    thread::spawn({
+        move || {
+            loop {
+                let msg = xous::receive_message(cb_sid_clone).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(NetTcpCallback::RxData) => {
+                        let buffer = unsafe {Buffer::from_memory_message(msg.body.memory_message().unwrap())};
+                        let incoming = buffer.as_flat::<NetTcpResponse, _>().unwrap();
+                        log::trace!("rx data({})", incoming.len);
+                        { // grab the lock once for better efficiency
+                            let mut rx_locked = rx_buf.lock().unwrap();
+                            for &d in incoming.data[..incoming.len as usize].iter() {
+                                rx_locked.push_back(d);
+                            }
+                        }
+                        notify.lock().unwrap().notify(); // this will only notify if a destination has been set
+                    }
+                    Some(NetTcpCallback::ListenerActive) => {
+                        let buffer = unsafe {Buffer::from_memory_message(msg.body.memory_message().unwrap())};
+                        let incoming = buffer.to_original::<NetTcpListenCallback, _>().unwrap();
+                        // notify the caller that it should pick up its state
+                        log::info!("Setting the notifier structure from {:?} to Some({:?})", listener, incoming);
+                        *listener.lock().unwrap() = Some(incoming);
+                        log::info!("After: {:?}", listener);
+                        notify.lock().unwrap().notify(); // this will only notify if a destination has been set
+                    }
+                    Some(NetTcpCallback::Drop) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        log::debug!("Drop received, exiting Tcp handler");
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                        break;
+                    }),
+                    None => {
+                        log::error!("got unknown message type on Tcp callback: {:?}", msg);
+                    }
+                }
+            }
+        }
+    })
 }

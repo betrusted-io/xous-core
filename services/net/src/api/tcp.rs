@@ -17,6 +17,20 @@ pub(crate) struct NetTcpManage {
     pub(crate) mgmt_code: Option<TcpMgmtCode>,
 }
 
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+pub(crate) struct NetTcpListen {
+    pub(crate) cb_sid: [u32; 4],
+    pub(crate) local_port: u16,
+    pub(crate) result: Option<NetMemResponse>,
+}
+
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+pub(crate) struct NetTcpListenCallback {
+    pub(crate) ip_addr: NetIpAddr,
+    pub(crate) remote_port: u16,
+    pub(crate) local_port: u16,
+}
+
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum TcpMgmtCode {
     SetRxShutdown,
@@ -26,11 +40,13 @@ pub(crate) enum TcpMgmtCode {
     GetTtl(u32),
     ErrorCheck(NetMemResponse),
     Flush(bool),
+    CloseListener,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetTcpCallback {
     RxData,
+    ListenerActive,
     Drop,
 }
 

@@ -197,7 +197,7 @@ fn xmain() -> ! {
     uptime_tv.style = GlyphStyle::Regular;
     uptime_tv.draw_border = false;
     uptime_tv.margin = Point::new(3, 0);
-    write!(uptime_tv, "Booting up...").expect("|status: couldn't init uptime text");
+    write!(uptime_tv, "{}", t!("secnote.startup", xous::LANG)).expect("|status: couldn't init uptime text");
     gam.post_textview(&mut uptime_tv)
         .expect("|status: can't draw battery stats");
     log::trace!("|status: screensize as reported: {:?}", screensize);

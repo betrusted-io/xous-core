@@ -16,7 +16,7 @@ pub struct Llio {
 }
 impl Llio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(SERVER_NAME_LLIO).expect("Can't connect to LLIO");
         Llio {
           conn,
@@ -405,8 +405,7 @@ impl Drop for Llio {
         if let Some(sid) = self.rtc_sid.take() {
             drop_conn(sid);
         }
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }

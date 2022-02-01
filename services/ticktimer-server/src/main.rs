@@ -475,7 +475,7 @@ fn xmain() -> ! {
 
     log::info!("****************************************************************");
     log::info!("Welcome to Xous {}", version::SEMVER);
-    log::info!("Built at {}", version::TIMESTAMP);
+    log::info!("Built on {}", version::TIMESTAMP);
     log::info!("****************************************************************");
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")

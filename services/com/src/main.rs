@@ -421,6 +421,28 @@ fn xmain() -> ! {
             Some(Opcode::LinkReset) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::LINK_SYNC.verb);
                 ticktimer.sleep_ms(200).unwrap(); // give some time for the link to reset - the EC does not have a guaranteed latency to respond to a link reset
+                let mut attempts = 0;
+                let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
+                loop {
+                    com.txrx(ComState::LINK_PING.verb);
+                    com.txrx(ping_value);
+                    let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                    let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                    if pong == !ping_value &&
+                       phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                        break;
+                    } else {
+                        log::warn!("Link reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                        com.txrx(ComState::LINK_SYNC.verb);
+                        ticktimer.sleep_ms(200).unwrap();
+                        attempts += 1;
+                    }
+                    if attempts > 50 {
+                        // abort and return failure
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                        continue;
+                    }
+                }
                 xous::return_scalar(msg.sender, 1).unwrap();
             }),
             Some(Opcode::ReseedTrng) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
@@ -672,17 +694,20 @@ fn xmain() -> ! {
                 com.txrx(ComState::WF200_RESET.verb);
                 com.txrx(0);
                 let mut attempts = 0;
+                let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
                 loop {
-                    com.txrx(ComState::LOOP_TEST.verb);
-                    let ack = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
-                    // TODO: offer a more robust sequence than 0x00 for detecting if sync is back...
-                    if (ack & 0xff) != 0x00 { //it will read 0xdd or 0xff if the EC is actually still in reset or held up
-                        log::warn!("Wf200 reset took too long, trying to re-establish link sync...{:x}", ack);
+                    com.txrx(ComState::LINK_PING.verb);
+                    com.txrx(ping_value);
+                    let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
+                    let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                    if pong == !ping_value &&
+                       phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                        break;
+                    } else {
+                        log::warn!("Wf200 reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
                         com.txrx(ComState::LINK_SYNC.verb);
                         ticktimer.sleep_ms(200).unwrap();
                         attempts += 1;
-                    } else {
-                        break;
                     }
                     if attempts > 50 {
                         // something has gone horribly wrong. Reset the EC entirely.

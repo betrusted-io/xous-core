@@ -4,10 +4,13 @@ use net::{Duration, XousServerId, NetPingCallback};
 use xous::MessageEnvelope;
 use num_traits::*;
 use std::net::{SocketAddr, IpAddr};
+use std::io::Write;
+use std::io::Read;
 
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
     udp_clone: Option<net::UdpSocket>,
+    tcp_listener: Option<net::TcpListener>,
     callback_id: Option<u32>,
     callback_conn: u32,
     udp_count: u32,
@@ -19,6 +22,7 @@ impl NetCmd {
         NetCmd {
             udp: None,
             udp_clone: None,
+            tcp_listener: None,
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
@@ -30,8 +34,9 @@ impl NetCmd {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetCmdDispatch {
-    UdpTest1 = 0x1_0000, // we're muxing our own dispatch + ping dispatch, so we need a custom discriminant
-    UdpTest2 = 0x1_0001,
+    UdpTest1 =  0x1_0000, // we're muxing our own dispatch + ping dispatch, so we need a custom discriminant
+    UdpTest2 =  0x1_0001,
+    TcpServer = 0x2_0000,
 }
 
 pub const UDP_TEST_SIZE: usize = 64;
@@ -54,8 +59,6 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "tcpget" => {
-                    use std::io::Write;
-                    use std::io::Read;
                     // note: to keep shellchat lightweight, we do a very minimal parsing of the URL. We assume it always has
                     // a form such as:
                     // bunniefoo.com./bunnie/test.txt
@@ -110,6 +113,19 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     } else {
                         write!(ret, "Usage: tcpget bunniefoo.com/bunnie/test.txt").unwrap();
                     }
+                }
+                "server" => {
+                    let mut listener = net::TcpListener::bind_xous(
+                        "127.0.0.1:80"
+                    ).unwrap();
+                    listener.set_scalar_notification(
+                        self.callback_conn,
+                        self.callback_id.unwrap() as usize,
+                        [Some(NetCmdDispatch::TcpServer.to_usize().unwrap()), None, None, None]
+                    );
+                    // listener.set_nonblocking(true).unwrap(); // we shouldn't need to block because we only check once we're notified
+                    self.tcp_listener = Some(listener);
+                    write!(ret, "TCP listener started on port 80").unwrap();
                 }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
@@ -228,7 +244,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
     }
 
 
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         log::debug!("net callback");
@@ -296,6 +312,69 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     } else {
                         log::error!("Got NetCmd callback from uninitialized socket");
                         write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
+                    }
+                },
+                Some(NetCmdDispatch::TcpServer) => {
+                    if let Some(listener) = &mut self.tcp_listener {
+                        match listener.accept() {
+                            Ok((mut stream, addr)) => {
+                                let test_string = std::format!("Hello from Precursor!\n\rI have been up for {} ms.\n\r", env.ticktimer.elapsed_ms());
+                                let mut request = [0u8; 1024];
+                                match stream.read(&mut request) {
+                                    Ok(len) => {
+                                        let r = std::string::String::from_utf8_lossy(&request[..len]);
+                                        log::info!("Request received from {:?}: {}", stream.peer_addr().unwrap(), r);
+                                        write!(ret, "{}\n\n", r).unwrap();
+                                        let mut tokens = r.split(' ');
+                                        let mut valid = true;
+                                        if let Some(verb) = tokens.next() {
+                                            if verb != "GET" {
+                                                log::info!("Expected GET, got {}", verb);
+                                                valid = false;
+                                            }
+                                        }
+                                        if let Some(path) = tokens.next() {
+                                            if path != "/" {
+                                                log::info!("We only know /, got {}", path);
+                                                valid = false;
+                                            }
+                                        }
+                                        if valid {
+                                            // now send a page back...
+                                            let page = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\rConnection: close\n\r\n\r{}\n\r",
+                                                test_string.len(),
+                                                test_string);
+                                            log::info!("Responding with: {}", page);
+                                            write!(stream, "{}", page).unwrap();
+                                            log::info!("Flushing response to {:?}", addr);
+                                            stream.flush().unwrap();
+                                            log::info!("Sent a response {:?}", addr);
+                                            write!(ret, "Sent 200 to {:?}", addr).unwrap();
+                                        } else {
+                                            let errstring = "Sorry, I have only one trick, and it's pretty dumb.";
+                                            let notfound = format!("HTTP/1.1 404 Not Found\n\rConnection: close\n\rContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\r\n\r{}\n\r",
+                                                errstring.len(),
+                                                errstring
+                                            );
+                                            log::info!("Responding with: {}", notfound);
+                                            write!(stream, "{}", notfound).unwrap();
+                                            stream.flush().unwrap();
+                                            write!(ret, "Sent 404 to {:?}", addr).unwrap();
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::info!("Stream was opened, but no request received: {:?}", e);
+                                        write!(ret, "Socket opened but no request data received: {:?}", e).unwrap();
+                                    }
+                                }
+                                // stream should close automatically as `stream` goes out of scope here and Drop is called.
+                            }
+                            Err(e) => {
+                                write!(ret, "Got error on TCP accept: {:?}", e).unwrap();
+                            }
+                        }
+                    } else {
+                        write!(ret, "Got NetCmd callback for uninitialized server").unwrap();
                     }
                 },
                 None => {

@@ -12,7 +12,7 @@ pub struct Rtc {
 static mut RTC_CB: Option<fn(DateTime)> = None;
 impl Rtc {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(crate::api::SERVER_NAME_RTC).expect("Can't connect to RTC");
         Rtc {
           conn,
@@ -101,8 +101,7 @@ impl Drop for Rtc {
 
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
         // all implementations will need this
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }

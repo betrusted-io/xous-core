@@ -85,6 +85,7 @@ pub struct TcpConnection {
     remote_port: u16,
     local_port: u16,
 }
+#[derive(Copy, Clone, Debug)]
 pub struct TcpState {
     handle: SocketHandle,
     cid: CID,
@@ -178,6 +179,7 @@ fn xmain() -> ! {
 
     // tcp storage
     let mut tcp_handles = HashMap::<TcpConnection, TcpState>::new();
+    let mut tcp_listeners = HashMap::<u16, Vec::<TcpState>>::new();
 
     // other link storage
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -408,7 +410,7 @@ fn xmain() -> ! {
                 let remote_port = tcpspec.remote_port;
 
                 // initiates a new connection to a remote server consisting of an (Address:Port) tuple.
-                // multiple connections can exist to a server, and they are furhte differentiated by the return port
+                // multiple connections can exist to a server, and they are further differentiated by the return port
                 let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
                 let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
                 let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
@@ -519,6 +521,10 @@ fn xmain() -> ! {
                                         tcpspec.mgmt_code = Some(TcpMgmtCode::Flush(false));
                                     }
                                 }
+                                TcpMgmtCode::CloseListener => {
+                                    // this is used for listener management, should never be sent to this routine
+                                    tcpspec.result = Some(NetMemResponse::LibraryError);
+                                }
                             }
                         } else {
                             tcpspec.result = Some(NetMemResponse::Invalid);
@@ -572,12 +578,113 @@ fn xmain() -> ! {
                     };
                     if let Some(tcp_state) = tcp_handles.remove(&connection) {
                         sockets.get::<TcpSocket>(tcp_state.handle).close();
+                        sockets.remove(tcp_state.handle);
                         tcpspec.result = Some(NetMemResponse::Ok);
                     } else {
                         tcpspec.result = Some(NetMemResponse::Invalid);
                     }
                 } else {
                     tcpspec.result = Some(NetMemResponse::Invalid);
+                }
+                buf.replace(tcpspec).unwrap();
+            }
+            Some(Opcode::TcpListen) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut tcpspec = buf.to_original::<NetTcpListen, _>().unwrap();
+
+                let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
+                let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
+                let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
+                match tcp_socket.listen(tcpspec.local_port) {
+                    Ok(_) => {
+                        if let Some(list) = tcp_listeners.get(&tcpspec.local_port) {
+                            if list.len() > 0 { // empty check necessary because an empty vector is left if a socket went from listening->active, or was dropped
+                                // guarantee that all TTLs are same even if we're inserting a new socket
+                                let ttl = sockets.get::<TcpSocket>(list[0].handle).hop_limit();
+                                tcp_socket.set_hop_limit(ttl);
+                            }
+                        }
+                        let handle = sockets.add(tcp_socket);
+                        let sid = tcpspec.cb_sid;
+                        let cid = xous::connect(SID::from_array(sid)).unwrap();
+                        let tcp_cb_state = TcpState {
+                            handle,
+                            cid,
+                            shutdown_rx: false,
+                        };
+                        if let Some(list) = tcp_listeners.get_mut(&tcpspec.local_port) {
+                            list.push(tcp_cb_state);
+                        } else {
+                            tcp_listeners.insert(tcpspec.local_port, vec![tcp_cb_state]);
+                        }
+                        log::info!("creating listener on port {}", tcpspec.local_port);
+                        tcpspec.result = Some(NetMemResponse::Ok);
+                    }
+                    Err(e) => {
+                        match e {
+                            smoltcp::Error::Illegal => {
+                                tcpspec.result = Some(NetMemResponse::SocketInUse);
+                            }
+                            smoltcp::Error::Unaddressable => {
+                                tcpspec.result = Some(NetMemResponse::Invalid);
+                            }
+                            _ => {
+                                tcpspec.result = Some(NetMemResponse::LibraryError);
+                            }
+                        }
+                    }
+                }
+                buf.replace(tcpspec).unwrap();
+            },
+            Some(Opcode::TcpManageListener) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap();
+                match tcpspec.mgmt_code {
+                    Some(TcpMgmtCode::CloseListener) => {
+                        if let Some(listener) = tcp_listeners.get_mut(&tcpspec.local_port.unwrap()) {
+                            if let Some(tcp_state) = listener.pop() {
+                                sockets.get::<TcpSocket>(tcp_state.handle).close();
+                                log::info!("closing one listener on port {:?}", tcpspec.local_port);
+                                sockets.remove(tcp_state.handle);
+                                tcpspec.result = Some(NetMemResponse::Ok);
+                                // this may leave an empty vector in the tcp_listeners structure, but I think that's OK
+                            }
+                        } else {
+                            tcpspec.result = Some(NetMemResponse::Invalid);
+                        }
+                    }
+                    Some(TcpMgmtCode::SetTtl(mut ttl)) => {
+                        if let Some(listener_vec) = tcp_listeners.get_mut(&tcpspec.local_port.unwrap()) {
+                            for listener in listener_vec.iter_mut() {
+                                let mut socket = sockets.get::<TcpSocket>(listener.handle);
+                                if ttl > 255 { ttl = 255; }
+                                if ttl > 0 {
+                                    socket.set_hop_limit(Some(ttl as u8));
+                                } else {
+                                    socket.set_hop_limit(None);
+                                }
+                            }
+                            tcpspec.result = Some(NetMemResponse::Ok);
+                        } else {
+                            tcpspec.result = Some(NetMemResponse::Invalid);
+                        }
+                    }
+                    Some(TcpMgmtCode::GetTtl(_)) => {
+                        if let Some(listener) = tcp_listeners.get(&tcpspec.local_port.unwrap()) {
+                            if listener.len() > 0 {
+                                // all listeners "should" have an identical setting, so, just return the setting of the 0th one
+                                let socket = sockets.get::<TcpSocket>(listener[0].handle);
+                                let value = socket.hop_limit().unwrap_or(64); // because that's what smoltcp does
+                                tcpspec.mgmt_code = Some(TcpMgmtCode::GetTtl(value as u32));
+                                tcpspec.result = Some(NetMemResponse::Ok);
+                            } else {
+                                tcpspec.result = Some(NetMemResponse::Invalid);
+                            }
+                        } else {
+                            tcpspec.result = Some(NetMemResponse::Invalid);
+                        }
+                    }
+                    _ => tcpspec.result = Some(NetMemResponse::LibraryError),
                 }
                 buf.replace(tcpspec).unwrap();
             }
@@ -660,6 +767,7 @@ fn xmain() -> ! {
                                 // if the clone map is nil, close the socket, we're done
                                 None => {
                                     sockets.get::<UdpSocket>(udpstate.handle).close();
+                                    sockets.remove(udpstate.handle);
                                     buf.replace(NetMemResponse::Ok).unwrap();
                                 }
                                 // if the clone map has entries, promote an arbitrary map entry to the primary handle
@@ -668,6 +776,7 @@ fn xmain() -> ! {
                                         // removing SIDs doesn't remove the map, so it's possible to have an empty mapping. Get rid of it, and we're done.
                                         udp_clones.remove(&udpspec.port);
                                         sockets.get::<UdpSocket>(udpstate.handle).close();
+                                        sockets.remove(udpstate.handle);
                                         buf.replace(NetMemResponse::Ok).unwrap();
                                     } else {
                                         // take an arbitrary key, re-insert it into the handles map.
@@ -943,6 +1052,53 @@ fn xmain() -> ! {
                                 }
                             }
                         }
+                    }
+                }
+
+                // this block handles TCP listeners
+                // There is no lock on sending Rx messages to the listener as it is being transformed
+                // because all messages come from *this thread* and by definition it is not re-entrant.
+                // If you end up splitting the Tcp Rx task and the Tcp Listener tasks into separate threads,
+                // Then you must worry about the possibility of a race condition between the transition of a
+                // TcpListener to a regular TcpStream client (that is, an Rx packet forwarded before the
+                // TcpStream is fully built).
+                if tcp_listeners.len() > 0 { // skip the whole chunk if we don't have any tcp listeners
+                    for (&local_port, tcp_state_vec) in tcp_listeners.iter_mut() {
+                        let mut remove_indices = Vec::<usize>::new();
+                        for (index, tcp_state) in tcp_state_vec.iter().enumerate() {
+                            let socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                            if socket.is_active() {
+                                log::info!("Promoting a listener on port {:?} to a stream", socket.local_endpoint());
+                                // 1. promote this socket to a TCP rx socket (this creates a double-entry that is cleaned up in step 3)
+                                let connection = TcpConnection {
+                                    remote: socket.remote_endpoint().addr,
+                                    remote_port: socket.remote_endpoint().port,
+                                    local_port,
+                                };
+                                tcp_handles.insert(connection, *tcp_state);
+
+                                // 2. notify the listener
+                                let note = NetTcpListenCallback {
+                                    ip_addr: NetIpAddr::from(socket.remote_endpoint().addr),
+                                    remote_port: socket.remote_endpoint().port,
+                                    local_port,
+                                };
+                                log::info!("Listener active, notification sent to {}: {:?}", tcp_state.cid, note);
+                                let buf = Buffer::into_buf(note).expect("can't transform memory message");
+                                buf.send(tcp_state.cid, NetTcpCallback::ListenerActive.to_u32().unwrap()).expect("can't inform callback of active status");
+                                remove_indices.push(index);
+                            }
+                        }
+                        // 3. now cleanup and remove the ports from the listeners status
+                        remove_indices.sort(); // this should be in ascending order, but let's do this just to be sure.
+                        remove_indices.reverse();
+                        for index in remove_indices {
+                            tcp_state_vec.remove(index);
+                        }
+                        // 4. At this point, the Listener is no more. However, the caller side will "renew" the
+                        // listener if the TcpListener is being used in an `incoming` loop.
+
+                        // 5. Side note: an empty vector could be left in the tcp_listeners array. 🔥This is fine🔥.
                     }
                 }
 
