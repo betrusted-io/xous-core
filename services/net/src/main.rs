@@ -595,6 +595,7 @@ fn xmain() -> ! {
                 let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
                 let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
                 let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
+                log::debug!("adding listener to local port {}", tcpspec.local_port);
                 match tcp_socket.listen(tcpspec.local_port) {
                     Ok(_) => {
                         if let Some(list) = tcp_listeners.get(&tcpspec.local_port) {
@@ -607,6 +608,7 @@ fn xmain() -> ! {
                         let handle = sockets.add(tcp_socket);
                         let sid = tcpspec.cb_sid;
                         let cid = xous::connect(SID::from_array(sid)).unwrap();
+                        log::trace!("Listener with cid {}, sid {:x?} registered", cid, sid);
                         let tcp_cb_state = TcpState {
                             handle,
                             cid,
@@ -614,10 +616,11 @@ fn xmain() -> ! {
                         };
                         if let Some(list) = tcp_listeners.get_mut(&tcpspec.local_port) {
                             list.push(tcp_cb_state);
+                            log::trace!("total listeners on port {}: {}", tcpspec.local_port, list.len());
                         } else {
                             tcp_listeners.insert(tcpspec.local_port, vec![tcp_cb_state]);
+                            log::trace!("creating first listener on port {}", tcpspec.local_port);
                         }
-                        log::info!("creating listener on port {}", tcpspec.local_port);
                         tcpspec.result = Some(NetMemResponse::Ok);
                     }
                     Err(e) => {
@@ -644,7 +647,7 @@ fn xmain() -> ! {
                         if let Some(listener) = tcp_listeners.get_mut(&tcpspec.local_port.unwrap()) {
                             if let Some(tcp_state) = listener.pop() {
                                 sockets.get::<TcpSocket>(tcp_state.handle).close();
-                                log::info!("closing one listener on port {:?}", tcpspec.local_port);
+                                log::debug!("closing one listener on port {:?}", tcpspec.local_port);
                                 sockets.remove(tcp_state.handle);
                                 tcpspec.result = Some(NetMemResponse::Ok);
                                 // this may leave an empty vector in the tcp_listeners structure, but I think that's OK
@@ -1063,12 +1066,13 @@ fn xmain() -> ! {
                 // TcpListener to a regular TcpStream client (that is, an Rx packet forwarded before the
                 // TcpStream is fully built).
                 if tcp_listeners.len() > 0 { // skip the whole chunk if we don't have any tcp listeners
-                    for (&local_port, tcp_state_vec) in tcp_listeners.iter_mut() {
+                log::trace!("checking {} TCP listener sockets", tcp_listeners.len());
+                for (&local_port, tcp_state_vec) in tcp_listeners.iter_mut() {
                         let mut remove_indices = Vec::<usize>::new();
                         for (index, tcp_state) in tcp_state_vec.iter().enumerate() {
                             let socket = sockets.get::<TcpSocket>(tcp_state.handle);
                             if socket.is_active() {
-                                log::info!("Promoting a listener on port {:?} to a stream", socket.local_endpoint());
+                                log::info!("Promoting a Listener on port {:?} from {:?} to a Stream", socket.local_endpoint(), socket.remote_endpoint());
                                 // 1. promote this socket to a TCP rx socket (this creates a double-entry that is cleaned up in step 3)
                                 let connection = TcpConnection {
                                     remote: socket.remote_endpoint().addr,
@@ -1083,10 +1087,14 @@ fn xmain() -> ! {
                                     remote_port: socket.remote_endpoint().port,
                                     local_port,
                                 };
-                                log::info!("Listener active, notification sent to {}: {:?}", tcp_state.cid, note);
+                                log::debug!("Listener active, notification sent to {}: {:x?}", tcp_state.cid, note);
                                 let buf = Buffer::into_buf(note).expect("can't transform memory message");
                                 buf.send(tcp_state.cid, NetTcpCallback::ListenerActive.to_u32().unwrap()).expect("can't inform callback of active status");
+                                log::trace!("listener index {} to remove", index);
                                 remove_indices.push(index);
+                                break;
+                            } else {
+                                log::trace!("socket not active: {:?}", socket.remote_endpoint());
                             }
                         }
                         // 3. now cleanup and remove the ports from the listeners status
@@ -1094,7 +1102,9 @@ fn xmain() -> ! {
                         remove_indices.reverse();
                         for index in remove_indices {
                             tcp_state_vec.remove(index);
+                            log::trace!("removing listener index {}", index);
                         }
+                        log::trace!("listeners remaining: {}", tcp_state_vec.len());
                         // 4. At this point, the Listener is no more. However, the caller side will "renew" the
                         // listener if the TcpListener is being used in an `incoming` loop.
 

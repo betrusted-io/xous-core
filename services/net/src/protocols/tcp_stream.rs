@@ -511,6 +511,7 @@ impl Drop for TcpStream {
                 }
             }
             // now we can detroy the server id of the responder thread
+            log::info!("destroying tcp_stream {:x?}", self.cb_sid);
             xous::destroy_server(self.cb_sid).ok();
         }
     }
@@ -543,13 +544,13 @@ pub(crate) fn tcp_rx_thread(
                         let buffer = unsafe {Buffer::from_memory_message(msg.body.memory_message().unwrap())};
                         let incoming = buffer.to_original::<NetTcpListenCallback, _>().unwrap();
                         // notify the caller that it should pick up its state
-                        log::info!("Setting the notifier structure from {:?} to Some({:?})", listener, incoming);
+                        log::debug!("Setting the notifier structure from {:?} to Some({:?})", listener, incoming);
                         *listener.lock().unwrap() = Some(incoming);
-                        log::info!("After: {:?}", listener);
+                        log::info!("Set listener notify {:?} with {:?}", notify.lock().unwrap(), listener);
                         notify.lock().unwrap().notify(); // this will only notify if a destination has been set
                     }
                     Some(NetTcpCallback::Drop) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                        log::debug!("Drop received, exiting Tcp handler");
+                        log::info!("Drop Tcp callback handler with notifier {:?}, listener {:?}", notify, listener);
                         xous::return_scalar(msg.sender, 1).unwrap();
                         break;
                     }),

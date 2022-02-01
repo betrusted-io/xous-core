@@ -65,7 +65,7 @@ impl TcpListener {
         rx_buf.lock().unwrap().reserve(TCP_BUFFER_SIZE);
         let notify = Arc::new(Mutex::new(XousScalarEndpoint::new()));
         let listener_info = Arc::new(Mutex::new(None::<NetTcpListenCallback>));
-
+        log::info!("TcpListener creating first thread with listener object: {:?}", listener_info);
         let _handle = crate::tcp_rx_thread(
             cb_sid.clone(),
             Arc::clone(&rx_buf),
@@ -78,13 +78,13 @@ impl TcpListener {
             local_port: socket.port(),
             result: None,
         };
-        log::info!("Attempting to bind a listener to port {}", socket.port());
+        log::debug!("Attempting to bind a listener to port {}", socket.port());
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "can't register with Net server")))?;
         buf.lend_mut(net.conn(), Opcode::TcpListen.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "can't register with Net server")))?;
         let ret = buf.to_original::<NetTcpListen, _>().unwrap();
-        log::info!("Got result: {:?}", ret.result);
+        log::debug!("Got result: {:?}", ret.result);
         match ret.result {
             Some(NetMemResponse::Ok) => {
                 Ok(TcpListener {
@@ -116,12 +116,12 @@ impl TcpListener {
     }
 
     pub fn accept(&mut self) -> io::Result<(TcpStream, SocketAddr)> {
-        let mut prints = 0;
         loop {
+            log::trace!("listener Arc count: {}", Arc::strong_count(&self.listener_info));
             let accepted = if let Some(info) = self.listener_info.lock().unwrap().take() {
                 // 1. Create a new TcpStream object using our existing handles
                 let remote = SocketAddr::new(IpAddr::from(info.ip_addr), info.remote_port);
-                log::info!("building stream to {:?}", remote);
+                log::info!("Incoming TCP detected, building stream to {:?}", remote);
                 let stream = TcpStream::build_from_listener(
                     NetConn::new(&self.xns).unwrap(),
                     self.cb_sid,
@@ -133,13 +133,13 @@ impl TcpListener {
                 );
                 Some((stream, remote))
             } else {
+                log::trace!("Accept: found no incoming TCP, waiting... {:?}, {:?}", self.listener_info, self.cb_sid);
                 if self.nonblocking {
                     return Err(Error::new(ErrorKind::WouldBlock, "accept would block"));
                 }
                 None
             };
             if let Some((stream, remote)) = accepted {
-                log::info!("replenishing listener, notifier: {:?}", self.rx_notify);
                 // 2. Replenish our Listener objects and pass a TcpListen message on to the Net manager to repeat the cycle
                 self.listener_info = Arc::new(Mutex::new(None::<NetTcpListenCallback>));
                 self.cb_sid = xous::create_server().unwrap();
@@ -148,35 +148,34 @@ impl TcpListener {
                 if self.original_notify.is_set() {
                     let (c, o, a) = self.original_notify.get();
                     self.rx_notify.lock().unwrap().set(c.unwrap(), o.unwrap(), a);
+                    log::debug!("Initializing listener with notifier: {:x?}", self.rx_notify.lock().unwrap());
                 }
                 let _handle = crate::tcp_rx_thread(
                     self.cb_sid.clone(),
                     Arc::clone(&self.rx_buf),
-                    // we're re-using the notifier object...is this going to be a problem?
                     Arc::clone(&self.rx_notify),
-                    // this is not used by TcpStream
                     Arc::clone(&self.listener_info)
                 );
+                log::trace!("Accept created new thread with listener object: {:?}", self.listener_info);
                 let request = NetTcpListen {
                     cb_sid: self.cb_sid.to_array(),
                     local_port: stream.socket_addr().unwrap().port(),
                     result: None,
                 };
+                log::trace!("Accept is registering a new listener: {:?}", request);
                 let mut buf = Buffer::into_buf(request)
                     .or(Err(Error::new(ErrorKind::Other, "can't register with Net server")))?;
                 buf.lend_mut(self.net.conn(), Opcode::TcpListen.to_u32().unwrap())
                     .or(Err(Error::new(ErrorKind::Other, "can't register with Net server")))?;
                 let ret = buf.to_original::<NetTcpListen, _>().unwrap();
+                log::debug!("Listener registered with return code {:?}", ret.result);
                 return
                     match ret.result {
                         Some(NetMemResponse::Ok) => Ok((stream, remote)),
                         _ => Err(Error::new(ErrorKind::Other, "can't renew Listener with Net server"))
                     }
             }
-            if prints < 10 {
-                log::info!("accept polling...");
-                prints += 1;
-            }
+
             self.ticktimer.sleep_ms(LISTENER_POLL_INTERVAL_MS).unwrap();
         }
     }

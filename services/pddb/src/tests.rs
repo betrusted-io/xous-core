@@ -488,7 +488,7 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
             EXTRA_BASIS, EXTRA_BASIS_PW, BasisRetentionPolicy::Persist) {
             basis_cache.basis_add(basis2);
         }
-        log::set_max_level(log::LevelFilter::Debug);
+        log::set_max_level(log::LevelFilter::Info);
         log::info!("Adding keys to Basis2");
         delete_add_dict_consistency(pddb_os, &mut basis_cache, Some(3),
             Some(15), None, None, Some(EXTRA_BASIS))?;
