@@ -884,10 +884,12 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 ret
             })
         }
+        /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
             ss.set_exception_handler(pid, pc, sp)
                 .and(Ok(xous_kernel::Result::Ok))
         }),
+        */
         _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
 }

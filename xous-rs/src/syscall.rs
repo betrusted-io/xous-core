@@ -1,9 +1,12 @@
 use crate::{
-    pid_from_usize, CpuID, Error, Exception, MemoryAddress, MemoryFlags, MemoryMessage,
+    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage,
     MemoryRange, MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs,
     ProcessInit, Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
 use core::convert::{TryFrom, TryInto};
+/* https://github.com/betrusted-io/xous-core/issues/90
+use crate::Exception
+*/
 
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
@@ -1627,7 +1630,7 @@ pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
         }
     })
 }
-
+/* https://github.com/betrusted-io/xous-core/issues/90
 static EXCEPTION_HANDLER: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 fn handle_exception(exception_type: usize, arg1: usize, arg2: usize) -> isize {
     let exception = crate::exceptions::Exception::new(exception_type, arg1, arg2);
@@ -1635,7 +1638,6 @@ fn handle_exception(exception_type: usize, arg1: usize, arg2: usize) -> isize {
     let f = unsafe { core::mem::transmute::<usize, fn(Exception) -> isize>(f) };
     f(exception)
 }
-
 /// Sets the given function as this process' Exception handler. This function
 /// will be called whenever an Exception occurs such as a memory fault,
 /// illegal instruction, or a child process terminating.
@@ -1663,6 +1665,7 @@ pub fn set_exception_handler(
         }
     })
 }
+*/
 
 /// Perform a raw syscall and return the result. This will transform
 /// `xous::Result::Error(e)` into an `Err(e)`.

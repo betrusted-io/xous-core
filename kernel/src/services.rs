@@ -2178,7 +2178,7 @@ impl SystemServices {
         }
         Ok(())
     }
-
+    /* https://github.com/betrusted-io/xous-core/issues/90
     /// Sets the exception handler for the given process ID. If an exception handler
     /// exists, it will be silently overridden.
     pub fn set_exception_handler(
@@ -2194,6 +2194,7 @@ impl SystemServices {
         };
         Ok(())
     }
+    */
 
     /// Causes the provided process to go into an exception state. This will fail
     /// if any of the following are true:
