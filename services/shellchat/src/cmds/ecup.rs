@@ -443,6 +443,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
             if let Some(sub_cmd) = tokens.next() {
                 match sub_cmd {
                     "fw" => {
+                        env.netmgr.connection_manager_stop().unwrap();
                         self.in_progress = true;
                         let start = env.ticktimer.elapsed_ms();
                         self.start_time = Some(start);
@@ -452,6 +453,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         write!(ret, "Starting EC firmware update").unwrap();
                     }
                     "gw" => {
+                        env.netmgr.connection_manager_stop().unwrap();
                         self.in_progress = true;
                         let start = env.ticktimer.elapsed_ms();
                         self.start_time = Some(start);
@@ -468,6 +470,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         write!(ret, "EC has been reset, and new firmware loaded.").unwrap();
                     }
                     "wf200" => {
+                        env.netmgr.connection_manager_stop().unwrap();
                         self.in_progress = true;
                         let start = env.ticktimer.elapsed_ms();
                         self.start_time = Some(start);
@@ -483,6 +486,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                             return Ok(Some(ret));
                         }
 
+                        env.netmgr.connection_manager_stop().unwrap();
                         self.in_progress = true;
                         let start = env.ticktimer.elapsed_ms();
                         self.start_time = Some(start);
@@ -523,14 +527,17 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                     },
                     Some(UpdateResult::ProgramDone) => {
                         write!(ret, "Programming of {} bytes done in {:.1}s. Please restart EC with `ecup reset`.", progress, elapsed / 1000.0).unwrap();
+                        env.netmgr.connection_manager_run().unwrap();
                         self.in_progress = false;
                     },
                     Some(UpdateResult::AutoDone) => {
                         write!(ret, "Autoupdate of EC finished. Shutting down now...").unwrap();
+                        env.netmgr.connection_manager_run().unwrap();
                         self.in_progress = false;
                     },
                     Some(UpdateResult::Abort) => {
                         write!(ret, "Programming aborted in {:.1}s. Did you stage all the firmware objects?", elapsed / 1000.0).unwrap();
+                        env.netmgr.connection_manager_run().unwrap();
                         self.in_progress = false;
                     }
                     _ => write!(ret, "Got unknown update callback: {:?}", result_code).unwrap()

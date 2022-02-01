@@ -66,6 +66,7 @@ pub(crate) enum Opcode {
     SubscribeWifiStats,
     UnsubWifiStats,
     FetchSsidList,
+    ConnMgrStartStop,
 
     /// [Internal] com llio interrupt callback
     ComInterrupt,

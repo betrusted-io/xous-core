@@ -160,6 +160,16 @@ impl NetManager {
         }
         Ok(ret)
     }
+    pub fn connection_manager_stop(&self) -> Result<(), xous::Error> {
+        send_message(self.netconn.conn(),
+            Message::new_scalar(Opcode::ConnMgrStartStop.to_usize().unwrap(), 0, 0,0, 0)
+        ).map(|_| ())
+    }
+    pub fn connection_manager_run(&self) -> Result<(), xous::Error> {
+        send_message(self.netconn.conn(),
+            Message::new_scalar(Opcode::ConnMgrStartStop.to_usize().unwrap(), 1, 0,0, 0)
+        ).map(|_| ())
+    }
 }
 impl Drop for NetManager {
     fn drop(&mut self) {

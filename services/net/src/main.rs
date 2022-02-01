@@ -9,7 +9,7 @@ use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 mod device;
 mod connection_manager;
 
-use xous::{Message, CID, SID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{Message, CID, SID, msg_scalar_unpack, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -1437,6 +1437,23 @@ fn xmain() -> ! {
                 let ret_list = buf.to_original::<SsidList, _>().expect("couldn't restore original");
                 buffer.replace(ret_list).expect("couldn't return config");
             },
+            Some(Opcode::ConnMgrStartStop) => msg_scalar_unpack!(msg, code, _, _, _, {
+                if code == 0 { // 0 is stop, 1 is start
+                    send_message(cm_cid,
+                        Message::new_scalar(
+                        connection_manager::ConnectionManagerOpcode::Stop.to_usize().unwrap(),
+                        0, 0, 0, 0)
+                    ).expect("couldn't send stop message");
+                } else if code == 1 {
+                    send_message(cm_cid,
+                        Message::new_scalar(
+                        connection_manager::ConnectionManagerOpcode::Run.to_usize().unwrap(),
+                        0, 0, 0, 0)
+                    ).expect("couldn't send stop message");
+                } else {
+                    log::error!("Got incorrect start/stop code: {}", code);
+                }
+            }),
             Some(Opcode::Reset) => {
                 net_config = None;
                 let neighbor_cache = NeighborCache::new(BTreeMap::new());
