@@ -129,7 +129,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 match listener.accept() {
                                     Ok((mut stream, addr)) => {
                                         let elapsed_time = ticktimer.elapsed_ms();
-                                        let test_string = std::format!("Hello from Precursor!\n\rI have been up for {}:{:02}:{02}.\n\r",
+                                        let test_string = std::format!("Hello from Precursor!\n\rI have been up for {}:{:02}:{:02}.\n\r",
                                             (elapsed_time / 3_600_000),
                                             (elapsed_time / 60_000) % 60,
                                             (elapsed_time / 1000) % 60,
