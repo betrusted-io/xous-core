@@ -76,7 +76,7 @@ impl<const N: usize> String<N> {
 
     /// Convert a `MemoryMessage` into a `String`
     pub fn from_message(
-        message: &mut MemoryMessage,
+        message: &MemoryMessage,
     ) -> core::result::Result<String<N>, core::str::Utf8Error> {
         let buf = unsafe { crate::Buffer::from_memory_message(message) };
         let bytes = Pin::new(buf.as_ref());

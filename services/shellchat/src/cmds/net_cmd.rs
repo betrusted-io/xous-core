@@ -10,7 +10,6 @@ use std::io::Read;
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
     udp_clone: Option<net::UdpSocket>,
-    tcp_listener: Option<net::TcpListener>,
     callback_id: Option<u32>,
     callback_conn: u32,
     udp_count: u32,
@@ -22,7 +21,6 @@ impl NetCmd {
         NetCmd {
             udp: None,
             udp_clone: None,
-            tcp_listener: None,
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
@@ -36,7 +34,6 @@ impl NetCmd {
 pub(crate) enum NetCmdDispatch {
     UdpTest1 =  0x1_0000, // we're muxing our own dispatch + ping dispatch, so we need a custom discriminant
     UdpTest2 =  0x1_0001,
-    TcpServer = 0x2_0000,
 }
 
 pub const UDP_TEST_SIZE: usize = 64;
@@ -115,16 +112,83 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 "server" => {
-                    let mut listener = net::TcpListener::bind_xous(
-                        "127.0.0.1:80"
-                    ).unwrap();
-                    listener.set_scalar_notification(
-                        self.callback_conn,
-                        self.callback_id.unwrap() as usize,
-                        [Some(NetCmdDispatch::TcpServer.to_usize().unwrap()), None, None, None]
-                    );
-                    // listener.set_nonblocking(true).unwrap(); // we shouldn't need to block because we only check once we're notified
-                    self.tcp_listener = Some(listener);
+                    // PLEASE NOTE:
+                    // Trying to make a TCP server of some kind? Don't be shy to open an issue at
+                    // https://github.com/betrusted-io/xous-core/issues. The TCP stack is very thinly
+                    // tested. Also, this is not a "real" web server, obviously -- so it's going to have quirks,
+                    // such as Firefox reporting that connections have been reset because this doesn't implement
+                    // a complete HTTP life cycle.
+                    let _ = std::thread::spawn({
+                        let mut listener = net::TcpListener::bind_xous(
+                            "127.0.0.1:80"
+                        ).unwrap();
+                        let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+                        let callback_conn = self.callback_conn.clone();
+                        move || {
+                            loop {
+                                match listener.accept() {
+                                    Ok((mut stream, addr)) => {
+                                        let test_string = std::format!("Hello from Precursor!\n\rI have been up for {} ms.\n\r", ticktimer.elapsed_ms());
+                                        let mut request = [0u8; 1024];
+                                        // this is probably not the "right way" to handle this -- but the "keep-alive" from the browser makes us hang on the read
+                                        // which prevents us from answering requests from other browsers (because this is a single-threaded implementation of a server)
+                                        stream.set_read_timeout(Some(Duration::from_millis(2_000))).unwrap();
+                                        match stream.read(&mut request) {
+                                            Ok(len) => {
+                                                let r = std::string::String::from_utf8_lossy(&request[..len]);
+                                                log::info!("Request received from {:?}: {}", stream.peer_addr().unwrap(), r);
+                                                // this works because the recipient will take only one type of memory message and it's a 512-byte length string.
+                                                xous_ipc::String::<512>::from_str(&r).send(callback_conn).unwrap();
+                                                let mut tokens = r.split(' ');
+                                                let mut valid = true;
+                                                if let Some(verb) = tokens.next() {
+                                                    if verb != "GET" {
+                                                        log::info!("Expected GET, got {}", verb);
+                                                        valid = false;
+                                                    }
+                                                }
+                                                if let Some(path) = tokens.next() {
+                                                    if path != "/" {
+                                                        log::info!("We only know /, got {}", path);
+                                                        valid = false;
+                                                    }
+                                                }
+                                                if valid {
+                                                    // now send a page back...
+                                                    let page = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\rConnection: close\n\r\n\r{}\n\r",
+                                                        test_string.len(),
+                                                        test_string);
+                                                    log::info!("Responding with: {}", page);
+                                                    write!(stream, "{}", page).unwrap();
+                                                    stream.flush().unwrap();
+                                                    log::info!("Sent a response {:?}", addr);
+                                                    xous_ipc::String::<512>::from_str(format!("Sent 200 to {:?}", addr)).send(callback_conn).unwrap();
+                                                } else {
+                                                    let errstring = "Sorry, I have only one trick, and it's pretty dumb.";
+                                                    let notfound = format!("HTTP/1.1 404 Not Found\n\rConnection: close\n\rContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\r\n\r{}\n\r",
+                                                        errstring.len(),
+                                                        errstring
+                                                    );
+                                                    log::info!("Responding with: {}", notfound);
+                                                    write!(stream, "{}", notfound).unwrap();
+                                                    stream.flush().unwrap();
+                                                    xous_ipc::String::<512>::from_str(format!("Sent 404 to {:?}", addr)).send(callback_conn).unwrap();
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::info!("Stream was opened, but no request received: {:?}", e);
+                                                xous_ipc::String::<512>::from_str(format!("Socket opened but no request data received: {:?}", e)).send(callback_conn).unwrap();
+                                            }
+                                        }
+                                        // stream should close automatically as `stream` goes out of scope here and Drop is called.
+                                    }
+                                    Err(e) => {
+                                        xous_ipc::String::<512>::from_str(format!("Got error on TCP accept: {:?}", e)).send(callback_conn).unwrap();
+                                    }
+                                }
+                            }
+                        }
+                    });
                     write!(ret, "TCP listener started on port 80").unwrap();
                 }
                 // Testing of udp is done with netcat:
@@ -244,179 +308,125 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
     }
 
 
-    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         log::debug!("net callback");
         let mut ret = String::<1024>::new();
-        xous::msg_scalar_unpack!(msg, arg1, arg2, arg3, arg4, {
-            let dispatch = arg1;
-            match FromPrimitive::from_usize(dispatch) {
-                Some(NetCmdDispatch::UdpTest1) => {
-                    if let Some(udp_socket) = &mut self.udp {
-                        let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
-                        match udp_socket.recv_from(&mut pkt) {
-                            Ok((len, addr)) => {
-                                write!(ret, "UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
-                                log::info!("UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
-                                self.udp_count += 1;
+        match &msg.body {
+            xous::Message::Scalar(xous::ScalarMessage {id: _, arg1, arg2, arg3, arg4}) => {
+                let dispatch = *arg1;
+                match FromPrimitive::from_usize(dispatch) {
+                    Some(NetCmdDispatch::UdpTest1) => {
+                        if let Some(udp_socket) = &mut self.udp {
+                            let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
+                            match udp_socket.recv_from(&mut pkt) {
+                                Ok((len, addr)) => {
+                                    write!(ret, "UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                    log::info!("UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
+                                    self.udp_count += 1;
 
-                                let response_addr = SocketAddr::new(
-                                    addr.ip(),
-                                    udp_socket.socket_addr().unwrap().port()
-                                );
-                                match udp_socket.send_to(
-                                    format!("Received {} packets\n\r", self.udp_count).as_bytes(),
-                                    &response_addr
-                                ) {
-                                    Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                    Err(_) => write!(ret, "UDP tx err").unwrap(),
+                                    let response_addr = SocketAddr::new(
+                                        addr.ip(),
+                                        udp_socket.socket_addr().unwrap().port()
+                                    );
+                                    match udp_socket.send_to(
+                                        format!("Received {} packets\n\r", self.udp_count).as_bytes(),
+                                        &response_addr
+                                    ) {
+                                        Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
+                                        Err(_) => write!(ret, "UDP tx err").unwrap(),
+                                    }
+                                },
+                                Err(e) => {
+                                    log::error!("Net UDP error: {:?}", e);
+                                    write!(ret, "UDP receive error: {:?}", e).unwrap();
                                 }
-                            },
-                            Err(e) => {
-                                log::error!("Net UDP error: {:?}", e);
-                                write!(ret, "UDP receive error: {:?}", e).unwrap();
                             }
+                        } else {
+                            log::error!("Got NetCmd callback from uninitialized socket");
+                            write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
                         }
-                    } else {
-                        log::error!("Got NetCmd callback from uninitialized socket");
-                        write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
-                    }
-                },
-                Some(NetCmdDispatch::UdpTest2) => {
-                    if let Some(udp_socket) = &mut self.udp_clone {
-                        let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
-                        match udp_socket.recv_from(&mut pkt) {
-                            Ok((len, addr)) => {
-                                write!(ret, "Clone UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
-                                log::info!("Clone UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
-                                self.udp_count += 1;
+                    },
+                    Some(NetCmdDispatch::UdpTest2) => {
+                        if let Some(udp_socket) = &mut self.udp_clone {
+                            let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
+                            match udp_socket.recv_from(&mut pkt) {
+                                Ok((len, addr)) => {
+                                    write!(ret, "Clone UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                    log::info!("Clone UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
+                                    self.udp_count += 1;
 
-                                let response_addr = SocketAddr::new(
-                                    addr.ip(),
-                                    udp_socket.socket_addr().unwrap().port()
-                                );
-                                match udp_socket.send_to(
-                                    format!("Clone received {} packets\n\r", self.udp_count).as_bytes(),
-                                    &response_addr
-                                ) {
-                                    Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                    Err(e) => write!(ret, "UDP tx err: {:?}", e).unwrap(),
-                                }
-                            },
-                            Err(e) => {
-                                log::error!("Net UDP error: {:?}", e);
-                                write!(ret, "UDP receive error: {:?}", e).unwrap();
-                            }
-                        }
-                    } else {
-                        log::error!("Got NetCmd callback from uninitialized socket");
-                        write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
-                    }
-                },
-                Some(NetCmdDispatch::TcpServer) => {
-                    if let Some(listener) = &mut self.tcp_listener {
-                        match listener.accept() {
-                            Ok((mut stream, addr)) => {
-                                let test_string = std::format!("Hello from Precursor!\n\rI have been up for {} ms.\n\r", env.ticktimer.elapsed_ms());
-                                let mut request = [0u8; 1024];
-                                match stream.read(&mut request) {
-                                    Ok(len) => {
-                                        let r = std::string::String::from_utf8_lossy(&request[..len]);
-                                        log::info!("Request received from {:?}: {}", stream.peer_addr().unwrap(), r);
-                                        write!(ret, "{}\n\n", r).unwrap();
-                                        let mut tokens = r.split(' ');
-                                        let mut valid = true;
-                                        if let Some(verb) = tokens.next() {
-                                            if verb != "GET" {
-                                                log::info!("Expected GET, got {}", verb);
-                                                valid = false;
-                                            }
-                                        }
-                                        if let Some(path) = tokens.next() {
-                                            if path != "/" {
-                                                log::info!("We only know /, got {}", path);
-                                                valid = false;
-                                            }
-                                        }
-                                        if valid {
-                                            // now send a page back...
-                                            let page = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\rConnection: close\n\r\n\r{}\n\r",
-                                                test_string.len(),
-                                                test_string);
-                                            log::info!("Responding with: {}", page);
-                                            write!(stream, "{}", page).unwrap();
-                                            log::info!("Flushing response to {:?}", addr);
-                                            stream.flush().unwrap();
-                                            log::info!("Sent a response {:?}", addr);
-                                            write!(ret, "Sent 200 to {:?}", addr).unwrap();
-                                        } else {
-                                            let errstring = "Sorry, I have only one trick, and it's pretty dumb.";
-                                            let notfound = format!("HTTP/1.1 404 Not Found\n\rConnection: close\n\rContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\r\n\r{}\n\r",
-                                                errstring.len(),
-                                                errstring
-                                            );
-                                            log::info!("Responding with: {}", notfound);
-                                            write!(stream, "{}", notfound).unwrap();
-                                            stream.flush().unwrap();
-                                            write!(ret, "Sent 404 to {:?}", addr).unwrap();
-                                        }
+                                    let response_addr = SocketAddr::new(
+                                        addr.ip(),
+                                        udp_socket.socket_addr().unwrap().port()
+                                    );
+                                    match udp_socket.send_to(
+                                        format!("Clone received {} packets\n\r", self.udp_count).as_bytes(),
+                                        &response_addr
+                                    ) {
+                                        Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
+                                        Err(e) => write!(ret, "UDP tx err: {:?}", e).unwrap(),
                                     }
-                                    Err(e) => {
-                                        log::info!("Stream was opened, but no request received: {:?}", e);
-                                        write!(ret, "Socket opened but no request data received: {:?}", e).unwrap();
-                                    }
+                                },
+                                Err(e) => {
+                                    log::error!("Net UDP error: {:?}", e);
+                                    write!(ret, "UDP receive error: {:?}", e).unwrap();
                                 }
-                                // stream should close automatically as `stream` goes out of scope here and Drop is called.
                             }
-                            Err(e) => {
-                                write!(ret, "Got error on TCP accept: {:?}", e).unwrap();
+                        } else {
+                            log::error!("Got NetCmd callback from uninitialized socket");
+                            write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
+                        }
+                    },
+                    None => {
+                        // rebind the scalar args to the Ping convention
+                        let op = arg1;
+                        let addr = IpAddr::from((*arg2 as u32).to_be_bytes());
+                        let seq_or_addr = *arg3;
+                        let timestamp = *arg4;
+                        match FromPrimitive::from_usize(op & 0xFF) {
+                            Some(NetPingCallback::Drop) => {
+                                // write!(ret, "Info: All pending pings done").unwrap();
+                                // ignore the message, just creates visual noise
+                                return Ok(None);
+                            }
+                            Some(NetPingCallback::NoErr) => {
+                                match addr {
+                                    IpAddr::V4(_) => {
+                                        write!(ret, "Pong from {:?} seq {} received: {} ms",
+                                        addr,
+                                        seq_or_addr,
+                                        timestamp).unwrap();
+                                    },
+                                    IpAddr::V6(_) => {
+                                        write!(ret, "Ipv6 pong received: {} ms", timestamp).unwrap();
+                                    },
+                                }
+                            }
+                            Some(NetPingCallback::Timeout) => {
+                                write!(ret, "Ping to {:?} timed out", addr).unwrap();
+                            }
+                            Some(NetPingCallback::Unreachable) => {
+                                let code = net::Icmpv4DstUnreachable::from((op >> 24) as u8);
+                                write!(ret, "Ping to {:?} unreachable: {:?}", addr, code).unwrap();
+                            }
+                            None => {
+                                log::error!("Unknown opcode received in NetCmd callback: {:?}", op);
+                                write!(ret, "Unknown opcode received in NetCmd callback: {:?}", op).unwrap();
                             }
                         }
-                    } else {
-                        write!(ret, "Got NetCmd callback for uninitialized server").unwrap();
-                    }
-                },
-                None => {
-                    // rebind the scalar args to the Ping convention
-                    let op = arg1;
-                    let addr = IpAddr::from((arg2 as u32).to_be_bytes());
-                    let seq_or_addr = arg3;
-                    let timestamp = arg4;
-                    match FromPrimitive::from_usize(op & 0xFF) {
-                        Some(NetPingCallback::Drop) => {
-                            // write!(ret, "Info: All pending pings done").unwrap();
-                            // ignore the message, just creates visual noise
-                            return Ok(None);
-                        }
-                        Some(NetPingCallback::NoErr) => {
-                            match addr {
-                                IpAddr::V4(_) => {
-                                    write!(ret, "Pong from {:?} seq {} received: {} ms",
-                                    addr,
-                                    seq_or_addr,
-                                    timestamp).unwrap();
-                                },
-                                IpAddr::V6(_) => {
-                                    write!(ret, "Ipv6 pong received: {} ms", timestamp).unwrap();
-                                },
-                            }
-                        }
-                        Some(NetPingCallback::Timeout) => {
-                            write!(ret, "Ping to {:?} timed out", addr).unwrap();
-                        }
-                        Some(NetPingCallback::Unreachable) => {
-                            let code = net::Icmpv4DstUnreachable::from((op >> 24) as u8);
-                            write!(ret, "Ping to {:?} unreachable: {:?}", addr, code).unwrap();
-                        }
-                        None => {
-                            log::error!("Unknown opcode received in NetCmd callback: {:?}", op);
-                            write!(ret, "Unknown opcode received in NetCmd callback: {:?}", op).unwrap();
-                        }
-                    }
-                },
+                    },
+                }
+            },
+            xous::Message::Move(m) => {
+                let s = xous_ipc::String::<512>::from_message(m).unwrap();
+                write!(ret, "{}", s.as_str().unwrap()).unwrap();
             }
-        });
+            _ => {
+                log::error!("got unecognized message type in callback handler")
+            }
+        }
         Ok(Some(ret))
     }
 }
