@@ -128,7 +128,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             loop {
                                 match listener.accept() {
                                     Ok((mut stream, addr)) => {
-                                        let test_string = std::format!("Hello from Precursor!\n\rI have been up for {} ms.\n\r", ticktimer.elapsed_ms());
+                                        let elapsed_time = ticktimer.elapsed_ms();
+                                        let test_string = std::format!("Hello from Precursor!\n\rI have been up for {}:{:02}:{02}.\n\r",
+                                            (elapsed_time / 3_600_000),
+                                            (elapsed_time / 60_000) % 60,
+                                            (elapsed_time / 1000) % 60,
+                                        );
                                         let mut request = [0u8; 1024];
                                         // this is probably not the "right way" to handle this -- but the "keep-alive" from the browser makes us hang on the read
                                         // which prevents us from answering requests from other browsers (because this is a single-threaded implementation of a server)
