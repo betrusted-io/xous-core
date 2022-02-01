@@ -5,6 +5,7 @@ mod mainmenu;
 use mainmenu::*;
 mod appmenu;
 use appmenu::*;
+mod app_autogen;
 
 use com::api::*;
 use core::fmt::Write;
@@ -31,7 +32,7 @@ const SERVER_NAME_STATUS: &str = "_Status bar manager_";
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-enum StatusOpcode {
+pub(crate) enum StatusOpcode {
     /// for passing battstats on to the main thread from the callback
     BattStats,
     /// for passing DateTime
@@ -50,10 +51,8 @@ enum StatusOpcode {
 
     /// Raise the Shellchat app
     SwitchToShellchat,
-    /// Raise the Ball app
-    SwitchToBall,
-    /// Raise the REPL demo app
-    SwitchToRepl,
+    /// Switch to an app
+    SwitchToApp,
 
     /// Suspend handler from the main menu
     TrySuspend,
@@ -694,14 +693,10 @@ fn xmain() -> ! {
                 ticktimer.sleep_ms(100).ok();
                 gam.switch_to_app(gam::APP_NAME_SHELLCHAT, security_tv.token.unwrap()).expect("couldn't raise shellchat");
             },
-            Some(StatusOpcode::SwitchToBall) => {
+            Some(StatusOpcode::SwitchToApp) => msg_scalar_unpack!(msg, index, _, _, _, {
                 ticktimer.sleep_ms(100).ok();
-                gam.switch_to_app(gam::APP_NAME_BALL, security_tv.token.unwrap()).expect("couldn't raise ball demo");
-            },
-            Some(StatusOpcode::SwitchToRepl) => {
-                ticktimer.sleep_ms(100).ok();
-                gam.switch_to_app(gam::APP_NAME_REPL, security_tv.token.unwrap()).expect("couldn't raise repl demo");
-            },
+                app_autogen::app_dispatch(&gam, security_tv.token.unwrap(), index);
+            }),
             Some(StatusOpcode::TrySuspend) => {
                 if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG)).expect("couldn't notify that power is plugged in");

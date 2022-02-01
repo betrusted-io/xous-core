@@ -1,4 +1,4 @@
-use gam::EXPECTED_BOOT_CONTEXTS;
+use gam::{EXPECTED_BOOT_CONTEXTS, EXPECTED_APP_CONTEXTS};
 
 /*
     Authentication tokens to the GAM are created on a first-come, first-serve basis,
@@ -29,7 +29,7 @@ impl<'a> TokenManager {
     }
     /// checks to see if all the slots have been occupied. We can't allow untrusted code to run until all slots have checked in
     pub(crate) fn allow_untrusted_code(&self) -> bool {
-        if self.tokens.len() == EXPECTED_BOOT_CONTEXTS.len() {
+        if self.tokens.len() == (EXPECTED_BOOT_CONTEXTS.len() + EXPECTED_APP_CONTEXTS.len()) {
             true
         } else {
             // throw a bone to the dev who has to debug this error. This typically only triggers after a major
@@ -44,8 +44,15 @@ impl<'a> TokenManager {
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
         log::trace!("claiming token {}", name);
         // first check if the name is valid
-        if EXPECTED_BOOT_CONTEXTS.iter().find(|&&context| context == name).is_none() {
-            log::error!("Server {} is not pre-registered in gam/lib.rs/EXPECTED_BOOT_CONTEXTS. Did you forget to register it?", name);
+        let mut found = false;
+        if EXPECTED_BOOT_CONTEXTS.iter().find(|&&context| context == name).is_some() {
+            found = true;
+        }
+        if EXPECTED_APP_CONTEXTS.iter().find(|&&context| context == name).is_some() {
+            found = true;
+        }
+        if !found {
+            log::error!("Server {} is not pre-registered in gam/lib.rs/EXPECTED_BOOT_CONTEXTS or apps.rs/EXPECTED_APP_CONTEXTS. Did you forget to register it?", name);
             return None
         }
         // now check if it hasn't already been registered

@@ -2,7 +2,7 @@ use gam::*;
 use locales::t;
 use num_traits::*;
 
-use crate::StatusOpcode;
+use crate::{StatusOpcode, app_autogen};
 
 pub fn create_app_menu(status_conn: xous::CID) {
     let mut menu_items = Vec::<MenuItem>::new();
@@ -15,21 +15,8 @@ pub fn create_app_menu(status_conn: xous::CID) {
         close_on_select: true,
     });
 
-    menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("appmenu.ball", xous::LANG)),
-        action_conn: Some(status_conn),
-        action_opcode: StatusOpcode::SwitchToBall.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    });
-
-    menu_items.push(MenuItem {
-        name: xous_ipc::String::from_str(t!("appmenu.repl", xous::LANG)),
-        action_conn: Some(status_conn),
-        action_opcode: StatusOpcode::SwitchToRepl.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    });
+    // insert the application menu items
+    app_autogen::app_menu_items(&mut menu_items, status_conn);
 
     menu_items.push(MenuItem {
         name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),

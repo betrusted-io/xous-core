@@ -20,6 +20,7 @@ pub(crate) enum ReplOp {
     Quit,
 }
 
+// This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
 pub(crate) const SERVER_NAME_REPL: &str = "_REPL demo application_";
 
 #[xous::xous_main]

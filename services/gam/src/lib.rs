@@ -8,6 +8,8 @@ pub mod modal;
 pub use modal::*;
 pub mod menu;
 pub use menu::*;
+pub mod apps;
+pub use apps::*;
 
 use graphics_server::api::{TextOp, TextView};
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
@@ -32,8 +34,6 @@ pub const SHARED_MODAL_NAME: &'static str = "shared modal";
 pub const STATUS_BAR_NAME: &'static str = "status";
 pub const APP_NAME_SHELLCHAT: &'static str = "shellchat";
 pub const APP_MENU_NAME: &'static str = "app menu";
-pub const APP_NAME_BALL: &'static str = "ball demo app";
-pub const APP_NAME_REPL: &'static str = "repl demo app";
 
 /// UX context registry. Names here are authorized by the GAM to have Canvases.
 pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
@@ -46,8 +46,6 @@ pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
     SHARED_MODAL_NAME,
     PDDB_MENU_NAME,
     APP_MENU_NAME,
-    APP_NAME_BALL,
-    APP_NAME_REPL,
 ];
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

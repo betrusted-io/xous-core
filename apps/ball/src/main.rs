@@ -6,6 +6,7 @@ use ball::*;
 use num_traits::*;
 use xous::Message;
 
+// This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
 const BALL_SERVER_NAME: &'static str = "User app 'ball'";
 
 /// Opcodes for the application main loop
