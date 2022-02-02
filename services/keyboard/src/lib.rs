@@ -51,6 +51,25 @@ impl Keyboard {
         ).map(|_| ())
     }
 
+    pub fn set_keymap(&self, map: KeyMap) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SelectKeyMap.to_usize().unwrap(),
+            map.into(),
+            0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn get_keymap(&self) -> Result<KeyMap, xous::Error> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetKeyMap.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(code)) => {
+                Ok(code.into())
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
+
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn hostmode_inject_key(&self, c: char) {
         send_message(self.conn,

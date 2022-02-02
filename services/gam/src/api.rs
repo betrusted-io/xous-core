@@ -201,6 +201,7 @@ pub(crate) enum MenuMgrOp {
     // incoming is one of these ops
     AddItem,
     DeleteItem,
+    SetIndex(usize),
     Quit,
     // response must be one of these
     Ok,

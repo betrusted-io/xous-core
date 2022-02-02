@@ -76,6 +76,9 @@ impl<'a> Menu<'a> {
     pub fn activate(&self) {
         self.gam.raise_menu(self.name.as_str()).expect("couldn't raise menu");
     }
+    pub fn set_index(&mut self, index: usize) {
+        self.index = index;
+    }
 
     /// this function spawns a client-side thread to forward redraw and key event
     /// messages on to a local server. The goal is to keep the local server's SID
@@ -357,6 +360,21 @@ impl MenuMatic {
             false
         }
     }
+    pub fn set_index(&self, index: usize) {
+        let op = MenuManagement {
+            item: MenuItem { // dummy item, not used
+                name: xous_ipc::String::<64>::new(),
+                action_conn: None,
+                action_opcode: 0,
+                action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+                close_on_select: false,
+            },
+            op: MenuMgrOp::SetIndex(index),
+        };
+        let mut buf = xous_ipc::Buffer::into_buf(op).expect("couldn't transform to memory");
+        buf.lend_mut(self.cid, 0).expect("couldn't set menu index");
+        // do nothing with the return code
+    }
     pub fn quit(&self) {
         let mm = MenuManagement {
             item: MenuItem {
@@ -385,9 +403,10 @@ pub fn menu_matic(items: Vec::<MenuItem>, menu_name: &'static str, maybe_manager
     }
     let _ = thread::spawn({
         let menu = menu.clone();
+        let sid = menu.lock().unwrap().sid.clone();
         move || {
             loop {
-                let msg = xous::receive_message(menu.lock().unwrap().sid).unwrap();
+                let msg = xous::receive_message(sid).unwrap();
                 log::trace!("message: {:?}", msg);
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(MenuOpcode::Redraw) => {
@@ -455,6 +474,13 @@ pub fn menu_matic(items: Vec::<MenuItem>, menu_name: &'static str, maybe_manager
                             }
                             buffer.replace(mgmt).unwrap();
                         }
+                        MenuMgrOp::SetIndex(index) => {
+                            log::info!("setting menu index {}", index);
+                            menu.lock().unwrap().set_index(index);
+                            log::info!("index is set");
+                            mgmt.op = MenuMgrOp::Ok;
+                            buffer.replace(mgmt).unwrap();
+                        },
                         MenuMgrOp::Quit => {
                             mgmt.op = MenuMgrOp::Ok;
                             buffer.replace(mgmt).unwrap();

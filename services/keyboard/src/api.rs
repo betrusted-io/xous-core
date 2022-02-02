@@ -28,19 +28,20 @@ impl From<usize> for KeyMap {
             1 => KeyMap::Azerty,
             2 => KeyMap::Qwertz,
             3 => KeyMap::Dvorak,
-            4 => KeyMap::Braille,
-            _ => KeyMap::Undefined,
+            254 => KeyMap::Braille, // braille has only one mapping available
+            _ => KeyMap::Qwerty,
         }
     }
 }
 impl Into<usize> for KeyMap {
     fn into(self) -> usize {
         match self {
+            // note: these indicese correspond to the position on the keyboard menu
             KeyMap::Qwerty => 0,
             KeyMap::Azerty => 1,
             KeyMap::Qwertz => 2,
             KeyMap::Dvorak => 3,
-            KeyMap::Braille => 4,
+            KeyMap::Braille => 254,
             KeyMap::Undefined => 255,
         }
     }
@@ -50,6 +51,7 @@ impl Into<usize> for KeyMap {
 pub(crate) enum Opcode {
     /// set which keyboard mapping is present
     SelectKeyMap, //(KeyMap),
+    GetKeyMap,
 
     /// request for ScanCodes
     RegisterListener,

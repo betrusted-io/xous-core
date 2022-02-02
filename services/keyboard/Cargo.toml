@@ -15,6 +15,7 @@ xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 llio = {path = "../llio"}
 susres = {path = "../susres"}
+spinor = {path = "../spinor"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}

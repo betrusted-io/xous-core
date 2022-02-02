@@ -608,8 +608,9 @@ fn xmain() -> ! {
           - suspend/resume (for suspend locking/unlocking calls)
           - keystore
           - PDDB
+          - keyboard (for updating the key map setting, which needs to be loaded upstream of the PDDB)
     */
-    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(4)).expect("can't register server");
+    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(5)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
     let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");

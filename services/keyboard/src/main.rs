@@ -8,7 +8,7 @@ use log::info;
 
 use num_traits::*;
 use xous_ipc::Buffer;
-use xous::{CID, msg_scalar_unpack};
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 /// Compute the dvorak key mapping of row/col to key tuples
 #[allow(dead_code)]
@@ -167,6 +167,7 @@ mod implementation {
     use num_traits::ToPrimitive;
     use susres::{RegManager, RegOrField, SuspendResume};
     use std::collections::HashSet;
+    use std::convert::TryInto;
 
     /// note: the code is structured to use at most 16 rows or 16 cols
     const KBD_ROWS: usize = 9;
@@ -208,7 +209,12 @@ mod implementation {
         /// indicate if the chord has been captured. Once captured, further presses are ignored, until all keys are let up.
         chord_captured: bool,
         susres: RegManager::<{utra::keyboard::KEYBOARD_NUMREGS}>,
+        /// a field used for debugging various keyboard issues, especially with the interrupt handler
         pub debug: usize,
+        /// a slice that contains the location of the early-boot keyboard settings
+        settings: xous::MemoryRange,
+        /// a handle to the spinor block so we can update our settings
+        spinor: spinor::Spinor,
     }
 
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
@@ -275,15 +281,31 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Keyboard CSR range");
+            let setting_page = xous::syscall::map_memory(
+                xous::MemoryAddress::new((xous::EARLY_SETTINGS + xous::FLASH_PHYS_BASE) as usize),
+                None,
+                4096,
+                xous::MemoryFlags::R,
+            )
+            .expect("couldn't map Keyboard pre-boot setting");
 
             let ticktimer = ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer");
             let timestamp = ticktimer.elapsed_ms();
+            let settings: &[u8] = setting_page.as_slice();
 
             let default_map = if cfg!(feature = "braille") {
                 KeyMap::Braille
             } else {
-                KeyMap::Qwerty
+                // the boot setting is intended to only contain the keyboard mapping...soooooooo.....we manage it as such
+                // if feature creep causes more stuff to end up here this should be made into something more generic.
+                // But! If you think you need to slap something in the boot setting, think again. This is an unverified,
+                // unencrypted and plaintext bit of memory that anyone can read or mess with. The only reason the keyboard
+                // layout is kept here is because you want your keyboard to be in the right language before typing in the
+                // password to unlock the PDDB, which is *actually* where all the user settings should be located.
+                let code = u32::from_le_bytes(settings[..4].try_into().unwrap());
+                KeyMap::from(code as usize)
             };
+            let xns = xous_names::XousNames::new().unwrap();
 
             let mut kbd = Keyboard {
                 conn: xous::connect(sid).unwrap(),
@@ -307,6 +329,8 @@ mod implementation {
                 chord_captured: false,
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 debug: 0,
+                settings: setting_page,
+                spinor: spinor::Spinor::new(&xns).unwrap(),
             };
 
             xous::claim_interrupt(
@@ -357,9 +381,21 @@ mod implementation {
         }
 
         pub(crate) fn set_map(&mut self, map: KeyMap) {
+            let code_usize: usize = map.into();
+            let code = (code_usize as u32).to_le_bytes();
+            let settings: &[u8] = self.settings.as_slice();
+            self.spinor.patch(settings, xous::EARLY_SETTINGS,
+                &code, 0
+            ).expect("couldn't patch our keyboard code");
             self.map = map;
         }
-        pub(crate) fn get_map(&self) -> KeyMap {self.map}
+        pub(crate) fn get_map(&mut self) -> KeyMap {
+            // refresh the map from the setting in the FLASH
+            let settings: &[u8] = self.settings.as_slice();
+            let code = u32::from_le_bytes(settings[..4].try_into().unwrap());
+            self.map = KeyMap::from(code as usize);
+            self.map
+        }
         pub(crate) fn set_repeat(&mut self, rate: u32, delay: u32) {
             self.rate = rate;
             self.delay = delay;
@@ -831,10 +867,11 @@ fn xmain() -> ! {
     //  - GAM
     //  - graphics (if building for hosted mode)
     //  - oqc (for factory test)
+    //  - status sub system (for setting the layout)
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(2)).expect("can't register server");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(3)).expect("can't register server");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 
     // Create a new kbd object
@@ -907,6 +944,11 @@ fn xmain() -> ! {
             },
             Some(Opcode::SelectKeyMap) => msg_scalar_unpack!(msg, km, _, _, _, {
                 kbd.set_map(KeyMap::from(km))
+            }),
+            Some(Opcode::GetKeyMap) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender,
+                    kbd.get_map().into()
+                ).expect("can't retrieve keymap");
             }),
             Some(Opcode::SetRepeat) => msg_scalar_unpack!(msg, rate, delay, _, _, {
                 kbd.set_repeat(rate as u32, delay as u32);

@@ -106,7 +106,13 @@
         "en": "Switch to App...",
         "ja": "アプリに切り替わる...",
         "zh": "APP子菜单",
-        "en-audio": "Switch to app"
+        "en-audio": "Switch to app submenu"
+    },
+    "mainmenu.kbd": {
+        "en": "Keyboard layout...",
+        "ja": "キーボード・レイアウト...",
+        "zh": "键盘布局...",
+        "en-audio": "Keyboard layout submenu"
     },
     "mainmenu.reboot": {
         "en": "Reboot",

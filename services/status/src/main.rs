@@ -5,6 +5,8 @@ mod mainmenu;
 use mainmenu::*;
 mod appmenu;
 use appmenu::*;
+mod kbdmenu;
+use kbdmenu::*;
 mod app_autogen;
 
 use com::api::*;
@@ -48,11 +50,16 @@ pub(crate) enum StatusOpcode {
     SubmenuPddb,
     /// Raise the App menu
     SubmenuApp,
+    /// Raise the Keyboard layout menu
+    SubmenuKbd,
 
     /// Raise the Shellchat app
     SwitchToShellchat,
     /// Switch to an app
     SwitchToApp,
+
+    /// Set the keyboard map
+    SetKeyboard,
 
     /// Suspend handler from the main menu
     TrySuspend,
@@ -333,6 +340,9 @@ fn xmain() -> ! {
     log::debug!("starting main menu thread");
     create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com);
     create_app_menu(xous::connect(status_sid).unwrap());
+    let kbd_mgr = xous::create_server().unwrap();
+    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
+    let kbd = keyboard::Keyboard::new(&xns).unwrap();
 
     // some RTC UX structures
     let modals = modals::Modals::new(&xns).unwrap();
@@ -689,6 +699,19 @@ fn xmain() -> ! {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::APP_MENU_NAME).expect("couldn't raise App submenu");
             },
+            Some(StatusOpcode::SubmenuKbd) => {
+                log::info!("getting keyboard map");
+                let map = kbd.get_keymap().expect("couldn't get key mapping");
+                log::info!("setting index to {:?}", map);
+                kbd_menumatic.set_index(map.into());
+                log::info!("raising keyboard menu");
+                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
+                gam.raise_menu(gam::KBD_MENU_NAME).expect("couldn't raise keyboard layout submenu");
+            },
+            Some(StatusOpcode::SetKeyboard) => msg_scalar_unpack!(msg, code, _, _, _, {
+                let map = keyboard::KeyMap::from(code);
+                kbd.set_keymap(map).expect("couldn't set keyboard mapping");
+            }),
             Some(StatusOpcode::SwitchToShellchat) => {
                 ticktimer.sleep_ms(100).ok();
                 gam.switch_to_app(gam::APP_NAME_SHELLCHAT, security_tv.token.unwrap()).expect("couldn't raise shellchat");
