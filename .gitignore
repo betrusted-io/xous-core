@@ -7,6 +7,9 @@
 /emulation/obj
 # auto-generated
 services/ticktimer-server/src/version.rs
+apps/i18n.json
+services/gam/src/apps.rs
+services/status/src/app_autogen.rs
 
 *.map
 
