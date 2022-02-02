@@ -1,0 +1,24 @@
+{
+    "ball": {
+        "context_name": "ball demo app",
+        "menu_name": {
+            "appmenu.ball": {
+                "en": "Simple ball demo",
+                "ja": "シンプルなボールのデモ",
+                "zh": "简单的球演示",
+                "en-audio": "Simple ball demo"
+            }
+        }
+    },
+    "repl": {
+        "context_name": "repl demo app",
+        "menu_name": {
+            "appmenu.repl": {
+                "en": "Basic REPL demo",
+                "ja": "シンプルなREPLデモ",
+                "zh": "基本 REPL 演示",
+                "en-audio": "Basic REPL demo"
+            }
+        }
+    }
+}
