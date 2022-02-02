@@ -7,6 +7,7 @@ use std::{
 };
 use std::fs::OpenOptions;
 use chrono::Local;
+use std::collections::{HashMap, BTreeMap};
 
 type DynError = Box<dyn std::error::Error>;
 
@@ -64,7 +65,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "dns",
         "pddb",
         "modals",
-        // apps
+    ];
+    let app_pkgs = [
+        // "standard" demo apps
         "ball",
         "repl",
     ];
@@ -176,12 +179,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs, &[])?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs, &[])?,
-        Some("run") => run(false, &hw_pkgs, None)?,
         Some("pddb-ci") => run(false, &hw_pkgs, Some(
             &["--features", "pddb/ci", "--features", "pddb/deterministic"]
         ))?,
+        Some("app-image") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = base_pkgs.to_vec();
+            let apps: Vec<String> = args.collect();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            build_hw_image(false,
+                Some("./precursors/soc.svd".to_string()),
+                &pkgs,
+                lkey, kkey, None, &[])?
+        }
         Some("hw-image") => {
-            build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None, &[])?
+            let mut pkgs = vec![];
+            for pkg in hw_pkgs {
+                pkgs.push(pkg);
+            }
+            for app in app_pkgs {
+                pkgs.push(app);
+            }
+            let mut app_strs = Vec::<String>::new();
+            for app in app_pkgs {
+                app_strs.push(app.to_string());
+            }
+            generate_app_menus(&app_strs);
+            build_hw_image(false, env::args().nth(2), &pkgs, lkey, kkey, None, &[])?
         }
         Some("gfx-dev") => {
             run(true, &gfx_dev_pkgs, Some(&["--features", "graphics-server/testing"]))?
@@ -268,31 +296,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn print_help() {
     eprintln!(
         "Tasks:
-renode-image            builds a functional image for renode
-renode-test             builds a test image for renode
-renode-image-debug      builds a test image for renode in debug mode
-libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
-                        specified on the command line (e.g. built externally)
-hw-image [soc.svd] [loader.key] [kernel.key]   builds an image for real hardware
-run                     runs a release build using a hosted environment
-debug                   runs a debug build using a hosted environment
-benchmark [soc.svd]     builds a benchmarking image for real hardware
-minimal [soc.svd]       builds a minimal image for API testing
-cbtest                  builds an image for callback testing
-trng-test [soc.svd]     builds an image for TRNG testing - urandom source seeded by TRNG+AV
-ro-test [soc.svd]       builds an image for ring oscillator only TRNG testing
-av-test [soc.svd]       builds an image for avalanche generater only TRNG testing
-sr-test [soc.svd]       builds the suspend/resume testing image
-burn-kernel             invoke the `usb_update.py` utility to burn the kernel
-burn-loader             invoke the `usb_update.py` utility to burn the loader
-burn-soc                invoke the `usb_update.py` utility to stage the SoC gateware, which must then be provisioned with secret material using the Precursor device.
-nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
-generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
-wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
-pddb-dev                PDDB testing only for live hardware
-pddb-hosted             PDDB testing in a hosted environment
+Hardware images:
+ hw-image [soc.svd]      builds an image for real hardware with baseline demo apps
+          [loader.key]   plus signing key options
+          [kernel.key]
+ app-image [app1] [..]   builds an image for real hardware of baseline kernel + specified apps
 
-Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
+Hosted emulation:
+ run [app1] [..]         runs a release build using a hosted environment plus specified apps
+
+Renode emulation:
+ renode-image            builds a functional image for renode
+ renode-test             builds a test image for renode
+ renode-image-debug      builds a test image for renode in debug mode
+ libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
+                         specified on the command line (e.g. built externally)
+
+Locale (re-)generation:
+ generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
+
+Direct USB updates:
+ ** Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py` **
+ burn-kernel             invoke the `usb_update.py` utility to burn the kernel
+ burn-loader             invoke the `usb_update.py` utility to burn the loader
+ burn-soc                invoke the `usb_update.py` utility to stage the SoC gateware, which must then be provisioned with secret material using the Precursor device.
+ nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
+
+Various debug configurations:
+ debug                   runs a debug build using a hosted environment
+ benchmark [soc.svd]     builds a benchmarking image for real hardware
+ minimal [soc.svd]       builds a minimal image for API testing
+ cbtest                  builds an image for callback testing
+ trng-test [soc.svd]     builds an image for TRNG testing - urandom source seeded by TRNG+AV
+ ro-test [soc.svd]       builds an image for ring oscillator only TRNG testing
+ av-test [soc.svd]       builds an image for avalanche generater only TRNG testing
+ sr-test [soc.svd]       builds the suspend/resume testing image
+ wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
+ pddb-dev                PDDB testing only for live hardware
+ pddb-hosted             PDDB testing in a hosted environment
+
 "
     )
 }
@@ -1068,4 +1110,119 @@ pub(crate) fn get_version() -> crate::api::VersionString {
 }
 "####;
     out.write_all(s.as_bytes()).expect("couldn't write our version template header");
+}
+
+use serde::{Deserialize, Serialize};
+use std::string::String;
+#[derive(Deserialize, Serialize, Debug)]
+struct AppManifest {
+    context_name: String,
+    menu_name: HashMap<String, HashMap<String, String>>,
+}
+#[derive(Deserialize, Serialize, Debug)]
+struct Locales {
+    locales: HashMap<String, HashMap<String, String>>,
+}
+
+fn generate_app_menus(apps: &Vec::<String>) {
+    let file = File::open("apps/manifest.json").expect("Failed to open the manifest file");
+    let mut reader = std::io::BufReader::new(file);
+    let mut content = String::new();
+    reader
+        .read_to_string(&mut content)
+        .expect("Failed to read the file");
+    let manifest: HashMap<String, AppManifest> =
+        serde_json::from_str(&content).expect("Cannot parse manifest file");
+
+    let mut working_set = BTreeMap::<String, &AppManifest>::new();
+    let mut l = HashMap::<String, HashMap::<String, String>>::new();
+
+    for app in apps {
+        if let Some(manifest) = manifest.get(app) {
+            working_set.insert(app.to_string(), &manifest);
+            for (name, translations) in &manifest.menu_name {
+                let mut map = HashMap::<String, String>::new();
+                for (language, phrase) in translations {
+                    map.insert(language.to_string(), phrase.to_string());
+                }
+                l.insert(name.to_string(), map);
+            }
+        } else {
+            println!("Warning: app '{}' not found in `apps/manifest.json`, ignoring.", app);
+        }
+    }
+
+    // output a JSON localizations file
+    let mut locale_file = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .create(true)
+    .truncate(true)
+    .open("apps/i18n.json").expect("Can't open our version file for writing");
+    write!(locale_file, "{}", serde_json::to_string(&l).unwrap()).expect("couldn't write to the app locale file");
+
+    // output the Rust manifests
+    let mut gam_tokens = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .create(true)
+    .truncate(true)
+    .open("services/gam/src/apps.rs").expect("Can't open our gam manifest for writing");
+    writeln!(gam_tokens, "// This file is auto-generated by xtask/main.rs generate_app_menus()").unwrap();
+    for (app_name, manifest) in working_set.iter() {
+        writeln!(gam_tokens, "pub const APP_NAME_{}: &'static str = \"{}\";",
+            app_name.to_uppercase(),
+            manifest.context_name,
+        ).unwrap();
+    }
+    writeln!(gam_tokens, "\npub const EXPECTED_APP_CONTEXTS: &[&'static str] = &[").unwrap();
+    for (app_name, _manifest) in working_set.iter() {
+        writeln!(gam_tokens, "    APP_NAME_{},",
+            app_name.to_uppercase(),
+        ).unwrap();
+    }
+    writeln!(gam_tokens, "];").unwrap();
+
+    let mut menu = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .create(true)
+    .truncate(true)
+    .open("services/status/src/app_autogen.rs").expect("Can't open our gam manifest for writing");
+    writeln!(menu, "// This file is auto-generated by xtask/main.rs generate_app_menus()").unwrap();
+
+    writeln!(menu, r####"use crate::StatusOpcode;
+    use gam::{{MenuItem, MenuPayload}};
+    use locales::t;
+    use num_traits::*;
+
+    pub(crate) fn app_dispatch(gam: &gam::Gam, token: [u32; 4], index: usize) {{
+        match index {{
+    "####).unwrap();
+    for (index, (app_name, _manifest)) in working_set.iter().enumerate() {
+        writeln!(menu, "{} => gam.switch_to_app(gam::APP_NAME_{}, token).expect(\"couldn't raise app\"),",
+            index,
+            app_name.to_uppercase()
+        ).unwrap();
+    }
+    writeln!(menu, r####"_ => log::error!("Invalid index for app dispatch: {{}}. Ignoring!", index),
+    }}
+}}
+
+pub(crate) fn app_menu_items(menu_items: &mut Vec::<MenuItem>, status_conn: u32) {{
+"####).unwrap();
+    for (index, (_app_name, manifest)) in working_set.iter().enumerate() {
+        writeln!(menu, "    menu_items.push(MenuItem {{",).unwrap();
+        assert!(manifest.menu_name.len() == 1, "Improper menu name record entry");
+        for name in manifest.menu_name.keys() {
+            writeln!(menu, "        name: xous_ipc::String::from_str(t!(\"{}\", xous::LANG)),",
+            name).unwrap();
+        }
+        writeln!(menu, "        action_conn: Some(status_conn),",).unwrap();
+        writeln!(menu, "        action_opcode: StatusOpcode::SwitchToApp.to_u32().unwrap(),",).unwrap();
+        writeln!(menu, "        action_payload: MenuPayload::Scalar([{}, 0, 0, 0]),", index).unwrap();
+        writeln!(menu, "        close_on_select: true,",).unwrap();
+        writeln!(menu, "    }});\n",).unwrap();
+    }
+    writeln!(menu, "}}").unwrap();
 }

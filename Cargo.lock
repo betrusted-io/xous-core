@@ -2916,6 +2916,8 @@ dependencies = [
  "curl",
  "filetime",
  "rustc_version 0.4.0",
+ "serde",
+ "serde_json",
  "zip",
 ]
 

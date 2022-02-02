@@ -126,18 +126,6 @@
         "zh": "充电时睡不着",
         "en-audio": "Can't sleep while charging"
     },
-    "appmenu.ball": {
-        "en": "Simple ball demo",
-        "ja": "シンプルなボールのデモ",
-        "zh": "简单的球演示",
-        "en-audio": "Simple ball demo"
-    },
-    "appmenu.repl": {
-        "en": "Basic REPL demo",
-        "ja": "シンプルなREPLデモ",
-        "zh": "基本 REPL 演示",
-        "en-audio": "Basic REPL demo"
-    },
     "appmenu.shellchat": {
         "en": "Shellchat",
         "ja": "Shellchat",

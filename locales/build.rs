@@ -23,7 +23,7 @@ fn read_locales() -> Translations {
 
     let project_dir = project_root();
     let build_directory = project_dir.to_str().unwrap();
-    let locales = format!("{}/**/locales/**/i18n.json", build_directory);
+    let locales = format!("{}/**/i18n.json", build_directory);
     println!("Reading {}", &locales);
 
     for entry in glob(&locales).expect("Failed to read glob pattern") {
