@@ -559,6 +559,8 @@ mod implementation {
                 let code = match self.map {
                     KeyMap::Qwerty => map_qwerty(rc),
                     KeyMap::Dvorak => map_dvorak(rc),
+                    KeyMap::Azerty => map_azerty(rc),
+                    KeyMap::Qwertz => map_qwertz(rc),
                     _ => ScanCode {key: None, shift: None, hold: None, alt: None},
                 };
                 // delete the key repeat if there is one
