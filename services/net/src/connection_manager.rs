@@ -9,8 +9,9 @@ use xous_ipc::Buffer;
 use num_traits::*;
 use std::io::Read;
 use std::collections::{HashMap, HashSet};
-use locales::t;
 use crate::ComIntSources;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use locales::t;
 
 #[allow(dead_code)]
 const BOOT_POLL_INTERVAL_MS: usize = 4_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
@@ -65,6 +66,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let self_cid = xous::connect(sid).unwrap();
     // give the system some time to boot before trying to run a check on the EC minimum version, as it is in reset on boot
     tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let modals = modals::Modals::new(&xns).unwrap();
 
     // check that the EC rev meets the minimum version for this service to function
@@ -72,6 +74,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let (maj, min, rev, commits) = com.get_ec_sw_tag().unwrap();
     let ec_rev = (maj as u32) << 24 | (min as u32) << 16 | (rev as u32) << 8 | commits as u32;
     let rev_ok = ec_rev >= MIN_EC_REV;
+    #[cfg(any(target_os = "none", target_os = "xous"))] // don't show this pop-up in hosted mode, it's just annoying and not helpful
     if !rev_ok {
         log::warn!("EC firmware is too old to interoperate with the connec tion manager.");
         let mut note = String::from(t!("net.ec_rev_old", xous::LANG));
