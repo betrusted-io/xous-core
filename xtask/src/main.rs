@@ -183,6 +183,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("pddb-ci") => run(false, &hw_pkgs, Some(
             &["--features", "pddb/ci", "--features", "pddb/deterministic"]
         ))?,
+        Some("run") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let mut apps: Vec<String> = args.collect();
+            if apps.len() == 0 { // add the standard demo apps if none are specified
+                println!("No apps specified, adding default apps...");
+                apps.push("ball".to_string());
+                apps.push("repl".to_string());
+            }
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            run(false, &pkgs, None)?
+        },
         Some("app-image") => {
             let mut args = env::args();
             args.nth(1);
