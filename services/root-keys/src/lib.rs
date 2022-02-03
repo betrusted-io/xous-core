@@ -168,6 +168,93 @@ impl RootKeys {
             pass_type.to_usize().unwrap(), 0, 0, 0)
         ).expect("couldn't send bbram provision message");
     }
+
+    pub fn wrap_key(&self, input: &[u8]) -> Result<Vec<u8>, KeywrapError> {
+        if input.len() > api::MAX_WRAP_DATA {
+            // of course, the underlying crypto can handle a much larger piece of data,
+            // but the intention of this API is to wrap crypto keys -- not bulk data. So for simplicity
+            // we're going to limit the size of wrapped data to 2kiB (typically it's envisioned you're
+            // wrapping data on the order of 32-512 bytes)
+            return Err(KeywrapError::TooBig)
+        }
+        if !self.ensure_aes_password() {
+            return Err(KeywrapError::AuthenticationFailed);
+        }
+        let mut alloc = KeyWrapper {
+            data: [0u8; MAX_WRAP_DATA + 8],
+            len: input.len() as u32,
+            key_index: self.key_index.to_u8().unwrap(),
+            op: KeyWrapOp::Wrap,
+            result: Some(KeywrapError::AuthenticationFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
+            // this field is ignored on the Wrap side
+            expected_len: 0,
+        };
+        for (&src, dst) in input.iter().zip(alloc.data.iter_mut()) {
+            *dst = src;
+        }
+        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::AuthenticationFailed))?;
+        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::AuthenticationFailed))?;
+        let ret = buf.to_original::<KeyWrapper, _>().unwrap();
+        match ret.result {
+            None => { // no error, proceed
+                Ok(ret.data[..ret.len as usize].to_vec(),)
+            }
+            Some(err) => {
+                Err(err)
+            }
+        }
+    }
+    pub fn unwrap_key(&self, wrapped: &[u8], expected_len: usize) -> Result<Vec<u8>, KeywrapError> {
+        if wrapped.len() > api::MAX_WRAP_DATA + 8 {
+            return Err(KeywrapError::TooBig)
+        }
+        if !self.ensure_aes_password() {
+            return Err(KeywrapError::AuthenticationFailed);
+        }
+        let mut alloc = KeyWrapper {
+            data: [0u8; MAX_WRAP_DATA + 8],
+            len: wrapped.len() as u32,
+            key_index: self.key_index.to_u8().unwrap(),
+            op: KeyWrapOp::Unwrap,
+            result: Some(KeywrapError::AuthenticationFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
+            expected_len: expected_len as u32,
+        };
+        for (&src, dst) in wrapped.iter().zip(alloc.data.iter_mut()) {
+            *dst = src;
+        }
+        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::AuthenticationFailed))?;
+        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::AuthenticationFailed))?;
+        let ret = buf.to_original::<KeyWrapper, _>().unwrap();
+        match ret.result {
+            None => { // no error, proceed
+                if ret.len as usize != expected_len {
+                    // The key wrapper will return a vector that is rounded to the nearest 8-bytes, with
+                    // a zero-pad on the excess data. Ensure that the zero-pad is intact before lopping it off.
+                    if (ret.len as usize) < expected_len {
+                        Err(KeywrapError::InvalidExpectedLen)
+                    } else {
+                        let mut all_zeroes = true;
+                        for &d in ret.data[expected_len..ret.len as usize].iter() {
+                            if d != 0 {
+                                all_zeroes = false;
+                                break;
+                            }
+                        }
+                        if all_zeroes {
+                            Ok(ret.data[..expected_len as usize].to_vec(),)
+                        } else {
+                            Err(KeywrapError::InvalidExpectedLen)
+                        }
+                    }
+                } else {
+                    Ok(ret.data[..expected_len as usize].to_vec(),)
+                }
+            }
+            Some(err) => {
+                Err(err)
+            }
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

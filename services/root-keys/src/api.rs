@@ -15,6 +15,8 @@ pub(crate) enum Opcode {
     IsJtagWorking,
     /// initiate an AES oracle operation
     AesOracle,
+    /// initiate key wrapper operation
+    AesKwp,
     /// create new FPGA keys; provisioning requires a slave device to be connected that can run the JTAG sequence
     BbramProvision,
     /// clear a cached password
@@ -151,4 +153,53 @@ impl AesOp {
             }
         }
     }
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq, Copy, Clone)]
+pub enum KeywrapError {
+    /// Input is too big.
+    TooBig,
+    /// Input is too small.
+    TooSmall,
+    /// Ciphertext has invalid padding.
+    Unpadded,
+    /// The ciphertext is not valid for the expected length.
+    InvalidExpectedLen,
+    /// The ciphertext couldn't be authenticated.
+    AuthenticationFailed,
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq)]
+pub enum KeyWrapOp {
+    Wrap,
+    Unwrap,
+}
+
+use std::error::Error;
+impl Error for KeywrapError {}
+
+use std::fmt;
+impl fmt::Display for KeywrapError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            KeywrapError::TooBig => f.write_str("Input too big"),
+            KeywrapError::TooSmall => f.write_str("Input too small"),
+            KeywrapError::Unpadded => f.write_str("Padding error"),
+            KeywrapError::InvalidExpectedLen => f.write_str("Invalid expected lengthr"),
+            KeywrapError::AuthenticationFailed => f.write_str("Authentication failed"),
+        }
+    }
+}
+
+pub(crate) const MAX_WRAP_DATA: usize = 2048;
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
+#[zeroize(drop)]
+pub (crate) struct KeyWrapper {
+    pub data: [u8; MAX_WRAP_DATA + 8],
+    // used to specify the length of the data used in the fixed-length array above
+    pub len: u32,
+    pub key_index: u8,
+    pub op: KeyWrapOp,
+    pub result: Option<KeywrapError>,
+    // used by the unwrap side
+    pub expected_len: u32,
 }

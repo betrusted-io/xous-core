@@ -396,6 +396,12 @@ pub(crate) struct BasisRequestPassword {
     db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>,
     plaintext_pw: Option<xous_ipc::String::<{crate::api::PASSWORD_LEN}>>,
 }
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PasswordState {
+    Correct,
+    Incorrect,
+    Uninit,
+}
 
 struct TokenRecord {
     pub dict: String,
@@ -466,8 +472,14 @@ fn xmain() -> ! {
     #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode, for now...
     if pddb_os.rootkeys_initialized() {
         tt.sleep_ms(1000).unwrap(); // wait 1 second after boot before attempting to mount, to let the boot screen finish redrawing (cometic issue).
-        if ensure_password(&modals, &mut pddb_os) {
-            try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache);
+        match ensure_password(&modals, &mut pddb_os) {
+            PasswordState::Correct => {
+                try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct);
+            },
+            PasswordState::Uninit => {
+                try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit);
+            },
+            _ => (), // continue without mounting if the user opts out
         }
     }
     // main server loop
@@ -502,8 +514,8 @@ fn xmain() -> ! {
                         // can't mount if we have no root keys
                         xous::return_scalar(msg.sender, 0).expect("could't return scalar");
                     } else {
-                        if ensure_password(&modals, &mut pddb_os) {
-                            if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache) {
+                        if ensure_password(&modals, &mut pddb_os) == PasswordState::Correct {
+                            if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct) {
                                 xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                             } else {
                                 xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -1055,40 +1067,48 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> bool {
+fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordState {
     log::info!("Requesting login password");
-    let mut done = false;
-    let mut skip = false;
-    while !done {
-        done = pddb_os.try_login();
-        if !done {
-            pddb_os.clear_password(); // clear the bad password entry
-            modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
-            modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
-            match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
-                Ok(response) => {
-                    if response.as_str() == t!("pddb.yes", xous::LANG) {
-                        done = false;
-                    } else if response.as_str() == t!("pddb.no", xous::LANG) {
-                        done = true;
-                        skip = true;
-                    } else {
-                        panic!("Got unexpected return from radiobutton");
+    loop {
+        match pddb_os.try_login() {
+            PasswordState::Correct => {
+                return PasswordState::Correct
+            }
+            PasswordState::Incorrect => {
+                pddb_os.clear_password(); // clear the bad password entry
+                // check if the user wants to re-try or not.
+                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
+                    Ok(response) => {
+                        if response.as_str() == t!("pddb.yes", xous::LANG) {
+                            continue;
+                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                            return PasswordState::Incorrect;
+                        } else {
+                            panic!("Got unexpected return from radiobutton");
+                        }
                     }
+                    _ => panic!("get_radiobutton failed"),
                 }
-                _ => panic!("get_radiobutton failed"),
+            }
+            PasswordState::Uninit => {
+                return PasswordState::Uninit;
             }
         }
     }
-    !skip
 }
-fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache) -> bool {
+fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState) -> bool {
     log::info!("Attempting to mount the PDDB");
-    if let Some(sys_basis) = pddb_os.pddb_mount() {
-        log::info!("PDDB mount operation finished successfully");
-        basis_cache.basis_add(sys_basis);
-        true
-    } else {
+    if pw_state == PasswordState::Correct {
+        if let Some(sys_basis) = pddb_os.pddb_mount() {
+            log::info!("PDDB mount operation finished successfully");
+            basis_cache.basis_add(sys_basis);
+            return true
+        }
+    }
+    // correct password but no mount -> offer to format; uninit -> offer to format
+    if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
         #[cfg(any(target_os = "none", target_os = "xous"))]
         {
             log::debug!("PDDB did not mount; requesting format");
@@ -1162,6 +1182,9 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 false
             }
         }
+    } else {
+        // password was incorrect, don't try anything just return false
+        false
     }
 }
 

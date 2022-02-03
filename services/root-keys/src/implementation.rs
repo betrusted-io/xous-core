@@ -1,5 +1,7 @@
 mod oracle;
 use oracle::*;
+mod keywrap;
+use keywrap::*;
 pub use oracle::FpgaKeySource;
 
 use utralib::generated::*;
@@ -345,6 +347,63 @@ impl<'a> RootKeys {
             AesOpType::Encrypt => {
                 for block in blocks.iter_mut() {
                     cipher.encrypt_block(block.try_into().unwrap());
+                }
+            }
+        }
+    }
+    pub fn kwp_op(&mut self, kwp: &mut KeyWrapper) {
+        let key = match kwp.key_index {
+            KeyRomLocs::USER_KEY => {
+                let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
+                let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
+                if pcache.hashed_boot_pw_valid == 0 {
+                    self.purge_password(PasswordType::Boot);
+                    log::warn!("boot password isn't valid! Returning bogus results.");
+                }
+                for (key, &pw) in
+                key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
+                    *key = *key ^ pw;
+                }
+                if self.boot_password_policy == PasswordRetentionPolicy::AlwaysPurge {
+                    self.purge_password(PasswordType::Boot);
+                }
+                key_enc
+            },
+            _ => {
+                self.fake_key[0] = kwp.key_index;
+                self.fake_key
+            }
+        };
+        let keywrapper = Aes256KeyWrap::new(&key);
+        match kwp.op {
+            KeyWrapOp::Wrap => {
+                match keywrapper.encapsulate(&kwp.data[..kwp.len as usize]) {
+                    Ok(wrapped) => {
+                        for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
+                            *dst = src;
+                        }
+                        kwp.len = wrapped.len() as u32;
+                        kwp.result = None;
+                        // this is an un-used field but...why not?
+                        kwp.expected_len = wrapped.len() as u32;
+                    }
+                    Err(e) => {
+                        kwp.result = Some(e);
+                    }
+                }
+            }
+            KeyWrapOp::Unwrap => {
+                match keywrapper.decapsulate(&kwp.data[..kwp.len as usize], kwp.expected_len as usize) {
+                    Ok(unwrapped) => {
+                        for (&src, dst) in unwrapped.iter().zip(kwp.data.iter_mut()) {
+                            *dst = src;
+                        }
+                        kwp.len = unwrapped.len() as u32;
+                        kwp.result = None;
+                    }
+                    Err(e) => {
+                        kwp.result = Some(e);
+                    }
                 }
             }
         }

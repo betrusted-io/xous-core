@@ -351,6 +351,7 @@ Various debug configurations:
  wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
  pddb-dev                PDDB testing only for live hardware
  pddb-hosted             PDDB testing in a hosted environment
+ pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
 
 "
     )

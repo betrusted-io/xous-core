@@ -33,14 +33,25 @@ pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
 /// size of a virtual page -- after the AES encryption and journaling overhead is subtracted
 pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>();
 
+const WRAPPED_AES_KEYSIZE: usize = AES_KEYSIZE + 8;
+const SCD_VERSION: u32 = 1;
 #[repr(C)] // this can map directly into Flash
 pub(crate) struct StaticCryptoData {
-    /// aes-256 key of the system basis, encrypted with the User0 root key
-    pub(crate) system_key: [u8; AES_KEYSIZE],
-    /// check data to confirm the password was entered correctly; it is the encryption of the first 128 bits of the salt below.
-    pub(crate) check_data: [u8; BLOCK_SIZE],
-    /// a pool of fixed data used to pick salts, based on a hash of the basis name
-    pub(crate) salt_base: [u8; 4048],
+    /// a version number for the block
+    pub(crate) version: u32,
+    /// aes-256 key of the system basis, encrypted with the User0 root key, and wrapped using NIST SP800-38F
+    pub(crate) system_key: [u8; WRAPPED_AES_KEYSIZE],
+    /// a pool of fixed data used as a salt
+    pub(crate) salt_base: [u8; 4096 - WRAPPED_AES_KEYSIZE - size_of::<u32>()],
+}
+impl StaticCryptoData {
+    pub fn default() -> StaticCryptoData {
+        StaticCryptoData {
+            version: SCD_VERSION,
+            system_key: [0u8; WRAPPED_AES_KEYSIZE],
+            salt_base: [0u8; 4096 - WRAPPED_AES_KEYSIZE - size_of::<u32>()],
+        }
+    }
 }
 impl Deref for StaticCryptoData {
     type Target = [u8];
@@ -79,6 +90,7 @@ pub(crate) struct PddbOs {
     /// free space circular buffer base -- location in FLASH, offset from physical bottom of pddb_mr
     fscb_phys_base: PageAlignedPa,
     data_phys_base: PageAlignedPa,
+    /// We keep a copy of the raw key around because we have to combine this with the AAD of a block to derive the AES-GCM-SIV cipher.
     system_basis_key: Option<[u8; AES_KEYSIZE]>,
     /// derived cipher for handling fastspace -- cache it, so we can save the time cost of constructing the cipher key schedule
     cipher_ecb: Option<Aes256>,
@@ -452,69 +464,43 @@ impl PddbOs {
     pub(crate) fn clear_password(&self) {
         self.rootkeys.clear_password(AesRootkeyType::User0);
     }
-    pub (crate) fn try_login(&mut self) -> bool {
+    pub (crate) fn try_login(&mut self) -> PasswordState {
         if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
             let scd = self.static_crypto_data_get();
-            let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
-            let mut blank = true;
-            for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
-                *dst = src;
-                if src != 0xFF {
-                    blank = false;
-                }
+            if scd.version == 0xFFFF_FFFF { // system is in the blank state
+                return PasswordState::Uninit
             }
-            for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
-                self.rootkeys.decrypt_block(block.try_into().unwrap());
+            if scd.version != SCD_VERSION {
+                log::error!("Version mismatch for keystore, declaring database as uninitialized");
+                return PasswordState::Uninit;
             }
-            if !blank {
-                // form the ECB cipher and check the check data
-                let cipher = Aes256::new(GenericArray::from_slice(&system_key));
-                let mut block = [0u8; BLOCK_SIZE];
-                for (&src, dst) in scd.check_data[0..BLOCK_SIZE].iter().zip(block.iter_mut()) {
-                    *dst = src;
-                }
-                let ga = GenericArray::from_mut_slice(&mut block);
-                //log::info!("test block before: {:x?}", ga);
-                cipher.decrypt_block(ga);
-                //log::info!("test block after check: {:x?}", ga);
-                let mut success = true;
-                let mut checkedlen = 0;
-                for (&a, &b) in scd.salt_base[0..BLOCK_SIZE].iter().zip(ga.iter()) {
-                    if a != b {
-                        success = false;
-                    }
-                    checkedlen += 1;
-                }
-                if checkedlen != BLOCK_SIZE {
-                    success = false;
-                }
-                if success {
+            match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
+                Ok(mut syskey) => {
+                    let cipher = Aes256::new(GenericArray::from_slice(&syskey));
+                    self.cipher_ecb = Some(cipher);
                     let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
-                    for (&src, dst) in scd.system_key.iter().zip(system_key.iter_mut()) {
+                    for (&src, dst) in syskey.iter().zip(system_key.iter_mut()) {
                         *dst = src;
                     }
-                    for block in system_key.chunks_mut(aes::BLOCK_SIZE) {
-                        self.rootkeys.decrypt_block(block.try_into().unwrap());
-                    }
                     self.system_basis_key = Some(system_key);
-                    self.cipher_ecb = Some(cipher);
+                    // erase the old vector completely
+                    let nuke = syskey.as_mut_ptr();
+                    for i in 0..syskey.len() {
+                        unsafe{nuke.add(i).write_volatile(0)};
+                    }
+                    PasswordState::Correct
                 }
-                success
-            } else {
-                // the system is in a blank state -- use the bogus key so that the later test for
-                // mounting the PDDB doesn't fail on account of a lack of key matter. We'll deal
-                // with setting the key correctly later.
-                self.system_basis_key = Some(system_key);
-                let cipher = Aes256::new(GenericArray::from_slice(&system_key));
-                self.cipher_ecb = Some(cipher);
-                true
+                Err(e) => {
+                    log::error!("Couldn't unwrap our system key: {:?}", e);
+                    PasswordState::Incorrect
+                }
             }
         } else {
-            true
+            PasswordState::Correct
         }
     }
     fn syskey_ensure(&mut self) {
-        while !self.try_login() {
+        while self.try_login() != PasswordState::Correct {
             self.clear_password(); // clear the bad password entry
             let xns = xous_names::XousNames::new().unwrap();
             let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
@@ -1202,6 +1188,10 @@ impl PddbOs {
         if let Some(modals) = progress {
             let mut success = false;
             while !success {
+                // the "same password check" is accomplished by just encrypting the all-zeros block twice
+                // with the cipher after clearing the password and re-entering it, and then comparing that
+                // the results are identical. The test blocks are never committed or stored anywhere.
+                // The actual creation of the "real" key material is done in step 3.
                 let mut checkblock_a = [0u8; BLOCK_SIZE];
                 self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
 
@@ -1301,40 +1291,27 @@ impl PddbOs {
         assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
         let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
         self.entropy.borrow_mut().get_slice(&mut system_basis_key);
-        let mut basis_key_aes: [u8; AES_KEYSIZE] = system_basis_key.clone();
-        self.cipher_ecb = Some(Aes256::new(GenericArray::from_slice(&basis_key_aes))); // build the ECB cipher for page table entries
-        let cipher =  Aes256::new(GenericArray::from_slice(&basis_key_aes));
-        self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
-        for block in basis_key_aes.chunks_mut(aes::BLOCK_SIZE) {
-            self.rootkeys.encrypt_block(block.try_into().unwrap());
-        }
-        let mut crypto_keys = StaticCryptoData {
-            system_key: [0; AES_KEYSIZE],
-            check_data: [0; BLOCK_SIZE],
-            salt_base: [0; 4048],
-        };
+        // build the ECB cipher for page table entries
+        self.cipher_ecb = Some(Aes256::new(GenericArray::from_slice(&system_basis_key)));
+        let cipher_ecb = Aes256::new(GenericArray::from_slice(&system_basis_key)); // a second copy for patching the page table later in this routine interior mutability blah blah work around oops
+        // now wrap the key for storage
+        let wrapped_key = self.rootkeys.wrap_key(&system_basis_key).expect("Internal error wrapping our encryption key");
+        self.system_basis_key = Some(system_basis_key); // this causes system_basis_key to be owned by self and go out of scope
+        let mut crypto_keys = StaticCryptoData::default();
+        crypto_keys.version = SCD_VERSION; // should already be set by `default()` but let's be sure.
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
             self.tt.sleep_ms(100).unwrap();
         }
         // copy the encrypted key into the data structure for commit to Flash
-        for (&src, dst) in basis_key_aes.iter().zip(crypto_keys.system_key.iter_mut()) {
+        // the wrapped key should have a well-defined length of 40 bytes
+        assert!(wrapped_key.len() == 40, "wrapped key did not have the expected length");
+        for (&src, dst) in wrapped_key.iter().zip(crypto_keys.system_key.iter_mut()) {
             *dst = src;
         }
+        // initialize the salt
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
-        let cipher_ecb = self.cipher_ecb.as_ref().unwrap();
-        let mut block = [0u8; BLOCK_SIZE];
-        // the test data is just the first 128 bits of the salt base
-        for (&src, dst) in crypto_keys.salt_base[0..BLOCK_SIZE].iter().zip(block.iter_mut()) {
-            *dst = src;
-        }
-        let ga = GenericArray::from_mut_slice(&mut block);
-        log::info!("test block before: {:x?}", ga);
-        cipher_ecb.encrypt_block(ga);
-        for (&src, dst) in ga.iter().zip(crypto_keys.check_data.iter_mut()) {
-            *dst = src;
-        }
-        log::info!("test block after: {:x?}", crypto_keys.check_data);
+        // commit keys
         self.patch_keys(crypto_keys.deref(), 0);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
@@ -1484,7 +1461,7 @@ impl PddbOs {
 
         // step 9. generate & write initial page table entries
         for (&virt, phys) in basis_v2p_map.iter_mut() {
-            self.pt_patch_mapping(virt, phys.page_number(), &cipher);
+            self.pt_patch_mapping(virt, phys.page_number(), &cipher_ecb);
             // mark the entry as clean, as it has been sync'd to disk
             phys.set_clean(true);
         }

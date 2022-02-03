@@ -80,6 +80,8 @@ pub struct MetadataInFlash {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
+    mod keywrap;
+    use keywrap::*;
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
     use gam::modal::{Modal, Slider};
@@ -99,7 +101,7 @@ mod implementation {
         Efuse,
     }
     #[allow(dead_code)]
-    pub struct RootKeys {
+    pub(crate) struct RootKeys {
         password_type: Option<PasswordType>,
         jtag: jtag::Jtag,
         xns: xous_names::XousNames,
@@ -248,6 +250,41 @@ mod implementation {
                 AesOpType::Encrypt => {
                     for block in blocks.iter_mut() {
                         cipher.encrypt_block(block.try_into().unwrap());
+                    }
+                }
+            }
+        }
+        pub fn kwp_op(&mut self, kwp: &mut KeyWrapper) {
+            let keywrapper = Aes256KeyWrap::new(&[0u8; 32]);
+            match kwp.op {
+                KeyWrapOp::Wrap => {
+                    match keywrapper.encapsulate(&kwp.data[..kwp.len as usize]) {
+                        Ok(wrapped) => {
+                            for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
+                                *dst = src;
+                            }
+                            kwp.len = wrapped.len() as u32;
+                            kwp.result = None;
+                            // this is an un-used field but...why not?
+                            kwp.expected_len = wrapped.len() as u32;
+                        }
+                        Err(e) => {
+                            kwp.result = Some(e);
+                        }
+                    }
+                }
+                KeyWrapOp::Unwrap => {
+                    match keywrapper.decapsulate(&kwp.data[..kwp.len as usize], kwp.expected_len as usize) {
+                        Ok(unwrapped) => {
+                            for (&src, dst) in unwrapped.iter().zip(kwp.data.iter_mut()) {
+                                *dst = src;
+                            }
+                            kwp.len = unwrapped.len() as u32;
+                            kwp.result = None;
+                        }
+                        Err(e) => {
+                            kwp.result = Some(e);
+                        }
                     }
                 }
             }
@@ -914,6 +951,12 @@ fn xmain() -> ! {
                 };
                 buffer.replace(aes_op).unwrap();
             },
+            Some(Opcode::AesKwp) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut kwp = buffer.to_original::<KeyWrapper, _>().unwrap();
+                keys.kwp_op(&mut kwp);
+                buffer.replace(kwp).unwrap();
+            }
 
             Some(Opcode::BbramProvision) => {
                 modals.show_notification(t!("rootkeys.bbram.confirm", xous::LANG)).expect("modals error");

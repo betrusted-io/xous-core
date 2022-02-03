@@ -46,6 +46,7 @@ sha2 = {path = "../engine-sha512"}
 digest = "0.9.0"
 aes={path="../aes"}
 engine-25519 = {path="../engine-25519"}
+byteorder = "1.4.3" # used by keywrap
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 rand_core = "0.5.1"
 hex = {version = "0.4.3", default-features = false, features = []}
