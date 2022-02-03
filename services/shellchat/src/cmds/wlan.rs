@@ -126,7 +126,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         Ok(list) => {
                             write!(ret, "Saved network configs:\n").unwrap();
                             for item in list.iter() {
-                                write!(ret, "  {}", item).ok(); // whatever, maybe we have too many?
+                                write!(ret, "- {}", item).ok(); // whatever, maybe we have too many?
                             }
                         }
                         Err(e) => {
