@@ -180,9 +180,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs, &[])?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs, &[])?,
-        Some("pddb-ci") => run(false, &hw_pkgs, Some(
+        Some("pddb-ci") => {
+            generate_app_menus(&Vec::<String>::new());
+            run(false, &hw_pkgs, Some(
             &["--features", "pddb/ci", "--features", "pddb/deterministic"]
-        ))?,
+        ))?},
         Some("run") => {
             let mut args = env::args();
             args.nth(1);
@@ -268,7 +270,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None,
             &[],
         )?,
-        Some("trng-test") => build_hw_image(
+        Some("trng-test") => {
+            generate_app_menus(&Vec::<String>::new());
+            build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
@@ -276,8 +280,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             Some(&["--features", "urandomtest"]),
             &[],
-        )?,
-        Some("ro-test") => build_hw_image(
+        )?},
+        Some("ro-test") => {
+            generate_app_menus(&Vec::<String>::new());
+            build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
@@ -285,8 +291,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             Some(&["--features", "ringosctest"]),
             &[],
-        )?,
-        Some("av-test") => build_hw_image(
+        )?},
+        Some("av-test") => {
+            generate_app_menus(&Vec::<String>::new());
+            build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
@@ -294,7 +302,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             Some(&["--features", "avalanchetest"]),
             &[],
-        )?,
+        )?},
         Some("sr-test") => {
             build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
         }
