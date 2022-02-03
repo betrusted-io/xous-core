@@ -241,6 +241,12 @@ impl Keyrom {
         }
         ed25519_dalek::PublicKey::from_bytes(&pk_bytes).or(Err("invalid public key"))
     }
+    /// locks all the keys from future read-out
+    pub fn lock(&mut self) {
+        for i in 0..256 {
+            self.csr.wfo(utra::keyrom::LOCKADDR_LOCKADDR, i);
+        }
+    }
 }
 
 // returns true if the kernel is valid
@@ -435,11 +441,13 @@ fn die() {
     let mut power = CSR::new(utra::power::HW_POWER_BASE as *mut u32);
     let mut com = CSR::new(utra::com::HW_COM_BASE as *mut u32);
     let mut start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
+    let mut keyrom = Keyrom::new();
+    keyrom.lock();
     loop {
         // every 15 seconds, attempt to send a power down command
         // any attempt to re-flash the system must halt the CPU before we time-out to this point!
         if ticktimer.rf(utra::ticktimer::TIME0_TIME) - start > 15_000 {
-            println!("Powering down...");
+            println!("Powering down, keyrom locked...");
             power.rmwf(utra::power::POWER_STATE, 0);
             power.rmwf(utra::power::POWER_SELF, 0);
 
@@ -448,6 +456,7 @@ fn die() {
             while com.rf(utra::com::STATUS_TIP) == 1 {}
             let _ = com.rf(utra::com::RX_RX); // discard the RX result
             start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
+            keyrom.lock();
         }
     }
 }
