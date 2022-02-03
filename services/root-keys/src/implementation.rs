@@ -16,7 +16,7 @@ use crate::bcrypt::*;
 use crate::api::PasswordType;
 
 use core::convert::TryInto;
-use ed25519_dalek::{Keypair, Signature, PublicKey, Signer, ExpandedSecretKey};
+use ed25519_dalek::{Keypair, Signature, PublicKey, Signer, ExpandedSecretKey, SecretKey};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants;
 use sha2::{FallbackStrategy, Sha256, Sha512, Sha512Trunc256};
@@ -24,6 +24,7 @@ use digest::Digest;
 use graphics_server::BulkRead;
 use core::mem::size_of;
 use core::cell::RefCell;
+use rand_core::RngCore;
 
 use aes::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
@@ -34,6 +35,13 @@ use root_keys::key2bits::*;
 
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
 const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
+
+/// Maximum number of times the global rollback limiter can be updated. Every time this is updated,
+/// the firmware has to be re-signed, the gateware ROM re-injected, and the PDDB system key updated.
+///
+/// N.B.: As of Xous 0.9.6 we don't have a call to update the anti-rollback count, we have only provisioned for
+/// that call to exist sometime in the future.
+const MAX_ROLLBACK_LIMIT: u8 = 255;
 
 /// Size of the total area allocated for signatures. It is equal to the size of one FLASH sector, which is the smallest
 /// increment that can be erased.
@@ -86,6 +94,7 @@ impl KeyRomLocs {
     const PEPPER:     u8 = 0xf8;
     const FPGA_MIN_REV:   u8 = 0xfc;
     const LOADER_MIN_REV: u8 = 0xfd;
+    const GLOBAL_ROLLBACK: u8 = 0xfe;
     const CONFIG:     u8 = 0xff;
 }
 
@@ -277,13 +286,33 @@ impl<'a> RootKeys {
     }
     pub fn kernel_base(&self) -> u32 { self.kernel_base }
 
+    /// takes a root key and computes the current rollback state of the key by hashing it
+    /// MAX_ROLLBACK_LIMIT - GLOBAL_ROLLBACK times.
+    fn compute_key_rollback(&mut self, key: &mut [u8]) {
+        assert!(key.len() == 32, "Key length is incorrect");
+        self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocs::GLOBAL_ROLLBACK as u32);
+        let mut rollback_limit = self.keyrom.rf(utra::keyrom::DATA_DATA);
+        if rollback_limit > 255 { rollback_limit = 255; } // prevent increment-up attacks that roll over
+        log::debug!("rollback_limit: {}", rollback_limit);
+        for _i in 0..MAX_ROLLBACK_LIMIT - rollback_limit as u8 {
+            let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+            hasher.update(&key);
+            let digest = hasher.finalize();
+            assert!(digest.len() == 32, "Digest had an incorrect length");
+            key.copy_from_slice(&digest);
+            #[cfg(feature = "hazardous-debug")]
+            if _i >= (MAX_ROLLBACK_LIMIT - 3) {
+                log::info!("iter {} key {:x?}", _i, key);
+            }
+        }
+    }
     /// This implementation creates and destroys the AES key schedule on every function call
     /// However, Rootkey operations are not meant to be used for streaming operations; they are typically
     /// used to secure subkeys, so a bit of overhead on each call is OK in order to not keep excess secret
     /// data laying around.
     /// ASSUME: the caller has confirmed that the user password is valid and in cache
     pub fn aes_op(&mut self, key_index: u8, op_type: AesOpType, block: &mut [u8; 16]) {
-        let key = match key_index {
+        let mut key = match key_index {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
                 let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
@@ -308,6 +337,7 @@ impl<'a> RootKeys {
                 self.fake_key
             }
         };
+        self.compute_key_rollback(&mut key);
         let cipher = Aes256::new(GenericArray::from_slice(&key));
         match op_type {
             AesOpType::Decrypt => cipher.decrypt_block(block.try_into().unwrap()),
@@ -315,7 +345,7 @@ impl<'a> RootKeys {
         }
     }
     pub fn aes_par_op(&mut self, key_index: u8, op_type: AesOpType, blocks: &mut[[u8; 16]; PAR_BLOCKS]) {
-        let key = match key_index {
+        let mut key = match key_index {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
                 let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
@@ -337,6 +367,7 @@ impl<'a> RootKeys {
                 self.fake_key
             }
         };
+        self.compute_key_rollback(&mut key);
         let cipher = Aes256::new(GenericArray::from_slice(&key));
         match op_type {
             AesOpType::Decrypt => {
@@ -352,7 +383,7 @@ impl<'a> RootKeys {
         }
     }
     pub fn kwp_op(&mut self, kwp: &mut KeyWrapper) {
-        let key = match kwp.key_index {
+        let mut key = match kwp.key_index {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
                 let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
@@ -374,6 +405,11 @@ impl<'a> RootKeys {
                 self.fake_key
             }
         };
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("root user key: {:x?}", key);
+        self.compute_key_rollback(&mut key);
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("root user key (anti-rollback): {:x?}", key);
         let keywrapper = Aes256KeyWrap::new(&key);
         match kwp.op {
             KeyWrapOp::Wrap => {
@@ -810,9 +846,37 @@ impl<'a> RootKeys {
 
         // get access to the pcache and generate a keypair
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        // initialize the global rollback constant to 0
+        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::GLOBAL_ROLLBACK as usize] = 0;
+        let mut root_sk = [0u8; ed25519_dalek::SECRET_KEY_LENGTH];
+        self.trng.fill_bytes(&mut root_sk);
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("root privkey: {:x?}", root_sk);
         let keypair = if true { // true for production, false for debug (uses dev keys, so we can compare results)
+            // we use software hashing because for short keys its faster
+            let mut derived_sk = [0u8; ed25519_dalek::SECRET_KEY_LENGTH];
+            derived_sk.copy_from_slice(&root_sk);
+            // hash a derived secret key based on the maximum rollback limit we anticipate less the current global rollback limit (which is 0)
+            // this allows us to work with a "final" key that generates a private signing key, which can't be predicted to future versions
+            // given the current key (due to the irreversability of Sha512/256), but once derived to a more recent version can be willfullly
+            // computed to an older version to recover e.g. old data encrypted with a prior key
+            //
+            // We don't use the `compute_key_rollback` function because the value of the GLOBAL_ROLLBACK in the KeyROM
+            // has not yet been set (it should be zero, but there is no reason for it to be at this point).
+            for _i in 0..MAX_ROLLBACK_LIMIT {
+                let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+                hasher.update(&derived_sk);
+                let digest = hasher.finalize();
+                derived_sk.copy_from_slice(&digest);
+                #[cfg(feature = "hazardous-debug")]
+                if _i >= (MAX_ROLLBACK_LIMIT - 3) {
+                    log::info!("iter {} key {:x?}", _i, derived_sk);
+                }
+            }
+            let sk: SecretKey = SecretKey::from_bytes(&derived_sk).expect("couldn't construct secret key");
+            let pk: PublicKey = (&sk).into();
             // keypair zeroizes on drop
-            Keypair::generate(&mut self.trng)
+            Keypair{public: pk, secret: sk}
         } else {
             Keypair::from_bytes(
                 &[168, 167, 118, 92, 141, 162, 215, 147, 134, 43, 8, 176, 0, 222, 188, 167, 178, 14, 137, 237, 82, 199, 133, 162, 179, 235, 161, 219, 156, 182, 42, 39,
@@ -825,7 +889,7 @@ impl<'a> RootKeys {
         #[cfg(feature = "hazardous-debug")]
         log::debug!("keypair privkey: {:?}", keypair.secret.to_bytes());
         #[cfg(feature = "hazardous-debug")]
-        log::debug!("keypair privkey: {:x?}", keypair.secret.to_bytes());
+        log::debug!("keypair privkey (after anti-rollback): {:x?}", keypair.secret.to_bytes());
 
         // encrypt the FPGA key using the update password. in an un-init system, it is provided to us in plaintext format
         // e.g. in the case that we're doing a BBRAM boot (eFuse flow would give us a 0's key and we'd later on set it)
@@ -876,7 +940,7 @@ impl<'a> RootKeys {
         // I don't think this loop should make any extra copies of the secret key, but might be good to check in godbolt!
         for (dst, (plain, key)) in
         private_key_enc.iter_mut()
-        .zip(keypair.secret.to_bytes().iter()
+        .zip(root_sk.iter() // we encrypt the root sk, not the derived sk
         .zip(pcache.hashed_update_pw.iter())) {
             *dst = plain ^ key;
         }
@@ -1071,15 +1135,26 @@ impl<'a> RootKeys {
         // derive signing key
         let mut keypair_bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] = [0; ed25519_dalek::KEYPAIR_LENGTH];
         let enc_signing_key = self.read_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("encrypted root privkey: {:x?}", enc_signing_key);
         for (key, (&enc_key, &pw)) in
         keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
         .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
             *key = enc_key ^ pw;
         }
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("decrypted root privkey: {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+        // derived_sk now holds the "Root" secret key. It needs to be hashed (MAX_ROLLBACK_LIMIT - GLOBAL_ROLLBACK) times to get the current signing key.
+        self.compute_key_rollback(&mut keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+        // now populate the public key portion. that's just in the plain.
+        // note that this would have been updated in the case of an update to GLOBAL_ROLLBACK -- the purpose of
+        // this routine is to sign software in the current rollback count, not to increment the rollback count
         for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
         .zip(self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
             *key = src;
         }
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("anti-rollback privkey: {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
         #[cfg(feature = "hazardous-debug")]
         log::debug!("trying to make a keypair from {:x?}", keypair_bytes);
         // Keypair zeroizes on drop
@@ -1090,6 +1165,8 @@ impl<'a> RootKeys {
             Some(Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?)
         };
         log::debug!("keypair success");
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("keypair privkey (after anti-rollback): {:x?}", keypair.as_ref().unwrap().secret.to_bytes());
 
         // stage the keyrom data for patching
         self.populate_sensitive_data();
@@ -1286,12 +1363,17 @@ impl<'a> RootKeys {
         .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
             *key = enc_key ^ pw;
         }
+        self.compute_key_rollback(&mut keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("keypair privkey (after anti-rollback): {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
         for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
         .zip(self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
             *key = src;
         }
         // Keypair zeroizes the secret key on drop.
         let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("keypair privkey (after anti-rollback + conversion): {:x?}", keypair.secret.to_bytes());
 
         // check if the keypair is valid by signing and verifying a short message
         let test_data = "whiskey made me do it";
@@ -1755,6 +1837,7 @@ impl<'a> RootKeys {
         self.debug_print_key(KeyRomLocs::USER_KEY as usize, 256, "Boot key: ");
         self.debug_print_key(KeyRomLocs::PEPPER as usize, 128, "Pepper: ");
         self.debug_print_key(KeyRomLocs::CONFIG as usize, 32, "Config (as BE): ");
+        self.debug_print_key(KeyRomLocs::GLOBAL_ROLLBACK as usize, 32, "Global rollback state: ");
     }
 
     #[cfg(feature = "hazardous-debug")]

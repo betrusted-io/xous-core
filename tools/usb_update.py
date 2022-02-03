@@ -583,14 +583,19 @@ def main():
             with open(args.soc, "rb") as f:
                 image = f.read()
                 pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+                print("Erasing PDDB root structures")
+                pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
         else:
-            print("This will overwrite any secret keys in your device. Continue? (y/n)")
+            print("This will overwrite any secret keys in your device and erase PDDB keys. Continue? (y/n)")
             confirm = input()
             if len(confirm) > 0 and confirm.lower()[:1] == 'y':
                 print("Programming SoC gateware {}".format(args.soc))
                 with open(args.soc, "rb") as f:
                     image = f.read()
                     pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+                    print("Erasing PDDB root structures")
+                    pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
+
 
     if args.audiotest != None:
         print("Loading audio test clip {}".format(args.audiotest))
