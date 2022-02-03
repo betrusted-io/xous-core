@@ -65,7 +65,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         let _ = match env.com.wlan_set_ssid(val.as_str().expect("not valid utf-8")) {
                             Ok(_) => {
                                 self.current_ssid = Some(std::string::String::from(val.as_str().unwrap()));
-                                write!(ret, "wlan setssid {}. Connection manager paused during configuration.", val).unwrap()
+                                write!(ret, "wlan setssid {}.\nConnection manager paused during configuration.", val).unwrap()
                             },
                             Err(_) => write!(ret, "Error: SSID too long for WF200").unwrap(),
                         };
@@ -78,7 +78,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     let _ = match env.com.wlan_set_pass(val.as_str().expect("not valid utf-8")) {
                         Ok(_) => {
                             self.current_pass = Some(std::string::String::from(val.as_str().unwrap()));
-                            write!(ret, "wlan setpass {}. Connection manager paused during configuration.", val).unwrap()
+                            write!(ret, "wlan setpass {}.\nConnection manager paused during configuration.", val).unwrap()
                         },
                         Err(_) => write!(ret, "Error: passphrase too long for WF200").unwrap(),
                     };
@@ -137,7 +137,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 "join" => {
                     let _ = match env.com.wlan_join() {
                         Ok(_) => {
-                            write!(ret, "wlan join. Connection manager still paused, use `save` to resume connection manager.").unwrap();
+                            write!(ret, "wlan join.\nConnection manager still paused, use `save` to resume connection manager.").unwrap();
                         },
                         Err(e) => write!(ret, "Error: {:?}", e).unwrap(),
                     };
@@ -145,7 +145,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 "leave" => {
                     env.netmgr.connection_manager_stop().unwrap();
                     let _ = match env.com.wlan_leave() {
-                        Ok(_) => write!(ret, "wlan leave. Connection manager stopped."),
+                        Ok(_) => write!(ret, "wlan leave.\nConnection manager stopped."),
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
                 }
