@@ -34,7 +34,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
         env: &mut CommonEnv,
     ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status] [save]";
+        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status] [save] [known]";
         let mut show_help = false;
 
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -45,14 +45,18 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         Ok(_) => write!(ret, "wlan on"),
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
+                    env.netmgr.connection_manager_run().unwrap();
                 }
                 "off" => {
+                    env.netmgr.connection_manager_stop().unwrap();
                     let _ = match env.com.wlan_set_off() {
                         Ok(_) => write!(ret, "wlan off"),
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
                 }
                 "setssid" => {
+                    // stop the connection manager from running if we're setting up an AP
+                    env.netmgr.connection_manager_stop().unwrap();
                     let mut val = String::<1024>::new();
                     join_tokens(&mut val, &mut tokens);
                     if val.len() == 0 {
@@ -68,6 +72,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     }
                 }
                 "setpass" => {
+                    env.netmgr.connection_manager_stop().unwrap();
                     let mut val = String::<1024>::new();
                     join_tokens(&mut val, &mut tokens);
                     let _ = match env.com.wlan_set_pass(val.as_str().expect("not valid utf-8")) {
@@ -95,6 +100,8 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                                                 // future we'll have a timer that automatically syncs the pddb
                                                 entry.flush().expect("couldn't sync pddb cache");
                                                 write!(ret, "SSID/pass combo saved to PDDB").unwrap();
+                                                // restart the connection manager now that the key combo has been committed
+                                                env.netmgr.connection_manager_run().unwrap();
                                             }
                                         }
                                         Err(e) => {
@@ -112,17 +119,34 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     } else {
                         write!(ret, "No SSID currently set").unwrap();
                     }
-
+                }
+                "known" => {
+                    let mut pddb = pddb::Pddb::new();
+                    match pddb.list_keys(net::AP_DICT_NAME, None) {
+                        Ok(list) => {
+                            write!(ret, "Saved network configs:\n").unwrap();
+                            for item in list.iter() {
+                                write!(ret, "  {}", item).ok(); // whatever, maybe we have too many?
+                            }
+                        }
+                        Err(e) => {
+                            write!(ret, "PDDB error accessing network configs: {:?}", e).unwrap();
+                        }
+                    }
                 }
                 "join" => {
                     let _ = match env.com.wlan_join() {
-                        Ok(_) => write!(ret, "wlan join"),
-                        Err(e) => write!(ret, "Error: {:?}", e),
+                        Ok(_) => {
+                            write!(ret, "wlan join. Connection manager started.").unwrap();
+                            env.netmgr.connection_manager_run().unwrap();
+                        },
+                        Err(e) => write!(ret, "Error: {:?}", e).unwrap(),
                     };
                 }
                 "leave" => {
+                    env.netmgr.connection_manager_stop().unwrap();
                     let _ = match env.com.wlan_leave() {
-                        Ok(_) => write!(ret, "wlan leave"),
+                        Ok(_) => write!(ret, "wlan leave. Connection manager stopped."),
                         Err(e) => write!(ret, "Error: {:?}", e),
                     };
                 }

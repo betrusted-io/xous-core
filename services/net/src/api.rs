@@ -20,7 +20,7 @@ pub use smoltcp::wire::Icmpv4DstUnreachable;
 
 pub(crate) const SERVER_NAME_NET: &str     = "_Middleware Network Server_";
 #[allow(dead_code)]
-pub const AP_DICT_NAME: &'static str = "wlan_ap_list";
+pub const AP_DICT_NAME: &'static str = "wlan.networks";
 
 #[allow(dead_code)]
 /// minimum revision required for compatibility with Net crate
