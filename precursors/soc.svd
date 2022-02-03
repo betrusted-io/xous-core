@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2022-02-04 01:39:03]]></description>
+    <description><![CDATA[Litex SoC 2022-02-04 03:21:56]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1238,10 +1238,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``1f5d7406``, so this value is 526218246, which should be enough to check out
+``3b0081ea``, so this value is 989889002, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x1f5d7406</resetValue>
+                    <resetValue>0x3b0081ea</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1258,7 +1258,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x01</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3593,7 +3593,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x39f8d343</resetValue>
+                    <resetValue>0x5cb15120</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3608,7 +3608,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x18056c98</resetValue>
+                    <resetValue>0x259f731c</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
