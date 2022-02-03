@@ -65,7 +65,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                         let _ = match env.com.wlan_set_ssid(val.as_str().expect("not valid utf-8")) {
                             Ok(_) => {
                                 self.current_ssid = Some(std::string::String::from(val.as_str().unwrap()));
-                                write!(ret, "wlan setssid {}", val).unwrap()
+                                write!(ret, "wlan setssid {}. Connection manager paused during configuration.", val).unwrap()
                             },
                             Err(_) => write!(ret, "Error: SSID too long for WF200").unwrap(),
                         };
@@ -78,7 +78,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     let _ = match env.com.wlan_set_pass(val.as_str().expect("not valid utf-8")) {
                         Ok(_) => {
                             self.current_pass = Some(std::string::String::from(val.as_str().unwrap()));
-                            write!(ret, "wlan setpass {}", val).unwrap()
+                            write!(ret, "wlan setpass {}. Connection manager paused during configuration.", val).unwrap()
                         },
                         Err(_) => write!(ret, "Error: passphrase too long for WF200").unwrap(),
                     };
@@ -99,7 +99,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                                                 // for now, we should always call flush at the end of a routine; perhaps in the
                                                 // future we'll have a timer that automatically syncs the pddb
                                                 entry.flush().expect("couldn't sync pddb cache");
-                                                write!(ret, "SSID/pass combo saved to PDDB").unwrap();
+                                                write!(ret, "SSID/pass combo saved to PDDB. Connection manager started.").unwrap();
                                                 // restart the connection manager now that the key combo has been committed
                                                 env.netmgr.connection_manager_run().unwrap();
                                             }
@@ -137,8 +137,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 "join" => {
                     let _ = match env.com.wlan_join() {
                         Ok(_) => {
-                            write!(ret, "wlan join. Connection manager started.").unwrap();
-                            env.netmgr.connection_manager_run().unwrap();
+                            write!(ret, "wlan join. Connection manager still paused, use `save` to resume connection manager.").unwrap();
                         },
                         Err(e) => write!(ret, "Error: {:?}", e).unwrap(),
                     };
