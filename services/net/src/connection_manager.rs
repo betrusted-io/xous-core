@@ -270,8 +270,6 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         ComIntSources::WlanIpConfigUpdate => {
                             log::info!("{:?}", source);
                             activity_interval.store(0, Ordering::SeqCst);
-                            wifi_state = WifiState::Connected;
-                            log::debug!("comint new wifi state: {:?}", wifi_state);
                             // this is the "first" path -- it's hit immediately on connect.
                             // relay status updates to any subscribers that want to know if a state has changed
                             wifi_stats_cache = com.wlan_status().unwrap();
@@ -280,6 +278,12 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
                                 buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
                             }
+                            if wifi_stats_cache.ipv4.dhcp == com_rs_ref::DhcpState::Bound {
+                                wifi_state = WifiState::Connected;
+                            } else {
+                                wifi_state = WifiState::WaitDhcp;
+                            }
+                            log::debug!("comint new wifi state: {:?}", wifi_state);
                         }
                         ComIntSources::WfxErr => {
                             log::info!("{:?}", source);
