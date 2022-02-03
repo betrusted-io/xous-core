@@ -2,10 +2,11 @@ use crate::println;
 
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 
-const VERSION_STR: &'static str = "Xous OS Loader v0.9.2\n\r";
+const VERSION_STR: &'static str = "Xous OS Loader v0.9.3\n\r";
 // v0.9.0 -- initial version
 // v0.9.1 -- booting with hw acceleration, and "simplest signature" check on the entire xous.img blob
 // v0.9.2 -- add version and length check between header and signed area
+// v0.9.3 -- add lockout of key ROM in die() routine
 
 pub const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
 pub const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;
