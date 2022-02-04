@@ -166,11 +166,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let kkey = args.nth(4);
     match task.as_deref() {
         Some("renode-image") => {
-            generate_app_menus(&Vec::<String>::new());
+            generate_app_menus(&vec!["ball".to_string()]);
             renode_image(false, &hw_pkgs, &[])?
         },
         Some("renode-test") => {
-            generate_app_menus(&Vec::<String>::new());
+            generate_app_menus(&vec!["ball".to_string()]);
             renode_image(false, &cbtest_pkgs, &[])?
         },
         Some("libstd-test") => {
@@ -189,7 +189,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             renode_image(false, &aestest_pkgs, &[])?
         },
         Some("renode-image-debug") => {
-            generate_app_menus(&Vec::<String>::new());
+            generate_app_menus(&vec!["ball".to_string()]);
             renode_image(true, &hw_pkgs, &[])?
         },
         Some("pddb-ci") => {
