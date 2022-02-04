@@ -298,6 +298,7 @@ impl<'a> Menu<'a> {
                     }
                     self.index = 0; // reset the index to 0
                     self.gam.redraw().unwrap();
+                    break; // drop any characters that happened to trail the select key, it's probably a fat-finger error.
                 },
                 '←' => {
                     // placeholder
@@ -414,26 +415,10 @@ pub fn menu_matic(items: Vec::<MenuItem>, menu_name: &'static str, maybe_manager
                     },
                     Some(MenuOpcode::Rawkeys) => xous::msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                         let keys = [
-                            if let Some(a) = core::char::from_u32(k1 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
-                            if let Some(a) = core::char::from_u32(k2 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
-                            if let Some(a) = core::char::from_u32(k3 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
-                            if let Some(a) = core::char::from_u32(k4 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
+                            core::char::from_u32(k1 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k2 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k3 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k4 as u32).unwrap_or('\u{0000}'),
                         ];
                         menu.lock().unwrap().key_event(keys);
                     }),

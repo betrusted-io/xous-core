@@ -436,6 +436,7 @@ impl<'a> Modal<'a> {
                         log::debug!("closing modal");
                         // if it's a "close" button, invoke the GAM to put our box away
                         self.gam.relinquish_focus().unwrap();
+                        break; // don't process any more keys after a close message
                     }
                 }
             }
