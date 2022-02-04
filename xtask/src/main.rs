@@ -165,8 +165,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lkey = args.nth(3);
     let kkey = args.nth(4);
     match task.as_deref() {
-        Some("renode-image") => renode_image(false, &hw_pkgs, &[])?,
-        Some("renode-test") => renode_image(false, &cbtest_pkgs, &[])?,
+        Some("renode-image") => {
+            generate_app_menus(&Vec::<String>::new());
+            renode_image(false, &hw_pkgs, &[])?
+        },
+        Some("renode-test") => {
+            generate_app_menus(&Vec::<String>::new());
+            renode_image(false, &cbtest_pkgs, &[])?
+        },
         Some("libstd-test") => {
             let mut args = env::args();
             args.nth(1);
@@ -178,8 +184,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             renode_image(false, &pkgs, extra_packages.as_slice())?;
         }
-        Some("renode-aes-test") => renode_image(false, &aestest_pkgs, &[])?,
-        Some("renode-image-debug") => renode_image(true, &hw_pkgs, &[])?,
+        Some("renode-aes-test") => {
+            generate_app_menus(&Vec::<String>::new());
+            renode_image(false, &aestest_pkgs, &[])?
+        },
+        Some("renode-image-debug") => {
+            generate_app_menus(&Vec::<String>::new());
+            renode_image(true, &hw_pkgs, &[])?
+        },
         Some("pddb-ci") => {
             generate_app_menus(&Vec::<String>::new());
             run(false, &hw_pkgs, Some(
