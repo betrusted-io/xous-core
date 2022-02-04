@@ -22,7 +22,6 @@ pub(crate) struct ChatLayout {
     screensize: Point,
     _small_height: i16,
     _regular_height: i16,
-    visible: bool,
 }
 impl ChatLayout {
     // pass in the status canvas so we can size around it, but we can't draw on it
@@ -65,7 +64,6 @@ impl ChatLayout {
             screensize,
             _small_height: small_height,
             _regular_height: regular_height,
-            visible: true,
         })
     }
 }
@@ -139,32 +137,14 @@ impl LayoutApi for ChatLayout {
         ]
     }
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
-        log::debug!("request modal to onscreen {} from self.visible {}", onscreen, self.visible);
-        if onscreen == self.visible {
-            log::trace!("chatlayout: no change to visibility, moving on");
-            // nothing to do
-            return
-        }
-        let offscreen = if !onscreen && self.visible {
-            // move canvases off-screen
-            Point::new(self.screensize.x*2, 0)
-        } else if onscreen && !self.visible {
-            // undo the off-screen move
-            Point::new(-self.screensize.x*2, 0)
-        } else {
-            // should actually never reach this because of the identity check at the very top
-            Point::new(0, 0)
-        };
-        log::debug!("chatlayout: shifting canvas for input by {:?}", offscreen);
         let input_canvas = canvases.get_mut(&self.input).expect("couldn't find input canvas");
-        input_canvas.set_clip(input_canvas.clip_rect().translate_chain(offscreen));
+        log::debug!("request modal to onscreen {}->{}", input_canvas.is_onscreen(), onscreen);
+        input_canvas.set_onscreen(onscreen);
 
         let content_canvas = canvases.get_mut(&self.content).expect("couldn't find content canvas");
-        content_canvas.set_clip(content_canvas.clip_rect().translate_chain(offscreen));
+        content_canvas.set_onscreen(onscreen);
 
         let predictive_canvas = canvases.get_mut(&self.predictive).expect("couldn't find predictive canvas");
-        predictive_canvas.set_clip(predictive_canvas.clip_rect().translate_chain(offscreen));
-
-        self.visible = onscreen;
+        predictive_canvas.set_onscreen(onscreen);
     }
 }

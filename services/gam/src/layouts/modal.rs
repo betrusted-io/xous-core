@@ -18,7 +18,6 @@ pub(crate) struct ModalLayout {
     modal_min_height: i16,
     screensize: Point,
     _height: i16,
-    visible: bool,
     _modal_y_max: i16,
 }
 impl ModalLayout {
@@ -43,7 +42,6 @@ impl ModalLayout {
             modal_min_height: height,
             screensize,
             _height: screensize.y - MODAL_Y_PAD, // start with the "maximum" size, and shrink down once items are known
-            visible: true,
             _modal_y_max: crate::api::MODAL_Y_MAX,
         })
     }
@@ -87,25 +85,8 @@ impl LayoutApi for ModalLayout {
     }
 
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
-        log::debug!("modal box entering set_visibilty_state, self.visible {}, onscreen {}", self.visible, onscreen);
-        if onscreen == self.visible {
-            // nothing to do
-            return
-        }
         let modal_canvas = canvases.get_mut(&self.modal).expect("couldn't find modal canvas");
-
-        let offscreen = if !onscreen && self.visible {
-            // move canvases off-screen
-            Point::new(self.screensize.x*2, 0)
-        } else if onscreen && !self.visible {
-            // undo the off-screen move
-            Point::new(-self.screensize.x*2, 0)
-        } else {
-            // should actually never reach this because of the identity check at the very top
-            Point::new(0, 0)
-        };
-        modal_canvas.set_clip(modal_canvas.clip_rect().translate_chain(offscreen));
-        self.visible = onscreen;
-        log::debug!("moving modal box by {:?}, final state: {:?}", offscreen, modal_canvas);
+        log::debug!("modal box entering set_visibilty_state {}->{}", modal_canvas.is_onscreen(), onscreen);
+        modal_canvas.set_onscreen(onscreen);
     }
 }

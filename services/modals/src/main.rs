@@ -387,6 +387,7 @@ fn xmain() -> ! {
     });
 
     if cfg!(feature = "ux_tests") {
+        tt.sleep_ms(1000).unwrap();
         tests::spawn_test();
     }
 

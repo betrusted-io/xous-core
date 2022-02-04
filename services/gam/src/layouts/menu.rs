@@ -17,7 +17,6 @@ pub(crate) struct MenuLayout {
     menu_min_height: i16,
     screensize: Point,
     _height: i16,
-    visible: bool,
 }
 impl MenuLayout {
     pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut HashMap<Gid, Canvas>) -> Result<MenuLayout, xous::Error> {
@@ -41,7 +40,6 @@ impl MenuLayout {
             menu_min_height: height,
             screensize,
             _height: height, // start with "minimum" size and grow up as items are added
-            visible: true,
         })
     }
 }
@@ -83,25 +81,8 @@ impl LayoutApi for MenuLayout {
         ]
     }
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
-        log::debug!("menu entering set_visibilty_state, self.visible {}, onscreen {}", self.visible, onscreen);
-        if onscreen == self.visible {
-            // nothing to do
-            return
-        }
         let menu_canvas = canvases.get_mut(&self.menu).expect("couldn't find menu canvas");
-
-        let offscreen = if !onscreen && self.visible {
-            // move canvases off-screen
-            Point::new(self.screensize.x*2, 0)
-        } else if onscreen && !self.visible {
-            // undo the off-screen move
-            Point::new(-self.screensize.x*2, 0)
-        } else {
-            // should actually never reach this because of the identity check at the very top
-            Point::new(0, 0)
-        };
-        log::debug!("moving menu by {:?}", offscreen);
-        menu_canvas.set_clip(menu_canvas.clip_rect().translate_chain(offscreen));
-        self.visible = onscreen;
+        log::debug!("menu entering set_visibilty_state, {}->{}", menu_canvas.is_onscreen(), onscreen);
+        menu_canvas.set_onscreen(onscreen);
     }
 }

@@ -309,7 +309,7 @@ impl ContextManager {
         canvases: &mut HashMap<Gid, Canvas>,
         token: [u32; 4],
         clear: bool,
-    ) {
+    ) -> ActivationResult {
         let mut leaving_visibility: bool = false;
         {
             // using a temp copy of the old focus, check if we need to update any visibility state
@@ -329,6 +329,8 @@ impl ContextManager {
                     if token != leaving_focused_context.app_token {
                             if (context.layout.behavior()                 == LayoutBehavior::Alert) &&
                             (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                                // left off: determine if the currently visible context is a password field. if it is, deny the activation.
+                                
                                 context.layout.set_visibility_state(true, canvases);
                                 //leaving_focused_context.layout.set_visibility_state(false, canvases);
                                 leaving_visibility = false;
@@ -438,6 +440,7 @@ impl ContextManager {
             log::trace!("activate redraw");
             self.redraw().expect("couldn't redraw the currently focused app");
         }
+        ActivationResult::Success
     }
     pub(crate) fn revert_focus(&mut self,
         gfx: &graphics_server::Gfx,
@@ -565,7 +568,7 @@ impl ContextManager {
         name: &str,
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
-    ) {
+    ) -> ActivationResult {
         log::debug!("looking for menu {}", name);
         if let Some(token) = self.find_app_token_by_name(name) {
             log::debug!("found menu token: {:?}", token);
@@ -575,10 +578,11 @@ impl ContextManager {
                 // but alerts can be raised without authentication
                 if context.layout.behavior() == LayoutBehavior::Alert {
                     log::debug!("activating context");
-                    self.activate(gfx, canvases, token, false);
+                    return self.activate(gfx, canvases, token, false)
                 }
             }
         }
+        ActivationResult::Failure
     }
 }
 

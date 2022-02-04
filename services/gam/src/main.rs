@@ -59,12 +59,14 @@ fn xmain() -> ! {
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
     // the status canvas is special -- there can only be one, and it is ultimately trusted
-    let status_canvas = Canvas::new(
+    let mut status_canvas = Canvas::new(
         Rectangle::new_coords(
             0, 0, screensize.x,
             gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height") as i16 * 2),
         255, &trng, None, crate::api::CanvasType::Status
     ).expect("couldn't create status canvas");
+    status_canvas.set_onscreen(true);
+    status_canvas.set_drawable(true);
     canvases.insert(status_canvas.gid(), status_canvas);
     canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
@@ -193,9 +195,9 @@ fn xmain() -> ! {
                         }
 
                         log::trace!("render request for {:?}", tv);
-                        tv.set_dry_run(false);
 
                         if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
+                            tv.set_dry_run(!canvas.is_onscreen());
                             // if we're requesting inverted text, this better be a "trusted canvas"
                             // BOOT_CONTEXT_TRUSTLEVEL is reserved for the "status bar"
                             // BOOT_CONTEXT_TRUSTLEVEL - 1 is where e.g. password modal dialog boxes end up
@@ -204,7 +206,7 @@ fn xmain() -> ! {
                                 continue;
                             }
                             // first, figure out if we should even be drawing to this canvas.
-                            if canvas.is_drawable() { // dry runs should not move any pixels so they are OK to go through in any case
+                            if canvas.is_drawable() {
                                 // set the clip rectangle according to the canvas' location
                                 let base_clip_rect = canvas.clip_rect();
                                 tv.clip_rect = Some(base_clip_rect.into());
@@ -222,7 +224,9 @@ fn xmain() -> ! {
 
                                 let ret = api::Return::RenderReturn(tv);
                                 buffer.replace(ret).unwrap();
-                                canvas.do_drawn().expect("couldn't set canvas to drawn");
+                                if canvas.is_onscreen() {
+                                    canvas.do_drawn().expect("couldn't set canvas to drawn");
+                                }
                             } else {
                                 log::debug!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
                                 let ret = api::Return::NotCurrentlyDrawable;
@@ -299,7 +303,7 @@ fn xmain() -> ! {
                 log::trace!("renderobject {:?}", obj);
                 if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                     // first, figure out if we should even be drawing to this canvas.
-                    if canvas.is_drawable() {
+                    if canvas.is_drawable() && canvas.is_onscreen() {
                         match obj.obj {
                             GamObjectType::Line(mut line) => {
                                 line.translate(canvas.clip_rect().tl);
@@ -348,7 +352,7 @@ fn xmain() -> ! {
                 let obj_ipc = buffer.to_original::<GamObjectList, _>().unwrap();
                 if let Some(canvas) = canvases.get_mut(&obj_ipc.canvas) {
                     // first, figure out if we should even be drawing to this canvas.
-                    if canvas.is_drawable() {
+                    if canvas.is_drawable() && canvas.is_onscreen() {
                         let mut obj_list = ClipObjectList::default();
                         for item in obj_ipc.list.iter() {
                             if let Some(obj) = item {
@@ -508,10 +512,12 @@ fn xmain() -> ! {
                 }
             },
             Some(Opcode::RaiseMenu) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let menu_name = buffer.to_original::<String::<128>, _>().unwrap();
-                log::debug!("got request to raise menu {}", menu_name);
-                context_mgr.raise_menu(menu_name.as_str().unwrap(), &gfx, &mut canvases);
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut activation = buffer.to_original::<GamActivation, _>().unwrap();
+                log::debug!("got request to raise context {}", activation.name);
+                let result = context_mgr.raise_menu(activation.name.as_str().unwrap(), &gfx, &mut canvases);
+                activation.result = Some(result);
+                buffer.replace(activation).unwrap();
             },
             Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
                 if ena != 0 { gfx.set_devboot(true).expect("couldn't send devboot message"); }

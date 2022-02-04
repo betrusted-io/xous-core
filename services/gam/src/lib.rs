@@ -343,12 +343,21 @@ impl Gam {
         let buf = Buffer::into_buf(switchapp).or(Err(xous::Error::InternalError))?;
         buf.send(self.conn, Opcode::SwitchToApp.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_|())
     }
-    pub fn raise_menu(&self, menu_name: &str) -> Result<(), xous::Error> {
-        let menu_name = String::<128>::from_str(menu_name);
-        let buf = Buffer::into_buf(menu_name).or(Err(xous::Error::InternalError))?;
-        buf.send(self.conn, Opcode::RaiseMenu.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_|())
+    pub fn raise_menu(&self, menu_name: &str) -> Result<ActivationResult, xous::Error> {
+        let menu_name = GamActivation {
+            name: String::<128>::from_str(menu_name),
+            result: None,
+        };
+        let mut buf = Buffer::into_buf(menu_name).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::RaiseMenu.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
+        let result = buf.to_original::<GamActivation, _>().unwrap();
+        if let Some(code) = result.result {
+            Ok(code)
+        } else {
+            Err(xous::Error::InternalError)
+        }
     }
-    pub fn raise_modal(&self, modal_name: &str) -> Result<(), xous::Error> {
+    pub fn raise_modal(&self, modal_name: &str) -> Result<ActivationResult, xous::Error> {
         self.raise_menu(modal_name)
     }
     /// this is a one-way door, once you've set it, you can't unset it.

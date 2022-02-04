@@ -10,7 +10,6 @@ const TRUST_OFFSET: u8 = 4;
 pub(crate) struct Framebuffer {
     pub gid: Gid,
     screensize: Point,
-    visible: bool,
 }
 impl Framebuffer {
     pub fn init(
@@ -30,7 +29,6 @@ impl Framebuffer {
         Ok(Framebuffer {
             gid: fb_canvas.gid(),
             screensize,
-            visible: true,
         })
     }
 }
@@ -63,25 +61,8 @@ impl LayoutApi for Framebuffer {
         ]
     }
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>) {
-        log::debug!("raw fb entering set_visibilty_state, self.visible {}, onscreen {}", self.visible, onscreen);
-        if onscreen == self.visible {
-            // nothing to do
-            return
-        }
         let fb_canvas = canvases.get_mut(&self.gid).expect("couldn't find my canvas");
-
-        let offscreen = if !onscreen && self.visible {
-            // move canvases off-screen
-            Point::new(self.screensize.x*2, 0)
-        } else if onscreen && !self.visible {
-            // undo the off-screen move
-            Point::new(-self.screensize.x*2, 0)
-        } else {
-            // should actually never reach this because of the identity check at the very top
-            Point::new(0, 0)
-        };
-        fb_canvas.set_clip(fb_canvas.clip_rect().translate_chain(offscreen));
-        self.visible = onscreen;
-        log::debug!("moving raw framebuffer box by {:?}, final state: {:?}", offscreen, fb_canvas);
+        log::debug!("raw fb entering set_visibilty_state, {}->{}", fb_canvas.is_onscreen(), onscreen);
+        fb_canvas.set_onscreen(onscreen);
     }
 }

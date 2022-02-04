@@ -207,6 +207,16 @@ pub(crate) enum MenuMgrOp {
     Ok,
     Err,
 }
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Eq)]
+pub enum ActivationResult {
+    Success,
+    Failure,
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct GamActivation {
+    pub(crate) name: xous_ipc::String::<128>,
+    pub(crate) result: Option<ActivationResult>,
+}
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct MenuManagement {

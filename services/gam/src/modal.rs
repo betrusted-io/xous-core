@@ -330,7 +330,11 @@ impl<'a> Modal<'a> {
         modal
     }
     pub fn activate(&self) {
-        self.gam.raise_modal(self.name.to_str()).expect("couldn't activate modal");
+        let tt = ticktimer_server::Ticktimer::new().unwrap();
+        while self.gam.raise_modal(self.name.to_str()).expect("couldn't activate modal") != ActivationResult::Success {
+            // wait a bit then try again
+            tt.sleep_ms(857).unwrap();
+        }
     }
 
     /// this function spawns a client-side thread to forward redraw and key event
