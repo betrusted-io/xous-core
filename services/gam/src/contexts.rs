@@ -515,7 +515,8 @@ impl ContextManager {
                     if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
                         // set the menu to the active context
                         match self.activate(gfx, canvases, menu_token, false) {
-                            _ => log::warn!("Couldn't raise menu, user will have to try again."),
+                            Ok(_) => (),
+                            Err(_) => log::warn!("Couldn't raise menu, user will have to try again."),
                         }
                         // don't pass the initial key hit back to the menu app, just eat it and return
                         return;

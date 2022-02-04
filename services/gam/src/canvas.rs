@@ -62,7 +62,7 @@ impl Canvas {
             }
         } else {
             Canvas {
-                clip_rect, trust_level, state: CanvasState::OffScreenNotDrawable, gid: Gid::new(gid), pan_offset: Point::new(0, 0),
+                clip_rect, trust_level, state: CanvasState::OffScreenDrawable, gid: Gid::new(gid), pan_offset: Point::new(0, 0),
                 canvas_type,
             }
         })
@@ -75,7 +75,7 @@ impl Canvas {
     }
     pub fn pan_offset(&self) -> Point { self.pan_offset }
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
-    pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; self.state = CanvasState::OffScreenNotDrawable }
+    pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; self.state = CanvasState::OffScreenDrawable }
     pub fn gid(&self) -> Gid { self.gid }
     pub fn trust_level(&self) -> u8 { self.trust_level }
     pub fn set_trust_level(&mut self, level: u8) {self.trust_level = level;}

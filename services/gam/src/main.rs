@@ -494,7 +494,8 @@ fn xmain() -> ! {
                     if let Some(menu_token) = context_mgr.find_app_token_by_name(MAIN_MENU_NAME) {
                         if menu_token == switchapp.token {
                             match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
-                                _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                                Ok(_) => (),
+                                Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
                             }
                             continue;
                         }
@@ -502,7 +503,8 @@ fn xmain() -> ! {
                     if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
                         if modal_token == switchapp.token {
                             match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
-                                _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                                Ok(_) => (),
+                                Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
                             }
                             continue;
                         }
@@ -510,7 +512,8 @@ fn xmain() -> ! {
                     if let Some(token) = context_mgr.find_app_token_by_name(gam::STATUS_BAR_NAME) {
                         if token == switchapp.token {
                             match context_mgr.activate(&gfx, &mut canvases, new_app_token, true) {
-                                _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                                Ok(_) => (),
+                                Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
                             }
                             continue;
                         }
@@ -518,7 +521,8 @@ fn xmain() -> ! {
                     // this message came from ourselves
                     if gam_token == switchapp.token {
                         match context_mgr.activate(&gfx, &mut canvases, new_app_token, true) {
-                            _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                            Ok(_) => (),
+                            Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
                         }
                     }
                 }
