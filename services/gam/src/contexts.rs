@@ -309,7 +309,7 @@ impl ContextManager {
         canvases: &mut HashMap<Gid, Canvas>,
         token: [u32; 4],
         clear: bool,
-    ) -> ActivationResult {
+    ) -> Result<(), xous::Error> {
         let mut leaving_visibility: bool = false;
         {
             // using a temp copy of the old focus, check if we need to update any visibility state
@@ -327,28 +327,29 @@ impl ContextManager {
             if let Some(context) = maybe_new_focus {
                 if let Some(leaving_focused_context) = maybe_leaving_focused_context {
                     if token != leaving_focused_context.app_token {
-                            if (context.layout.behavior()                 == LayoutBehavior::Alert) &&
-                            (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
-                                // left off: determine if the currently visible context is a password field. if it is, deny the activation.
-                                
-                                context.layout.set_visibility_state(true, canvases);
-                                //leaving_focused_context.layout.set_visibility_state(false, canvases);
-                                leaving_visibility = false;
-                        } else if (context.layout.behavior()                 == LayoutBehavior::App) &&
-                                (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
-                                context.layout.set_visibility_state(true, canvases);
-                                //leaving_focused_context.layout.set_visibility_state(false, canvases);
-                                leaving_visibility = false;
-                        } else if (context.layout.behavior()                 == LayoutBehavior::Alert) &&
-                                (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
-                                context.layout.set_visibility_state(true, canvases);
-                                //leaving_focused_context.layout.set_visibility_state(true, canvases);
-                                leaving_visibility = true;
-                        } else if (context.layout.behavior()                 == LayoutBehavior::App) &&
-                                (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
-                                context.layout.set_visibility_state(true, canvases);
-                                //leaving_focused_context.layout.set_visibility_state(false, canvases);
-                                leaving_visibility = false;
+                        if  // alert covering an alert
+                        (context.layout.behavior()                 == LayoutBehavior::Alert) &&
+                        (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                            // just disallow alerts covering alerts for now...it's first come, first-serve.
+                            log::warn!("Disallowing raise of alert over alert");
+                            return Err(xous::Error::ShareViolation)
+                            // context.layout.set_visibility_state(true, canvases);
+                            // leaving_visibility = false;
+                        } else if // app covering an app
+                        (context.layout.behavior()                 == LayoutBehavior::App) &&
+                        (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                            context.layout.set_visibility_state(true, canvases);
+                            leaving_visibility = false;
+                        } else if // alert covering an app
+                        (context.layout.behavior()                 == LayoutBehavior::Alert) &&
+                        (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                            context.layout.set_visibility_state(true, canvases);
+                            leaving_visibility = true;
+                        } else if // app covering an alert
+                        (context.layout.behavior()                 == LayoutBehavior::App) &&
+                        (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                            context.layout.set_visibility_state(true, canvases);
+                            leaving_visibility = false;
                         }
                     }
                 } else {
@@ -440,14 +441,16 @@ impl ContextManager {
             log::trace!("activate redraw");
             self.redraw().expect("couldn't redraw the currently focused app");
         }
-        ActivationResult::Success
+        Ok(())
     }
     pub(crate) fn revert_focus(&mut self,
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
-    ) {
+    ) -> Result<(), xous::Error> {
         if let Some(last) = self.last_context {
-            self.activate(gfx, canvases, last, false);
+            self.activate(gfx, canvases, last, false)
+        } else {
+            Err(xous::Error::UseBeforeInit)
         }
     }
     fn notify_focus_change_to(&self, new_state: gam::FocusState, context: &UxContext) -> Result<(), xous::Error> {
@@ -511,7 +514,9 @@ impl ContextManager {
                 if context.layout.behavior() == LayoutBehavior::App {
                     if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
                         // set the menu to the active context
-                        self.activate(gfx, canvases, menu_token, false);
+                        match self.activate(gfx, canvases, menu_token, false) {
+                            _ => log::warn!("Couldn't raise menu, user will have to try again."),
+                        }
                         // don't pass the initial key hit back to the menu app, just eat it and return
                         return;
                     }
@@ -568,7 +573,7 @@ impl ContextManager {
         name: &str,
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
-    ) -> ActivationResult {
+    ) -> Result<(), xous::Error> {
         log::debug!("looking for menu {}", name);
         if let Some(token) = self.find_app_token_by_name(name) {
             log::debug!("found menu token: {:?}", token);
@@ -579,10 +584,11 @@ impl ContextManager {
                 if context.layout.behavior() == LayoutBehavior::Alert {
                     log::debug!("activating context");
                     return self.activate(gfx, canvases, token, false)
+                } else {
+                    return Err(xous::Error::AccessDenied)
                 }
             }
         }
-        ActivationResult::Failure
+        Err(xous::Error::ProcessNotFound)
     }
 }
-

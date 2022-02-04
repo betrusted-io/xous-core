@@ -467,9 +467,9 @@ fn xmain() -> ! {
         }
     });
     // try to mount the PDDB automatically before starting the server
-    //#[cfg(not(any(windows, unix)))] // avoid errors in hosted mode
+    #[cfg(not(any(windows, unix)))] // avoid errors in hosted mode
     let tt = ticktimer_server::Ticktimer::new().unwrap();
-    //#[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode, for now...
+    #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode, for now...
     if pddb_os.rootkeys_initialized() {
         tt.sleep_ms(1000).unwrap(); // wait 1 second after boot before attempting to mount, to let the boot screen finish redrawing (cometic issue).
         match ensure_password(&modals, &mut pddb_os) {

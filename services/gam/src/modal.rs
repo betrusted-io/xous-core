@@ -330,10 +330,25 @@ impl<'a> Modal<'a> {
         modal
     }
     pub fn activate(&self) {
-        let tt = ticktimer_server::Ticktimer::new().unwrap();
-        while self.gam.raise_modal(self.name.to_str()).expect("couldn't activate modal") != ActivationResult::Success {
-            // wait a bit then try again
-            tt.sleep_ms(857).unwrap();
+        const POLL_DELAY_MS: usize = 857;
+        match self.gam.raise_modal(self.name.to_str()) {
+            Ok(_) => (),
+            Err(_) => {
+                std::thread::spawn({
+                    let name = self.name.clone();
+                    move || {
+                        let xns = xous_names::XousNames::new().unwrap();
+                        let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+                        ticktimer.sleep_ms(POLL_DELAY_MS).unwrap();
+                        let gam = crate::Gam::new(&xns).unwrap();
+                        while gam.raise_modal(name.to_str()).is_err() {
+                            log::info!("Couldn't raise {}; retrying...", name);
+                            ticktimer.sleep_ms(POLL_DELAY_MS).unwrap();
+                        }
+                        log::info!("Success! exiting polling thread.");
+                    }
+                });
+            }
         }
     }
 

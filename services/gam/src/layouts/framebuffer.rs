@@ -9,7 +9,7 @@ const TRUST_OFFSET: u8 = 4;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Framebuffer {
     pub gid: Gid,
-    screensize: Point,
+    _screensize: Point,
 }
 impl Framebuffer {
     pub fn init(
@@ -28,7 +28,7 @@ impl Framebuffer {
 
         Ok(Framebuffer {
             gid: fb_canvas.gid(),
-            screensize,
+            _screensize: screensize,
         })
     }
 }

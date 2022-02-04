@@ -67,6 +67,12 @@ impl Canvas {
             }
         })
     }
+    pub fn intersects(&self, other: &Canvas) -> bool {
+        self.clip_rect.intersects(other.clip_rect())
+    }
+    pub fn less_trusted_than(&self, other: &Canvas) -> bool {
+        self.trust_level() < other.trust_level()
+    }
     pub fn pan_offset(&self) -> Point { self.pan_offset }
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
     pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; self.state = CanvasState::OffScreenNotDrawable }
@@ -322,36 +328,6 @@ pub fn recompute_canvases(canvases: &HashMap<Gid, Canvas>, screen: Rectangle) ->
         }
         higher_clipregions.push(canvas);
     }
-    /*
-    loop {
-        if let Some(c) = sorted_clipregions.pop() {
-            if debug { info!("   CANVAS: considering {:?}", c);}
-            let mut canvas = c.clone();
-
-            let mut drawable: bool = true;
-            if canvas.trust_level() < trust_level {
-                trust_level = canvas.trust_level();
-            }
-            //if !clip_region.intersects(screen) {
-            //    drawable = false;
-            //    if debug { info!("    * CANVAS: not drawable, does not intersect");}
-            //} else { // short circuit this computation if it's not drawable because it's off screen
-                // note that this .iter() is *not* sorted by trust level, but all elements will be of greater than or equal to the current trust level
-                for &region in higher_clipregions.iter() {
-                    // regions of the same trust level can draw over each other. Draw order is arbitrary.
-                    if region.clip_rect().intersects(clip_region) && (region.trust_level() < trust_level) {
-                        log::info!("{:?} {:?}->false", canvas.canvas_type, canvas.state);
-                        drawable = false;
-                        if debug { info!("    * CANVAS: not drawable, lower trust intersecting with higher trust region");}
-                    }
-                }
-            //}
-            canvas.set_drawable(drawable);
-            higher_clipregions.push(canvas);
-        } else {
-            break;
-        }
-    }*/
 
     // create a new index map out of the recomputed higher_clipregions
     let mut map: HashMap<Gid, Canvas> = HashMap::new();

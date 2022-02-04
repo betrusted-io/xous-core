@@ -468,11 +468,15 @@ fn xmain() -> ! {
                 else { context_mgr.vibe(false) }
             }),
             Some(Opcode::RevertFocus) => {
-                context_mgr.revert_focus(&gfx, &mut canvases);
-                xous::return_scalar(msg.sender, 0).expect("couldn't unblock caller");
+                match context_mgr.revert_focus(&gfx, &mut canvases) {
+                    Ok(_) => xous::return_scalar(msg.sender, 0).expect("couldn't unblock caller"),
+                    _ => xous::return_scalar(msg.sender, 1).expect("couldn't unblock caller"),
+                }
             },
             Some(Opcode::RevertFocusNb) => {
-                context_mgr.revert_focus(&gfx, &mut canvases);
+                match context_mgr.revert_focus(&gfx, &mut canvases) {
+                    _ => log::warn!("failed to revert focus, silent error!"),
+                }
             },
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
                 let height = gfx.glyph_height_hint(GlyphStyle::from(style)).expect("couldn't query glyph height from gfx");
@@ -489,25 +493,33 @@ fn xmain() -> ! {
                 if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
                     if let Some(menu_token) = context_mgr.find_app_token_by_name(MAIN_MENU_NAME) {
                         if menu_token == switchapp.token {
-                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                            match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
+                                _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                            }
                             continue;
                         }
                     }
                     if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
                         if modal_token == switchapp.token {
-                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                            match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
+                                _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                            }
                             continue;
                         }
                     }
                     if let Some(token) = context_mgr.find_app_token_by_name(gam::STATUS_BAR_NAME) {
                         if token == switchapp.token {
-                            context_mgr.activate(&gfx, &mut canvases, new_app_token, true);
+                            match context_mgr.activate(&gfx, &mut canvases, new_app_token, true) {
+                                _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                            }
                             continue;
                         }
                     }
                     // this message came from ourselves
                     if gam_token == switchapp.token {
-                        context_mgr.activate(&gfx, &mut canvases, new_app_token, true);
+                        match context_mgr.activate(&gfx, &mut canvases, new_app_token, true) {
+                            _ => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                        }
                     }
                 }
             },
@@ -516,7 +528,11 @@ fn xmain() -> ! {
                 let mut activation = buffer.to_original::<GamActivation, _>().unwrap();
                 log::debug!("got request to raise context {}", activation.name);
                 let result = context_mgr.raise_menu(activation.name.as_str().unwrap(), &gfx, &mut canvases);
-                activation.result = Some(result);
+                activation.result = Some(
+                    match result {
+                        Ok(_) => ActivationResult::Success,
+                        Err(_) => ActivationResult::Failure,
+                });
                 buffer.replace(activation).unwrap();
             },
             Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _,  _,  _, {

@@ -335,6 +335,8 @@ impl Gam {
     }
     /// requests a context switch to a new app. Doesn't have to be obeyed, depending
     /// upon the GAM's policy. Only the certain sources can switch apps, hence the token.
+    /// Failure to switch *is silent* because waiting for an activation to go through and
+    /// confirm can cause a deadlock condition.
     pub fn switch_to_app(&self, app_name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
         let switchapp = SwitchToApp {
             token,
@@ -343,21 +345,27 @@ impl Gam {
         let buf = Buffer::into_buf(switchapp).or(Err(xous::Error::InternalError))?;
         buf.send(self.conn, Opcode::SwitchToApp.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_|())
     }
-    pub fn raise_menu(&self, menu_name: &str) -> Result<ActivationResult, xous::Error> {
+    pub fn raise_menu(&self, menu_name_str: &str) -> Result<(), xous::Error> {
         let menu_name = GamActivation {
-            name: String::<128>::from_str(menu_name),
+            name: String::<128>::from_str(menu_name_str),
             result: None,
         };
         let mut buf = Buffer::into_buf(menu_name).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::RaiseMenu.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
         let result = buf.to_original::<GamActivation, _>().unwrap();
         if let Some(code) = result.result {
-            Ok(code)
+            match code {
+                ActivationResult::Success => Ok(()),
+                ActivationResult::Failure => {
+                    log::warn!("Couldn't raise {}", menu_name_str);
+                    Err(xous::Error::ShareViolation)
+                }
+            }
         } else {
             Err(xous::Error::InternalError)
         }
     }
-    pub fn raise_modal(&self, modal_name: &str) -> Result<ActivationResult, xous::Error> {
+    pub fn raise_modal(&self, modal_name: &str) -> Result<(), xous::Error> {
         self.raise_menu(modal_name)
     }
     /// this is a one-way door, once you've set it, you can't unset it.

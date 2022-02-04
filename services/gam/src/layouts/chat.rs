@@ -19,7 +19,7 @@ pub(crate) struct ChatLayout {
     // my internal bookkeeping records. Allow input area to grow into content area
     min_content_height: i16,
     min_input_height: i16,
-    screensize: Point,
+    _screensize: Point,
     _small_height: i16,
     _regular_height: i16,
 }
@@ -61,7 +61,7 @@ impl ChatLayout {
             input: input_canvas.gid(),
             min_content_height: 64,
             min_input_height,
-            screensize,
+            _screensize: screensize,
             _small_height: small_height,
             _regular_height: regular_height,
         })

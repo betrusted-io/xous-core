@@ -193,7 +193,7 @@ mod implementation {
             false
         }
         pub fn is_pcache_boot_password_valid(&self) -> bool {
-            false
+            true
         }
         pub fn fpga_key_source(&self) -> FpgaKeySource {
             FpgaKeySource::Efuse
