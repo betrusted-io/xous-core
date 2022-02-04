@@ -471,7 +471,7 @@ fn xmain() -> ! {
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode, for now...
     if pddb_os.rootkeys_initialized() {
-        tt.sleep_ms(1000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing (cosmetic issue).
+        tt.sleep_ms(6000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing (cosmetic issue).
         match ensure_password(&modals, &mut pddb_os) {
             PasswordState::Correct => {
                 try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct);
