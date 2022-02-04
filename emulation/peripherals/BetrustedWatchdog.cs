@@ -19,7 +19,7 @@ namespace Antmicro.Renode.Peripherals.Timers
     {
         public BetrustedWatchdog(Machine machine) : base(machine)
         {
-            machine.ClockSource.AddClockEntry(new ClockEntry(10, ClockEntry.FrequencyToRatio(this, 1000), OnTick, this, String.Empty));
+            machine.ClockSource.AddClockEntry(new ClockEntry(10, 1000, OnTick, this, String.Empty));
             var registersMap = new Dictionary<long, DoubleWordRegister>()
             {
                 {(long)Registers.Watchdog, new DoubleWordRegister(this)
