@@ -125,14 +125,18 @@ pub(crate) fn password_ux_manager(
                         pddb_modal.activate();
                     }
                     Some(PwRendererOpcode::PwReturn) => {
-                        let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let mut pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                        if renderer_active.load(Ordering::SeqCst) {
+                            let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                            let mut pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
 
-                        plaintext_pw.lock().unwrap().clear();
-                        write!(plaintext_pw.lock().unwrap(), "{}", pw.as_str()).expect("couldn't transfer password to local buffer");
+                            plaintext_pw.lock().unwrap().clear();
+                            write!(plaintext_pw.lock().unwrap(), "{}", pw.as_str()).expect("couldn't transfer password to local buffer");
 
-                        pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                        buf.volatile_clear();
+                            pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                            buf.volatile_clear();
+                        } else {
+                            log::warn!("Fat finger event received from Ux, ignoring");
+                        }
 
                         // this resumes the waiting Ux Manager thread
                         renderer_active.store(false, Ordering::SeqCst);
@@ -142,10 +146,10 @@ pub(crate) fn password_ux_manager(
                     },
                     Some(PwRendererOpcode::ModalKeypress) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                         let keys = [
-                            if let Some(a) = core::char::from_u32(k1 as u32) {a} else {'\u{0000}'},
-                            if let Some(a) = core::char::from_u32(k2 as u32) {a} else {'\u{0000}'},
-                            if let Some(a) = core::char::from_u32(k3 as u32) {a} else {'\u{0000}'},
-                            if let Some(a) = core::char::from_u32(k4 as u32) {a} else {'\u{0000}'},
+                            core::char::from_u32(k1 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k2 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k3 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k4 as u32).unwrap_or('\u{0000}'),
                         ];
                         pddb_modal.key_event(keys);
                     }),

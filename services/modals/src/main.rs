@@ -96,7 +96,7 @@ fn xmain() -> ! {
                 RendererOp::Gutter.to_u32().unwrap()
             );
             gutter.set_manual_dismiss(false);
-            let mut progress_action = Slider::new(renderer_cid, RendererOp::NotificationReturn.to_u32().unwrap(),
+            let mut progress_action = Slider::new(renderer_cid, RendererOp::Gutter.to_u32().unwrap(),
                 0, 100, 1, Some("%"), 0, true, true
             );
             let mut last_percentage = 0;
@@ -299,7 +299,7 @@ fn xmain() -> ! {
                                     *mutex_op = RendererState::ResponseText(text);
                                 }
                             }
-                            RendererState::None => log::info!("Text entry got multiple key hits to close the dialog box"),
+                            RendererState::None => log::warn!("Text entry detected a fat finger event, ignoring."),
                             _ => {
                                 log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
@@ -310,7 +310,7 @@ fn xmain() -> ! {
                         let mut mutex_op = op.lock().unwrap();
                         match *mutex_op {
                             RendererState::RunNotification(_) => *mutex_op = RendererState::None,
-                            RendererState::None => log::info!("Notification got multiple key hits to close the dialog box"),
+                            RendererState::None => log::warn!("Notification detected a fat finger event, ignoring."),
                             _ => {
                                 log::error!("UX return opcode does not match our current operation in flight: {:?}", mutex_op);
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
@@ -333,6 +333,8 @@ fn xmain() -> ! {
                                 let item = buffer.to_original::<RadioButtonPayload, _>().unwrap();
                                 *mutex_op = RendererState::ResponseRadio(item.0);
                             }
+                            RendererState::ResponseRadio(_) => log::warn!("Radio buttons detected a fat finger event, ignoring."),
+                            RendererState::None => log::warn!("Radio buttons detected a fat finger event, ignoring."),
                             _ => {
                                 log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
@@ -347,6 +349,8 @@ fn xmain() -> ! {
                                 let item = buffer.to_original::<CheckBoxPayload, _>().unwrap();
                                 *mutex_op = RendererState::ResponseCheckBox(item);
                             }
+                            RendererState::ResponseCheckBox(_) => log::warn!("Check boxes detected a fat finger event, ignoring."),
+                            RendererState::None => log::warn!("Check boxes detected a fat finger event, ignoring."),
                             _ => {
                                 log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
                                 panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");

@@ -896,38 +896,38 @@ fn xmain() -> ! {
                 rootkeys_modal.activate();
             },
             Some(Opcode::UxAesEnsureReturn) => {
-                #[cfg(feature = "policy-menu")]
-                { // in case we want to bring back the policy check
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
-                    if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
-                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
-                    } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
-                        keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
-                    } else if payload.as_str() == "no change" {
-                        // don't change the policy
-                    } else {
-                        keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
-                    }
-                }
-                {
-                    let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
-
-                    keys.hash_and_save_password(plaintext_pw.as_str());
-                    plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                    buf.volatile_clear();
-
-                    // this is a reasonable default policy -- don't bother the user to answer this question all the time.
-                    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
-                }
-
-                keys.set_ux_password_type(None);
                 if let Some(sender) = aes_sender.take() {
                     xous::return_scalar(sender, 1).unwrap();
+                    #[cfg(feature = "policy-menu")]
+                    { // in case we want to bring back the policy check
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                        if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
+                            keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
+                        } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                            keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                        } else if payload.as_str() == "no change" {
+                            // don't change the policy
+                        } else {
+                            keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                        }
+                    }
+                    {
+                        let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                        keys.hash_and_save_password(plaintext_pw.as_str());
+                        plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                        buf.volatile_clear();
+
+                        // this is a reasonable default policy -- don't bother the user to answer this question all the time.
+                        keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                    }
+
+                    keys.set_ux_password_type(None);
                 } else {
-                    log::error!("entered a UxAesEnsureReturn but the flow was not set up correctly!");
-                    panic!("entered a UxAesEnsureReturn but the flow was not set up correctly!")
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                    log::warn!("UxAesEnsureReturn detected a fat-finger event. Ignoring.");
                 }
             }
             Some(Opcode::AesOracle) => {
