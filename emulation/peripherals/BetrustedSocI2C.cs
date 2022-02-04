@@ -27,7 +27,7 @@ namespace Antmicro.Renode.Peripherals.I2C
             dataFromSlave = new Queue<byte>();
             IRQ = new GPIO();
 
-            irqTimeoutCallback = new ClockEntry((ulong)5, ClockEntry.FrequencyToRatio(machine, 1000), this.FinishTransaction, machine, "Irq Scheduler");
+            irqTimeoutCallback = new ClockEntry((ulong)5, 1000, this.FinishTransaction, machine, "Irq Scheduler");
 
             var registersMap = new Dictionary<long, DoubleWordRegister>()
             {
