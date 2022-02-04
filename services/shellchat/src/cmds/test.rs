@@ -472,22 +472,14 @@ impl<'a> ShellCmdApi<'a> for Test {
                         match oqc_status(oqc_cid) {
                             Some(true) => {
                                 log::info!("wrapping up: fetching SSID list");
-                                let ssid_str = env.com.ssid_fetch_as_list().unwrap();
-                                let mut min = 255u8;
-                                let mut min_index = 0;
-                                for (index, (rssi, name)) in ssid_str.iter().enumerate() {
-                                    if name.len() > 0 {
-                                        if (*rssi < min) && (*rssi != 0) { // 0 are non-reporting and thus not valid
-                                            min = *rssi;
-                                            min_index = index;
-                                        }
+                                let ssid_list = env.netmgr.wifi_get_ssid_list().unwrap();
+                                write!(ret, "RSSI reported in dBm:\n").unwrap();
+                                for ssid in ssid_list {
+                                    if ssid.name.len() > 0 {
+                                        write!(ret, "-{} {}\n", ssid.rssi, &ssid.name.as_str().unwrap_or("UTF-8 error")).unwrap();
                                     }
                                 }
-                                let (rssi, name) = &ssid_str[min_index];
-                                log::info!("strongest AP: -{}dBm, {}", *rssi, name);
-                                write!(ret, "SSID (-{}):{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
-                                    *rssi, name // just the first SSID result
-                                ).unwrap();
+                                write!(ret, "CHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",).unwrap();
                                 let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
                                 write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
                                 log::info!("finished status update");
