@@ -545,25 +545,25 @@ mod implementation {
 
 
         pub fn xadc_vbus(&self) -> u16 {
-            0
+            2 // some small but non-zero value to represent typical noise
         }
         pub fn xadc_vccint(&self) -> u16 {
-            0
+            1296
         }
         pub fn xadc_vccaux(&self) -> u16 {
-            0
+            2457
         }
         pub fn xadc_vccbram(&self) -> u16 {
-            0
+            2450
         }
         pub fn xadc_usbn(&self) -> u16 {
-            0
+            3
         }
         pub fn xadc_usbp(&self) -> u16 {
-            0
+            4
         }
         pub fn xadc_temperature(&self) -> u16 {
-            0
+            2463
         }
         pub fn xadc_gpio5(&self) -> u16 {
             0

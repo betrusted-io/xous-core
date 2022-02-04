@@ -1076,10 +1076,10 @@ fn xmain() -> ! {
             },
             Some(Opcode::ModalKeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                 let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {a} else {'\u{0000}'},
-                    if let Some(a) = core::char::from_u32(k2 as u32) {a} else {'\u{0000}'},
-                    if let Some(a) = core::char::from_u32(k3 as u32) {a} else {'\u{0000}'},
-                    if let Some(a) = core::char::from_u32(k4 as u32) {a} else {'\u{0000}'},
+                    core::char::from_u32(k1 as u32).unwrap_or('\u{0000}'),
+                    core::char::from_u32(k2 as u32).unwrap_or('\u{0000}'),
+                    core::char::from_u32(k3 as u32).unwrap_or('\u{0000}'),
+                    core::char::from_u32(k4 as u32).unwrap_or('\u{0000}'),
                 ];
                 rootkeys_modal.key_event(keys);
             }),

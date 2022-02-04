@@ -132,6 +132,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                             passing = Some(true);
                             com.set_backlight(0, 0).unwrap();
                             modal.dynamic_notification_close().unwrap();
+                            ticktimer.sleep_ms(50).unwrap();
                             log::info!("all keys hit, exiting");
                             test_finished = true;
                         }
@@ -140,6 +141,7 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
                         passing = Some(false);
                         com.set_backlight(0, 0).unwrap();
                         modal.dynamic_notification_close().unwrap();
+                        ticktimer.sleep_ms(50).unwrap();
                         log::info!("test done, relinquishing focus");
                         test_finished = true;
                     }
@@ -304,14 +306,14 @@ fn map_codes(code: RowCol) -> &'static str {
         (8, 1) => "F2",
         (3, 8) => "F3",
         (3, 9) => "F4",
-        //(8, 3) => "⬅️",
-        (8, 3) => "LT",
-        //(3, 6) => "➡️",
-        (3, 6) => "RT",
-        //(6, 4) => "⬆️",
-        (6, 4) => "UP",
-        //(8, 2) => "⬇️",
-        (8, 2) => "DN",
+        (8, 3) => "←",
+        //(8, 3) => "LT",
+        (3, 6) => "→",
+        //(3, 6) => "RT",
+        (6, 4) => "↑",
+        //(6, 4) => "UP",
+        (8, 2) => "↓",
+        //(8, 2) => "DN",
         (5, 2) => "MID",
         _ => "ERR!",
     }
@@ -320,13 +322,13 @@ fn map_codes(code: RowCol) -> &'static str {
 fn render_string(txt: &mut String, remaining: &Vec::<(RowCol, bool)>, time_remaining: u64) {
     txt.clear();
     let mut keyrowstrs: [String; 7] = [
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
+        String::from("▶ "),
+        String::from("▶ "),
+        String::from("▶ "),
+        String::from("▶ "),
+        String::from("▶ "),
+        String::from("▶ "),
+        String::from("▶ "),
     ];
     for &(code, was_hit) in remaining.iter() {
         if !was_hit {
@@ -343,12 +345,16 @@ fn render_string(txt: &mut String, remaining: &Vec::<(RowCol, bool)>, time_remai
                 _ => 6,
             };
             keyrowstrs[draw_row].push_str(map_codes(code));
-            keyrowstrs[draw_row].push_str(" ");
+            keyrowstrs[draw_row].push_str("\t");
         }
     }
     for s in keyrowstrs.iter() {
-        txt.push_str(s);
-        txt.push('\n');
+        if s.chars().count() > 2 {
+            txt.push_str(s);
+            txt.push('\n');
+        } else {
+            txt.push_str("✔\n")
+        }
     }
     txt.push_str("Timeout: ");
     txt.push_str(&(time_remaining / 1000).to_string());

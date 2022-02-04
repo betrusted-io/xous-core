@@ -285,10 +285,10 @@ mod implementation {
 
         pub fn get_battstats(&mut self) -> BattStats {
             BattStats {
-                voltage: 3700,
-                current: -150,
-                soc: 50,
-                remaining_capacity: 750,
+                voltage: 3950,
+                current: -110,
+                soc: 85,
+                remaining_capacity: 850,
             }
         }
         pub fn stby_current(&self) -> Option<i16> { None }
@@ -321,7 +321,9 @@ mod implementation {
             }
         }
         pub fn get_more_stats(&mut self) -> [u16; 15] {
-            [0; 15]
+            let mut ret = [0u16; 15];
+            ret[12] = 3950; // make the oqc test happy
+            ret
         }
 
         pub fn poll_usb_cc(&mut self) -> [u32; 2] {

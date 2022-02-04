@@ -430,6 +430,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                     };
 
                     let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
+                    // turn off the connection for the duration of this test
+                    env.netmgr.connection_manager_stop().unwrap();
                     env.llio.wfi_override(true).unwrap();
                     // activate SSID scanning while the test runs
                     env.com.set_ssid_scanning(true).expect("couldn't turn on SSID scanning");
@@ -440,12 +442,6 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
                     }
-                    env.com.wlan_set_ssid("precursortest").unwrap();
-                    env.ticktimer.sleep_ms(500).unwrap();
-                    env.com.wlan_set_pass("notasecret").unwrap();
-                    env.ticktimer.sleep_ms(500).unwrap();
-                    env.com.wlan_join().unwrap();
-
                     let battstats = env.com.get_more_stats().unwrap();
                     if battstats[12] < 3900 {
                         write!(ret, "FAIL: Battery voltage too low ({}mV) for shipment. Charge to >3900mV before OQC testing.", battstats[12]).unwrap();
@@ -455,7 +451,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "FAIL: Battery voltage too high ({}mV).\nSuspect issue with U17P or U11K.", battstats[12]).unwrap();
                         return Ok(Some(ret));
                     }
-
+                    log::info!("initiating suspend");
+                    env.ticktimer.sleep_ms(250).unwrap(); // give a moment for all the command queues to clear
                     susres.initiate_suspend().unwrap();
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
@@ -463,6 +460,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                     xous::send_message(oqc_cid,
                         xous::Message::new_blocking_scalar(OqcOp::Trigger.to_usize().unwrap(), timeout, 0, 0, 0,)
                     ).expect("couldn't trigger self test");
+                    // join the LAN while the keyboard test is running
+                    log::info!("starting wlan join");
+                    env.com.wlan_set_ssid("precursortest").unwrap();
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.com.wlan_set_pass("notasecret").unwrap();
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.com.wlan_join().unwrap();
 
                     loop {
                         match oqc_status(oqc_cid) {
@@ -473,7 +477,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 let mut min_index = 0;
                                 for (index, (rssi, name)) in ssid_str.iter().enumerate() {
                                     if name.len() > 0 {
-                                        if *rssi < min {
+                                        if (*rssi < min) && (*rssi != 0) { // 0 are non-reporting and thus not valid
                                             min = *rssi;
                                             min_index = index;
                                         }

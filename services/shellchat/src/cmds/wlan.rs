@@ -99,7 +99,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                                                 // for now, we should always call flush at the end of a routine; perhaps in the
                                                 // future we'll have a timer that automatically syncs the pddb
                                                 entry.flush().expect("couldn't sync pddb cache");
-                                                write!(ret, "SSID/pass combo saved to PDDB. Connection manager started.").unwrap();
+                                                write!(ret, "SSID/pass combo saved to PDDB.\nConnection manager started.").unwrap();
                                                 // restart the connection manager now that the key combo has been committed
                                                 env.netmgr.connection_manager_run().unwrap();
                                             }
