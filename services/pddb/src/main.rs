@@ -473,7 +473,7 @@ fn xmain() -> ! {
         let my_cid = my_cid.clone();
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            tt.sleep_ms(5000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing
+            tt.sleep_ms(4000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing
             send_message(my_cid,
                 Message::new_blocking_scalar(Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)
             ).expect("couldn't send mount request");

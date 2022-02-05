@@ -206,7 +206,7 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
         }
     }
     if needs_defacing {
-        log::debug!("doing a deface computation!");
+        log::info!("doing a deface computation!");
 
         let screensize = gfx.screen_size().unwrap();
         let screen_rect = Rectangle::new(Point::new(0, 0,), screensize);
