@@ -374,7 +374,7 @@ impl<'a> Modal<'a> {
         const BORDER_WIDTH: i16 = 3;
         log::debug!("modal redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
-        let do_redraw = self.top_dirty || self.bot_dirty;
+        let do_redraw = self.top_dirty || self.bot_dirty || self.inverted;
         // draw the outer border
         if do_redraw {
             self.gam.draw_rounded_rectangle(self.canvas,
