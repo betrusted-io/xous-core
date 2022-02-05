@@ -506,12 +506,14 @@ mod implementation {
 
     #[derive(Copy, Clone, Debug)]
     pub struct Llio {
+        usb_disable: bool,
     }
     pub fn log_init() -> *mut u32 { 0 as *mut u32 }
 
     impl Llio {
         pub fn new(_handler_conn: xous::CID, _gpio_base: *mut u32) -> Llio {
             Llio {
+                usb_disable: false,
             }
         }
         pub fn suspend(&self) {}
@@ -590,9 +592,10 @@ mod implementation {
         }
 
         pub fn get_usb_disable(&self) -> bool {
-            false
+            self.usb_disable
         }
-        pub fn set_usb_disable(&mut self, _state: bool) {
+        pub fn set_usb_disable(&mut self, state: bool) {
+            self.usb_disable = state;
         }
 
     }

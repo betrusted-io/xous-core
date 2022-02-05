@@ -452,12 +452,13 @@ fn xmain() -> ! {
                     || (sec_notes.lock().unwrap().len() > 1)
                         && ((stats_phase % secnotes_interval) == 0)
                 {
+                    log::info!("updating lock state text");
                     if debug_locked != is_locked {
-                        if debug_locked {
+                        if is_locked {
                             sec_notes
                                 .lock()
                                 .unwrap()
-                                .remove(&"secnotes.usb_unlock".to_string());
+                                .remove(&"secnote.usb_unlock".to_string()); // this is the key, not the value to remove
                         } else {
                             sec_notes.lock().unwrap().insert(
                                 "secnotes.usb_unlock".to_string(),
