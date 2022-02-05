@@ -26,7 +26,7 @@ pub(crate) struct ChatLayout {
 impl ChatLayout {
     // pass in the status canvas so we can size around it, but we can't draw on it
     pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng,
-        status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<ChatLayout, xous::Error> {
+        status_cliprect: &Rectangle, canvases: &mut HashMap<Gid, Canvas>) -> Result<ChatLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
         let small_height: i16 = gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
@@ -40,25 +40,30 @@ impl ChatLayout {
             MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET,
             &trng, None, crate::api::CanvasType::ChatPreditive
         ).expect("couldn't create predictive text canvas");
+        let pred_gid = predictive_canvas.gid();
+        let predictive_cr = predictive_canvas.clip_rect();
         canvases.insert(predictive_canvas.gid(), predictive_canvas);
 
         let min_input_height = regular_height + margin*2;
         let input_canvas = Canvas::new(
-            Rectangle::new_v_stack(predictive_canvas.clip_rect(), -min_input_height),
+            Rectangle::new_v_stack(predictive_cr, -min_input_height),
             MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::ChatInput
         ).expect("couldn't create input text canvas");
+        let input_gid = input_canvas.gid();
+        let input_cr = input_canvas.clip_rect();
         canvases.insert(input_canvas.gid(), input_canvas);
 
         let content_canvas = Canvas::new(
-            Rectangle::new_v_span(status_canvas.clip_rect(), input_canvas.clip_rect()),
+            Rectangle::new_v_span(*status_cliprect, input_cr),
             (MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET) / 2, &trng, None, crate::api::CanvasType::ChatContent
         ).expect("couldn't create content canvas");
+        let content_gid = content_canvas.gid();
         canvases.insert(content_canvas.gid(), content_canvas);
 
         Ok(ChatLayout {
-            content: content_canvas.gid(),
-            predictive: predictive_canvas.gid(),
-            input: input_canvas.gid(),
+            content: content_gid,
+            predictive: pred_gid,
+            input: input_gid,
             min_content_height: 64,
             min_input_height,
             _screensize: screensize,
@@ -89,7 +94,7 @@ impl LayoutApi for ChatLayout {
         gfx.draw_rectangle(rect).expect("can't clear canvas");
         Ok(())
     }
-    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error> {
+    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Rectangle, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("couldn't find input canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("couldn't find predictive canvas");
 
@@ -99,7 +104,7 @@ impl LayoutApi for ChatLayout {
             new_height
         };
         let mut new_input_rect = Rectangle::new_v_stack(predictive_canvas.clip_rect(), -height);
-        let mut new_content_rect = Rectangle::new_v_span(status_canvas.clip_rect(), new_input_rect);
+        let mut new_content_rect = Rectangle::new_v_span(*status_canvas, new_input_rect);
         if (new_content_rect.br.y - new_content_rect.tl.y) > self.min_content_height {
             {
                 let input_canvas_mut = canvases.get_mut(&self.input).expect("couldn't find input canvas");

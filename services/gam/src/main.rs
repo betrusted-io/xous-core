@@ -59,16 +59,18 @@ fn xmain() -> ! {
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
     // the status canvas is special -- there can only be one, and it is ultimately trusted
-    let mut status_canvas = Canvas::new(
+    let status_canvas = Canvas::new(
         Rectangle::new_coords(
             0, 0, screensize.x,
             gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height") as i16 * 2),
         255, &trng, None, crate::api::CanvasType::Status
     ).expect("couldn't create status canvas");
+    let status_cliprect = status_canvas.clip_rect();
     status_canvas.set_onscreen(true);
     status_canvas.set_drawable(true);
+    let status_gid = status_canvas.gid().gid();
     canvases.insert(status_canvas.gid(), status_canvas);
-    canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
+    recompute_canvases(&canvases);
 
     // initialize the status bar -- this needs to start late, after the IMEF and most other things are initialized
     // this used to be domiciled in the GAM, but we split it out because this started to pull too much functionality
@@ -76,8 +78,6 @@ fn xmain() -> ! {
     // we do a hack to try and push a GID to the status bar "securely": we introduce a race condition where we hope
     // that the GAM is the first thing to talk to the status bar, and the first message is its GID to render on.
     // generally should be OK, because during boot, all processes are trusted...
-    let status_gid = status_canvas.gid().gid();
-    log::trace!("initializing status bar with gid {:?}", status_gid);
     let status_conn = xns.request_connection_blocking("_Status bar GID receiver_").expect("couldn't connect to status bar GID receiver");
     xous::send_message(status_conn,
         xous::Message::new_scalar(0, // message type doesn't matter because there is only one message it should ever receive
@@ -273,14 +273,13 @@ fn xmain() -> ! {
                 log::trace!("SetCanvasBoundsRequest {:?}", cb);
 
                 let granted = if cb.token_type == TokenType::Gam {
-                    context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &status_canvas, &mut canvases)
+                    context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &status_cliprect, &mut canvases)
                 } else {
-                    context_mgr.set_canvas_height_app_token(&gfx, cb.token, cb.requested.y, &status_canvas, &mut canvases)
+                    context_mgr.set_canvas_height_app_token(&gfx, cb.token, cb.requested.y, &status_cliprect, &mut canvases)
                 };
                 if granted.is_some() {
                     // recompute the canvas orders based on the new layout
-                    let recomp_canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
-                    canvases = recomp_canvases;
+                    recompute_canvases(&canvases);
                     // this set of redraw commands is not needed because every context will call redraw after it has finished fitting its bounds
                     // log::info!("canvas bounds redraw");
                     // context_mgr.redraw().expect("can't redraw after new canvas bounds");
@@ -416,13 +415,13 @@ fn xmain() -> ! {
                 };
                 // note that we are currently assigning all Ux registrations a trust level consistent with a boot context (ultimately trusted)
                 // this needs to be modified later on once we allow post-boot apps to be created
-                let token = context_mgr.register(&gfx, &trng, &status_canvas, &mut canvases,
+                let token = context_mgr.register(&gfx, &trng, &status_cliprect, &mut canvases,
                     registration);
 
                 // compute what canvases are drawable
                 // this _replaces_ the original canvas structure, to avoid complications of tracking mutable references through compound data structures
                 // this is broken into two steps because of https://github.com/rust-lang/rust/issues/71126
-                canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
+                recompute_canvases(&canvases);
 
                 buffer.replace(Return::UxToken(token)).unwrap();
 

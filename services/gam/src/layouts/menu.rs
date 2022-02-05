@@ -31,10 +31,11 @@ impl MenuLayout {
             Rectangle::new_coords(MENU_X_PAD, MENU_Y_PAD, screensize.x - MENU_X_PAD, MENU_Y_PAD + height),
             MISC_CONTEXT_DEFAULT_TRUST - TRUST_OFFSET, &trng, None, crate::api::CanvasType::Menu
         ).expect("couldn't create menu canvas");
+        let gid = menu_canvas.gid();
         canvases.insert(menu_canvas.gid(), menu_canvas);
 
         Ok(MenuLayout {
-            menu: menu_canvas.gid(),
+            menu: gid,
             menu_y_pad: MENU_Y_PAD,
             _menu_x_pad: MENU_X_PAD,
             menu_min_height: height,
@@ -54,7 +55,7 @@ impl LayoutApi for MenuLayout {
         rect.style = DrawStyle {fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0,};
         gfx.draw_rectangle(rect)
     }
-    fn resize_height(&mut self, _gfx: &graphics_server::Gfx, new_height: i16, _status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error> {
+    fn resize_height(&mut self, _gfx: &graphics_server::Gfx, new_height: i16, _status_canvas: &Rectangle, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error> {
         let menu_canvas = canvases.get_mut(&self.menu).expect("couldn't find menu canvas");
         let orig_rect = menu_canvas.clip_rect();
 

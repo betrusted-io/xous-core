@@ -23,9 +23,12 @@ pub enum CanvasState {
     OffScreenNotDrawable,
 }
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 /// A rectangular region that defines a top-left zero relative offset for graphical items
 /// and a bottom-right point that defines a clipping area for things drawn inside.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct Canvas {
     // unique, random identifier for the Canvas
     gid: Gid,
@@ -36,7 +39,7 @@ pub struct Canvas {
     // enables scroll/pan of objects within a region
     pan_offset: Point,
     // track the drawing state of the canvas
-    state: CanvasState,
+    state: Rc<RefCell<CanvasState>>,
     // The type of canvas. Useful for debugging, don't remove it.
     #[allow(dead_code)]
     canvas_type: crate::api::CanvasType,
@@ -57,12 +60,12 @@ impl Canvas {
 
         Ok(if pan_offset.is_some() {
             Canvas {
-                clip_rect, trust_level, state: CanvasState::OffScreenDrawable, gid: Gid::new(gid), pan_offset: pan_offset.unwrap(),
+                clip_rect, trust_level, state: Rc::new(RefCell::new(CanvasState::OffScreenDrawable)), gid: Gid::new(gid), pan_offset: pan_offset.unwrap(),
                 canvas_type,
             }
         } else {
             Canvas {
-                clip_rect, trust_level, state: CanvasState::OffScreenDrawable, gid: Gid::new(gid), pan_offset: Point::new(0, 0),
+                clip_rect, trust_level, state: Rc::new(RefCell::new(CanvasState::OffScreenDrawable)), gid: Gid::new(gid), pan_offset: Point::new(0, 0),
                 canvas_type,
             }
         })
@@ -75,93 +78,96 @@ impl Canvas {
     }
     pub fn pan_offset(&self) -> Point { self.pan_offset }
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
-    pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; self.state = CanvasState::OffScreenDrawable }
+    pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; *self.state.borrow_mut() = CanvasState::OffScreenDrawable }
     pub fn gid(&self) -> Gid { self.gid }
     pub fn trust_level(&self) -> u8 { self.trust_level }
     pub fn set_trust_level(&mut self, level: u8) {self.trust_level = level;}
-    pub fn state(&self) -> CanvasState { self.state }
+    pub fn state(&self) -> CanvasState { *self.state.borrow() }
     pub fn is_onscreen(&self) -> bool {
-        if self.state == CanvasState::OffScreenDrawable || self.state == CanvasState::OffScreenNotDrawable {
+        if *self.state.borrow() == CanvasState::OffScreenDrawable || *self.state.borrow() == CanvasState::OffScreenNotDrawable {
             false
         } else {
             true
         }
     }
     pub fn is_drawable(&self) -> bool {
-        if self.state == CanvasState::DrawableDirty || self.state == CanvasState::DrawableDrawn || self.state == CanvasState::OffScreenDrawable {
+        if *self.state.borrow() == CanvasState::DrawableDirty
+        || *self.state.borrow() == CanvasState::DrawableDrawn
+        || *self.state.borrow() == CanvasState::OffScreenDrawable {
             true
         } else {
             false
         }
     }
     pub fn is_drawable_or_offscreen(&self) -> bool {
-        if self.state == CanvasState::DrawableDirty || self.state == CanvasState::DrawableDrawn
-        || self.state == CanvasState::OffScreenDrawable {
+        if *self.state.borrow() == CanvasState::DrawableDirty
+        || *self.state.borrow() == CanvasState::DrawableDrawn
+        || *self.state.borrow() == CanvasState::OffScreenDrawable {
             true
         } else {
             false
         }
     }
-    pub fn set_drawable(&mut self, drawable: bool) {
+    pub fn set_drawable(&self, drawable: bool) {
         if drawable {
-            if self.state == CanvasState::OffScreenNotDrawable {
-                self.state = CanvasState::OffScreenDrawable
-            } else if self.state != CanvasState::DrawableDrawn {
-                self.state = CanvasState::DrawableDirty;
+            if *self.state.borrow() == CanvasState::OffScreenNotDrawable {
+                *self.state.borrow_mut() = CanvasState::OffScreenDrawable
+            } else if *self.state.borrow() != CanvasState::DrawableDrawn {
+                *self.state.borrow_mut() = CanvasState::DrawableDirty;
             }
         } else {
-            if self.state == CanvasState::OffScreenDrawable {
-                self.state = CanvasState::OffScreenNotDrawable
-            } else if self.state != CanvasState::NotDrawableDefaced {
-                self.state = CanvasState::NotDrawableDirty;
+            if *self.state.borrow() == CanvasState::OffScreenDrawable {
+                *self.state.borrow_mut() = CanvasState::OffScreenNotDrawable
+            } else if *self.state.borrow() != CanvasState::NotDrawableDefaced {
+                *self.state.borrow_mut() = CanvasState::NotDrawableDirty;
             }
         }
     }
-    pub fn set_onscreen(&mut self, onscreen: bool) {
+    pub fn set_onscreen(&self, onscreen: bool) {
         if onscreen {
-            if self.state == CanvasState::OffScreenDrawable {
-                self.state = CanvasState::DrawableDirty;
-            } else if self.state == CanvasState::OffScreenNotDrawable {
-                self.state = CanvasState::NotDrawableDirty;
+            if *self.state.borrow() == CanvasState::OffScreenDrawable {
+                *self.state.borrow_mut() = CanvasState::DrawableDirty;
+            } else if *self.state.borrow() == CanvasState::OffScreenNotDrawable {
+                *self.state.borrow_mut() = CanvasState::NotDrawableDirty;
             }
             // other states are already onscreen
         } else {
-            if self.state == CanvasState::DrawableDirty || self.state == CanvasState::DrawableDrawn {
-                self.state = CanvasState::OffScreenDrawable;
-            } else if self.state == CanvasState::NotDrawableDirty || self.state == CanvasState::NotDrawableDefaced {
-                self.state = CanvasState::OffScreenNotDrawable;
+            if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
+                *self.state.borrow_mut() = CanvasState::OffScreenDrawable;
+            } else if *self.state.borrow() == CanvasState::NotDrawableDirty || *self.state.borrow() == CanvasState::NotDrawableDefaced {
+                *self.state.borrow_mut() = CanvasState::OffScreenNotDrawable;
             }
             // other states are already offscreen
         }
     }
     // call this after the screen has been flushed
-    pub fn do_flushed(&mut self) -> Result<(), xous::Error> {
-        if self.state == CanvasState::DrawableDirty || self.state == CanvasState::DrawableDrawn {
-            self.state = CanvasState::DrawableDrawn;
+    pub fn do_flushed(&self) -> Result<(), xous::Error> {
+        if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
+            *self.state.borrow_mut() = CanvasState::DrawableDrawn;
             Ok(())
-        } else if self.state == CanvasState::NotDrawableDefaced
-        || self.state == CanvasState::OffScreenNotDrawable
-        || self.state == CanvasState::OffScreenDrawable {
+        } else if *self.state.borrow() == CanvasState::NotDrawableDefaced
+        || *self.state.borrow() == CanvasState::OffScreenNotDrawable
+        || *self.state.borrow() == CanvasState::OffScreenDrawable {
             Ok(())
         } else {
             error!("Canvas: flush happened before not drawable regions were defaced, or before initialized! {:?}", self.state);
             Err(xous::Error::UseBeforeInit)
         }
     }
-    pub fn do_drawn(&mut self) -> Result<(), xous::Error> {
-        if self.state == CanvasState::DrawableDirty || self.state == CanvasState::DrawableDrawn {
-            self.state = CanvasState::DrawableDirty;
+    pub fn do_drawn(&self) -> Result<(), xous::Error> {
+        if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
+            *self.state.borrow_mut() = CanvasState::DrawableDirty;
             Ok(())
         } else {
             error!("Canvas: attempt to draw on regions that are not drawable, or not initialized!");
             Err(xous::Error::AccessDenied)
         }
     }
-    pub fn do_defaced(&mut self) -> Result<(), xous::Error> {
-        if self.state == CanvasState::NotDrawableDirty {
-            self.state = CanvasState::NotDrawableDefaced;
+    pub fn do_defaced(&self) -> Result<(), xous::Error> {
+        if *self.state.borrow() == CanvasState::NotDrawableDirty {
+            *self.state.borrow_mut() = CanvasState::NotDrawableDefaced;
             Ok(())
-        } else if self.state == CanvasState::DrawableDirty || self.state == CanvasState::DrawableDrawn {
+        } else if *self.state.borrow() == CanvasState::DrawableDirty || *self.state.borrow() == CanvasState::DrawableDrawn {
             info!("Canvas: drawable region was defaced. Allowing it, but this could be a logic bug");
             Ok(())
         } else {
@@ -170,7 +176,7 @@ impl Canvas {
         }
     }
     pub fn needs_defacing(&self) -> bool {
-        if self.state == CanvasState::NotDrawableDirty {
+        if *self.state.borrow() == CanvasState::NotDrawableDirty {
             true
         } else {
             false
@@ -206,8 +212,6 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut Hash
         }
     }
     if needs_defacing {
-        log::info!("doing a deface computation!");
-
         let screensize = gfx.screen_size().unwrap();
         let screen_rect = Rectangle::new(Point::new(0, 0,), screensize);
         /*
@@ -292,50 +296,27 @@ fn remap_rand(end_range: i32, rand: i16, source_range: i32) -> i16 {
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
-pub(crate) fn recompute_canvases(canvases: &HashMap<Gid, Canvas>, screen: Rectangle) -> HashMap<Gid, Canvas> {
-    let debug = false; // keep this around, it's really convenient for turning off just this specific subset of debug messages
+pub(crate) fn recompute_canvases(canvases: &HashMap<Gid, Canvas>) {
     // first, sort canvases by trust_level. Canvas implements ord/eq based on the trust_level attribute
     // so jush pushing it into a max binary heap does the trick.
-    if debug { info!("CANVAS: recompute canvas"); }
-    let mut sorted_clipregions: BinaryHeap<Canvas> = BinaryHeap::new();
-    for (&k, &c) in canvases.iter() {
-        if debug { info!("   CANVAS: sorting gid {:?}, canvas {:?}", k, c);}
-        sorted_clipregions.push(c); // always succeeds because incoming type is the same size
+    let mut sorted_clipregions: BinaryHeap<&Canvas> = BinaryHeap::new();
+    for c in canvases.values() {
+        sorted_clipregions.push(c);
     }
 
-    // now, descend through trust levels and compute intersections, putting the updated drawable states into higher_clipregions
-    let mut higher_clipregions: BinaryHeap<&Canvas> = BinaryHeap::new();
-    let mut current_trust_level: u8 = 255;
-    // sorted_clipregions is a Max heap keyed on trust, so popping the elements off will return them sorted from most to least trusted
-    if debug{info!("CANVAS: received screen argument of {:?}", screen);}
-    if debug{info!("CANVAS: now determining which regions are drawable");}
-
-    let mut sorted_clipregions_vec = sorted_clipregions.into_sorted_vec();
-    for canvas in sorted_clipregions_vec.iter_mut() {
-        if canvas.is_onscreen() {
-            if canvas.trust_level() < current_trust_level {
-                current_trust_level = canvas.trust_level();
-            }
-            for region in higher_clipregions.iter() {
-                if region.is_onscreen()
-                && (region.trust_level() > current_trust_level) // regions of same trust level have arbitrary draw order
-                && region.clip_rect().intersects(canvas.clip_rect()) {
-                    canvas.set_drawable(false);
-                } else {
-                    canvas.set_drawable(true);
+    let mut higher_clipregions = Vec::<&Canvas>::new(); // contains only a subset of on-screen clip rects to consider
+    while let Some(candidate) = sorted_clipregions.pop() {
+        log::trace!("candidate {}", candidate.trust_level());
+        if candidate.is_onscreen() {
+            candidate.set_drawable(true); // i *think* this is ok and doesn't cause thrashing, but verify...
+            for previous in higher_clipregions.iter() {
+                log::trace!("candidate {:?}/{} veruss {:?}/{}", candidate.canvas_type, candidate.trust_level, previous.canvas_type, previous.trust_level);
+                if candidate.clip_rect().intersects(previous.clip_rect()) {
+                    log::trace!("candidate is less trusted, setting to not drawable");
+                    candidate.set_drawable(false);
                 }
             }
+            higher_clipregions.push(candidate);
         }
-        higher_clipregions.push(canvas);
     }
-
-    // create a new index map out of the recomputed higher_clipregions
-    let mut map: HashMap<Gid, Canvas> = HashMap::new();
-    if debug { info!("CANVAS: reconstituting index map");}
-    for &c in higher_clipregions.iter() {
-        if debug { info!("   CANVAS: inserting gid {:?}, canvas {:?}", c.gid(), c);}
-        map.insert(c.gid(), *c);
-    }
-
-    map
 }

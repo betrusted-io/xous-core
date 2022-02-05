@@ -26,7 +26,7 @@ pub(crate) enum LayoutBehavior {
 pub(crate) trait LayoutApi {
     fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut HashMap<Gid, Canvas>) -> Result<(), xous::Error>;
     // for Chats, this resizes the height of the input area; for menus, it resizes the overall height
-    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error>;
+    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_cliprect: &Rectangle, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error>;
     fn get_gids(&self) -> Vec<GidRecord>;
     //fn get_input_canvas(&self) -> Option<Gid> { None }
     //fn get_prediction_canvas(&self) -> Option<Gid> { None }
@@ -128,7 +128,7 @@ impl ContextManager {
     pub(crate) fn register(&mut self,
                 gfx: &graphics_server::Gfx,
                 trng: &trng::Trng,
-                status_canvas: &Canvas,
+                status_cliprect: &Rectangle,
                 canvases: &mut HashMap<Gid, Canvas>,
                 registration: UxRegistration)
             -> Option<[u32; 4]> {
@@ -137,7 +137,7 @@ impl ContextManager {
             match registration.ux_type {
                 UxType::Chat => {
                     let mut chatlayout = ChatLayout::init(&gfx, &trng,
-                        &status_canvas, canvases).expect("couldn't create chat layout");
+                        status_cliprect, canvases).expect("couldn't create chat layout");
                     // default to off-screen for all layouts
                     chatlayout.set_visibility_state(false, canvases);
                         let ux_context = UxContext {
@@ -212,7 +212,7 @@ impl ContextManager {
                 }
                 UxType::Framebuffer => {
                     let mut raw_fb = Framebuffer::init(&gfx, &trng,
-                        &status_canvas, canvases).expect("couldn't create raw fb layout");
+                        &status_cliprect, canvases).expect("couldn't create raw fb layout");
                     raw_fb.set_visibility_state(false, canvases);
                     log::debug!("debug raw fb layout: {:?}", raw_fb);
                     let ux_context = UxContext {
@@ -272,12 +272,12 @@ impl ContextManager {
         gfx: &graphics_server::Gfx,
         gam_token: [u32; 4],
         new_height: i16,
-        status_canvas: &Canvas,
+        status_cliprect: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
         for context in self.contexts.values_mut() {
             if context.gam_token == gam_token {
-                let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
+                let result = context.layout.resize_height(gfx, new_height, status_cliprect, canvases).expect("couldn't adjust height of active Ux context");
                 return Some(result)
             }
         }
@@ -288,11 +288,11 @@ impl ContextManager {
         gfx: &graphics_server::Gfx,
         app_token: [u32; 4],
         new_height: i16,
-        status_canvas: &Canvas,
+        status_cliprect: &Rectangle,
         canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
         if let Some(context) = self.contexts.get_mut(&app_token) {
-            let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
+            let result = context.layout.resize_height(gfx, new_height, status_cliprect, canvases).expect("couldn't adjust height of active Ux context");
             Some(result)
         } else {
             None
@@ -407,8 +407,7 @@ impl ContextManager {
                 }
 
                 // now recompute the drawability of canvases, based on on-screen visibility and trust state
-                let screensize = gfx.screen_size().expect("Couldn't get screen size");
-                *canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
+                recompute_canvases(canvases);
             }
         }
         log::trace!("foregrounding new context");
@@ -437,7 +436,7 @@ impl ContextManager {
             }
             // run the defacement before we redraw all the canvases
             if deface(gfx, &self.trng, canvases) {
-                log::info!("activate triggered a defacement");
+                log::trace!("activate triggered a defacement");
             }
             log::trace!("activate redraw");
             self.redraw().expect("couldn't redraw the currently focused app");
