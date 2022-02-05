@@ -255,7 +255,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.com.reseed_ec_trng().unwrap();
                     let ut_after = env.com.get_ec_uptime().unwrap();
 
-                    if ut < ut_after || ut_after > 4200 {
+                    if ut < ut_after || ut_after > 8500 {
                         log::info!("{}|ECRESET|FAIL|{}|{}|", SENTINEL, ut, ut_after);
                     } else {
                         log::info!("{}|ECRESET|PASS|{}|{}|", SENTINEL, ut, ut_after);
