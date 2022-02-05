@@ -352,7 +352,31 @@ fn xmain() -> ! {
     // reset the EC so we're in sync at boot on state
     let llio = llio::Llio::new(&xns);
     llio.ec_reset().unwrap();
-    ticktimer.sleep_ms(EC_BOOT_WAIT_MS).unwrap();
+    ticktimer.sleep_ms(250).unwrap();
+    #[cfg(not(any(windows, unix)))] // avoid errors in hosted mode
+    {
+        let mut attempts = 0;
+        let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
+        loop {
+            com.txrx(ComState::LINK_PING.verb);
+            com.txrx(ping_value);
+            let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // this should "stall" until the EC comes out of reset
+            let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+            if pong == !ping_value &&
+            phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                break;
+            } else {
+                log::warn!("Wf200 reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                com.txrx(ComState::LINK_SYNC.verb);
+                ticktimer.sleep_ms(200).unwrap();
+                attempts += 1;
+            }
+            if attempts > 50 {
+                log::error!("EC didn't sync out of reset...continuing and praying for the best.");
+                break;
+            }
+        }
+    }
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(com_sid).expect("couldn't create suspend callback connection");
@@ -419,6 +443,9 @@ fn xmain() -> ! {
                 if bl_main != 0 || bl_sec != 0 { // restore the backlight settings, if they are not 0
                     com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
                 }
+            }),
+            Some(Opcode::Ping) => xous::msg_blocking_scalar_unpack!(msg, ping, _, _, _, {
+                xous::return_scalar(msg.sender, !ping).unwrap();
             }),
             Some(Opcode::LinkReset) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::LINK_SYNC.verb);

@@ -84,6 +84,15 @@ impl Com {
             Message::new_blocking_scalar(Opcode::LinkReset.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn ping(&self, value: usize) -> Result<usize, xous::Error> {
+        if let xous::Result::Scalar1(pong) = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::Ping.to_usize().unwrap(), value, 0, 0, 0)
+        )? {
+            Ok(pong)
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
     pub fn reseed_ec_trng(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::ReseedTrng.to_usize().unwrap(), 0, 0, 0, 0)

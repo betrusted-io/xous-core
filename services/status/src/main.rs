@@ -116,7 +116,7 @@ pub fn pump_thread(conn: usize, pump_run: Arc<AtomicBool>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -146,7 +146,7 @@ fn xmain() -> ! {
     let status_gid: Gid = Gid::new(canvas_gid);
     log::trace!("|status: my canvas {:?}", status_gid);
 
-    log::trace!("|status: registering GAM|status thread");
+    log::debug!("|status: registering GAM|status thread");
     // we have one connection, from the status main loop; but we make it with a local call, not using xns. so there's 0 in xns.
     let status_sid = xns
         .register_name(SERVER_NAME_STATUS, Some(0))
@@ -165,7 +165,6 @@ fn xmain() -> ! {
 
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-    let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
 
@@ -193,7 +192,7 @@ fn xmain() -> ! {
         DrawStyle::new(PixelColor::Light, PixelColor::Light, 0),
     );
 
-    log::trace!("|status: building textview objects");
+    log::debug!("|status: building textview objects");
     // build uptime text view: left half of status bar
     let mut uptime_tv = TextView::new(
         status_gid,
@@ -206,8 +205,8 @@ fn xmain() -> ! {
     write!(uptime_tv, "{}", t!("secnote.startup", xous::LANG)).expect("|status: couldn't init uptime text");
     gam.post_textview(&mut uptime_tv)
         .expect("|status: can't draw battery stats");
-    log::trace!("|status: screensize as reported: {:?}", screensize);
-    log::trace!("|status: uptime initialized to '{:?}'", uptime_tv);
+    log::debug!("|status: screensize as reported: {:?}", screensize);
+    log::debug!("|status: uptime initialized to '{:?}'", uptime_tv);
 
     // build battstats text view: right half of status bar
     let mut battstats_tv = TextView::new(
@@ -227,16 +226,6 @@ fn xmain() -> ! {
         current: 0,
         remaining_capacity: 650,
     };
-
-    // the EC gets reset by the Net crate on boot to ensure that the state machines are synced up
-    // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
-    // the status bar reads "booting up..." during this period.
-    ticktimer.sleep_ms(4000).unwrap();
-    com.hook_batt_stats(battstats_cb)
-        .expect("|status: couldn't hook callback for events from COM");
-    // prime the loop
-    com.req_batt_stats()
-        .expect("Can't get battery stats from COM");
 
     log::debug!("initializing RTC...");
     let mut rtc = llio::Rtc::new(&xns);
@@ -337,6 +326,18 @@ fn xmain() -> ! {
     let mut battstats_phase = true;
     let mut secnotes_force_redraw = false;
 
+    // the EC gets reset by the Net crate on boot to ensure that the state machines are synced up
+    // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
+    // the status bar reads "booting up..." during this period.
+    log::debug!("syncing with COM");
+    let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
+    com.ping(0).unwrap(); // this will block until the COM is ready to take events
+    com.hook_batt_stats(battstats_cb)
+        .expect("|status: couldn't hook callback for events from COM");
+    // prime the loop
+    com.req_batt_stats()
+        .expect("Can't get battery stats from COM");
+
     log::debug!("starting main menu thread");
     create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com);
     create_app_menu(xous::connect(status_sid).unwrap());
@@ -355,6 +356,7 @@ fn xmain() -> ! {
         t!("rtc.saturday", xous::LANG),
         t!("rtc.sunday", xous::LANG),
     ];
+    log::debug!("subscribe to wifi updates");
     netmgr.wifi_state_subscribe(cb_cid, StatusOpcode::WifiStats.to_u32().unwrap()).unwrap();
     let mut wifi_status: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string

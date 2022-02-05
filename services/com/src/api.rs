@@ -144,6 +144,9 @@ pub struct WlanDebug {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
+    /// A ping back, used to determine when the COM has finished initializing
+    Ping,
+
     /// Reset the COM link - useful after an EC reset
     LinkReset,
 
