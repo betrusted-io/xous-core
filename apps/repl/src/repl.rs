@@ -208,6 +208,7 @@ impl Repl{
                 break; // we get None on the bounds computed if the text view fell off the top of the screen
             }
         }
+        log::trace!("repl app redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
         Ok(())
     }

@@ -116,7 +116,7 @@ pub fn pump_thread(conn: usize, pump_run: Arc<AtomicBool>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -259,6 +259,7 @@ fn xmain() -> ! {
     gam.draw_line(status_gid, Line::new_with_style(
         Point::new(0, screensize.y), screensize,
         DrawStyle::new(PixelColor::Light, PixelColor::Light, 1))).unwrap();
+    log::trace!("status redraw## initial");
     gam.redraw().unwrap(); // initial boot redraw
 
     let sec_notes = Arc::new(Mutex::new(HashMap::new()));
@@ -575,6 +576,7 @@ fn xmain() -> ! {
                     gam.post_textview(&mut uptime_tv)
                         .expect("|status: can't draw uptime");
                 }
+                log::trace!("status redraw## update");
                 gam.redraw().expect("|status: couldn't redraw");
 
                 stats_phase = stats_phase.wrapping_add(1);

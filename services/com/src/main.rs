@@ -341,6 +341,10 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
+    // reset the EC so we're in sync at boot on state
+    let llio = llio::Llio::new(&xns);
+    llio.ec_reset().unwrap();
+
     // unlimited connections allowed -- any server is currently allowed to talk to COM. This might need to be revisited.
     let com_sid = xns.register_name(api::SERVER_NAME_COM, None).expect("can't register server");
     trace!("registered with NS -- {:?}", com_sid);
@@ -349,24 +353,22 @@ fn xmain() -> ! {
     let mut com = XousCom::new();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
 
-    // reset the EC so we're in sync at boot on state
-    let llio = llio::Llio::new(&xns);
-    llio.ec_reset().unwrap();
-    ticktimer.sleep_ms(250).unwrap();
     #[cfg(not(any(windows, unix)))] // avoid errors in hosted mode
     {
+        ticktimer.sleep_ms(100).unwrap(); // give the EC a moment to de-chatter
         let mut attempts = 0;
         let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
         loop {
             com.txrx(ComState::LINK_PING.verb);
             com.txrx(ping_value);
-            let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // this should "stall" until the EC comes out of reset
-            let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+            let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(150)); // this should "stall" until the EC comes out of reset
+            let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(150));
             if pong == !ping_value &&
             phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                log::info!("EC rebooting: link established");
                 break;
             } else {
-                log::warn!("Wf200 reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                log::info!("EC rebooting: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
                 com.txrx(ComState::LINK_SYNC.verb);
                 ticktimer.sleep_ms(200).unwrap();
                 attempts += 1;

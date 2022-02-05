@@ -292,7 +292,7 @@ fn remap_rand(end_range: i32, rand: i16, source_range: i32) -> i16 {
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
-pub fn recompute_canvases(canvases: &HashMap<Gid, Canvas>, screen: Rectangle) -> HashMap<Gid, Canvas> {
+pub(crate) fn recompute_canvases(canvases: &HashMap<Gid, Canvas>, screen: Rectangle) -> HashMap<Gid, Canvas> {
     let debug = false; // keep this around, it's really convenient for turning off just this specific subset of debug messages
     // first, sort canvases by trust_level. Canvas implements ord/eq based on the trust_level attribute
     // so jush pushing it into a max binary heap does the trick.

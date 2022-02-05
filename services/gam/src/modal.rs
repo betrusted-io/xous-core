@@ -440,6 +440,7 @@ impl<'a> Modal<'a> {
             self.bot_dirty = false;
         }
         log::trace!("total height: {}", cur_height);
+        log::trace!("modal redraw##");
         self.gam.redraw().unwrap();
     }
 

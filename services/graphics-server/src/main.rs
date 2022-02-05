@@ -350,6 +350,7 @@ fn xmain() -> ! {
                 buffer.replace(tv).unwrap();
             }
             Some(Opcode::Flush) => {
+                log::trace!("***gfx flush*** redraw##");
                 display.update();
                 display.redraw();
             }

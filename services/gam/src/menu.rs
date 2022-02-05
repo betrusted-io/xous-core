@@ -267,6 +267,7 @@ impl<'a> Menu<'a> {
                 self.draw_divider(cur_index as _);
             }
         }
+        log::trace!("menu redraw##");
         self.gam.redraw().unwrap();
     }
     fn num_items(&self) -> usize {
@@ -297,6 +298,7 @@ impl<'a> Menu<'a> {
                         }
                     }
                     self.index = 0; // reset the index to 0
+                    log::trace!("menu redraw## select key");
                     self.gam.redraw().unwrap();
                     break; // drop any characters that happened to trail the select key, it's probably a fat-finger error.
                 },
@@ -310,10 +312,12 @@ impl<'a> Menu<'a> {
                 }
                 '↑' => {
                     self.prev_item();
+                    log::trace!("menu redraw## up key");
                     self.gam.redraw().unwrap();
                 }
                 '↓' => {
                     self.next_item();
+                    log::trace!("menu redraw## down key");
                     self.gam.redraw().unwrap();
                 }
                 _ => {}

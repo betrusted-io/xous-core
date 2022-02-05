@@ -435,9 +435,10 @@ impl ContextManager {
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
             }
-            log::trace!("defacing old canvases prior to redraw");
             // run the defacement before we redraw all the canvases
-            deface(gfx, &self.trng, canvases);
+            if deface(gfx, &self.trng, canvases) {
+                log::info!("activate triggered a defacement");
+            }
             log::trace!("activate redraw");
             self.redraw().expect("couldn't redraw the currently focused app");
         }

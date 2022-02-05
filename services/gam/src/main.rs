@@ -281,8 +281,9 @@ fn xmain() -> ! {
                     // recompute the canvas orders based on the new layout
                     let recomp_canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
                     canvases = recomp_canvases;
-                    log::trace!("canvas bounds redraw");
-                    context_mgr.redraw().expect("can't redraw after new canvas bounds");
+                    // this set of redraw commands is not needed because every context will call redraw after it has finished fitting its bounds
+                    // log::info!("canvas bounds redraw");
+                    // context_mgr.redraw().expect("can't redraw after new canvas bounds");
                 }
                 cb.granted = granted;
                 let ret = api::Return::SetCanvasBoundsReturn(cb);

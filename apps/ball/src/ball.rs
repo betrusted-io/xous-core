@@ -142,6 +142,7 @@ impl Ball {
         self.ball.style = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         draw_list.push(GamObjectType::Circ(self.ball)).unwrap();
         self.gam.draw_list(draw_list).expect("couldn't execute draw list");
+        log::trace!("ball app redraw##");
         self.gam.redraw().unwrap();
     }
     pub(crate) fn focus(&mut self) {

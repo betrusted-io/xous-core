@@ -460,28 +460,25 @@ fn xmain() -> ! {
         }
     });
     // our menu handler
+    let my_cid = xous::connect(pddb_sid).unwrap();
     let _ = thread::spawn({
-        let my_cid = xous::connect(pddb_sid).unwrap();
+        let my_cid = my_cid.clone();
         move || {
             pddb_menu(my_cid);
         }
     });
-    // try to mount the PDDB automatically before starting the server
-    #[cfg(not(any(windows, unix)))] // avoid errors in hosted mode
-    let tt = ticktimer_server::Ticktimer::new().unwrap();
-    #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode, for now...
-    if pddb_os.rootkeys_initialized() {
-        tt.sleep_ms(6000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing (cosmetic issue).
-        match ensure_password(&modals, &mut pddb_os) {
-            PasswordState::Correct => {
-                try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct);
-            },
-            PasswordState::Uninit => {
-                try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit);
-            },
-            _ => (), // continue without mounting if the user opts out
+    // spawn a delayed mount command, shortly after boot. There's too much going on at boot, and it blocks other things from coming up.
+    #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode
+    let _ = thread::spawn({
+        let my_cid = my_cid.clone();
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            tt.sleep_ms(5000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing
+            send_message(my_cid,
+                Message::new_blocking_scalar(Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)
+            ).expect("couldn't send mount request");
         }
-    }
+    });
     // main server loop
     let mut key_list = Vec::<String>::new(); // storage for key lists
     let mut key_token: Option<[u32; 4]> = None;
@@ -489,9 +486,8 @@ fn xmain() -> ! {
     let mut dict_token: Option<[u32; 4]> = None;
 
     // register a suspend/resume listener
-    let sr_cid = xous::connect(pddb_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
-        Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+        Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -514,14 +510,23 @@ fn xmain() -> ! {
                         // can't mount if we have no root keys
                         xous::return_scalar(msg.sender, 0).expect("could't return scalar");
                     } else {
-                        if ensure_password(&modals, &mut pddb_os) == PasswordState::Correct {
-                            if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct) {
-                                xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
-                            } else {
-                                xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
-                            }
-                        } else {
-                            xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
+                        match ensure_password(&modals, &mut pddb_os) {
+                            PasswordState::Correct => {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct) {
+                                    xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
+                                } else {
+                                    xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
+                                }
+                            },
+                            PasswordState::Uninit => {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit) {
+                                    xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
+                                } else {
+                                    xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
+                                }
+                            },
+                            // user aborted procedure
+                            _ => xous::return_scalar(msg.sender, 0).expect("couldn't return scalar"),
                         }
                     }
                 }

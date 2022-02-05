@@ -600,6 +600,7 @@ impl InputTracker {
             }
         }
 
+        log::trace!("imef: redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
 
         Ok(retstring)

@@ -134,7 +134,6 @@ impl XousDisplay {
     }
 
     pub fn redraw(&mut self) {
-        log::info!("**update**");
         let mut busy_count = 0;
         let mut dirty_count = 0;
         while self.busy() {
