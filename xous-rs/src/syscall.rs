@@ -23,6 +23,10 @@ pub enum SysCall {
     /// If a virtual address is specified, then the returned pages are located
     /// at that address.  Otherwise, they are located at the Default offset.
     ///
+    /// # Returns
+    ///
+    /// * **MemoryRange**: A memory range containing zeroed bytes.
+    ///
     /// # Errors
     ///
     /// * **BadAlignment**: Either the physical or virtual addresses aren't
@@ -40,6 +44,9 @@ pub enum SysCall {
     /// Release the memory back to the operating system.
     ///
     /// # Errors
+    ///
+    /// * **BadAlignment**: The memory range was not page-aligned
+    /// * **BadAddress**: A page in the range was not mapped
     ///
     UnmapMemory(MemoryRange),
 
@@ -101,6 +108,13 @@ pub enum SysCall {
     /// to REMOVE flags on a memory region, for example to mark it as no-execute
     /// after writing program data.
     ///
+    /// If `PID` is `None`, then modifies this process. Note that it is not legal
+    /// to modify the memory range of another process that has been started already.
+    ///
+    /// # Returns
+    ///
+    /// * **Ok**: The call completed successfully
+    ///
     /// # Errors
     ///
     /// * **ProcessNotChild**: The given PID is not a child of the current
@@ -109,25 +123,65 @@ pub enum SysCall {
     ///                    legal to modify memory flags anymore.
     UpdateMemoryFlags(
         MemoryAddress, /* virt */
-        usize,         /* number of pages */
+        MemorySize,    /* number of bytes */
         MemoryFlags,   /* new flags */
+        Option<PID>,   /* if present, indicates the process to modify */
     ),
 
     /// Pauses execution of the current thread and returns execution to the parent
     /// process.  This may return at any time in the future, including immediately.
+    ///
+    /// # Returns
+    ///
+    /// * **Ok**: The call completed successfully
+    ///
+    /// # Errors
+    ///
+    /// This syscall will never return an error.
     Yield,
 
     /// This process will now wait for an event such as an IRQ or Message.
+    ///
+    /// # Returns
+    ///
+    /// * **Ok**: The call completed successfully
+    ///
+    /// # Errors
+    ///
+    /// This syscall will never error.
     WaitEvent,
 
     /// This thread will now wait for a message with the given server ID. You
     /// can set up a pool by having multiple threads call `ReceiveMessage` with
     /// the same SID.
+    ///
+    /// # Returns
+    ///
+    /// * **Message**: A valid message from the queue
+    ///
+    /// # Errors
+    ///
+    /// * **ServerNotFound**: The given SID is not active or has terminated
+    /// * **ProcessNotFound**: The parent process terminated when we were getting ready
+    ///                        to block. This is an internal error.
+    /// * **BlockedProcess**: When running in Hosted mode, this indicates that this
+    ///                       thread is blocking.
     ReceiveMessage(SID),
 
     /// If a message is available for the specified server, return that message
     /// and resume execution. If no message is available, return `Result::None`
     /// immediately without blocking.
+    ///
+    /// # Returns
+    ///
+    /// * **Message**: A valid message from the queue
+    /// * **None**: Indicates that no message was in the queue
+    ///
+    /// # Errors
+    ///
+    /// * **ServerNotFound**: The given SID is not active or has terminated
+    /// * **ProcessNotFound**: The parent process terminated when we were getting ready
+    ///                        to block. This is an internal error.
     TryReceiveMessage(SID),
 
     /// Stop running the given process and return control to the parent. This
@@ -143,6 +197,10 @@ pub enum SysCall {
     /// Claims an interrupt and unmasks it immediately.  The provided function
     /// will be called from within an interrupt context, but using the ordinary
     /// privilege level of the process.
+    ///
+    /// # Returns
+    ///
+    /// * **Ok**: The interrupt has been mapped to this process
     ///
     /// # Errors
     ///
@@ -213,6 +271,10 @@ pub enum SysCall {
     SwitchTo(PID, usize /* context ID */),
 
     /// Get a list of contexts that can be run in the given PID.
+    ///
+    /// # Errors
+    ///
+    /// * **UnhandledSyscall**: This syscall is currently unimplemented.
     ReadyThreads(PID),
 
     /// Create a new Server with a specified address
@@ -223,8 +285,8 @@ pub enum SysCall {
     ///
     /// # Returns
     ///
-    /// The specified SID, along with the connection ID for this process to talk
-    /// to the server.
+    /// * **NewServerID(sid, cid)**: The specified SID, along with the connection ID
+    ///                              for this process to talk to the server.
     ///
     /// # Errors
     ///
@@ -236,6 +298,10 @@ pub enum SysCall {
     /// Connect to a server.   This turns a 128-bit Server ID into a 32-bit
     /// Connection ID. Blocks until the server is available.
     ///
+    /// # Returns
+    ///
+    /// * **ConnectionID(cid)**: The new connection ID for communicating with the server.
+    ///
     /// # Errors
     ///
     /// None
@@ -244,15 +310,44 @@ pub enum SysCall {
     /// Try to connect to a server.   This turns a 128-bit Server ID into a 32-bit
     /// Connection ID.
     ///
+    /// # Returns
+    ///
+    /// * **ConnectionID(cid)**: The new connection ID for communicating with the server.
+    ///
     /// # Errors
     ///
     /// * **ServerNotFound**: The server could not be found.
     TryConnect(SID /* server id */),
 
     /// Send a message to a server (blocking until it's ready)
+    ///
+    /// # Returns
+    ///
+    /// * **Ok**: The Scalar / Send message was successfully sent, or the Borrow has finished
+    /// * **Scalar1**: The Server returned a `Scalar1` value
+    /// * **Scalar2**: The Server returned a `Scalar2` value
+    /// * **BlockedProcess**: In Hosted mode, the target process is now blocked
+    ///
+    /// # Errors
+    ///
+    /// * **ServerNotFound**: The server could not be found.
+    /// * **ProcessNotFound**: Internal error -- the parent process couldn't be found when blocking
     SendMessage(CID, Message),
 
     /// Try to send a message to a server
+    ///
+    /// # Returns
+    ///
+    /// * **Ok**: The Scalar / Send message was successfully sent, or the Borrow has finished
+    /// * **Scalar1**: The Server returned a `Scalar1` value
+    /// * **Scalar2**: The Server returned a `Scalar2` value
+    /// * **BlockedProcess**: In Hosted mode, the target process is now blocked
+    ///
+    /// # Errors
+    ///
+    /// * **ServerNotFound**: The server could not be found.
+    /// * **ServerQueueFull**: The server's mailbox is full
+    /// * **ProcessNotFound**: Internal error -- the parent process couldn't be found when blocking
     TrySendMessage(CID, Message),
 
     /// Return a Borrowed memory region to the sender
