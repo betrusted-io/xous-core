@@ -1119,8 +1119,10 @@ fn generate_version() {
         .truncate(true)
         .open("services/ticktimer-server/src/version.rs").expect("Can't open our version file for writing");
     print_header(&mut vfile);
+    #[cfg(not(feature="no-timestamp"))]
     let now = Local::now();
-    write!(vfile, "pub const TIMESTAMP: &'static str = \"{}\";\n", now.to_rfc2822()).expect("couldn't add our timestamp");
+    #[cfg(not(feature="no-timestamp"))]
+    write!(vfile, "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"{}\";\n", now.to_rfc2822()).expect("couldn't add our timestamp");
     write!(vfile, "pub const SEMVER: &'static str = \"{}\";\n",
         semver
         .strip_suffix("\r\n")
@@ -1139,7 +1141,9 @@ pub(crate) fn get_version() -> crate::api::VersionString {
         version: xous_ipc::String::new()
     };
     v.version.append(SEMVER).ok();
+    #[cfg(not(feature="no-timestamp"))]
     v.version.append("\n").ok();
+    #[cfg(not(feature="no-timestamp"))]
     v.version.append(TIMESTAMP).ok();
     v
 }

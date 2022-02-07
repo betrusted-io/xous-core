@@ -475,6 +475,7 @@ fn xmain() -> ! {
 
     log::info!("****************************************************************");
     log::info!("Welcome to Xous {}", version::SEMVER);
+    #[cfg(not(feature="no-timestamp"))]
     log::info!("Built on {}", version::TIMESTAMP);
     log::info!("****************************************************************");
 

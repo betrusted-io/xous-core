@@ -25,7 +25,8 @@ utralib = {path = "../../utralib"}
 [features]
 debug-print = []
 watchdog = []
-# generally you want to disable watchdog if you're doing development
+no-timestamp = [] # turns off embedded timestamp for reproducible builds
+# you may want to remove the watchdog feature if you're debugging a crash, as it will force the system to reboot automatically
 default = ["watchdog"]
 # default = []
 # default = ["debug-print"]
