@@ -4,10 +4,12 @@ description = "System call interface for Xous"
 edition = "2018"
 license = "MIT OR Apache-2.0"
 name = "xous-ipc"
-version = "0.8.0"
+version = "0.9.7"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/"
 
 # Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 bitflags = {version = "1"}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-xous = "0.8.0"
+xous = "0.9.7"
