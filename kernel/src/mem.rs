@@ -776,4 +776,47 @@ impl MemoryManager {
             }
         }
     }
+
+    /// Adjust the flags on the given memory range. This allows for stripping flags from a memory
+    /// range but does not allow adding flags. The memory range must exist, and the flags must be valid.
+    pub fn update_memory_flags(
+        &mut self,
+        range: MemoryRange,
+        flags: MemoryFlags,
+    ) -> Result<(), xous_kernel::Error> {
+        let virt = range.as_mut_ptr() as usize;
+        let size = range.len();
+        if virt & (PAGE_SIZE - 1) != 0 {
+            return Err(xous_kernel::Error::BadAlignment);
+        }
+
+        if size & (PAGE_SIZE - 1) != 0 {
+            return Err(xous_kernel::Error::BadAlignment);
+        }
+
+        // Pre-check the range to ensure the new flags are valid
+        for virt in (virt..(virt + size)).step_by(PAGE_SIZE) {
+            let existing_flags =
+                crate::arch::mem::page_flags(virt).ok_or(xous_kernel::Error::MemoryInUse)?;
+            // If the new flags add to the range, return an error.
+            if !(!existing_flags & flags).is_empty() {
+                return Err(xous_kernel::Error::MemoryInUse);
+            }
+        }
+
+        // Now that the flags are validated, perform the update. This is fine as long as
+        // we're unicore.
+        for virt in (virt..(virt + size)).step_by(PAGE_SIZE) {
+            let existing_flags =
+                crate::arch::mem::page_flags(virt).ok_or(xous_kernel::Error::MemoryInUse)?;
+            // If the new flags add to the range, return an error.
+            if !(!existing_flags & flags).is_empty() {
+                return Err(xous_kernel::Error::MemoryInUse);
+            }
+
+            crate::arch::mem::update_page_flags(virt, flags)?;
+        }
+
+        Ok(())
+    }
 }

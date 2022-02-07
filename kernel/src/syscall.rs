@@ -884,6 +884,15 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 ret
             })
         }
+        SysCall::UpdateMemoryFlags(range, flags, pid) => {
+            // We do not yet support modifying flags for other processes.
+            if pid.is_some() {
+                return Err(xous_kernel::Error::ProcessNotChild);
+            }
+
+            MemoryManager::with_mut(|mm| mm.update_memory_flags(range, flags))?;
+            Ok(xous_kernel::Result::Ok)
+        }
         /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
             ss.set_exception_handler(pid, pc, sp)

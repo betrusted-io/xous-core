@@ -111,3 +111,11 @@ pub fn hand_page_to_user(_virt: *mut u8) -> Result<(), Error> {
 pub fn virt_to_phys(virt: usize) -> Result<usize, Error> {
     Ok(virt)
 }
+
+pub fn page_flags(_virt: usize) -> Option<MemoryFlags> {
+    None
+}
+
+pub fn update_page_flags(_virt: usize, _flags: MemoryFlags) -> Result<(), xous_kernel::Error> {
+    Ok(())
+}

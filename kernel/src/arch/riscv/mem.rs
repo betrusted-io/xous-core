@@ -282,7 +282,7 @@ pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {
     // The root (l1) pagetable is defined to be mapped into our virtual
     // address space at this address.
     let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    let l1_pt =&mut  l1_pt.entries;
+    let l1_pt = &mut l1_pt.entries;
 
     // Subsequent pagetables are defined as being mapped starting at
     // PAGE_TABLE_OFFSET
@@ -788,4 +788,125 @@ pub fn address_available(virt: usize) -> bool {
         // If the address is not an error, then it is not available and shouldn't be used.
         false
     }
+}
+
+/// Get the `MemoryFlags` for the requested virtual address. The address must
+/// be valid and page-aligned, and must not be Shared.
+///
+/// # Returns
+///
+/// * **None**: The page is not valid or is shared
+/// * **Some(MemoryFlags)**: The translated sharing permissions of the given flags
+pub fn page_flags(virt: usize) -> Option<MemoryFlags> {
+    let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+    let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+
+    // The root (l1) pagetable is defined to be mapped into our virtual
+    // address space at this address.
+    let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+    let l1_pt = &mut l1_pt.entries;
+
+    // Subsequent pagetables are defined as being mapped starting at
+    // offset 0x0020_0004, so 4 must be added to the ppn1 value.
+    let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+    let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+
+    // If the level 1 pagetable doesn't exist, then this address is invalid
+    if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
+        return None;
+    }
+
+    let mmu_flags = l0_pt.entries[vpn0];
+
+    // If the page is "Valid" but shared, issue a sharing violation
+    if mmu_flags & MMUFlags::S.bits() != 0 {
+        return None;
+    }
+
+    let mut return_flags = MemoryFlags::empty();
+
+    if mmu_flags & MMUFlags::R.bits() != 0 {
+        return_flags = return_flags | MemoryFlags::R;
+    }
+
+    if mmu_flags & MMUFlags::W.bits() != 0 {
+        return_flags = return_flags | MemoryFlags::W;
+    }
+
+    if mmu_flags & MMUFlags::X.bits() != 0 {
+        return_flags = return_flags | MemoryFlags::X;
+    }
+
+    if return_flags.is_empty() {
+        None
+    } else {
+        Some(return_flags)
+    }
+}
+
+pub fn update_page_flags(virt: usize, flags: MemoryFlags) -> Result<(), xous_kernel::Error> {
+    // The resulting flags must actually be valid
+    if (flags & (MemoryFlags::R | MemoryFlags::W | MemoryFlags::X)).is_empty() {
+        return Err(xous_kernel::Error::MemoryInUse);
+    }
+
+    let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+    let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+
+    // The root (l1) pagetable is defined to be mapped into our virtual
+    // address space at this address.
+    let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+    let l1_pt = &mut l1_pt.entries;
+
+    // Subsequent pagetables are defined as being mapped starting at
+    // offset 0x0020_0004, so 4 must be added to the ppn1 value.
+    let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+    let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+
+    // If the level 1 pagetable doesn't exist, then this address is invalid
+    if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
+        return Err(xous_kernel::Error::OutOfMemory);
+    }
+
+    let mut mmu_flags = l0_pt.entries[vpn0];
+
+    // If the page is "Valid" but shared, issue a sharing violation
+    if mmu_flags & MMUFlags::S.bits() != 0 {
+        return Err(xous_kernel::Error::ShareViolation);
+    }
+
+    // Strip the flags as requested
+    if (flags & MemoryFlags::X).is_empty() {
+        if mmu_flags & MMUFlags::X.bits() != 0 {
+            mmu_flags = mmu_flags & !MMUFlags::X.bits();
+        }
+    } else if mmu_flags & MMUFlags::X.bits() == 0 {
+        // Ensure we're not adding flags back
+        return Err(xous_kernel::Error::ShareViolation);
+    }
+
+    // Strip the flags as requested
+    if (flags & MemoryFlags::R).is_empty() {
+        if mmu_flags & MMUFlags::R.bits() != 0 {
+            mmu_flags = mmu_flags & !MMUFlags::R.bits();
+        }
+    } else if mmu_flags & MMUFlags::R.bits() == 0 {
+        // Ensure we're not adding flags back
+        return Err(xous_kernel::Error::ShareViolation);
+    }
+
+    // Strip the flags as requested
+    if (flags & MemoryFlags::W).is_empty() {
+        if mmu_flags & MMUFlags::W.bits() != 0 {
+            mmu_flags = mmu_flags & !MMUFlags::W.bits();
+        }
+    } else if mmu_flags & MMUFlags::W.bits() == 0 {
+        // Ensure we're not adding flags back
+        return Err(xous_kernel::Error::ShareViolation);
+    }
+
+    // Update the MMU
+    l0_pt.entries[vpn0] = mmu_flags;
+
+    Ok(())
 }
