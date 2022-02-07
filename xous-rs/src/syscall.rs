@@ -1,7 +1,7 @@
 use crate::{
-    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage,
-    MemoryRange, MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs,
-    ProcessInit, Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
+    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
+    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
+    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
 use core::convert::{TryFrom, TryInto};
 /* https://github.com/betrusted-io/xous-core/issues/90
@@ -122,10 +122,9 @@ pub enum SysCall {
     /// * **MemoryInUse**: The given PID has already been started, and it is not
     ///                    legal to modify memory flags anymore.
     UpdateMemoryFlags(
-        MemoryAddress, /* virt */
-        MemorySize,    /* number of bytes */
-        MemoryFlags,   /* new flags */
-        Option<PID>,   /* if present, indicates the process to modify */
+        MemoryRange, /* range of memory to update flags for */
+        MemoryFlags, /* new flags */
+        Option<PID>, /* if present, indicates the process to modify */
     ),
 
     /// Pauses execution of the current thread and returns execution to the parent
@@ -658,10 +657,10 @@ impl SysCall {
             ],
             SysCall::UpdateMemoryFlags(a1, a2, a3) => [
                 SysCallNumber::UpdateMemoryFlags as usize,
-                a1.get(),
-                *a2 as usize,
-                crate::get_bits(a3),
-                0,
+                a1.as_mut_ptr() as usize,
+                a1.len(),
+                crate::get_bits(a2),
+                a3.map(|m| m.get() as usize).unwrap_or(0),
                 0,
                 0,
                 0,
@@ -910,9 +909,9 @@ impl SysCall {
             ),
             SysCallNumber::DecreaseHeap => SysCall::DecreaseHeap(a1 as usize),
             SysCallNumber::UpdateMemoryFlags => SysCall::UpdateMemoryFlags(
-                MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
-                a2 as usize,
+                unsafe { MemoryRange::new(a1, a2) }?,
                 crate::from_bits(a3).ok_or(Error::InvalidSyscall)?,
+                PID::new(a4 as _),
             ),
             SysCallNumber::SetMemRegion => SysCall::SetMemRegion(
                 pid_from_usize(a1)?,
@@ -1153,6 +1152,22 @@ pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
     if let crate::Result::Ok = result {
         crate::arch::unmap_memory_post(range)?;
         Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Update the permissions on the given memory range. Note that permissions may
+/// only be stripped here -- they may never be added.
+pub fn update_memory_flags(
+    range: MemoryRange,
+    flags: MemoryFlags,
+) -> core::result::Result<Result, Error> {
+    let result = rsyscall(SysCall::UpdateMemoryFlags(range, flags, None))?;
+    if let Result::Ok = result {
+        Ok(Result::Ok)
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
