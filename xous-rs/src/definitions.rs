@@ -165,8 +165,8 @@ pub type CpuID = usize;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct MemoryRange {
-    addr: MemoryAddress,
-    size: MemorySize,
+    pub(crate) addr: MemoryAddress,
+    pub(crate) size: MemorySize,
 }
 
 #[cfg(feature = "bitflags")]
