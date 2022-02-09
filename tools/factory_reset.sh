@@ -35,7 +35,7 @@ echo "waiting for device to reboot"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
-./usb_update.py --soc /tmp/soc_csr.bin --force 
+./usb_update.py --soc /tmp/soc_csr.bin --force
 rm /tmp/soc_csr.bin
 
 echo "waiting for device to reboot"
