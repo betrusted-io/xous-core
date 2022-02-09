@@ -261,7 +261,12 @@ impl XousKeyboardHandler {
 
 impl minifb::InputCallback for XousKeyboardHandler {
     fn add_char(&mut self, uni_char: u32) {
-        self.kbd.hostmode_inject_key( char::from_u32(uni_char).unwrap_or('\u{0000}') );
+        let c = char::from_u32(uni_char).unwrap_or('\u{0000}');
+        if c != '\u{0008}'
+        && c != '\u{000d}'
+        && c != '\u{007f}' {
+            self.kbd.hostmode_inject_key(c);
+        }
     }
 
     fn set_key_state(&mut self, key: minifb::Key, state: bool) {
