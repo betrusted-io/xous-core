@@ -227,7 +227,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            run(true, &hw_pkgs, None)?
+            run(true, &pkgs, None)?
         },
         Some("app-image") => {
             let mut args = env::args();
