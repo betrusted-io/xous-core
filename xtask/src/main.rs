@@ -213,6 +213,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_app_menus(&apps);
             run(false, &pkgs, None)?
         },
+        Some("debug") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let mut apps: Vec<String> = args.collect();
+            if apps.len() == 0 { // add the standard demo apps if none are specified
+                println!("No apps specified, adding default apps...");
+                apps.push("ball".to_string());
+                apps.push("repl".to_string());
+            }
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            run(true, &hw_pkgs, None)?
+        },
         Some("app-image") => {
             let mut args = env::args();
             args.nth(1);
@@ -318,7 +334,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("sr-test") => {
             build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
         }
-        Some("debug") => run(true, &hw_pkgs, None)?,
         Some("burn-kernel") => update_usb(true, false, false, false)?,
         Some("burn-loader") => update_usb(false, true, false, false)?,
         Some("nuke-soc") => update_usb(false, false, true, false)?,
