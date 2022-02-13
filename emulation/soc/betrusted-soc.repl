@@ -32,7 +32,8 @@ memlcd: Video.BetrustedLCD @ sysbus 0xf000c000
     memAddr: 0xb0000000
     memSize: 0x5c20
 
-// Unrecognized peripheral: com @ 0xf000d000
+com: SPI.BetrustedSocSpi @ sysbus 0xf000d000
+    IRQ -> cpu @ 1005
 
 i2c: I2C.BetrustedSocI2C @ sysbus 0xf000e000
     -> cpu @ 1006
