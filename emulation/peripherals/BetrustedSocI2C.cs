@@ -44,6 +44,15 @@ namespace Antmicro.Renode.Peripherals.I2C
                 {(long)Registers.Transmit, new DoubleWordRegister(this)
                     .WithValueField(0, 8, out transmitBuffer, FieldMode.Write)
                 },
+                {(long)Registers.Reset, new DoubleWordRegister(this)
+                    .WithFlag(0, writeCallback: (_, val) => {
+                        if (val) {
+                            dataToSlave.Clear();
+                            dataFromSlave.Clear();
+                            UpdateInterrupts();
+                        }
+                    })
+                },
 
                 {(long)Registers.Receive, new DoubleWordRegister(this)
                     .WithValueField(0, 8, out receiveBuffer, FieldMode.Read)
