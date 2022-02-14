@@ -387,8 +387,8 @@ mod implementation {
                 (&mut spinor) as *mut Spinor as *mut usize,
             )
             .expect("couldn't claim SPINOR irq");
-            spinor.softirq.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
-            spinor.softirq.wfo(utra::spinor::EV_ENABLE_ECC_ERROR, 1);
+            spinor.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
+            spinor.csr.wfo(utra::spinor::EV_ENABLE_ECC_ERROR, 1);
             spinor.susres.push_fixed_value(RegOrField::Reg(utra::spinor::EV_PENDING), 0xFFFF_FFFF);
             spinor.susres.push(RegOrField::Reg(utra::spinor::EV_ENABLE), None);
 
