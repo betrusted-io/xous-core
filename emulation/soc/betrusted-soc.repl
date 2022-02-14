@@ -9,20 +9,20 @@ cpu: CPU.VexRiscv @ sysbus
 
 timer0: Timers.LiteX_Timer_32 @ sysbus 0xf0001000
     frequency: 100000000
-    -> cpu @ 1000
+    IRQ -> cpu @ 1000
 
 // Unrecognized peripheral: crg @ 0xf0002000
 
 // Unrecognized peripheral: gpio @ 0xf0003000
 
 uart: UART.LiteX_UART @ sysbus 0xf0005000
-    -> cpu @ 1002
+    IRQ -> cpu @ 1002
 
 console: UART.LiteX_UART @ sysbus 0xf0007000
-    -> cpu @ 1003
+    IRQ -> cpu @ 1003
 
 app_uart: UART.LiteX_UART @ sysbus 0xf0009000
-    -> cpu @ 1004
+    IRQ -> cpu @ 1004
 
 // Unrecognized peripheral: info @ 0xf000a000
 
@@ -32,11 +32,11 @@ memlcd: Video.BetrustedLCD @ sysbus 0xf000c000
     memAddr: 0xb0000000
     memSize: 0x5c20
 
-com: SPI.BetrustedSocSpi @ sysbus 0xf000d000
+com: SPI.BetrustedSocCom @ sysbus 0xf000d000
     IRQ -> cpu @ 1005
 
 i2c: I2C.BetrustedSocI2C @ sysbus 0xf000e000
-    -> cpu @ 1006
+    IRQ -> cpu @ 1006
 
 // Unrecognized peripheral: btevents @ 0xf000f000
 
@@ -45,19 +45,19 @@ i2c: I2C.BetrustedSocI2C @ sysbus 0xf000e000
 // Unrecognized peripheral: messible2 @ 0xf0011000
 
 ticktimer: Timers.TickTimer @ sysbus 0xf0012000
-    -> cpu @ 1008
+    IRQ -> cpu @ 1008
 
 // Unrecognized peripheral: susres @ 0xf0013000
 
 // Unrecognized peripheral: power @ 0xf0014000
 
 spinor_soft_int: Miscellaneous.SpinorSoftInt @ sysbus 0xf0015000
-    -> cpu @ 1011
+    IRQ -> cpu @ 1011
 
 // Unrecognized peripheral: spinor @ 0xf0016000
 
 keyboard: Input.BetrustedKbd @ sysbus 0xf0017000
-    -> cpu @ 1013
+    IRQ -> cpu @ 1013
 
 // Unrecognized peripheral: keyinject @ 0xf0018000
 
@@ -68,22 +68,22 @@ keyrom: Miscellaneous.Keyrom @ sysbus 0xf001a000
 // Unrecognized peripheral: audio @ 0xf001b000
 
 trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xf001c000
-    -> cpu @ 1015
+    IRQ -> cpu @ 1015
 
 trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001d000
-    -> cpu @ 1016
+    IRQ -> cpu @ 1016
 
 // Unrecognized peripheral: trng @ 0xf001e000
 
 sha512: Miscellaneous.Sha512 @ sysbus 0xf001f000
     memAddr: 0xe0002000
     memSize: 0x4
-    -> cpu @ 1017
+    IRQ -> cpu @ 1017
 
 engine: Miscellaneous.Engine @ sysbus 0xf0020000
     memAddr: 0xe0020000
     memSize: 0x20000
-    -> cpu @ 1018
+    IRQ -> cpu @ 1018
 
 // Unrecognized peripheral: jtag @ 0xf0021000
 
