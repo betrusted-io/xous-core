@@ -403,14 +403,24 @@ fn update_usb(
 
     if do_kernel {
         println!("Burning kernel. After this is done, you must select 'Sign xous update' to self-sign the image.");
-        let stdout = Command::new("python3")
-            .arg("tools/usb_update.py")
-            .arg("-k")
-            .arg("target/riscv32imac-unknown-none-elf/release/xous.img")
+        let stdout = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+            .args(["/C", "python",
+            "tools/usb_update.py", "-k", "target/riscv32imac-unknown-xous-elf/release/xous.img"])
             .stdout(Stdio::piped())
             .spawn()?
             .stdout
-            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        } else {
+            Command::new("python3")
+            .arg("tools/usb_update.py")
+            .arg("-k")
+            .arg("target/riscv32imac-unknown-xous-elf/release/xous.img")
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        };
 
         let reader = BufReader::new(stdout);
         reader
@@ -419,14 +429,24 @@ fn update_usb(
     }
     if do_loader {
         println!("Burning loader. After this is done, you must select 'Sign xous update' to self-sign the image.");
-        let stdout = Command::new("python3")
-            .arg("tools/usb_update.py")
-            .arg("-l")
-            .arg("target/riscv32imac-unknown-none-elf/release/loader.bin")
+        let stdout = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+            .args(["/C", "python", "tools/usb_update.py",
+            "-l", "target/riscv32imac-unknown-xous-elf/release/loader.bin"])
             .stdout(Stdio::piped())
             .spawn()?
             .stdout
-            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        } else {
+            Command::new("python3")
+            .arg("tools/usb_update.py")
+            .arg("-l")
+            .arg("target/riscv32imac-unknown-xous-elf/release/loader.bin")
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        };
 
         let reader = BufReader::new(stdout);
         reader
@@ -435,14 +455,24 @@ fn update_usb(
     }
     if stage_soc {
         println!("Staging SoC gateware. After this is done, you must select 'Install Gateware Update' from the root menu of your Precursor device.");
-        let stdout = Command::new("python3")
+        let stdout = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+            .args(["/C", "python", "tools/usb_update.py",
+            "-s", "precursors/soc_csr.bin"])
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        } else {
+            Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("-s")
             .arg("precursors/soc_csr.bin")
             .stdout(Stdio::piped())
             .spawn()?
             .stdout
-            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        };
 
         let reader = BufReader::new(stdout);
         reader
@@ -451,15 +481,24 @@ fn update_usb(
     }
     if nuke_soc {
         println!("Installing factory-reset SoC gateware (secrets will be lost)!");
-        let stdout = Command::new("python3")
+        let stdout = if cfg!(traget_os = "windows") {
+            Command::new("cmd")
+            .args(["/C", "python", "tools/usb_update.py",
+            "--soc", "precursors/soc_csr.bin"])
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        } else {
+            Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("--soc")
             .arg("precursors/soc_csr.bin")
             .stdout(Stdio::piped())
             .spawn()?
             .stdout
-            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
-
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
+        };
         let reader = BufReader::new(stdout);
         reader
             .lines()
