@@ -20,6 +20,7 @@ namespace Antmicro.Renode.Peripherals.SPI
     public interface IComPeripheral : IPeripheral, IInterestingType
     {
         ushort Transmit(ushort data);
+        bool HasData();
         void FinishTransmission();
     }
     public interface IComController : IPeripheral, IInterestingType, IGPIOReceiver
@@ -180,7 +181,15 @@ namespace Antmicro.Renode.Peripherals.SPI
                 // We don't use a separate time domain here because the peripheral's output is buffered and we
                 // want it to operate at the same speed as the host. If we used a separate time domain then there would
                 // be gaps in the buffer, whereas the real hardware will have no gaps.
-                return peripheral.Transmit(data);
+                ushort result = peripheral.Transmit(data);
+
+                // Update the hold GPIO in this same domain. It may get updated slightly in the future
+                // by the `OnGPIO` call above, but update it in this cycle to avoid latency issues.
+                if (holdGpio != null)
+                {
+                    holdGpio.Set(!peripheral.HasData());
+                }
+                return result;
             }
         }
 
@@ -338,7 +347,7 @@ namespace Antmicro.Renode.Peripherals.SPI
             {
                 TxValue = 0xDDDD;
             }
-            this.Log(LogLevel.Debug, "EC received:{0:X4} sent:{1:X4}", value, TxValue);
+            this.Log(LogLevel.Noisy, "EC received:{0:X4} sent:{1:X4}", value, TxValue);
             Hold.Set(!EcRam.WriteFifoHasData());
             EcRam.WriteNextWord((ushort)value);
             // this.Log(LogLevel.Info, "EcRam.ReadFifo now contains {0} items, EcRam.WriteFifo contains {1} items", EcRam.ReadFifoCount(), EcRam.WriteFifoCount());
@@ -348,6 +357,11 @@ namespace Antmicro.Renode.Peripherals.SPI
         public void FinishTransmission()
         {
             // this.Log(LogLevel.Info, "EC finished transmission");
+        }
+
+        public bool HasData()
+        {
+            return EcRam.WriteFifoHasData();
         }
 
         public void Reset()
@@ -389,7 +403,7 @@ namespace Antmicro.Renode.Peripherals.SPI
                     // }
                     Rx.Value = (uint)RegisteredPeripheral.Transmit((ushort)val);
                     RegisteredPeripheral.FinishTransmission();
-                    machine.Log(LogLevel.Debug, "SoC sent {0:X4} received {1:X4}", val, Rx.Value);
+                    machine.Log(LogLevel.Noisy, "SoC sent {0:X4} received {1:X4}", val, Rx.Value);
                     if (IntEna.Value)
                     {
                         SpiIntStatus.Value = true;
