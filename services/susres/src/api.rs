@@ -227,13 +227,13 @@ impl<const N: usize> ManagedMem<N> {
 impl<const N: usize> SuspendResume for ManagedMem<N> {
     fn suspend(&mut self) {
         let src = self.mem.as_ptr() as *const u32;
-        for words in 0..(self.mem.len() / core::mem::size_of::<u32>()) {
+        for words in 0..(N / core::mem::size_of::<u32>()) {
             self.backing[words] = unsafe{src.add(words).read_volatile()};
         }
     }
     fn resume(&mut self) {
         let dst = self.mem.as_ptr() as *mut u32;
-        for words in 0..(self.mem.len() / core::mem::size_of::<u32>()) {
+        for words in 0..(N / core::mem::size_of::<u32>()) {
             unsafe{dst.add(words).write_volatile(self.backing[words])};
         }
     }

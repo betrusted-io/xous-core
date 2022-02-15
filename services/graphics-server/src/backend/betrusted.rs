@@ -14,7 +14,7 @@ const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 pub struct XousDisplay {
     fb: MemoryRange,
     hwfb: MemoryRange,
-    srfb: ManagedMem<{ utralib::generated::HW_MEMLCD_MEM_LEN }>,
+    srfb: ManagedMem<{ utralib::generated::HW_MEMLCD_MEM_LEN / core::mem::size_of::<u32>() }>,
     csr: utralib::CSR<u32>,
     susres: RegManager<{ utra::memlcd::MEMLCD_NUMREGS }>,
 }
