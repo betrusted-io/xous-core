@@ -8,7 +8,7 @@ the Basis memory space, and contains most of the code for manipulating dictionar
 entries stored within the basis cache.
 - [dictionary.rs](src/backend/dictionary.rs) will contain most of the code for
 manipulating the keys stored in a dictionary cache entry.
-- [keys.rs](src/backend/keys.rs) documents the key cache format and on-disk metadataa and data formats.
+- [keys.rs](src/backend/keys.rs) documents the key cache format and on-disk metadata and data formats.
 - [pagetable.rs](src/backend/pagetable.rs) documents the page table format.
 - [hw.rs](src/backend/hw.rs) contains all the glue to the SPINOR layer, TRNG, and system time, as well as low-level
 routines for formatting the disk.
@@ -25,7 +25,7 @@ portions, which are the API calls you would use to talk to the PDDB. These are
 deliberately uninteresting, as we've gone through great effort to make
 the bindings are "what you expect" (principle of least surprise).
 
-Howeve, you're probably looking to fix a PDDB bug, audit
+However, you're probably looking to fix a PDDB bug, audit
 the code, or generally figure out what the hell is going on. This means you want
 to look at the PDDB as a "binary" and not a "library" -- something RustDoc can't
 help you with. As the issue above notes, the fallback is for you to consult this README
