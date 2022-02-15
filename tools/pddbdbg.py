@@ -462,7 +462,7 @@ class BasisDicts:
                 if keylen != key.len and keylen + 4 != key.len: # the second case is what happens with the length extension test, it's actually not an error
                     logging.warning(" Key named len vs disk len mismatch: {}/{}".format(keylen, key.len))
             else:
-                if key.len != 17 and key.len != 12: # 12 means we weren't extended. But, the test patch data extennds a 12-length key to 13, so with the checksum ts final length is 17.
+                if key.len != 17 and key.len != 12: # 12 means we weren't extended. But, the test patch data extends a 12-length key to 13, so with the checksum its final length is 17.
                     logging.warning(" Key named len vs disk len mismatch: {}/{} (extension did not work correctly)".format(keylen, key.len))
             if key.ci_ok == False:
                 logging.warning(" CI failed on key {}:".format(name))
