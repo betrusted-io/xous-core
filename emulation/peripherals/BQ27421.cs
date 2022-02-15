@@ -26,23 +26,75 @@ namespace Antmicro.Renode.Peripherals.Sensors
             RegistersCollection = new ByteRegisterCollection(this);
             IRQ = new GPIO();
             DefineRegisters();
+            Reset();
         }
 
-        public void FinishTransmission(){}
+        private bool firstByte;
+        private bool secondByte;
+
+        public void FinishTransmission()
+        {
+            firstByte = true;
+            secondByte = false;
+        }
 
         public void Reset()
         {
             RegistersCollection.Reset();
             IRQ.Set(false);
             regAddress = 0;
+            firstByte = true;
+            secondByte = false;
+            Temperature = 298.1M;
+            Voltage = 3700;
+            SoC = 90;
+            AvgCur = 300;
+            RemainingCapacity = 4000;
         }
 
         public void Write(byte[] data)
         {
-            if(data.Length == 0 || data.Length == 1)
+            if (data.Length == 0)
             {
                 this.Log(LogLevel.Warning, "Unexpected write with no data");
                 return;
+            }
+            if (data.Length == 1)
+            {
+                if (firstByte)
+                {
+                    firstByte = false;
+                    secondByte = true;
+                    return;
+                }
+                if (secondByte)
+                {
+                    regAddress = (long)data[0];
+                    secondByte = false;
+                    return;
+                }
+                this.Log(LogLevel.Warning, "Unexpected write with one byte of data: {0:X2}", data[0]);
+                return;
+            }
+            uint dataOffset = 0;
+            if (firstByte)
+            {
+                dataOffset += 1;
+                firstByte = false;
+                secondByte = true;
+            }
+            if (secondByte)
+            {
+                secondByte = false;
+                regAddress = (long)data[dataOffset];
+                dataOffset += 1;
+            }
+
+            while (dataOffset < data.Length)
+            {
+                RegistersCollection.Write((long)regAddress, data[dataOffset]);
+                regAddress += 1;
+                dataOffset += 1;
             }
 
             // The first byte contains our address.
@@ -62,33 +114,45 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         public byte[] Read(int count)
         {
-            this.Log(LogLevel.Error, "Reading {0} bytes from register {1} (0x{1:X})", count, regAddress);
+            this.Log(LogLevel.Noisy, "Reading {0} bytes beginning at register {1} (0x{1:X})", count, (Registers)regAddress);
             var result = new byte[count];
-            // readyPending.Value = false;
-            // UpdateInterrupts();
-            if (count >= 1) {
-                result[0] = (byte)(response & 0xff);
+            for (var i = 0; i < count; i++)
+            {
+                result[i] = RegistersCollection.Read(regAddress + i);
             }
-            if (count >= 2) {
-                result[1] = (byte)((response >> 8) & 0xff);
-            }
-            // for(var i = 0; i < result.Length; i++)
-            // {
-            //     result[i] = RegistersCollection.Read((byte)regAddress);
-            //     this.Log(LogLevel.Error, "Read value {0}", result[i]);
-            //     RegistersAutoIncrement();
-            // }
             return result;
         }
         public decimal Temperature { get; set; }
+        private uint Voltage;
+        private uint SoC;
+        private uint AvgCur;
+        private uint RemainingCapacity;
 
         public GPIO IRQ { get; }
         public ByteRegisterCollection RegistersCollection { get; }
 
         private void DefineRegisters()
         {
-            Registers.Temp.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "TEMPERATURE_SENSOR", valueProviderCallback: _ => TwoComplementSignConvert(Temperature));
+            Registers.TempLow.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "TEMPERATURE_SENSOR_LOW", valueProviderCallback: _ => ((uint)(Temperature * 10)) >> 8);
+            Registers.TempHigh.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "TEMPERATURE_SENSOR_LOW", valueProviderCallback: _ => ((uint)(Temperature * 10)));
+            Registers.VoltLow.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "VOLTAGE_LOW", valueProviderCallback: _ => Voltage >> 8);
+            Registers.VoltHigh.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "VOLTAGE_HIGH", valueProviderCallback: _ => Voltage);
+            Registers.AvgCurLow.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "AVGCUR_LOW", valueProviderCallback: _ => AvgCur >> 8);
+            Registers.AvgCurHigh.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "AVGCUR_HIGH", valueProviderCallback: _ => AvgCur);
+            Registers.RmLow.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "RM_LOW", valueProviderCallback: _ => RemainingCapacity >> 8);
+            Registers.RmHigh.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "RM_HIGH", valueProviderCallback: _ => RemainingCapacity);
+            Registers.SocLow.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "SOC_LOW", valueProviderCallback: _ => SoC);
+            Registers.SocHigh.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "SOC_HIGH", valueProviderCallback: _ => SoC);
         }
 
         private void RegistersAutoIncrement()
@@ -105,7 +169,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private byte TwoComplementSignConvert(decimal temp)
         {
             byte tempAsByte = Decimal.ToByte(temp);
-            if(temp < 0)
+            if (temp < 0)
             {
                 byte twoComplementTemp = (byte)(~tempAsByte + 1);
                 return twoComplementTemp;
@@ -118,39 +182,38 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private IFlagRegisterField highFreqDataRateMode;
         private IValueRegisterField outDataRate;
         private IValueRegisterField fullScale;
-        private Registers regAddress;
+        private long regAddress;
 
         private ushort controlStatus;
-        private ushort response;
 
         private enum Registers : byte
         {
             Cntl = 0x00,
             // Reserved: 0x01
-            Temp = 0x02,
-            // Reserved: 0x03
-            Volt = 0x04,
-            // Reserved: 0x05
+            TempLow = 0x02,
+            TempHigh = 0x03,
+            VoltLow = 0x04,
+            VoltHigh = 0x05,
             Flag = 0x06,
             // Reserved: 0x07
             NomCap = 0x08,
             // Reserved: 0x09
             FullCap = 0x0A,
             // Reserved: 0x0B
-            Rm = 0x0C,
-            // Reserved: 0x0d
+            RmLow = 0x0C,
+            RmHigh = 0x0D,
             Fcc = 0x0e,
             // Reserved: 0x0f
-            AvgCur = 0x10,
-            // Reserved: 0x11
+            AvgCurLow = 0x10,
+            AvgCurHigh = 0x11,
             SbyCur = 0x12,
             // Reserved: 0x13
             MaxCur = 0x14,
             // Reserved: 0x15 - 0x17
             AvgPwr = 0x18,
             // Reserved: 0x19 = 0x1b
-            Soc = 0x1c,
-            // Reserved: 0x1d
+            SocLow = 0x1c,
+            SocHigh = 0x1d,
             IntTemp = 0x1e,
             // Reserved: 0x1f
             Soh = 0x20,

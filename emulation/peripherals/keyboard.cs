@@ -40,23 +40,36 @@ namespace Antmicro.Renode.Peripherals.Input
             this.machine = machine;
             RegistersCollection = new DoubleWordRegisterCollection(this);
             this.IRQ = new GPIO();
-            Reset();
+            injectedKeys = new Queue<char>();
             DefineRegisters();
+            Reset();
         }
 
         private void DefineRegisters()
         {
             Registers.UART_CHAR.Define(this)
-                .WithValueField(0, 8,
-                valueProviderCallback: _ => { return this.injectedKey; },
-                writeCallback: (_, value) =>
-                {
-                    this.injectedKey = value;
-                    this.irqInjectStatus = true;
-                    UpdateInterrupts();
-                    this.irqInjectStatus = false;
-                }
-            );
+                .WithValueField(0, 9,
+                    valueProviderCallback: _ =>
+                    {
+                        var ret = injectedKey;
+                        // If there is a key, dequeue it.
+                        if (injectedKeys.Count > 0)
+                        {
+                            injectedKey = ((uint)injectedKeys.Dequeue());
+                            ret = injectedKey | 0x100;
+                            UpdateInterrupts();
+                        }
+                        return ret;
+                    },
+                    writeCallback: (_, value) =>
+                    {
+                        if (value != 0) {
+                            injectedKeys.Enqueue((char)value);
+                            UpdateInterrupts();
+                        }
+                    }
+                )
+            ;
             Registers.ROW0DAT.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return this.rows[0]; })
             ;
@@ -86,7 +99,7 @@ namespace Antmicro.Renode.Peripherals.Input
             ;
             Registers.EV_STATUS.Define32(this)
                 .WithFlag(0, FieldMode.Read, name: "KEYPRESSED", valueProviderCallback: _ => irqKeyPressedStatus)
-                .WithFlag(1, FieldMode.Read, name: "INJECT", valueProviderCallback: _ => irqInjectStatus)
+                .WithFlag(1, FieldMode.Read, name: "INJECT", valueProviderCallback: _ => injectedKeys.Count > 0)
             ;
 
             Registers.EV_PENDING.Define32(this)
@@ -99,7 +112,7 @@ namespace Antmicro.Renode.Peripherals.Input
                 .WithFlag(1, out irqInjectEnabled, name: "INJECT", changeCallback: (_, __) => UpdateInterrupts())
             ;
             Registers.ROWCHANGE.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return this.rowChange; })
+                .WithValueField(0, 32, valueProviderCallback: _ => this.rowChange)
             ;
         }
 
@@ -109,12 +122,12 @@ namespace Antmicro.Renode.Peripherals.Input
             {
                 this.irqKeyPressedPending.Value = true;
             }
-            if (this.irqInjectStatus && this.irqInjectEnabled.Value)
+            if (injectedKeys.Count > 0 && this.irqInjectEnabled.Value)
             {
                 this.irqInjectPending.Value = true;
             }
             IRQ.Set((this.irqKeyPressedPending.Value && this.irqKeyPressedEnabled.Value)
-            || (this.irqInjectPending.Value && this.irqInjectEnabled.Value));
+                 || (this.irqInjectPending.Value && this.irqInjectEnabled.Value));
         }
 
         public void WriteDoubleWord(long address, uint value)
@@ -125,6 +138,31 @@ namespace Antmicro.Renode.Peripherals.Input
         public uint ReadDoubleWord(long offset)
         {
             return RegistersCollection.Read(offset);
+        }
+
+        public void InjectKey(char key)
+        {
+            injectedKeys.Enqueue(key);
+            UpdateInterrupts();
+        }
+
+        public void InjectString(String s)
+        {
+            foreach (var letter in s.ToCharArray())
+            {
+                injectedKeys.Enqueue(letter);
+            }
+            UpdateInterrupts();
+        }
+
+        public void InjectLine(String s)
+        {
+            foreach (var letter in s.ToCharArray())
+            {
+                injectedKeys.Enqueue(letter);
+            }
+            injectedKeys.Enqueue('\r');
+            UpdateInterrupts();
         }
 
         public long Size { get { return 4096; } }
@@ -207,12 +245,17 @@ namespace Antmicro.Renode.Peripherals.Input
 
         public void Reset()
         {
-            for (var i = 0; i < this.rows.Length; i++) {
+            for (var i = 0; i < this.rows.Length; i++)
+            {
                 this.rows[i] = 0;
             }
             irqKeyPressedStatus = false;
-            irqInjectStatus = false;
-            this.PressedKeys.Clear();
+            injectedKeys.Clear();
+            PressedKeys.Clear();
+            irqKeyPressedEnabled.Value = false;
+            irqKeyPressedPending.Value = false;
+            irqInjectEnabled.Value = false;
+            irqInjectPending.Value = false;
         }
 
         private Dictionary<KeyScanCode, bool> PressedKeys = new Dictionary<KeyScanCode, bool> { };
@@ -291,9 +334,9 @@ namespace Antmicro.Renode.Peripherals.Input
         private bool irqKeyPressedStatus;
         private IFlagRegisterField irqInjectEnabled;
         private IFlagRegisterField irqInjectPending;
-        private bool irqInjectStatus;
         private UInt32 rowChange;
         private UInt32 injectedKey;
+        private readonly Queue<char> injectedKeys;
         private enum Registers
         {
             UART_CHAR = 0x0,

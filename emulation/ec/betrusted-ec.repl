@@ -19,17 +19,29 @@ i2c: I2C.BetrustedEcI2C @ sysbus 0xE0004800
 ticktimer: Timers.TickTimer @ sysbus 0xe0005000
     -> cpu @ 1003
 
+com: SPI.BetrustedEcCom @ sysbus 0xe0005800
+    memAddr: 0xD0000000
+    memSize: 0x1000
+
 sram: Memory.MappedMemory @ {
         sysbus 0x10000000;
         sysbus 0x90000000 // shadow
     }
     size: 0x00020000
 
+power: Miscellaneous.EcPower @ sysbus 0xE0002800
+
+rom: Memory.MappedMemory @ {
+        sysbus 0x00000000;
+        sysbus 0x80000000 // shadow
+    }
+    size: 0x00002000
+
 flash_mem: Memory.MappedMemory @ {
         sysbus 0x20000000;
         sysbus 0xA0000000 // shadow
     }
-    size: 0x8000000
+    size: 0x00100000
 
 lm3509: Mocks.LM3509 @ i2c 0x36
 tusb320lai: Mocks.TUSB320LAI @ i2c 0x47

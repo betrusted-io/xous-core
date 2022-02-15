@@ -589,7 +589,7 @@ fn print_peripherals<U: Write>(
 
             // Add the interrupt, if one exists.
             if let Some(irq) = peripheral.interrupt.get(0) {
-                writeln!(out, "    -> cpu @ {}", 1000 + irq.value)?;
+                writeln!(out, "    IRQ -> cpu @ {}", 1000 + irq.value)?;
             }
         } else {
             writeln!(out, "// Unrecognized peripheral: {} @ 0x{:08x}", lc_name, peripheral.base)?;
@@ -633,6 +633,7 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     cs_peripherals.insert("app_uart", "UART.LiteX_UART");
     cs_peripherals.insert("console", "UART.LiteX_UART");
     cs_peripherals.insert("engine", "Miscellaneous.Engine");
+    cs_peripherals.insert("com", "SPI.BetrustedSocCom");
     cs_peripherals.insert("i2c", "I2C.BetrustedSocI2C");
     cs_peripherals.insert("keyboard", "Input.BetrustedKbd");
     cs_peripherals.insert("keyrom", "Miscellaneous.Keyrom");

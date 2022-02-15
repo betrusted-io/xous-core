@@ -2,7 +2,7 @@
 
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
-    <name>SOC</name>
+    <name>EC</name>
     <description>Betrusted EC</description>
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -261,10 +261,10 @@ Notably, a watchdog reset will disable the watchdog.]]></description>
                 <register>
                     <name>GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``03ba1c49``, so this value is 62528585, which should be enough to check out the
-exact git version used to build this firmware.]]></description>
+``b565873d``, so this value is 3043329853, which should be enough to check out
+the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x3ba1c49</resetValue>
+                    <resetValue>0xb565873d</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -324,18 +324,10 @@ modifications.]]></description>
                             <description><![CDATA[Writing `1` to this powers on the SoC]]></description>
                         </field>
                         <field>
-                            <name>discharge</name>
+                            <name>kbddrive</name>
                             <msb>2</msb>
                             <bitRange>[2:2]</bitRange>
                             <lsb>2</lsb>
-                            <description><![CDATA[Writing `1` to this connects a low-value resistor across FPGA domain supplies to
-force a full discharge]]></description>
-                        </field>
-                        <field>
-                            <name>kbddrive</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
                             <description><![CDATA[Writing `1` to this drives the scan column to 1. Do this prior to reading to
 mitigate noise]]></description>
                         </field>

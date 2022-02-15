@@ -14,6 +14,8 @@ i @peripherals/BetrustedSocI2C.cs
 i @peripherals/BetrustedWatchdog.cs
 i @peripherals/BQ24157.cs
 i @peripherals/BQ27421.cs
+i @peripherals/Com.cs
+i @peripherals/ec_power.cs
 i @peripherals/engine.cs
 i @peripherals/keyboard.cs
 i @peripherals/keyrom.cs
@@ -28,6 +30,9 @@ i @peripherals/trng_kernel.cs
 i @peripherals/trng_server.cs
 i @peripherals/TUSB320LAI.cs
 i @peripherals/wfi.cs
+
+# Create the COM SPI bus
+emulation CreateComConnector "com"
 
 ############### Define the Betrusted SoC ###############
 mach create "SoC"
@@ -53,13 +58,16 @@ sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
 # logLevel -1 i2c.abracom_rtc
 # logLevel -1 sha512
 
-# Silence COM and WDT and WFI
-# sysbus SilenceRange <0xF000D000, 0xF000DFFF>
+# Silence GPIO
+sysbus SilenceRange <0xf0003000, 0xF0003FFF>
 # sysbus SilenceRange <0xF0021000, 0xF0021FFF>
 # sysbus SilenceRange <0xF0023000, 0xF0023FFF>
 
 # Load the SPI flash into RAM
 sysbus LoadBinary @precursors/soc_csr.bin 0x20000000
+
+# Connect the SoC to the SPI bus
+connector Connect sysbus.com com
 
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
@@ -87,16 +95,18 @@ machine LoadPlatformDescription @ec/betrusted-ec.repl
 # logLevel -1 i2c
 # logLevel -1 i2c.bq27421
 
-machine StartGdbServer 2222 true
+machine StartGdbServer 3334 true
 showAnalyzer uart
 
-# Silence the COM bus, which is currently unimplemented
-sysbus SilenceRange <0xE0005800, 0xE0005FFF>
+# Connect the EC to the SPI bus
+connector Connect sysbus.com com
 
 macro reset
 """
-    sysbus LoadBinary @ec/kernel.bin 0x10000000
-    cpu PC 0x10000000
+    sysbus LoadBinary @ec/bt-ec.bin 0x20000000
+    sysbus LoadBinary @ec/loader.bin 0x00000000
+    cpu PC 0
+    cpu SP 0x1001FFFC
 """
 runMacro $reset
 
