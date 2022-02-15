@@ -452,7 +452,7 @@ fn xmain() -> ! {
                     || (sec_notes.lock().unwrap().len() > 1)
                         && ((stats_phase % secnotes_interval) == 0)
                 {
-                    log::info!("updating lock state text");
+                    log::debug!("updating lock state text");
                     if debug_locked != is_locked {
                         if is_locked {
                             sec_notes
