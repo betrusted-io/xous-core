@@ -240,17 +240,19 @@ mod implementation {
 
     pub struct Rtc {
         i2c: I2c,
+        cb_to_main: xous::CID,
         rtc_alarm_enabled: bool,
         wakeup_alarm_enabled: bool,
         ticktimer: ticktimer_server::Ticktimer,
     }
 
     impl Rtc {
-        pub fn new(xns: &xous_names::XousNames) -> Rtc {
+        pub fn new(xns: &xous_names::XousNames, cb_to_main: xous::CID) -> Rtc {
             log::trace!("hardware initialized");
             let i2c = I2c::new(xns);
             Rtc {
                 i2c,
+                cb_to_main,
                 rtc_alarm_enabled: false,
                 wakeup_alarm_enabled: false,
                 ticktimer: ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer"),
@@ -290,7 +292,7 @@ mod implementation {
             txbuf[6] = to_bcd(months);
             txbuf[7] = to_bcd(years);
 
-            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
+            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseWriteOk => Ok(true),
@@ -304,7 +306,13 @@ mod implementation {
 
         pub fn rtc_get(&mut self) -> Result<(), xous::Error> {
             let mut rxbuf = [0; 7];
-            match self.i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, Some(i2c_callback)) {
+            match self.i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf,
+                Some(
+                    llio::I2cAsyncReadHook {
+                        conn: self.cb_to_main,
+                        id: RtcOpcode::ResponseDateTime.to_u32().unwrap(),
+                    }
+                )) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseInProgress => Ok(()),
@@ -315,16 +323,13 @@ mod implementation {
                 _ => Err(xous::Error::InternalError)
             }
         }
-        pub fn rtc_get_ack(&mut self) {
-            self.i2c.i2c_async_done();
-        }
 
         // the awkward array syntax is a legacy of a port from a previous implementation
         // would be fine to clean up method signature as e.g.
         // blocking_i2c_write2(adr: u8, data: u8) -> bool
         // but need to make sure we don't bork any of the constants later on in this code :P
         fn blocking_i2c_write2(&mut self, adr: u8, data: u8) -> bool {
-            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, adr, &[data], None) {
+            match self.i2c.i2c_write(ABRTCMC_I2C_ADR, adr, &[data]) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseWriteOk => true,
@@ -520,7 +525,7 @@ pub(crate) fn rtc_server(rtc_sid: xous::SID) {
     CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    let mut rtc = Rtc::new(&xns);
+    let mut rtc = Rtc::new(&xns, CB_TO_MAIN_CONN.load(Ordering::Relaxed)); // swap the conn variable out later
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let mut rtc = Rtc::new(&xns);
@@ -582,27 +587,39 @@ pub(crate) fn rtc_server(rtc_sid: xous::SID) {
                 unsafe{xous::disconnect(cid).unwrap()};
             }),
             Some(RtcOpcode::ResponseDateTime) => {
-                rtc.rtc_get_ack(); // let the async callback interface know we returned
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
-                log::trace!("ResponseDateTime received: {:?}", dt);
-                for cid in 1..dt_cb_conns.len() { // 0 is not a valid connection
-                    if dt_cb_conns[cid as usize] {
-                        let outgoing_buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
-                        log::trace!("ResponeDateTime sending to {}", cid);
-                        match outgoing_buf.lend(cid as u32, Return::ReturnDateTime.to_u32().unwrap()) {
-                            Err(xous::Error::ServerNotFound) => {
-                                log::trace!("ServerNotFound, dropping connection");
-                                dt_cb_conns[cid] = false;
-                            },
-                            Ok(_) => {
-                                log::trace!("RespondeDateTime sent successfully");
-                            },
-                            _ => panic!("unhandled error or result in callback processing")
+                let rx_result = incoming_buffer.to_original::<I2cReadResult, _>().unwrap();
+                if rx_result.rxlen == 7 {
+                    let dt = DateTime {
+                        seconds: to_binary(rx_result.rxbuf[0] & 0x7f),
+                        minutes: to_binary(rx_result.rxbuf[1] & 0x7f),
+                        hours: to_binary(rx_result.rxbuf[2] & 0x3f),
+                        days: to_binary(rx_result.rxbuf[3] & 0x3f),
+                        weekday: to_weekday(rx_result.rxbuf[4] & 0x7f),
+                        months: to_binary(rx_result.rxbuf[5] & 0x1f),
+                        years: to_binary(rx_result.rxbuf[6]),
+                    };
+                    log::trace!("ResponseDateTime received: {:?}", dt);
+                    for cid in 1..dt_cb_conns.len() { // 0 is not a valid connection
+                        if dt_cb_conns[cid as usize] {
+                            let outgoing_buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
+                            log::trace!("ResponeDateTime sending to {}", cid);
+                            match outgoing_buf.lend(cid as u32, Return::ReturnDateTime.to_u32().unwrap()) {
+                                Err(xous::Error::ServerNotFound) => {
+                                    log::trace!("ServerNotFound, dropping connection");
+                                    dt_cb_conns[cid] = false;
+                                },
+                                Ok(_) => {
+                                    log::trace!("RespondeDateTime sent successfully");
+                                },
+                                _ => panic!("unhandled error or result in callback processing")
+                            }
                         }
                     }
+                    log::trace!("ResponeDateTime done");
+                } else {
+                    log::error!("I2C response for date time has incorrect length of {}", rx_result.rxlen);
                 }
-                log::trace!("ResponeDateTime done");
             },
             Some(RtcOpcode::RequestDateTime) => {
                 let mut sent = false;
@@ -668,4 +685,21 @@ pub(crate) fn rtc_server(rtc_sid: xous::SID) {
     xns.unregister_server(rtc_sid).unwrap();
     xous::destroy_server(rtc_sid).unwrap();
     log::trace!("quitting");
+}
+
+fn to_binary(bcd: u8) -> u8 {
+    (bcd & 0xf) + ((bcd >> 4) * 10)
+}
+
+fn to_weekday(bcd: u8) -> Weekday {
+    match bcd {
+        0 => Weekday::Sunday,
+        1 => Weekday::Monday,
+        2 => Weekday::Tuesday,
+        3 => Weekday::Wednesday,
+        4 => Weekday::Thursday,
+        5 => Weekday::Friday,
+        6 => Weekday::Saturday,
+        _ => Weekday::Sunday,
+    }
 }
