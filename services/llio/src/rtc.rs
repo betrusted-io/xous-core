@@ -3,19 +3,14 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use xous_ipc::Buffer;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 
-use core::sync::atomic::{AtomicU32, Ordering};
-static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
-
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     #![allow(dead_code)]
     use bitflags::*;
-    use crate::rtc::CB_TO_MAIN_CONN;
-    use core::sync::atomic::Ordering;
-    use llio::{I2cStatus, I2cTransaction, I2c};
-    use crate::api::{RtcOpcode, DateTime, Weekday};
-    use xous_ipc::Buffer;
+    use llio::{I2cStatus, I2c};
+    use crate::api::{RtcOpcode, Weekday};
     use num_traits::ToPrimitive;
+    use crate::rtc::{to_binary, to_weekday, to_bcd};
 
     const BLOCKING_I2C_TIMEOUT_MS: u64 = 50;
 
@@ -180,64 +175,6 @@ mod implementation {
     const ABRTCMC_TIMERB: u8 = 0x13;
     // no bitflags, register is timer period in seconds, and the period is N / (source clock frequency)
 
-    /// convert binary to BCD
-    fn to_bcd(binary: u8) -> u8 {
-        let mut lsd: u8 = binary % 10;
-        if lsd > 9 {
-            lsd = 9;
-        }
-        let mut msd: u8 = binary / 10;
-        if msd > 9 {
-            msd = 9;
-        }
-
-        (msd << 4) | lsd
-    }
-
-    fn to_binary(bcd: u8) -> u8 {
-        (bcd & 0xf) + ((bcd >> 4) * 10)
-    }
-
-    fn to_weekday(bcd: u8) -> Weekday {
-        match bcd {
-            0 => Weekday::Sunday,
-            1 => Weekday::Monday,
-            2 => Weekday::Tuesday,
-            3 => Weekday::Wednesday,
-            4 => Weekday::Thursday,
-            5 => Weekday::Friday,
-            6 => Weekday::Saturday,
-            _ => Weekday::Sunday,
-        }
-    }
-
-    fn i2c_callback(trans: I2cTransaction) {
-        if trans.status == I2cStatus::ResponseReadOk {
-            let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
-            if cb_to_main_conn != 0 {
-                // we expect this to be 0, as we don't set it
-                assert!(trans.callback_id == 0, "callback ID was incorrect!");
-                if let Some(rxbuf) = trans.rxbuf {
-                    let dt = DateTime {
-                        seconds: to_binary(rxbuf[0] & 0x7f),
-                        minutes: to_binary(rxbuf[1] & 0x7f),
-                        hours: to_binary(rxbuf[2] & 0x3f),
-                        days: to_binary(rxbuf[3] & 0x3f),
-                        weekday: to_weekday(rxbuf[4] & 0x7f),
-                        months: to_binary(rxbuf[5] & 0x1f),
-                        years: to_binary(rxbuf[6]),
-                    };
-                    let buf = Buffer::into_buf(dt).unwrap();
-                    buf.send(cb_to_main_conn, RtcOpcode::ResponseDateTime.to_u32().unwrap()).unwrap();
-                } else {
-                    log::error!("i2c_callback: no rx data to unpack!")
-                }
-            } else {
-                log::error!("i2c_callback happened, but no connection to the main server!");
-            }
-        }
-    }
-
     pub struct Rtc {
         i2c: I2c,
         cb_to_main: xous::CID,
@@ -317,6 +254,29 @@ mod implementation {
                     match status {
                         I2cStatus::ResponseInProgress => Ok(()),
                         I2cStatus::ResponseBusy => Err(xous::Error::ServerQueueFull),
+                        _ => Err(xous::Error::InternalError),
+                    }
+                }
+                _ => Err(xous::Error::InternalError)
+            }
+        }
+
+        pub fn rtc_get_blocking(&mut self) -> Result<crate::DateTime, xous::Error> {
+            let mut rxbuf = [0; 7];
+            match self.i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None ) {
+                Ok(status) => {
+                    match status {
+                        I2cStatus::ResponseReadOk => {
+                            Ok(crate::DateTime {
+                                seconds: to_binary(rxbuf[0] & 0x7f),
+                                minutes: to_binary(rxbuf[1] & 0x7f),
+                                hours: to_binary(rxbuf[2] & 0x3f),
+                                days: to_binary(rxbuf[3] & 0x3f),
+                                weekday: to_weekday(rxbuf[4] & 0x7f),
+                                months: to_binary(rxbuf[5] & 0x1f),
+                                years: to_binary(rxbuf[6]),
+                            })
+                        },
                         _ => Err(xous::Error::InternalError),
                     }
                 }
@@ -447,55 +407,48 @@ mod implementation {
 mod implementation {
     use crate::api::Weekday;
     use chrono::prelude::*;
-    use crate::rtc::CB_TO_MAIN_CONN;
-    use core::sync::atomic::Ordering;
     use num_traits::ToPrimitive;
-
-    fn rtc_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-        let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-        log::trace!("rtc callback server started");
-        loop {
-            let msg = xous::receive_message(sid).unwrap();
-            log::trace!("rtc callback got msg: {:?}", msg);
-            // we only have one purpose, and that's to send this message.
-            let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
-            if cb_to_main_conn != 0 {
-                log::trace!("rtc_get sending time to main server");
-                let now = Local::now();
-                let wday: Weekday = match now.weekday() {
-                    chrono::Weekday::Mon => Weekday::Monday,
-                    chrono::Weekday::Tue => Weekday::Tuesday,
-                    chrono::Weekday::Wed => Weekday::Wednesday,
-                    chrono::Weekday::Thu => Weekday::Thursday,
-                    chrono::Weekday::Fri => Weekday::Friday,
-                    chrono::Weekday::Sat => Weekday::Saturday,
-                    chrono::Weekday::Sun => Weekday::Sunday,
-                };
-                let dt = crate::api::DateTime {
-                    seconds: now.second() as u8,
-                    minutes: now.minute() as u8,
-                    hours: now.hour() as u8,
-                    months: now.month() as u8,
-                    days: now.day() as u8,
-                    years: (now.year() - 2000) as u8,
-                    weekday: wday,
-                };
-                let buf = xous_ipc::Buffer::into_buf(dt).unwrap();
-                buf.send(cb_to_main_conn, crate::api::RtcOpcode::ResponseDateTime.to_u32().unwrap()).unwrap();
-            }
-        }
-    }
-
     pub struct Rtc {
         cb_conn: xous::CID,
     }
 
     impl Rtc {
-        pub fn new(_xns: &xous_names::XousNames) -> Rtc {
+        pub fn new(_xns: &xous_names::XousNames, cb_to_main: xous::CID) -> Rtc {
             let sid = xous::create_server().unwrap();
-            let sid_tuple = sid.to_u32();
             let cid = xous::connect(sid).unwrap();
-            xous::create_thread_4(rtc_thread, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+
+            std::thread::spawn({
+                move || {
+                    log::trace!("rtc callback server started");
+                    loop {
+                        let msg = xous::receive_message(sid).unwrap();
+                        log::trace!("rtc callback got msg: {:?}", msg);
+                        // we only have one purpose, and that's to send this message.
+                        log::trace!("rtc_get sending time to main server");
+                        let now = Local::now();
+                        let wday: Weekday = match now.weekday() {
+                            chrono::Weekday::Mon => Weekday::Monday,
+                            chrono::Weekday::Tue => Weekday::Tuesday,
+                            chrono::Weekday::Wed => Weekday::Wednesday,
+                            chrono::Weekday::Thu => Weekday::Thursday,
+                            chrono::Weekday::Fri => Weekday::Friday,
+                            chrono::Weekday::Sat => Weekday::Saturday,
+                            chrono::Weekday::Sun => Weekday::Sunday,
+                        };
+                        let dt = crate::api::DateTime {
+                            seconds: now.second() as u8,
+                            minutes: now.minute() as u8,
+                            hours: now.hour() as u8,
+                            months: now.month() as u8,
+                            days: now.day() as u8,
+                            years: (now.year() - 2000) as u8,
+                            weekday: wday,
+                        };
+                        let buf = xous_ipc::Buffer::into_buf(dt).unwrap();
+                        buf.send(cb_to_main, crate::api::RtcOpcode::ResponseDateTime.to_u32().unwrap()).unwrap();
+                    }
+                }
+            });
             Rtc {
                 cb_conn: cid,
             }
@@ -508,12 +461,32 @@ mod implementation {
             xous::send_message(self.cb_conn, xous::Message::new_scalar(0, 0, 0, 0, 0)).unwrap();
             Ok(())
         }
+        pub fn rtc_get_blocking(&mut self) -> Result<crate::api::DateTime, xous::Error> {
+            let now = Local::now();
+            let wday: Weekday = match now.weekday() {
+                chrono::Weekday::Mon => Weekday::Monday,
+                chrono::Weekday::Tue => Weekday::Tuesday,
+                chrono::Weekday::Wed => Weekday::Wednesday,
+                chrono::Weekday::Thu => Weekday::Thursday,
+                chrono::Weekday::Fri => Weekday::Friday,
+                chrono::Weekday::Sat => Weekday::Saturday,
+                chrono::Weekday::Sun => Weekday::Sunday,
+            };
+            let dt = crate::api::DateTime {
+                seconds: now.second() as u8,
+                minutes: now.minute() as u8,
+                hours: now.hour() as u8,
+                months: now.month() as u8,
+                days: now.day() as u8,
+                years: (now.year() - 2000) as u8,
+                weekday: wday,
+            };
+            Ok(dt)
+        }
         pub fn wakeup_alarm(&mut self, _seconds: u8) { }
         pub fn clear_wakeup_alarm(&mut self) { }
         pub fn rtc_alarm(&mut self, _seconds: u8) { }
         pub fn clear_rtc_alarm(&mut self) { }
-        pub fn rtc_get_ack(&mut self) {
-        }
     }
 }
 
@@ -522,19 +495,15 @@ pub(crate) fn rtc_server(rtc_sid: xous::SID) {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
+    let cb_to_main = xous::connect(rtc_sid).unwrap();
 
-    #[cfg(any(target_os = "none", target_os = "xous"))]
-    let mut rtc = Rtc::new(&xns, CB_TO_MAIN_CONN.load(Ordering::Relaxed)); // swap the conn variable out later
-
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    let mut rtc = Rtc::new(&xns);
+    let mut rtc = Rtc::new(&xns, cb_to_main);
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer");
     let mut dt_cb_conns: [bool; xous::MAX_CID] = [false; xous::MAX_CID];
     log::trace!("ready to accept requests");
     loop {
-        let msg = xous::receive_message(rtc_sid).unwrap();
+        let mut msg = xous::receive_message(rtc_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(RtcOpcode::SetDateTime) => {
@@ -639,6 +608,11 @@ pub(crate) fn rtc_server(rtc_sid: xous::SID) {
                 }
                 log::trace!("RequestDateTime completed");
             }
+            Some(RtcOpcode::RequestDateTimeBlocking) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let dt = rtc.rtc_get_blocking().expect("couldn't read RTC");
+                buffer.replace(dt).unwrap();
+            }
             Some(RtcOpcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.wakeup_alarm(delay as u8); // this will block until finished, no callbacks used
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
@@ -668,10 +642,7 @@ pub(crate) fn rtc_server(rtc_sid: xous::SID) {
     // clean up our program
     log::trace!("main loop exit, destroying servers");
     unsafe{
-        let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
-        if cb_to_main_conn != 0 {
-            xous::disconnect(cb_to_main_conn).unwrap();
-        }
+        xous::disconnect(cb_to_main).ok();
     }
     for cid in 1..dt_cb_conns.len() {
         if dt_cb_conns[cid as usize] {
@@ -702,4 +673,19 @@ fn to_weekday(bcd: u8) -> Weekday {
         6 => Weekday::Saturday,
         _ => Weekday::Sunday,
     }
+}
+
+/// convert binary to BCD
+#[allow(dead_code)] // unused in hosted mode
+fn to_bcd(binary: u8) -> u8 {
+    let mut lsd: u8 = binary % 10;
+    if lsd > 9 {
+        lsd = 9;
+    }
+    let mut msd: u8 = binary / 10;
+    if msd > 9 {
+        msd = 9;
+    }
+
+    (msd << 4) | lsd
 }

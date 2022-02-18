@@ -26,7 +26,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "rtc options: set, get";
+        let helpstring = "rtc options: set, get, pubget";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -37,6 +37,10 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                     env.rtc.lock().unwrap().hook_rtc_callback(dt_callback).unwrap();
                     env.rtc.lock().unwrap().request_datetime().unwrap();
                 },
+                "pubget" => {
+                    // super lazy test routine
+                    write!(ret, "{:?}", env.llio.read_rtc_blocking().unwrap()).unwrap();
+                }
                 "set" => {
                     let mut success = true;
                     let mut hour: u8 = 0;

@@ -121,6 +121,9 @@ pub(crate) enum Opcode {
     /// debug USB status
     DebugUsbOp,
 
+    /// Read the date and time from the RTC. Warning: blocking call, operation takes ~10-20ms
+    DateTime,
+
     /// SuspendResume callback
     SuspendResume,
 
