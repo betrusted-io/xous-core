@@ -4,7 +4,7 @@ use num_traits::{ToPrimitive, FromPrimitive};
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use crate::api::*;
 
-static I2C_REFCOUNT: AtomicU32 = AtomicU32::new(0);
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 // this hooks the response of the I2C bus
 static mut I2C_CB: Option<fn(I2cTransaction)> = None;
@@ -32,7 +32,7 @@ pub struct I2c {
 }
 impl I2c {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        I2C_REFCOUNT.store(I2C_REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let i2c_conn = xns.request_connection_blocking(SERVER_NAME_I2C).expect("Can't connect to I2C");
         I2c {
             i2c_sid: None,
@@ -202,8 +202,7 @@ impl Drop for I2c {
         if let Some(sid) = self.i2c_sid.take() {
             drop_conn(sid);
         }
-        I2C_REFCOUNT.store(I2C_REFCOUNT.load(Ordering::Relaxed) - 1, Ordering::Relaxed);
-        if I2C_REFCOUNT.load(Ordering::Relaxed) == 0 {
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe{xous::disconnect(self.i2c_conn).unwrap();}
         }
     }
