@@ -97,7 +97,7 @@ impl TcpStream {
         }
     }
     /// note that there is no provision in the rust stdlib to set a keepalive, so it's sort of wedged in here
-    pub fn connect_inner(
+    fn connect_inner(
         maybe_socket: io::Result<&SocketAddr>,
         timeout: Option<Duration>,
         keepalive: Option<Duration>) -> io::Result<TcpStream> {

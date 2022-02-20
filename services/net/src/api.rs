@@ -3,6 +3,7 @@ pub(crate) use udp::*;
 pub(crate) mod ping;
 pub(crate) use ping::*;
 pub(crate) mod tcp;
+#[allow(unused_imports)] // needed to keep hosted mode quiet, since the Tcp implementation is a bodge
 pub(crate) use tcp::*;
 pub use ping::NetPingCallback;
 

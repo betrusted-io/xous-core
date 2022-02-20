@@ -1,11 +1,14 @@
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
-use net::{Duration, XousServerId, NetPingCallback};
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use net::XousServerId;
+use net::{Duration, NetPingCallback};
 use xous::MessageEnvelope;
 use num_traits::*;
 use std::net::{SocketAddr, IpAddr};
 use std::io::Write;
 use std::io::Read;
+use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
 
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
@@ -13,7 +16,8 @@ pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,
     udp_count: u32,
-    dns: dns::Dns,
+    dns: Dns,
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     ping: Option<net::Ping>,
 }
 impl NetCmd {
@@ -25,6 +29,7 @@ impl NetCmd {
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
             dns: dns::Dns::new(&xns).unwrap(),
+            #[cfg(any(target_os = "none", target_os = "xous"))]
             ping: None,
         }
     }
@@ -49,7 +54,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
+        #[cfg(any(target_os = "none", target_os = "xous"))]
         let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]] [tcpget host/path]";
+        // no ping in hosted mode -- why would you need it? we're using the host's network connection.
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -257,6 +266,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {
                     if let Some(name) = tokens.next() {
                         match self.dns.lookup(name) {
