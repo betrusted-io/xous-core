@@ -449,8 +449,8 @@ fn xmain() -> ! {
                 if (debug_locked != is_locked)
                     || force_update || secnotes_force_redraw
                     || sec_notes.lock().unwrap().len() != last_sec_note_size
-                    || (sec_notes.lock().unwrap().len() > 1)
-                        && ((stats_phase % secnotes_interval) == 0)
+                    || /*(sec_notes.lock().unwrap().len() > 1) // force the redraw periodically to clean up any tb overflow from uptime
+                        &&*/ ((stats_phase % secnotes_interval) == 0)
                 {
                     log::debug!("updating lock state text");
                     if debug_locked != is_locked {
@@ -576,6 +576,14 @@ fn xmain() -> ! {
                     .expect("|status: can't write string");
                     gam.post_textview(&mut uptime_tv)
                         .expect("|status: can't draw uptime");
+                    if let Some(bounds) = uptime_tv.bounds_computed {
+                        if bounds.height() as i16 > screensize.y / 2 + 1 {
+                            // the clipping rectangle limits the bounds to the overall height of the status area, so
+                            // the overlap between status and secnotes must be managed within this server
+                            log::info!("Status text overstepped its intended bound. Forcing secnotes redraw.");
+                            secnotes_force_redraw = true;
+                        }
+                    }
                 }
                 log::trace!("status redraw## update");
                 gam.redraw().expect("|status: couldn't redraw");
