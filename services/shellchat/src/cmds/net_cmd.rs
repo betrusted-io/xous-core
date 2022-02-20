@@ -337,20 +337,24 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
                             match udp_socket.recv_from(&mut pkt) {
                                 Ok((len, addr)) => {
-                                    write!(ret, "UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                    write!(ret, "UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
                                     log::info!("UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
                                     self.udp_count += 1;
 
-                                    let response_addr = SocketAddr::new(
-                                        addr.ip(),
-                                        udp_socket.socket_addr().unwrap().port()
-                                    );
-                                    match udp_socket.send_to(
-                                        format!("Received {} packets\n\r", self.udp_count).as_bytes(),
-                                        &response_addr
-                                    ) {
-                                        Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                        Err(_) => write!(ret, "UDP tx err").unwrap(),
+                                    if addr.ip() != IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)) {
+                                        let response_addr = SocketAddr::new(
+                                            addr.ip(),
+                                            udp_socket.socket_addr().unwrap().port()
+                                        );
+                                        match udp_socket.send_to(
+                                            format!("Received {} packets\n\r", self.udp_count).as_bytes(),
+                                            &response_addr
+                                        ) {
+                                            Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
+                                            Err(_) => write!(ret, "UDP tx err").unwrap(),
+                                        }
+                                    } else {
+                                        log::info!("localhost UDP origin detected (are you testing in hosted mode?), not reflecting packet as this would create a loop");
                                     }
                                 },
                                 Err(e) => {
@@ -368,7 +372,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
                             match udp_socket.recv_from(&mut pkt) {
                                 Ok((len, addr)) => {
-                                    write!(ret, "Clone UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                    write!(ret, "Clone UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
                                     log::info!("Clone UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
                                     self.udp_count += 1;
 

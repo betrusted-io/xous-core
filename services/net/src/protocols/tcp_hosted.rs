@@ -13,26 +13,11 @@ pub struct TcpStream {
 }
 
 impl TcpStream {
-    /// This is routine that allows a TcpListener to create a TcpStream object. The following must be observed:
-    /// 1. The `cb_sid`, `rx_buf` and `rx_notify` are the memory locations mapped into the already-allocated Rx thread
-    /// 2. These fields are not to be re-used in the Listener object that succeeds the current one
-    /*
-    pub(crate) fn build_from_listener(
-        net: NetConn,
-        cb_sid: SID,
-        remote: SocketAddr,
-        local_port: u16,
-        rx_buf: Arc::<Mutex::<VecDeque::<u8>>>,
-        rx_notify: Arc<Mutex<XousScalarEndpoint>>,
-    ) -> TcpStream {
-        TcpStream {
-        }
-    }*/
     pub fn connect(maybe_socket: io::Result<&SocketAddr>) -> io::Result<TcpStream> {
         if let Ok(socket) = maybe_socket {
             match TcpStreamHosted::connect(socket) {
                 Ok(stream) => {
-                    Ok(TcpStream{
+                    Ok(TcpStream {
                         stream,
                     })
                 },
@@ -47,7 +32,7 @@ impl TcpStream {
             let d = std::time::Duration::from_millis(duration.total_millis());
             match TcpStreamHosted::connect_timeout(socket, d) {
                 Ok(stream) => {
-                    Ok(TcpStream{
+                    Ok(TcpStream {
                         stream,
                     })
                 },
@@ -68,7 +53,7 @@ impl TcpStream {
                         Some(socket_addr) => {
                             match TcpStreamHosted::connect_timeout(&socket_addr, d) {
                                 Ok(stream) => {
-                                    Ok(TcpStream{
+                                    Ok(TcpStream {
                                         stream,
                                     })
                                 },
@@ -83,7 +68,7 @@ impl TcpStream {
         } else {
             match TcpStreamHosted::connect(addr) {
                 Ok(stream) => {
-                    Ok(TcpStream{
+                    Ok(TcpStream {
                         stream,
                     })
                 },

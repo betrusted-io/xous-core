@@ -1,4 +1,5 @@
 pub mod api;
+#[allow(unused_imports)]
 use api::*;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
