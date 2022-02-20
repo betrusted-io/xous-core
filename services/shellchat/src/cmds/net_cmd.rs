@@ -212,13 +212,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     if let Some(udp_socket) = &self.udp {
                         write!(ret, "Socket listener already installed on {:?}.", udp_socket.socket_addr().unwrap()).unwrap();
                     } else {
-                        let port = if let Some(tok_str) = tokens.next() {
-                            if let Ok(n) = tok_str.parse::<u16>() { n } else { 6502 }
+                        let socket = if let Some(tok_str) = tokens.next() {
+                            tok_str
                         } else {
-                            6502
+                            "127.0.0.1:6502"
                         };
                         let mut udp = net::UdpSocket::bind_xous(
-                            format!("127.0.0.1:{}", port),
+                            socket,
                             Some(UDP_TEST_SIZE as u16)
                         ).unwrap();
                         udp.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
@@ -228,7 +228,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             [Some(NetCmdDispatch::UdpTest1.to_usize().unwrap()), None, None, None]
                         );
                         self.udp = Some(udp);
-                        write!(ret, "Created UDP socket listener on port {}", port).unwrap();
+                        write!(ret, "Created UDP socket listener on socket {}", socket).unwrap();
                     }
                 }
                 "udpclose" => {
