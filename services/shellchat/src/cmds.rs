@@ -39,7 +39,6 @@ macro_rules! cmd_api {
 
 use trng::*;
 /////////////////////////// Command shell integration
-#[derive(Debug)]
 pub struct CommonEnv {
     llio: llio::Llio,
     i2c: llio::I2c,

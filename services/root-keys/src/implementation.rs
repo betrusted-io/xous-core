@@ -266,6 +266,13 @@ impl<'a> RootKeys {
             jtag,
             fake_key,
         };
+        /*
+        // dumps the key enclave -- in a format for Renode integration. Or if you just wanted to steal all the keys.
+        // PS: you still need to know the passwords to decrypt the keys
+        for i in 0..256 {
+            keys.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, i);
+            log::info!("this.data[0x{:x}] = 0x{:x};", i, keys.keyrom.rf(utra::keyrom::DATA_DATA));
+        } */
 
         keys
     }

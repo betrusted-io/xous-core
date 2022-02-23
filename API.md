@@ -150,9 +150,11 @@ impl MyServer {
   }
 
   /// an example of registering for a callback
-  /// Note: since Xous 0.9 we support `std` threads and closures. See the Net crate
+  /// Note: since Xous 0.9 we support `std` threads and closures. See the Net crate or
+  /// Rtc lib implementation (llio/src/rtc_lib.rs)
   /// for an example of how to implement callbacks using `std` primitives.
-  /// The below implementation is how closures are done in a `no-std` fashion.
+  /// The below implementation is how closures are done in a `no-std` fashion. This is
+  /// considered deprecated.
   static mut MYSERVER_CB: Option<fn(BattStats)> = None; // this actually goes outside the object decl
   pub fn hook_callback(&mut self, cb: fn(u32)) -> Result<(), xous::Error> {
       if unsafe{MYSERVER_CB}.is_some() {

@@ -730,6 +730,7 @@ fn xmain() -> ! {
             crate::rtc::rtc_server(rtc_sid);
         }
     });
+    let rtc_conn = xous::connect(rtc_sid).unwrap();
 
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
@@ -755,7 +756,7 @@ fn xmain() -> ! {
 
     log::trace!("starting main loop");
     loop {
-        let msg = xous::receive_message(llio_sid).unwrap();
+        let mut msg = xous::receive_message(llio_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
@@ -1009,6 +1010,14 @@ fn xmain() -> ! {
                 xous::return_scalar2(msg.sender, is_locked, force_update).expect("couldn't return status");
                 lockstatus_force_update = false;
             }),
+            Some(Opcode::DateTime) => {
+                let alloc = DateTime::default();
+                let mut buf = Buffer::into_buf(alloc).expect("couldn't transform to IPC memory");
+                buf.lend_mut(rtc_conn, RtcOpcode::RequestDateTimeBlocking.to_u32().unwrap()).expect("RTC blocking get failed");
+                let dt = buf.to_original::<DateTime, _>().expect("couldn't revert IPC memory");
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                buffer.replace(dt).unwrap();
+            }
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting.");
                 let dropconn = xous::connect(i2c_sid).unwrap();

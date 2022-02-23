@@ -1,11 +1,14 @@
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
-use net::{Duration, XousServerId, NetPingCallback};
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use net::XousServerId;
+use net::{Duration, NetPingCallback};
 use xous::MessageEnvelope;
 use num_traits::*;
 use std::net::{SocketAddr, IpAddr};
 use std::io::Write;
 use std::io::Read;
+use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
 
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
@@ -13,7 +16,8 @@ pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,
     udp_count: u32,
-    dns: dns::Dns,
+    dns: Dns,
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     ping: Option<net::Ping>,
 }
 impl NetCmd {
@@ -25,6 +29,7 @@ impl NetCmd {
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
             dns: dns::Dns::new(&xns).unwrap(),
+            #[cfg(any(target_os = "none", target_os = "xous"))]
             ping: None,
         }
     }
@@ -49,7 +54,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
+        #[cfg(any(target_os = "none", target_os = "xous"))]
         let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]] [tcpget host/path]";
+        // no ping in hosted mode -- why would you need it? we're using the host's network connection.
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -203,13 +212,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     if let Some(udp_socket) = &self.udp {
                         write!(ret, "Socket listener already installed on {:?}.", udp_socket.socket_addr().unwrap()).unwrap();
                     } else {
-                        let port = if let Some(tok_str) = tokens.next() {
-                            if let Ok(n) = tok_str.parse::<u16>() { n } else { 6502 }
+                        let socket = if let Some(tok_str) = tokens.next() {
+                            tok_str
                         } else {
-                            6502
+                            "127.0.0.1:6502"
                         };
                         let mut udp = net::UdpSocket::bind_xous(
-                            format!("127.0.0.1:{}", port),
+                            socket,
                             Some(UDP_TEST_SIZE as u16)
                         ).unwrap();
                         udp.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
@@ -219,7 +228,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             [Some(NetCmdDispatch::UdpTest1.to_usize().unwrap()), None, None, None]
                         );
                         self.udp = Some(udp);
-                        write!(ret, "Created UDP socket listener on port {}", port).unwrap();
+                        write!(ret, "Created UDP socket listener on socket {}", socket).unwrap();
                     }
                 }
                 "udpclose" => {
@@ -257,6 +266,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {
                     if let Some(name) = tokens.next() {
                         match self.dns.lookup(name) {
@@ -327,20 +337,24 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
                             match udp_socket.recv_from(&mut pkt) {
                                 Ok((len, addr)) => {
-                                    write!(ret, "UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                    write!(ret, "UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
                                     log::info!("UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
                                     self.udp_count += 1;
 
-                                    let response_addr = SocketAddr::new(
-                                        addr.ip(),
-                                        udp_socket.socket_addr().unwrap().port()
-                                    );
-                                    match udp_socket.send_to(
-                                        format!("Received {} packets\n\r", self.udp_count).as_bytes(),
-                                        &response_addr
-                                    ) {
-                                        Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                        Err(_) => write!(ret, "UDP tx err").unwrap(),
+                                    if addr.ip() != IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)) {
+                                        let response_addr = SocketAddr::new(
+                                            addr.ip(),
+                                            udp_socket.socket_addr().unwrap().port()
+                                        );
+                                        match udp_socket.send_to(
+                                            format!("Received {} packets\n\r", self.udp_count).as_bytes(),
+                                            &response_addr
+                                        ) {
+                                            Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
+                                            Err(_) => write!(ret, "UDP tx err").unwrap(),
+                                        }
+                                    } else {
+                                        log::info!("localhost UDP origin detected (are you testing in hosted mode?), not reflecting packet as this would create a loop");
                                     }
                                 },
                                 Err(e) => {
@@ -358,7 +372,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
                             match udp_socket.recv_from(&mut pkt) {
                                 Ok((len, addr)) => {
-                                    write!(ret, "Clone UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                    write!(ret, "Clone UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
                                     log::info!("Clone UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
                                     self.udp_count += 1;
 

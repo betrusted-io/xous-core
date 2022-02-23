@@ -41,7 +41,7 @@ pub struct I2cTransaction {
     // write address and read address are encoded in the packet field below
     // NOTE: the number 33 that appears twice below mirrors I2C_MAX_LEN; due to a regression in Rust 1.56 we can't use constants in array types
     // pending https://github.com/rust-lang/rust/issues/90195
-    pub txbuf: Option<[u8; 33]>, // long enough for a 256-byte operation + 2 bytes of "register address"
+    pub txbuf: Option<[u8; 33]>,
     pub txlen: u32,
     pub rxbuf: Option<[u8; 33]>,
     pub rxlen: u32,
@@ -67,4 +67,18 @@ pub(crate) enum I2cOpcode {
     /// SuspendResume callback
     SuspendResume,
     Quit,
+}
+
+/// Routing information for the AsyncRead reporting od I2cReadResult
+#[derive(Debug, Copy, Clone)]
+pub struct I2cAsyncReadHook {
+    pub conn: xous::CID,
+    pub id: u32,
+}
+/// The data reported by an I2cAsycReadHook message
+#[derive(Debug, Copy, Clone, Archive, Serialize, Deserialize)]
+pub struct I2cReadResult {
+    pub rxbuf: [u8; 33],
+    pub rxlen: u32,
+    pub status: I2cStatus,
 }

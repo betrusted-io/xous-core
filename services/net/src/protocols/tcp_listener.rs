@@ -54,7 +54,7 @@ impl TcpListener {
         }
     }
 
-    pub fn bind_inner(maybe_socket: io::Result<&SocketAddr>) -> io::Result<TcpListener> {
+    fn bind_inner(maybe_socket: io::Result<&SocketAddr>) -> io::Result<TcpListener> {
         let socket = maybe_socket?;
         let xns = xous_names::XousNames::new().unwrap();
         let net = NetConn::new(&xns).unwrap();

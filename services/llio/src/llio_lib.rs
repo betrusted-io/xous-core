@@ -382,6 +382,13 @@ impl Llio {
             Message::new_scalar(Opcode::UartMux.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn read_rtc_blocking(&self) -> Result<DateTime, xous::Error> {
+        let alloc = DateTime::default();
+        let mut buf = Buffer::into_buf(alloc).expect("couldn't transform into IPC memory");
+        buf.lend_mut(self.conn, Opcode::DateTime.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let dt = buf.to_original::<DateTime, _>().expect("couldn't transform back from IPC memory");
+        Ok(dt)
+    }
 }
 
 

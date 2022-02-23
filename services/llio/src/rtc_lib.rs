@@ -4,12 +4,10 @@ use xous_ipc::Buffer;
 use num_traits::{ToPrimitive, FromPrimitive};
 use crate::*;
 
-#[derive(Debug)]
 pub struct Rtc {
     conn: CID,
     callback_sid: Option<xous::SID>,
 }
-static mut RTC_CB: Option<fn(DateTime)> = None;
 impl Rtc {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
@@ -24,8 +22,7 @@ impl Rtc {
         buf.lend(self.conn, RtcOpcode::SetDateTime.to_u32().unwrap()).map(|_| ())
     }
     pub fn unhook_rtc_callback(&mut self) -> Result<(), xous::Error> {
-        unsafe{RTC_CB = None};
-        if let Some(sid) = self.callback_sid {
+        if let Some(sid) = self.callback_sid.take() {
             let sid_tuple = sid.to_u32();
             xous::send_message(self.conn,
             Message::new_scalar(RtcOpcode::UnregisterDateTimeCallback.to_usize().unwrap(),
@@ -34,21 +31,39 @@ impl Rtc {
         }
         Ok(())
     }
-    pub fn hook_rtc_callback(&mut self, cb: fn(DateTime)) -> Result<(), xous::Error> {
+    pub fn hook_rtc_callback(&mut self, cb: impl Fn(DateTime) + 'static + Send) -> Result<(), xous::Error> {
         log::trace!("hooking rtc callback");
-        if unsafe{RTC_CB}.is_some() {
+        if self.callback_sid.is_some() {
             return Err(xous::Error::MemoryInUse)
         }
-        unsafe{RTC_CB = Some(cb)};
-        let sid_tuple: (u32, u32, u32, u32);
-        if let Some(sid) = self.callback_sid {
-            sid_tuple = sid.to_u32();
-        } else {
-            let sid = xous::create_server().expect("Couldn't create RTC callback server");
-            self.callback_sid = Some(sid);
-            sid_tuple = sid.to_u32();
-            xous::create_thread_4(rtc_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-        }
+        let sid = xous::create_server().expect("Couldn't create RTC callback server");
+        self.callback_sid = Some(sid);
+        let sid_tuple = sid.to_u32();
+        std::thread::spawn({
+            let sid = sid.clone();
+            let rtc_cb = Box::new(cb);
+            move || {
+                loop {
+                    let msg = xous::receive_message(sid).unwrap();
+                    log::trace!("rtc callback got msg: {:?}", msg);
+                    match FromPrimitive::from_usize(msg.body.id()) {
+                        Some(Return::ReturnDateTime) => {
+                            let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                            let dt = buffer.to_original::<DateTime,_>().unwrap();
+                            rtc_cb.as_ref()(dt);
+                        }
+                        Some(Return::Drop) => {
+                            break;
+                        }
+                        None => {
+                            log::error!("got unrecognized message in rtc CB server, ignoring");
+                        }
+                    }
+                }
+                log::trace!("rtc callback server exiting");
+                xous::destroy_server(sid).expect("can't destroy my server on exit!");                }
+        });
+        //xous::create_thread_4(rtc_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
         xous::send_message(self.conn,
             Message::new_scalar(RtcOpcode::RegisterDateTimeCallback.to_usize().unwrap(),
             sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
@@ -105,37 +120,4 @@ impl Drop for Rtc {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }
-}
-
-fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    log::trace!("rtc callback server started");
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        log::trace!("rtc callback got msg: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Return::ReturnDateTime) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let dt = buffer.to_original::<DateTime,_>().unwrap();
-                unsafe {
-                    if let Some(cb) = RTC_CB {
-                        cb(dt)
-                    } else {
-                        // callback happened after we unregistered
-                        // this is a race condition, but it's also a harmless side effect
-                        // we handle it by just ignoring the message
-                        continue;
-                    }
-                }
-            }
-            Some(Return::Drop) => {
-                break;
-            }
-            None => {
-                log::error!("got unrecognized message in rtc CB server, ignoring");
-            }
-        }
-    }
-    log::trace!("rtc callback server exiting");
-    xous::destroy_server(sid).expect("can't destroy my server on exit!");
 }

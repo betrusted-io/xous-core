@@ -834,7 +834,7 @@ fn rtc_set(i2c: &mut llio::I2c, secs: u8, mins: u8, hours: u8, days: u8, months:
     txbuf[6] = to_bcd(months);
     txbuf[7] = to_bcd(years);
 
-    match i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf, None) {
+    match i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf) {
         Ok(status) => {
             match status {
                 I2cStatus::ResponseWriteOk => true,

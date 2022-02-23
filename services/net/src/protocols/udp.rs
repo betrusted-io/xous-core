@@ -198,39 +198,17 @@ impl UdpSocket {
         Ok(self.write_timeout)
     }
 
-    fn recv_inner(&self, pkt: &mut[u8], do_peek: bool) -> io::Result<usize> {
-        let timeout = if let Some(to) = self.read_timeout {
-            to.total_millis() + self.ticktimer.elapsed_ms()
-        } else {
-            u64::MAX
-        };
-        loop {
-            if self.rx_buf.lock().unwrap().len() > 0 {
-                let rx_pkt = self.rx_buf.lock().unwrap().remove(0); // safe b/c len > 1, checked above
-                for (&src, dst) in rx_pkt.data.iter().zip(pkt.iter_mut()) {
-                    *dst = src;
-                }
-                let len = rx_pkt.data.len();
-                if do_peek {
-                    // re-insert the element after taking it out. We can't mux it above with the if/else because
-                    // a peek is a borrow, but a remove is a move, and that's not easy to coerce in Rust
-                    self.rx_buf.lock().unwrap().insert(0, rx_pkt);
-                }
-                return Ok(len);
-            } else if self.nonblocking {
-                return Err(Error::new(ErrorKind::WouldBlock, "Nonblocking mode: Rx is empty"));
-            }
-            if timeout < self.ticktimer.elapsed_ms() {
-                return Err(Error::new(ErrorKind::WouldBlock, "UDP Rx timeout reached"));
-            }
-            xous::yield_slice();
-        }
-    }
     pub fn recv(&self, pkt: &mut [u8]) -> io::Result<usize> {
-        self.recv_inner(pkt, false)
+        self.recv_from_inner(pkt, false).map(|(len, _addr)| len)
     }
     pub fn peek(&self, pkt: &mut [u8]) -> io::Result<usize> {
-        self.recv_inner(pkt, true)
+        self.recv_from_inner(pkt, true).map(|(len, _addr)| len)
+    }
+    pub fn recv_from(&self, pkt: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+        self.recv_from_inner(pkt, false)
+    }
+    pub fn peek_from(&self, pkt: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+        self.recv_from_inner(pkt, true)
     }
 
     fn recv_from_inner(&self, pkt: &mut [u8], do_peek: bool) -> io::Result<(usize, SocketAddr)> {
@@ -280,18 +258,11 @@ impl UdpSocket {
                     socket_addr
                 ));
             }
-            if timeout > self.ticktimer.elapsed_ms() {
+            if timeout < self.ticktimer.elapsed_ms() {
                 return Err(Error::new(ErrorKind::WouldBlock, "UDP Rx timeout reached"));
             }
             xous::yield_slice();
         }
-    }
-
-    pub fn recv_from(&self, pkt: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        self.recv_from_inner(pkt, false)
-    }
-    pub fn peek_from(&self, pkt: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        self.recv_from_inner(pkt, true)
     }
 
     pub fn connect(&mut self, maybe_socket_addr: io::Result<&SocketAddr>) -> io::Result<()> {

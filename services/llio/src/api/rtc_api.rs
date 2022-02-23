@@ -8,6 +8,9 @@ pub enum Weekday {
     Friday,
     Saturday,
 }
+impl Default for Weekday {
+    fn default() -> Self { Weekday::Sunday }
+}
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum TimeUnits {
@@ -16,7 +19,7 @@ pub enum TimeUnits {
     Hours,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Default)]
 pub struct DateTime {
     pub seconds: u8,
     pub minutes: u8,
@@ -42,6 +45,8 @@ pub(crate) enum RtcOpcode {
 
     /// Get datetime. Causes users with registered callbacks to receive the current DateTime
     RequestDateTime,
+    /// Get datetime. Blocks until complete.
+    RequestDateTimeBlocking,
 
     /// the datetime response, used internally from the callback manager
     ResponseDateTime,
