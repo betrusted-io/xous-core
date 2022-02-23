@@ -23,6 +23,8 @@ com: SPI.BetrustedEcCom @ sysbus 0xe0005800
     memAddr: 0xD0000000
     memSize: 0x1000
 
+wifi: SPI.EcWifi @ sysbus 0xe0006000
+
 sram: Memory.MappedMemory @ {
         sysbus 0x10000000;
         sysbus 0x90000000 // shadow
@@ -41,13 +43,14 @@ flash_mem: Memory.MappedMemory @ {
         sysbus 0x20000000;
         sysbus 0xA0000000 // shadow
     }
-    size: 0x00100000
+    size: 0x00200000
 
 lm3509: Mocks.LM3509 @ i2c 0x36
 tusb320lai: Mocks.TUSB320LAI @ i2c 0x47
 bq27421: Sensors.BQ27421 @ i2c 0x55
 bq24157: Mocks.BQ24157 @ i2c 0x6a
 lsm6ds3: Mocks.LSM6DS3 @ i2c 0x6b
+wf200: Network.WF200 @ wifi
 
 sysbus:
     init:

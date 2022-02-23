@@ -70,7 +70,7 @@ namespace Antmicro.Renode.Peripherals.SPI
                     {
                         this.holdGpio = gpio.Item2;
                     }
-                    if (gpio.Item1 == "INTERRUPT")
+                    if (gpio.Item1 == "EC_INTERRUPT")
                     {
                         this.interruptGpio = gpio.Item2;
                     }
@@ -155,6 +155,7 @@ namespace Antmicro.Renode.Peripherals.SPI
                 if (holdGpio != null)
                 {
                     // controller.GetMachine().HandleTimeDomainEvent(holdGpio.Set, value, new TimeStamp(default(TimeInterval), EmulationManager.ExternalWorld));
+                    // this.Log(LogLevel.Warning, "Setting hold value to: {0}", value);
                     controller.GetMachine().HandleTimeDomainEvent(holdGpio.Set, value, false);
                 }
             }
@@ -164,7 +165,8 @@ namespace Antmicro.Renode.Peripherals.SPI
                 if (interruptGpio != null)
                 {
                     // controller.GetMachine().HandleTimeDomainEvent(holdGpio.Set, value, new TimeStamp(default(TimeInterval), EmulationManager.ExternalWorld));
-                    controller.GetMachine().HandleTimeDomainEvent(holdGpio.Set, value, false);
+                    // this.Log(LogLevel.Warning, "Setting interurpt value to: {0}", value);
+                    controller.GetMachine().HandleTimeDomainEvent(interruptGpio.Set, value, false);
                 }
             }
         }

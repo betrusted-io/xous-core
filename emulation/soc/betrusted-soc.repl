@@ -33,12 +33,14 @@ memlcd: Video.BetrustedLCD @ sysbus 0xf000c000
     memSize: 0x5c20
 
 com: SPI.BetrustedSocCom @ sysbus 0xf000d000
+    EC_INTERRUPT -> btevents @ 0
     IRQ -> cpu @ 1005
 
 i2c: I2C.BetrustedSocI2C @ sysbus 0xf000e000
     IRQ -> cpu @ 1006
 
-// Unrecognized peripheral: btevents @ 0xf000f000
+btevents: GPIOPort.BtEvents @ sysbus 0xf000f000
+    IRQ -> cpu @ 1007
 
 // Unrecognized peripheral: messible @ 0xf0010000
 

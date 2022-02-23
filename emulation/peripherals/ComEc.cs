@@ -24,6 +24,7 @@ namespace Antmicro.Renode.Peripherals.SPI
             this.machine = machine;
             this.spi = spi;
             this.size = size;
+
             // Hardware defaults to 1280 entries
             readFifo = new ConcurrentQueue<uint>();
             writeFifo = new ConcurrentQueue<uint>();
@@ -156,7 +157,7 @@ namespace Antmicro.Renode.Peripherals.SPI
             {
                 TxValue = 0xDDDD;
             }
-            this.Log(LogLevel.Noisy, "EC received:{0:X4} sent:{1:X4}", value, TxValue);
+            // this.Log(LogLevel.Noisy, "EC received:{0:X4} sent:{1:X4}", value, TxValue);
             Hold.Set(!EcRam.WriteFifoHasData());
             EcRam.WriteNextWord((ushort)value);
             // this.Log(LogLevel.Info, "EcRam.ReadFifo now contains {0} items, EcRam.WriteFifo contains {1} items", EcRam.ReadFifoCount(), EcRam.WriteFifoCount());
@@ -177,6 +178,7 @@ namespace Antmicro.Renode.Peripherals.SPI
         {
             EcRam.Reset();
             Hold.Set(true);
+            Interrupt.Set(false);
         }
 
         public long Size { get { return 0x100; } }

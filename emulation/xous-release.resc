@@ -1,5 +1,7 @@
 # Boot Renode Script (boot.resc)
 
+i @emulation/linux-server.resc
+
 # Add this script's path to the global path, so
 # we can include files relative to ourselves.
 path add $ORIGIN
@@ -15,13 +17,14 @@ i @peripherals/BetrustedSpinor.cs
 i @peripherals/BetrustedWatchdog.cs
 i @peripherals/BQ24157.cs
 i @peripherals/BQ27421.cs
+i @peripherals/BtEvents.cs
 i @peripherals/ComConnector.cs
 EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.IComPeripheral"
 EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.IComController"
-i @peripherals/ComSoC.cs
 i @peripherals/ComEc.cs
 i @peripherals/ComSoC.cs
 i @peripherals/ec_power.cs
+i @peripherals/EcWifi.cs
 i @peripherals/engine.cs
 i @peripherals/keyboard.cs
 i @peripherals/keyrom.cs
@@ -36,6 +39,7 @@ i @peripherals/ticktimer.cs
 i @peripherals/trng_kernel.cs
 i @peripherals/trng_server.cs
 i @peripherals/TUSB320LAI.cs
+i @peripherals/WF200.cs
 i @peripherals/wfi.cs
 
 EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
@@ -84,6 +88,7 @@ connector Connect sysbus.com com
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
 """
+    #sysbus LoadBinary @flash-formatted.bin 0x20000000
     sysbus LoadELF @../loader/target/riscv32imac-unknown-xous-elf/release/loader
     sysbus LoadBinary @../target/riscv32imac-unknown-xous-elf/release/xous.img 0x20980000
     # Set $a0 to point at the args binary
@@ -91,8 +96,7 @@ macro reset
 """
 
 # Connect the serial port to an Ethernet port
-mach set 0
-emulation CreateServerSocketTerminal 9999 "kernel" False
+emulation CreateServerSocketTerminal 8888 "kernel" False
 connector Connect sysbus.uart kernel
 
 runMacro $reset
@@ -105,6 +109,9 @@ machine LoadPlatformDescription @ec/betrusted-ec.repl
 
 # logLevel -1 i2c
 # logLevel -1 i2c.bq27421
+# logLevel -1 wifi
+logLevel 0 wifi.wf200
+# sysbus LogPeripheralAccess wifi true
 
 machine StartGdbServer 3334 true
 showAnalyzer uart
@@ -115,11 +122,15 @@ connector Connect sysbus.com com
 macro reset
 """
     sysbus LoadBinary @ec/bt-ec.bin 0x20000000
+    sysbus LoadBinary @ec/wf200_fw.bin 0x2009C000
     sysbus LoadBinary @ec/loader.bin 0x00000000
     cpu PC 0
     cpu SP 0x1001FFFC
 """
 runMacro $reset
+
+connector Connect wifi.wf200 switch
+
 
 mach clear
 

@@ -93,7 +93,7 @@ namespace Antmicro.Renode.Peripherals.SPI
 
         public byte Transmit(byte data)
         {
-            this.Log(LogLevel.Noisy, "Received data 0x{0:X}, current state: {1}  OPI mode? {2}", data, currentOperation.State, opiMode);
+            // this.Log(LogLevel.Noisy, "Received data 0x{0:X}, current state: {1}  OPI mode? {2}", data, currentOperation.State, opiMode);
             // Eat the first byte when running in OPI mode. The second byte should be the inverse of the first byte.
             if (opiMode)
             {
@@ -145,7 +145,7 @@ namespace Antmicro.Renode.Peripherals.SPI
         {
             if (currentOperation.TryAccumulateAddress(addressByte))
             {
-                this.Log(LogLevel.Noisy, "Address accumulated: 0x{0:X}", currentOperation.ExecutionAddress);
+                // this.Log(LogLevel.Noisy, "Address accumulated: 0x{0:X}", currentOperation.ExecutionAddress);
                 currentOperation.State = nextState;
             }
         }
@@ -181,12 +181,12 @@ namespace Antmicro.Renode.Peripherals.SPI
                     currentOperation.State = DecodedOperation.OperationState.AccumulateCommandAddressBytes;
                     break;
                 case (byte)Commands.WriteEnable:
-                    this.Log(LogLevel.Noisy, "Setting write enable latch");
+                    // this.Log(LogLevel.Noisy, "Setting write enable latch");
                     currentOperation.Operation = DecodedOperation.OperationType.None;
                     enable.Value = true;
                     return; //return to prevent further logging
                 case (byte)Commands.WriteDisable:
-                    this.Log(LogLevel.Noisy, "Unsetting write enable latch");
+                    // this.Log(LogLevel.Noisy, "Unsetting write enable latch");
                     currentOperation.Operation = DecodedOperation.OperationType.None;
                     enable.Value = false;
                     return; //return to prevent further logging
@@ -252,7 +252,7 @@ namespace Antmicro.Renode.Peripherals.SPI
                     this.Log(LogLevel.Error, "Command decoding failed on byte: 0x{0:X} ({1}).", firstByte, (Commands)firstByte);
                     return;
             }
-            this.Log(LogLevel.Noisy, "Decoded operation: {0}, write enabled {1}", currentOperation, enable.Value);
+            // this.Log(LogLevel.Noisy, "Decoded operation: {0}, write enabled {1}", currentOperation, enable.Value);
         }
 
         private byte HandleCommand(byte data)
@@ -304,7 +304,7 @@ namespace Antmicro.Renode.Peripherals.SPI
                     break;
             }
             currentOperation.CommandBytesHandled++;
-            this.Log(LogLevel.Noisy, "Handled command: {0}, returning 0x{1:X}", currentOperation, result);
+            // this.Log(LogLevel.Noisy, "Handled command: {0}, returning 0x{1:X}", currentOperation, result);
             return result;
         }
 

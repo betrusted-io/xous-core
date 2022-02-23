@@ -73,12 +73,16 @@ namespace Antmicro.Renode.Peripherals.CPU
                 }
             }
 
-            this.Log(LogLevel.Noisy, "PC@0x{8:X}: Handling aes instruction: is dec? {0}, is last? {1}, rs1: x{2} ({5:X8}), rs2: x{3} ({6:X8}), written to x{4} ({7:X8})",
-                        is_dec, is_last, rs1, rs2, rd, arg1, arg2, result, PC.RawValue);
+            // this.Log(LogLevel.Noisy, "PC@0x{8:X}: Handling aes instruction: is dec? {0}, is last? {1}, rs1: x{2} ({5:X8}), rs2: x{3} ({6:X8}), written to x{4} ({7:X8})",
+            //             is_dec, is_last, rs1, rs2, rd, arg1, arg2, result, PC.RawValue);
 
             SetRegisterUnsafe(rd, (ulong)result);
         }
 
+        // Create the AES tables.
+        // This is a very odd format for C# code because the obvious method of including it in
+        // the initializers doesn't appear to work with the dynamically-loaded module system
+        // used in Renode.
         private void CreateTables()
         {
             var idx = 0;

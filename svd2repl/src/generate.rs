@@ -577,6 +577,8 @@ fn print_peripherals<U: Write>(
                 if !freq_found {
                     panic!("Couldn't discover clock frequency when creating timer0 object");
                 }
+            } else if lc_name == "com" {
+                writeln!(out, "    EC_INTERRUPT -> btevents @ 0")?;
             }
 
             // If there is a corresponding memory region, add it as parameters.
@@ -595,7 +597,11 @@ fn print_peripherals<U: Write>(
                 writeln!(out, "    IRQ -> cpu @ {}", 1000 + irq.value)?;
             }
         } else {
-            writeln!(out, "// Unrecognized peripheral: {} @ 0x{:08x}", lc_name, peripheral.base)?;
+            writeln!(
+                out,
+                "// Unrecognized peripheral: {} @ 0x{:08x}",
+                lc_name, peripheral.base
+            )?;
         }
         writeln!(out)?;
     }
@@ -635,6 +641,7 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     let mut cs_peripherals = HashMap::new();
     cs_peripherals.insert("app_uart", "UART.LiteX_UART");
     cs_peripherals.insert("console", "UART.LiteX_UART");
+    cs_peripherals.insert("btevents", "GPIOPort.BtEvents");
     cs_peripherals.insert("engine", "Miscellaneous.Engine");
     cs_peripherals.insert("com", "SPI.BetrustedSocCom");
     cs_peripherals.insert("i2c", "I2C.BetrustedSocI2C");
