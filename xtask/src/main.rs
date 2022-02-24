@@ -1319,7 +1319,7 @@ pub(crate) fn app_index_to_name(index: usize) -> Result<&'static str, AppDispatc
                 index,
                 name,
             ).unwrap();
-        }  
+        }
     }
     writeln!(menu, r####"        _ => Err(AppDispatchError::IndexNotFound(index)),
     }}

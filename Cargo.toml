@@ -37,6 +37,7 @@ default-members = [
   "services/modals",
   "apps/ball",
   "apps/repl",
+  "services/espeak",
 ]
 members = [
   "xous-ipc",
@@ -89,6 +90,7 @@ members = [
   "apps/ball",
   "apps/repl",
   "kernel",
+  "services/espeak",
 ]
 resolver = "2"
 
