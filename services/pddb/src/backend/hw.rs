@@ -1255,7 +1255,7 @@ impl PddbOs {
         }
         assert!(written == 4096, "data sizing error in encryption with key commit");
         log::trace!("nonce: {:x?}", &nonce);
-        log::info!("dest_page[kcom_nonce]: {:x?}", &dest_page[12+4004..12+4004+32]);
+        log::debug!("dest_page[kcom_nonce]: {:x?}", &dest_page[12+4004..12+4004+32]);
         self.patch_data(&dest_page, pp.page_number() * PAGE_SIZE as u32);
     }
 
