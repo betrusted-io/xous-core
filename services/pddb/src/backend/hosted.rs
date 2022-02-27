@@ -94,6 +94,7 @@ impl HostedSpinor {
         }
     }
     pub fn patch(&self, _region: &[u8], _region_base: u32, data: &[u8], offset: u32) -> Result<(), xous::Error> {
+        // println!("patch at {:x}+{}", offset, data.len());
         for (&src, dst) in data.iter().zip(
             flashmem().memory.as_mut_slice()[offset as usize..offset as usize + data.len()].iter_mut()
         ) {

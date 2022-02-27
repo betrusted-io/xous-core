@@ -111,6 +111,7 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
     let dict_start_index = dict_list.len();
     for (evicted, evict_dict) in dict_list.iter().enumerate() {
         if evicted < evict_count {
+            log::debug!("evicting dict {}", evict_dict);
             match basis_cache.dict_remove(hw, evict_dict, basis_name, false) {
                 Ok(_) => {},
                 Err(e) => log::error!("Error evicting dictionary {}: {:?}", evict_dict, e),
@@ -124,6 +125,7 @@ pub(crate) fn delete_add_dict_consistency(hw: &mut PddbOs, basis_cache: &mut Bas
         for dictnum in 1..=evict_count {
             let dictname = format!("dict{}", dictnum + dict_start_index);
             let (keyname, keydata) = gen_key(&dictname, keynum, key_lower_bound, key_upper_bound);
+            log::debug!("adding {}:{}", dictname, keyname);
             // now we're ready to write it out
             if maybe_extra_reserved.is_none() {
                 // we do this slightly funky way instead of just passing Some(0) because we want to test the "None" path explicitly
@@ -169,6 +171,7 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
             #[cfg(not(feature = "deterministic"))]
             let key_list = key_list_unord;
             for key in key_list.iter() {
+                log::debug!("updating {}:{}", dict, key);
                 // this actually does something a bit more complicated on a multi-basis system than you'd think:
                 // it will get the union of all key names, and then patch the *latest open basis* only with new data.
                 // note: if the key didn't already exist in the latest open basis, it's added, with just that patch data in it.
@@ -182,14 +185,11 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                     }
                 }
 
-                log::debug!("bef readback");
                 // now fix the CI checksum. structured as two separate patches. not because it's efficient,
                 // but because it exercises the code harder.
                 let mut patchbuf = [0u8; UPPER_BOUND];
                 let readlen = basis_cache.key_read(hw, dict, key, &mut patchbuf, Some(0), None).unwrap();
-                log::debug!("bef no extend");
                 if !extend {
-                    log::debug!("bef no extend");
                     // now re-compute the checksum
                     let mut checkdata = Vec::<u8>::new();
                     for &b in &patchbuf[..readlen-4] {
@@ -202,7 +202,6 @@ pub(crate) fn patch_test(hw: &mut PddbOs, basis_cache: &mut BasisCache,
                     let checksum = murmur3_32(&checkdata, 0);
                     basis_cache.key_update(hw, dict, key, &checksum.to_le_bytes(), Some(readlen-4), None, None, false)?;
                 } else {
-                    log::debug!("extend");
                     // this gloms a new checksum onto the existing record, adding 4 new bytes.
                     let mut checkdata = Vec::<u8>::new();
                     for &b in &patchbuf[..readlen] {
@@ -408,7 +407,6 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
             None, None, Some(32))?;
         log::info!("Saving `basecase1e` to local host");
         pddb_os.dbg_dump(Some("basecase1e".to_string()), None);
-
         let extra_basis_key = pddb_os.basis_derive_key(EXTRA_BASIS, EXTRA_BASIS_PW);
         let mut name = [0 as u8; 64];
         for (&src, dst) in EXTRA_BASIS.as_bytes().iter().zip(name.iter_mut()) {
