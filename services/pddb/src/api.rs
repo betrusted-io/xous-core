@@ -22,7 +22,7 @@ pub(crate) const PASSWORD_LEN: usize = 72; // this is actually set by bcrypt
 #[allow(dead_code)]
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 #[allow(dead_code)]
-pub(crate) const PDDB_VERSION: u32 = 0x00_00_00_01;
+pub(crate) const PDDB_VERSION: u32 = 0x00_00_01_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
