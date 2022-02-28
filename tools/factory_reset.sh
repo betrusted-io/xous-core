@@ -6,9 +6,7 @@ ARG1=${1:-bogus}
 
 if [ $ARG1 == "-s" ]; then
     echo "Updating to latest stabilized release"
-    wget https://ci.betrusted.io/releases/LATEST -O /tmp/LATEST
-    REV=`cat /tmp/LATEST`
-    REVISION="releases/${REV}"
+    REVISION="releases/latest"
 elif [ $ARG1 == "-b" ]; then
     echo "Updating to bleeding edge release"
     REVISION="latest-ci"
