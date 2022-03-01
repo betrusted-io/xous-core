@@ -166,11 +166,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let kkey = args.nth(4);
     match task.as_deref() {
         Some("renode-image") => {
-            generate_app_menus(&vec!["ball".to_string()]);
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let mut apps: Vec<String> = args.collect();
+            if apps.len() == 0 { // add the standard demo apps if none are specified
+                println!("No apps specified, adding default apps...");
+                apps.push("ball".to_string());
+                apps.push("repl".to_string());
+            }
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
             renode_image(false, &hw_pkgs, &[])?
         },
         Some("renode-test") => {
-            generate_app_menus(&vec!["ball".to_string()]);
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let mut apps: Vec<String> = args.collect();
+            if apps.len() == 0 { // add the standard demo apps if none are specified
+                println!("No apps specified, adding default apps...");
+                apps.push("ball".to_string());
+                apps.push("repl".to_string());
+            }
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
             renode_image(false, &cbtest_pkgs, &[])?
         },
         Some("libstd-test") => {
