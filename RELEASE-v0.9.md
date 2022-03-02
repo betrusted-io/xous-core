@@ -68,14 +68,57 @@ for examples of idiomatic ways to write code for Xous.
   - Initial support of emulation of EC
     - No COM-based inter-chip communication yet
 
-## New in 0.9.1
+## New in 0.9.5
 - `modals` server for a simple "Pure Rust" API for creating dialog boxes and getting user input. See the `tests.rs` file for some examples how to use the applcation calls.
+
+## New in 0.9.6
+- Networking: DNS, UDP, Ping and TCP
+  -  Basic demo of ping, rudimentary http get/serve
+  -  EC offload of ARP and DHCP – thanks to samblenny for adding that, along with a solid refactor of the EC code base! The EC now also has the capability to act as a coarse packet filter for the core CPU.
+- Connection manager
+  -  Maintains a list of known SSID/password combos
+  -  Manages passive SSID scanning and re-connection
+  -  Enrolling in and saving a network profile is done via shellchat's wlan series of commands
+  -  Only WPA2 is supported
+  -  Still a lot of corner cases to work through
+- PDDB: Plausibly Deniable DataBase for system config and user data storage.
+  -  Uniform filesystem for all user-specific Xous data
+  -  Fully encrypted database
+  -  Plausibly deniable secret overlays
+  -  See this blog post for more details
+  -  Rust API bindings available, but as of now, few command line tools
+- EC events – asynchronous callbacks triggered by network and battery events
+- CPU load monitor in status bar
+- Improved fonts
+  -  B/W display optimized emoji
+  -  Chinese-native Hanzi glyphs
+  -  Japanese-native Kanji glyphs
+  -  Hangul glyph set
+  -  Thanks again to samblenny for all the hard work to make a slick new set of glyphs and a smooth new API!
+- Japanese locale
+- AZERTY and QWERTZ layouts
+- Auto word-wrapping in the TextView objects
+- Simplified graphical abstractions
+  -  Modal server: create notifications, checkboxes, progress bars, radio boxes, and text entry boxes with validators using a single API call
+  -  Simplified menu API
+- Modular application programs
+  -  manifest.json file to specify application integration parameters, such as the localized name and app launcher menu name
+  -  Build-time command line selection of which apps you want baked into the Xous image
+- Many bug fixes and improvements
+- Improved libstd support
+- Improved Renode and Hosted mode support
+
+## New in 0.9.7
+- `pddb` has salamanders fixed (https://eprint.iacr.org/2020/1456.pdf). This changes the root basis record storage, causing all prior versions to be unrecognized.
+- `betrusted-soc` was updated to the latest Litex in prep for some work optimizing CPU performance and USB cores
 
 ## Roadmap to 1.0
 
 The items that are still missing before we can hit a 1.0 release include:
-- PDDB (plausibly deniable database): a key/value store that is the equivalent of a "filesystem" for Xous
-- Networking capabilities: a simple (think UDP-only) network stack
+- [x] PDDB (plausibly deniable database): a key/value store that is the equivalent of a "filesystem" for Xous
+- [x] Networking capabilities: a simple (think UDP-only) network stack
 - Password changes in the `rootkey` context
-- Post-boot loadable applications (currently we have a kernel, there is no notion of a separate "application" file from the kernel code base; although this might be a 1.1-release feature as it depends on the PDDB, which is a major item in and of itself)
+- Post-boot loadable applications. We currently have modularized integrated applications, but no notion of a disk-loadable application. Still not sure if this is a feature we want, though, given that Xous is supposed to be a single-purpose tool and not a general OS.
+- Further integration of drivers into `libstd`
+- Maybe a functional USB device stack??
 - Lots of testing and bug fixes

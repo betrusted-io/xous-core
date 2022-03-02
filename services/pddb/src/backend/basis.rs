@@ -659,8 +659,12 @@ impl BasisCache {
             }
             // refetch the basis here to avoid the re-borrow problem, now that all the potential dict cache mutations are done
             let basis = &mut self.cache[basis_index];
-            basis.age = basis.age.saturating_add(1);
-            basis.clean = false;
+
+            // bumping this every key update affects performance *a lot* -- don't think this is worth it.
+            // the bases should only "age" when dicts or keys are modified, not when any data in it is updated for any reason.
+            // basis.age = basis.age.saturating_add(1);
+            // basis.clean = false;
+
             // now do the sync
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 let updated_ptr = dict_entry.key_update(hw, &mut basis.v2p_map,
@@ -785,10 +789,9 @@ impl BasisCache {
     policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         let basis_key =  hw.basis_derive_key(name, password);
         if let Some(basis_map) = hw.pt_scan_key(&basis_key, name) {
-            let cipher = Aes256GcmSiv::new(Key::from_slice(&basis_key));
             let aad = hw.data_aad(name);
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
-                let vpage = match hw.data_decrypt_page(&cipher, &aad, root_page) {
+                let vpage = match hw.data_decrypt_page_with_commit(&basis_key, &aad, root_page) {
                     Some(data) => data,
                     None => {log::error!("Could not find basis {} root", name); return None;},
                 };
@@ -856,12 +859,11 @@ impl BasisCache {
         let slice_iter =
             journal_bytes.iter() // journal rev
             .chain(basis_root.as_ref().iter());
-        let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+        let mut block = [0 as u8; KCOM_CT_LEN];
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
             *dst = src;
         }
-        let key = Key::clone_from_slice(&basis_key);
-        hw.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
+        hw.data_encrypt_and_patch_page_with_commit(&basis_key, &aad, &mut block, &pp);
 
         let cipher =  Aes256::new(GenericArray::from_slice(&basis_key));
         for (&virt, phys) in basis_v2p_map.iter_mut() {
@@ -983,6 +985,8 @@ pub(crate) struct BasisCacheEntry {
     pub cipher: Aes256GcmSiv,
     /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
     pub cipher_ecb: Aes256,
+    /// raw AES key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
+    pub key: GenericArray<u8, cipher::consts::U32>,
     /// the AAD associated with this Basis
     pub aad: Vec::<u8>,
     /// modification count
@@ -1009,7 +1013,7 @@ impl BasisCacheEntry {
             let aad = hw.data_aad(name);
             // get the first page, where the basis root is guaranteed to be
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
-                let vpage = match hw.data_decrypt_page(&cipher, &aad, root_page) {
+                let vpage = match hw.data_decrypt_page_with_commit(key, &aad, root_page) {
                     Some(data) => data,
                     None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return None;},
                 };
@@ -1040,6 +1044,7 @@ impl BasisCacheEntry {
                     dicts: HashMap::<String, DictCacheEntry>::new(),
                     cipher,
                     cipher_ecb: Aes256::new(GenericArray::from_slice(key)),
+                    key: GenericArray::clone_from_slice(key),
                     aad,
                     age: basis_root.age,
                     free_dict_offset: None,
@@ -1492,14 +1497,14 @@ impl BasisCacheEntry {
             let slice_iter =
                 journal_bytes.iter() // journal rev
                 .chain(basis_root.as_ref().iter());
-            let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+            let mut block = [0 as u8; KCOM_CT_LEN];
             for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(block[..size_of::<JournalType>()].iter_mut()) {
                 *dst = src;
             }
             for (&src, dst) in slice_iter.zip(block.iter_mut()) {
                 *dst = src;
             }
-            hw.data_encrypt_and_patch_page(&self.cipher, &self.aad, &mut block, &pp);
+            hw.data_encrypt_and_patch_page_with_commit(self.key.as_slice(), &self.aad, &mut block, &pp);
             self.clean = true;
         }
     }

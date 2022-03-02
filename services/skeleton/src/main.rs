@@ -86,7 +86,7 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let codec_sid = xns.register_name(api::SERVER_NAME_CODEC).expect("can't register server");
+    let codec_sid = xns.register_name(api::SERVER_NAME_CODEC, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", codec_sid);
 
     let mut codec = Codec::new();

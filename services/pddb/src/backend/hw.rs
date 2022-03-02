@@ -7,6 +7,7 @@ use aes::{Aes256, Block, BLOCK_SIZE};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
 use root_keys::api::AesRootkeyType;
 use spinor::SPINOR_BULK_ERASE_SIZE;
+use subtle::ConstantTimeEq;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
@@ -32,6 +33,11 @@ pub(crate) const FSCB_PAGES: usize = 16;
 pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
 /// size of a virtual page -- after the AES encryption and journaling overhead is subtracted
 pub const VPAGE_SIZE: usize = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>();
+
+/// length of the ciphertext in an AES-GCM-SIV page with key commitments
+/// equal to the total plaintext to be encrypted, including the journal number
+/// does not include the MAC overhead
+pub const KCOM_CT_LEN: usize = 4004;
 
 const WRAPPED_AES_KEYSIZE: usize = AES_KEYSIZE + 8;
 const SCD_VERSION: u32 = 1;
@@ -1113,6 +1119,77 @@ impl PddbOs {
             }
         }
     }
+
+    /// returns a decrypted page that also encodes a key commitments. In this case, a raw key is passed,
+    /// instead of the generic AES-GCM-SIV cipher, because we need to derive the key commitment.
+    /// Key commitments are a patch to work-around the salamander problem in AES-GCM-SIV see https://eprint.iacr.org/2020/1456.pdf
+    ///
+    /// The structure of a page with commit key storage is as follows:
+    /// - Nonce - 12 bytes
+    /// - ciphertext - 4004 bytes (includes the journal number)
+    ///   - kcomm_nonce - 32 bytes
+    ///   - kcomm - 32 bytes
+    /// - MAC - 16 bytes
+    /// We stripe the MAC at the end just in case the MAC has some arithmetic property that can betray the existence
+    /// of a basis root record with key commitment. The committed key and the nonce both should be indistinguishable
+    /// from ciphertext.
+    pub(crate) fn data_decrypt_page_with_commit(&mut self, key: &[u8], aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
+        const KCOM_NONCE_LEN: usize = 32;
+        const KCOM_LEN: usize = 32;
+        const MAC_LEN: usize = 16;
+        let ct_slice = &self.pddb_mr.as_slice()[
+            self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
+            self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE];
+        log::debug!("commit data at 0x{:x}", self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE);
+        let nonce = &ct_slice[..size_of::<Nonce>()];
+        let ct_total = &ct_slice[size_of::<Nonce>()..];
+
+        // extract the regions of the stored data and place them into their respective buffers
+        let mut ct_plus_mac = [0u8; KCOM_CT_LEN + MAC_LEN];
+        let mut nonce_comm = [0u8; KCOM_NONCE_LEN];
+        let mut key_comm_stored = [0u8; KCOM_LEN];
+        let mut ct_pos = 0;
+
+        for (&src, dst) in ct_total[ct_pos..].iter().zip(ct_plus_mac[..KCOM_CT_LEN].iter_mut()) {
+            *dst = src;
+            ct_pos += 1;
+        }
+        for (&src, dst) in ct_total[ct_pos..].iter().zip(nonce_comm.iter_mut()) {
+            *dst = src;
+            ct_pos += 1;
+        }
+        for (&src, dst) in ct_total[ct_pos..].iter().zip(key_comm_stored.iter_mut()) {
+            *dst = src;
+            ct_pos += 1;
+        }
+        for (&src, dst) in ct_total[ct_pos..].iter().zip(ct_plus_mac[KCOM_CT_LEN..].iter_mut()) {
+            *dst = src;
+            ct_pos += 1;
+        }
+        assert!(ct_pos == PAGE_SIZE - size_of::<Nonce>(), "struct sizing error in unpacking page with key commit");
+        log::debug!("found nonce of {:x?}", nonce);
+        log::debug!("found kcom_nonce of {:x?}", nonce_comm);
+
+        let (kenc, kcom) = self.kcom_func(key.try_into().unwrap(), &nonce_comm);
+        let cipher = Aes256GcmSiv::new(Key::from_slice(&kenc));
+
+        // Attempt decryption. This is None on failure
+        let plaintext = cipher.decrypt(
+            Nonce::from_slice(nonce),
+            Payload {
+                aad,
+                msg: &ct_plus_mac,
+            }
+        ).ok();
+
+        // Only return the plaintext if the stored key commitment agrees with the computed one
+        if kcom.ct_eq(&key_comm_stored).into() {
+            plaintext
+        } else {
+            None
+        }
+    }
+
     /// `data` includes the journal entry on top. The data passed in must be exactly one vpage plus the journal entry
     pub(crate) fn data_encrypt_and_patch_page(&mut self, cipher: &Aes256GcmSiv, aad: &[u8], data: &mut [u8], pp: &PhysPage) {
         assert!(data.len() == VPAGE_SIZE + size_of::<JournalType>(), "did not get a page-sized region to patch");
@@ -1129,6 +1206,74 @@ impl PddbOs {
         self.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
     }
 
+    /// `data` includes the journal entry on top.
+    /// The data passed in must be exactly one vpage plus the journal entry minus the length of the commit structure (64 bytes),
+    /// which is 4004 bytes total
+    pub(crate) fn data_encrypt_and_patch_page_with_commit(&mut self, key: &[u8], aad: &[u8], data: &mut [u8], pp: &PhysPage) {
+        assert!(data.len() == KCOM_CT_LEN, "did not get a key-commit sized region to patch");
+        // updates the journal type
+        let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
+        for (&src, dst) in j.to_le_bytes().iter().zip(data[..size_of::<JournalType>()].iter_mut()) { *dst = src; }
+        // gets the AES-GCM-SIV nonce
+        let nonce = self.nonce_gen();
+        // makes a nonce for the key commit
+        let mut kcom_nonce = [0u8; 32];
+        self.trng_slice(&mut kcom_nonce);
+        // generates the encryption and commit keys
+        let (kenc, kcom) = self.kcom_func(key.try_into().unwrap(), &kcom_nonce);
+        let cipher = Aes256GcmSiv::new(Key::from_slice(&kenc));
+        let ciphertext = cipher.encrypt(
+            &nonce,
+            Payload {
+                aad,
+                msg: &data,
+            }
+        ).expect("couldn't encrypt data");
+        let mut dest_page = [0u8; PAGE_SIZE];
+
+        let mut written = 0; // used as a sanity check on the insane iterator chain constructed below
+        for (&src, dst) in
+        nonce.as_slice().iter()
+        .chain(ciphertext[..KCOM_CT_LEN].iter())
+        .chain(kcom_nonce.iter())
+        .chain(kcom.iter())
+        .chain(ciphertext[KCOM_CT_LEN..].iter())
+        .zip(dest_page.iter_mut()) {
+            *dst = src;
+            written += 1;
+        }
+        assert!(written == 4096, "data sizing error in encryption with key commit");
+        log::trace!("nonce: {:x?}", &nonce);
+        log::debug!("dest_page[kcom_nonce]: {:x?}", &dest_page[12+4004..12+4004+32]);
+        self.patch_data(&dest_page, pp.page_number() * PAGE_SIZE as u32);
+    }
+
+    /// Derive a key commitment. This takes in a base `key`, which is 256 bits;
+    /// a `nonce` which is the 96-bit nonce used in the AES-GCM-SIV for a given block;
+    /// and `nonce_com` which is the commitment nonce, set at 256 bits.
+    /// The result is two tuples, (kenc, kcom).
+    fn kcom_func(&self,
+        key: &[u8; 32],
+        nonce_com: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+        use sha2::{FallbackStrategy, Sha512Trunc256};
+        use digest::Digest;
+
+        let mut h_enc = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        h_enc.update(key);
+        // per https://eprint.iacr.org/2020/1456.pdf Table 4 on page 13 Type I Lenc
+        h_enc.update([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]);
+        h_enc.update(nonce_com);
+        let k_enc = h_enc.finalize();
+
+        let mut h_com = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
+        h_com.update(key);
+        // per https://eprint.iacr.org/2020/1456.pdf Table 4 on page 13 Type I Lcom. Note one-bit difference in last byte.
+        h_com.update([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x02]);
+        h_com.update(nonce_com);
+        let k_com = h_com.finalize();
+        (k_enc.into(), k_com.into())
+    }
+
     /// Meant to be called on boot. This will read the FastSpace record, and then attempt to load
     /// in the system basis.
     pub(crate) fn pddb_mount(&mut self) -> Option<BasisCacheEntry> {
@@ -1136,11 +1281,10 @@ impl PddbOs {
         self.syskey_ensure();
         if let Some(syskey) = self.system_basis_key {
             if let Some(sysbasis_map) = self.pt_scan_key(&syskey, PDDB_DEFAULT_SYSTEM_BASIS) {
-                let cipher = Aes256GcmSiv::new(Key::from_slice(&syskey));
                 let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
                 // get the first page, where the basis root is guaranteed to be
                 if let Some(root_page) = sysbasis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
-                    let vpage = match self.data_decrypt_page(&cipher, &aad, root_page) {
+                    let vpage = match self.data_decrypt_page_with_commit(&syskey, &aad, root_page) {
                         Some(data) => data,
                         None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return None;},
                     };
@@ -1448,12 +1592,13 @@ impl PddbOs {
         let slice_iter =
             journal_bytes.iter() // journal rev
             .chain(basis_root.as_ref().iter());
-        let mut block = [0 as u8; VPAGE_SIZE + size_of::<JournalType>()];
+        let mut block = [0 as u8; KCOM_CT_LEN];
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
             *dst = src;
         }
-        let key = Key::clone_from_slice(self.system_basis_key.as_ref().unwrap());
-        self.data_encrypt_and_patch_page(&Aes256GcmSiv::new(&key), &aad, &mut block, &pp);
+        let syskey = self.system_basis_key.unwrap(); // take the key out
+        self.data_encrypt_and_patch_page_with_commit(&syskey, &aad, &mut block, &pp);
+        self.system_basis_key = Some(syskey); // put the key back
         if let Some(modals) = progress {
             modals.update_progress(66).expect("couldn't update progress bar");
             self.tt.sleep_ms(100).unwrap();

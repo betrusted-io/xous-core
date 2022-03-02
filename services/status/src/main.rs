@@ -309,6 +309,7 @@ fn xmain() -> ! {
             }
         });
     };
+    sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string()); // this is the default app on boot
 
     let mut stats_phase: usize = 0;
 
@@ -727,11 +728,26 @@ fn xmain() -> ! {
             }),
             Some(StatusOpcode::SwitchToShellchat) => {
                 ticktimer.sleep_ms(100).ok();
+                sec_notes.lock().unwrap().remove(&"current_app".to_string());
+                sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string());
                 gam.switch_to_app(gam::APP_NAME_SHELLCHAT, security_tv.token.unwrap()).expect("couldn't raise shellchat");
+                secnotes_force_redraw = true;
+                send_message(
+                    cb_cid,
+                    Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                ).expect("couldn't trigger status update");
             },
             Some(StatusOpcode::SwitchToApp) => msg_scalar_unpack!(msg, index, _, _, _, {
                 ticktimer.sleep_ms(100).ok();
-                app_autogen::app_dispatch(&gam, security_tv.token.unwrap(), index);
+                let app_name = app_autogen::app_index_to_name(index).expect("app index not found");
+                app_autogen::app_dispatch(&gam, security_tv.token.unwrap(), index).expect("cannot switch to app");
+                sec_notes.lock().unwrap().remove(&"current_app".to_string());
+                sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: {}", app_name).to_string());
+                secnotes_force_redraw = true;
+                send_message(
+                    cb_cid,
+                    Message::new_scalar(StatusOpcode::Pump.to_usize().unwrap(), 0, 0, 0, 0),
+                ).expect("couldn't trigger status update");
             }),
             Some(StatusOpcode::TrySuspend) => {
                 if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {

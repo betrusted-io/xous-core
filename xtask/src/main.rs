@@ -166,11 +166,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let kkey = args.nth(4);
     match task.as_deref() {
         Some("renode-image") => {
-            generate_app_menus(&vec!["ball".to_string()]);
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let mut apps: Vec<String> = args.collect();
+            if apps.len() == 0 { // add the standard demo apps if none are specified
+                println!("No apps specified, adding default apps...");
+                apps.push("ball".to_string());
+                apps.push("repl".to_string());
+            }
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
             renode_image(false, &hw_pkgs, &[])?
         },
         Some("renode-test") => {
-            generate_app_menus(&vec!["ball".to_string()]);
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let mut apps: Vec<String> = args.collect();
+            if apps.len() == 0 { // add the standard demo apps if none are specified
+                println!("No apps specified, adding default apps...");
+                apps.push("ball".to_string());
+                apps.push("repl".to_string());
+            }
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
             renode_image(false, &cbtest_pkgs, &[])?
         },
         Some("libstd-test") => {
@@ -1279,16 +1303,49 @@ fn generate_app_menus(apps: &Vec::<String>) {
 use gam::{{MenuItem, MenuPayload}};
 use locales::t;
 use num_traits::*;
+use std::{{error::Error, fmt}};
 
-pub(crate) fn app_dispatch(gam: &gam::Gam, token: [u32; 4], index: usize) {{
+#[derive(Debug)]
+pub enum AppDispatchError {{
+    IndexNotFound(usize),
+}}
+
+impl Error for AppDispatchError {{}}
+
+impl fmt::Display for AppDispatchError {{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
+        match self {{
+            AppDispatchError::IndexNotFound(app_index) => write!(f, "Index {{}} not found", app_index),
+        }}
+    }}
+}}
+
+pub(crate) fn app_dispatch(gam: &gam::Gam, token: [u32; 4], index: usize) -> Result<(), AppDispatchError> {{
     match index {{"####).unwrap();
     for (index, (app_name, _manifest)) in working_set.iter().enumerate() {
-        writeln!(menu, "        {} => gam.switch_to_app(gam::APP_NAME_{}, token).expect(\"couldn't raise app\"),",
+        writeln!(menu, "        {} => {{
+            gam.switch_to_app(gam::APP_NAME_{}, token).expect(\"couldn't raise app\");
+            Ok(())
+        }},",
             index,
             app_name.to_uppercase()
         ).unwrap();
     }
-    writeln!(menu, r####"        _ => log::error!("Invalid index for app dispatch: {{}}. Ignoring!", index),
+    writeln!(menu, r####"        _ => Err(AppDispatchError::IndexNotFound(index)),
+    }}
+}}
+
+pub(crate) fn app_index_to_name(index: usize) -> Result<&'static str, AppDispatchError> {{
+    match index {{"####).unwrap();
+    for (index, (_, _manifest)) in working_set.iter().enumerate() {
+        for name in _manifest.menu_name.keys() {
+            writeln!(menu, "        {} => Ok(t!(\"{}\", xous::LANG)),",
+                index,
+                name,
+            ).unwrap();
+        }
+    }
+    writeln!(menu, r####"        _ => Err(AppDispatchError::IndexNotFound(index)),
     }}
 }}
 

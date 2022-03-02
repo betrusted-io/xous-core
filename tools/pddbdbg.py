@@ -4,6 +4,8 @@ import sys
 
 from Crypto.Cipher import AES
 from rfc8452 import AES_GCM_SIV
+from Crypto.Hash import SHA512
+import binascii
 
 import logging
 
@@ -99,6 +101,41 @@ def mm3_hash( key, seed = 0x0 ):
     else:
         return -( (unsigned_val ^ 0xFFFFFFFF) + 1 )
 
+def keycommit_decrypt(key, aad, pp_data):
+    # print([hex(d) for d in pp_data[:32]])
+    nonce = pp_data[:12]
+    ct = pp_data[12:12+4004]
+    kcom_nonce = pp_data[12+4004:12+4004+32]
+    kcom = pp_data[12+4004+32:12+4004+32+32]
+    mac = pp_data[-16:]
+
+    #print([hex(d) for d in kcom_nonce])
+    # print([hex(d) for d in kcom])
+    #h_test = SHA512.new(truncate="256")  # just something to make sure our hash functions are sane
+    #h_test.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]))
+    #print(h_test.hexdigest())
+
+    h_enc = SHA512.new(truncate="256")
+    h_enc.update(key)
+    h_enc.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]))
+    h_enc.update(kcom_nonce)
+    k_enc = h_enc.digest()
+
+    h_com = SHA512.new(truncate="256")
+    h_com.update(key)
+    h_com.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x02]))
+    h_com.update(kcom_nonce)
+    k_com_derived = h_com.digest()
+    print('kcom_stored:  ' + binascii.hexlify(kcom).decode('utf-8'))
+    print('kcom_derived: ' + binascii.hexlify(k_com_derived).decode('utf-8'))
+
+    cipher = AES_GCM_SIV(k_enc, nonce)
+    pt_data = cipher.decrypt(ct + mac, aad)
+    if k_com_derived != kcom:
+        print("basis failed key commit test")
+        raise Exception(ValueError)
+    return pt_data
+
 
 def main():
     parser = argparse.ArgumentParser(description="Debug PDDB Images")
@@ -191,11 +228,10 @@ def main():
 
                 basis_data = bytearray()
                 pp_start = v2p_table[VPAGE_SIZE]
-                # print("pp_start: {}, vp: {}".format(pp_start, vp))
+                # print("pp_start: {:x}".format(pp_start))
                 pp_data = data[pp_start:pp_start + PAGE_SIZE]
                 try:
-                    cipher = AES_GCM_SIV(key, pp_data[:12])
-                    pt_data = cipher.decrypt(pp_data[12:], basis_aad(name))
+                    pt_data = keycommit_decrypt(key, basis_aad(name), pp_data)
                     basis_data.extend(bytearray(pt_data))
                     logging.debug("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
                     # print([hex(x) for x in basis_data[:256]])
@@ -535,7 +571,7 @@ class Basis:
         #desc += ' DictPtr: {:x}\n'.format(self.dict_ptr)
         return desc
 
-def basis_aad(name, version=1, dna=0):
+def basis_aad(name, version=0x01_01, dna=0):
     name_bytes = bytearray(name, 'utf-8')
     # name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
     name_bytes += version.to_bytes(4, 'little')
@@ -703,7 +739,7 @@ class Fscb:
                 self.free_space[pp.page_number() * 4096] = pp
 
     # this is the "AAD" used to encrypt the FastSpace
-    def aad(version=1, dna=0):
+    def aad(version=0x01_01, dna=0):
         return bytearray([46, 70, 97, 115, 116, 83, 112, 97, 99, 101]) + version.to_bytes(4, 'little') + dna.to_bytes(8, 'little')
 
 class SpaceUpdate:
