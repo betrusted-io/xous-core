@@ -6,11 +6,16 @@ fn test_main() -> ! {
 
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     log::info!("waiting for others to boot");
-    tt.sleep_ms(5000).unwrap();
+    tt.sleep_ms(1000).unwrap();
+    let xns = xous_names::XousNames::new().unwrap();
+    let mut com = com::Com::new(&xns).unwrap();
+    com.wlan_join().expect("couldn't issue join command");
+    log::info!("waiting for join to finish");
+    tt.sleep_ms(1000).unwrap();
+
     let host = "bunniefoo.com";
     log::info!("attempting to resolve {}", host);
 
-    let xns = xous_names::XousNames::new().unwrap();
     let dns = dns::Dns::new(&xns).unwrap();
     match dns.lookup(host) {
         Ok(ipaddr) => {
