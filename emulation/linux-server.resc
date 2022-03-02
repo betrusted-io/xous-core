@@ -11,7 +11,7 @@ machine LoadPlatformDescription @platforms/boards/versatile.repl
 sysbus Redirect 0xC0000000 0x0 0x10000000
 
 $bin?=@emulation/versatile-vmlinux
-$rootfs?=@emulation/new-flash.jffs2
+$rootfs?=@emulation/linux-server-rootfs.jffs2
 
 ### create externals ###
 
