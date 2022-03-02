@@ -179,7 +179,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &hw_pkgs, &[], None)?
+            renode_image(false, &hw_pkgs, &[],
+                None, Some(&["--features", "renode-bypass"]))?
         },
         Some("renode-test") => {
             let mut args = env::args();
@@ -195,7 +196,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &cbtest_pkgs, &[], None)?
+            renode_image(false, &cbtest_pkgs, &[], None, None)?
         },
         Some("libstd-test") => {
             let mut args = env::args();
@@ -207,15 +208,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 extra_packages.push(program.as_str());
             }
             renode_image(false, &pkgs, extra_packages.as_slice(),
+            None, Some(&["--features", "renode-bypass"]))?;
+        }
+        Some("libstd-net") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = base_pkgs.to_vec();
+            pkgs.push("net");
+            pkgs.push("com");
+            pkgs.push("llio");
+            pkgs.push("dns");
+            pkgs.push("libstd-test");
+            let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
+            for program in &args {
+                extra_packages.push(program.as_str());
+            }
+            renode_image(false, &pkgs, extra_packages.as_slice(),
+            Some(&["--features", "renode-minimal"]),
             Some(&["--features", "renode-bypass"]))?;
         }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
-            renode_image(false, &aestest_pkgs, &[], None)?
+            renode_image(false, &aestest_pkgs, &[], None, None)?
         },
         Some("renode-image-debug") => {
             generate_app_menus(&vec!["ball".to_string()]);
-            renode_image(true, &hw_pkgs, &[], None)?
+            renode_image(true, &hw_pkgs, &[], None, None)?
         },
         Some("pddb-ci") => {
             generate_app_menus(&Vec::<String>::new());
@@ -389,7 +408,8 @@ Renode emulation:
  renode-test             builds a test image for renode
  renode-image-debug      builds a test image for renode in debug mode
  libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
-                         specified on the command line (e.g. built externally)
+                         specified on the command line (e.g. built externally). Bypasses sig checks, keys locked out.
+ libstd-net [pkg1] [..]  builds a test image for testing network functions. Bypasses sig checks, keys locked out.
 
 Locale (re-)generation:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
@@ -694,6 +714,7 @@ fn renode_image(
     debug: bool,
     packages: &[&str],
     extra_packages: &[&str],
+    xous_features: Option<&[&str]>,
     loader_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
     // Regenerate the Platform file
@@ -719,7 +740,7 @@ fn renode_image(
         packages,
         None,
         None,
-        None,
+        xous_features,
         extra_packages,
         loader_features,
     )

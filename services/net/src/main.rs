@@ -218,6 +218,7 @@ fn xmain() -> ! {
     let cm_sid = xous::create_server().expect("couldn't create connection manager server");
     let cm_cid = xous::connect(cm_sid).unwrap();
     let activity_interval = Arc::new(AtomicU32::new(0));
+    #[cfg(not(feature="renode-minimal"))]
     thread::spawn({
         let activity_interval = activity_interval.clone();
         move || {
