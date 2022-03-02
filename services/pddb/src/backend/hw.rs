@@ -7,6 +7,7 @@ use aes::{Aes256, Block, BLOCK_SIZE};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
 use root_keys::api::AesRootkeyType;
 use spinor::SPINOR_BULK_ERASE_SIZE;
+use subtle::ConstantTimeEq;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
@@ -1171,33 +1172,21 @@ impl PddbOs {
 
         let (kenc, kcom) = self.kcom_func(key.try_into().unwrap(), &nonce_comm);
         let cipher = Aes256GcmSiv::new(Key::from_slice(&kenc));
-        match cipher.decrypt(
+
+        // Attempt decryption. This is None on failure
+        let plaintext = cipher.decrypt(
             Nonce::from_slice(nonce),
             Payload {
                 aad,
                 msg: &ct_plus_mac,
             }
-        ) {
-            Ok(data) => {
-                assert!(data.len() == KCOM_CT_LEN, "authentication successful, but wrong amount of data was recovered");
-                if kcom == key_comm_stored {
-                    Some(data)
-                } else {
-                    log::debug!("Key commitment failed to match on a reputed basis root block");
-                    None
-                }
-            },
-            Err(e) => {
-                // do the commit check again at the same point, even if there is an error, for some semblance of constant time
-                // (of course the error messages leak information, if they are forced on)
-                if kcom == key_comm_stored {
-                    log::trace!("Error decrypting page: {:?}", e); // sometimes this is totally "normal", like when we're testing for valid data.
-                    None
-                } else {
-                    log::trace!("Error decrypting page + commitment error: {:?}", e);
-                    None
-                }
-            }
+        ).ok();
+
+        // Only return the plaintext if the stored key commitment agrees with the computed one
+        if kcom.ct_eq(&key_comm_stored).into() {
+            plaintext
+        } else {
+            None
         }
     }
 
