@@ -30,6 +30,7 @@ lazy_static = "1.4.0"
 [features]
 debug-print = []
 earlyprintk = []
+renode-bypass = []
 #default = ["debug-print"]
 default = []
 
