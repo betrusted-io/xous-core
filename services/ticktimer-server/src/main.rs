@@ -475,7 +475,7 @@ fn xmain() -> ! {
 
     log::info!("****************************************************************");
     log::info!("Welcome to Xous {}", version::SEMVER);
-    #[cfg(not(feature="no-timestamp"))]
+    #[cfg(not(feature = "no-timestamp"))]
     log::info!("Built on {}", version::TIMESTAMP);
     log::info!("****************************************************************");
 
@@ -495,8 +495,27 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let sr_cid =
         xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(SuspendOrder::Last), &xns, api::Opcode::SuspendResume as u32, sr_cid)
-        .expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(
+        Some(SuspendOrder::Last),
+        &xns,
+        api::Opcode::SuspendResume as u32,
+        sr_cid,
+    )
+    .expect("couldn't create suspend/resume object");
+
+    use std::collections::{HashMap, HashSet, VecDeque};
+
+    // A list of mutexes that should be allowed to run immediately, because the
+    // thread they were waiting on has already unlocked the mutex. This occurs
+    // when a thread attempts to Lock a Mutex and fails, then gets preempted
+    // before it has a chance to send the `LockMutex` message to us.
+    let mut mutex_ready_hash: HashMap<Option<xous::PID>, HashSet<usize>> = HashMap::new();
+
+    // A list of message IDs that are waiting to lock a Mutex. These are processes
+    // that have attempted to lock a Mutex and failed, and have sent us the `LockMutex`
+    // message. This queue is drained by threads sending `UnlockMutex` to us.
+    let mut mutex_hash: HashMap<Option<xous::PID>, HashMap<usize, VecDeque<xous::MessageSender>>> =
+        HashMap::new();
 
     loop {
         #[cfg(feature = "watchdog")]
@@ -540,8 +559,59 @@ fn xmain() -> ! {
                 ticktimer.reset_wdt();
             }
             Some(api::Opcode::GetVersion) => {
-                let mut buf = unsafe{xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut buf = unsafe {
+                    xous_ipc::Buffer::from_memory_message_mut(
+                        msg.body.memory_message_mut().unwrap(),
+                    )
+                };
                 buf.replace(version::get_version()).unwrap();
+            }
+            Some(api::Opcode::LockMutex) => {
+                let pid = msg.sender.pid();
+                if !msg.body.is_blocking() {
+                    info!("sender made LockMutex request that was not blocking");
+                    break;
+                }
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let ready = mutex_ready_hash.entry(pid).or_default();
+
+                    // If this item is in the Ready list, return right away without blocking
+                    if ready.remove(&scalar.arg1) {
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                        break;
+                    }
+
+                    // This item is not in the Ready list, so add our sender to the list of processes
+                    // to get called when UnlockMutex is invoked
+                    let awaiting = mutex_hash.entry(pid).or_default();
+
+                    // Add this to the end of the list of entries to call so that when `UnlockMutex` is sent
+                    // the message will get a response.
+                    let mutex_entry = awaiting.entry(scalar.arg1).or_default();
+                    mutex_entry.push_back(msg.sender);
+                }
+            }
+            Some(api::Opcode::UnlockMutex) => {
+                let pid = msg.sender.pid();
+                if msg.body.is_blocking() {
+                    info!("sender made UnlockMutex request that was blocking");
+                    break;
+                }
+                if let Some(scalar) = msg.body.scalar_message() {
+                    // Get a list of awaiting mutexes for this process
+                    let awaiting = mutex_hash.entry(pid).or_default();
+
+                    // Get the vector of awaiting mutex entries.
+                    let mutex_entry = awaiting.entry(scalar.arg1).or_default();
+
+                    // If there's something waiting in the queue, respond to that message
+                    if let Some(sender) = mutex_entry.pop_front() {
+                        xous::return_scalar(sender, 0).unwrap();
+                    } else {
+                        // Otherwise, mark this scalar as being ready to run
+                        mutex_ready_hash.entry(pid).or_default().insert(scalar.arg1);
+                    }
+                }
             }
             None => {
                 error!("couldn't convert opcode");
