@@ -15,8 +15,14 @@ pub(crate) enum Opcode {
     /// force a WDT update
     PingWdt = 4,
 
-    /// return the version string of Xous. We bury it here because this is a small, lightweight server we can rebuild on every run.
+    /// Return the version string of Xous. We bury it here because this is a small, lightweight server we can rebuild on every run.
     GetVersion = 5,
+
+    /// Lock the given Mutex, blocking if it is already locked
+    LockMutex = 6,
+
+    /// Unlock the given Mutex
+    UnlockMutex = 7,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
