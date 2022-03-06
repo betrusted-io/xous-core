@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "llio",
         "susres",
         "codec",
-        "sha2",
+        "sha2:0.9.8",
         "engine-25519",
         "spinor",
         "root-keys",
@@ -588,7 +588,15 @@ fn build_hw_image(
     let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args, None)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
-        pkg_path.push(pkg);
+        // some packages may have a colon-delimited version after it to clarify crates.io patches.
+        // Strip off the version number before passing to the image builder.
+        let pkg_maybe_version: Vec<&str> = pkg.split(':').collect();
+        let pkg_root = if pkg_maybe_version.len() > 1 {
+            pkg_maybe_version[pkg_maybe_version.len() - 2]
+        } else {
+            pkg
+        };
+        pkg_path.push(pkg_root);
         init.push(pkg_path);
     }
     for pkg in extra_packages {
