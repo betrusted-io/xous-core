@@ -135,7 +135,7 @@ dependencies = [
  "ticktimer-server",
  "trng",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -168,7 +168,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -183,7 +183,7 @@ dependencies = [
  "rkyv",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -312,7 +312,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -329,7 +329,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -346,7 +346,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -449,7 +449,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -470,7 +470,7 @@ dependencies = [
  "typenum",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -713,7 +713,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -769,7 +769,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -924,7 +924,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1010,7 +1010,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1073,7 +1073,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1087,7 +1087,7 @@ dependencies = [
  "num-traits",
  "rkyv",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1104,7 +1104,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1142,7 +1142,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1191,7 +1191,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1274,7 +1274,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1308,7 +1308,7 @@ dependencies = [
  "num-traits",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
 ]
 
 [[package]]
@@ -1384,7 +1384,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1410,7 +1410,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1573,7 +1573,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1836,7 +1836,7 @@ dependencies = [
  "ticktimer-server",
  "trng",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1900,7 +1900,7 @@ dependencies = [
  "rkyv",
  "ticktimer-server",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1948,7 +1948,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
  "zeroize",
 ]
@@ -2132,7 +2132,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2176,10 +2176,11 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "trng",
+ "tts-frontend",
  "utralib",
  "x25519-dalek",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2259,7 +2260,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2301,7 +2302,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2334,7 +2335,7 @@ dependencies = [
  "rkyv",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2442,7 +2443,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
 ]
 
 [[package]]
@@ -2495,7 +2496,7 @@ dependencies = [
  "susres",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2541,8 +2542,25 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
+]
+
+[[package]]
+name = "tts-frontend"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc 0.9.7",
+ "xous-names",
+ "xous-tts-backend",
 ]
 
 [[package]]
@@ -2928,6 +2946,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "xous-ipc"
+version = "0.9.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9874c4b4dcce5c8fe73351e0bb27e08cc1bf5b58ce621a4c42d1a5cb8869bd87"
+dependencies = [
+ "bitflags",
+ "rkyv",
+ "xous",
+]
+
+[[package]]
 name = "xous-macros"
 version = "0.1.0"
 dependencies = [
@@ -2948,7 +2977,20 @@ dependencies = [
  "rkyv",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
+]
+
+[[package]]
+name = "xous-tts-backend"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "xous",
+ "xous-ipc 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-names",
 ]
 
 [[package]]

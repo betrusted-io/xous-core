@@ -90,6 +90,7 @@ members = [
   "apps/repl",
   "services/libstd-test",
   "services/ffi-test",
+  "services/tts",
   "kernel",
 ]
 resolver = "2"
@@ -121,6 +122,8 @@ xous-macros = {path = "macros"}
 path = "services/engine-sha512"
 [patch.crates-io.aes]
 path = "services/aes"
+[patch.crates-io.xous-names]
+path = "services/xous-names"
 
 [patch.crates-io.curve25519-dalek]
 git="https://github.com/betrusted-io/curve25519-dalek.git"

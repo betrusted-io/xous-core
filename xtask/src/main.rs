@@ -201,20 +201,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("tts") => {
             let mut args = env::args();
             args.nth(1);
-            //let mut pkgs = hw_pkgs.to_vec();
-            let mut pkgs = gfx_dev_pkgs.to_vec();
+            let mut pkgs = hw_pkgs.to_vec();
+            //let mut pkgs = gfx_dev_pkgs.to_vec();
             let apps: Vec<String> = args.collect();
             for app in &apps {
                 pkgs.push(app);
             }
-            pkgs.push("tts");
+            pkgs.push("tts-frontend");
             generate_app_menus(&apps);
             build_hw_image(false,
                 Some("./precursors/soc.svd".to_string()),
                 &pkgs,
-                lkey, kkey,
+                None, None,
                 Some(&["--features", "tts"]), // one thing at a time... "--features", "braille",
-                &[])?
+                &["bins/espeak-embedded"], None)?
         }
         Some("libstd-test") => {
             let mut args = env::args();
@@ -469,7 +469,7 @@ Various debug configurations:
  pddb-hosted             PDDB testing in a hosted environment
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
  ffi-test                builds an image for testing C-FFI bindings and integration
-
+ tts                     builds an image with text to speech support via externally linked C executable
 "
     )
 }
