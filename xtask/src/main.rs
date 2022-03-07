@@ -198,6 +198,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_app_menus(&apps);
             renode_image(false, &cbtest_pkgs, &[], None, None)?
         },
+        Some("tts") => {
+            let mut args = env::args();
+            args.nth(1);
+            //let mut pkgs = hw_pkgs.to_vec();
+            let mut pkgs = gfx_dev_pkgs.to_vec();
+            let apps: Vec<String> = args.collect();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            pkgs.push("tts");
+            generate_app_menus(&apps);
+            build_hw_image(false,
+                Some("./precursors/soc.svd".to_string()),
+                &pkgs,
+                lkey, kkey,
+                Some(&["--features", "tts"]), // one thing at a time... "--features", "braille",
+                &[])?
+        }
         Some("libstd-test") => {
             let mut args = env::args();
             args.nth(1);
