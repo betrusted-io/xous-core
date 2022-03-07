@@ -223,7 +223,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             build_hw_image(false, Some("./precursors/soc.svd".to_string()),
             &pkgs, None, None, None, &[], Some(&["--features", "renode-bypass"]))?
-
             //renode_image(false, &pkgs, extra_packages.as_slice(),
             //None, Some(&["--features", "renode-bypass"]))?;
         }
@@ -451,6 +450,7 @@ Various debug configurations:
  pddb-dev                PDDB testing only for live hardware
  pddb-hosted             PDDB testing in a hosted environment
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
+ ffi-test                builds an image for testing C-FFI bindings and integration
 
 "
     )
