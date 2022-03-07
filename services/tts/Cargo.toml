@@ -17,6 +17,7 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 xous-tts-backend = {path="../../../tts-backend"}
+codec = {path = "../codec"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

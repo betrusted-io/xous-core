@@ -6,6 +6,8 @@ pub(crate) enum Opcode {
     TextToSpeech,
     /// Callback for the codec crate
     CodecCb,
+    /// Stops audio playback immediately. Does not stop wave generation.
+    CodecStop,
     /// Exits the server
     Quit,
 }

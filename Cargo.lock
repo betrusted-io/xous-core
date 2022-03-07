@@ -2550,6 +2550,7 @@ dependencies = [
 name = "tts-frontend"
 version = "0.1.0"
 dependencies = [
+ "codec",
  "log",
  "log-server",
  "num-derive",
