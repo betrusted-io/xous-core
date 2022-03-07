@@ -1,8 +1,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use xous::{CID, send_message};
-use num_traits::ToPrimitive;
+use xous::CID;
+
+/// A test stub for checking FFI integration routines.
 
 pub struct FfiTest {
     conn: CID,

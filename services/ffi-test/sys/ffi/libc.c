@@ -26,7 +26,8 @@ void*  calloc(size_t nmemb, size_t size) {
     return malloc(nmemb * size);
 }
 
-
+// ctype table from https://android.googlesource.com/platform/bionic/+/779585f/libc/stdlib/ctype_.c
+// openBSD licensed
 #define CTYPE_NUM_CHARS       256
 const char _ctype_[1 + CTYPE_NUM_CHARS] = {
 	0,
@@ -68,7 +69,7 @@ const char _ctype_[1 + CTYPE_NUM_CHARS] = {
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-// printf
+// printf is from https://github.com/mpaland/printf (MIT license)
 
 // 'ntoa' conversion buffer size, this must be big enough to hold one converted
 // numeric number including padded zeros (dynamically created on stack)
@@ -966,9 +967,9 @@ __dorand48(unsigned short xseed[3])
 	xseed[1] = temp[1];
 	xseed[2] = (unsigned short) accu;
 }
-long
+int
 rand(void)
 {
 	__dorand48(__rand48_seed);
-	return ((long) __rand48_seed[2] << 15) + ((long) __rand48_seed[1] >> 1);
+	return ((int) __rand48_seed[2] << 15) + ((int) __rand48_seed[1] >> 1);
 }

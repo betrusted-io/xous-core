@@ -10,8 +10,6 @@ pub use bindings::*;
 
 use num_traits::FromPrimitive;
 
-use utralib::utra::ticktimer;
-
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
