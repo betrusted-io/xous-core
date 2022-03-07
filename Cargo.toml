@@ -89,6 +89,7 @@ members = [
   "apps/ball",
   "apps/repl",
   "services/libstd-test",
+  "services/ffi-test",
   "kernel",
 ]
 resolver = "2"

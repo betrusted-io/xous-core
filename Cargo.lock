@@ -841,6 +841,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "ffi-sys"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "ffi-test"
+version = "0.1.0"
+dependencies = [
+ "ffi-sys",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "filetime"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
