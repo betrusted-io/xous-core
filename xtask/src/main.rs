@@ -578,6 +578,7 @@ fn build_hw_image(
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
+    // std::env::set_var("RUST_LOG", "debug"); // set this to debug the image creation process
 
     // extract key file names; replace with defaults if not specified
     let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
