@@ -213,7 +213,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("ffi-test") => {
             let mut args = env::args();
             args.nth(1);
-            let mut pkgs = hw_pkgs.to_vec();
+            //let mut pkgs = hw_pkgs.to_vec();
+            let mut pkgs = gfx_dev_pkgs.to_vec();
             pkgs.push("ffi-test");
             let args: Vec<String> = args.collect();
             let mut extra_packages = vec![];
