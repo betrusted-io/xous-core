@@ -90,7 +90,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "xous-names",
         "trng",
         "llio",
-        "test-stub",
         "susres",
         "com",
     ];
@@ -157,6 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "com",
         "graphics-server",
         "keyboard",
+        "spinor",
     ];
 
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
@@ -209,6 +209,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             renode_image(false, &pkgs, extra_packages.as_slice(),
             None, Some(&["--features", "renode-bypass"]))?;
+        }
+        Some("ffi-test") => {
+            let mut args = env::args();
+            args.nth(1);
+            //let mut pkgs = hw_pkgs.to_vec();
+            let mut pkgs = gfx_dev_pkgs.to_vec();
+            pkgs.push("ffi-test");
+            let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
+            for program in &args {
+                extra_packages.push(program.as_str());
+            }
+            build_hw_image(false, Some("./precursors/soc.svd".to_string()),
+            &pkgs, None, None, None, &[], Some(&["--features", "renode-bypass"]))?
+            //renode_image(false, &pkgs, extra_packages.as_slice(),
+            //None, Some(&["--features", "renode-bypass"]))?;
         }
         Some("libstd-net") => {
             let mut args = env::args();
@@ -434,6 +450,7 @@ Various debug configurations:
  pddb-dev                PDDB testing only for live hardware
  pddb-hosted             PDDB testing in a hosted environment
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
+ ffi-test                builds an image for testing C-FFI bindings and integration
 
 "
     )
