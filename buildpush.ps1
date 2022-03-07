@@ -4,6 +4,7 @@
 # $env:RUSTFLAGS="--remap-path-prefix=$(Get-Location)=build"
 
 cargo xtask app-image ball repl
+# cargo xtask ffi-test
 # cargo xtask minimal precursors/soc.svd
 
 CertUtil -hashfile precursors/bbram-test1.nky MD5
