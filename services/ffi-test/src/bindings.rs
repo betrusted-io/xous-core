@@ -105,7 +105,6 @@ pub unsafe extern "C" fn realloc(
         Some(index) => {
             log::info!("realloc/free success: {:x}", ptr as usize);
             let mut old = C_HEAP.remove(index);
-            old.clear();
             let checked_size = if size == 0 {
                 1 // at least 1 element so we have a pointer we can pass back
             } else {
@@ -113,9 +112,10 @@ pub unsafe extern "C" fn realloc(
             };
             let mut alloc: Vec::<u8> = Vec::with_capacity(checked_size as usize);
             let ret_ptr = alloc.as_mut_ptr();
-            for (&src, dst) in old.iter().zip(alloc.iter_mut()) {
-                *dst = src;
+            for &src in old.iter() {
+                alloc.push(src);
             }
+            old.clear();
             C_HEAP.push(alloc);
             log::info!("realloc/allocated: {:x}", ret_ptr as usize);
 

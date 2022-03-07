@@ -8,6 +8,7 @@ fn main() {
     let espeak_srcs = vec![
         "ffi/ffi.c",
         "ffi/libc.c",
+        "ffi/libc_split.c",
         "ffi/scanf.c",
     ];
     let espeak_includes = vec![
