@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+use api::*;
 
 use num_traits::FromPrimitive;
 
@@ -100,14 +101,17 @@ fn xmain() -> ! {
     loop {
         let msg = xous::receive_message(codec_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 codec.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 codec.resume();
             }),
+            Some(Opcode::Quit) => {
+                log::warn!("Quit received, goodbye world!");
+                break;
+            },
             None => {
-                log::error!("couldn't convert opcode");
-                break
+                log::error!("couldn't convert opcode: {:?}", msg);
             }
         }
     }
