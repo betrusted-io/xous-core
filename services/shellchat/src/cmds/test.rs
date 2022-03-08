@@ -360,7 +360,7 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                 }
                 "astop" => {
-                    self.codec.pause().unwrap(); // this should stop callbacks from occurring too.
+                    self.codec.abort().unwrap(); // this should stop callbacks from occurring too.
                     write!(ret, "Playback stopped at {} frames.", self.framecount).unwrap();
                     self.framecount = 0;
                     self.play_sample = 0.0;
@@ -680,7 +680,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         _ => self.freq = 659.25,
                     }
                     if elapsed - self.oqc_start > 6000 {
-                        self.codec.pause().unwrap();
+                        self.codec.abort().unwrap();
 
                         // put system automatically into ship mode at conclusion of test
                         env.gam.shipmode_blank_request().unwrap();

@@ -18,7 +18,7 @@ impl Tts {
 impl<'a> ShellCmdApi<'a> for Tts {
     cmd_api!(tts); // inserts boilerplate for command API
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         let helpstring = "tts options: speak";
 
