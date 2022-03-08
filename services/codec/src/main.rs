@@ -80,9 +80,20 @@ fn xmain() -> ! {
             }),
             Some(api::Opcode::PauseStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                 if codec.is_on() && codec.is_init() {
+                    codec.drain(); // this will suppress any future callbacks from firing
+                    while codec.can_play() {
+                        xous::yield_slice();
+                    }
                     codec.audio_i2s_stop();
                 } else {
                     log::error!("attempted to pause a stream on an uninitialized codec, ignoring!")
+                }
+            }),
+            Some(api::Opcode::AbortStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                if codec.is_on() && codec.is_init() {
+                    codec.audio_i2s_stop();
+                } else {
+                    log::error!("attempted to abort a stream on an uninitialized codec, ignoring!")
                 }
             }),
             Some(api::Opcode::IsLive) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {

@@ -27,6 +27,7 @@ pub struct Codec {
     initialized: bool,
     live: bool,
     conn: xous::CID,
+    drain: bool,
 }
 
 static SILENCE: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
@@ -91,7 +92,7 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
     }
 
     // if the buffer is low, let the audio handler know we used up another frame!
-    if codec.play_buffer.readable_count() < 6 {
+    if codec.play_buffer.readable_count() < 6 && !codec.drain {
         xous::try_send_message(codec.conn,
             xous::Message::new_scalar(Opcode::AnotherFrame.to_usize().unwrap(), rx_rdcount, rx_wrcount, 0, 0)).unwrap();
     }
@@ -136,6 +137,7 @@ impl Codec {
             conn,
             tx_stat_errors: 0,
             rx_stat_errors: 0,
+            drain: false,
         };
 
         xous::claim_interrupt(
@@ -201,6 +203,12 @@ impl Codec {
     }
     pub fn free_play_frames(&self) -> usize {
         self.play_buffer.writeable_count()
+    }
+    pub fn can_play(&self) -> bool {
+        !self.play_buffer.is_empty()
+    }
+    pub fn drain(&mut self) {
+        self.drain = true;
     }
     pub fn available_rec_frames(&self) -> usize {
         self.rec_buffer.readable_count()
@@ -497,6 +505,7 @@ impl Codec {
         // this sets everything running
         self.csr.wfo(utra::audio::RX_CTL_ENABLE, 1);
         self.csr.wfo(utra::audio::TX_CTL_ENABLE, 1);
+        self.drain = false;
         self.live = true;
     }
 
@@ -517,6 +526,7 @@ impl Codec {
         self.csr.wfo(utra::audio::RX_CTL_RESET, 1);
         self.csr.wfo(utra::audio::TX_CTL_RESET, 1);
         self.live = false;
+        self.drain = true;
         self.play_buffer.clear();
         self.rec_buffer.clear();
     }
