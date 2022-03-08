@@ -199,9 +199,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             renode_image(false, &cbtest_pkgs, &[], None, None)?
         },
         Some("tts") => {
-            let tts_exec_string = if false {
+            let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
+            let tts_exec_string = if true {
                 println!("Fetching tts executable from build server...");
-                let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
                 let tts_exec_name = tmp_dir.path().join("espeak-embedded");
                 let tts_exec_string = tts_exec_name.clone().into_os_string().into_string().unwrap();
                 let mut tts_exec_file = OpenOptions::new()
