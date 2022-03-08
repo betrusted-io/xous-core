@@ -2,7 +2,7 @@
 
 pub mod api;
 pub use api::*;
-use xous::CID;
+use xous::{CID, send_message, Message};
 use xous_ipc::Buffer;
 use num_traits::ToPrimitive;
 
@@ -26,6 +26,11 @@ impl TtsFrontend {
         };
         let buf = Buffer::into_buf(msg).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::TextToSpeech.to_u32().unwrap()).map(|_| ())
+    }
+    pub fn set_words_per_minute(&self, wpm: u32) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetWordsPerMinute.to_usize().unwrap(), wpm as usize, 0, 0, 0)
+        ).map(|_| ())
     }
 }
 

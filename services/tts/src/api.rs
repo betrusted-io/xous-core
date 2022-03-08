@@ -8,6 +8,8 @@ pub(crate) enum Opcode {
     CodecCb,
     /// Stops audio playback immediately. Does not stop wave generation.
     CodecStop,
+    /// Set words per minute
+    SetWordsPerMinute,
     /// Exits the server
     Quit,
 }

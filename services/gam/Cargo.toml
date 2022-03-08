@@ -30,10 +30,13 @@ susres = {path = "../susres"} # used for the sleep now menu item
 enum_dispatch = "0.3.7" # used for trait-based dispatch off of multiple layout objects.
 locales = {path = "../../locales"}
 
+tts-frontend = {path="../tts"}
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []
+tts = []
 # default = ["debugprint"] # "debugprint"
 default = []

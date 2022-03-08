@@ -199,21 +199,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             renode_image(false, &cbtest_pkgs, &[], None, None)?
         },
         Some("tts") => {
-            println!("Fetching tts executable from build server...");
-            let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
-            let tts_exec_name = tmp_dir.path().join("espeak-embedded");
-            let tts_exec_string = tts_exec_name.clone().into_os_string().into_string().unwrap();
-            let mut tts_exec_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(tts_exec_name).expect("Can't open our version file for writing");
-            let mut freader = ureq::get("https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
-            .call()?
-            .into_reader();
-            std::io::copy(&mut freader, &mut tts_exec_file)?;
-            println!("TTS exec is {} bytes", tts_exec_file.metadata().unwrap().len());
+            let tts_exec_string = if false {
+                println!("Fetching tts executable from build server...");
+                let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
+                let tts_exec_name = tmp_dir.path().join("espeak-embedded");
+                let tts_exec_string = tts_exec_name.clone().into_os_string().into_string().unwrap();
+                let mut tts_exec_file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(tts_exec_name).expect("Can't open our version file for writing");
+                let mut freader = ureq::get("https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
+                .call()?
+                .into_reader();
+                std::io::copy(&mut freader, &mut tts_exec_file)?;
+                println!("TTS exec is {} bytes", tts_exec_file.metadata().unwrap().len());
+                tts_exec_string
+            } else {
+                println!("****** WARNING: using local dev image. Do not check this configuration in! ******");
+                "../espeak-embedded/target/riscv32imac-unknown-xous-elf/release/espeak-embedded".to_string()
+            };
 
             let mut args = env::args();
             args.nth(1);

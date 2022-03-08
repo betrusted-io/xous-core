@@ -13,6 +13,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::VecDeque;
 
+const DEFAULT_WPM: u32 = 350;
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum WaveOp {
     Return,
@@ -90,7 +92,13 @@ fn xmain() -> ! {
             }
         }
     });
-    tts_be.tts_config(wav_sid.to_array(), WaveOp::Return.to_u32().unwrap(), None).unwrap();
+    let mut wpm = DEFAULT_WPM;
+    tts_be.tts_config(
+        wav_sid.to_array(),
+        WaveOp::Return.to_u32().unwrap(),
+        None,
+        Some(wpm)
+    ).unwrap();
     let mut just_initiated = false;
     loop {
         let msg = xous::receive_message(tts_sid).unwrap();
@@ -158,6 +166,10 @@ fn xmain() -> ! {
                 log::info!("stop called. Immediate stop and loss of audio data.");
                 codec.abort().unwrap();
             }
+            Some(Opcode::SetWordsPerMinute) => msg_scalar_unpack!(msg, wpm_arg, _, _, _, {
+                wpm = wpm_arg as u32;
+                tts_be.tts_config(wav_sid.to_array(), WaveOp::Return.to_u32().unwrap(), None, Some(wpm)).unwrap();
+            }),
             Some(Opcode::Quit) => {
                 send_message(wav_cid,
                     Message::new_blocking_scalar(WaveOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
