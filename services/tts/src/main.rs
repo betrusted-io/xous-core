@@ -5,7 +5,7 @@ mod api;
 use api::*;
 
 use xous_ipc::Buffer;
-use xous::{msg_scalar_unpack, Message};
+use xous::{msg_scalar_unpack, Message, send_message};
 use num_traits::*;
 use codec::{ZERO_PCM, VolumeOps, FrameRing};
 use xous_tts_backend::*;
@@ -22,7 +22,7 @@ pub(crate) enum WaveOp {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -48,7 +48,7 @@ fn xmain() -> ! {
     std::thread::spawn({
         let wav_sid = wav_sid.clone();
         let wavbuf = wavbuf.clone();
-        let tts_cid = tts_cid.clone();
+        // let tts_cid = tts_cid.clone();
         let synth_done = synth_done.clone();
         move || {
             loop {
@@ -63,15 +63,19 @@ fn xmain() -> ! {
                         }
                         match wavdat.control {
                             Some(TtsBeControl::End) => {
+                                // the buffer can still be quite full at this point, we have to wait until it drains naturally
                                 synth_done.store(true, Ordering::SeqCst);
-                                /*
-                                xous::send_message(tts_cid,
-                                    Message::new_scalar(Opcode::CodecStop.to_usize().unwrap(), 0, 0, 0, 0)
-                                ).expect("couldn't stop playback");
-                                */
+                            }
+                            Some(TtsBeControl::Abort) => {
+                                // clear the playback buffer and indicate we're done, because we want to stop the playback too.
+                                log::info!("abort received");
+                                buf.clear();
+                                synth_done.store(true, Ordering::SeqCst);
                             }
                             None => {
-                                // do nothing
+                                // more data can arrive after done is set true if a new synthesis was
+                                // kicked off that aborts the current run. reflect that in the synth_done state.
+                                synth_done.store(false, Ordering::SeqCst);
                             }
                         }
                     },
@@ -87,19 +91,21 @@ fn xmain() -> ! {
         }
     });
     tts_be.tts_config(wav_sid.to_array(), WaveOp::Return.to_u32().unwrap(), None).unwrap();
-
+    let mut just_initiated = false;
     loop {
         let msg = xous::receive_message(tts_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::TextToSpeech) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let msg = buffer.to_original::<TtsFrontendMsg, _>().unwrap();
-                log::info!("tts front end got string {}", msg.text.as_str().unwrap());
+                log::debug!("tts front end got string {}", msg.text.as_str().unwrap());
+                wavbuf.lock().unwrap().clear(); // this will truncate any buffered audio that is playing
                 synth_done.store(false, Ordering::SeqCst);
                 tts_be.tts_simple(msg.text.as_str().unwrap()).unwrap();
+                just_initiated = true;
                 codec.resume().unwrap();
             },
-            Some(Opcode::CodecCb) => msg_scalar_unpack!(msg, free_play, available_rec, _, routing_id, {
+            Some(Opcode::CodecCb) => msg_scalar_unpack!(msg, free_play, _available_rec, _, routing_id, {
                 if routing_id == codec::AUDIO_CB_ROUTING_ID {
                     let mut frames: FrameRing = FrameRing::new();
                     let frames_to_push = if frames.writeable_count() < free_play {
@@ -111,15 +117,33 @@ fn xmain() -> ! {
 
                     log::debug!("f{} p{}", frame_count, frames_to_push);
                     let mut locked_buf = wavbuf.lock().unwrap();
+                    if just_initiated {
+                        // prevent stutter if the synth buffer isn't ready yet and we got an early fill request from the codec
+                        if locked_buf.len() < codec::FIFO_DEPTH {
+                            for _ in 0..frames_to_push {
+                                let frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
+                                frames.nq_frame(frame).unwrap();
+                            }
+                            codec.swap_frames(&mut frames).unwrap();
+                            continue;
+                        } else {
+                            just_initiated = false;
+                        }
+                    }
                     for _ in 0..frames_to_push {
                         let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
-                        for sample in frame.iter_mut() {
-                            let samp = locked_buf.pop_front().unwrap_or(ZERO_PCM);
-                            let left = samp as u16;
-                            let right = samp as u16;
-                            *sample = right as u32 | (left as u32) << 16;
+                        if locked_buf.len() >= frame.len() || synth_done.load(Ordering::SeqCst) {
+                            for sample in frame.iter_mut() {
+                                let samp = locked_buf.pop_front().unwrap_or(ZERO_PCM);
+                                let left = samp as u16;
+                                let right = samp as u16;
+                                *sample = right as u32 | (left as u32) << 16;
+                            }
+                            frames.nq_frame(frame).unwrap();
+                        } else {
+                            log::trace!("ran out of frames during tts fill");
+                            break;
                         }
-                        frames.nq_frame(frame).unwrap();
                     }
                     codec.swap_frames(&mut frames).unwrap();
                     // detect if the buffer is empty and the synthesizer has indicated it's finished
@@ -131,10 +155,14 @@ fn xmain() -> ! {
                 }
             }),
             Some(Opcode::CodecStop) => {
-                log::info!("stop called");
-                codec.pause().unwrap();
+                log::info!("stop called. Immediate stop and loss of audio data.");
+                codec.abort().unwrap();
             }
             Some(Opcode::Quit) => {
+                send_message(wav_cid,
+                    Message::new_blocking_scalar(WaveOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't send quit to callback handler");
+                unsafe{xous::disconnect(wav_cid).ok()};
                 log::warn!("Quit received, goodbye world!");
                 break;
             },

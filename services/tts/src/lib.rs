@@ -2,7 +2,7 @@
 
 pub mod api;
 pub use api::*;
-use xous::{CID, send_message};
+use xous::CID;
 use xous_ipc::Buffer;
 use num_traits::ToPrimitive;
 
@@ -18,8 +18,8 @@ impl TtsFrontend {
             conn
         })
     }
-    /// A fully synchronous text to speech call. The text is turned into speech and played immediately,
-    /// with no further synchronization or ability to abort the speech playback.
+    /// A fully synchronous text to speech call. The text is turned into speech and played immediately.
+    /// If there is speech currently playing, it is cut short and the new text takes its place.
     pub fn tts_simple(&self, text: &str) -> Result<(), xous::Error> {
         let msg = TtsFrontendMsg {
             text: xous_ipc::String::from_str(text),
