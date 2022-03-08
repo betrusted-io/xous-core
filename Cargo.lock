@@ -2983,7 +2983,9 @@ dependencies = [
 
 [[package]]
 name = "xous-tts-backend"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7926a51a6c938a69e85dba884726def03980e475ef8fc60829493b35a1143839"
 dependencies = [
  "log",
  "num-derive",
