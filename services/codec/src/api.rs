@@ -24,8 +24,10 @@ pub(crate) enum Opcode {
     /// Powers on the CODEC, sets up 8k stereo streaming; puts audio in "paused" state
     Setup8kStereo,
 
-    /// Pause the stream without powering anything off
+    /// Pause the stream without powering anything off. Will wait until the current playback frames in process are finished.
     PauseStream,
+    /// Pause the stream without powering anything off. Clears the buffer immediately, losing any frames in playback.
+    AbortStream,
 
     /// Resumes the stream withouth re-initializing anything
     ResumeStream,

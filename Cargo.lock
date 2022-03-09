@@ -135,7 +135,7 @@ dependencies = [
  "ticktimer-server",
  "trng",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -168,7 +168,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -183,7 +183,7 @@ dependencies = [
  "rkyv",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -312,7 +312,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -329,7 +329,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -346,7 +346,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -389,6 +389,12 @@ dependencies = [
  "time",
  "winapi",
 ]
+
+[[package]]
+name = "chunked_transfer"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fff857943da45f546682664a79488be82e69e43c1a7a2307679ab9afb3a66d2e"
 
 [[package]]
 name = "cipher"
@@ -449,7 +455,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -470,7 +476,7 @@ dependencies = [
  "typenum",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -713,7 +719,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -740,7 +746,7 @@ checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
- "rand 0.7.3",
+ "rand",
  "sha2",
  "zeroize",
 ]
@@ -769,7 +775,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -841,6 +847,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrand"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3fcf0cee53519c866c09b5de1f6c56ff9d647101f81c1964fa632e148896cdf"
+dependencies = [
+ "instant",
+]
+
+[[package]]
+name = "ffi-sys"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "ffi-test"
+version = "0.1.0"
+dependencies = [
+ "ffi-sys",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "filetime"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -854,9 +892,9 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.20"
+version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd3aec53de10fe96d7d8c565eb17f2c687bb5518a2ec453b5b1252964526abe0"
+checksum = "1e6988e897c1c9c485f43b47a529cef42fde0547f9d8d41a7062518f1d8fc53f"
 dependencies = [
  "cfg-if 1.0.0",
  "crc32fast",
@@ -880,6 +918,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "form_urlencoded"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fc25a87fa4fd2094bffb06925852034d90a17f0d1e05197d4956d3555752191"
+dependencies = [
+ "matches",
+ "percent-encoding",
+]
+
+[[package]]
 name = "gam"
 version = "0.1.0"
 dependencies = [
@@ -901,7 +949,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -945,18 +993,7 @@ checksum = "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
- "wasi 0.9.0+wasi-snapshot-preview1",
-]
-
-[[package]]
-name = "getrandom"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9495705279e7140bf035dde1f6e750c162df8b625267cd52cc44e0b156732c8"
-dependencies = [
- "cfg-if 1.0.0",
- "libc",
- "wasi 0.10.2+wasi-snapshot-preview1",
+ "wasi",
 ]
 
 [[package]]
@@ -987,7 +1024,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1034,6 +1071,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "idna"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "418a0a6fab821475f634efe3ccc45c013f742efe03d853e8d3355d5cb850ecf8"
+dependencies = [
+ "matches",
+ "unicode-bidi",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "ime-frontend"
 version = "0.1.0"
 dependencies = [
@@ -1050,7 +1098,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1064,7 +1112,7 @@ dependencies = [
  "num-traits",
  "rkyv",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1081,7 +1129,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1090,6 +1138,15 @@ name = "indenter"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
+
+[[package]]
+name = "instant"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
+dependencies = [
+ "cfg-if 1.0.0",
+]
 
 [[package]]
 name = "itoa"
@@ -1119,7 +1176,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1134,7 +1191,7 @@ dependencies = [
  "gdbstub_arch",
  "hex",
  "lazy_static",
- "rand 0.7.3",
+ "rand",
  "rand_chacha 0.3.1",
  "riscv",
  "stats_alloc",
@@ -1168,7 +1225,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1251,7 +1308,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1285,7 +1342,7 @@ dependencies = [
  "num-traits",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
 ]
 
 [[package]]
@@ -1293,6 +1350,12 @@ name = "managed"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ca88d725a0a943b096803bd34e73a4437208b6077654cc4ecb2947a5f91618d"
+
+[[package]]
+name = "matches"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
 
 [[package]]
 name = "memchr"
@@ -1361,7 +1424,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1387,7 +1450,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1537,7 +1600,7 @@ dependencies = [
  "modals",
  "num-derive",
  "num-traits",
- "rand 0.7.3",
+ "rand",
  "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rkyv",
@@ -1550,7 +1613,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1570,6 +1633,12 @@ dependencies = [
  "once_cell",
  "regex",
 ]
+
+[[package]]
+name = "percent-encoding"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
 name = "pkg-config"
@@ -1654,24 +1723,12 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
 dependencies = [
- "getrandom 0.1.16",
+ "getrandom",
  "libc",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
- "rand_hc 0.2.0",
+ "rand_hc",
  "rand_pcg",
-]
-
-[[package]]
-name = "rand"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7573632e6454cf6b99d7aac4ccca54be06da05aca2ef7423d22d27d4d4bcd8"
-dependencies = [
- "libc",
- "rand_chacha 0.3.1",
- "rand_core 0.6.3",
- "rand_hc 0.3.0",
 ]
 
 [[package]]
@@ -1700,7 +1757,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90bde5296fc891b0cef12a6d03ddccc162ce7b2aff54160af9338f8d40df6d19"
 dependencies = [
- "getrandom 0.1.16",
+ "getrandom",
 ]
 
 [[package]]
@@ -1708,9 +1765,6 @@ name = "rand_core"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
-dependencies = [
- "getrandom 0.2.2",
-]
 
 [[package]]
 name = "rand_hc"
@@ -1719,15 +1773,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
  "rand_core 0.5.1",
-]
-
-[[package]]
-name = "rand_hc"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3190ef7066a446f2e7f42e239d161e905420ccab01eb967c9eb27d21b2322a73"
-dependencies = [
- "rand_core 0.6.3",
 ]
 
 [[package]]
@@ -1750,9 +1795,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.2.4"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05ec8ca9416c5ea37062b502703cd7fcb207736bc294f6e0cf367ac6fc234570"
+checksum = "8380fe0152551244f0747b1bf41737e0f8a74f97a14ccefd1148187271634f3c"
 dependencies = [
  "bitflags",
 ]
@@ -1813,7 +1858,7 @@ dependencies = [
  "ticktimer-server",
  "trng",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1877,7 +1922,7 @@ dependencies = [
  "rkyv",
  "ticktimer-server",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -1925,7 +1970,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
  "zeroize",
 ]
@@ -1967,6 +2012,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls"
+version = "0.20.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fbfeb8d0ddb84706bc597a5574ab8912817c52a397f819e5b614e2265206921"
+dependencies = [
+ "log",
+ "ring",
+ "sct",
+ "webpki",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1986,6 +2043,16 @@ checksum = "8f05ba609c234e60bee0d547fe94a4c7e9da733d1c962cf6e59efa4cd9c8bc75"
 dependencies = [
  "lazy_static",
  "winapi",
+]
+
+[[package]]
+name = "sct"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d53dcdb7c9f8158937a7981b48accfd39a43af418591a5d008c7b22b5e1b7ca4"
+dependencies = [
+ "ring",
+ "untrusted",
 ]
 
 [[package]]
@@ -2109,7 +2176,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2153,10 +2220,11 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "trng",
+ "tts-frontend",
  "utralib",
  "x25519-dalek",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2229,14 +2297,14 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rand 0.7.3",
+ "rand",
  "rkyv",
  "susres",
  "ticktimer-server",
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2278,7 +2346,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2311,7 +2379,7 @@ dependencies = [
  "rkyv",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2371,13 +2439,13 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dac1c663cfc93810f88aed9b8941d48cabf856a1b111c29a40439018d870eb22"
+checksum = "5cdb1ef4eaeeaddc8fbd371e5017057064af0911902ef36b39801f67cc6d79e4"
 dependencies = [
  "cfg-if 1.0.0",
+ "fastrand",
  "libc",
- "rand 0.8.4",
  "redox_syscall",
  "remove_dir_all",
  "winapi",
@@ -2419,7 +2487,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
 ]
 
 [[package]]
@@ -2472,7 +2540,7 @@ dependencies = [
  "susres",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 
@@ -2485,6 +2553,21 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "tinyvec"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c1c1d5a42b6245520c249549ec267180beaffcc0615401ac8e31853d4b6d8d2"
+dependencies = [
+ "tinyvec_macros",
+]
+
+[[package]]
+name = "tinyvec_macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tools"
@@ -2510,7 +2593,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rand 0.7.3",
+ "rand",
  "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rkyv",
@@ -2518,8 +2601,26 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
  "xous-names",
+]
+
+[[package]]
+name = "tts-frontend"
+version = "0.1.0"
+dependencies = [
+ "codec",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc 0.9.7",
+ "xous-names",
+ "xous-tts-backend",
 ]
 
 [[package]]
@@ -2527,6 +2628,21 @@ name = "typenum"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "373c8a200f9e67a0c95e62a4f52fbf80c23b4381c05a17845531982fa99e6b33"
+
+[[package]]
+name = "unicode-bidi"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a01404663e3db436ed2746d9fefef640d868edae3cceb81c3b8d5732fda678f"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d54590932941a9e9266f0832deed84ebe1bf2e4c9e4a3554d393d18f5e854bf9"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "unicode-width"
@@ -2568,6 +2684,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
+name = "ureq"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9399fa2f927a3d327187cbd201480cee55bee6ac5d3c77dd27f0c6814cff16d5"
+dependencies = [
+ "base64",
+ "chunked_transfer",
+ "flate2",
+ "log",
+ "once_cell",
+ "rustls",
+ "url",
+ "webpki",
+ "webpki-roots",
+]
+
+[[package]]
+name = "url"
+version = "2.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a507c383b2d33b5fc35d1861e77e6b383d158b2da5e14fe51b83dfedf6fd578c"
+dependencies = [
+ "form_urlencoded",
+ "idna",
+ "matches",
+ "percent-encoding",
+]
+
+[[package]]
 name = "utralib"
 version = "0.1.0"
 dependencies = [
@@ -2603,12 +2748,6 @@ name = "wasi"
 version = "0.9.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
-
-[[package]]
-name = "wasi"
-version = "0.10.2+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 
 [[package]]
 name = "wasm-bindgen"
@@ -2742,6 +2881,25 @@ checksum = "e828417b379f3df7111d3a2a9e5753706cae29c41f7c4029ee9fd77f3e09e582"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
+dependencies = [
+ "ring",
+ "untrusted",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.22.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "552ceb903e957524388c4d3475725ff2c8b7960922063af6ce53c9a43da07449"
+dependencies = [
+ "webpki",
 ]
 
 [[package]]
@@ -2905,18 +3063,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "xous-ipc"
+version = "0.9.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9874c4b4dcce5c8fe73351e0bb27e08cc1bf5b58ce621a4c42d1a5cb8869bd87"
+dependencies = [
+ "bitflags",
+ "rkyv",
+ "xous",
+]
+
+[[package]]
 name = "xous-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "rand 0.7.3",
+ "rand",
  "syn",
 ]
 
 [[package]]
 name = "xous-names"
-version = "0.1.0"
+version = "0.9.7"
 dependencies = [
  "log",
  "log-server",
@@ -2925,7 +3094,22 @@ dependencies = [
  "rkyv",
  "utralib",
  "xous",
- "xous-ipc",
+ "xous-ipc 0.9.7",
+]
+
+[[package]]
+name = "xous-tts-backend"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b895859a53d60cf076ce5af2b0520390a5fada412fa5dd6e9b92e4c1b4020ce7"
+dependencies = [
+ "log",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "xous",
+ "xous-ipc 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-names",
 ]
 
 [[package]]
@@ -2939,6 +3123,8 @@ dependencies = [
  "rustc_version 0.4.0",
  "serde",
  "serde_json",
+ "tempfile",
+ "ureq",
  "zip",
 ]
 

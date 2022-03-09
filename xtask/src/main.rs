@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "llio",
         "susres",
         "codec",
-        "sha2",
+        "sha2:0.9.8",
         "engine-25519",
         "spinor",
         "root-keys",
@@ -90,7 +90,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "xous-names",
         "trng",
         "llio",
-        "test-stub",
         "susres",
         "com",
     ];
@@ -157,6 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "com",
         "graphics-server",
         "keyboard",
+        "spinor",
     ];
 
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
@@ -198,6 +198,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_app_menus(&apps);
             renode_image(false, &cbtest_pkgs, &[], None, None)?
         },
+        Some("tts") => {
+            println!("Fetching tts executable from build server...");
+            let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
+            let tts_exec_name = tmp_dir.path().join("espeak-embedded");
+            let tts_exec_string = tts_exec_name.clone().into_os_string().into_string().unwrap();
+            let mut tts_exec_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(tts_exec_name).expect("Can't open our version file for writing");
+            let mut freader = ureq::get("https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
+            .call()?
+            .into_reader();
+            std::io::copy(&mut freader, &mut tts_exec_file)?;
+            println!("TTS exec is {} bytes", tts_exec_file.metadata().unwrap().len());
+
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            //let mut pkgs = gfx_dev_pkgs.to_vec();
+            let apps: Vec<String> = args.collect();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            pkgs.push("tts-frontend");
+            generate_app_menus(&apps);
+            build_hw_image(false,
+                Some("./precursors/soc.svd".to_string()),
+                &pkgs,
+                None, None,
+                Some(&["--features", "tts"]), // one thing at a time... "--features", "braille",
+                &[&tts_exec_string], None)?
+        }
         Some("libstd-test") => {
             let mut args = env::args();
             args.nth(1);
@@ -209,6 +243,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             renode_image(false, &pkgs, extra_packages.as_slice(),
             None, Some(&["--features", "renode-bypass"]))?;
+        }
+        Some("ffi-test") => {
+            let mut args = env::args();
+            args.nth(1);
+            //let mut pkgs = hw_pkgs.to_vec();
+            let mut pkgs = gfx_dev_pkgs.to_vec();
+            pkgs.push("ffi-test");
+            let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
+            for program in &args {
+                extra_packages.push(program.as_str());
+            }
+            build_hw_image(false, Some("./precursors/soc.svd".to_string()),
+            &pkgs, None, None, None, &[], Some(&["--features", "renode-bypass"]))?
+            //renode_image(false, &pkgs, extra_packages.as_slice(),
+            //None, Some(&["--features", "renode-bypass"]))?;
         }
         Some("libstd-net") => {
             let mut args = env::args();
@@ -434,7 +484,8 @@ Various debug configurations:
  pddb-dev                PDDB testing only for live hardware
  pddb-hosted             PDDB testing in a hosted environment
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
-
+ ffi-test                builds an image for testing C-FFI bindings and integration
+ tts                     builds an image with text to speech support via externally linked C executable
 "
     )
 }
@@ -578,6 +629,7 @@ fn build_hw_image(
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
+    // std::env::set_var("RUST_LOG", "debug"); // set this to debug the image creation process
 
     // extract key file names; replace with defaults if not specified
     let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
@@ -588,7 +640,15 @@ fn build_hw_image(
     let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args, None)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
-        pkg_path.push(pkg);
+        // some packages may have a colon-delimited version after it to clarify crates.io patches.
+        // Strip off the version number before passing to the image builder.
+        let pkg_maybe_version: Vec<&str> = pkg.split(':').collect();
+        let pkg_root = if pkg_maybe_version.len() > 1 {
+            pkg_maybe_version[pkg_maybe_version.len() - 2]
+        } else {
+            pkg
+        };
+        pkg_path.push(pkg_root);
         init.push(pkg_path);
     }
     for pkg in extra_packages {
@@ -1330,6 +1390,12 @@ fn generate_app_menus(apps: &Vec::<String>) {
     // construct the app menu
     let mut menu = String::new();
     writeln!(menu, "// This file is auto-generated by xtask/main.rs generate_app_menus()").unwrap();
+    if apps.len() == 0 {
+        writeln!(menu, "// NO APPS SELECTED: suppressing warning messages!").unwrap();
+        writeln!(menu, "#![allow(dead_code)]").unwrap();
+        writeln!(menu, "#![allow(unused_imports)]").unwrap();
+        writeln!(menu, "#![allow(unused_variables)]").unwrap();
+    }
     writeln!(menu, r####"use crate::StatusOpcode;
 use gam::{{MenuItem, MenuPayload}};
 use locales::t;

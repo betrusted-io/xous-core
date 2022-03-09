@@ -1,9 +1,12 @@
 [package]
 authors = ["bunnie <bunnie@kosagi.com>"]
-description = ""
+description = "Xous microkernel OS inter-process name resolution server"
 edition = "2018"
 name = "xous-names"
-version = "0.1.0"
+version = "0.9.7"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/"
 
 # Dependency policy: fully specify dependencies to the minor version number
 [dependencies]

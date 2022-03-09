@@ -111,7 +111,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     // we'll get a callback that demands the next data...
                 }
                 "stop" => {
-                    self.codec.pause().unwrap(); // this should stop callbacks from occurring too.
+                    self.codec.abort().unwrap(); // this should stop callbacks from occurring too.
                     write!(ret, "Playback stopped at {} frames.", self.framecount).unwrap();
                     self.framecount = 0;
                     self.play_ptr_bytes = 0;
@@ -205,7 +205,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
             } else {
                 log::debug!("stopping playback");
                 if self.framecount != 0 {
-                    self.codec.pause().unwrap(); // this should stop callbacks from occurring too.
+                    self.codec.abort().unwrap(); // this should stop callbacks from occurring too.
                     write!(ret, "Playback of {} frames finished", self.framecount).unwrap();
                     self.framecount = 0;
                     self.play_ptr_bytes = 0;

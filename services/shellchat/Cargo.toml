@@ -36,6 +36,7 @@ net = {path="../net"}
 dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
+tts-frontend = {path="../tts"}
 
 trng = {path = "../trng"}
 
@@ -76,6 +77,7 @@ utralib = {path = "../../utralib"}
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
+tts = [] # adds text to speech plugin
 default = [] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]
