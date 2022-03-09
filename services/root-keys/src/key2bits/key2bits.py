@@ -501,10 +501,10 @@ mod tests {
                         bitvalue = (keyrom[coord[0]] & (1 << coord[1]))
                         if bitvalue != 0:
                             wordvalue |= (1 << bit)
-                    f.write('        assert_eq!(crate::patch_frame({}'.format(frame_rec[0]) + ', ' + '{}'.format(word) + ', &ROM), (Some(' + '0x{:08x}'.format(wordvalue) + '), Some(!0x{:08x}'.format(wordvalue) + ')));\n')
+                    f.write('        assert_eq!(crate::key2bits::patch_frame({}'.format(frame_rec[0]) + ', ' + '{}'.format(word) + ', &ROM), Some((' + '0x{:08x}u32'.format(wordvalue) + ', !0x{:08x}u32'.format(wordvalue) + ')));\n')
 
         f.write('        // also test the null case, frame 0 should typically have no mappings.\n')
-        f.write('        assert_eq!(crate::patch_frame(0x0, 0, &ROM), (None, None) );\n')
+        f.write('        assert_eq!(crate::key2bits::patch_frame(0x0, 0, &ROM), None );\n')
         f.write("""
     }
 }
