@@ -57,7 +57,7 @@ pub static TESTING_RNG_SEED: AtomicU64 = AtomicU64::new(0);
 pub mod exceptions;
 pub use exceptions::*;
 
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone, Default)]
 pub struct MessageSender {
     data: usize,
 }
@@ -74,12 +74,6 @@ impl MessageSender {
     pub fn pid(&self) -> Option<PID> {
         let pid_u8 = ((self.data >> 24) & 0xff) as u8;
         PID::new(pid_u8)
-    }
-}
-
-impl core::default::Default for MessageSender {
-    fn default() -> Self {
-        MessageSender { data: 0 }
     }
 }
 
