@@ -111,6 +111,7 @@ fn xmain() -> ! {
                 synth_done.store(false, Ordering::SeqCst);
                 tts_be.tts_simple(msg.text.as_str().unwrap()).unwrap();
                 just_initiated = true;
+                log::debug!("resuming codec");
                 codec.resume().unwrap();
             },
             Some(Opcode::CodecCb) => msg_scalar_unpack!(msg, free_play, _available_rec, _, routing_id, {
@@ -158,8 +159,6 @@ fn xmain() -> ! {
                     if (locked_buf.len() == 0) && synth_done.load(Ordering::SeqCst) {
                         codec.pause().unwrap();
                     }
-                } else {
-                    codec.pause().unwrap(); // this should stop callbacks from occurring too.
                 }
             }),
             Some(Opcode::CodecStop) => {

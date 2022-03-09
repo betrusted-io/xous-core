@@ -281,7 +281,7 @@ impl<'a> Menu<'a> {
         self.gam.redraw().unwrap();
         #[cfg(feature="tts")]
         {
-            // self.tts.tts_simple(&self.name).unwrap();
+            self.tts.tts_simple(&self.name).unwrap();
         }
     }
     fn num_items(&self) -> usize {

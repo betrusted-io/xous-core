@@ -79,7 +79,7 @@ fn xmain() -> ! {
                 }
             }),
             Some(api::Opcode::PauseStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
-                if codec.is_on() && codec.is_init() {
+                if codec.is_on() && codec.is_init() && codec.is_live() {
                     codec.drain(); // this will suppress any future callbacks from firing
                     while codec.can_play() {
                         xous::yield_slice();
@@ -90,7 +90,7 @@ fn xmain() -> ! {
                 }
             }),
             Some(api::Opcode::AbortStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
-                if codec.is_on() && codec.is_init() {
+                if codec.is_on() && codec.is_init() && codec.is_live() {
                     codec.audio_i2s_stop();
                 } else {
                     log::error!("attempted to abort a stream on an uninitialized codec, ignoring!")
