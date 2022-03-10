@@ -637,13 +637,13 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.1.0"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#c0ee5bf18c606b51bbffb02fde5801ac129b4e7d"
+version = "3.2.1"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#ec0fe92578bba6dd47457a9bb8287deb48432ce1"
 dependencies = [
  "byteorder",
  "digest",
  "engine-25519",
- "engine25519-as 0.1.0 (git+https://github.com/betrusted-io/engine25519-as.git?rev=6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3)",
+ "engine25519-as",
  "log",
  "rand_core 0.5.1",
  "subtle",
@@ -764,7 +764,7 @@ dependencies = [
 name = "engine-25519"
 version = "0.1.0"
 dependencies = [
- "engine25519-as 0.1.0 (git+https://github.com/betrusted-io/engine25519-as.git?rev=274b82899d28535ac6d4b7869e26eef2039578d5)",
+ "engine25519-as",
  "llio",
  "log",
  "log-server",
@@ -783,11 +783,6 @@ dependencies = [
 name = "engine25519-as"
 version = "0.1.0"
 source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=274b82899d28535ac6d4b7869e26eef2039578d5#274b82899d28535ac6d4b7869e26eef2039578d5"
-
-[[package]]
-name = "engine25519-as"
-version = "0.1.0"
-source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3#6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3"
 
 [[package]]
 name = "enum_dispatch"
@@ -1423,6 +1418,7 @@ dependencies = [
  "rkyv",
  "ticktimer-server",
  "trng",
+ "tts-frontend",
  "utralib",
  "xous",
  "xous-ipc 0.9.7",
