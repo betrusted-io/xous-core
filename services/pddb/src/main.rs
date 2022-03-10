@@ -468,7 +468,6 @@ fn xmain() -> ! {
         }
     });
     // spawn a delayed mount command, shortly after boot. There's too much going on at boot, and it blocks other things from coming up.
-    /*
     #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode
     let _ = thread::spawn({
         let my_cid = my_cid.clone();
@@ -479,7 +478,7 @@ fn xmain() -> ! {
                 Message::new_blocking_scalar(Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)
             ).expect("couldn't send mount request");
         }
-    });*/
+    });
     // main server loop
     let mut key_list = Vec::<String>::new(); // storage for key lists
     let mut key_token: Option<[u32; 4]> = None;
