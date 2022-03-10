@@ -264,6 +264,12 @@ impl ActionApi for TextEntry {
                 // ignore null messages
             }
             '\u{8}' => { // backspace
+                #[cfg(feature="tts")]
+                {
+                    let xns = xous_names::XousNames::new().unwrap();
+                    let tts = tts_frontend::TtsFrontend::new(&xns).unwrap();
+                    tts.tts_blocking(locales::t!("input.delete-tts", xous::LANG)).unwrap();
+                }
                 // coded in a conservative manner to avoid temporary allocations that can leave the plaintext on the stack
                 if self.action_payload.0.len() > 0 { // don't backspace if we have no string.
                     let mut temp_str = String::<256>::from_str(self.action_payload.0.as_str().unwrap());
@@ -277,6 +283,12 @@ impl ActionApi for TextEntry {
                 }
             }
             _ => { // text entry
+                #[cfg(feature="tts")]
+                {
+                    let xns = xous_names::XousNames::new().unwrap();
+                    let tts = tts_frontend::TtsFrontend::new(&xns).unwrap();
+                    tts.tts_blocking(&k.to_string()).unwrap();
+                }
                 self.action_payload.0.push(k).expect("ran out of space storing password");
                 log::trace!("****update payload: {}", self.action_payload.0);
             }

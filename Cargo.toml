@@ -58,6 +58,7 @@ members = [
   "services/benchmark-target",
   "services/ime-frontend",
   "services/ime-plugin-shell",
+  "services/ime-plugin-tts",
   "services/rkyv-test-server",
   "services/rkyv-test-client",
   "services/shellchat",

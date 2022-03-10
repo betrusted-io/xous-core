@@ -230,6 +230,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             pkgs.push("tts-frontend");
+            pkgs.push("ime-plugin-tts");
+            pkgs.retain(|&pkg| pkg != "ime-plugin-shell");
             generate_app_menus(&apps);
             build_hw_image(false,
                 Some("./precursors/soc.svd".to_string()),

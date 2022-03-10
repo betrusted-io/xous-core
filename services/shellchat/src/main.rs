@@ -45,6 +45,11 @@ use cmds::*;
 
 mod oqc_test;
 
+#[cfg(feature="tts")]
+use locales::t;
+#[cfg(feature="tts")]
+use tts_frontend::*;
+
 #[derive(Debug)]
 struct History {
     // the history record
@@ -80,6 +85,8 @@ struct Repl {
 
     // our security token for making changes to our record on the GAM
     token: [u32; 4],
+    #[cfg(feature="tts")]
+    tts: TtsFrontend,
 }
 impl Repl{
     fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
@@ -88,7 +95,10 @@ impl Repl{
         let token = gam.register_ux(UxRegistration {
             app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_SHELLCHAT),
             ux_type: gam::UxType::Chat,
+            #[cfg(not(feature="tts"))]
             predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
+            #[cfg(feature="tts")]
+            predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_tts::SERVER_NAME_IME_PLUGIN_TTS)),
             listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
             redraw_id: ShellOpcode::Redraw.to_u32().unwrap(),
             gotinput_id: Some(ShellOpcode::Line.to_u32().unwrap()),
@@ -116,6 +126,8 @@ impl Repl{
             bubble_space: 4,
             env: CmdEnv::new(xns),
             token: token.unwrap(),
+            #[cfg(feature="tts")]
+            tts: TtsFrontend::new(xns).unwrap(),
         }
     }
 
@@ -163,6 +175,12 @@ impl Repl{
         if let Some(local) = &self.input {
             log::trace!("processing line: {}", local);
             if let Some(res) = self.env.dispatch(Some(&mut xous_ipc::String::<1024>::from_str(&local)), None).expect("command dispatch failed") {
+                #[cfg(feature="tts")]
+                {
+                    let mut output = t!("shellchat.output-tts", xous::LANG).to_string();
+                    output.push_str(res.as_str().unwrap_or("UTF-8 error"));
+                    self.tts.tts_simple(&output).unwrap();
+                }
                 let output_history = History {
                     text: String::from(res.as_str().unwrap_or("UTF-8 Error")),
                     is_input: false
@@ -174,6 +192,12 @@ impl Repl{
         } else if let Some(msg) = &self.msg {
             log::trace!("processing callback msg: {:?}", msg);
             if let Some(res) = self.env.dispatch(None, Some(msg)).expect("callback failed") {
+                #[cfg(feature="tts")]
+                {
+                    let mut output = t!("shellchat.output-tts", xous::LANG).to_string();
+                    output.push_str(res.as_str().unwrap_or("UTF-8 error"));
+                    self.tts.tts_simple(&output).unwrap();
+                }
                 let output_history = History {
                     text: String::from(res.as_str().unwrap_or("UTF-8 Error")),
                     is_input: false
@@ -297,6 +321,9 @@ fn xmain() -> ! {
     let shch_sid = xns.register_name(SERVER_NAME_SHELLCHAT, None).expect("can't register server");
     //log::trace!("registered with NS -- {:?}", shch_sid);
 
+    #[cfg(feature="tts")]
+    let tts = TtsFrontend::new(&xns).unwrap();
+
     let mut repl = Repl::new(&xns, shch_sid);
     let mut update_repl = false;
     let mut was_callback = false;
@@ -311,6 +338,12 @@ fn xmain() -> ! {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
                 log::trace!("shell got input line: {}", s.as_str());
+                #[cfg(feature="tts")]
+                {
+                    let mut input = t!("shellchat.input-tts", xous::LANG).to_string();
+                    input.push_str(s.as_str());
+                    tts.tts_simple(&input).unwrap();
+                }
                 repl.input(s.as_str()).expect("REPL couldn't accept input string");
                 update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 was_callback = false;

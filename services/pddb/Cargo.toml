@@ -28,6 +28,7 @@ bitfield = "0.13.2"
 aes-gcm-siv = "0.10.3"
 llio = {path="../llio"}
 subtle = {version = "2.4.1", default-features = false}
+tts-frontend = {path="../tts"}
 
 # passwords
 sha2 = {path = "../engine-sha512"}
@@ -61,4 +62,6 @@ mbbb = []
 deterministic = []
 # this flag adds CI tests to the build
 ci = []
+# this feature is for text-to-speech support
+tts = []
 default = ["mbbb"]

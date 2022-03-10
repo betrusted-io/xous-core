@@ -1,21 +1,17 @@
 [package]
 authors = ["bunnie <bunnie@kosagi.com>"]
-description = "IME front end"
+description = "IME Text to Speech Plugin"
 edition = "2018"
-name = "ime-frontend"
+name = "ime-plugin-tts"
 version = "0.1.0"
 
 # Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
-gam = {path = "../gam"}
-graphics-server = {path = "../graphics-server"}
 ime-plugin-api = {path = "../ime-plugin-api"}
-keyboard = {path = "../keyboard"}
 log = "0.4.14"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
-locales = {path = "../../locales"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 
@@ -24,11 +20,11 @@ num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 tts-frontend = {path="../tts"}
+locales = {path = "../../locales"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 
 [features]
-tts = []
 debugprint = []
 default = [] # "debugprint"

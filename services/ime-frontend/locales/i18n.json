@@ -1,4 +1,10 @@
 {
+    "input.delete-tts": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "delete"
+    },
     "input.greeting": {
         "en": "Ready for input...",
         "ja": "入力可能...",
