@@ -15,6 +15,9 @@ use gam::modal::*;
 #[cfg(feature = "policy-menu")]
 use gam::{MenuItem, MenuPayload};
 
+#[cfg(feature = "tts")]
+use tts_frontend::*;
+
 use locales::t;
 use std::format;
 use std::str;
@@ -327,6 +330,9 @@ fn xmain() -> ! {
     let main_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, main_cid).expect("couldn't create suspend/resume object");
 
+    #[cfg(feature="tts")]
+    let tts = TtsFrontend::new(&xns).unwrap();
+
     // create a policy menu object
     #[cfg(feature = "policy-menu")]
     {
@@ -459,6 +465,8 @@ fn xmain() -> ! {
 
                     if keys.is_initialized() {
                         modals.show_notification(t!("rootkeys.already_init", xous::LANG)).expect("modals error");
+                        #[cfg(feature="tts")]
+                        tts.tts_blocking(t!("rootkeys.already_init", xous::LANG)).unwrap();
                         keys.set_ux_password_type(None);
                         continue;
                     } else {
@@ -489,6 +497,8 @@ fn xmain() -> ! {
                         Some(t!("rootkeys.bootpass", xous::LANG)), false,
                         None, true, None
                     );
+                    #[cfg(feature="tts")]
+                    tts.tts_blocking(t!("rootkeys.bootpass", xous::LANG)).unwrap();
                     rootkeys_modal.activate();
                 }
             }),
@@ -511,6 +521,8 @@ fn xmain() -> ! {
                     Some(t!("rootkeys.updatepass", xous::LANG)), false,
                     None, true, None
                 );
+                #[cfg(feature="tts")]
+                tts.tts_blocking(t!("rootkeys.updatepass", xous::LANG)).unwrap();
                 rootkeys_modal.activate();
             },
             Some(Opcode::UxInitUpdatePasswordReturn) => {
@@ -705,6 +717,8 @@ fn xmain() -> ! {
                         Some(t!("rootkeys.get_update_password", xous::LANG)), false,
                         None, true, None
                     );
+                    #[cfg(feature="tts")]
+                    tts.tts_blocking(t!("rootkeys.get_update_password", xous::LANG)).unwrap();
                     rootkeys_modal.activate();
                 }
             }
@@ -780,6 +794,8 @@ fn xmain() -> ! {
                         Some(t!("rootkeys.get_signing_password", xous::LANG)), false,
                         None, true, None
                     );
+                    #[cfg(feature="tts")]
+                    tts.tts_blocking(t!("rootkeys.get_signing_password", xous::LANG)).unwrap();
                     rootkeys_modal.activate();
                 }
             },
@@ -858,6 +874,8 @@ fn xmain() -> ! {
                         Some(t!("rootkeys.get_login_password", xous::LANG)), false,
                         None, true, None
                     );
+                    #[cfg(feature="tts")]
+                    tts.tts_blocking(t!("rootkeys.get_login_password", xous::LANG)).unwrap();
                     rootkeys_modal.activate();
                     // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
                 } else {
@@ -893,6 +911,8 @@ fn xmain() -> ! {
                     Some(ActionType::RadioButtons(confirm_radiobox)),
                     Some(t!("rootkeys.policy_request", xous::LANG)), false,
                     None, true, None);
+                #[cfg(feature="tts")]
+                tts.tts_blocking(t!("rootkeys.policy_request", xous::LANG)).unwrap();
                 rootkeys_modal.activate();
             },
             Some(Opcode::UxAesEnsureReturn) => {
@@ -968,6 +988,8 @@ fn xmain() -> ! {
                     Some(ActionType::ConsoleInput(console_input)),
                     Some(t!("rootkeys.console_input", xous::LANG)), false,
                     None, true, None);
+                #[cfg(feature="tts")]
+                tts.tts_blocking(t!("rootkeys.console_input", xous::LANG)).unwrap();
                 rootkeys_modal.activate();
                 log::info!("{}check_conn", CONSOLE_SENTINEL);
             }
@@ -990,6 +1012,8 @@ fn xmain() -> ! {
                             Some(t!("rootkeys.get_signing_password", xous::LANG)), false,
                             None, true, None
                         );
+                        #[cfg(feature="tts")]
+                        tts.tts_blocking(t!("rootkeys.get_signing_password", xous::LANG)).unwrap();
                         rootkeys_modal.activate();
                     }
                 } else {

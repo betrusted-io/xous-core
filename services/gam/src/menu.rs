@@ -279,10 +279,6 @@ impl<'a> Menu<'a> {
         }
         log::trace!("menu redraw##");
         self.gam.redraw().unwrap();
-        #[cfg(feature="tts")]
-        {
-            self.tts.tts_simple(&self.name).unwrap();
-        }
     }
     fn num_items(&self) -> usize {
         self.items.len()
@@ -299,6 +295,12 @@ impl<'a> Menu<'a> {
                     }
                     if let Some(action) = mi.action_conn {
                         log::debug!("doing menu action for {}", mi.name);
+                        #[cfg(feature="tts")]
+                        {
+                            let mut phrase = "select ".to_string();
+                            phrase.push_str(mi.name.as_str().unwrap());
+                            self.tts.tts_blocking(&phrase).unwrap();
+                        }
                         match mi.action_payload {
                             MenuPayload::Scalar(args) => {
                                 xous::send_message(action,

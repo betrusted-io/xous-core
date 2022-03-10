@@ -27,6 +27,14 @@ impl TtsFrontend {
         let buf = Buffer::into_buf(msg).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::TextToSpeech.to_u32().unwrap()).map(|_| ())
     }
+    /// This blocks until the text is finished rendering
+    pub fn tts_blocking(&self, text: &str) -> Result<(), xous::Error> {
+        let msg = TtsFrontendMsg {
+            text: xous_ipc::String::from_str(text),
+        };
+        let buf = Buffer::into_buf(msg).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::TextToSpeechBlocking.to_u32().unwrap()).map(|_| ())
+    }
     pub fn set_words_per_minute(&self, wpm: u32) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::SetWordsPerMinute.to_usize().unwrap(), wpm as usize, 0, 0, 0)

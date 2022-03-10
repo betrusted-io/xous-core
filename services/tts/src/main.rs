@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::VecDeque;
 
 const DEFAULT_WPM: u32 = 350;
+const WAIT_INTERVAL: usize = 50; // milliseconds to wait before polling if a phrase is finished.
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum WaveOp {
@@ -113,6 +114,20 @@ fn xmain() -> ! {
                 just_initiated = true;
                 log::debug!("resuming codec");
                 codec.resume().unwrap();
+            },
+            Some(Opcode::TextToSpeechBlocking) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let msg = buffer.to_original::<TtsFrontendMsg, _>().unwrap();
+                log::debug!("tts blocking front end got string {}", msg.text.as_str().unwrap());
+                wavbuf.lock().unwrap().clear(); // this will truncate any buffered audio that is playing
+                synth_done.store(false, Ordering::SeqCst);
+                tts_be.tts_simple(msg.text.as_str().unwrap()).unwrap();
+                just_initiated = true;
+                log::debug!("resuming codec (blocking)");
+                codec.resume().unwrap();
+                while !synth_done.load(Ordering::SeqCst) {
+                    tt.sleep_ms(WAIT_INTERVAL).unwrap();
+                }
             },
             Some(Opcode::CodecCb) => msg_scalar_unpack!(msg, free_play, _available_rec, _, routing_id, {
                 if routing_id == codec::AUDIO_CB_ROUTING_ID {

@@ -1970,6 +1970,7 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "trng",
+ "tts-frontend",
  "utralib",
  "xous",
  "xous-ipc 0.9.7",

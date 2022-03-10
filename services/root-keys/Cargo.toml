@@ -40,6 +40,9 @@ graphics-server = {path = "../graphics-server"}
 # for reboots and fuse operations
 jtag = {path = "../jtag"}
 
+# for text to speech support
+tts-frontend = {path="../tts"}
+
 # private keys
 #sha2 = {version = "0.9.5", default-features = false, features = []}
 sha2 = {path = "../engine-sha512"}
@@ -67,6 +70,7 @@ utralib = { path = "../../utralib"}
 [features]
 policy-menu = [] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
 hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
+tts = []
 default = []
 
 [lib]
