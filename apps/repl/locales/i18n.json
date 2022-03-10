@@ -3,30 +3,30 @@
         "en": "Welcome to the simple REPL demo.",
         "ja": "シンプルなREPLデモへようこそ",
         "zh": "简单的 repl 演示活动",
-        "en-audio": "Welcome to the simple REPL demo."
+        "en-tts": "Welcome to the simple REPL demo."
     },
     "replapp.audio.start": {
         "en": "tone started...",
         "ja": "トーン開始…",
         "zh": "哔声开始...",
-        "en-audio": "tone started..."
+        "en-tts": "tone started..."
     },
     "replapp.audio.help": {
         "en": "audio [tone [freq [duration]]]",
         "ja": "オーディオ [ トーン [ 周波数 [ 間隔 ]]]",
         "zh": "audio [tone [音频 [时长]]]",
-        "en-audio": "audio tone, then optional frequency plus optional duration."
+        "en-tts": "audio tone, then optional frequency plus optional duration."
     },
     "replapp.audio.completion_a": {
         "en": "Playback stopped at",
         "ja": "再生停止位置: ",
         "zh": "播放停止在",
-        "en-audio": "Playback stopped at"
+        "en-tts": "Playback stopped at"
     },
     "replapp.audio.completion_b": {
         "en": "frames",
         "ja": "フレーム",
         "zh": "帧",
-        "en-audio": "frames"
+        "en-tts": "frames"
     }
 }

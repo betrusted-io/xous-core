@@ -575,7 +575,7 @@ pub fn style_glyph(ch: char, base_style: &GlyphStyle) -> GlyphSprite {
         "kr" => {
             style_wrapper!(kr_rules, base_style, ch)
         }
-        "en-audio" => {
+        "en-tts" => {
             style_wrapper!(en_audio_rules, base_style, ch)
         }
         // default to English rules

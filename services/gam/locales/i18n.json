@@ -3,12 +3,12 @@
         "en": "[ Okay ]",
         "ja": "[ OK ]",
         "zh": "[ 确定 ]",
-        "en-audio": "Accept and close radio box"
+        "en-tts": "Accept and close radio box"
     },
     "notification.dismiss": {
         "en": "[ Press any key ]",
         "ja": "[  何かのキーを押してください。]",
         "zh": "[ 按任意键 ]",
-        "en-audio": "Press any key"
+        "en-tts": "Press any key"
     }
 }

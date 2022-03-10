@@ -24,7 +24,7 @@ Each entry for an app needs a record in `manifest.json` with this format:
                 "en": "app name in english",
                 "ja": "app name in japanese",
                 "zh": "app name in chinese",
-                "en-audio": "app name for the blind"
+                "en-tts": "app name for the blind"
             }
         }
     },
