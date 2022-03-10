@@ -6,8 +6,6 @@ pub(crate) enum Opcode {
     TextToSpeech,
     /// Non-interruptable conversion of a string to audible speech. Blocks until the phrase is finished.
     TextToSpeechBlocking,
-    /// Callback for the codec crate
-    CodecCb,
     /// Stops audio playback immediately. Does not stop wave generation.
     CodecStop,
     /// Set words per minute

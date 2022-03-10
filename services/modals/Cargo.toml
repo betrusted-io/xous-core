@@ -19,6 +19,7 @@ rkyv = {version = "0.4.3", features = ["const_generics"], default-features = fal
 gam = {path="../gam"}
 trng = {path="../trng"}
 tts-frontend = {path="../tts"}
+locales = {path = "../../locales"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
@@ -26,4 +27,4 @@ utralib = { path = "../../utralib"}
 [features]
 ux_tests = []
 tts = []
-default = []
+default = ["ux_tests"]

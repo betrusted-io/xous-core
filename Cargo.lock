@@ -1416,6 +1416,7 @@ name = "modals"
 version = "0.1.0"
 dependencies = [
  "gam",
+ "locales",
  "log",
  "log-server",
  "num-derive",

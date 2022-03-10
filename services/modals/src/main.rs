@@ -16,6 +16,10 @@ use std::thread;
 use gam::modal::*;
 #[cfg(feature="tts")]
 use tts_frontend::TtsFrontend;
+#[cfg(feature="tts")]
+use locales::t;
+#[cfg(feature="tts")]
+const TICK_INTERVAL: u64 = 2500;
 
 use num_traits::*;
 
@@ -76,12 +80,15 @@ fn xmain() -> ! {
 
     #[cfg(feature="tts")]
     let tts = TtsFrontend::new(&xns).unwrap();
+    #[cfg(feature="tts")]
+    let mut last_tick = tt.elapsed_ms();
 
     let op = Arc::new(Mutex::new(RendererState::None));
     // create a thread that just handles the redrawing requests
     let _redraw_handle = thread::spawn({
         let op = Arc::clone(&op);
         move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
             // build the core data structure here
             let text_action = TextEntry {
                 is_password: false,
@@ -178,7 +185,10 @@ fn xmain() -> ! {
                                 }
                                 fixed_items.clear();
                                 #[cfg(feature="tts")]
-                                tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
+                                {
+                                    tts.tts_blocking(t!("modals.radiobutton", xous::LANG)).unwrap();
+                                    tts.tts_blocking(config.prompt.as_str().unwrap()).unwrap();
+                                }
                                 renderer_modal.modify(
                                     Some(ActionType::RadioButtons(radiobuttons)),
                                     Some(config.prompt.as_str().unwrap()), false,
@@ -196,7 +206,11 @@ fn xmain() -> ! {
                                 }
                                 fixed_items.clear();
                                 #[cfg(feature="tts")]
-                                tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
+                                #[cfg(feature="tts")]
+                                {
+                                    tts.tts_blocking(t!("modals.checkbox", xous::LANG)).unwrap();
+                                    tts.tts_blocking(config.prompt.as_str().unwrap()).unwrap();
+                                }
                                 renderer_modal.modify(
                                     Some(ActionType::CheckBoxes(checkbox)),
                                     Some(config.prompt.as_str().unwrap()), false,
@@ -238,11 +252,17 @@ fn xmain() -> ! {
                     Some(RendererOp::UpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
                         let new_percentage = compute_checked_percentage(
                             current as u32, start_work, end_work);
-                            log::trace!("percentage: {}, current: {}, start: {}, end: {}", new_percentage, current, start_work, end_work);
-                            if new_percentage != last_percentage {
+                        log::trace!("percentage: {}, current: {}, start: {}, end: {}", new_percentage, current, start_work, end_work);
+                        if new_percentage != last_percentage {
                             last_percentage = new_percentage;
                             progress_action.set_state(last_percentage);
-
+                            #[cfg(feature="tts")]
+                            {
+                                if tt.elapsed_ms() - last_tick > TICK_INTERVAL {
+                                    tts.tts_blocking(t!("progress.increment", xous::LANG)).unwrap();
+                                    last_tick = tt.elapsed_ms();
+                                }
+                            }
                             renderer_modal.modify(
                                 Some(ActionType::Slider(progress_action)),
                                 None, false,
