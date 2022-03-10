@@ -235,7 +235,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some("./precursors/soc.svd".to_string()),
                 &pkgs,
                 None, None,
-                Some(&["--features", "tts"]), // one thing at a time... "--features", "braille",
+                Some(&["--features", "tts", "--features", "braille",]),
                 &[&tts_exec_string], None)?
         }
         Some("libstd-test") => {

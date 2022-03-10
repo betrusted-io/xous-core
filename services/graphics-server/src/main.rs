@@ -327,9 +327,9 @@ fn xmain() -> ! {
                     }
                 }
                 // for now, if we're in braille mode, emit all text to the debug log so we can see it
-                if cfg!(feature = "braille") {
-                    log::info!("{}", tv);
-                }
+                //if cfg!(feature = "braille") {
+                //   log::info!("{}", tv);
+                //}
 
                 if !tv.dry_run() {
                     // note: make the clip rect `tv.clip_rect.unwrap()` if you want to debug wordwrapping artifacts; otherwise smallest_rect masks some problems
