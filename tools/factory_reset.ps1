@@ -1,3 +1,6 @@
+param (
+    [string]$LOCALE="en"
+)
 Write-Output "This script will do a factory reset, removing all stored data and keys."
 $title    = 'Factory reset'
 $question = 'Are you sure you want to proceed?'
@@ -17,7 +20,7 @@ Remove-Item loader.bin
 Write-Output "waiting for device to reboot"
 Start-Sleep 5
 
-Invoke-WebRequest https://ci.betrusted.io/releases/latest/xous.img -OutFile xous.img
+Invoke-WebRequest https://ci.betrusted.io/releases/latest/xous-$LOCALE.img -OutFile xous.img
 python usb_update.py -k xous.img
 Remove-Item xous.img
 

@@ -1,3 +1,6 @@
+param (
+    [string]$LOCALE="en"
+)
 Write-Output "This script will update Xous and stage gateware and EC firmware for self-provisioning. No secrets will be erased."
 Write-Output "This script will use the bleeding edge CI build."
 $title    = 'Update to bleeding edge CI'
@@ -18,7 +21,7 @@ Remove-Item loader.bin
 Write-Output "waiting for device to reboot"
 Start-Sleep 5
 
-Invoke-WebRequest https://ci.betrusted.io/latest-ci/xous.img -OutFile xous.img
+Invoke-WebRequest https://ci.betrusted.io/latest-ci/xous-$LOCALE.img -OutFile xous.img
 python usb_update.py -k xous.img
 Remove-Item xous.img
 
