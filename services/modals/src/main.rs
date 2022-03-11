@@ -88,6 +88,7 @@ fn xmain() -> ! {
     let _redraw_handle = thread::spawn({
         let op = Arc::clone(&op);
         move || {
+            #[cfg(feature="tts")]
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             // build the core data structure here
             let text_action = TextEntry {
@@ -205,7 +206,6 @@ fn xmain() -> ! {
                                     checkbox.add_item(*item);
                                 }
                                 fixed_items.clear();
-                                #[cfg(feature="tts")]
                                 #[cfg(feature="tts")]
                                 {
                                     tts.tts_blocking(t!("modals.checkbox", xous::LANG)).unwrap();
