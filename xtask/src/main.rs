@@ -221,6 +221,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "../espeak-embedded/target/riscv32imac-unknown-xous-elf/release/espeak-embedded".to_string()
             };
 
+            let mut locale_override = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("xous-rs/src/locale.rs").expect("Can't open locale for modification");
+            write!(locale_override, "{}", "pub const LANG: &str = \"en-tts\";\n").unwrap();
+
             let mut args = env::args();
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
@@ -238,7 +246,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &pkgs,
                 None, None,
                 Some(&["--features", "tts", "--features", "braille",]),
-                &[&tts_exec_string], None)?
+                &[&tts_exec_string], None)?;
+            let mut locale_revert = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("xous-rs/src/locale.rs").expect("Can't open locale for modification");
+            write!(locale_revert, "{}", "pub const LANG: &str = \"en\";\n").unwrap();
         }
         Some("libstd-test") => {
             let mut args = env::args();
