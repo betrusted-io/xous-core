@@ -3,12 +3,54 @@
         "en": "[ Okay ]",
         "ja": "[ OK ]",
         "zh": "[ 确定 ]",
-        "en-audio": "Accept and close radio box"
+        "en-tts": "Accept and close radio box"
+    },
+    "radio.selection_tts": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "Set selection to: "
+    },
+    "radio.select_and_close_tts": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "Close radio box with selection of "
+    },
+    "radio.selected_tts": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "Selected: "
+    },
+    "checkbox.select_and_close_tts": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "Close checkbox with these items selected "
+    },
+    "checkbox.uncheck": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "Unchecked "
+    },
+    "checkbox.check": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "Checked "
+    },
+    "progress.increment": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "tick"
     },
     "notification.dismiss": {
         "en": "[ Press any key ]",
         "ja": "[  何かのキーを押してください。]",
         "zh": "[ 按任意键 ]",
-        "en-audio": "Press any key"
+        "en-tts": "Press any key"
     }
 }

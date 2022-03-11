@@ -270,6 +270,23 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
     };
     gfx.init(100_000_000);
 
+    #[cfg(feature = "renode-bypass")]
+    {
+        let (_top, bottom) = gfx.fb.split_at_mut(gfx.fb.len() / 2);
+        for (i, word) in bottom.iter_mut().enumerate() {
+            *word = 0xff00_ff00;
+        }
+        gfx.flush();
+        gfx.msg("RENODE BYPASS SELECTED\n\r", &mut cursor);
+        gfx.msg("THIS IS A SECURITY VIOLATION\n\r", &mut cursor);
+        gfx.msg("ALL SIGCHECKS SKIPPED\n\r", &mut cursor);
+        let mut keyrom = Keyrom::new();
+        keyrom.lock();
+        gfx.set_devboot();
+        gfx.flush();
+        return true;
+        // this will emit a warning -- we want that. this is not a natural or intended normal code exit!
+    }
     // insert a pattern of alternating 0101/1010 to create a "gray effect" on the bottom half of the fb
     // note that the gray has "stripes" every 32 bits but it's visually easier to look at than stripes every other bit
     let (_top, bottom) = gfx.fb.split_at_mut(gfx.fb.len() / 2);

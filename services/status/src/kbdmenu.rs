@@ -44,6 +44,17 @@ pub fn create_kbd_menu(status_conn: xous::CID, kbd_mgr: xous::SID) -> MenuMatic 
         action_payload: MenuPayload::Scalar([code as u32, 0, 0, 0]),
         close_on_select: true,
     });
+    #[cfg(feature="tts")]
+    {
+        let code: usize = KeyMap::Braille.into();
+        menu_items.push(MenuItem {
+            name: xous_ipc::String::from_str("Braille"),
+            action_conn: Some(status_conn),
+            action_opcode: StatusOpcode::SetKeyboard.to_u32().unwrap(),
+            action_payload: MenuPayload::Scalar([code as u32, 0, 0, 0]),
+            close_on_select: true,
+        });
+    }
 
     menu_matic(menu_items, gam::KBD_MENU_NAME, Some(kbd_mgr)).expect("couldn't create MenuMatic manager")
 }

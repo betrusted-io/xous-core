@@ -6,6 +6,8 @@ use xous_ipc::Buffer;
 
 use core::fmt::Write;
 use locales::t;
+#[cfg(feature="tts")]
+use tts_frontend::TtsFrontend;
 
 #[derive(Debug)]
 pub struct CheckBoxes {
@@ -14,15 +16,21 @@ pub struct CheckBoxes {
     pub action_opcode: u32,
     pub action_payload: CheckBoxPayload,
     pub select_index: i16,
+    #[cfg(feature = "tts")]
+    pub tts: TtsFrontend,
 }
 impl CheckBoxes {
     pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
+        #[cfg(feature="tts")]
+        let tts = TtsFrontend::new(&xous_names::XousNames::new().unwrap()).unwrap();
         CheckBoxes {
             items: Vec::new(),
             action_conn,
             action_opcode,
             action_payload: CheckBoxPayload::new(),
             select_index: 0,
+            #[cfg(feature="tts")]
+            tts,
         }
     }
     pub fn add_item(&mut self, new_item: ItemName) {
@@ -62,6 +70,10 @@ impl ActionApi for CheckBoxes {
         for item in self.items.iter() {
             let cur_y = at_height + cur_line * modal.line_height;
             if cur_line == self.select_index {
+                #[cfg(feature="tts")]
+                {
+                    self.tts.tts_simple(item.as_str()).unwrap();
+                }
                 // draw the cursor
                 tv.text.clear();
                 tv.bounds_computed = None;
@@ -103,6 +115,15 @@ impl ActionApi for CheckBoxes {
             ));
             write!(tv, "\u{25B6}").unwrap(); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
+            #[cfg(feature="tts")]
+            {
+                self.tts.tts_blocking(t!("checkbox.select_and_close_tts", xous::LANG)).unwrap();
+                for item in self.action_payload.payload().iter() {
+                    if let Some(name) = item {
+                        self.tts.tts_blocking(name.as_str()).unwrap();
+                    }
+                }
+            }
         }
         // draw the "OK" line
         tv.text.clear();
@@ -141,10 +162,21 @@ impl ActionApi for CheckBoxes {
                     let item_name = self.items[self.select_index as usize].as_str();
                     if self.action_payload.contains(item_name) {
                         self.action_payload.remove(item_name);
+                        #[cfg(feature="tts")]
+                        {
+                            self.tts.tts_blocking(t!("checkbox.uncheck", xous::LANG)).unwrap();
+                            self.tts.tts_blocking(item_name).unwrap();
+                        }
                     } else {
                         if !self.action_payload.add(item_name) {
                             log::warn!("Limit of {} items that can be checked hit, consider increasing MAX_ITEMS in gam/src/modal.rs", MAX_ITEMS);
                             log::warn!("The attempted item '{}' was not selected.", item_name);
+                        } else {
+                            #[cfg(feature="tts")]
+                            {
+                                self.tts.tts_blocking(t!("checkbox.check", xous::LANG)).unwrap();
+                                self.tts.tts_blocking(item_name).unwrap();
+                            }
                         }
                     }
                 } else {  // the OK button select

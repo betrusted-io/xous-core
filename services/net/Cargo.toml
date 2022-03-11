@@ -46,4 +46,5 @@ rev = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
 utralib = { path = "../../utralib"}
 
 [features]
+renode-minimal = []
 default = []

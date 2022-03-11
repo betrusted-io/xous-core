@@ -3,126 +3,126 @@
         "en": "Okay",
         "ja": "OK",
         "zh": "确定",
-        "en-audio": "Okay"
+        "en-tts": "Okay"
     },
     "pddb.cancel": {
         "en": "Cancel",
         "ja": "キャンセル",
         "zh": "取消",
-        "en-audio": "Cancel"
+        "en-tts": "Cancel"
     },
     "pddb.yes": {
         "en": "Yes",
         "ja": "はい",
         "zh": "是的",
-        "en-audio": "Yes"
+        "en-tts": "Yes"
     },
     "pddb.no": {
         "en": "No",
         "ja": "いいえ",
         "zh": "不",
-        "en-audio": "No"
+        "en-tts": "No"
     },
     "pddb.badpass": {
         "en": "Incorrect password.\n\nTry again?\n",
         "ja": "パスワードを認証失敗でした。\n\nもう一度実行しませんか。\n",
         "zh": "密码错误。 再试一次？",
-        "en-audio": "Incorrect password. Try again?"
+        "en-tts": "Incorrect password. Try again?"
     },
     "pddb.checkpass": {
         "en": "Press any key, then re-enter your password for setup confirmation.",
         "ja": "任意キーを押して、パスワードを再入力してセットアップを確認してください。",
         "zh": "第一次使用，再次输入密码",
-        "en-audio": "First-time setup: Enter password again."
+        "en-tts": "First-time setup: Enter password again."
     },
     "pddb.checkpass_fail": {
         "en": "Password mismatch!\n\nPlease try again.",
         "ja": "パスワード一致していません!\n\nもう一度実行しください。",
         "zh": "密码不匹配，请重试.",
-        "en-audio": "Password mismatch! Please try again."
+        "en-tts": "Password mismatch! Please try again."
     },
     "pddb.badpass_infallible": {
         "en": "Incorrect password.\n\nPlease try again.",
         "ja": "パスワードを認証失敗でした。\n\nもう一度実行しください。",
         "zh": "密码错误。",
-        "en-audio": "Incorrect password. Please try again."
+        "en-tts": "Incorrect password. Please try again."
     },
     "pddb.requestformat": {
         "en": "The PDDB storage needs formatting. This takes about 15 minutes and can't be interrupted.\n\nProceed?",
         "ja": "PDDBストレージのフォーマットが必要です。これは約15分かかり、中断することはできません。\n\n続行しますか？",
         "zh": "存储需要格式化。这需要15分钟。继续？",
-        "en-audio": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?"
+        "en-tts": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?"
     },
     "pddb.devbypass": {
         "en": "Are you testing the PDDB?",
         "ja": "PDDBをテストしているのか？",
         "zh": "你在测试存储吗？",
-        "en-audio": "Are you testing the PDDB?"
+        "en-tts": "Are you testing the PDDB?"
     },
     "pddb.erase": {
         "en": "Bulk erase\n(1/6)",
         "ja": "一括削除\n(1/6)",
         "zh": "擦除存储(1/6)",
-        "en-audio": "Bulk erase step 1 of 6"
+        "en-tts": "Bulk erase step 1 of 6"
     },
     "pddb.initpt": {
         "en": "Pagetable\n(2/6)",
         "ja": "ページテーブル\n(2/6)",
         "zh": "分页表(2/6)",
-        "en-audio": "Pagetable step 2 of 6"
+        "en-tts": "Pagetable step 2 of 6"
     },
     "pddb.key": {
         "en": "Keys\n(3/6)",
         "ja": "キー\n(3/6)",
         "zh": "密钥(3/6)",
-        "en-audio": "Keys step 3 of 6"
+        "en-tts": "Keys step 3 of 6"
     },
     "pddb.fastspace": {
         "en": "Fastspace\n(4/6)",
         "ja": "ファーストスペース\n(4/6)",
         "zh": "快空间(4/6)",
-        "en-audio": "Fastspace step 4 of 6"
+        "en-tts": "Fastspace step 4 of 6"
     },
     "pddb.randomize": {
         "en": "Cryptographic wipe\n(5/6)",
         "ja": "クリプトワイプ\n(5/6)",
         "zh": "随机存储(5/6)",
-        "en-audio": "Randomize disk step 5 of 6"
+        "en-tts": "Randomize disk step 5 of 6"
     },
     "pddb.structure": {
         "en": "Commit root\n(6/6)",
         "ja": "コミットルート\n(6/6)",
         "zh": "提交根(6/6)",
-        "en-audio": "Commit root step 6 of 6"
+        "en-tts": "Commit root step 6 of 6"
     },
     "pddb.internalerror": {
         "en": "Internal Error",
         "ja": "内部エラー",
         "zh": "内部错误",
-        "en-audio": "Internal Error"
+        "en-tts": "Internal Error"
     },
     "pddb.basisname": {
         "en": "Basis Name:",
         "ja": "Basis名",
         "zh": "基础名称",
-        "en-audio": "Enter name of Basis"
+        "en-tts": "Enter name of Basis"
     },
     "pddb.password": {
         "en": "Basis Password:",
         "ja": "Basis パスワード",
         "zh": "基础密码",
-        "en-audio": "Enter password for Basis"
+        "en-tts": "Enter password for Basis"
     },
     "pddb.menu.listbasis": {
         "en": "List unlocked bases",
         "ja": "ロック解除されたベースをー覧表します",
         "zh": "基础列表",
-        "en-audio": "List unlocked bases"
+        "en-tts": "List unlocked bases"
     },
     "pddb.menu.listbasis_response": {
         "en": "Unlocked bases:\n",
         "ja": "ロック解除されたベース:\n",
         "zh": "透露列表:\n",
-        "en-audio": "Unlocked bases:"
+        "en-tts": "Unlocked bases:"
     }
 }

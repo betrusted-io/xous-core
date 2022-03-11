@@ -102,9 +102,12 @@ macro_rules! en_audio_rules {
     ($base_style: expr, $emoji_style: expr, $ch: ident) => {
         match $base_style($ch) {
             Ok(g) => g,
-            _ => match $base_style(REPLACEMENT) {
+            _ => match $emoji_style($ch) {
+                Ok(g) => g,
+                _ => match $base_style(REPLACEMENT) {
                     Ok(g) => g,
                     _ => NULL_GLYPH_SPRITE,
+                },
             },
         }
     };

@@ -377,8 +377,6 @@ mod bcrypt;
 // some short tests to just confirm we're not totally broken.
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn hash_with_fixed_salt() {
         let salt: [u8; 16] = [

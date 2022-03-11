@@ -13,6 +13,7 @@ gam = {path = "../gam"}
 graphics-server = {path = "../graphics-server"}
 ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
+ime-plugin-tts = {path = "../ime-plugin-tts"}
 llio = {path = "../llio"}
 log = "0.4.14"
 log-server = {path = "../log-server"}
@@ -36,6 +37,9 @@ net = {path="../net"}
 dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
+
+tts-frontend = {path="../tts"}
+locales = {path = "../../locales"}
 
 trng = {path = "../trng"}
 
@@ -76,6 +80,7 @@ utralib = {path = "../../utralib"}
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
+tts = [] # adds text to speech plugin
 default = [] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]

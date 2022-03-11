@@ -3,30 +3,30 @@
         "en": "Bouncing ball ⛹ demo.\nInterrupted with key hit: ",
         "ja": "弾むボール ⛹ デモ。キーヒットで中断: ",
         "zh": "弹跳球演示.⛹\n因击键而中断:",
-        "en-audio": "Bouncing ball demo. Interrupted with key hit:"
+        "en-tts": "Bouncing ball demo. Interrupted with key hit:"
     },
     "ballapp.notification_b": {
         "en": "Press any key to continue.",
         "ja": "続行するには何かキーを押してください。",
         "zh": "按任意键继续",
-        "en-audio": "Press any key to continue."
+        "en-tts": "Press any key to continue."
     },
     "ballapp.mode_prompt": {
         "en": "Pick a mode of operation:",
         "ja": "動作モードを選択してください:",
         "zh": "选择一种操作模式:",
-        "en-audio": "Pick a mode of operation:"
+        "en-tts": "Pick a mode of operation:"
     },
     "ballapp.random": {
         "en": "Random",
         "ja": "ランダム",
         "zh": "随机的",
-        "en-audio": "Random"
+        "en-tts": "Random"
     },
     "ballapp.tilt": {
         "en": "Tilt",
         "ja": "傾ける",
         "zh": "加速度计倾斜",
-        "en-audio": "Tilt"
+        "en-tts": "Tilt"
     }
 }

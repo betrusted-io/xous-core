@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "llio",
         "susres",
         "codec",
-        "sha2",
+        "sha2:0.9.8",
         "engine-25519",
         "spinor",
         "root-keys",
@@ -90,7 +90,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "xous-names",
         "trng",
         "llio",
-        "test-stub",
         "susres",
         "com",
     ];
@@ -157,6 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "com",
         "graphics-server",
         "keyboard",
+        "spinor",
     ];
 
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
@@ -179,7 +179,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &hw_pkgs, &[])?
+            renode_image(false, &hw_pkgs, &[],
+                None, Some(&["--features", "renode-bypass"]))?
         },
         Some("renode-test") => {
             let mut args = env::args();
@@ -195,8 +196,65 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &cbtest_pkgs, &[])?
+            renode_image(false, &cbtest_pkgs, &[], None, None)?
         },
+        Some("tts") => {
+            let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
+            let tts_exec_string = if true {
+                println!("Fetching tts executable from build server...");
+                let tts_exec_name = tmp_dir.path().join("espeak-embedded");
+                let tts_exec_string = tts_exec_name.clone().into_os_string().into_string().unwrap();
+                let mut tts_exec_file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(tts_exec_name).expect("Can't open our version file for writing");
+                let mut freader = ureq::get("https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
+                .call()?
+                .into_reader();
+                std::io::copy(&mut freader, &mut tts_exec_file)?;
+                println!("TTS exec is {} bytes", tts_exec_file.metadata().unwrap().len());
+                tts_exec_string
+            } else {
+                println!("****** WARNING: using local dev image. Do not check this configuration in! ******");
+                "../espeak-embedded/target/riscv32imac-unknown-xous-elf/release/espeak-embedded".to_string()
+            };
+
+            let mut locale_override = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("xous-rs/src/locale.rs").expect("Can't open locale for modification");
+            write!(locale_override, "{}", "pub const LANG: &str = \"en-tts\";\n").unwrap();
+
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            //let mut pkgs = gfx_dev_pkgs.to_vec();
+            let apps: Vec<String> = args.collect();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            pkgs.push("tts-frontend");
+            pkgs.push("ime-plugin-tts");
+            pkgs.retain(|&pkg| pkg != "ime-plugin-shell");
+            generate_app_menus(&apps);
+            build_hw_image(false,
+                Some("./precursors/soc.svd".to_string()),
+                &pkgs,
+                None, None,
+                Some(&["--features", "tts", "--features", "braille",]),
+                &[&tts_exec_string], None)?;
+            let mut locale_revert = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("xous-rs/src/locale.rs").expect("Can't open locale for modification");
+            write!(locale_revert, "{}", "pub const LANG: &str = \"en\";\n").unwrap();
+        }
         Some("libstd-test") => {
             let mut args = env::args();
             args.nth(1);
@@ -206,15 +264,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for program in &args {
                 extra_packages.push(program.as_str());
             }
-            renode_image(false, &pkgs, extra_packages.as_slice())?;
+            renode_image(false, &pkgs, extra_packages.as_slice(),
+            None, Some(&["--features", "renode-bypass"]))?;
+        }
+        Some("ffi-test") => {
+            let mut args = env::args();
+            args.nth(1);
+            //let mut pkgs = hw_pkgs.to_vec();
+            let mut pkgs = gfx_dev_pkgs.to_vec();
+            pkgs.push("ffi-test");
+            let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
+            for program in &args {
+                extra_packages.push(program.as_str());
+            }
+            build_hw_image(false, Some("./precursors/soc.svd".to_string()),
+            &pkgs, None, None, None, &[], Some(&["--features", "renode-bypass"]))?
+            //renode_image(false, &pkgs, extra_packages.as_slice(),
+            //None, Some(&["--features", "renode-bypass"]))?;
+        }
+        Some("libstd-net") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = base_pkgs.to_vec();
+            pkgs.push("net");
+            pkgs.push("com");
+            pkgs.push("llio");
+            pkgs.push("dns");
+            pkgs.push("libstd-test");
+            let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
+            for program in &args {
+                extra_packages.push(program.as_str());
+            }
+            renode_image(false, &pkgs, extra_packages.as_slice(),
+            Some(&["--features", "renode-minimal"]),
+            Some(&["--features", "renode-bypass"]))?;
         }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
-            renode_image(false, &aestest_pkgs, &[])?
+            renode_image(false, &aestest_pkgs, &[], None, None)?
         },
         Some("renode-image-debug") => {
             generate_app_menus(&vec!["ball".to_string()]);
-            renode_image(true, &hw_pkgs, &[])?
+            renode_image(true, &hw_pkgs, &[], None, None)?
         },
         Some("pddb-ci") => {
             generate_app_menus(&Vec::<String>::new());
@@ -265,7 +358,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             build_hw_image(false,
                 Some("./precursors/soc.svd".to_string()),
                 &pkgs,
-                lkey, kkey, None, &[])?
+                lkey, kkey, None, &[], None)?
         }
         Some("hw-image") => {
             let mut pkgs = vec![];
@@ -280,7 +373,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 app_strs.push(app.to_string());
             }
             generate_app_menus(&app_strs);
-            build_hw_image(false, env::args().nth(2), &pkgs, lkey, kkey, None, &[])?
+            build_hw_image(false, env::args().nth(2),
+            &pkgs, lkey, kkey, None, &[], None)?
         }
         Some("gfx-dev") => {
             run(true, &gfx_dev_pkgs, Some(&["--features", "graphics-server/testing"]))?
@@ -292,7 +386,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             None,
-            &[],
+            &[], None,
         )?,
         Some("pddb-hosted") => run(false, &pddb_dev_pkgs, None)?,
         Some("benchmark") => build_hw_image(
@@ -302,7 +396,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             None,
-            &[],
+            &[], None,
         )?,
         Some("minimal") => build_hw_image(
             false,
@@ -311,7 +405,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             None,
-            &[],
+            &[], None,
         )?,
         Some("cbtest") => build_hw_image(
             false,
@@ -320,7 +414,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             None,
-            &[],
+            &[], None,
         )?,
         Some("trng-test") => {
             generate_app_menus(&Vec::<String>::new());
@@ -331,7 +425,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             Some(&["--features", "urandomtest"]),
-            &[],
+            &[], None,
         )?},
         Some("ro-test") => {
             generate_app_menus(&Vec::<String>::new());
@@ -342,7 +436,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             Some(&["--features", "ringosctest"]),
-            &[],
+            &[], None,
         )?},
         Some("av-test") => {
             generate_app_menus(&Vec::<String>::new());
@@ -353,10 +447,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             Some(&["--features", "avalanchetest"]),
-            &[],
+            &[], None,
         )?},
         Some("sr-test") => {
-            build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
+            build_hw_image(false, env::args().nth(2),
+            &sr_pkgs, lkey, kkey, None, &[], None)?
         }
         Some("burn-kernel") => update_usb(true, false, false, false)?,
         Some("burn-loader") => update_usb(false, true, false, false)?,
@@ -386,7 +481,8 @@ Renode emulation:
  renode-test             builds a test image for renode
  renode-image-debug      builds a test image for renode in debug mode
  libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
-                         specified on the command line (e.g. built externally)
+                         specified on the command line (e.g. built externally). Bypasses sig checks, keys locked out.
+ libstd-net [pkg1] [..]  builds a test image for testing network functions. Bypasses sig checks, keys locked out.
 
 Locale (re-)generation:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
@@ -411,7 +507,8 @@ Various debug configurations:
  pddb-dev                PDDB testing only for live hardware
  pddb-hosted             PDDB testing in a hosted environment
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
-
+ ffi-test                builds an image for testing C-FFI bindings and integration
+ tts                     builds an image with text to speech support via externally linked C executable
 "
     )
 }
@@ -540,6 +637,7 @@ fn build_hw_image(
     kkey: Option<String>,
     extra_args: Option<&[&str]>,
     extra_packages: &[&str],
+    loader_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
@@ -554,6 +652,7 @@ fn build_hw_image(
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
+    // std::env::set_var("RUST_LOG", "debug"); // set this to debug the image creation process
 
     // extract key file names; replace with defaults if not specified
     let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
@@ -564,7 +663,15 @@ fn build_hw_image(
     let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args, None)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
-        pkg_path.push(pkg);
+        // some packages may have a colon-delimited version after it to clarify crates.io patches.
+        // Strip off the version number before passing to the image builder.
+        let pkg_maybe_version: Vec<&str> = pkg.split(':').collect();
+        let pkg_root = if pkg_maybe_version.len() > 1 {
+            pkg_maybe_version[pkg_maybe_version.len() - 2]
+        } else {
+            pkg
+        };
+        pkg_path.push(pkg_root);
         init.push(pkg_path);
     }
     for pkg in extra_packages {
@@ -577,7 +684,7 @@ fn build_hw_image(
         debug,
         Some(KERNEL_TARGET),
         Some("loader".into()),
-        None, None,
+        None, loader_features,
     )?;
     loader.push(PathBuf::from("loader"));
 
@@ -686,7 +793,13 @@ fn sign_loader(in_path: Pathbuf, out_path: Pathbuf) -> Result<(), DynError> {
 
 }*/
 
-fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Result<(), DynError> {
+fn renode_image(
+    debug: bool,
+    packages: &[&str],
+    extra_packages: &[&str],
+    xous_features: Option<&[&str]>,
+    loader_features: Option<&[&str]>,
+) -> Result<(), DynError> {
     // Regenerate the Platform file
     let status = Command::new(cargo())
         .current_dir(project_root())
@@ -710,8 +823,9 @@ fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Resu
         packages,
         None,
         None,
-        None,
+        xous_features,
         extra_packages,
+        loader_features,
     )
 }
 
@@ -1299,6 +1413,12 @@ fn generate_app_menus(apps: &Vec::<String>) {
     // construct the app menu
     let mut menu = String::new();
     writeln!(menu, "// This file is auto-generated by xtask/main.rs generate_app_menus()").unwrap();
+    if apps.len() == 0 {
+        writeln!(menu, "// NO APPS SELECTED: suppressing warning messages!").unwrap();
+        writeln!(menu, "#![allow(dead_code)]").unwrap();
+        writeln!(menu, "#![allow(unused_imports)]").unwrap();
+        writeln!(menu, "#![allow(unused_variables)]").unwrap();
+    }
     writeln!(menu, r####"use crate::StatusOpcode;
 use gam::{{MenuItem, MenuPayload}};
 use locales::t;

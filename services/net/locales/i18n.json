@@ -3,12 +3,12 @@
         "en": "EC firmware is out of date. Wifi connection manager cannot start.",
         "ja": "ECファームウェアが古くなっています。Wifiコネクションマネージャーが起動できません。",
         "zh": "EC 固件已过期，无法启动连接管理器.",
-        "en-audio": "EC firmware is out of date. Wifi connection manager cannot start."
+        "en-tts": "EC firmware is out of date. Wifi connection manager cannot start."
     },
     "net.ec_current_rev": {
         "en": "Current EC rev: ",
         "ja": "現在のEC rev: ",
         "zh": "当前的 EC 修订版: ",
-        "en-audio": "Current EC rev: "
+        "en-tts": "Current EC rev: "
     }
 }

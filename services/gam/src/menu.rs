@@ -11,6 +11,8 @@ use num_traits::*;
 
 use graphics_server::api::{PixelColor, TextBounds, DrawStyle, GlyphStyle};
 
+#[cfg(feature = "tts")]
+use tts_frontend::*;
 #[derive(Debug)]
 pub struct Menu<'a> {
     pub sid: xous::SID,
@@ -26,6 +28,8 @@ pub struct Menu<'a> {
     pub canvas_width: Option<i16>,
     pub helper_data: Option<Buffer<'a>>,
     pub name: std::string::String,
+    #[cfg(feature = "tts")]
+    pub tts: TtsFrontend,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -57,6 +61,8 @@ impl<'a> Menu<'a> {
         log::debug!("requesting content canvas for menu");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
         let line_height = gam.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height hint") as i16 + 2;
+        #[cfg(feature="tts")]
+        let tts = TtsFrontend::new(&xns).unwrap();
         Menu {
             sid,
             gam,
@@ -71,6 +77,8 @@ impl<'a> Menu<'a> {
             canvas_width: None,
             helper_data: None,
             name: std::string::String::from(name),
+            #[cfg(feature="tts")]
+            tts,
         }
     }
     pub fn activate(&self) {
@@ -164,6 +172,8 @@ impl<'a> Menu<'a> {
 
         if with_marker {
             write!(item_tv.text, "\u{25B6}").unwrap();
+            #[cfg(feature="tts")]
+            self.tts.tts_simple(item.name.as_str().unwrap()).unwrap();
         } else {
             write!(item_tv.text, "\t").unwrap();
         }
@@ -285,6 +295,12 @@ impl<'a> Menu<'a> {
                     }
                     if let Some(action) = mi.action_conn {
                         log::debug!("doing menu action for {}", mi.name);
+                        #[cfg(feature="tts")]
+                        {
+                            let mut phrase = "select ".to_string();
+                            phrase.push_str(mi.name.as_str().unwrap());
+                            self.tts.tts_blocking(&phrase).unwrap();
+                        }
                         match mi.action_payload {
                             MenuPayload::Scalar(args) => {
                                 xous::send_message(action,

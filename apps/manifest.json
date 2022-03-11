@@ -6,7 +6,7 @@
                 "en": "Simple ball demo",
                 "ja": "シンプルなボールのデモ",
                 "zh": "简单的球演示",
-                "en-audio": "Simple ball demo"
+                "en-tts": "Simple ball demo"
             }
         }
     },
@@ -17,7 +17,7 @@
                 "en": "Basic REPL demo",
                 "ja": "シンプルなREPLデモ",
                 "zh": "基本 REPL 演示",
-                "en-audio": "Basic REPL demo"
+                "en-tts": "Basic REPL demo"
             }
         }
     }

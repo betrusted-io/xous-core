@@ -23,9 +23,12 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
+tts-frontend = {path="../tts"}
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 
 [features]
+tts = []
 debugprint = []
 default = [] # "debugprint"

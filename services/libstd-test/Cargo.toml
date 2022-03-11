@@ -1,0 +1,25 @@
+[package]
+name = "libstd-test"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "libstd test stub"
+
+# Dependency policy: fully specify dependencies to the minor version number
+[dependencies]
+xous = { path = "../../xous-rs" }
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+net = {path = "../net"}
+dns = {path = "../dns"}
+com = {path = "../com"}
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+default = []

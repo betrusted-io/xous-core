@@ -3,139 +3,139 @@
         "ja": "測定...",
         "en": "Measuring...",
         "zh": "进行测量...",
-        "en-audio": "Measuring..."
+        "en-tts": "Measuring..."
     },
     "stats.disconnected": {
         "ja": "接続不可",
         "en": "Not connected",
         "zh": "没有连接",
-        "en-audio": "Not connected"
+        "en-tts": "Not connected"
     },
     "stats.uptime": {
         "translator-note": "This needs to be a very short string, 2 chars max. Trailing space is necessary for English due to proportional font.",
-        "ja": "稼働 ",
+        "ja": "稼働",
         "en": "Up ",
-        "zh": "运行 ",
-        "en-audio": "Uptime"
+        "zh": "运行",
+        "en-tts": "Up"
     },
     "secnote.usb_unlock": {
         "en": " USB unlocked",
         "ja": "USBロック解除",
         "zh": "USB解锁",
-        "en-audio": "USB unlocked"
+        "en-tts": "USB unlocked"
     },
     "secnote.gateware_fail": {
         "en": " Gateware selfsig fail",
         "ja": "Gateware selfsig 失敗",
         "zh": "比特流签名失败",
-        "en-audio": "Gateware self signature failure"
+        "en-tts": "Gateware self signature failure"
     },
     "secnote.state_fail": {
         "en": " Invalid key state",
         "ja": "無効なキー状態",
         "zh": "无效的根密钥",
-        "en-audio": "Invalid key state"
+        "en-tts": "Invalid key state"
     },
     "secnote.no_keys": {
         "en": " Root keys uninitialized",
         "ja": "ルートキーは未初期化",
         "zh": "密钥未初始化",
-        "en-audio": "Root keys unitialized"
+        "en-tts": "Root keys unitialized"
     },
     "secnote.allclear": {
         "en": " No security warnings",
         "ja": "セキュリティ警告なし",
         "zh": "没有警告",
-        "en-audio": "🔇"
+        "en-tts": "🔇"
     },
     "secnote.startup": {
         "en": " Starting up...",
         "ja": "起動中...",
         "zh": "现在开始...",
-        "en-audio": "🔇"
+        "en-tts": "🔇"
     },
     "mainmenu.sleep": {
         "en": "Sleep now",
         "ja": "今睡眠",
         "zh": "睡眠模式",
-        "en-audio": "Sleep now"
+        "en-tts": "Sleep now"
     },
     "mainmenu.backlighton": {
         "en": "Backlight on",
         "ja": "バックライト点灯",
         "zh": "背光开启",
-        "en-audio": "🔇"
+        "en-tts": "🔇"
     },
     "mainmenu.backlightoff": {
         "en": "Backlight off",
         "ja": "バックライト消灯",
         "zh": "背光关闭",
-        "en-audio": "🔇"
+        "en-tts": "🔇"
     },
     "mainmenu.init_keys": {
         "en": "Initialize root keys",
         "ja": "ルートキーの初期化",
         "zh": "设置根密码",
-        "en-audio": "Initialize root keys"
+        "en-tts": "Initialize root keys"
     },
     "mainmenu.provision_gateware": {
         "en": "Install gateware update",
         "ja": "ゲートウェアアップデートをインストールする",
         "zh": "安装比特流更新",
-        "en-audio": "Install gateware update"
+        "en-tts": "Install gateware update"
     },
     "mainmenu.selfsign": {
         "en": "Sign Xous update",
         "ja": "サインXousアップデート",
         "zh": "数字签名Xous",
-        "en-audio": "Sign Xous update"
+        "en-tts": "Sign Xous update"
     },
     "mainmenu.set_rtc": {
         "en": "Set time",
         "ja": "時間設定",
         "zh": "设置时间",
-        "en-audio": "Set time"
+        "en-tts": "Set time"
     },
     "mainmenu.pddb": {
         "en": "PDDB Submenu",
         "ja": "PDDBサブメニュー",
         "zh": "PDDB子菜单",
-        "en-audio": "PDDB submenu"
+        "en-tts": "PDDB submenu"
     },
     "mainmenu.app": {
         "en": "Switch to App...",
         "ja": "アプリに切り替わる...",
         "zh": "APP子菜单",
-        "en-audio": "Switch to app submenu"
+        "en-tts": "Switch to app submenu"
     },
     "mainmenu.kbd": {
         "en": "Keyboard layout...",
         "ja": "キーボード・レイアウト...",
         "zh": "键盘布局...",
-        "en-audio": "Keyboard layout submenu"
+        "en-tts": "Keyboard layout submenu"
     },
     "mainmenu.reboot": {
         "en": "Reboot",
         "ja": "リブート",
         "zh": "重启",
-        "en-audio": "Reboot"
+        "en-tts": "Reboot"
     },
     "mainmenu.closemenu": {
         "en": "Close menu",
         "ja": "メニューを閉じる",
         "zh": "关闭功能表",
-        "en-audio": "Close menu"
+        "en-tts": "Close menu"
     },
     "mainmenu.cant_sleep": {
         "en": "Can't sleep while charging",
         "ja": "充電中は眠れません",
         "zh": "充电时睡不着",
-        "en-audio": "Can't sleep while charging"
+        "en-tts": "Can't sleep while charging"
     },
     "appmenu.shellchat": {
         "en": "Shellchat",
         "ja": "Shellchat",
         "zh": "外壳聊天",
-        "en-audio": "Shellchat"
+        "en-tts": "Shellchat"
     }
 }

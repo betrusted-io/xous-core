@@ -102,6 +102,11 @@ mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
 
+#[cfg(feature="tts")]
+mod tts;
+#[cfg(feature="tts")]
+use tts::*;
+
 #[cfg(feature="benchmarks")]
 mod engine;
 #[cfg(feature="benchmarks")]
@@ -137,6 +142,9 @@ pub struct CmdEnv {
     net_cmd: NetCmd,
     pddb_cmd: PddbCmd,
     wlan_cmd: Wlan,
+
+    #[cfg(feature="tts")]
+    tts_cmd: Tts,
 
     #[cfg(feature="benchmarks")]
     sha_cmd: Sha,
@@ -205,6 +213,9 @@ impl CmdEnv {
             pddb_cmd: PddbCmd::new(&xns),
             wlan_cmd: Wlan::new(),
 
+            #[cfg(feature="tts")]
+            tts_cmd: Tts::new(&xns),
+
             #[cfg(feature="benchmarks")]
             sha_cmd: sha,
             #[cfg(feature="benchmarks")]
@@ -246,6 +257,9 @@ impl CmdEnv {
             &mut self.jtag_cmd,
             &mut self.net_cmd,
             &mut self.pddb_cmd,
+
+            #[cfg(feature="tts")]
+            &mut self.tts_cmd,
 
             #[cfg(feature="benchmarks")]
             &mut self.sha_cmd,

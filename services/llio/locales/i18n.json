@@ -3,96 +3,96 @@
         "en": "Enter month (1-12)",
         "ja": "月（1-12）を入力してください。",
         "zh": "输入月份 (1-12)",
-        "en-audio": "Enter month one through twelve"
+        "en-tts": "Enter month one through twelve"
     },
     "rtc.day": {
         "en": "Enter day (1-31)",
         "ja": "日数 (1-31) を入力してください。",
         "zh": "输入日期 (1-31)",
-        "en-audio": "Enter day one through 31"
+        "en-tts": "Enter day one through 31"
     },
     "rtc.year": {
         "en": "Enter last two digits of year",
         "ja": "西暦の下2桁を入力してください。",
         "zh": "输入年份 (最后两位数)",
-        "en-audio": "Enter last two digits of year"
+        "en-tts": "Enter last two digits of year"
     },
     "rtc.hour": {
         "en": "Enter hours (0-23)",
         "ja": "時間（0-23）を入力してください。",
         "zh": "输入小时 (0-23)",
-        "en-audio": "Enter hours as 24 hour format"
+        "en-tts": "Enter hours as 24 hour format"
     },
     "rtc.minute": {
         "en": "Enter minutes (0-59)",
         "ja": "分（0-59）を入力してください。",
         "zh": "输入分钟 (0-59)",
-        "en-audio": "Enter minutes"
+        "en-tts": "Enter minutes"
     },
     "rtc.seconds": {
         "en": "Enter seconds (0-59)",
         "ja": "秒 (0-59) を入力してください。",
         "zh": "输入秒数 (0-59)",
-        "en-audio": "Enter seconds"
+        "en-tts": "Enter seconds"
     },
     "rtc.day_of_week": {
         "en": "Select the day of week",
         "ja": "曜日を選択してください。",
         "zh": "[星期几]清单框",
-        "en-audio": "Select the day of week"
+        "en-tts": "Select the day of week"
     },
     "rtc.monday": {
         "en": "Monday",
         "ja": "月曜日",
         "zh": "星期一",
-        "en-audio": "Monday"
+        "en-tts": "Monday"
     },
     "rtc.tuesday": {
         "en": "Tuesday",
         "ja": "火曜日",
         "zh": "星期二",
-        "en-audio": "Tuesday"
+        "en-tts": "Tuesday"
     },
     "rtc.wednesday": {
         "en": "Wednesday",
         "ja": "水曜日",
         "zh": "星期三",
-        "en-audio": "Wednesday"
+        "en-tts": "Wednesday"
     },
     "rtc.thursday": {
         "en": "Thursday",
         "ja": "木曜日",
         "zh": "星期四",
-        "en-audio": "Thursday"
+        "en-tts": "Thursday"
     },
     "rtc.friday": {
         "en": "Friday",
         "ja": "金曜日",
         "zh": "星期五",
-        "en-audio": "Friday"
+        "en-tts": "Friday"
     },
     "rtc.saturday": {
         "en": "Saturday",
         "ja": "土曜日",
         "zh": "星期六",
-        "en-audio": "Saturday"
+        "en-tts": "Saturday"
     },
     "rtc.sunday": {
         "en": "Sunday",
         "ja": "日曜日",
         "zh": "星期日",
-        "en-audio": "Sunday"
+        "en-tts": "Sunday"
     },
     "rtc.integer_err": {
         "en": "Error: entry was not numeric",
         "ja": "エラー:エントリは数値ではありませんでした。",
         "zh": "错误：输入不是数字",
-        "en-audio": "Error: entry was not numeric"
+        "en-tts": "Error: entry was not numeric"
     },
     "rtc.range_err": {
         "en": "Error: input out of range",
         "ja": "エラー:入力が範囲外です。",
         "zh": "错误：输入超出范围",
-        "en-audio": "Error: input out of range"
+        "en-tts": "Error: input out of range"
     }
 }

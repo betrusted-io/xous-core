@@ -20,6 +20,8 @@ use xous::{CID, msg_scalar_unpack};
 use core::fmt::Write;
 
 use locales::t;
+#[cfg(feature = "tts")]
+use tts_frontend::*;
 
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
@@ -63,6 +65,8 @@ struct InputTracker {
 
     /// render the predictions. Slightly awkward because this code comes from before we had libstd
     pred_options: [Option<String>; MAX_PREDICTION_OPTIONS],
+    #[cfg(feature = "tts")]
+    tts: TtsFrontend,
 }
 
 impl InputTracker {
@@ -84,6 +88,8 @@ impl InputTracker {
             last_height: 0,
             was_grown: false,
             pred_options: Default::default(),
+            #[cfg(feature="tts")]
+            tts: TtsFrontend::new(xns).unwrap(),
         }
     }
     pub fn set_gam_token(&mut self, token: [u32; 4]) {
@@ -302,6 +308,8 @@ impl InputTracker {
                         do_redraw = true;
                     }
                     '\u{0008}' => { // backspace
+                        #[cfg(feature="tts")]
+                        self.tts.tts_simple(t!("input.delete-tts", xous::LANG)).unwrap();
                         if (self.characters > 0) && (self.insertion == self.characters) {
                             if debug1{info!("simple backspace case")}
                             self.line.pop();
@@ -356,7 +364,7 @@ impl InputTracker {
                     }
                     '\u{000d}' => { // carriage return
                         let mut ret = xous_ipc::String::<4000>::new();
-                        write!(ret, "{}", self.line.as_str()).expect("couldn't copy input ilne to output");
+                        write!(ret, "{}", self.line.as_str()).expect("couldn't copy input line to output");
                         retstring = Some(ret);
 
                         if let Some(trigger) = self.pred_triggers {
@@ -406,8 +414,7 @@ impl InputTracker {
                                     update_predictor = true;
                                 }
                                 self.last_trigger_char = Some(self.insertion);
-                            }
-                            if trigger.punctuation && k.is_ascii_punctuation() {
+                            } else if trigger.punctuation && k.is_ascii_punctuation() {
                                 if self.pred_phrase.len() > 0 {
                                     self.predictor.unwrap().feedback_picked(
                                         xous_ipc::String::<4000>::from_str(&self.pred_phrase)).expect("couldn't send feedback to predictor");
@@ -419,6 +426,13 @@ impl InputTracker {
                             }
                         }
                         if self.insertion == self.characters {
+                            #[cfg(feature="tts")]
+                            {
+                                if !k.is_ascii_whitespace() && !k.is_ascii_punctuation() {
+                                    // this is disastisfying in how slow it is
+                                    // self.tts.tts_simple(&k.to_string()).unwrap();
+                                }
+                            }
                             self.line.push(k);
                             if let Some(trigger) = self.pred_triggers {
                                 if !(trigger.punctuation && k.is_ascii_punctuation() ||
@@ -687,26 +701,10 @@ fn xmain() -> ! {
                 if tracker.is_init() {
                     msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                         let keys = [
-                            if let Some(a) = core::char::from_u32(k1 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
-                            if let Some(a) = core::char::from_u32(k2 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
-                            if let Some(a) = core::char::from_u32(k3 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
-                            if let Some(a) = core::char::from_u32(k4 as u32) {
-                                a
-                            } else {
-                                '\u{0000}'
-                            },
+                            core::char::from_u32(k1 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k2 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k3 as u32).unwrap_or('\u{0000}'),
+                            core::char::from_u32(k4 as u32).unwrap_or('\u{0000}'),
                         ];
                         log::trace!("tracking keys: {:?}", keys);
                         if keys[0] == '😊' {

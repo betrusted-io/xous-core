@@ -82,6 +82,11 @@ impl Codec {
             Message::new_scalar(Opcode::PauseStream.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn abort(&mut self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::AbortStream.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_| ())
+    }
 
     /// gain goes from 0dB down to -80dB
     pub fn set_speaker_volume(&self, op: VolumeOps, gain: Option<f32>) -> Result<(), xous::Error> {
@@ -123,7 +128,20 @@ impl Codec {
             )
         ).map(|_| ())
     }
-
+    pub fn is_running(&self) -> Result<bool, xous::Error> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsLive.to_usize().unwrap(), 0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(is_live)) => {
+                if is_live != 0 {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

@@ -1,8 +1,14 @@
 {
+    "input.delete-tts": {
+        "en": "",
+        "ja": "",
+        "zh": "",
+        "en-tts": "delete"
+    },
     "input.greeting": {
         "en": "Ready for input...",
         "ja": "入力可能...",
         "zh": "等待输入...",
-        "en-audio": "Ready for input"
+        "en-tts": "Ready for input"
     }
 }

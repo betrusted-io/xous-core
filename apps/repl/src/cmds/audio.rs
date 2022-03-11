@@ -130,7 +130,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     env.codec.swap_frames(&mut frames).unwrap();
                 } else if *routing_id == STOP_ID {
                     let mut ret = String::<1024>::new();
-                    env.codec.pause().unwrap(); // this should stop callbacks from occurring too.
+                    env.codec.abort().unwrap(); // this should stop callbacks from occurring too.
                     write!(ret, "{} {} {}.",
                         t!("replapp.audio.completion_a", xous::LANG),
                         self.framecount,

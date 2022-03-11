@@ -18,10 +18,13 @@ xous-ipc = { path = "../../xous-ipc" }
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 gam = {path="../gam"}
 trng = {path="../trng"}
+tts-frontend = {path="../tts"}
+locales = {path = "../../locales"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
 [features]
 ux_tests = []
+tts = []
 default = []

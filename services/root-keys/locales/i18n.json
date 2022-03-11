@@ -3,288 +3,288 @@
         "en": "Create a PIN code for device unlock.",
         "ja": "デバイスのロックを解除するためのPINコードを作成します。",
         "zh": "输入密码 解锁 安全含义:低",
-        "en-audio": "Enter unlock password"
+        "en-tts": "Enter unlock password"
     },
     "rootkeys.updatepass": {
         "en": "⚠ Critical Password ⚠\nCreate a strong passphrase for authorizing system updates.",
         "ja": "重要なパスワード\nシステムアップデートを認証するための強力なパスフレーズを作成します。",
         "zh": "输入密码 软件更新 安全含义:至关重要 ",
-        "en-audio": "Enter update password. This password is critically important."
+        "en-tts": "Enter update password. This password is critically important."
     },
     "rootkeys.already_init": {
         "en": "Root keys already initialized.",
         "ja": "ルートキーはすでに初期化されています。",
         "zh": "根密码已经设置",
-        "en-audio": "Root keys already initialized."
+        "en-tts": "Root keys already initialized."
     },
     "rootkeys.confirm": {
         "en": "This will initialize the root keys on your Precursor device.\n\nYou will be prompted for two passwords:\n\t1. Device unlock PIN code\n\t2. System update passphrase.\n\nAre you ready?",
         "ja": "これにより、Precursorデバイスのルートキーが初期化されます。\n\n2つのパスワードの入力を求められます。\n\t1.デバイスのロック解除PINコード\n\t2.システムアップデートパスフレーズ。\n\n準備はいいですか？",
         "zh": "仅当您准备好信 任此设备时才 应继续",
-        "en-audio": "You should only proceed with this operation if you are ready to trust this device."
+        "en-tts": "You should only proceed with this operation if you are ready to trust this device."
     },
     "rootkeys.confirm.yes": {
         "en": "I'm ready!",
         "ja": "準備OK!",
         "zh": "确定",
-        "en-audio": "I'm ready!"
+        "en-tts": "I'm ready!"
     },
     "rootkeys.confirm.no": {
         "en": "Not yet, maybe later.",
         "ja": "まだです、多分後で。",
         "zh": "我先检查一下,稍后再试",
-        "en-audio": "I'll try again after inspecting my device."
+        "en-tts": "I'll try again after inspecting my device."
     },
     "rootkeys.setup_wait": {
         "en": "Initializing keys. This takes a few minutes. Do not reset or sleep!",
         "ja": "キーを初期化中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "现在正在初始化 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Initializing keys. This may take a while, don't reset or sleep the device."
+        "en-tts": "Initializing keys. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.signing_loader": {
         "en": "Signing loader. This takes a few minutes. Do not reset or sleep!",
         "ja": "ローダーは署名中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "签名引导程序 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Signing loader. This may take a while, don't reset or sleep the device."
+        "en-tts": "Signing loader. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.signing_kernel": {
         "en": "Signing kernel. This takes a few minutes. Do not reset or sleep!",
         "ja": "カーネルへを署名中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "签名内核 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Signing kernel. This may take a while, don't reset or sleep the device."
+        "en-tts": "Signing kernel. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.backup_gateware": {
         "en": "Backing up gateware. This takes a few minutes. Do not reset or sleep!",
         "ja": "ゲートウェアをバックアップ中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "备份比特流 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Backing up gateware. This may take a while, don't reset or sleep the device."
+        "en-tts": "Backing up gateware. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.patching_keys": {
         "en": "Injecting new keys. This takes a few minutes. Do not reset or sleep!",
         "ja": "新しいキーを挿入中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "更换新钥匙 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Injecting new keys. This may take a while, don't reset or sleep the device."
+        "en-tts": "Injecting new keys. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.verifying_gateware": {
         "en": "Verifying new gateware. This takes a few minutes. Do not reset or sleep!",
         "ja": "新しいゲートウェアの検証中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "验证比特流 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Verifying gateware. This may take a while, don't reset or sleep the device."
+        "en-tts": "Verifying gateware. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.commit_signatures": {
         "en": "Committing signatures. This takes a few minutes. Do not reset or sleep!",
         "ja": "署名のコミット中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "保存签名 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Committing signatures. This may take a while, don't reset or sleep the device."
+        "en-tts": "Committing signatures. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.unplug_power": {
         "en": "Please unplug the charging cable so I can reboot!  ",
         "ja": "再起動できるように、充電ケーブルを抜いてください。",
         "zh": "拔下充电线以允许重启!",
-        "en-audio": "Unplug the charging cable so I can reboot!"
+        "en-tts": "Unplug the charging cable so I can reboot!"
     },
     "rootkeys.init.finished": {
         "en": "Rebooting now...   ",
         "ja": "再起動中...",
         "zh": "准备重启...  ",
-        "en-audio": "Rebooting now."
+        "en-tts": "Rebooting now."
     },
     "rootkeys.init.fail_verify": {
         "en": "Verification failed, aborting!",
         "ja": "検証に失敗し、中止します!",
         "zh": "*missing*正在初始化失败，中止!",
-        "en-audio": "Verification failed, aborting"
+        "en-tts": "Verification failed, aborting"
     },
     "rootkeys.init.fail_key": {
         "en": "FPGA key is wrong: Perhaps the update password was entered incorrectly?",
         "ja": "FPGAキーが間違っています: 更新パスワードが間違って入力された可能性がありますか？",
         "zh": "*missing*正在初始化失败，中止します!",
-        "en-audio": "FPGA key is wrong, perhaps the update password was entered incorrectly?"
+        "en-tts": "FPGA key is wrong, perhaps the update password was entered incorrectly?"
     },
     "rootkeys.init.fail_burn": {
         "en": "FLASH write problem, aborting!",
         "ja": "フラッシュ書き込みの問題、中止します!",
         "zh": "*missing*正在初始化失败，中止!",
-        "en-audio": "FLASH write problem, aborting"
+        "en-tts": "FLASH write problem, aborting"
     },
     "rootkeys.init.fail_alignment": {
         "en": "Internal alignment error, aborting!",
         "ja": "内部アライメントエラー、中止します!",
         "zh": "*missing*正在初始化失败，中止!",
-        "en-audio": "Internal alignment error, aborting"
+        "en-tts": "Internal alignment error, aborting"
     },
     "rootkeys.init.confirmation": {
         "en": "This cannot be undone. Continue?",
         "ja": "これは元に戻せません。続けますか？",
         "zh": "这无法撤消，要继续吗?",
-        "en-audio": "This cannot be undone. Continue?"
+        "en-tts": "This cannot be undone. Continue?"
     },
     "rootkeys.gwup.no_update_found": {
         "en": "No valid update found, aborting!",
         "ja": "有効な更新が見つかりませんでした。中止します!",
         "zh": "未找到有效更新，正在中止!",
-        "en-audio": "No valid update found, aborting"
+        "en-tts": "No valid update found, aborting"
     },
     "rootkeys.gwup.inspecting": {
         "en": "Inspecting update, please wait...",
         "ja": "アップデートを確認しています、お待ちください...",
         "zh": "正在检查比特流，请稍候...",
-        "en-audio": "Inspecting update, please wait."
+        "en-tts": "Inspecting update, please wait."
     },
     "rootkeys.gwup.viewinfo_ss": {
         "en": "Self-signed image found. Review details?",
         "ja": "自己署名画像が見つかりました。 詳細を確認しますか？",
         "zh": "**missing**查看更新的详细信息?",
-        "en-audio": "Self-signed image found. Review details?"
+        "en-tts": "Self-signed image found. Review details?"
     },
     "rootkeys.gwup.viewinfo_tp": {
         "en": "Third party image found. Review details?",
         "ja": "サードパーティの画像が見つかりました。 詳細を確認しますか？",
         "zh": "**missing**查看更新的详细信息?",
-        "en-audio": "Self-signed image found. Review details?"
+        "en-tts": "Self-signed image found. Review details?"
     },
     "rootkeys.gwup.viewinfo_dk": {
         "en": "Devkey image found. Review details?",
         "ja": "Devkeyの画像が見つかりました。 詳細を確認しますか？",
         "zh": "**missing**查看更新的详细信息?",
-        "en-audio": "Self-signed image found. Review details?"
+        "en-tts": "Self-signed image found. Review details?"
     },
     "rootkeys.gwup.details": {
         "en": "All details",
         "ja": "すべての詳細",
         "zh": "所有细节",
-        "en-audio": "All details"
+        "en-tts": "All details"
     },
     "rootkeys.gwup.short": {
         "en": "Short summary",
         "ja": "簡単な要約",
         "zh": "简短的摘要",
-        "en-audio": "Short summary"
+        "en-tts": "Short summary"
     },
     "rootkeys.gwup.none": {
         "en": "Skip",
         "ja": "スキップ",
         "zh": "跳过这步",
-        "en-audio": "Skip"
+        "en-tts": "Skip"
     },
     "rootkeys.gwup.proceed_confirm": {
         "en": "Proceed with update?",
         "ja": "更新を続行しますか？",
         "zh": "继续更新？",
-        "en-audio": "Proceed with update?"
+        "en-tts": "Proceed with update?"
     },
     "rootkeys.gwup.yes": {
         "en": "Yes",
         "ja": "はい",
         "zh": "确定",
-        "en-audio": "Yes"
+        "en-tts": "Yes"
     },
     "rootkeys.gwup.no": {
         "en": "No",
         "ja": "いいえ",
         "zh": "取消",
-        "en-audio": "No"
+        "en-tts": "No"
     },
     "rootkeys.gwup_starting": {
         "en": "Updating gateware. This takes a few minutes.\nDo not reset or sleep!",
         "ja": "ゲートウェアをアップデート中です。これには数分かかります。\nリセットやスリープはしないでください。",
         "zh": "现在正在初始化 可能还要等一下 不要重置或睡眠! ",
-        "en-audio": "Updating gateware. This may take a while, don't reset or sleep the device."
+        "en-tts": "Updating gateware. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.get_update_password": {
         "en": "⚠ Critical password request ⚠\nEnter the 'SYSTEM UPDATE' passphrase. This authorizes a system update.",
         "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。これでシステムアップデートが許可されます。",
         "zh": "输入密码 软件更新 安全含义:至关重要 ",
-        "en-audio": "Enter update password, in order to authorize a gateware update."
+        "en-tts": "Enter update password, in order to authorize a gateware update."
     },
     "rootkeys.gwup.finished": {
         "en": "Gateware update finished.\nReboot at your earliest convenience.",
         "ja": "ゲートウェアアップデートが終了しました。ご都合の良い時に再起動してください。",
         "zh": "更新完成重启应用",
-        "en-audio": "Gateware update finished. Reboot at your earliest convenience."
+        "en-tts": "Gateware update finished. Reboot at your earliest convenience."
     },
     "rootkeys.bbram.confirm": {
         "en": "Connect provisioning helper, then press enter. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for details.",
         "ja": "プロビジョニングヘルパーを接続し、Enterキーを押してください。詳しくは、https://github.com/betrusted-io/betrusted-wiki/wiki を参照してください。",
         "zh": "立即连接配置助手。请参阅 https://github.com/betrusted-io/betrusted-wiki/wiki 了解详情。",
-        "en-audio": "Connect provisioning helper then press enter. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for details."
+        "en-tts": "Connect provisioning helper then press enter. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for details."
     },
     "rootkeys.bbram.finished": {
         "en": "BBRAM helper should have rebooted the device. There was a problem with the procedure!",
         "ja": "BBRAMヘルパーはデバイスをリブートしたはずです。手順に問題がありました!",
         "zh": "**missing**",
-        "en-audio": "BBRAM helper should have rebooted the device, you should not get this message!"
+        "en-tts": "BBRAM helper should have rebooted the device, you should not get this message!"
     },
     "rootkeys.bbram.failed_restore": {
         "en": "Something went wrong. Restoring from backup... ",
         "ja": "何かがうまくいきませんでした。 バックアップからの復元中です...",
         "zh": "出了点问题，从备份中恢复...",
-        "en-audio": "Something went wrong, restoring from backup."
+        "en-tts": "Something went wrong, restoring from backup."
     },
     "rootkeys.console_input": {
         "en": "Communicating with helper... Press enter to abort.",
         "ja": "ヘルパーと通信しています... Enterキーを押して中止します。",
         "zh": "与助手通信，按 Enter 中止",
-        "en-audio": "Communicating with helper. Press enter to abort."
+        "en-tts": "Communicating with helper. Press enter to abort."
     },
     "rootkeys.bbram.no_helper": {
         "en": "No BBRAM helper found. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for help.",
         "ja": "BBRAMヘルパーが見つかりませんでした。https://github.com/betrusted-io/betrusted-wiki/wiki を参照してください。",
         "zh": "没有找到 BBRAM helper。参考https://github.com/betrusted-io/betrusted-wiki/wiki。",
-        "en-audio": "No BBRAM helper found. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for help."
+        "en-tts": "No BBRAM helper found. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for help."
     },
     "rootkeys.get_signing_password": {
         "en": "⚠ Critical password request ⚠\nEnter the 'SYSTEM UPDATE' passphrase.\n\nThis will digitally sign your system firmware.",
         "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。\n\nこれにより、システムのファームウェアに電子署名が施されます。",
         "zh": "输入密码 软件更新 安全含义:至关重要 ",
-        "en-audio": "Enter update password, in order to authorize a gateware update."
+        "en-tts": "Enter update password, in order to authorize a gateware update."
     },
     "rootkeys.signxous.finished": {
         "en": "Xous signing finished.\nReboot at your earliest convenience.",
         "ja": "Xousのサインは終了しました。ご都合の良い時に再起動してください。",
         "zh": "更新完成重启应用",
-        "en-audio": "Xous signing finished. Reboot at your earliest convenience."
+        "en-tts": "Xous signing finished. Reboot at your earliest convenience."
     },
     "rootkeys.get_login_password": {
         "en": "Password request\nEnter the 'DEVICE UNLOCK' PIN code.",
         "ja": "パスワード要求\nデバイスのロック解除のPINコードを入力してください。",
         "zh": "输入密码 解锁 安全含义:低",
-        "en-audio": "Enter device unlock password to access basic service."
+        "en-tts": "Enter device unlock password to access basic service."
     },
     "rootkeys.bad_password_request": {
         "en": "Someone issued a request for a non-existent password.",
         "ja": "誰かが存在しないパスワードのリクエストを発行しました。",
         "zh": "**improve**无效的密码请求",
-        "en-audio": "Someone issued a request for a non-existent password."
+        "en-tts": "Someone issued a request for a non-existent password."
     },
     "rootkeys.policy_request": {
         "en": "Please pick a password retention policy:",
         "ja": "パスワード保持ポリシーを指定ください。",
         "zh": "请选择密码保留策略:",
-        "en-audio": "Please pick a passowrd retention policy."
+        "en-tts": "Please pick a passowrd retention policy."
     },
     "rootkeys.policy_clear": {
         "en": "Clear after use",
         "ja": "使用後クリア",
         "zh": "使用后删除",
-        "en-audio": "Clear password after use"
+        "en-tts": "Clear password after use"
     },
     "rootkeys.policy_suspend": {
         "en": "Retain until sleep",
         "ja": "スリープまで保持",
         "zh": "睡眠后删除",
-        "en-audio": "Retain password until sleep"
+        "en-tts": "Retain password until sleep"
     },
     "rootkeys.policy_idle": {
         "en": "Retain until timeout",
         "ja": "タイムアウトまで保持",
         "zh": "保留到延时",
-        "en-audio": "Retain until timeout"
+        "en-tts": "Retain until timeout"
     },
     "rootkeys.policy_keep": {
         "en": "Retain until reboot",
         "ja": "リブートまで保持",
         "zh": "保留到启动",
-        "en-audio": "Retain until reboot"
+        "en-tts": "Retain until reboot"
     }
 }

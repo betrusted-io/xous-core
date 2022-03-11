@@ -28,7 +28,7 @@ impl From<usize> for KeyMap {
             1 => KeyMap::Azerty,
             2 => KeyMap::Qwertz,
             3 => KeyMap::Dvorak,
-            254 => KeyMap::Braille, // braille has only one mapping available
+            4 => KeyMap::Braille,
             _ => KeyMap::Qwerty,
         }
     }
@@ -41,7 +41,7 @@ impl Into<usize> for KeyMap {
             KeyMap::Azerty => 1,
             KeyMap::Qwertz => 2,
             KeyMap::Dvorak => 3,
-            KeyMap::Braille => 254,
+            KeyMap::Braille => 4,
             KeyMap::Undefined => 255,
         }
     }

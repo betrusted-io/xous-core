@@ -12,27 +12,27 @@ then placing a `.json` file in there with a format like this:
     "mainmenu.sleep": {
         "en": "Sleep now",
         "zh": "睡眠模式",
-        "en-audio": "Sleep now"
+        "en-tts": "Sleep now"
     },
     "mainmenu.backlighton": {
         "en": "Backlight on",
         "zh": "背光开启",
-        "en-audio": "🔇"
+        "en-tts": "🔇"
     },
     "mainmenu.backlightoff": {
         "en": "Backlight off",
         "zh": "背光关闭",
-        "en-audio": "🔇"
+        "en-tts": "🔇"
     },
     "mainmenu.closemenu": {
         "en": "Close menu",
         "zh": "关闭功能表",
-        "en-audio": "Close menu"
+        "en-tts": "Close menu"
     }
 }
 ```
 
-Note that "en-audio" is a locale for english/vision-impaired. `🔇` means that an item does not exist
+Note that "en-tts" is a locale for english/vision-impaired. `🔇` means that an item does not exist
 for that locale (can be used in any locale, not just speech-to-text locales). Omitting a locale
 entirely without using the 🔇 character will lead to a panic.
 
