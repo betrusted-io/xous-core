@@ -5,30 +5,39 @@
 mod api;
 mod version;
 
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use log::{error, info};
 
+type TimeoutExpiry = i64;
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+pub enum RequestKind {
+    Sleep = 0,
+    Timeout = 1,
+}
+
 #[derive(Eq)]
-pub struct SleepRequest {
-    msec: i64,
+pub struct TimerRequest {
+    msec: TimeoutExpiry,
     sender: xous::MessageSender,
+    kind: RequestKind,
+    data: usize,
 }
 
-impl core::fmt::Display for SleepRequest {
+impl core::fmt::Display for TimerRequest {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "SleepRequest {{ msec: {}, {} }}", self.msec, self.sender)
+        write!(f, "TimerRequest {{ msec: {}, {} }}", self.msec, self.sender)
     }
 }
 
-impl core::fmt::Debug for SleepRequest {
+impl core::fmt::Debug for TimerRequest {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "SleepRequest {{ msec: {}, {} }}", self.msec, self.sender)
+        write!(f, "TimerRequest {{ msec: {}, {} }}", self.msec, self.sender)
     }
 }
 
-impl core::cmp::Ord for SleepRequest {
+impl core::cmp::Ord for TimerRequest {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         if self.msec < other.msec {
             core::cmp::Ordering::Less
@@ -40,13 +49,13 @@ impl core::cmp::Ord for SleepRequest {
     }
 }
 
-impl core::cmp::PartialOrd for SleepRequest {
+impl core::cmp::PartialOrd for TimerRequest {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl core::cmp::PartialEq for SleepRequest {
+impl core::cmp::PartialEq for TimerRequest {
     fn eq(&self, other: &Self) -> bool {
         self.msec == other.msec && self.sender == other.sender
     }
@@ -55,13 +64,13 @@ impl core::cmp::PartialEq for SleepRequest {
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
-    use super::SleepRequest;
+    use super::TimerRequest;
     use susres::{RegManager, RegOrField, SuspendResume};
     use utralib::generated::*;
 
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
-        current_response: Option<SleepRequest>,
+        current_response: Option<TimerRequest>,
         connection: xous::CID,
         ticktimer_sr_manager: RegManager<{ utra::ticktimer::TICKTIMER_NUMREGS }>,
         wdt_sr_manager: RegManager<{ utra::wdt::WDT_NUMREGS }>,
@@ -75,8 +84,8 @@ mod implementation {
         // Safe because we're in an interrupt, and this interrupt is only
         // enabled when this value is not None.
         let response = xtt.current_response.take().unwrap();
-
-        xous::return_scalar(response.sender, 0).expect("couldn't send response");
+        xous::return_scalar(response.sender, response.kind as usize)
+            .expect("couldn't send response");
 
         // Disable the timer
         xtt.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 0);
@@ -89,9 +98,9 @@ mod implementation {
             xtt.connection,
             xous::Message::Scalar(xous::ScalarMessage {
                 id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
-                arg1: 0,
-                arg2: 0,
-                arg3: 0,
+                arg1: response.sender.to_usize(),
+                arg2: response.kind as usize,
+                arg3: response.data,
                 arg4: 0,
             }),
         )
@@ -170,7 +179,7 @@ mod implementation {
             self.raw_ticktime() / TICKS_PER_MS
         }
 
-        pub fn stop_interrupt(&mut self) -> Option<SleepRequest> {
+        pub fn stop_interrupt(&mut self) -> Option<TimerRequest> {
             // Disable the timer
             self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 0);
 
@@ -192,7 +201,7 @@ mod implementation {
             }
         }
 
-        pub fn schedule_response(&mut self, request: SleepRequest) {
+        pub fn schedule_response(&mut self, request: TimerRequest) {
             let irq_target = request.msec;
             log::trace!(
                 "setting a response at {} ms (current time: {} ms)",
@@ -276,7 +285,9 @@ mod implementation {
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
-    use super::SleepRequest;
+    use crate::RequestKind;
+
+    use super::TimerRequest;
     use num_traits::ToPrimitive;
     use std::convert::TryInto;
 
@@ -292,7 +303,7 @@ mod implementation {
     pub struct XousTickTimer {
         start: std::time::Instant,
         sleep_comms: std::sync::mpsc::Sender<SleepComms>,
-        time_remaining_receiver: std::sync::mpsc::Receiver<Option<SleepRequest>>,
+        time_remaining_receiver: std::sync::mpsc::Receiver<Option<TimerRequest>>,
     }
 
     impl XousTickTimer {
@@ -301,7 +312,7 @@ mod implementation {
             let (time_remaining_sender, time_remaining_receiver) = std::sync::mpsc::channel();
             xous::create_thread(move || {
                 let mut timeout = None;
-                let mut current_response: Option<SleepRequest> = None;
+                let mut current_response: Option<TimerRequest> = None;
                 loop {
                     let result = match timeout {
                         None => sleep_receiver
@@ -311,19 +322,20 @@ mod implementation {
                     };
                     match result {
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                            let sender = current_response.take().unwrap().sender;
+                            let response = current_response.take().unwrap();
                             #[cfg(feature = "debug-print")]
-                            log::info!("Returning scalar to {}", sender);
-                            xous::return_scalar(sender, 0).expect("couldn't send response");
+                            log::info!("Returning scalar to {}", response.sender);
+                            xous::return_scalar(response.sender, response.kind as usize)
+                                .expect("couldn't send response");
 
                             // This is dangerous and may panic if the queue is full.
                             xous::try_send_message(
                                 cid,
                                 xous::Message::Scalar(xous::ScalarMessage {
                                     id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
-                                    arg1: 0,
-                                    arg2: 0,
-                                    arg3: 0,
+                                    arg1: response.sender.to_usize(),
+                                    arg2: response.kind as usize,
+                                    arg3: response.data,
                                     arg4: 0,
                                 }),
                             )
@@ -358,9 +370,11 @@ mod implementation {
                             timeout = Some(std::time::Duration::from_millis(
                                 duration.try_into().unwrap(),
                             ));
-                            current_response = Some(SleepRequest {
+                            current_response = Some(TimerRequest {
                                 sender: new_sender,
                                 msec: expiry,
+                                kind: RequestKind::Sleep,
+                                data: 0,
                             });
                         }
                     }
@@ -383,12 +397,12 @@ mod implementation {
             self.start.elapsed().as_millis().try_into().unwrap()
         }
 
-        pub fn stop_interrupt(&mut self) -> Option<SleepRequest> {
+        pub fn stop_interrupt(&mut self) -> Option<TimerRequest> {
             self.sleep_comms.send(SleepComms::InterruptSleep).unwrap();
             self.time_remaining_receiver.recv().unwrap()
         }
 
-        pub fn schedule_response(&mut self, request: SleepRequest) {
+        pub fn schedule_response(&mut self, request: TimerRequest) {
             #[cfg(feature = "debug-print")]
             log::info!(
                 "request.msec: {}  self.elapsed_ms: {}  returning to: {}",
@@ -424,51 +438,86 @@ mod implementation {
 use implementation::*;
 use susres::SuspendOrder;
 
-fn recalculate_sleep(
+/// Disable the sleep interrupt and remove the currently-pending sleep item.
+/// If the sleep item has fired, then there will be no existing sleep item
+/// remaining.
+fn stop_sleep(
     ticktimer: &mut XousTickTimer,
-    sleep_heap: &mut BinaryHeap<Reverse<SleepRequest>>, // min-heap with Reverse
-    new: Option<SleepRequest>,
+    sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
 ) {
     // If there's a sleep request ongoing now, grab it.
     if let Some(current) = ticktimer.stop_interrupt() {
         #[cfg(feature = "debug-print")]
         info!("Existing request was {:?}", current);
-        sleep_heap.push(Reverse(current));
+        sleep_heap.insert(current.msec, current);
     } else {
         #[cfg(feature = "debug-print")]
-        info!("There was no existing request");
+        info!("There was no existing sleep() request");
     }
+}
 
-    // If we have a new sleep request, add it to the heap.
-    if let Some(mut request) = new {
-        #[cfg(feature = "debug-print")]
-        info!("New sleep request was: {:?}", request);
-
-        request.msec += ticktimer.elapsed_ms() as i64;
-
-        #[cfg(feature = "debug-print")]
-        info!("Modified, the request was: {:?}", request);
-        sleep_heap.push(Reverse(request));
-    } else {
-        #[cfg(feature = "debug-print")]
-        info!("No new sleep request");
-    }
-
+fn start_sleep(
+    ticktimer: &mut XousTickTimer,
+    sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+) {
     // If there are items in the sleep heap, take the next item that will expire.
-    if let Some(Reverse(next_response)) = sleep_heap.pop() {
+    // TODO: Replace this with `.min()` when it's stabilized:
+    // https://github.com/rust-lang/rust/issues/62924
+    let next_timeout_msec = sleep_heap.iter().min().map(|(msec, _)| *msec);
+    if let Some(msec) = next_timeout_msec {
+        let next_response = sleep_heap.remove(&msec).unwrap();
         #[cfg(feature = "debug-print")]
         info!(
             "scheduling a response at {} to {} (heap: {:?})",
             next_response.msec, next_response.sender, sleep_heap
         );
         ticktimer.schedule_response(next_response);
+    } else {
+        #[cfg(feature = "debug-print")]
+        info!(
+            "not scheduling a response since the sleep heap is empty ({:?})",
+            sleep_heap
+        );
     }
+}
+
+/// Recalculate the sleep timer, optionally adding a new Request to the list of available
+/// sleep events. This involves stopping the timer, recalculating the newest item, then
+/// restarting the timer.
+///
+/// Note that interrupts are always enabled, which is why we must stop the timer prior to
+/// reordering the list.
+fn recalculate_sleep(
+    ticktimer: &mut XousTickTimer,
+    sleep_heap: &mut BTreeMap<TimeoutExpiry, TimerRequest>, // min-heap with Reverse
+    new: Option<TimerRequest>,
+) {
+    stop_sleep(ticktimer, sleep_heap);
+
+    // If we have a new sleep request, add it to the heap.
+    if let Some(mut request) = new {
+        #[cfg(feature = "debug-print")]
+        info!("New sleep request was: {:?}", request);
+
+        // Ensure that each timeout only exists once inside the tree
+        request.msec += ticktimer.elapsed_ms() as i64;
+        while sleep_heap.contains_key(&request.msec) {
+            request.msec += 1;
+        }
+
+        #[cfg(feature = "debug-print")]
+        info!("Modified, the request was: {:?}", request);
+        sleep_heap.insert(request.msec, request);
+    } else {
+        #[cfg(feature = "debug-print")]
+        info!("No new sleep request");
+    }
+
+    start_sleep(ticktimer, sleep_heap);
 }
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let mut sleep_heap: BinaryHeap<Reverse<SleepRequest>> = BinaryHeap::new(); // Reverse wrapping makes this a min-heap
-
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
@@ -503,7 +552,28 @@ fn xmain() -> ! {
     )
     .expect("couldn't create suspend/resume object");
 
-    use std::collections::{HashMap, HashSet, VecDeque};
+    // A list of all sleep requests in the system, sorted by the time at which it
+    // expires. That is, if a request comes in to sleep for 1000 ms, and the ticktimer
+    // is currently at 900, the Request will be `1900`.
+    let mut sleep_heap: BTreeMap<TimeoutExpiry, TimerRequest> = BTreeMap::new();
+
+    // A list of message IDs that are waiting to receive a Notification. This queue is drained
+    // by threads sending `NotifyCondition` to us, or by a condvar timing out.
+    let mut notify_hash: HashMap<Option<xous::PID>, HashMap<usize, VecDeque<xous::MessageSender>>> =
+        HashMap::new();
+
+    // There is a small chance that a client sends a `notify_one()` or `notify_all()` before
+    // the other threads have a chance to recover. This is due to a non-threadsafe use of
+    // Mutex<T> within the standard library. Keep track of any excess `notify_one()` or
+    // `notify_all()` messages for when the Mutex<T> is successfully locked.
+    let mut immedaite_notifications: HashMap<Option<xous::PID>, HashMap<usize, usize>> =
+        HashMap::new();
+
+    // // A list of timeouts for a given condvar. This list serves two purposes:
+    // //      1. When a Notification is sent to a condvar, it is removed from this hash (based on the Message ID)
+    // //      2. When the timer event hits, a response is sent to this condvar
+    // // Therefore, this must be indexable by two keys: Message ID and
+    // let mut timeout_heap: std::collections::VecDeque<TimerRequest> = VecDeque::new();
 
     // A list of mutexes that should be allowed to run immediately, because the
     // thread they were waiting on has already unlocked the mutex. This occurs
@@ -524,7 +594,7 @@ fn xmain() -> ! {
         //ticktimer.check_wdt();
 
         let mut msg = xous::receive_message(ticktimer_server).unwrap();
-        log::trace!("msg: {:?}", msg);
+        log::trace!("msg: {:x?}", msg);
         match num_traits::FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::ElapsedMs) => {
                 let time = ticktimer.elapsed_ms() as i64;
@@ -536,16 +606,50 @@ fn xmain() -> ! {
                 .expect("couldn't return time request");
             }
             Some(api::Opcode::SleepMs) => xous::msg_blocking_scalar_unpack!(msg, ms, _, _, _, {
+                // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
                 recalculate_sleep(
                     &mut ticktimer,
                     &mut sleep_heap,
-                    Some(SleepRequest {
+                    Some(TimerRequest {
                         msec: ms as i64,
                         sender: msg.sender,
+                        kind: RequestKind::Sleep,
+                        data: 0,
                     }),
                 )
             }),
             Some(api::Opcode::RecalculateSleep) => {
+                // let timeout_queue = timeout_heap.entry(msg.sender.pid()).or_default();
+                if let Some(args) = msg.body.scalar_message() {
+                    // If this is a Timeout message that fired, remove it from the Notification list
+                    let sender = args.arg1;
+                    let request_kind = args.arg2;
+                    let condvar = args.arg3;
+                    let sender_pid = msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32;
+
+                    // If we're being asked to recalculate due to a timeout expiring, drop the sent
+                    // message from the `entries` list.
+                    if sender_pid == xous::process::id()
+                        && (request_kind == RequestKind::Timeout as usize)
+                        && (sender > 0)
+                    {
+                        let entries = notify_hash
+                            .entry(msg.sender.pid())
+                            .or_default()
+                            .entry(condvar)
+                            .or_default();
+                        let mut idx = None;
+                        for (i, val) in entries.iter().enumerate() {
+                            if val.to_usize() == sender {
+                                idx = Some(i);
+                                break;
+                            }
+                        }
+                        if let Some(idx) = idx {
+                            entries.remove(idx);
+                        }
+                    }
+                }
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }
             Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
@@ -570,7 +674,7 @@ fn xmain() -> ! {
                 let pid = msg.sender.pid();
                 if !msg.body.is_blocking() {
                     info!("sender made LockMutex request that was not blocking");
-                    break;
+                    continue;
                 }
                 if let Some(scalar) = msg.body.scalar_message() {
                     let ready = mutex_ready_hash.entry(pid).or_default();
@@ -578,7 +682,7 @@ fn xmain() -> ! {
                     // If this item is in the Ready list, return right away without blocking
                     if ready.remove(&scalar.arg1) {
                         xous::return_scalar(msg.sender, 0).unwrap();
-                        break;
+                        continue;
                     }
 
                     // This item is not in the Ready list, so add our sender to the list of processes
@@ -595,7 +699,7 @@ fn xmain() -> ! {
                 let pid = msg.sender.pid();
                 if msg.body.is_blocking() {
                     info!("sender made UnlockMutex request that was blocking");
-                    break;
+                    continue;
                 }
                 if let Some(scalar) = msg.body.scalar_message() {
                     // Get a list of awaiting mutexes for this process
@@ -613,15 +717,133 @@ fn xmain() -> ! {
                     }
                 }
             }
+            Some(api::Opcode::WaitForCondition) => {
+                let pid = msg.sender.pid();
+                if !msg.body.is_blocking() {
+                    info!("sender made WaitForCondition request that was not blocking");
+                    continue;
+                }
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let condvar = scalar.arg1;
+                    let timeout = scalar.arg2;
+
+                    log::trace!(
+                        "sender in pid {:?} is waiting on a condition {:08x} with a timeout of {}",
+                        pid,
+                        condvar,
+                        timeout
+                    );
+
+                    // If there's a condition waiting already, decrement the total list
+                    // and return immediately.
+                    if let Some(excess) = immedaite_notifications
+                        .entry(pid)
+                        .or_default()
+                        .get_mut(&condvar)
+                    {
+                        if *excess > 0 {
+                            *excess -= 1;
+                            xous::return_scalar(msg.sender, 0)
+                                .expect("couldn't respond to message");
+                            continue;
+                        }
+                    }
+
+                    // If there's a `timeout` argument, schedule a response.
+                    if timeout != 0 {
+                        recalculate_sleep(
+                            &mut ticktimer,
+                            &mut sleep_heap,
+                            Some(TimerRequest {
+                                msec: timeout as i64,
+                                sender: msg.sender,
+                                kind: RequestKind::Timeout,
+                                data: condvar,
+                            }),
+                        )
+                    }
+
+                    // Add this to the list of entries waiting for a response.
+                    notify_hash
+                        .entry(pid)
+                        .or_default()
+                        .entry(condvar)
+                        .or_default()
+                        .push_back(msg.sender);
+
+                    continue;
+                } else {
+                    info!(
+                        "sender made WaitForCondition request that wasn't a BlockingScalar Message"
+                    );
+                }
+            }
+            Some(api::Opcode::NotifyCondition) => {
+                let pid = msg.sender.pid();
+                if msg.body.is_blocking() {
+                    info!("sender made NotifyCondition request that was blocking");
+                    continue;
+                }
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let condvar = scalar.arg1;
+
+                    log::trace!(
+                        "sender in pid {:?} is notifying {} entries for condition {:08x}",
+                        pid,
+                        scalar.arg2,
+                        condvar,
+                    );
+
+                    let awaiting = notify_hash
+                        .entry(pid)
+                        .or_default()
+                        .entry(condvar)
+                        .or_default();
+
+                    // Wake threads, ensuring we don't run off the end.
+                    let requested_count = scalar.arg2;
+                    let available_count = core::cmp::min(requested_count, awaiting.len());
+
+                    stop_sleep(&mut ticktimer, &mut sleep_heap);
+                    for entry in awaiting.drain(..available_count) {
+                        // Remove each entry in the timeout set
+                        sleep_heap.retain(|_, v| {
+                            if v.sender == entry {
+                                false
+                            } else {
+                                true
+                            }
+                        });
+                        xous::return_scalar(entry, 0).expect("couldn't send response");
+                    }
+
+                    // If there are leftover requested, add them to the list of
+                    // notofications that will be responded to immediately.
+                    if available_count - requested_count > 0 {
+                        #[cfg(feature = "debug-print")]
+                        log::trace!(
+                            "Adding {} spare sleep requests to immediate_notifications list",
+                            available_count - requested_count
+                        );
+                        *immedaite_notifications
+                            .entry(pid)
+                            .or_default()
+                            .entry(condvar)
+                            .or_default() += available_count - requested_count;
+                    }
+
+                    // Resume sleeping, which re-enables interrupts and queues the
+                    // next timer event to fire.
+                    start_sleep(&mut ticktimer, &mut sleep_heap);
+                } else {
+                    info!(
+                        "sender made WaitForCondition request that wasn't a BlockingScalar Message"
+                    );
+                }
+            }
             None => {
                 error!("couldn't convert opcode");
-                break;
             }
         }
     }
-    // clean up our program
-    log::trace!("main loop exit, destroying servers");
-    xous::destroy_server(ticktimer_server).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0);
 }

@@ -14,21 +14,29 @@ pub enum ParseError {
 
 #[derive(Default, Debug)]
 pub struct Field {
+    #[allow(dead_code)]
     name: String,
+    #[allow(dead_code)]
     lsb: usize,
+    #[allow(dead_code)]
     msb: usize,
 }
 
 #[derive(Default, Debug)]
 pub struct Register {
+    #[allow(dead_code)]
     name: String,
+    #[allow(dead_code)]
     offset: usize,
+    #[allow(dead_code)]
     description: Option<String>,
+    #[allow(dead_code)]
     fields: Vec<Field>,
 }
 
 #[derive(Default, Debug)]
 pub struct Interrupt {
+    #[allow(dead_code)]
     name: String,
     value: usize,
 }
@@ -37,8 +45,10 @@ pub struct Interrupt {
 pub struct Peripheral {
     name: String,
     pub base: usize,
+    #[allow(dead_code)]
     size: usize,
     interrupt: Vec<Interrupt>,
+    #[allow(dead_code)]
     registers: Vec<Register>,
 }
 
