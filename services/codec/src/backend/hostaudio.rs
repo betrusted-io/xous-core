@@ -26,6 +26,14 @@ impl Codec {
     pub fn free_play_frames(&self) -> usize {
         0
     }
+
+    pub fn can_play(&self) -> bool {
+        false
+    }
+
+    pub fn drain(&mut self) {
+    }
+
     pub fn available_rec_frames(&self) -> usize {
         0
     }
