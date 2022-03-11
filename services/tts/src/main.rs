@@ -15,6 +15,8 @@ use std::collections::VecDeque;
 
 const DEFAULT_WPM: u32 = 350;
 const WAIT_INTERVAL: usize = 50; // milliseconds to wait before polling if a phrase is finished.
+const MAX_BUF_DEPTH: usize = (8000 * core::mem::size_of::<u16>()) * 3; // 8000 samples/s * num seconds to buffer
+const DRAIN_INTERVAL: usize = 100; // milliseconds to wait before checking if buffer has drained
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum WaveOp {
@@ -52,10 +54,22 @@ fn xmain() -> ! {
         // let tts_cid = tts_cid.clone();
         let synth_done = synth_done.clone();
         move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
             loop {
                 let msg = xous::receive_message(wav_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(WaveOp::Return) => {
+                        // check to see if we need to apply backpressure on the synthesizer. If so, this is where we pause
+                        let mut capacity = { // put this in a block of its own to ensure the lock goes out of scope after we have measured the length
+                            wavbuf.lock().unwrap().len()
+                        };
+                        while capacity > MAX_BUF_DEPTH {
+                            // this effectively stalls the tts engine because the buffer sent to us is a `lend`, which is blocking.
+                            // by blocking this thread from copying the memory, we also block the synthesizer from generating more samples.
+                            log::info!("synth backpressure");
+                            tt.sleep_ms(DRAIN_INTERVAL).unwrap();
+                            capacity = wavbuf.lock().unwrap().len();
+                        }
                         let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let wavdat = buffer.to_original::<TtsBackendData, _>().unwrap();
                         let mut buf = wavbuf.lock().unwrap();
@@ -113,7 +127,7 @@ fn xmain() -> ! {
                                 free_play
                             };
                             frame_count += frames_to_push as u32;
-                            log::debug!("f{} p{}", frame_count, frames_to_push);
+                            log::trace!("f{} p{}", frame_count, frames_to_push);
                             let mut locked_buf = wavbuf.lock().unwrap();
                             if just_initiated.load(Ordering::SeqCst) {
                                 // prevent stutter if the synth buffer isn't ready yet and we got an early fill request from the codec
@@ -181,23 +195,23 @@ fn xmain() -> ! {
             Some(Opcode::TextToSpeech) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let msg = buffer.to_original::<TtsFrontendMsg, _>().unwrap();
-                log::info!("tts front end got string {}", msg.text.as_str().unwrap());
+                log::debug!("tts front end got string {}", msg.text.as_str().unwrap());
                 wavbuf.lock().unwrap().clear(); // this will truncate any buffered audio that is playing
                 synth_done.store(false, Ordering::SeqCst);
                 tts_be.tts_simple(msg.text.as_str().unwrap()).unwrap();
                 just_initiated.store(true, Ordering::SeqCst);
-                log::debug!("resuming codec");
+                log::trace!("resuming codec");
                 codec.resume().unwrap();
             },
             Some(Opcode::TextToSpeechBlocking) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let msg = buffer.to_original::<TtsFrontendMsg, _>().unwrap();
-                log::info!("tts blocking front end got string {}", msg.text.as_str().unwrap());
+                log::debug!("tts blocking front end got string {}", msg.text.as_str().unwrap());
                 wavbuf.lock().unwrap().clear(); // this will truncate any buffered audio that is playing
                 synth_done.store(false, Ordering::SeqCst);
                 tts_be.tts_simple(msg.text.as_str().unwrap()).unwrap();
                 just_initiated.store(true, Ordering::SeqCst);
-                log::debug!("resuming codec (blocking)");
+                log::trace!("resuming codec (blocking)");
                 codec.resume().unwrap();
                 while !synth_done.load(Ordering::SeqCst) {
                     // this is done fairly "fast" because the synth buf fills quickly
