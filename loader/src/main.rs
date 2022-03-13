@@ -1265,14 +1265,14 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     }
 
     println!("Font maps located as follows:");
-    println!("  Hanzi @ {:08x}", fonts::hanzi::DATA_HANZI.as_ptr() as u32);
-    println!("  Emoji @ {:08x}", fonts::emoji::DATA_EMOJI.as_ptr() as u32);
+    println!("  Hanzi @ {:08x}", fonts::zh::ZH_GLYPHS.as_ptr() as u32);
+    println!("  Emoji @ {:08x}", fonts::emoji::EMOJI_GLYPHS.as_ptr() as u32);
     println!(
         "  Regular @ {:08x}",
-        fonts::regular::DATA_REGULAR.as_ptr() as u32
+        fonts::regular::REGULAR_GLYPHS.as_ptr() as u32
     );
-    println!("  Small @ {:08x}", fonts::small::DATA_SMALL.as_ptr() as u32);
-    println!("  Bold @ {:08x}", fonts::bold::DATA_BOLD.as_ptr() as u32);
+    println!("  Small @ {:08x}", fonts::small::SMALL_GLYPHS.as_ptr() as u32);
+    println!("  Bold @ {:08x}", fonts::bold::BOLD_GLYPHS.as_ptr() as u32);
 
     if !clean {
         // The MMU should be set up now, and memory pages assigned to their
@@ -1339,6 +1339,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             //let satp = (*backup_args)[3];
             println!("Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
 
+            #[cfg(not(feature = "renode-bypass"))]
             if true {
                 use utralib::generated::*;
                 let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
