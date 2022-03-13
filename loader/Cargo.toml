@@ -8,21 +8,13 @@ description = "Initial kernel loader for Xous"
 # Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
 utralib = { path = "utralib" }
+curve25519-dalek = { package = "curve25519-dalek", version = "3.1.0", default-features = false, features = ["u32e_backend"], optional = true }
+ed25519-dalek = { version = "1.0.1", default-features = false, optional = true }
+#features = ["u32_backend"]
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
 branch = "main"
-
-[dependencies.curve25519-dalek]
-package = "curve25519-dalek"
-version = "3.1.0"
-default-features = false
-features = ["u32e_backend"]
-
-[dependencies.ed25519-dalek]
-version = "1.0.1"
-default-features = false
-#features = ["u32_backend"]
 
 [dev-dependencies]
 lazy_static = "1.4.0"
@@ -32,7 +24,7 @@ debug-print = []
 earlyprintk = []
 renode-bypass = []
 #default = ["debug-print"]
-default = []
+default = ["curve25519-dalek", "ed25519-dalek"]
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
 utralib = { path = "utralib" }

@@ -180,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             generate_app_menus(&apps);
             renode_image(false, &hw_pkgs, &[],
-                None, Some(&["--features", "renode-bypass"]))?
+                None, Some(&["--no-default-features", "--features", "renode-bypass"]))?
         },
         Some("renode-test") => {
             let mut args = env::args();
@@ -255,6 +255,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .open("xous-rs/src/locale.rs").expect("Can't open locale for modification");
             write!(locale_revert, "{}", "pub const LANG: &str = \"en\";\n").unwrap();
         }
+        Some("usbdev") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = base_pkgs.to_vec();
+            pkgs.push("usb-test");
+            let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
+            for program in &args {
+                extra_packages.push(program.as_str());
+            }
+            build_hw_image(false, Some("./precursors/soc.svd".to_string()), &pkgs,
+            None,
+            None,
+            None,
+            extra_packages.as_slice(), Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]))?;
+        }
         Some("libstd-test") => {
             let mut args = env::args();
             args.nth(1);
@@ -265,7 +281,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 extra_packages.push(program.as_str());
             }
             renode_image(false, &pkgs, extra_packages.as_slice(),
-            None, Some(&["--features", "renode-bypass"]))?;
+            None, Some(&["--no-default-features", "--features", "renode-bypass"]))?;
         }
         Some("ffi-test") => {
             let mut args = env::args();
@@ -279,7 +295,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 extra_packages.push(program.as_str());
             }
             build_hw_image(false, Some("./precursors/soc.svd".to_string()),
-            &pkgs, None, None, None, &[], Some(&["--features", "renode-bypass"]))?
+            &pkgs, None, None, None, &[],
+            Some(&["--no-default-features", "--features", "renode-bypass"]))?
             //renode_image(false, &pkgs, extra_packages.as_slice(),
             //None, Some(&["--features", "renode-bypass"]))?;
         }
@@ -299,7 +316,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             renode_image(false, &pkgs, extra_packages.as_slice(),
             Some(&["--features", "renode-minimal"]),
-            Some(&["--features", "renode-bypass"]))?;
+            Some(&["--no-default-features", "--features", "renode-bypass"]))?;
         }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
@@ -509,6 +526,7 @@ Various debug configurations:
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
  ffi-test                builds an image for testing C-FFI bindings and integration
  tts                     builds an image with text to speech support via externally linked C executable
+ usbdev                  minimal, insecure build for new USB core bringup
 "
     )
 }

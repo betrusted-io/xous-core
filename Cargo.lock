@@ -2740,6 +2740,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "usb-test"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "utralib"
 version = "0.1.0"
 dependencies = [

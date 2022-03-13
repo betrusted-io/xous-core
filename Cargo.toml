@@ -92,6 +92,7 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
+  "services/usb-test",
   "kernel",
 ]
 resolver = "2"
