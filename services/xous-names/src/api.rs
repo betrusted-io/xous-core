@@ -2,31 +2,72 @@
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[non_exhaustive]
+#[repr(C)]
 pub(crate) enum Opcode {
     /// Create a new server with the given name and return its SID.
-    Register,
+    Register = 0,
+
     /// Create a connection to the target server.
-    Lookup,
+    Lookup = 1,
+
     /// Create an authenticated connection to the target server.
-    AuthenticatedLookup,
+    AuthenticatedLookup = 2,
+
     /// unregister a server, given its cryptographically unique SID.
-    Unregister,
+    Unregister = 3,
+
     /// disconnect, given a server name and a cryptographically unique, one-time use token
-    Disconnect,
+    Disconnect = 4,
+
     /// indicates if all inherentely trusted slots have been occupied. Should not run untrusted code until this is the case.
-    TrustedInitDone,
+    TrustedInitDone = 5,
+
+    /// Connect to a Server, blocking if the Server does not exist. When the Server is started,
+    /// return with either the CID or an AuthenticationRequest
+    ///
+    /// # Message Types
+    ///
+    ///     * MutableLend
+    ///
+    /// # Arguments
+    ///
+    /// The memory being pointed to should be a &str, and the length of the string should
+    /// be specified in the `valid` field.
+    ///
+    /// # Return Values
+    ///
+    /// Memory is overwritten to contain a return value.  This return value can be defined
+    /// as the following enum:
+    ///
+    /// ```rust
+    /// #[repr(C)]
+    /// #[non_exhaustive]
+    /// enum ConnectResult {
+    ///     Success(xous::CID /* connection ID */, [u32; 4] /* Disconnection token */),
+    ///     Error(u32 /* error code */),
+    ///     Unhandled, /* Catchall for future Results */
+    /// }
+    /// ```
+    BlockingConnect = 6,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[non_exhaustive]
+#[repr(C)]
 pub(crate) enum Return {
     /// The caller must perform an AuthenticatedLookup using this challenge
     AuthenticateRequest(AuthenticateRequest),
+
     /// The connection failed for some reason
     Failure,
+
     /// A server was successfully created with the given SID
     SID([u32; 4]),
+
     /// A connection was successfully made with the given CID; an optional "disconnect token" is provided
     CID((xous::CID, Option<[u32; 4]>)),
+
     /// Operation requested was otherwise successful (currently only used by disconnect to ack the disconnect)
     Success,
 }
@@ -51,6 +92,7 @@ pub(crate) struct AuthenticatedLookup {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C)]
 pub(crate) struct AuthenticateRequest {
     pub name: xous_ipc::String<64>, // a copy of the originally requested lookup
     pub pubkey_id: [u8; 20],        // 160-bit pubkey ID encoded in network order (big endian)
