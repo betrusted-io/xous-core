@@ -114,6 +114,12 @@
         "zh": "键盘布局...",
         "en-tts": "Keyboard layout submenu"
     },
+    "mainmenu.battery_disconnect": {
+        "en": "Disconnect battery",
+        "ja": "バッテリーを外します",
+        "zh": "断开电池",
+        "en-tts": "Disconnect battery"
+    },
     "mainmenu.reboot": {
         "en": "Reboot",
         "ja": "リブート",

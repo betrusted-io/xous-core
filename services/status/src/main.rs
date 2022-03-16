@@ -63,6 +63,8 @@ pub(crate) enum StatusOpcode {
 
     /// Suspend handler from the main menu
     TrySuspend,
+    /// Ship mode handler for the main menu
+    BatteryDisconnect,
     /// for returning wifi stats
     WifiStats,
     Quit,
@@ -754,6 +756,18 @@ fn xmain() -> ! {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG)).expect("couldn't notify that power is plugged in");
                 } else {
                     susres.initiate_suspend().expect("couldn't initiate suspend op");
+                }
+            },
+            Some(StatusOpcode::BatteryDisconnect) => {
+                if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG)).expect("couldn't notify that power is plugged in");
+                } else {
+                    gam.shipmode_blank_request().ok();
+                    ticktimer.sleep_ms(500).unwrap();
+                    llio.allow_ec_snoop(true).unwrap();
+                    llio.allow_power_off(true).unwrap();
+                    com.ship_mode().unwrap();
+                    com.power_off_soc().unwrap();
                 }
             },
             Some(StatusOpcode::Quit) => {
