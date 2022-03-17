@@ -329,7 +329,7 @@ mod implementation {
                 self.chord[rc.r as usize][rc.c as usize] = true;
                 self.chord_active += 1;
             }
-            log::info!("self.chord: {:?}", self.chord);
+            log::trace!("self.chord: {:?}", self.chord);
             let mut keystates: Vec<char> = Vec::new();
 
             let now = self.ticktimer.elapsed_ms();
@@ -340,7 +340,7 @@ mod implementation {
 
             if self.chord_active != 0 && ((now - self.chord_timestamp) >= self.chord_interval as u64) && !self.chord_captured {
                 self.chord_captured = true;
-                log::info!("interpreting chords");
+                log::trace!("interpreting chords");
                 // extract chord state
                 /*
                     keyboard:
@@ -371,7 +371,7 @@ mod implementation {
                         keycode |= 1 << i;
                     }
                 }
-                log::info!("keycode: 0x{:x}", keycode);
+                log::trace!("keycode: 0x{:x}", keycode);
                 let keychar = match keycode {
                     0b000_001 => Some('a'),
                     0b000_011 => Some('b'),
@@ -434,7 +434,7 @@ mod implementation {
                 let cr: char = 0xd_u8.into();  // carriage return
                 if func { keystates.push(cr); }
 
-                log::info!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
+                log::debug!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
                     up, left, right, down, center, space, esc, func);
             }
             for rc in krs.keyups.iter() {
