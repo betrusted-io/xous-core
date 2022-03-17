@@ -365,41 +365,118 @@ impl Resolver {
             let qclass = QueryClass::IN;
             let query = Message::query(qname, qtype, qclass, self.trng.get_u32().unwrap() as u16);
 
-            self.socket.send_to(&query.datagram, &server)
-            .map_err(|_| DnsResponseCode::NetworkError)?;
+            self.socket
+                .send_to(&query.datagram, &server)
+                .map_err(|_| DnsResponseCode::NetworkError)?;
 
             match self.socket.recv(&mut self.buf) {
                 Ok(len) => {
                     let message = Message::from(&self.buf[..len]);
                     if message.id() == query.id() && message.is_response() {
                         return match message.rcode() {
-                            DnsResponseCode::NoError => {
-                                message.parse_response()
-                            }
-                            rcode => {
-                                Err(rcode)
-                            }
-                        }
+                            DnsResponseCode::NoError => message.parse_response(),
+                            rcode => Err(rcode),
+                        };
                     } else {
                         Err(DnsResponseCode::NetworkError)
                     }
                 }
-                Err(e) => {
-                    match e.kind() {
-                        ErrorKind::WouldBlock => {
-                            Err(DnsResponseCode::NetworkError)
-                        }
-                        _ => {
-                            Err(DnsResponseCode::UnknownError)
-                        }
-                    }
-                }
+                Err(e) => match e.kind() {
+                    ErrorKind::WouldBlock => Err(DnsResponseCode::NetworkError),
+                    _ => Err(DnsResponseCode::UnknownError),
+                },
             }
-
         } else {
             Err(DnsResponseCode::NoServerSpecified)
         }
     }
+}
+
+#[derive(PartialEq, Debug)]
+#[repr(C)]
+enum NameConversionError {
+    /// The length of the memory buffer was invalid
+    InvalidMemoryBuffer = 1,
+
+    /// The specified nameserver string was not UTF-8
+    InvalidString = 3,
+
+    /// The message was not a mutable memory message
+    InvalidMessageType = 4,
+}
+
+fn name_from_msg(env: &xous::MessageEnvelope) -> Result<&str, NameConversionError> {
+    let msg = env
+        .body
+        .memory_message()
+        .ok_or(NameConversionError::InvalidMessageType)?;
+    let valid_bytes = msg.valid.map(|v| v.get()).unwrap_or_else(|| msg.buf.len());
+    if valid_bytes > DNS_NAME_LENGTH_LIMIT || valid_bytes < 1 {
+        log::error!("valid bytes exceeded DNS name limit");
+        return Err(NameConversionError::InvalidMemoryBuffer);
+    }
+    // Safe because we've already validated that it's a valid range
+    let str_slice = unsafe { core::slice::from_raw_parts(msg.buf.as_ptr(), valid_bytes) };
+    let name_string =
+        core::str::from_utf8(str_slice).map_err(|_| NameConversionError::InvalidString)?;
+
+    Ok(name_string)
+}
+
+fn fill_response(mut env: xous::MessageEnvelope, entries: &HashMap<IpAddr, u32>) -> Option<()> {
+    let mem = env.body.memory_message_mut()?;
+
+    let s: &mut [u8] = mem.buf.as_slice_mut();
+    let mut i = s.iter_mut();
+
+    // First tag = 1 for "Error" -- we'll fill this in at the end when it's successful
+    *i.next()? = 1;
+
+    // Limit the number of entries to 128, which is a nice number. Given that an IPv6
+    // address is 17 bytes, that means that ~240 IPv6 addresses will fit in a 4 kB page.
+    // 128 is just a conservative value rounded down.
+    let mut entry_count = entries.len();
+    if entry_count > 128 {
+        entry_count = 128;
+    }
+    *i.next()? = entry_count.try_into().ok()?;
+
+    // Start filling in the addreses
+    for addr in entries.keys() {
+        match addr {
+            &IpAddr::V4(a) => {
+                // IPv4
+                *i.next()? = 4;
+                for entry in a.octets() {
+                    *i.next()? = entry;
+                }
+            }
+            &IpAddr::V6(a) => {
+                // IPv6
+                for entry in a.octets() {
+                    *i.next()? = entry;
+                }
+                *i.next()? = 6;
+            }
+        }
+    }
+
+    // Convert the entry to a "Success" message
+    drop(i);
+    s[0] = 0;
+
+    None
+}
+
+fn fill_error(mut env: xous::MessageEnvelope, code: DnsResponseCode) -> Option<()> {
+    let mem = env.body.memory_message_mut()?;
+
+    let s: &mut [u8] = mem.buf.as_slice_mut();
+    let mut i = s.iter_mut();
+
+    *i.next()? = 1;
+    *i.next()? = code as u8;
+    None
 }
 
 #[xous::xous_main]
@@ -448,9 +525,43 @@ fn xmain() -> ! {
     loop {
         let mut msg = xous::receive_message(dns_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::RawLookup) => {
+                match name_from_msg(&msg).map(|s| s.to_owned()) {
+                    Ok(owned_name) => {
+                        log::trace!("performing a lookup of {}", owned_name);
+                        // Try to get the result out of the DNS cache
+                        if let Some(entries) = dns_cache.get(&owned_name) {
+                            fill_response(msg, entries);
+                            continue;
+                        }
+
+                        // This entry is not in the cache, so perform a lookup
+                        match resolver.resolve(&owned_name) {
+                            Ok(cache_entry) => {
+                                fill_response(msg, &cache_entry);
+                                dns_cache.insert(owned_name, cache_entry);
+                                continue;
+                            }
+                            Err(e) => {
+                                fill_error(msg, e);
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("unable to do name lookup: {:?}", e);
+                        fill_error(msg, DnsResponseCode::NameError);
+                        continue;
+                    }
+                };
+            }
             Some(Opcode::Lookup) => {
-                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
-                let name = buf.to_original::<String::<DNS_NAME_LENGTH_LIMIT>, _>().unwrap();
+                let mut buf = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                let name = buf
+                    .to_original::<String<DNS_NAME_LENGTH_LIMIT>, _>()
+                    .unwrap();
                 let name_std = std::string::String::from(name.as_str().unwrap());
                 if let Some(cache_entry) = dns_cache.get(&name_std) {
                     // pick a random entry
