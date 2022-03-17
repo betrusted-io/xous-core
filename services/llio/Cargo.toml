@@ -32,5 +32,6 @@ chrono = "0.4"
 [features]
 debugprint = []
 wfi_off = [] # useful for serial port debugging, forces power on so the UART characters can finish printing
+tts = []
 default = [] # "debugprint"
 #default = ["debugprint"] # , "fccagent"

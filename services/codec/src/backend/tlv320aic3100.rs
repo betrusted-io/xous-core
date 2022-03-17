@@ -28,6 +28,10 @@ pub struct Codec {
     live: bool,
     conn: xous::CID,
     drain: bool,
+    // to recall values through suspend/resume
+    speaker_gain: f32,
+    headphone_left_gain: f32,
+    headphone_right_gain: f32,
 }
 
 static SILENCE: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
@@ -138,6 +142,9 @@ impl Codec {
             tx_stat_errors: 0,
             rx_stat_errors: 0,
             drain: false,
+            speaker_gain: -6.0,
+            headphone_left_gain: -15.0,
+            headphone_right_gain: -15.0,
         };
 
         xous::claim_interrupt(
@@ -182,6 +189,8 @@ impl Codec {
             }
         }
         self.susres_manager.resume();
+        self.set_speaker_gain_db(self.speaker_gain);
+        self.set_headphone_gain_db(self.headphone_left_gain, self.headphone_right_gain);
     }
 
     pub fn init(&mut self) {
@@ -191,6 +200,9 @@ impl Codec {
         self.audio_ports();
         log::trace!("audio_mixer");
         self.audio_mixer();
+        // this restores the user state of gain, which is overriden during the audio_mixer() reset sequence
+        self.set_speaker_gain_db(self.speaker_gain);
+        self.set_headphone_gain_db(self.headphone_left_gain, self.headphone_right_gain);
         log::trace!("audio initialized!");
         self.initialized = true;
     }
@@ -233,6 +245,7 @@ impl Codec {
     }
 
     pub fn set_speaker_gain_db(&mut self, gain_db: f32) {
+        self.speaker_gain = gain_db;
         if gain_db <= -79.0 {
             // mute
             self.w(0, &[1]); // select page 1
@@ -247,18 +260,21 @@ impl Codec {
         }
     }
 
-    pub fn set_headphone_gain_db(&mut self, gain_db: f32) {
-        if gain_db <= -79.0 {
+    pub fn set_headphone_gain_db(&mut self, gain_db_left: f32, gain_db_right: f32) {
+        self.headphone_left_gain = gain_db_left;
+        self.headphone_right_gain = gain_db_right;
+        if gain_db_left <= -79.0 && gain_db_right <= -79.0 {
             // mute
             self.w(0, &[1]); // select page 1
             self.w(31, &[0b0_0_0_10_1_0_0]); // headphones powered down
         } else {
-            let code = analog_volume_db_to_code(gain_db);
+            let code_left = analog_volume_db_to_code(gain_db_left);
+            let code_right = analog_volume_db_to_code(gain_db_right);
             self.w(0, &[1]); // select page 1
             self.w(31, &[0b1_1_00011_0]); // headphones powered up
             self.w(36, &[
-                0b1_000_0000 | code, // HPL
-                0b1_000_0000 | code, // HPR
+                0b1_000_0000 | code_left, // HPL
+                0b1_000_0000 | code_right, // HPR
                 ]);
         }
     }

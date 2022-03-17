@@ -217,7 +217,7 @@ fn xmain() -> ! {
                     },
                     _ => log::error!("got speaker volume primitive that we don't recognize, ignoring!"),
                 };
-                codec.set_headphone_gain_db(headphone_analog_gain_db);
+                codec.set_headphone_gain_db(headphone_analog_gain_db, headphone_analog_gain_db);
             }),
             None => {
                 log::error!("couldn't convert opcode");

@@ -325,6 +325,7 @@ mod implementation {
              */
             let was_idle = self.chord_active == 0;
             for rc in krs.keydowns.iter() {
+                log::info!("keydown r: {} c: {}", rc.r, rc.c);
                 self.chord[rc.r as usize][rc.c as usize] = true;
                 self.chord_active += 1;
             }
@@ -349,13 +350,20 @@ mod implementation {
                     1 4
                     2 5
                 */
+                /*
+                    7/5  0/1   1/2       5/7     4/8  8/6
+                               2/3       2/3
+                    8/0  6/4                         3/9
+                    8/3  5/2 3/6
+                         8/2
+                 */
                 let keys: [bool; 6] = [
-                    self.chord[5][7],
-                    self.chord[4][8],
-                    self.chord[3][9],
                     self.chord[1][2],
                     self.chord[0][1],
-                    self.chord[8][0],
+                    self.chord[7][5],
+                    self.chord[5][7],
+                    self.chord[4][8],
+                    self.chord[8][6],
                 ];
                 let mut keycode: usize = 0;
                 for i in 0..keys.len() {
@@ -418,15 +426,15 @@ mod implementation {
                 let space = self.chord[2][3];
                 if space { keystates.push(' '); }
 
-                let esc = self.chord[8][6];
+                let esc = self.chord[8][0];
                 let bs: char = 0x8_u8.into();  // back space
                 if esc { keystates.push(bs); }
 
-                let func = self.chord[7][5];
+                let func = self.chord[3][9];
                 let cr: char = 0xd_u8.into();  // carriage return
                 if func { keystates.push(cr); }
 
-                log::trace!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
+                log::debug!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
                     up, left, right, down, center, space, esc, func);
             }
             for rc in krs.keyups.iter() {

@@ -363,6 +363,18 @@ fn xmain() -> ! {
     log::debug!("subscribe to wifi updates");
     netmgr.wifi_state_subscribe(cb_cid, StatusOpcode::WifiStats.to_u32().unwrap()).unwrap();
     let mut wifi_status: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
+
+    #[cfg(feature="tts")]
+    thread::spawn({
+        move || {
+            // indicator of boot-up for blind users
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            tt.sleep_ms(1500).unwrap();
+            let xns = xous_names::XousNames::new().unwrap();
+            let llio = llio::Llio::new(&xns);
+            llio.vibe(llio::VibePattern::Double).unwrap();
+        }
+    });
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
     loop {
         let msg = xous::receive_message(status_sid).unwrap();

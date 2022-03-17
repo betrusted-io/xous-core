@@ -443,6 +443,10 @@ mod implementation {
                 },
             }
         }
+        /// this vibrates until the device sleeps
+        pub fn tts_sleep_indicate(&mut self) {
+            self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
+        }
         pub fn xadc_vbus(&self) -> u16 {
             self.xadc_csr.rf(utra::trng::XADC_VBUS_XADC_VBUS) as u16
         }
@@ -597,7 +601,8 @@ mod implementation {
         pub fn set_usb_disable(&mut self, state: bool) {
             self.usb_disable = state;
         }
-
+        pub fn tts_sleep_indicate(&mut self) {
+        }
     }
 }
 
@@ -761,8 +766,12 @@ fn xmain() -> ! {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 llio.suspend();
+                #[cfg(feature="tts")]
+                llio.tts_sleep_indicate(); // this happens after the suspend call because we don't want the sleep indicator to be restored on resume
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 llio.resume();
+                #[cfg(feature="tts")]
+                llio.vibe(VibePattern::Double);
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
             }),
             Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
