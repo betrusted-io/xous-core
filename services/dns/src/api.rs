@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-pub(crate) const SERVER_NAME_DNS: &str     = "_DNS Resolver Middleware_";
+pub(crate) const SERVER_NAME_DNS: &str = "_DNS Resolver Middleware_";
 use net::NetIpAddr;
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -35,9 +35,9 @@ pub enum DnsResponseCode {
     NotImplemented = 4,
     Refused = 5,
 
-    UnknownError,
-    NetworkError,
-    NoServerSpecified,
+    UnknownError = 6,
+    NetworkError = 7,
+    NoServerSpecified = 8,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
