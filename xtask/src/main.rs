@@ -1123,7 +1123,7 @@ fn ensure_compiler(
     let toolchain_path =
         get_sysroot(None)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
     // If the terminal is a tty, offer to download the latest toolchain.
-    if !atty::is(atty::Stream::Stdin) {
+    if !atty::is(atty::Stream::Stdin) && !force_install {
         return Err(format!("Toolchain for {} not found", target));
     }
 
