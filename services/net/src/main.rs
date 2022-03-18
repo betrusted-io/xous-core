@@ -133,6 +133,30 @@ fn parse_address(data: &[u8]) -> Option<smoltcp::wire::IpAddress> {
     }
 }
 
+fn write_address(address: IpAddress, data: &mut [u8]) -> Option<usize> {
+    let mut i = data.iter_mut();
+    match address {
+        IpAddress::Ipv4(a) => {
+            *i.next()? = 4;
+            for (dest, src) in i.zip(a.as_bytes().iter()) {
+                *dest = *src;
+            }
+            Some(5)
+        }
+        IpAddress::Ipv6(a) => {
+            *i.next()? = 6;
+            for (dest, src) in i.zip(a.as_bytes().iter()) {
+                *dest = *src;
+            }
+            Some(16)
+        }
+        _ => {
+            *i.next()? = 0;
+            Some(1)
+        }
+    }
+}
+
 fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
     // If it's not a memory message, don't fill in the return information.
     let body = match env.body.memory_message_mut() {
@@ -859,6 +883,177 @@ fn xmain() -> ! {
                 } else if !msg.body.is_blocking() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
+            }
+
+            Some(Opcode::StdGetAddress) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let body = match msg.body.memory_message_mut() {
+                    Some(body) => body,
+                    None => {
+                        respond_with_error(msg, NetError::LibraryError);
+                        continue;
+                    }
+                };
+
+                let socket = sockets.get::<TcpSocket>(handle);
+                body.valid = xous::MemorySize::new(
+                    write_address(socket.local_endpoint().addr, body.buf.as_slice_mut())
+                        .unwrap_or_default(),
+                );
+            }
+
+            Some(Opcode::StdGetTtl) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let socket = sockets.get::<TcpSocket>(handle);
+                xous::return_scalar(msg.sender, socket.hop_limit().unwrap_or_default() as usize)
+                    .ok();
+            }
+
+            Some(Opcode::StdSetTtl) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let args = msg.body.scalar_message().unwrap();
+
+                let mut socket = sockets.get::<TcpSocket>(handle);
+                let hop_limit = if args.arg1 == 0 {
+                    None
+                } else {
+                    Some(args.arg1 as u8)
+                };
+                socket.set_hop_limit(hop_limit);
+                xous::return_scalar(msg.sender, 0).ok();
+            }
+
+            Some(Opcode::StdGetNodelay) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let socket = sockets.get::<TcpSocket>(handle);
+                xous::return_scalar(
+                    msg.sender,
+                    if socket.nagle_enabled().is_some() {
+                        1
+                    } else {
+                        0
+                    },
+                )
+                .ok();
+            }
+
+            Some(Opcode::StdSetNodelay) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let args = msg.body.scalar_message().unwrap();
+
+                let mut socket = sockets.get::<TcpSocket>(handle);
+                socket.set_nagle_enabled(args.arg1 != 0);
+                xous::return_scalar(msg.sender, 0).ok();
             }
 
             Some(Opcode::TcpConnect) => {
@@ -1616,8 +1811,8 @@ fn xmain() -> ! {
                     let mut socket;
                     let WaitingSocket {
                         mut env,
-                        handle,
-                        expiry,
+                        handle: _,
+                        expiry: _,
                     } = {
                         match connection {
                             &mut None => continue,
@@ -1662,8 +1857,8 @@ fn xmain() -> ! {
                     let mut socket;
                     let WaitingSocket {
                         mut env,
-                        handle,
-                        expiry,
+                        handle: _,
+                        expiry: _,
                     } = {
                         match connection {
                             &mut None => continue,

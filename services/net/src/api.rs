@@ -161,6 +161,20 @@ pub(crate) enum Opcode {
     /// etc.)
     StdTcpClose = 34,
 
+    /// Get the current IP address
+    StdGetAddress = 35,
+
+    /// BlockingScalar call to get the current hop count of this connection
+    StdGetTtl = 36,
+
+    /// BlockingScalar call to set the maximum hop count of this connection
+    StdSetTtl = 37,
+
+    /// BlockingScalar call to get the NODELAY / "Nagle" value of this connection
+    StdGetNodelay = 38,
+
+    /// BlockingScalar call to set the NODELAY / "Nagle" value of this connection
+    StdSetNodelay = 39,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
@@ -225,14 +239,14 @@ pub(crate) enum NetMemResponse {
 
 #[repr(C)]
 pub enum NetError {
-    Ok = 0,
-    OutOfMemory = 1,
+    // Ok = 0,
+    // OutOfMemory = 1,
     SocketInUse = 2,
-    AccessDenied = 3,
+    // AccessDenied = 3,
     Invalid = 4,
-    Finished = 5,
+    // Finished = 5,
     LibraryError = 6,
-    AlreadyUsed = 7,
+    // AlreadyUsed = 7,
     TimedOut = 8,
 }
 
