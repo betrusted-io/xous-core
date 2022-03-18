@@ -5,7 +5,7 @@ use net::XousServerId;
 use net::{Duration, NetPingCallback};
 use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::{SocketAddr, IpAddr};
+use std::net::{SocketAddr, IpAddr, TcpStream};
 use std::io::Write;
 use std::io::Read;
 use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
@@ -76,16 +76,14 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 match self.dns.lookup(host) {
                                     Ok(ipaddr) => {
                                         log::info!("resolved {} to {:?}", host, ipaddr);
-                                        match net::TcpStream::connect_xous((IpAddr::from(ipaddr), 80),
-                                        Some(Duration::from_millis(5000)),
-                                        None) {
+                                        match TcpStream::connect((IpAddr::from(ipaddr), 80)) {
                                             Ok(mut stream) => {
                                                 log::trace!("stream open, setting timeouts");
-                                                stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
-                                                stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
-                                                log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().total_millis());
-                                                log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().total_millis());
-                                                log::info!("my socket: {:?}", stream.socket_addr());
+                                                stream.set_read_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
+                                                stream.set_write_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
+                                                log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().as_millis());
+                                                log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().as_millis());
+                                                log::info!("my socket: {:?}", stream.local_addr());
                                                 log::info!("peer addr: {:?}", stream.peer_addr());
                                                 log::info!("sending GET request");
                                                 match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
