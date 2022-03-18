@@ -92,7 +92,15 @@ pub(crate) enum Opcode {
     /// =======|=========
     ///      0 | port number, low byte
     ///      1 | port number, high byte
-    ///      2 | address type -- 4 = ipv4, 6 = ipv6
+    ///      2 | timeout, msecs, low byte
+    ///      3 | timeout
+    ///      4 | timeout
+    ///      5 | timeout
+    ///      6 | timeout
+    ///      7 | timeout
+    ///      8 | timeout
+    ///      9 | timeout, high byte
+    ///     10 | address type -- 4 = ipv4, 6 = ipv6
     ///    ... | remaining bytes are the address
     ///
     /// # Returns
@@ -219,6 +227,7 @@ pub enum NetError {
     Finished = 5,
     LibraryError = 6,
     AlreadyUsed = 7,
+    TimedOut = 8,
 }
 
 /////// a bunch of structures are re-derived here so we can infer `rkyv` traits on them

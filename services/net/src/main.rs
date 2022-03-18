@@ -150,10 +150,48 @@ fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<
     None
 }
 
+fn respond_with_connected(
+    mut env: xous::MessageEnvelope,
+    idx: u16,
+    local_port: u16,
+    remote_port: u16,
+) {
+    let body = env.body.memory_message_mut().unwrap();
+    let bfr = body.buf.as_slice_mut::<u16>();
+
+    log::trace!("successfully connected: {}", idx);
+    bfr[0] = 0;
+    bfr[1] = idx;
+    bfr[2] = local_port;
+    bfr[3] = remote_port;
+}
+
+/// Insert `Some(value)` into the first slot in the Vec that is `None`,
+/// or append it to the end if there is no free slot
+fn insert_or_append<T>(arr: &mut Vec<Option<T>>, val: T) -> usize {
+    // Look for a free index, or add it onto the end.
+    let mut idx = None;
+    for (i, elem) in arr.iter_mut().enumerate() {
+        if elem.is_none() {
+            idx = Some(i);
+            break;
+        }
+    }
+    if let Some(idx) = idx {
+        arr[idx] = Some(val);
+        idx
+    } else {
+        let idx = arr.len();
+        arr.push(Some(val));
+        idx
+    }
+}
+
 fn std_tcp_connect(
     mut msg: xous::MessageEnvelope,
     local_port: u16,
     sockets: &mut SocketSet,
+    tcp_connect_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle, u16, u16, u16)>>,
     our_sockets: &mut Vec<Option<SocketHandle>>,
 ) {
     // Ignore nonblocking and scalar messages
@@ -168,7 +206,9 @@ fn std_tcp_connect(
 
     let bytes = body.buf.as_slice::<u8>();
     let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
-    let address = match parse_address(&bytes[2..]) {
+    let timeout_ms =
+        core::num::NonZeroU64::new(u64::from_le_bytes(bytes[2..10].try_into().unwrap()));
+    let address = match parse_address(&bytes[10..]) {
         Some(addr) => addr,
         None => {
             log::trace!("couldn't parse address");
@@ -198,31 +238,14 @@ fn std_tcp_connect(
         return;
     }
 
+    tcp_socket.set_timeout(timeout_ms.map(|t| Duration::from_millis(t.get())));
+
     let handle = sockets.add(tcp_socket);
 
-    // Look for a free index, or add it onto the end.
-    let mut idx = None;
-    for (i, elem) in our_sockets.iter_mut().enumerate() {
-        if elem.is_none() {
-            idx = Some(i);
-            *elem = Some(handle);
-            break;
-        }
-    }
-    if idx.is_none() {
-        idx = Some(our_sockets.len());
-        our_sockets.push(Some(handle));
-    }
-
-    // We're done with the `bytes` array now as we've extracted all the data from it.
-    drop(bytes);
-    let bfr = body.buf.as_slice_mut::<u16>();
-
-    log::trace!("successfully connected: {}", idx.unwrap_or_default());
-    bfr[0] = 0;
-    bfr[1] = idx.unwrap_or_default() as u16;
-    bfr[2] = local_port as u16;
-    bfr[3] = remote_port as u16;
+    // Add the socket onto the list of sockets waiting to connect, since the connection will
+    // take time.
+    let idx = insert_or_append(our_sockets,  handle) as u16;
+    insert_or_append(tcp_connect_waiting,  (msg, handle, idx, local_port, remote_port));
 }
 
 fn std_tcp_tx(
@@ -253,18 +276,7 @@ fn std_tcp_tx(
         log::trace!("tx can't send, will retry");
         // Add the message to the TcpRxWaiting list, which will prevent it from getting
         // responded to right away.
-        let mut idx = None;
-        for (i, elem) in tcp_tx_waiting.iter_mut().enumerate() {
-            if elem.is_none() {
-                idx = Some(i);
-                break;
-            }
-        }
-        if let Some(idx) = idx {
-            tcp_tx_waiting[idx] = Some((msg, *handle));
-        } else {
-            tcp_tx_waiting.push(Some((msg, *handle)));
-        }
+        insert_or_append(tcp_tx_waiting, (msg, *handle));
         return;
     }
 
@@ -344,24 +356,13 @@ fn std_tcp_rx(
 
     // Add the message to the TcpRxWaiting list, which will prevent it from getting
     // responded to right away.
-    let mut idx = None;
-    for (i, elem) in tcp_rx_waiting.iter_mut().enumerate() {
-        if elem.is_none() {
-            idx = Some(i);
-            break;
-        }
-    }
-    if let Some(idx) = idx {
-        tcp_rx_waiting[idx] = Some((msg, *handle));
-    } else {
-        tcp_rx_waiting.push(Some((msg, *handle)));
-    }
+    insert_or_append(tcp_rx_waiting, (msg, *handle));
 }
 
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -411,6 +412,18 @@ fn xmain() -> ! {
     // When a client issues a Send request, it will get placed here while the packet data
     // is being accumulated.
     let mut tcp_tx_waiting: Vec<Option<(xous::MessageEnvelope, SocketHandle)>> = Vec::new();
+
+    // When a client issues a Connect request, it will get placed here while the connection is
+    // being established.
+    let mut tcp_connect_waiting: Vec<
+        Option<(
+            xous::MessageEnvelope,
+            SocketHandle,
+            u16, /* fd */
+            u16, /* local_port */
+            u16, /* remote_port */
+        )>,
+    > = Vec::new();
 
     // ping storage
     // up to four concurrent pings in the queue
@@ -710,6 +723,7 @@ fn xmain() -> ! {
                     msg,
                     local_port,
                     &mut sockets,
+                    &mut tcp_connect_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
             }
@@ -1477,6 +1491,36 @@ fn xmain() -> ! {
                                 }
                             }
                         }
+                    }
+                }
+
+                // Connect calls take time to establish. This block checks to see if connections
+                // have been made and issues callbacks as necessary.
+                for connection in tcp_connect_waiting.iter_mut() {
+                    use smoltcp::socket::TcpState;
+                    let mut socket;
+                    let (env, handle, fd, local_port, remote_port) = {
+                        // If the connection is blank, or if it's still waiting to get
+                        // connected, don't do anything.
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<TcpSocket>(s.1);
+                                if socket.state() == TcpState::SynSent
+                                    || socket.state() == TcpState::SynReceived
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+                        connection.take().unwrap()
+                    };
+
+                    log::trace!("tcp state is {:?}", socket.state());
+                    if socket.state() == TcpState::Established {
+                        respond_with_connected(env, fd, local_port, remote_port);
+                    } else {
+                        respond_with_error(env, NetError::TimedOut);
                     }
                 }
 
