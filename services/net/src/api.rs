@@ -92,7 +92,15 @@ pub(crate) enum Opcode {
     /// =======|=========
     ///      0 | port number, low byte
     ///      1 | port number, high byte
-    ///      2 | address type -- 4 = ipv4, 6 = ipv6
+    ///      2 | timeout, msecs, low byte
+    ///      3 | timeout
+    ///      4 | timeout
+    ///      5 | timeout
+    ///      6 | timeout
+    ///      7 | timeout
+    ///      8 | timeout
+    ///      9 | timeout, high byte
+    ///     10 | address type -- 4 = ipv4, 6 = ipv6
     ///    ... | remaining bytes are the address
     ///
     /// # Returns
@@ -140,13 +148,33 @@ pub(crate) enum Opcode {
 
     /// Receives data from the specified TCP Connection. The TCP connection number is
     /// passed in the upper 16 bits of the opcode, and the number of received bytes
+    /// is returned as part of the `Valid` parameter. This is not blocking.
+    StdTcpPeek = 32,
+
+    /// Receives data from the specified TCP Connection. The TCP connection number is
+    /// passed in the upper 16 bits of the opcode, and the number of received bytes
     /// is returned as part of the `Valid` parameter.
-    StdTcpRx = 32,
+    StdTcpRx = 33,
 
     /// Close the TCP connection. The connection ID is specified in the upper 16 bits
     /// of the opcode. This may be any kind of message (scalar, blockingscalar, memory,
     /// etc.)
-    StdTcpClose = 33,
+    StdTcpClose = 34,
+
+    /// Get the current IP address
+    StdGetAddress = 35,
+
+    /// BlockingScalar call to get the current hop count of this connection
+    StdGetTtl = 36,
+
+    /// BlockingScalar call to set the maximum hop count of this connection
+    StdSetTtl = 37,
+
+    /// BlockingScalar call to get the NODELAY / "Nagle" value of this connection
+    StdGetNodelay = 38,
+
+    /// BlockingScalar call to set the NODELAY / "Nagle" value of this connection
+    StdSetNodelay = 39,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
@@ -210,15 +238,17 @@ pub(crate) enum NetMemResponse {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub enum NetError {
-    Ok = 0,
-    OutOfMemory = 1,
+    // Ok = 0,
+    Unaddressable = 1,
     SocketInUse = 2,
-    AccessDenied = 3,
+    // AccessDenied = 3,
     Invalid = 4,
-    Finished = 5,
+    // Finished = 5,
     LibraryError = 6,
-    AlreadyUsed = 7,
+    // AlreadyUsed = 7,
+    TimedOut = 8,
 }
 
 /////// a bunch of structures are re-derived here so we can infer `rkyv` traits on them
