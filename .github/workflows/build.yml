@@ -1,0 +1,37 @@
+on:
+  push:
+    branches:
+      - main
+
+name: Build xous-core
+
+jobs:
+  build:
+    name: Setup Rust
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        task: ["hosted-ci", "renode-image"]
+    steps:
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libxkbcommon-dev
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: "1.59.0"
+          default: true
+
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Install RISC-V toolkit
+        run: cargo xtask install-toolkit
+
+      - name: Build hosted-ci
+        run: cargo xtask ${{ matrix.task }}

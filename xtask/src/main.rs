@@ -165,6 +165,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lkey = args.nth(3);
     let kkey = args.nth(4);
     match task.as_deref() {
+        Some("install-toolkit") => {
+            ensure_compiler(&Some(PROGRAM_TARGET), true)?
+        }
         Some("renode-image") => {
             let mut args = env::args();
             args.nth(1);
@@ -602,6 +605,7 @@ Various debug configurations:
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
  ffi-test                builds an image for testing C-FFI bindings and integration
  tts                     builds an image with text to speech support via externally linked C executable
+ install-toolkit         installs Xous toolkit with no prompt, useful in CI
 "
     )
 }
@@ -1015,7 +1019,7 @@ static DONE_COMPILER_CHECK: std::sync::atomic::AtomicBool =
 /// Ensure we have a compatible compiler toolchain. We use a new Target,
 /// and we want to give the user a friendly way of installing the latest
 /// Rust toolchain.
-fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
+fn ensure_compiler(target: &Option<&str>, force_install: bool) -> Result<(), String> {
     use std::process::Stdio;
     if DONE_COMPILER_CHECK.load(std::sync::atomic::Ordering::SeqCst) {
         return Ok(());
@@ -1108,6 +1112,10 @@ fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
         target
     );
     loop {
+        if force_install {
+            break;
+        }
+
         print!("Would you like this program to attempt to download and install it?   [Y/n] ");
         stdout.flush().unwrap();
         buffer.clear();
@@ -1251,7 +1259,7 @@ fn build(
     extra_args: Option<&[&str]>,
     features: Option<&[&str]>,
 ) -> Result<PathBuf, DynError> {
-    ensure_compiler(&target)?;
+    ensure_compiler(&target, false)?;
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["build"];
     print!("Building");
