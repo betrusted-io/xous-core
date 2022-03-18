@@ -312,8 +312,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("pddb-ci") => {
             generate_app_menus(&Vec::<String>::new());
             run(false, &hw_pkgs, Some(
-            &["--features", "pddb/ci", "--features", "pddb/deterministic"]
-        ))?},
+                &["--features", "pddb/ci", "--features", "pddb/deterministic"],
+            ),
+            false,
+        )?},
         Some("run") => {
             let mut args = env::args();
             args.nth(1);
@@ -328,7 +330,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            run(false, &pkgs, None)?
+            run(false, &pkgs, None, false)?
+        },
+        Some("hosted-ci") => {
+            let mut pkgs = hw_pkgs.to_vec();
+            let mut apps: Vec<String> = args.collect();
+            apps.push("ball".to_string());
+            apps.push("repl".to_string());
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            run(false, &pkgs, None, true)?
         },
         Some("debug") => {
             let mut args = env::args();
@@ -344,7 +357,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            run(true, &pkgs, None)?
+            run(true, &pkgs, None, false)?
         },
         Some("app-image") => {
             let mut args = env::args();
@@ -377,7 +390,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &pkgs, lkey, kkey, None, &[], None)?
         }
         Some("gfx-dev") => {
-            run(true, &gfx_dev_pkgs, Some(&["--features", "graphics-server/testing"]))?
+            run(true, &gfx_dev_pkgs, Some(&["--features", "graphics-server/testing"]), false)?
         }
         Some("pddb-dev") => build_hw_image(
             false,
@@ -388,7 +401,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None,
             &[], None,
         )?,
-        Some("pddb-hosted") => run(false, &pddb_dev_pkgs, None)?,
+        Some("pddb-hosted") => run(false, &pddb_dev_pkgs, None, false)?,
         Some("benchmark") => build_hw_image(
             false,
             env::args().nth(2),
@@ -829,7 +842,7 @@ fn renode_image(
     )
 }
 
-fn run(debug: bool, init: &[&str], features: Option<&[&str]>) -> Result<(), DynError> {
+fn run(debug: bool, init: &[&str], features: Option<&[&str]>, dry_run: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
 
     build(init, debug, None, None, None, features)?;
@@ -860,13 +873,15 @@ fn run(debug: bool, init: &[&str], features: Option<&[&str]>) -> Result<(), DynE
     let mut dir = project_root();
     dir.push("kernel");
 
-    println!("Building and running kernel...");
-    let status = Command::new(cargo())
-        .current_dir(dir)
-        .args(&args)
-        .status()?;
-    if !status.success() {
-        return Err("cargo build failed".into());
+    if !dry_run {
+        println!("Building and running kernel...");
+        let status = Command::new(cargo())
+            .current_dir(dir)
+            .args(&args)
+            .status()?;
+        if !status.success() {
+            return Err("cargo build failed".into());
+        }
     }
 
     Ok(())
