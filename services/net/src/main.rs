@@ -180,6 +180,9 @@ fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<
     *i.next()? = 1;
     *i.next()? = 1;
     *i.next()? = code as u8;
+    *i.next()? = 0;
+    *i.next()? = 0;
+    *i.next()? = 0;
     None
 }
 
@@ -261,11 +264,11 @@ fn std_tcp_connect(
         .connect((address, remote_port), local_port)
         .map_err(|e| match e {
             smoltcp::Error::Illegal => NetError::SocketInUse,
-            smoltcp::Error::Unaddressable => NetError::Invalid,
+            smoltcp::Error::Unaddressable => NetError::Unaddressable,
             _ => NetError::LibraryError,
         })
     {
-        log::trace!("couldn't connect");
+        log::trace!("couldn't connect: {:?}", e);
         respond_with_error(msg, e);
         return;
     }
@@ -308,7 +311,7 @@ fn std_tcp_tx(
     };
 
     let mut socket = sockets.get::<TcpSocket>(*handle);
-    if !socket.may_send() {
+    if !socket.can_send() {
         log::trace!("tx can't send, will retry");
         let expiry = body
             .offset
@@ -465,7 +468,7 @@ fn std_tcp_peek(
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -888,23 +891,6 @@ fn xmain() -> ! {
             Some(Opcode::StdGetAddress) => {
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
-
-                let handle = if let Some(connection) = process_sockets
-                    .entry(pid)
-                    .or_default()
-                    .get_mut(connection_idx)
-                {
-                    if let Some(connection) = connection.take() {
-                        connection
-                    } else {
-                        respond_with_error(msg, NetError::Invalid);
-                        continue;
-                    }
-                } else {
-                    respond_with_error(msg, NetError::Invalid);
-                    continue;
-                };
-
                 let body = match msg.body.memory_message_mut() {
                     Some(body) => body,
                     None => {
@@ -913,11 +899,19 @@ fn xmain() -> ! {
                     }
                 };
 
-                let socket = sockets.get::<TcpSocket>(handle);
-                body.valid = xous::MemorySize::new(
-                    write_address(socket.local_endpoint().addr, body.buf.as_slice_mut())
-                        .unwrap_or_default(),
-                );
+                if let Some(Some(connection)) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    let socket = sockets.get::<TcpSocket>(*connection);
+                    body.valid = xous::MemorySize::new(
+                        write_address(socket.local_endpoint().addr, body.buf.as_slice_mut())
+                            .unwrap_or_default(),
+                    );
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                }
             }
 
             Some(Opcode::StdGetTtl) => {
@@ -929,25 +923,21 @@ fn xmain() -> ! {
                     continue;
                 }
 
-                let handle = if let Some(connection) = process_sockets
+                if let Some(Some(connection)) = process_sockets
                     .entry(pid)
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    if let Some(connection) = connection.take() {
-                        connection
-                    } else {
-                        respond_with_error(msg, NetError::Invalid);
-                        continue;
-                    }
+                    let socket = sockets.get::<TcpSocket>(*connection);
+                    xous::return_scalar(
+                        msg.sender,
+                        socket.hop_limit().unwrap_or_default() as usize,
+                    )
+                    .ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
                     continue;
-                };
-
-                let socket = sockets.get::<TcpSocket>(handle);
-                xous::return_scalar(msg.sender, socket.hop_limit().unwrap_or_default() as usize)
-                    .ok();
+                }
             }
 
             Some(Opcode::StdSetTtl) => {
@@ -959,32 +949,24 @@ fn xmain() -> ! {
                     continue;
                 }
 
-                let handle = if let Some(connection) = process_sockets
+                if let Some(Some(connection)) = process_sockets
                     .entry(pid)
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    if let Some(connection) = connection.take() {
-                        connection
+                    let mut socket = sockets.get::<TcpSocket>(*connection);
+                    let args = msg.body.scalar_message().unwrap();
+                    let hop_limit = if args.arg1 == 0 {
+                        None
                     } else {
-                        respond_with_error(msg, NetError::Invalid);
-                        continue;
-                    }
+                        Some(args.arg1 as u8)
+                    };
+                    socket.set_hop_limit(hop_limit);
+                    xous::return_scalar(msg.sender, 0).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
                     continue;
-                };
-
-                let args = msg.body.scalar_message().unwrap();
-
-                let mut socket = sockets.get::<TcpSocket>(handle);
-                let hop_limit = if args.arg1 == 0 {
-                    None
-                } else {
-                    Some(args.arg1 as u8)
-                };
-                socket.set_hop_limit(hop_limit);
-                xous::return_scalar(msg.sender, 0).ok();
+                }
             }
 
             Some(Opcode::StdGetNodelay) => {
@@ -996,32 +978,24 @@ fn xmain() -> ! {
                     continue;
                 }
 
-                let handle = if let Some(connection) = process_sockets
+                if let Some(Some(connection)) = process_sockets
                     .entry(pid)
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    if let Some(connection) = connection.take() {
-                        connection
-                    } else {
-                        respond_with_error(msg, NetError::Invalid);
-                        continue;
-                    }
+                    let socket = sockets.get::<TcpSocket>(*connection);
+                    xous::return_scalar(
+                        msg.sender,
+                        if socket.nagle_enabled().is_some() {
+                            1
+                        } else {
+                            0
+                        },
+                    )
+                    .ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
-                    continue;
-                };
-
-                let socket = sockets.get::<TcpSocket>(handle);
-                xous::return_scalar(
-                    msg.sender,
-                    if socket.nagle_enabled().is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-                .ok();
+                }
             }
 
             Some(Opcode::StdSetNodelay) => {
@@ -1033,27 +1007,18 @@ fn xmain() -> ! {
                     continue;
                 }
 
-                let handle = if let Some(connection) = process_sockets
+                if let Some(Some(connection)) = process_sockets
                     .entry(pid)
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    if let Some(connection) = connection.take() {
-                        connection
-                    } else {
-                        respond_with_error(msg, NetError::Invalid);
-                        continue;
-                    }
+                    let mut socket = sockets.get::<TcpSocket>(*connection);
+                    let args = msg.body.scalar_message().unwrap();
+                    socket.set_nagle_enabled(args.arg1 != 0);
+                    xous::return_scalar(msg.sender, 0).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
-                    continue;
                 };
-
-                let args = msg.body.scalar_message().unwrap();
-
-                let mut socket = sockets.get::<TcpSocket>(handle);
-                socket.set_nagle_enabled(args.arg1 != 0);
-                xous::return_scalar(msg.sender, 0).ok();
             }
 
             Some(Opcode::TcpConnect) => {
@@ -1208,7 +1173,7 @@ fn xmain() -> ! {
                 };
                 if let Some(tcp_state) = tcp_handles.get(&connection) {
                     let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                    if socket.may_send() {
+                    if socket.can_send() {
                         tcp_tx.result = match socket.send_slice(&tcp_tx.data[..tcp_tx.len as usize])
                         {
                             Ok(octets) => {

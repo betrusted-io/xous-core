@@ -238,9 +238,10 @@ pub(crate) enum NetMemResponse {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub enum NetError {
     // Ok = 0,
-    // OutOfMemory = 1,
+    Unaddressable = 1,
     SocketInUse = 2,
     // AccessDenied = 3,
     Invalid = 4,
