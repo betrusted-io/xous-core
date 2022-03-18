@@ -5,6 +5,7 @@ mod api;
 use api::*;
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 use num_traits::*;
+use ticktimer_server::Ticktimer;
 
 mod connection_manager;
 mod device;
@@ -21,6 +22,7 @@ use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBu
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv4Cidr};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
+use core::num::NonZeroU64;
 use core::sync::atomic::{AtomicU32, Ordering};
 use smoltcp::socket::{
     SocketHandle, TcpSocket, TcpSocketBuffer, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
@@ -92,6 +94,12 @@ pub struct TcpState {
     shutdown_rx: bool,
 }
 
+struct WaitingSocket {
+    env: xous::MessageEnvelope,
+    handle: SocketHandle,
+    expiry: Option<NonZeroU64>,
+}
+
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -125,6 +133,30 @@ fn parse_address(data: &[u8]) -> Option<smoltcp::wire::IpAddress> {
     }
 }
 
+fn write_address(address: IpAddress, data: &mut [u8]) -> Option<usize> {
+    let mut i = data.iter_mut();
+    match address {
+        IpAddress::Ipv4(a) => {
+            *i.next()? = 4;
+            for (dest, src) in i.zip(a.as_bytes().iter()) {
+                *dest = *src;
+            }
+            Some(5)
+        }
+        IpAddress::Ipv6(a) => {
+            *i.next()? = 6;
+            for (dest, src) in i.zip(a.as_bytes().iter()) {
+                *dest = *src;
+            }
+            Some(16)
+        }
+        _ => {
+            *i.next()? = 0;
+            Some(1)
+        }
+    }
+}
+
 fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
     // If it's not a memory message, don't fill in the return information.
     let body = match env.body.memory_message_mut() {
@@ -138,6 +170,7 @@ fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<
         Some(b) => b,
     };
 
+    body.valid = None;
     let s: &mut [u8] = body.buf.as_slice_mut();
     let mut i = s.iter_mut();
 
@@ -150,10 +183,48 @@ fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<
     None
 }
 
+fn respond_with_connected(
+    mut env: xous::MessageEnvelope,
+    idx: u16,
+    local_port: u16,
+    remote_port: u16,
+) {
+    let body = env.body.memory_message_mut().unwrap();
+    let bfr = body.buf.as_slice_mut::<u16>();
+
+    log::trace!("successfully connected: {}", idx);
+    bfr[0] = 0;
+    bfr[1] = idx;
+    bfr[2] = local_port;
+    bfr[3] = remote_port;
+}
+
+/// Insert `Some(value)` into the first slot in the Vec that is `None`,
+/// or append it to the end if there is no free slot
+fn insert_or_append<T>(arr: &mut Vec<Option<T>>, val: T) -> usize {
+    // Look for a free index, or add it onto the end.
+    let mut idx = None;
+    for (i, elem) in arr.iter_mut().enumerate() {
+        if elem.is_none() {
+            idx = Some(i);
+            break;
+        }
+    }
+    if let Some(idx) = idx {
+        arr[idx] = Some(val);
+        idx
+    } else {
+        let idx = arr.len();
+        arr.push(Some(val));
+        idx
+    }
+}
+
 fn std_tcp_connect(
     mut msg: xous::MessageEnvelope,
     local_port: u16,
     sockets: &mut SocketSet,
+    tcp_connect_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle, u16, u16, u16)>>,
     our_sockets: &mut Vec<Option<SocketHandle>>,
 ) {
     // Ignore nonblocking and scalar messages
@@ -168,7 +239,8 @@ fn std_tcp_connect(
 
     let bytes = body.buf.as_slice::<u8>();
     let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
-    let address = match parse_address(&bytes[2..]) {
+    let timeout_ms = NonZeroU64::new(u64::from_le_bytes(bytes[2..10].try_into().unwrap()));
+    let address = match parse_address(&bytes[10..]) {
         Some(addr) => addr,
         None => {
             log::trace!("couldn't parse address");
@@ -198,37 +270,24 @@ fn std_tcp_connect(
         return;
     }
 
+    tcp_socket.set_timeout(timeout_ms.map(|t| Duration::from_millis(t.get())));
+
     let handle = sockets.add(tcp_socket);
 
-    // Look for a free index, or add it onto the end.
-    let mut idx = None;
-    for (i, elem) in our_sockets.iter_mut().enumerate() {
-        if elem.is_none() {
-            idx = Some(i);
-            *elem = Some(handle);
-            break;
-        }
-    }
-    if idx.is_none() {
-        idx = Some(our_sockets.len());
-        our_sockets.push(Some(handle));
-    }
-
-    // We're done with the `bytes` array now as we've extracted all the data from it.
-    drop(bytes);
-    let bfr = body.buf.as_slice_mut::<u16>();
-
-    log::trace!("successfully connected: {}", idx.unwrap_or_default());
-    bfr[0] = 0;
-    bfr[1] = idx.unwrap_or_default() as u16;
-    bfr[2] = local_port as u16;
-    bfr[3] = remote_port as u16;
+    // Add the socket onto the list of sockets waiting to connect, since the connection will
+    // take time.
+    let idx = insert_or_append(our_sockets, handle) as u16;
+    insert_or_append(
+        tcp_connect_waiting,
+        (msg, handle, idx, local_port, remote_port),
+    );
 }
 
 fn std_tcp_tx(
     mut msg: xous::MessageEnvelope,
+    timer: &Ticktimer,
     sockets: &mut SocketSet,
-    tcp_tx_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle)>>,
+    tcp_tx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
@@ -251,20 +310,19 @@ fn std_tcp_tx(
     let mut socket = sockets.get::<TcpSocket>(*handle);
     if !socket.may_send() {
         log::trace!("tx can't send, will retry");
+        let expiry = body
+            .offset
+            .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
         // Add the message to the TcpRxWaiting list, which will prevent it from getting
         // responded to right away.
-        let mut idx = None;
-        for (i, elem) in tcp_tx_waiting.iter_mut().enumerate() {
-            if elem.is_none() {
-                idx = Some(i);
-                break;
-            }
-        }
-        if let Some(idx) = idx {
-            tcp_tx_waiting[idx] = Some((msg, *handle));
-        } else {
-            tcp_tx_waiting.push(Some((msg, *handle)));
-        }
+        insert_or_append(
+            tcp_tx_waiting,
+            WaitingSocket {
+                env: msg,
+                handle: *handle,
+                expiry,
+            },
+        );
         return;
     }
 
@@ -300,8 +358,9 @@ fn std_tcp_tx(
 
 fn std_tcp_rx(
     mut msg: xous::MessageEnvelope,
+    timer: &Ticktimer,
     sockets: &mut SocketSet,
-    tcp_rx_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle)>>,
+    tcp_rx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
@@ -344,24 +403,69 @@ fn std_tcp_rx(
 
     // Add the message to the TcpRxWaiting list, which will prevent it from getting
     // responded to right away.
-    let mut idx = None;
-    for (i, elem) in tcp_rx_waiting.iter_mut().enumerate() {
-        if elem.is_none() {
-            idx = Some(i);
-            break;
+    let expiry = body
+        .offset
+        .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
+    insert_or_append(
+        tcp_rx_waiting,
+        WaitingSocket {
+            env: msg,
+            handle: *handle,
+            expiry,
+        },
+    );
+}
+
+fn std_tcp_peek(
+    mut msg: xous::MessageEnvelope,
+    sockets: &mut SocketSet,
+    our_sockets: &Vec<Option<SocketHandle>>,
+) {
+    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
+    let body = match msg.body.memory_message_mut() {
+        Some(body) => body,
+        None => {
+            respond_with_error(msg, NetError::LibraryError);
+            return;
         }
-    }
-    if let Some(idx) = idx {
-        tcp_rx_waiting[idx] = Some((msg, *handle));
+    };
+
+    // Default to having no valid data upon return, indicating an error
+    body.valid = None;
+
+    let handle = match our_sockets.get(connection_handle_index) {
+        Some(Some(val)) => val,
+        _ => {
+            respond_with_error(msg, NetError::Invalid);
+            return;
+        }
+    };
+
+    let mut socket = sockets.get::<TcpSocket>(*handle);
+    if socket.can_recv() {
+        log::trace!("receiving data right away");
+        match socket.peek_slice(body.buf.as_slice_mut()) {
+            Ok(bytes) => {
+                body.valid = xous::MemorySize::new(bytes);
+                log::trace!("set body.valid = {:?}", body.valid);
+            }
+            Err(e) => {
+                log::error!("unable to receive: {:?}", e);
+                respond_with_error(msg, NetError::LibraryError);
+            }
+        }
     } else {
-        tcp_rx_waiting.push(Some((msg, *handle)));
+        // No data available, so indicate `None`
+        body.valid = None;
+        // Also indicate no error
+        body.buf.as_slice_mut::<u32>()[0] = 0;
     }
 }
 
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -406,11 +510,23 @@ fn xmain() -> ! {
 
     // When a client issues a Receive request, it will get placed here while the packet data
     // is being accumulated.
-    let mut tcp_rx_waiting: Vec<Option<(xous::MessageEnvelope, SocketHandle)>> = Vec::new();
+    let mut tcp_rx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
     // When a client issues a Send request, it will get placed here while the packet data
     // is being accumulated.
-    let mut tcp_tx_waiting: Vec<Option<(xous::MessageEnvelope, SocketHandle)>> = Vec::new();
+    let mut tcp_tx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
+
+    // When a client issues a Connect request, it will get placed here while the connection is
+    // being established.
+    let mut tcp_connect_waiting: Vec<
+        Option<(
+            xous::MessageEnvelope,
+            SocketHandle,
+            u16, /* fd */
+            u16, /* local_port */
+            u16, /* remote_port */
+        )>,
+    > = Vec::new();
 
     // ping storage
     // up to four concurrent pings in the queue
@@ -710,6 +826,7 @@ fn xmain() -> ! {
                     msg,
                     local_port,
                     &mut sockets,
+                    &mut tcp_connect_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
             }
@@ -718,16 +835,23 @@ fn xmain() -> ! {
                 let pid = msg.sender.pid();
                 std_tcp_tx(
                     msg,
+                    &timer,
                     &mut sockets,
                     &mut tcp_tx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
             }
 
+            Some(Opcode::StdTcpPeek) => {
+                let pid = msg.sender.pid();
+                std_tcp_peek(msg, &mut sockets, process_sockets.entry(pid).or_default());
+            }
+
             Some(Opcode::StdTcpRx) => {
                 let pid = msg.sender.pid();
                 std_tcp_rx(
                     msg,
+                    &timer,
                     &mut sockets,
                     &mut tcp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
@@ -759,6 +883,177 @@ fn xmain() -> ! {
                 } else if !msg.body.is_blocking() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
+            }
+
+            Some(Opcode::StdGetAddress) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let body = match msg.body.memory_message_mut() {
+                    Some(body) => body,
+                    None => {
+                        respond_with_error(msg, NetError::LibraryError);
+                        continue;
+                    }
+                };
+
+                let socket = sockets.get::<TcpSocket>(handle);
+                body.valid = xous::MemorySize::new(
+                    write_address(socket.local_endpoint().addr, body.buf.as_slice_mut())
+                        .unwrap_or_default(),
+                );
+            }
+
+            Some(Opcode::StdGetTtl) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let socket = sockets.get::<TcpSocket>(handle);
+                xous::return_scalar(msg.sender, socket.hop_limit().unwrap_or_default() as usize)
+                    .ok();
+            }
+
+            Some(Opcode::StdSetTtl) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let args = msg.body.scalar_message().unwrap();
+
+                let mut socket = sockets.get::<TcpSocket>(handle);
+                let hop_limit = if args.arg1 == 0 {
+                    None
+                } else {
+                    Some(args.arg1 as u8)
+                };
+                socket.set_hop_limit(hop_limit);
+                xous::return_scalar(msg.sender, 0).ok();
+            }
+
+            Some(Opcode::StdGetNodelay) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let socket = sockets.get::<TcpSocket>(handle);
+                xous::return_scalar(
+                    msg.sender,
+                    if socket.nagle_enabled().is_some() {
+                        1
+                    } else {
+                        0
+                    },
+                )
+                .ok();
+            }
+
+            Some(Opcode::StdSetNodelay) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        respond_with_error(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    respond_with_error(msg, NetError::Invalid);
+                    continue;
+                };
+
+                let args = msg.body.scalar_message().unwrap();
+
+                let mut socket = sockets.get::<TcpSocket>(handle);
+                socket.set_nagle_enabled(args.arg1 != 0);
+                xous::return_scalar(msg.sender, 0).ok();
             }
 
             Some(Opcode::TcpConnect) => {
@@ -1431,7 +1726,8 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::NetPump) => {
-                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
+                let now = timer.elapsed_ms();
+                let timestamp = Instant::from_millis(now as i64);
                 match iface.poll(&mut sockets, timestamp) {
                     Ok(_) => {}
                     Err(e) => {
@@ -1480,14 +1776,67 @@ fn xmain() -> ! {
                     }
                 }
 
+                // Connect calls take time to establish. This block checks to see if connections
+                // have been made and issues callbacks as necessary.
+                for connection in tcp_connect_waiting.iter_mut() {
+                    use smoltcp::socket::TcpState;
+                    let socket;
+                    let (env, _handle, fd, local_port, remote_port) = {
+                        // If the connection is blank, or if it's still waiting to get
+                        // connected, don't do anything.
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<TcpSocket>(s.1);
+                                if socket.state() == TcpState::SynSent
+                                    || socket.state() == TcpState::SynReceived
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+                        connection.take().unwrap()
+                    };
+
+                    log::trace!("tcp state is {:?}", socket.state());
+                    if socket.state() == TcpState::Established {
+                        respond_with_connected(env, fd, local_port, remote_port);
+                    } else {
+                        respond_with_error(env, NetError::TimedOut);
+                    }
+                }
+
                 // This block handles TCP Rx for libstd callers
                 for connection in tcp_rx_waiting.iter_mut() {
-                    let (env, handle) = match connection {
-                        &mut None => continue,
-                        Some(s) => s,
+                    let mut socket;
+                    let WaitingSocket {
+                        mut env,
+                        handle: _,
+                        expiry: _,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<TcpSocket>(s.handle);
+                                if !socket.can_recv() {
+                                    if let Some(trigger) = s.expiry {
+                                        if trigger.get() < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        connection.take().unwrap()
                     };
-                    let mut socket = sockets.get::<TcpSocket>(*handle);
+
+                    // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
+                        respond_with_error(env, NetError::TimedOut);
                         continue;
                     }
 
@@ -1501,23 +1850,40 @@ fn xmain() -> ! {
                             body.valid = None;
                         }
                     }
-
-                    *connection = None;
                 }
 
                 // This block handles TCP Tx for libstd callers
                 for connection in tcp_tx_waiting.iter_mut() {
-                    match connection {
-                        &mut None => continue,
-                        Some(s) => {
-                            let socket = sockets.get::<TcpSocket>(s.1);
-                            if !socket.can_send() {
-                                continue;
+                    let mut socket;
+                    let WaitingSocket {
+                        mut env,
+                        handle: _,
+                        expiry: _,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<TcpSocket>(s.handle);
+                                if !socket.can_send() {
+                                    if let Some(trigger) = s.expiry {
+                                        if trigger.get() < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                }
                             }
                         }
+                        connection.take().unwrap()
                     };
-                    let (mut env, handle) = connection.take().unwrap();
-                    let mut socket = sockets.get::<TcpSocket>(handle);
+
+                    if !socket.can_send() {
+                        respond_with_error(env, NetError::TimedOut);
+                        continue;
+                    }
 
                     let body = env.body.memory_message_mut().unwrap();
                     // Perform the transfer
