@@ -527,7 +527,7 @@ def main():
            "LOC_PDDB"   : [0x01D80000, "pass"],
         }
     else:
-        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
+        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
