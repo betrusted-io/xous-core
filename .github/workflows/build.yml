@@ -31,7 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@v1
 
       - name: Install RISC-V toolkit
-        run: cargo xtask install-toolkit
-
+        run: cargo xtask install-toolkit --force
+      
       - name: Build hosted-ci
         run: cargo xtask ${{ matrix.task }}

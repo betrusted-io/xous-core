@@ -1122,8 +1122,9 @@ fn ensure_compiler(
     // Since no sysroot exists, we must download a new one.
     let toolchain_path =
         get_sysroot(None)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
-    // If the terminal is a tty, offer to download the latest toolchain.
-    if !atty::is(atty::Stream::Stdin) {
+    // If the terminal is a tty, or if toolchain installation is forced,
+    // download the latest toolchain.
+    if !atty::is(atty::Stream::Stdin) && !force_install {
         return Err(format!("Toolchain for {} not found", target));
     }
 
