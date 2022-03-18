@@ -444,6 +444,7 @@ mod implementation {
             }
         }
         /// this vibrates until the device sleeps
+        #[allow(dead_code)]
         pub fn tts_sleep_indicate(&mut self) {
             self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
         }
