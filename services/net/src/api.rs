@@ -148,13 +148,19 @@ pub(crate) enum Opcode {
 
     /// Receives data from the specified TCP Connection. The TCP connection number is
     /// passed in the upper 16 bits of the opcode, and the number of received bytes
+    /// is returned as part of the `Valid` parameter. This is not blocking.
+    StdTcpPeek = 32,
+
+    /// Receives data from the specified TCP Connection. The TCP connection number is
+    /// passed in the upper 16 bits of the opcode, and the number of received bytes
     /// is returned as part of the `Valid` parameter.
-    StdTcpRx = 32,
+    StdTcpRx = 33,
 
     /// Close the TCP connection. The connection ID is specified in the upper 16 bits
     /// of the opcode. This may be any kind of message (scalar, blockingscalar, memory,
     /// etc.)
-    StdTcpClose = 33,
+    StdTcpClose = 34,
+
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]

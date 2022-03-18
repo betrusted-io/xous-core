@@ -5,6 +5,7 @@ mod api;
 use api::*;
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 use num_traits::*;
+use ticktimer_server::Ticktimer;
 
 mod connection_manager;
 mod device;
@@ -21,6 +22,7 @@ use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBu
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv4Cidr};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
+use core::num::NonZeroU64;
 use core::sync::atomic::{AtomicU32, Ordering};
 use smoltcp::socket::{
     SocketHandle, TcpSocket, TcpSocketBuffer, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
@@ -92,6 +94,12 @@ pub struct TcpState {
     shutdown_rx: bool,
 }
 
+struct WaitingSocket {
+    env: xous::MessageEnvelope,
+    handle: SocketHandle,
+    expiry: Option<NonZeroU64>,
+}
+
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -138,6 +146,7 @@ fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<
         Some(b) => b,
     };
 
+    body.valid = None;
     let s: &mut [u8] = body.buf.as_slice_mut();
     let mut i = s.iter_mut();
 
@@ -206,8 +215,7 @@ fn std_tcp_connect(
 
     let bytes = body.buf.as_slice::<u8>();
     let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
-    let timeout_ms =
-        core::num::NonZeroU64::new(u64::from_le_bytes(bytes[2..10].try_into().unwrap()));
+    let timeout_ms = NonZeroU64::new(u64::from_le_bytes(bytes[2..10].try_into().unwrap()));
     let address = match parse_address(&bytes[10..]) {
         Some(addr) => addr,
         None => {
@@ -244,14 +252,18 @@ fn std_tcp_connect(
 
     // Add the socket onto the list of sockets waiting to connect, since the connection will
     // take time.
-    let idx = insert_or_append(our_sockets,  handle) as u16;
-    insert_or_append(tcp_connect_waiting,  (msg, handle, idx, local_port, remote_port));
+    let idx = insert_or_append(our_sockets, handle) as u16;
+    insert_or_append(
+        tcp_connect_waiting,
+        (msg, handle, idx, local_port, remote_port),
+    );
 }
 
 fn std_tcp_tx(
     mut msg: xous::MessageEnvelope,
+    timer: &Ticktimer,
     sockets: &mut SocketSet,
-    tcp_tx_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle)>>,
+    tcp_tx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
@@ -274,9 +286,19 @@ fn std_tcp_tx(
     let mut socket = sockets.get::<TcpSocket>(*handle);
     if !socket.may_send() {
         log::trace!("tx can't send, will retry");
+        let expiry = body
+            .offset
+            .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
         // Add the message to the TcpRxWaiting list, which will prevent it from getting
         // responded to right away.
-        insert_or_append(tcp_tx_waiting, (msg, *handle));
+        insert_or_append(
+            tcp_tx_waiting,
+            WaitingSocket {
+                env: msg,
+                handle: *handle,
+                expiry,
+            },
+        );
         return;
     }
 
@@ -312,8 +334,9 @@ fn std_tcp_tx(
 
 fn std_tcp_rx(
     mut msg: xous::MessageEnvelope,
+    timer: &Ticktimer,
     sockets: &mut SocketSet,
-    tcp_rx_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle)>>,
+    tcp_rx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
@@ -356,7 +379,63 @@ fn std_tcp_rx(
 
     // Add the message to the TcpRxWaiting list, which will prevent it from getting
     // responded to right away.
-    insert_or_append(tcp_rx_waiting, (msg, *handle));
+    let expiry = body
+        .offset
+        .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
+    insert_or_append(
+        tcp_rx_waiting,
+        WaitingSocket {
+            env: msg,
+            handle: *handle,
+            expiry,
+        },
+    );
+}
+
+fn std_tcp_peek(
+    mut msg: xous::MessageEnvelope,
+    sockets: &mut SocketSet,
+    our_sockets: &Vec<Option<SocketHandle>>,
+) {
+    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
+    let body = match msg.body.memory_message_mut() {
+        Some(body) => body,
+        None => {
+            respond_with_error(msg, NetError::LibraryError);
+            return;
+        }
+    };
+
+    // Default to having no valid data upon return, indicating an error
+    body.valid = None;
+
+    let handle = match our_sockets.get(connection_handle_index) {
+        Some(Some(val)) => val,
+        _ => {
+            respond_with_error(msg, NetError::Invalid);
+            return;
+        }
+    };
+
+    let mut socket = sockets.get::<TcpSocket>(*handle);
+    if socket.can_recv() {
+        log::trace!("receiving data right away");
+        match socket.peek_slice(body.buf.as_slice_mut()) {
+            Ok(bytes) => {
+                body.valid = xous::MemorySize::new(bytes);
+                log::trace!("set body.valid = {:?}", body.valid);
+            }
+            Err(e) => {
+                log::error!("unable to receive: {:?}", e);
+                respond_with_error(msg, NetError::LibraryError);
+            }
+        }
+    } else {
+        // No data available, so indicate `None`
+        body.valid = None;
+        // Also indicate no error
+        body.buf.as_slice_mut::<u32>()[0] = 0;
+    }
 }
 
 #[xous::xous_main]
@@ -407,11 +486,11 @@ fn xmain() -> ! {
 
     // When a client issues a Receive request, it will get placed here while the packet data
     // is being accumulated.
-    let mut tcp_rx_waiting: Vec<Option<(xous::MessageEnvelope, SocketHandle)>> = Vec::new();
+    let mut tcp_rx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
     // When a client issues a Send request, it will get placed here while the packet data
     // is being accumulated.
-    let mut tcp_tx_waiting: Vec<Option<(xous::MessageEnvelope, SocketHandle)>> = Vec::new();
+    let mut tcp_tx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
     // When a client issues a Connect request, it will get placed here while the connection is
     // being established.
@@ -732,16 +811,23 @@ fn xmain() -> ! {
                 let pid = msg.sender.pid();
                 std_tcp_tx(
                     msg,
+                    &timer,
                     &mut sockets,
                     &mut tcp_tx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
             }
 
+            Some(Opcode::StdTcpPeek) => {
+                let pid = msg.sender.pid();
+                std_tcp_peek(msg, &mut sockets, process_sockets.entry(pid).or_default());
+            }
+
             Some(Opcode::StdTcpRx) => {
                 let pid = msg.sender.pid();
                 std_tcp_rx(
                     msg,
+                    &timer,
                     &mut sockets,
                     &mut tcp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
@@ -1445,7 +1531,8 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::NetPump) => {
-                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
+                let now = timer.elapsed_ms();
+                let timestamp = Instant::from_millis(now as i64);
                 match iface.poll(&mut sockets, timestamp) {
                     Ok(_) => {}
                     Err(e) => {
@@ -1498,8 +1585,8 @@ fn xmain() -> ! {
                 // have been made and issues callbacks as necessary.
                 for connection in tcp_connect_waiting.iter_mut() {
                     use smoltcp::socket::TcpState;
-                    let mut socket;
-                    let (env, handle, fd, local_port, remote_port) = {
+                    let socket;
+                    let (env, _handle, fd, local_port, remote_port) = {
                         // If the connection is blank, or if it's still waiting to get
                         // connected, don't do anything.
                         match connection {
@@ -1526,12 +1613,35 @@ fn xmain() -> ! {
 
                 // This block handles TCP Rx for libstd callers
                 for connection in tcp_rx_waiting.iter_mut() {
-                    let (env, handle) = match connection {
-                        &mut None => continue,
-                        Some(s) => s,
+                    let mut socket;
+                    let WaitingSocket {
+                        mut env,
+                        handle,
+                        expiry,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<TcpSocket>(s.handle);
+                                if !socket.can_recv() {
+                                    if let Some(trigger) = s.expiry {
+                                        if trigger.get() < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        connection.take().unwrap()
                     };
-                    let mut socket = sockets.get::<TcpSocket>(*handle);
+
+                    // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
+                        respond_with_error(env, NetError::TimedOut);
                         continue;
                     }
 
@@ -1545,23 +1655,40 @@ fn xmain() -> ! {
                             body.valid = None;
                         }
                     }
-
-                    *connection = None;
                 }
 
                 // This block handles TCP Tx for libstd callers
                 for connection in tcp_tx_waiting.iter_mut() {
-                    match connection {
-                        &mut None => continue,
-                        Some(s) => {
-                            let socket = sockets.get::<TcpSocket>(s.1);
-                            if !socket.can_send() {
-                                continue;
+                    let mut socket;
+                    let WaitingSocket {
+                        mut env,
+                        handle,
+                        expiry,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<TcpSocket>(s.handle);
+                                if !socket.can_send() {
+                                    if let Some(trigger) = s.expiry {
+                                        if trigger.get() < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                }
                             }
                         }
+                        connection.take().unwrap()
                     };
-                    let (mut env, handle) = connection.take().unwrap();
-                    let mut socket = sockets.get::<TcpSocket>(handle);
+
+                    if !socket.can_send() {
+                        respond_with_error(env, NetError::TimedOut);
+                        continue;
+                    }
 
                     let body = env.body.memory_message_mut().unwrap();
                     // Perform the transfer
