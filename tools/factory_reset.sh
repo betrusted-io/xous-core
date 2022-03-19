@@ -60,5 +60,6 @@ wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
 rm /tmp/loader.bin
 rm /tmp/soc_csr.bin
 
-echo " "
+echo "Please insert a paperclip in the hard reset hole in the lower right hand corner to ensure the new FPGA gateware is loaded."
+echo "After inserting the paperclip you will need to apply power via USB to boot."
 echo "IMPORTANT: you must run 'ecup auto' to update the EC with the staged firmware objects."
