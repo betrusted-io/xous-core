@@ -41,7 +41,7 @@ wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
 rm /tmp/loader.bin
 
 echo "waiting for device to reboot"
-sleep 5
+sleep 4
 
 wget https://ci.betrusted.io/$REVISION/xous$LOCALE.img -O /tmp/xous.img
 ./usb_update.py -k /tmp/xous.img
