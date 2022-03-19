@@ -405,6 +405,12 @@ def main():
         "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-xous-elf/release/loader.bin'
     )
     parser.add_argument(
+        "--disable-boot", required=False, action='store_true', help="Disable system boot (for use in multi-stage updates)"
+    )
+    parser.add_argument(
+        "--enable-boot", required=False, action='store_true', help="Re-enable system boot. Requires both a loader and a soc spec."
+    )
+    parser.add_argument(
         "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='../target/riscv32imac-unknown-xous-elf/release/xous.img'
     )
     parser.add_argument(
@@ -538,6 +544,34 @@ def main():
     if args.erase_pddb:
         print("Erasing PDDB region")
         pc_usb.erase_region(locs['LOC_PDDB'][0], locs['LOC_EC'][0] - locs['LOC_PDDB'][0])
+
+    if args.disable_boot:
+        print("Disabling boot")
+        pc_usb.erase_region(locs['LOC_LOADER'][0], 1024 * 256)
+
+    if args.enable_boot:
+        if args.loader == None:
+            print("Must provide both a loader and soc image")
+        if args.soc == None:
+            print("Must provide both a soc and loader image")
+        print("Enabling boot with {} and {}".format(args.loader, args.soc))
+        print("Programming loader image {}".format(args.loader))
+        with open(args.loader, "rb") as f:
+            image = f.read()
+            pc_usb.flash_program(locs['LOC_LOADER'][0], image, verify=verify)
+        print("Programming SoC gateware".format(args.soc))
+        with open(args.soc, "rb") as f:
+            image = f.read()
+            pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+        print("Resuming CPU.")
+        pc_usb.poke(vexdbg_addr, 0x02000000)
+
+        print("Resetting SOC...")
+        try:
+            pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
+        except usb.core.USBError:
+            pass # we expect an error because we reset the SOC and that includes the USB core
+        exit(0)
 
     if args.image:
         image_file, addr_str = args.image
