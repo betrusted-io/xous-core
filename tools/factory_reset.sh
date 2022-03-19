@@ -29,6 +29,13 @@ else
     LOCALE=""
 fi
 
+wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
+./usb_update.py --soc /tmp/soc_csr.bin --force
+rm /tmp/soc_csr.bin
+
+echo "waiting for device to reboot"
+sleep 5
+
 wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
 ./usb_update.py -l /tmp/loader.bin
 rm /tmp/loader.bin
@@ -39,13 +46,6 @@ sleep 5
 wget https://ci.betrusted.io/$REVISION/xous$LOCALE.img -O /tmp/xous.img
 ./usb_update.py -k /tmp/xous.img
 rm /tmp/xous.img
-
-echo "waiting for device to reboot"
-sleep 5
-
-wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
-./usb_update.py --soc /tmp/soc_csr.bin --force
-rm /tmp/soc_csr.bin
 
 echo "waiting for device to reboot"
 sleep 5
