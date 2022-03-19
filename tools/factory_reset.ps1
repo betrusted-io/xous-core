@@ -13,23 +13,23 @@ if ($decision -eq 0) {
     Exit
 }
 
+Invoke-WebRequest https://ci.betrusted.io/releases/latest/soc_csr.bin -OutFile soc_csr.bin
+python usb_update.py --soc soc_csr.bin --force
+Remove-Item soc_csr.bin
+
+Write-Output "waiting for device to reboot"
+Start-Sleep 5
+
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/loader.bin -OutFile loader.bin
 python usb_update.py -l loader.bin
 Remove-Item loader.bin
 
 Write-Output "waiting for device to reboot"
-Start-Sleep 5
+Start-Sleep 4
 
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/xous-$LOCALE.img -OutFile xous.img
 python usb_update.py -k xous.img
 Remove-Item xous.img
-
-Write-Output "waiting for device to reboot"
-Start-Sleep 5
-
-Invoke-WebRequest https://ci.betrusted.io/releases/latest/soc_csr.bin -OutFile soc_csr.bin
-python usb_update.py --soc soc_csr.bin --force
-Remove-Item soc_csr.bin
 
 Write-Output "waiting for device to reboot"
 Start-Sleep 5
