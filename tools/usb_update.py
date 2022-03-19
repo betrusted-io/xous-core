@@ -197,10 +197,16 @@ class PrecursorUsb:
             self.spinor_command_value(exec=1, lock_reads=1, cmd_code=self.PP4B, has_arg=1, data_words=(data_bytes//2))
         )
 
-    def load_csrs(self):
+    def load_csrs(self, fname=None):
         LOC_CSRCSV = 0x20277000 # this address shouldn't change because it's how we figure out our version number
+        # CSR extraction:
+        # dd if=soc_csr.bin of=csr_data_0.9.6.bin skip=2524 count=32 bs=1024
+        if fname == None:
+            csr_data = self.burst_read(LOC_CSRCSV, 0x8000)
+        else:
+            with open(fname, "rb") as f:
+                csr_data = f.read(0x8000)
 
-        csr_data = self.burst_read(LOC_CSRCSV, 0x8000)
         hasher = hashlib.sha512()
         hasher.update(csr_data[:0x7FC0])
         digest = hasher.digest()
@@ -452,6 +458,9 @@ def main():
     parser.add_argument(
         "--factory-new", help="reset the entire image to mimic exactly what comes out of the factory, including temp files for testing. Warning: this will take a long time.", action="store_true"
     )
+    parser.add_argument(
+        "--override-csr", required=False, help="CSR file to use instead of CSR values stored with the image. Used to recover in case of partial update of soc_csr.bin", type=str,
+    )
     args = parser.parse_args()
 
     if not len(sys.argv) > 1:
@@ -494,7 +503,7 @@ def main():
         #     print("match")
         exit(0)
 
-    pc_usb.load_csrs() # prime the CSR values
+    pc_usb.load_csrs(args.override_csr) # prime the CSR values
     if "v0.8" in pc_usb.gitrev:
         locs = {
            "LOC_SOC"    : [0x0000_0000, "soc_csr.bin"],
