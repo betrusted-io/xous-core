@@ -193,7 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &hw_pkgs,
                 &[],
                 None,
-                Some(&["--features", "renode-bypass"]),
+                None,
             )?
         }
         Some("renode-test") => {
