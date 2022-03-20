@@ -13,3 +13,9 @@ log-server = { path = "../../services/log-server" }
 xous-names = { path = "../../services/xous-names" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
+locales = {path = "../../locales"}
+tts-frontend = {path="../../services/tts"}
+
+[features]
+tts = []
+default = []

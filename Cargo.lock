@@ -1035,10 +1035,12 @@ version = "0.1.0"
 dependencies = [
  "gam",
  "graphics-server",
+ "locales",
  "log",
  "log-server",
  "num-derive",
  "num-traits",
+ "tts-frontend",
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",

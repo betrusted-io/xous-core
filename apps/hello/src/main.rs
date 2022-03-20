@@ -5,6 +5,9 @@ use core::fmt::Write;
 use graphics_server::api::GlyphStyle;
 use graphics_server::{DrawStyle, Gid, PixelColor, Point, Rectangle, TextBounds, TextView};
 use num_traits::*;
+use locales::t;
+#[cfg(feature = "tts")]
+use tts_frontend::*;
 
 /// Basic 'Hello World!' application that draws a simple
 /// TextView to the screen.
@@ -26,6 +29,8 @@ struct Hello {
     gam: gam::Gam,
     _gam_token: [u32; 4],
     screensize: Point,
+    #[cfg(feature = "tts")]
+    tts: TtsFrontend,
 }
 
 impl Hello {
@@ -57,6 +62,8 @@ impl Hello {
             _gam_token: gam_token,
             content,
             screensize,
+            #[cfg(feature = "tts")]
+            tts: TtsFrontend::new(xns).unwrap(),
         }
     }
 
@@ -98,7 +105,9 @@ impl Hello {
         text_view.clear_area = true;
         text_view.rounded_border = Some(3);
         text_view.style = GlyphStyle::Regular;
-        write!(text_view.text, "{}", "Hello world!").expect("Could not write to text view");
+        write!(text_view.text, "{}", t!("helloworld.hello", xous::LANG)).expect("Could not write to text view");
+        #[cfg(feature="tts")]
+        self.tts.tts_simple(t!("helloworld.hello", xous::LANG)).unwrap();
 
         self.gam
             .post_textview(&mut text_view)
