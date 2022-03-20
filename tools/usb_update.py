@@ -572,6 +572,10 @@ def main():
         with open(args.soc, "rb") as f:
             image = f.read()
             pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+
+        print("Erasing PDDB root structures")
+        pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
+
         print("Resuming CPU.")
         pc_usb.poke(vexdbg_addr, 0x02000000)
 
