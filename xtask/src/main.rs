@@ -165,6 +165,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lkey = args.nth(3);
     let kkey = args.nth(4);
     match task.as_deref() {
+        Some("install-toolkit") => {
+            let arg = env::args().nth(2);
+            ensure_compiler(
+                &Some(PROGRAM_TARGET),
+                true,
+                arg.map(|x| x == "--force").unwrap_or(false),
+            )?
+        }
         Some("renode-image") => {
             let mut args = env::args();
             args.nth(1);
@@ -185,7 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &hw_pkgs,
                 &[],
                 None,
-                Some(&["--features", "renode-bypass"]),
+                None,
             )?
         }
         Some("renode-test") => {
@@ -602,6 +610,7 @@ Various debug configurations:
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
  ffi-test                builds an image for testing C-FFI bindings and integration
  tts                     builds an image with text to speech support via externally linked C executable
+ install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
 "
     )
 }
@@ -1015,7 +1024,11 @@ static DONE_COMPILER_CHECK: std::sync::atomic::AtomicBool =
 /// Ensure we have a compatible compiler toolchain. We use a new Target,
 /// and we want to give the user a friendly way of installing the latest
 /// Rust toolchain.
-fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
+fn ensure_compiler(
+    target: &Option<&str>,
+    force_install: bool,
+    remove_existing: bool,
+) -> Result<(), String> {
     use std::process::Stdio;
     if DONE_COMPILER_CHECK.load(std::sync::atomic::Ordering::SeqCst) {
         return Ok(());
@@ -1079,16 +1092,39 @@ fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
 
     // If the sysroot exists, then we're good.
     let target = target.unwrap_or(PROGRAM_TARGET);
-    if get_sysroot(Some(target))?.is_some() {
-        DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
-        return Ok(());
+    if let Some(path) = get_sysroot(Some(target))? {
+        let mut version_path = PathBuf::from(&path);
+        version_path.push("lib");
+        version_path.push("rustlib");
+        version_path.push(PROGRAM_TARGET);
+        if remove_existing {
+            println!("Target path exists, removing it");
+            std::fs::remove_dir_all(version_path)
+                .or_else(|e| Err(format!("unable to remove existing toolchain: {}", e)))?;
+            println!("Also removing target directories for existing toolchain");
+            let mut target_main = project_root();
+            target_main.push("target");
+            target_main.push(PROGRAM_TARGET);
+            std::fs::remove_dir_all(target_main).ok();
+
+            let mut target_loader = project_root();
+            target_loader.push("loader");
+            target_loader.push("target");
+            target_loader.push(PROGRAM_TARGET);
+            std::fs::remove_dir_all(target_loader).ok();
+
+        } else {
+            DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
+            return Ok(());
+        }
     }
 
     // Since no sysroot exists, we must download a new one.
     let toolchain_path =
         get_sysroot(None)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
-    // If the terminal is a tty, offer to download the latest toolchain.
-    if !atty::is(atty::Stream::Stdin) {
+    // If the terminal is a tty, or if toolchain installation is forced,
+    // download the latest toolchain.
+    if !atty::is(atty::Stream::Stdin) && !force_install {
         return Err(format!("Toolchain for {} not found", target));
     }
 
@@ -1108,6 +1144,10 @@ fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
         target
     );
     loop {
+        if force_install {
+            break;
+        }
+
         print!("Would you like this program to attempt to download and install it?   [Y/n] ");
         stdout.flush().unwrap();
         buffer.clear();
@@ -1251,7 +1291,7 @@ fn build(
     extra_args: Option<&[&str]>,
     features: Option<&[&str]>,
 ) -> Result<PathBuf, DynError> {
-    ensure_compiler(&target)?;
+    ensure_compiler(&target, false, false)?;
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["build"];
     print!("Building");

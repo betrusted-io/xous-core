@@ -1030,6 +1030,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "hello"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "graphics-server",
+ "locales",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "tts-frontend",
+ "xous",
+ "xous-ipc 0.9.7",
+ "xous-names",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"

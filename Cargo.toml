@@ -36,6 +36,7 @@ default-members = [
   "services/dns",
   "services/modals",
   "apps/ball",
+  "apps/hello",
   "apps/repl",
 ]
 members = [
@@ -88,6 +89,7 @@ members = [
   "services/dns",
   "services/modals",
   "apps/ball",
+  "apps/hello",
   "apps/repl",
   "services/libstd-test",
   "services/ffi-test",

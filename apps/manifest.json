@@ -10,6 +10,17 @@
             }
         }
     },
+    "hello": {
+        "context_name": "Hello World",
+        "menu_name": {
+            "appmenu.hello": {
+                "en": "Hello World!",
+                "ja": "Hello World!",
+                "zh": "大家好!",
+                "en-tts": "Hello World!"
+            }
+        }
+    },
     "repl": {
         "context_name": "repl demo app",
         "menu_name": {
