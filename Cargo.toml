@@ -95,6 +95,7 @@ members = [
   "services/ffi-test",
   "services/tts",
   "kernel",
+  "loader",
 ]
 resolver = "2"
 
@@ -103,7 +104,6 @@ resolver = "2"
 # packages to be rebuilt every time they were touched.
 # Keep them out of the main workspace.
 exclude = [
-  "loader",
   "utralib",  # Exclude UTRA, since it is machine-generated.
   "locales",  # exclude because it is machine-generated
 ]
@@ -123,6 +123,7 @@ xous-macros = {path = "macros"}
 # prefer hardware-accelerated versions of services
 [patch.crates-io.sha2]
 path = "services/engine-sha512"
+
 [patch.crates-io.aes]
 path = "services/aes"
 [patch.crates-io.xous-names]
