@@ -47,6 +47,7 @@ pub struct Pddb {
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
     trng: trng::Trng,
+    tt: ticktimer_server::Ticktimer,
 }
 impl Pddb {
     pub fn new() -> Self {
@@ -86,6 +87,7 @@ impl Pddb {
             cb_handle: Some(handle),
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
     pub fn is_mounted(&self) -> bool {
@@ -96,6 +98,19 @@ impl Pddb {
                 if code == 0 {false} else {true}
             },
             _ => panic!("Internal error"),
+        }
+    }
+    /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
+    /// A random interval between 1 and 2 seconds is chosen for the poll wait time. Randomizing the waiting time
+    /// helps to level out the task scheduler in the case that many threads are waiting on the PDDB simultaneously.
+    pub fn is_mounted_blocking(&self, poll_interval_ms: Option<u32>) {
+        let interval = if let Some(i) = poll_interval_ms {
+            i
+        } else {
+            (self.trng.get_u32().unwrap() % 1000) + 1000
+        };
+        while !self.is_mounted() {
+            self.tt.sleep_ms(interval as usize).unwrap();
         }
     }
     pub fn try_mount(&self) -> bool {
