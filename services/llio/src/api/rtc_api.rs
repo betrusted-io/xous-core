@@ -29,7 +29,7 @@ pub struct DateTime {
     pub years: u8,
     pub weekday: Weekday,
 }
-
+// note: this name cannot be changed, because it is baked into `libstd`
 pub(crate) const SERVER_NAME_RTC: &str       = "_Real time clock application server_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

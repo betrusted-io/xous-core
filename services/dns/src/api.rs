@@ -1,4 +1,5 @@
 #[allow(dead_code)]
+// note: this name cannot be changed, because it is baked into `libstd`
 pub(crate) const SERVER_NAME_DNS: &str = "_DNS Resolver Middleware_";
 use net::NetIpAddr;
 use rkyv::{Archive, Deserialize, Serialize};
