@@ -31,6 +31,8 @@
 // https://github.com/rust-analyzer/rust-analyzer/issues/8640
 #![recursion_limit="512"]
 
+#![allow(unused_macros)] // quiets an unused macro error imported from engine25519-as. It can't be quieted by just suppressing it in the source library.
+
 //------------------------------------------------------------------------
 // External dependencies:
 //------------------------------------------------------------------------

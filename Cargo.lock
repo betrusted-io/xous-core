@@ -743,7 +743,7 @@ dependencies = [
  "criterion",
  "digest",
  "engine-25519",
- "engine25519-as 0.1.0 (git+https://github.com/betrusted-io/engine25519-as.git?rev=274b82899d28535ac6d4b7869e26eef2039578d5)",
+ "engine25519-as 0.1.0 (git+https://github.com/betrusted-io/engine25519-as.git?rev=d249c967556b02ab5439eacb5078fa00c60b93d6)",
  "fiat-crypto",
  "hex",
  "log",
@@ -898,7 +898,7 @@ dependencies = [
 name = "engine-25519"
 version = "0.1.0"
 dependencies = [
- "engine25519-as 0.1.0 (git+https://github.com/betrusted-io/engine25519-as.git?rev=274b82899d28535ac6d4b7869e26eef2039578d5)",
+ "engine25519-as 0.1.0 (git+https://github.com/betrusted-io/engine25519-as.git?rev=d249c967556b02ab5439eacb5078fa00c60b93d6)",
  "llio",
  "log",
  "log-server",
@@ -916,12 +916,12 @@ dependencies = [
 [[package]]
 name = "engine25519-as"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=274b82899d28535ac6d4b7869e26eef2039578d5#274b82899d28535ac6d4b7869e26eef2039578d5"
+source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3#6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3"
 
 [[package]]
 name = "engine25519-as"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3#6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3"
+source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=d249c967556b02ab5439eacb5078fa00c60b93d6#d249c967556b02ab5439eacb5078fa00c60b93d6"
 
 [[package]]
 name = "enum_dispatch"
