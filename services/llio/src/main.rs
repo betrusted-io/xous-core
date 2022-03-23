@@ -602,6 +602,7 @@ mod implementation {
         pub fn set_usb_disable(&mut self, state: bool) {
             self.usb_disable = state;
         }
+        #[allow(dead_code)]
         pub fn tts_sleep_indicate(&mut self) {
         }
     }

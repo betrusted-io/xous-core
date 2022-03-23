@@ -5,7 +5,9 @@ use std::sync::Once;
 use std::mem::MaybeUninit;
 
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::io::SeekFrom;
 
 // This is considered bad practice for Rust to use a global singleton.
 // However, this hack puts the burden of emulation on the emulator, while
@@ -16,6 +18,7 @@ use std::io::prelude::*;
 // Note that this is a concurrently accessed, unsafe, unchecked vector.
 struct FlashSingleton {
     memory: Vec::<u8>,
+    disk: File,
 }
 
 fn flashmem() -> &'static mut FlashSingleton {
@@ -24,12 +27,33 @@ fn flashmem() -> &'static mut FlashSingleton {
 
     unsafe {
         ONCE.call_once(|| {
+            let mut disk = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("../tools/pddb-images/hosted.bin")
+            .expect("Can't open a PDDB image file for writing");
+
             let mut memory = Vec::<u8>::with_capacity(PDDB_A_LEN);
-            for _ in 0..PDDB_A_LEN {
-                memory.push(0xFF);
+            if disk.metadata().unwrap().len() == 0 {
+                for _ in 0..PDDB_A_LEN {
+                    memory.push(0xFF);
+                }
+                disk.write(&memory).expect("couldn't create initial disk image");
+            } else {
+                match disk.read_to_end(&mut memory) {
+                    Ok(bytes_read) => {
+                        assert!(bytes_read == PDDB_A_LEN, "PDDB disk image is of an incorrect size, refusing to run!");
+                    }
+                    _ => {
+                        panic!("Can't read PDDB disk image, refusing to run!");
+                    }
+                }
             }
+
             let flashmem = FlashSingleton {
                 memory,
+                disk,
             };
             SINGLETON.write(flashmem);
         });
@@ -100,12 +124,20 @@ impl HostedSpinor {
         ) {
             *dst = src;
         }
+        flashmem().disk.seek(SeekFrom::Start(offset as u64)).expect("couldn't seek PDDB");
+        flashmem().disk.write(data).expect("couldn't write PDDB");
         Ok(())
     }
     pub fn bulk_erase(&self, start: u32, len: u32) -> Result<(), xous::Error> {
         for b in flashmem().memory.as_mut_slice()[(start - xous::PDDB_LOC) as usize .. (start - xous::PDDB_LOC + len) as usize].iter_mut() {
             *b = 0xFF;
         }
+        flashmem().disk.seek(SeekFrom::Start(start as u64)).expect("couldn't seek PDDB");
+        let mut blank = Vec::<u8>::with_capacity(len as usize);
+        for _ in 0..len {
+            blank.push(0xFF);
+        }
+        flashmem().disk.write(&blank).expect("couldn't write PDDB");
         Ok(())
     }
 }
