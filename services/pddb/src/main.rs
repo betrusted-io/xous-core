@@ -468,7 +468,6 @@ fn xmain() -> ! {
         }
     });
     // spawn a delayed mount command, shortly after boot. There's too much going on at boot, and it blocks other things from coming up.
-    #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode
     let _ = thread::spawn({
         let my_cid = my_cid.clone();
         move || {
