@@ -10,6 +10,7 @@ use std::num::NonZeroU32;
 // get configured out in some builds). Thus, we tell clippy to just shut up and stick them all
 // here, because sometimes, clippy just can't see the big picture.
 
+// note this name cannot be changed because it is baked into `libstd`
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.

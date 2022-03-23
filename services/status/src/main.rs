@@ -37,8 +37,6 @@ const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 pub(crate) enum StatusOpcode {
     /// for passing battstats on to the main thread from the callback
     BattStats,
-    /// for passing DateTime
-    DateTime,
     /// indicates time for periodic update of the status bar
     Pump,
     /// Pulls up the time setting UI
@@ -85,17 +83,6 @@ fn battstats_cb(stats: BattStats) {
             ),
         )
         .unwrap();
-    }
-}
-
-pub fn dt_callback(dt: llio::DateTime) {
-    //log::info!("dt_callback received with {:?}", dt);
-    if let Some(cb_to_main_conn) = unsafe { CB_TO_MAIN_CONN } {
-        let buf = xous_ipc::Buffer::into_buf(dt)
-            .or(Err(xous::Error::InternalError))
-            .unwrap();
-        buf.send(cb_to_main_conn, StatusOpcode::DateTime.to_u32().unwrap())
-            .unwrap();
     }
 }
 
@@ -229,13 +216,6 @@ fn xmain() -> ! {
         remaining_capacity: 650,
     };
 
-    log::debug!("initializing RTC...");
-    let mut rtc = llio::Rtc::new(&xns);
-
-    #[cfg(any(target_os = "none", target_os = "xous"))]
-    rtc.clear_wakeup_alarm().unwrap(); // clear any wakeup alarm state, if it was set
-
-    rtc.hook_rtc_callback(dt_callback).unwrap();
     let mut datetime: Option<llio::DateTime> = None;
     let llio = llio::Llio::new(&xns);
 
@@ -532,9 +512,9 @@ fn xmain() -> ! {
                     }
                 }
                 if (stats_phase % dt_pump_interval) == 2 {
-                    #[cfg(any(target_os = "none", target_os = "xous"))]
-                    rtc.request_datetime()
-                        .expect("|status: can't request datetime from RTC");
+                    // #[cfg(any(target_os = "none", target_os = "xous"))]
+                    // TODO_RTC
+                    // placeholder for the RTC request when it is ready
                     #[cfg(not(any(target_os = "none", target_os = "xous")))]
                     {
                         log::trace!("hosted request of date time - short circuiting server call");
@@ -604,14 +584,6 @@ fn xmain() -> ! {
                 gam.redraw().expect("|status: couldn't redraw");
 
                 stats_phase = stats_phase.wrapping_add(1);
-            }
-            Some(StatusOpcode::DateTime) => {
-                //log::info!("got DateTime update");
-                let buffer = unsafe {
-                    xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
-                };
-                let dt = buffer.to_original::<llio::DateTime, _>().unwrap();
-                datetime = Some(dt);
             }
             Some(StatusOpcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
                 pump_run.store(false, Ordering::Relaxed); // stop status updates while we do this
@@ -688,7 +660,7 @@ fn xmain() -> ! {
                 log::debug!("got seconds {}", secs);
 
                 log::info!("Setting time: {}/{}/{} {}:{}:{} {:?}", months, days, years, hours, mins, secs, weekday);
-                let dt = llio::DateTime {
+                let _dt = llio::DateTime { // TODO_RTC
                     seconds: secs,
                     minutes: mins,
                     hours,
@@ -697,7 +669,8 @@ fn xmain() -> ! {
                     years,
                     weekday
                 };
-                rtc.set_rtc(dt).expect("couldn't set the current time");
+                // TODO_RTC
+                // rtc.set_rtc(dt).expect("couldn't set the current time");
                 pump_run.store(true, Ordering::Relaxed); // stop status updates while we do this
             }),
             Some(StatusOpcode::Reboot) => {
@@ -711,7 +684,7 @@ fn xmain() -> ! {
                     // do a full cold-boot if the power is cut. This will force a re-load of the SoC contents.
                     gam.shipmode_blank_request().ok();
                     ticktimer.sleep_ms(500).ok(); // screen redraw time after the blank request
-                    rtc.set_wakeup_alarm(4).expect("couldn't set wakeup alarm");
+                    llio.set_wakeup_alarm(4).expect("couldn't set wakeup alarm");
                     llio.allow_ec_snoop(true).ok();
                     llio.allow_power_off(true).ok();
                     com.power_off_soc().ok();
