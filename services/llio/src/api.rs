@@ -134,7 +134,7 @@ pub(crate) enum Opcode {
     /// clears any RTC alarms that have been set
     ClearRtcAlarm,
     /// reads the current RTC count as a value in seconds
-    GetRtcCount,
+    GetRtcValue,
     /// reads the SessionOffset which correlates RTC count and ticktimer's elapsed_time
     GetSessionOffset,
 

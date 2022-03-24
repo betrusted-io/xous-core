@@ -512,9 +512,35 @@ fn xmain() -> ! {
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
-            Some(Opcode::GetRtcCount) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                // TODO_RTC: implement get_rtc count function
-                xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return to caller");
+            Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                // There is a possibility that the RTC hardware is actually in an invalid state.
+                // Thus, this will return a u64 which is formatted as follows:
+                // [63] - invalid (0 for valid, 1 for invalid)
+                // [62:0] - time in seconds
+                // This is okay because 2^63 is much larger than the total number of seconds trackable by the RTC hardware.
+                // The RTC hardware can only count up to 100 years before rolling over, which is 3.1*10^9 seconds.
+                // Note that we start the RTC at somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
+                // of continuous uptime service out of the RTC.
+                let mut settings = [0u8; 8];
+                match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings, None) {
+                    Ok(llio::I2cStatus::ResponseReadOk) => {},
+                    _ => {
+                        log::error!("Couldn't read seconds from RTC!");
+                        xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                        continue;
+                    },
+                };
+                let total_secs = match rtc_to_seconds(&settings) {
+                    Some(s) => s,
+                    None => {
+                        xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                        continue;
+                    }
+                };
+                xous::return_scalar2(msg.sender,
+                    ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
+                    (total_secs & 0xFFFF_FFFF) as usize,
+                ).expect("couldn't return to caller");
             }),
             Some(Opcode::GetSessionOffset) => {
                 // TODO_RTC: implement GetSessionOffset
@@ -602,5 +628,79 @@ fn send_event(cb_conns: &[Option<ScalarCallback>; 32], which: usize) {
                 }
             }
         };
+    }
+}
+
+// run with `cargo test -- --nocapture --test-threads=1`:
+//   --nocapture to see the print output (while debugging)
+//   --test-threads=1 so we can see the output in sequence
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{DateTime, Utc};
+    use llio::rtc_to_seconds;
+    use rand::Rng;
+
+    #[test]
+    fn test_rtc_to_secs() {
+        let mut rng = rand::thread_rng();
+        let rtc_base = DateTime::<Utc>::from_utc(chrono::NaiveDate::from_ymd(2000, 1, 1)
+        .and_hms(0, 0, 0), Utc);
+
+        // test every year, every month, every day, with a random time stamp
+        for year in 0..99 {
+            for month in 1..=12 {
+                let days = match month {
+                    1 => 1..=31,
+                    2 => if (year % 4) == 0 {
+                        1..=29
+                    } else {
+                        1..=28
+                    }
+                    3 => 1..=31,
+                    4 => 1..=30,
+                    5 => 1..=31,
+                    6 => 1..=30,
+                    7 => 1..=31,
+                    8 => 1..=31,
+                    9 => 1..=30,
+                    10 => 1..=31,
+                    11 => 1..=30,
+                    12 => 1..=31,
+                    _ => {panic!("invalid month")},
+                };
+                for day in days {
+                    let h = rng.gen_range(0..24);
+                    let m = rng.gen_range(0..60);
+                    let s = rng.gen_range(0..60);
+                    let rtc_test = DateTime::<Utc>::from_utc(
+                        chrono::NaiveDate::from_ymd(2000 + year, month, day)
+                    .and_hms(h, m, s), Utc);
+
+                    let diff = rtc_test.signed_duration_since(rtc_base);
+                    let settings = [
+                        (Control3::BATT_STD_BL_EN).bits(),
+                        s as u8,
+                        m as u8,
+                        h as u8,
+                        day as u8,
+                        0,
+                        month as u8,
+                        year as u8,
+                    ];
+                    if diff.num_seconds() != rtc_to_seconds(&settings).unwrap() as i64 {
+                        println!("{} vs {}", diff.num_seconds(), rtc_to_seconds(&settings).unwrap());
+                        println!("Duration to {}/{}/{}-{}:{}:{} -- {}",
+                            2000 + year,
+                            month,
+                            day,
+                            h, m, s,
+                            diff.num_seconds()
+                        );
+                    }
+                    assert!(diff.num_seconds() == rtc_to_seconds(&settings).unwrap() as i64);
+                }
+            }
+        }
     }
 }

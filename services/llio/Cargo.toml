@@ -27,7 +27,11 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
-chrono = "0.4"
+chrono = "0.4.19"
+
+[dev-dependencies]
+"chrono" = "0.4.19"
+"rand" = "0.8.5"
 
 [features]
 debugprint = []

@@ -748,7 +748,7 @@ dependencies = [
  "hex",
  "log",
  "packed_simd_2",
- "rand",
+ "rand 0.7.3",
  "rand_core 0.5.1",
  "serde",
  "sha2-loader",
@@ -854,7 +854,7 @@ checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
- "rand",
+ "rand 0.7.3",
  "sha2",
  "zeroize",
 ]
@@ -869,7 +869,7 @@ dependencies = [
  "ed25519",
  "hex",
  "merlin",
- "rand",
+ "rand 0.7.3",
  "rand_core 0.5.1",
  "serde",
  "serde_bytes",
@@ -1134,7 +1134,18 @@ checksum = "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
- "wasi",
+ "wasi 0.9.0+wasi-snapshot-preview1",
+]
+
+[[package]]
+name = "getrandom"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d39cd93900197114fa1fcb7ae84ca742095eed9442088988ae74fa744e930e77"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "wasi 0.10.2+wasi-snapshot-preview1",
 ]
 
 [[package]]
@@ -1390,7 +1401,7 @@ dependencies = [
  "gdbstub_arch",
  "hex",
  "lazy_static",
- "rand",
+ "rand 0.7.3",
  "rand_chacha 0.3.1",
  "riscv",
  "stats_alloc",
@@ -1508,6 +1519,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "rand 0.8.5",
  "rkyv",
  "susres",
  "ticktimer-server",
@@ -1856,7 +1868,7 @@ dependencies = [
  "modals",
  "num-derive",
  "num-traits",
- "rand",
+ "rand 0.7.3",
  "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rkyv",
@@ -2008,12 +2020,23 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
 dependencies = [
- "getrandom",
+ "getrandom 0.1.16",
  "libc",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc",
  "rand_pcg",
+]
+
+[[package]]
+name = "rand"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
+dependencies = [
+ "libc",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.3",
 ]
 
 [[package]]
@@ -2042,7 +2065,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90bde5296fc891b0cef12a6d03ddccc162ce7b2aff54160af9338f8d40df6d19"
 dependencies = [
- "getrandom",
+ "getrandom 0.1.16",
 ]
 
 [[package]]
@@ -2050,6 +2073,9 @@ name = "rand_core"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
+dependencies = [
+ "getrandom 0.2.5",
+]
 
 [[package]]
 name = "rand_hc"
@@ -2654,7 +2680,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rand",
+ "rand 0.7.3",
  "rkyv",
  "susres",
  "ticktimer-server",
@@ -2969,7 +2995,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rand",
+ "rand 0.7.3",
  "rand_chacha 0.3.1",
  "rand_core 0.5.1",
  "rkyv",
@@ -3135,6 +3161,12 @@ name = "wasi"
 version = "0.9.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
+
+[[package]]
+name = "wasi"
+version = "0.10.2+wasi-snapshot-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 
 [[package]]
 name = "wasm-bindgen"
@@ -3466,7 +3498,7 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "rand",
+ "rand 0.7.3",
  "syn",
 ]
 
