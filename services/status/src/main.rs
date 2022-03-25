@@ -8,6 +8,8 @@ use appmenu::*;
 mod kbdmenu;
 use kbdmenu::*;
 mod app_autogen;
+mod time;
+use time::*;
 
 use com::api::*;
 use core::fmt::Write;
