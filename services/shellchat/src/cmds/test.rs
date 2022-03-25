@@ -13,6 +13,8 @@ use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
 use std::sync::Arc;
 use num_traits::*;
 
+use std::time::{Instant, Duration};
+
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
@@ -106,6 +108,13 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "instant" => {
+                    write!(ret, "start elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
+                    let now = Instant::now();
+                    env.ticktimer.sleep_ms(5000).unwrap();
+                    write!(ret, "Duration (ms): {}\n", now.elapsed().as_millis()).unwrap();
+                    write!(ret, "end elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
+                }
                 "factory" => {
                     // force a specified time to make sure the elapsed time computation later on works
                     if !rtc_set(&mut env.i2c, 0, 0, 10, 1, 6, 21) {
