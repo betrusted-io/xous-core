@@ -135,8 +135,6 @@ pub(crate) enum Opcode {
     ClearRtcAlarm,
     /// reads the current RTC count as a value in seconds
     GetRtcValue,
-    /// reads the SessionOffset which correlates RTC count and ticktimer's elapsed_time
-    GetSessionOffset,
 
     /// Exit the server
     Quit,

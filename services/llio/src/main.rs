@@ -542,9 +542,6 @@ fn xmain() -> ! {
                     (total_secs & 0xFFFF_FFFF) as usize,
                 ).expect("couldn't return to caller");
             }),
-            Some(Opcode::GetSessionOffset) => {
-                // TODO_RTC: implement GetSessionOffset
-            }
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting.");
                 let dropconn = xous::connect(i2c_sid).unwrap();

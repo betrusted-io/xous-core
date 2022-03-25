@@ -202,6 +202,12 @@ pub const ABRTCMC_TIMERA: u8 = 0x11;
 pub const ABRTCMC_TIMERB: u8 = 0x13;
 // no bitflags, register is timer period in seconds, and the period is N / (source clock frequency)
 
+/// This function takes the raw &[u8] as returned by the RTC I2C low level read function
+/// and converts it to a number of seconds. All hardware RTC readings are based off of the
+/// BCD equivalent of Jan 1 2000, 00:00:00, but keep in mind this is just an internal representation.
+/// We turn this into a u64 number of seconds because what we really want out of the hardware RTC
+/// is _just_ a count of seconds from some arbitrary but fixed start point, that we anchor through other
+/// algorithms to UTC.
 pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     const CTL3: usize = 0;
     const SECS: usize = 1;

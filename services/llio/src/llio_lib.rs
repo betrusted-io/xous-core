@@ -404,6 +404,25 @@ impl Llio {
             Message::new_blocking_scalar(Opcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
+    /// This returns the elapsed seconds on the RTC since an arbitrary start point in the past.
+    /// The translation of this is handled by `libstd::SystemTime`; you may use this call, but
+    /// the interpretation is not terribly meaningful on its own.
+    pub fn get_rtc_secs(&self) -> Result<u64, xous::Error> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetRtcValue.to_usize().unwrap(), 0, 0, 0, 0)
+        )? {
+            xous::Result::Scalar2(hi, lo) => {
+                if hi & 0x8000_0000 != 0 {
+                    Err(xous::Error::InternalError)
+                } else {
+                    Ok(((hi as u64) << 32) | lo as u64)
+                }
+            }
+            _ => {
+                Err(xous::Error::InternalError)
+            }
+        }
+    }
 }
 
 
