@@ -28,18 +28,22 @@ use llio::*;
 use pddb::Pddb;
 use std::io::{Read, Write, Seek, SeekFrom};
 use num_traits::*;
-use utralib::utra::ticktimer;
 
 /// This is a "well known name" used by `libstd` to connect to the time server
+/// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
+/// hence the scope of the name is private to this crate.
 const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
 /// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
+/// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
+/// depend upon this constant.
 pub const TIME_SERVER_PDDB: &'static str = "_dedicated pddb timeserver connection_";
-/// Dictionary for RTC settings
-pub const TIME_SERVER_DICT: &'static str = "sys.rtc";
+
+/// Dictionary for RTC settings.
+const TIME_SERVER_DICT: &'static str = "sys.rtc";
 /// This is the UTC offset from the current hardware RTC reading. This should be fixed once time is set.
-pub const TIME_SERVER_UTC_OFFSET: &'static str = "utc_offset";
+const TIME_SERVER_UTC_OFFSET: &'static str = "utc_offset";
 /// This is the offset from UTC to the display time zone. This can vary when the user changes time zones.
-pub const TIME_SERVER_TZ_OFFSET: &'static str = "tz_offset";
+const TIME_SERVER_TZ_OFFSET: &'static str = "tz_offset";
 
 const CTL3: usize = 0;
 const SECS: usize = 1;
@@ -111,7 +115,7 @@ pub fn start_time_server() {
                 sr_cid
             ).expect("couldn't create suspend/resume object");
 
-            let mut pddb = Pddb::new();
+            let pddb = Pddb::new();
             pddb.is_mounted_blocking(None);
             let mut offset_handle = Pddb::new();
             let mut offset_key = offset_handle.get(
@@ -138,7 +142,7 @@ pub fn start_time_server() {
                 tz_offset_ms = i64::from_le_bytes(tz_buf);
             }
             loop {
-                let msg = xous::receive_message(priv_sid).unwrap();
+                let msg = xous::receive_message(pub_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                         susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");

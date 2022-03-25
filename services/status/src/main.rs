@@ -9,7 +9,6 @@ mod kbdmenu;
 use kbdmenu::*;
 mod app_autogen;
 mod time;
-use time::*;
 
 use com::api::*;
 use core::fmt::Write;
@@ -109,6 +108,10 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+
+    // this kicks off the thread that services the `libstd` calls for time-related things.
+    // we want this started really early, because it sanity checks the RTC and a bunch of other stuff.
+    time::start_time_server();
 
     let xns = xous_names::XousNames::new().unwrap();
     // 1 connection exactly -- from the GAM to set our canvas GID
