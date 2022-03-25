@@ -444,6 +444,7 @@ impl Pddb {
         let response = buf.to_original::<PddbDictRequest, _>().unwrap();
         let count = match response.code {
             PddbRequestCode::NoErr => response.index,
+            PddbRequestCode::NotFound => return Err(Error::new(ErrorKind::NotFound, "dictionary not found")),
             _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
         };
         // very non-optimal, slow way of doing this, but let's just get it working first and optimize later.
