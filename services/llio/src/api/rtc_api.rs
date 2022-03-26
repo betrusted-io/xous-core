@@ -224,31 +224,31 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     }
     // this is a secondary check -- I have seen RTC return non-sensical time results before
     // so this is an extra check above and beyond what's in the datasheet
-    if (settings[SECS] > 59)
-    || (settings[MINS] > 59)
-    || (settings[HOURS] > 23) // 24 hour mode is default and assumed
-    || (settings[DAYS] > 31) || (settings[DAYS] == 0)
-    || (settings[MONTHS] > 12) || (settings[MONTHS] == 0)
-    || (settings[YEARS] > 99) {
+    if (to_binary(settings[SECS]) > 59)
+    || (to_binary(settings[MINS]) > 59)
+    || (to_binary(settings[HOURS]) > 23) // 24 hour mode is default and assumed
+    || (to_binary(settings[DAYS]) > 31) || (to_binary(settings[DAYS]) == 0)
+    || (to_binary(settings[MONTHS]) > 12) || (to_binary(settings[MONTHS]) == 0)
+    || (to_binary(settings[YEARS]) > 99) {
         log::error!("RTC has invalid digits!");
         return None;
     }
     let mut total_secs: u64 = 0;
-    total_secs += settings[SECS] as u64;
-    total_secs += settings[MINS] as u64 * 60;
-    total_secs += settings[HOURS] as u64 * 3600;
+    total_secs += to_binary(settings[SECS]) as u64;
+    total_secs += to_binary(settings[MINS]) as u64 * 60;
+    total_secs += to_binary(settings[HOURS]) as u64 * 3600;
     const SECS_PER_DAY: u64 = 86400;
     // DAYS is checked to be 1-31, so, it's safe to subtract 1 here
-    total_secs += (settings[DAYS] as u64 - 1) * SECS_PER_DAY;
+    total_secs += (to_binary(settings[DAYS]) as u64 - 1) * SECS_PER_DAY;
     // this will iterate from 0 through 11; december never has an offset added, because its contribution is directly measured in DAYS
-    for month in 0..settings[MONTHS] {
+    for month in 0..to_binary(settings[MONTHS]) {
         match month {
             0 => total_secs += 0u64,
             1 => total_secs += 31u64 * SECS_PER_DAY,
             2 => {
                 // per spec sheet: 1) If the year counter contains a value which is exactly divisible by 4 (including the year 00),
                 // the AB-RTCMC-32.768kHz-B5ZE-S3 compensates for leap years by adding a 29th day to February.
-                if (settings[YEARS] % 4) == 0 {
+                if (to_binary(settings[YEARS]) % 4) == 0 {
                     total_secs += 29u64 * SECS_PER_DAY;
                 } else {
                     total_secs += 28u64 * SECS_PER_DAY;
@@ -268,15 +268,19 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
         }
     }
     // figure out what the last round multiple of leap years was before the current time
-    let last_leap = (settings[YEARS] - settings[YEARS] % 4) as u64;
+    let last_leap = (to_binary(settings[YEARS]) - to_binary(settings[YEARS]) % 4) as u64;
     // now add the contributions of all these prior years
     total_secs += (last_leap / 4) * (365 * 3 + 366) * SECS_PER_DAY;
     // now add the contributions of any years since the last round multiple of leap years
-    if settings[YEARS] % 4 != 0 {
+    if to_binary(settings[YEARS]) % 4 != 0 {
         // account for the leap year
         total_secs += 366 * SECS_PER_DAY;
         // now account for successive years
-        total_secs += 365 * (((settings[YEARS] % 4) - 1) as u64) * SECS_PER_DAY;
+        total_secs += 365 * (((to_binary(settings[YEARS]) % 4) - 1) as u64) * SECS_PER_DAY;
     }
     Some(total_secs)
+}
+
+fn to_binary(bcd: u8) -> u8 {
+    (bcd & 0xf) + ((bcd >> 4) * 10)
 }
