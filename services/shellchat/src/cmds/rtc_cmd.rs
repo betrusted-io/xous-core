@@ -1,5 +1,8 @@
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
+use std::time::SystemTime;
+use chrono::offset::Utc;
+use chrono::{DateTime, NaiveDateTime};
 
 #[derive(Debug)]
 pub struct RtcCmd {
@@ -16,19 +19,39 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "rtc options: set, get";
+        let helpstring = "rtc options: utc local";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                "get" => {
-                    write!(ret, "{}", "Requesting DateTime from RTC...").unwrap();
-                    // TODO_RTC
+                "utc" => {
+                    let system_time = SystemTime::now();
+                    let datetime: DateTime<Utc> = system_time.into();
+                    write!(ret, "UTC time is {}", datetime.format("%m/%d/%Y %T")).unwrap();
                 },
-                "set" => {
-                    // TODO_RTC
-                },
+                "local" => {
+                    let localtime = llio::LocalTime::new();
+                    if let Some(timestamp) = localtime.get_local_time_ms() {
+                        // we "say" UTC but actually local time is in whatever the local time is
+                        let dt = chrono::DateTime::<Utc>::from_utc(
+                            NaiveDateTime::from_timestamp(timestamp as i64 / 1000, 0),
+                            chrono::offset::Utc
+                        );
+                        let timestr = dt.format("%m/%d/%Y %T").to_string();
+                        write!(
+                            ret,
+                            "Local time is {}",
+                            timestr
+                        )
+                        .unwrap();
+                    } else {
+                        write!(
+                            ret,
+                            "Local time has not been set up"
+                        ).unwrap();
+                    }
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }
