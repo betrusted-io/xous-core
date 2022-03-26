@@ -123,7 +123,7 @@ fn xmain() -> ! {
 
     // create the I2C handler thread
     // - codec
-    // - rtc
+    // - time server
     // - llio
     // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
@@ -530,6 +530,7 @@ fn xmain() -> ! {
                         continue;
                     },
                 };
+                log::debug!("GetRtcValue regs: {:?}", settings);
                 let total_secs = match rtc_to_seconds(&settings) {
                     Some(s) => s,
                     None => {
@@ -638,6 +639,18 @@ mod tests {
     use llio::rtc_to_seconds;
     use rand::Rng;
 
+    fn to_bcd(binary: u8) -> u8 {
+        let mut lsd: u8 = binary % 10;
+        if lsd > 9 {
+            lsd = 9;
+        }
+        let mut msd: u8 = binary / 10;
+        if msd > 9 {
+            msd = 9;
+        }
+        (msd << 4) | lsd
+    }
+
     #[test]
     fn test_rtc_to_secs() {
         let mut rng = rand::thread_rng();
@@ -677,13 +690,13 @@ mod tests {
                     let diff = rtc_test.signed_duration_since(rtc_base);
                     let settings = [
                         (Control3::BATT_STD_BL_EN).bits(),
-                        s as u8,
-                        m as u8,
-                        h as u8,
-                        day as u8,
+                        to_bcd(s as u8),
+                        to_bcd(m as u8),
+                        to_bcd(h as u8),
+                        to_bcd(day as u8),
                         0,
-                        month as u8,
-                        year as u8,
+                        to_bcd(month as u8),
+                        to_bcd(year as u8),
                     ];
                     if diff.num_seconds() != rtc_to_seconds(&settings).unwrap() as i64 {
                         println!("{} vs {}", diff.num_seconds(), rtc_to_seconds(&settings).unwrap());

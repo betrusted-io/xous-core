@@ -17,11 +17,17 @@
         "zh": "输入年份 (最后两位数)",
         "en-tts": "Enter last two digits of year"
     },
+    "rtc.bodge": {
+        "en": "Enter the system time in ⚠UTC⚠.\nThis is likely not the same thing as your local time.",
+        "ja": "システム時刻を⚠UTC⚠に入力します。\nこれは現地時間と同じではない可能性があります。",
+        "zh": "以⚠UTC⚠输入系统时间。\n这可能与您的本地时间不同。",
+        "en-tts": "Enter the system time in ⚠UTC⚠.\nThis is likely not the same thing as your local time."
+    },
     "rtc.hour": {
-        "en": "Enter hours (0-23)",
-        "ja": "時間（0-23）を入力してください。",
-        "zh": "输入小时 (0-23)",
-        "en-tts": "Enter hours as 24 hour format"
+        "en": "Enter hours for UTC (0-23)",
+        "ja": "UTC時間（0-23）を入力してください。",
+        "zh": "输入UTC小时 (0-23)",
+        "en-tts": "Enter hours for UTC as 24 hour format"
     },
     "rtc.minute": {
         "en": "Enter minutes (0-59)",
@@ -82,6 +88,12 @@
         "ja": "日曜日",
         "zh": "星期日",
         "en-tts": "Sunday"
+    },
+    "rtc.timezone": {
+        "en": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours).\nNote: this offset does not yet track daylight savings.",
+        "ja": "UTCからのローカルオフセットを時間単位で入力してください（-12.0〜 + 14.0時間)：",
+        "zh": "请以小时为单位输入您与 UTC 的本地偏移量（-12.0 到 +14.0 小时):",
+        "en-tts": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours):"
     },
     "rtc.integer_err": {
         "en": "Error: entry was not numeric",

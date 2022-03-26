@@ -2566,6 +2566,7 @@ name = "shellchat"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "chrono",
  "cipher",
  "codec",
  "com",
