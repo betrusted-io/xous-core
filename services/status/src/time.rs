@@ -25,14 +25,14 @@ use std::thread;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use llio::*;
-use pddb::Pddb;
+use pddb::{Pddb, PddbMountPoller};
 use std::io::{Read, Write, Seek, SeekFrom};
 use num_traits::*;
 
 /// This is a "well known name" used by `libstd` to connect to the time server
 /// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
 /// hence the scope of the name is private to this crate.
-const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
+pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
 /// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
 /// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
 /// depend upon this constant.
@@ -69,6 +69,10 @@ pub(crate) enum TimeOp {
     GetLocalTimeMs = 4,
     /// Sets the timezone offset, in milliseconds.
     SetTzOffsetMs = 5,
+    /// Query to see if timezone and time relative to UTC have been set.
+    WallClockTimeInit = 6,
+    /// Self-poll for PDDB mount
+    PddbMountPoll = 7,
 }
 
 /// Do not modify the discriminants in this structure. They are used in `libstd` directly.
@@ -105,6 +109,8 @@ pub fn start_time_server() {
             }
             let mut start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
             let mut start_tt_ms = tt.elapsed_ms();
+            log::trace!("start_rtc_secs: {}", start_rtc_secs);
+            log::trace!("start_tt_ms: {}", start_tt_ms);
 
             // register a suspend/resume listener
             let sr_cid = xous::connect(priv_sid).expect("couldn't create suspend callback connection");
@@ -114,14 +120,76 @@ pub fn start_time_server() {
                 TimeOp::SusRes as u32,
                 sr_cid
             ).expect("couldn't create suspend/resume object");
-
-            let pddb = Pddb::new();
-            pddb.is_mounted_blocking(None);
+            let self_cid = xous::connect(pub_sid).unwrap();
+            let pddb_poller = PddbMountPoller::new();
+            // enqueue a the first mount poll message
+            xous::send_message(self_cid,
+                xous::Message::new_scalar(TimeOp::PddbMountPoll.to_usize().unwrap(), 0, 0, 0, 0)
+            ).expect("couldn't check mount poll");
+            // an initial behavior which just retuns the raw RTC time, until the PDDB is mounted.
+            let mut temp = 0;
+            loop {
+                if pddb_poller.is_mounted_nonblocking() {
+                    log::debug!("PDDB mount detected, transitioning to real-time adjusted server");
+                    break;
+                }
+                let msg = xous::receive_message(pub_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(TimeOp::PddbMountPoll) => {
+                        tt.sleep_ms(330).unwrap();
+                        if temp < 10 {
+                            log::trace!("mount poll");
+                        }
+                        temp += 1;
+                        xous::send_message(self_cid,
+                            xous::Message::new_scalar(TimeOp::PddbMountPoll.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't check mount poll");
+                    }
+                    Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        // resync time on resume
+                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
+                        start_tt_ms = tt.elapsed_ms();
+                    }),
+                    Some(TimeOp::HwSync) => {
+                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
+                        start_tt_ms = tt.elapsed_ms();
+                    },
+                    Some(TimeOp::GetUtcTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        let t =
+                            start_rtc_secs as i64 * 1000i64
+                            + (tt.elapsed_ms() - start_tt_ms) as i64;
+                        log::debug!("hw only UTC ms {}", t);
+                        xous::return_scalar2(msg.sender,
+                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
+                            (t as u64 & 0xFFFF_FFFF) as usize,
+                        ).expect("couldn't respond to GetUtcTimeMs");
+                    }),
+                    Some(TimeOp::GetLocalTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        let t =
+                            start_rtc_secs as i64 * 1000i64
+                            + (tt.elapsed_ms() - start_tt_ms) as i64;
+                        assert!(t > 0, "time result is negative, this is an error");
+                        log::debug!("hw only local ms {}", t);
+                        xous::return_scalar2(msg.sender,
+                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
+                            (t as u64 & 0xFFFF_FFFF) as usize,
+                        ).expect("couldn't respond to GetLocalTimeMs");
+                    }),
+                    Some(TimeOp::WallClockTimeInit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        // definitely not initialized
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    }),
+                    _ => log::warn!("Time server can't handle this message yet: {:?}", msg),
+                }
+            }
+            // once the PDDB is mounted, read in the time zone offsets and then restart the
+            // loop handler using the offsets.
             let mut offset_handle = Pddb::new();
             let mut offset_key = offset_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_UTC_OFFSET,
-                None, false, true,
+                None, true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open UTC offset key");
@@ -129,7 +197,7 @@ pub fn start_time_server() {
             let mut tz_key = tz_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_TZ_OFFSET,
-                None, false, true,
+                None, true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open TZ offset key");
@@ -141,9 +209,17 @@ pub fn start_time_server() {
             if tz_key.read(&mut tz_buf).unwrap_or(0) == 8 {
                 tz_offset_ms = i64::from_le_bytes(tz_buf);
             }
+            log::info!("offset_key: {}", utc_offset_ms);
+            log::info!("tz_key: {}", tz_offset_ms);
+            log::info!("start_rtc_secs: {}", start_rtc_secs);
+            log::info!("start_tt_ms: {}", start_tt_ms);
             loop {
                 let msg = xous::receive_message(pub_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(TimeOp::PddbMountPoll) => {
+                        // do nothing, we're mounted now.
+                        continue;
+                    },
                     Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                         susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                         // resync time on resume
@@ -160,32 +236,39 @@ pub fn start_time_server() {
                             + (tt.elapsed_ms() - start_tt_ms) as i64
                             + utc_offset_ms;
                         assert!(t > 0, "time result is negative, this is an error");
+                        log::trace!("utc ms {}", t);
                         xous::return_scalar2(msg.sender,
-                            ((t >> 32) & 0xFFFF_FFFF) as usize,
-                            (t & 0xFFFF_FFFF) as usize,
+                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
+                            (t as u64 & 0xFFFF_FFFF) as usize,
                         ).expect("couldn't respond to GetUtcTimeMs");
                     }),
                     Some(TimeOp::GetLocalTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        log::trace!("current offset {}", (start_rtc_secs as i64 * 1000i64 + (tt.elapsed_ms() - start_tt_ms) as i64) / 1000);
                         let t =
                             start_rtc_secs as i64 * 1000i64
                             + (tt.elapsed_ms() - start_tt_ms) as i64
                             + utc_offset_ms
                             + tz_offset_ms;
                         assert!(t > 0, "time result is negative, this is an error");
+                        log::trace!("local since epoch {}", t / 1000);
                         xous::return_scalar2(msg.sender,
-                            ((t >> 32) & 0xFFFF_FFFF) as usize,
-                            (t & 0xFFFF_FFFF) as usize,
+                            (((t as u64) >> 32) & 0xFFFF_FFFF) as usize,
+                            (t as u64 & 0xFFFF_FFFF) as usize,
                         ).expect("couldn't respond to GetLocalTimeMs");
                     }),
                     Some(TimeOp::SetUtcTimeMs) => xous::msg_scalar_unpack!(msg, utc_hi_ms, utc_lo_ms, _, _, {
                         let utc_time_ms = (utc_hi_ms as i64) << 32 | (utc_lo_ms as i64);
                         start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
                         start_tt_ms = tt.elapsed_ms();
+                        log::info!("utc_time: {}", utc_time_ms / 1000);
+                        log::info!("rtc_secs: {}", start_rtc_secs);
+                        log::info!("start_tt_ms: {}", start_tt_ms);
                         let offset =
                             utc_time_ms -
                             (start_rtc_secs as i64) * 1000;
                         utc_offset_ms = offset;
                         offset_key.seek(SeekFrom::Start(0)).expect("couldn't seek");
+                        log::info!("setting offset to {} secs", offset / 1000);
                         assert_eq!(offset_key.write(&offset.to_le_bytes()).unwrap_or(0), 8, "couldn't commit UTC time offset to PDDB");
                         offset_key.flush().expect("couldn't flush PDDB");
                     }),
@@ -200,11 +283,19 @@ pub fn start_time_server() {
                         } else {
                             tz_offset_ms = tz_ms;
                             tz_key.seek(SeekFrom::Start(0)).expect("couldn't seek");
+                            log::info!("setting tz offset to {} secs", tz_ms / 1000);
                             assert_eq!(tz_key.write(&tz_ms.to_le_bytes()).unwrap_or(0), 8, "couldn't commit TZ time offset to PDDB");
                             tz_key.flush().expect("couldn't flush PDDB");
                         }
                     }),
-                    _ => log::error!("Time server public thread received unknown opcode: {:?}", msg),
+                    Some(TimeOp::WallClockTimeInit) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        if utc_offset_ms == 0 || tz_offset_ms == 0 {
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        } else {
+                            xous::return_scalar(msg.sender, 1).unwrap();
+                        }
+                    }),
+                    None => log::error!("Time server public thread received unknown opcode: {:?}", msg),
                 }
             }
         }
@@ -226,20 +317,21 @@ pub fn start_time_server() {
                 };
             }
             if is_rtc_invalid(&settings) {
+                log::warn!("RTC settings were invalid. Re-initializing! {:?}", settings);
                 settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
                 let mut start_time = trng.get_u64().unwrap();
                 // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
-                settings[SECS] = (start_time & 0xFF) as u8 % 60;
+                settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
                 start_time >>= 8;
-                settings[MINS] = (start_time & 0xFF) as u8 % 60;
+                settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
                 start_time >>= 8;
-                settings[HOURS] = (start_time & 0xFF) as u8 % 24;
+                settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
                 start_time >>= 8;
-                settings[DAYS] = (start_time & 0xFF) as u8 % 28 + 1;
+                settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
                 start_time >>= 8;
-                settings[MONTHS] = (start_time & 0xFF) as u8 % 12 + 1;
+                settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
                 start_time >>= 8;
-                settings[YEARS] = (start_time & 0xFF) as u8 % 10 + 1;
+                settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
             }
             rtc_checked.store(true, Ordering::SeqCst);
@@ -250,17 +342,17 @@ pub fn start_time_server() {
                         settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
                         let mut start_time = trng.get_u64().unwrap();
                         // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
-                        settings[SECS] = (start_time & 0xFF) as u8 % 60;
+                        settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
                         start_time >>= 8;
-                        settings[MINS] = (start_time & 0xFF) as u8 % 60;
+                        settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
                         start_time >>= 8;
-                        settings[HOURS] = (start_time & 0xFF) as u8 % 24;
+                        settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
                         start_time >>= 8;
-                        settings[DAYS] = (start_time & 0xFF) as u8 % 28 + 1;
+                        settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
                         start_time >>= 8;
-                        settings[MONTHS] = (start_time & 0xFF) as u8 % 12 + 1;
+                        settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
                         start_time >>= 8;
-                        settings[YEARS] = (start_time & 0xFF) as u8 % 10 + 1;
+                        settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
                         i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
                         xous::return_scalar(msg.sender, 0).unwrap();
                     }),
@@ -273,11 +365,27 @@ pub fn start_time_server() {
 
 fn is_rtc_invalid(settings: &[u8]) -> bool {
     (settings[CTL3] != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
-    || (settings[SECS] & 0x80 != 0)  // clock integrity should be guaranteed
-    || (settings[SECS] > 59)
-    || (settings[MINS] > 59)
-    || (settings[HOURS] > 23) // 24 hour mode is default and assumed
-    || (settings[DAYS] > 31) || (settings[DAYS] == 0)
-    || (settings[MONTHS] > 12) || (settings[MONTHS] == 0)
-    || (settings[YEARS] > 99)
+    || ((settings[SECS] & 0x80) != 0)  // clock integrity should be guaranteed
+    || (to_binary(settings[SECS]) > 59)
+    || (to_binary(settings[MINS]) > 59)
+    || (to_binary(settings[HOURS]) > 23) // 24 hour mode is default and assumed
+    || (to_binary(settings[DAYS]) > 31) || (to_binary(settings[DAYS]) == 0)
+    || (to_binary(settings[MONTHS]) > 12) || (to_binary(settings[MONTHS]) == 0)
+    || (to_binary(settings[YEARS]) > 99)
+}
+
+fn to_binary(bcd: u8) -> u8 {
+    (bcd & 0xf) + ((bcd >> 4) * 10)
+}
+fn to_bcd(binary: u8) -> u8 {
+    let mut lsd: u8 = binary % 10;
+    if lsd > 9 {
+        lsd = 9;
+    }
+    let mut msd: u8 = binary / 10;
+    if msd > 9 {
+        msd = 9;
+    }
+
+    (msd << 4) | lsd
 }

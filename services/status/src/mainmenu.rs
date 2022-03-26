@@ -82,6 +82,13 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
+    menuitems.push(MenuItem {
+        name: String::from_str(t!("mainmenu.set_tz", xous::LANG)),
+        action_conn: Some(status_conn),
+        action_opcode: StatusOpcode::UxSetTimeZone.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
 
     menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.reboot", xous::LANG)),
