@@ -544,7 +544,9 @@ mod implementation {
                     KeyMap::Qwertz => map_qwertz(rc),
                     _ => ScanCode {key: None, shift: None, hold: None, alt: None},
                 };
-                if code.hold == None { // if there isn't a pre-defined meaning if the key is held, it's a repeating key
+                if code.hold == None
+                && !((rc.r == 5) && (rc.c == 2)) // scan code for the menu key
+                 { // if there isn't a pre-defined meaning if the key is held *and* it's not the menu key: it's a repeating key
                     if let Some(key) = code.key {
                         self.repeating_key = Some(key);
                     }
