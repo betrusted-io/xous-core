@@ -1061,6 +1061,9 @@ fn xmain() -> ! {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
                 // we don't nede a "replace" operation because all ops happen in-place
+
+                // for now, do an expensive sync operation after every write to ensure data integrity
+                basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
             }
             Some(Opcode::WriteKeyFlush) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 match basis_cache.sync(&mut pddb_os, None) {
