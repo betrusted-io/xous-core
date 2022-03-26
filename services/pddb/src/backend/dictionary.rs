@@ -121,6 +121,7 @@ impl DictCacheEntry {
         } else {
             let mut index_cache = PlaintextCache { data: None, tag: None };
             let mut data_cache = PlaintextCache { data: None, tag: None };
+            let mut errcnt = 0;
             while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
                 // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
                 // be a substantial savings in effort.
@@ -129,7 +130,10 @@ impl DictCacheEntry {
 
                 if index_cache.data.is_none() || index_cache.tag.is_none() {
                     // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
-                    log::warn!("Dictionary fill: encountered unallocated page at {} in the dictionary map. {}/{}", try_entry, key_count, self.key_count);
+                    if (errcnt < 16) || (errcnt % 8192 == 0) {
+                        log::warn!("Dictionary fill: encountered unallocated page at {} in the dictionary map. {}/{}", try_entry, key_count, self.key_count);
+                    }
+                    errcnt += 1;
                     try_entry += DK_PER_VPAGE;
                 } else {
                     let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");

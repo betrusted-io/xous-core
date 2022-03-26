@@ -388,6 +388,8 @@ use std::thread;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use core::fmt::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use locales::t;
 
@@ -435,6 +437,34 @@ fn xmain() -> ! {
     let mut basis_cache = BasisCache::new();
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
     let mut token_dict = HashMap::<ApiToken, TokenRecord>::new();
+
+    // mount poller thread
+    let is_mounted = Arc::new(AtomicBool::new(false));
+    let _ = thread::spawn({
+        let is_mounted = is_mounted.clone();
+        move || {
+            let xns = xous_names::XousNames::new().unwrap();
+            let poller_sid = xns.register_name(api::SERVER_NAME_PDDB_POLLER, None).expect("can't register server");
+            loop {
+                let msg = xous::receive_message(poller_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PollOp::Poll) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        if is_mounted.load(Ordering::SeqCst) {
+                            xous::return_scalar(msg.sender, 1).unwrap();
+                        } else {
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        }
+                    }),
+                    Some(PollOp::Quit) => {
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                        break;
+                    }
+                    None => log::warn!("got unrecognized message: {:?}", msg),
+                }
+            }
+            xous::destroy_server(poller_sid).ok();
+        }
+    });
 
     // run the CI tests if the option has been selected
     #[cfg(all(
@@ -512,6 +542,7 @@ fn xmain() -> ! {
                         match ensure_password(&modals, &mut pddb_os) {
                             PasswordState::Correct => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct) {
+                                    is_mounted.store(true, Ordering::SeqCst);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -519,6 +550,7 @@ fn xmain() -> ! {
                             },
                             PasswordState::Uninit => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit) {
+                                    is_mounted.store(true, Ordering::SeqCst);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
