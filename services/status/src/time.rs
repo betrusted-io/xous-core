@@ -41,13 +41,20 @@ const TIME_SERVER_UTC_OFFSET: &'static str = "utc_offset";
 /// This is the offset from UTC to the display time zone. This can vary when the user changes time zones.
 pub(crate) const TIME_SERVER_TZ_OFFSET: &'static str = "tz_offset";
 
+#[allow(dead_code)]
 const CTL3: usize = 0;
+#[allow(dead_code)]
 const SECS: usize = 1;
+#[allow(dead_code)]
 const MINS: usize = 2;
+#[allow(dead_code)]
 const HOURS: usize = 3;
+#[allow(dead_code)]
 const DAYS: usize = 4;
 // note 5 is skipped - this is weekdays, and is unused
+#[allow(dead_code)]
 const MONTHS: usize = 6;
+#[allow(dead_code)]
 const YEARS: usize = 7;
 
 /// Do not modify the discriminants in this structure. They are used in `libstd` directly.
@@ -293,6 +300,7 @@ pub fn start_time_server() {
     });
 
     // this thread handles more sensitive operations on the RTC.
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     thread::spawn({
         let rtc_checked = rtc_checked.clone();
         move || {
@@ -359,8 +367,30 @@ pub fn start_time_server() {
             }
         }
     });
+
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    thread::spawn({
+        let rtc_checked = rtc_checked.clone();
+        move || {
+            let xns = xous_names::XousNames::new().unwrap();
+            // we expect exactly one connection from the PDDB
+            let priv_sid = xns.register_name(pddb::TIME_SERVER_PDDB, Some(1)).expect("can't register server");
+            rtc_checked.store(true, Ordering::SeqCst);
+            loop {
+                let msg = xous::receive_message(priv_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PrivTimeOp::ResetRtc) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        log::warn!("RTC time reset command received. This does nothing in hosted mode");
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    }),
+                    _ => log::error!("Time server private thread received unknown opcode: {:?}", msg),
+                }
+            }
+        }
+    });
 }
 
+#[allow(dead_code)]
 fn is_rtc_invalid(settings: &[u8]) -> bool {
     ((settings[CTL3] & 0xE0) != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
     || ((settings[SECS] & 0x80) != 0)  // clock integrity should be guaranteed
@@ -372,9 +402,11 @@ fn is_rtc_invalid(settings: &[u8]) -> bool {
     || (to_binary(settings[YEARS]) > 99)
 }
 
+#[allow(dead_code)]
 fn to_binary(bcd: u8) -> u8 {
     (bcd & 0xf) + ((bcd >> 4) * 10)
 }
+#[allow(dead_code)]
 fn to_bcd(binary: u8) -> u8 {
     let mut lsd: u8 = binary % 10;
     if lsd > 9 {

@@ -302,7 +302,6 @@ fn xmain() -> ! {
 
     let mut stats_phase: usize = 0;
 
-    let dt_pump_interval = 15;
     let charger_pump_interval = 180;
     let batt_interval;
     let secnotes_interval;
@@ -514,18 +513,6 @@ fn xmain() -> ! {
                         }
                     }
                 }
-                if (stats_phase % dt_pump_interval) == 2 {
-                    // #[cfg(any(target_os = "none", target_os = "xous"))]
-                    // TODO_RTC
-                    // placeholder for the RTC request when it is ready
-                    #[cfg(not(any(target_os = "none", target_os = "xous")))]
-                    {
-                        log::trace!("hosted request of date time - short circuiting server call");
-                        use chrono::prelude::*;
-                        let now = Local::now();
-                    }
-                }
-
                 { // update the time field
                     // have to clear the entire rectangle area, because the text has a variable width and dirty text will remain if the text is shortened
                     gam.draw_rectangle(status_gid, time_rect).ok();
