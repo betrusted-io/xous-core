@@ -31,7 +31,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                     write!(ret, "UTC time is {}", datetime.format("%m/%d/%Y %T")).unwrap();
                 },
                 "local" => {
-                    let localtime = llio::LocalTime::new();
+                    let mut localtime = llio::LocalTime::new();
                     if let Some(timestamp) = localtime.get_local_time_ms() {
                         // we "say" UTC but actually local time is in whatever the local time is
                         let dt = chrono::DateTime::<Utc>::from_utc(

@@ -15,6 +15,7 @@ static TIME_REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 pub struct LocalTime {
     conn: xous::CID,
+    warn_count: u32,
 }
 impl LocalTime {
     pub fn new() -> LocalTime {
@@ -22,11 +23,12 @@ impl LocalTime {
         let conn = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
         LocalTime {
           conn,
+          warn_count: 0,
         }
     }
     /// Returns the local time as milliseconds since EPOCH, assuming the time zone is set
     /// This is provided because we don't have a `libc` to do time zone lookups with `Chrono`.
-    pub fn get_local_time_ms(&self) -> Option<u64> {
+    pub fn get_local_time_ms(&mut self) -> Option<u64> {
         match xous::send_message(self.conn,
             xous::Message::new_blocking_scalar(
                 6, // WallClockTimeInit -- this should not change because it's a libstd mapping
@@ -35,7 +37,10 @@ impl LocalTime {
         ).expect("couldn't get init status") {
             xous::Result::Scalar1(is_init) => {
                 if is_init == 0 {
-                    log::warn!("Time offsets are not initialized, can't report local time");
+                    if self.warn_count < 10 || (self.warn_count & 0xff) == 0 {
+                        log::warn!("Time offsets are not initialized, can't report local time");
+                    }
+                    self.warn_count += 1;
                     return None;
                 }
             }
