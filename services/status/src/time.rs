@@ -35,11 +35,11 @@ use num_traits::*;
 pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
 
 /// Dictionary for RTC settings.
-const TIME_SERVER_DICT: &'static str = "sys.rtc";
+pub(crate) const TIME_SERVER_DICT: &'static str = "sys.rtc";
 /// This is the UTC offset from the current hardware RTC reading. This should be fixed once time is set.
 const TIME_SERVER_UTC_OFFSET: &'static str = "utc_offset";
 /// This is the offset from UTC to the display time zone. This can vary when the user changes time zones.
-const TIME_SERVER_TZ_OFFSET: &'static str = "tz_offset";
+pub(crate) const TIME_SERVER_TZ_OFFSET: &'static str = "tz_offset";
 
 const CTL3: usize = 0;
 const SECS: usize = 1;
