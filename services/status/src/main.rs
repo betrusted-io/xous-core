@@ -338,7 +338,7 @@ fn xmain() -> ! {
     // some RTC UX structures
     let modals = modals::Modals::new(&xns).unwrap();
     let timeserver_cid = xous::connect(xous::SID::from_bytes(crate::time::TIME_SERVER_PUBLIC).unwrap()).unwrap();
-    let localtime = llio::LocalTime::new();
+    let mut localtime = llio::LocalTime::new();
     let pddb_poller = pddb::PddbMountPoller::new();
 
     log::debug!("subscribe to wifi updates");
@@ -585,6 +585,10 @@ fn xmain() -> ! {
                 stats_phase = stats_phase.wrapping_add(1);
             }
             Some(StatusOpcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
+                if !pddb_poller.is_mounted_nonblocking() {
+                    modals.show_notification(t!("stats.please_mount", xous::LANG)).expect("couldn't show notification");
+                    continue;
+                }
                 pump_run.store(false, Ordering::Relaxed); // stop status updates while we do this
                 let secs: u8;
                 let mins: u8;
@@ -651,6 +655,10 @@ fn xmain() -> ! {
                 pump_run.store(true, Ordering::Relaxed); // stop status updates while we do this
             }),
             Some(StatusOpcode::UxSetTimeZone) => {
+                if !pddb_poller.is_mounted_nonblocking() {
+                    modals.show_notification(t!("stats.please_mount", xous::LANG)).expect("couldn't show notification");
+                    continue;
+                }
                 pump_run.store(false, Ordering::Relaxed); // stop status updates while we do this
                 let tz = modals.get_text(
                     t!("rtc.timezone", xous::LANG),
@@ -697,11 +705,11 @@ fn xmain() -> ! {
                 gam.raise_menu(gam::APP_MENU_NAME).expect("couldn't raise App submenu");
             },
             Some(StatusOpcode::SubmenuKbd) => {
-                log::info!("getting keyboard map");
+                log::debug!("getting keyboard map");
                 let map = kbd.get_keymap().expect("couldn't get key mapping");
-                log::info!("setting index to {:?}", map);
+                log::info!("setting keymap index to {:?}", map);
                 kbd_menumatic.set_index(map.into());
-                log::info!("raising keyboard menu");
+                log::debug!("raising keyboard menu");
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::KBD_MENU_NAME).expect("couldn't raise keyboard layout submenu");
             },

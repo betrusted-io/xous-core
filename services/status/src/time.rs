@@ -33,10 +33,6 @@ use num_traits::*;
 /// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
 /// hence the scope of the name is private to this crate.
 pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
-/// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
-/// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
-/// depend upon this constant.
-pub const TIME_SERVER_PDDB: &'static str = "_dedicated pddb timeserver connection_";
 
 /// Dictionary for RTC settings.
 const TIME_SERVER_DICT: &'static str = "sys.rtc";
@@ -89,7 +85,7 @@ pub fn start_time_server() {
 
     let xns = xous_names::XousNames::new().unwrap();
     // we expect exactly one connection from the PDDB
-    let priv_sid = xns.register_name(TIME_SERVER_PDDB, Some(1)).expect("can't register server");
+    let priv_sid = xns.register_name(pddb::TIME_SERVER_PDDB, Some(1)).expect("can't register server");
     let mut i2c = llio::I2c::new(&xns);
     let trng = trng::Trng::new(&xns).unwrap();
     let llio = llio::Llio::new(&xns);
@@ -209,10 +205,10 @@ pub fn start_time_server() {
             if tz_key.read(&mut tz_buf).unwrap_or(0) == 8 {
                 tz_offset_ms = i64::from_le_bytes(tz_buf);
             }
-            log::info!("offset_key: {}", utc_offset_ms);
-            log::info!("tz_key: {}", tz_offset_ms);
-            log::info!("start_rtc_secs: {}", start_rtc_secs);
-            log::info!("start_tt_ms: {}", start_tt_ms);
+            log::debug!("offset_key: {}", utc_offset_ms);
+            log::debug!("tz_key: {}", tz_offset_ms);
+            log::debug!("start_rtc_secs: {}", start_rtc_secs);
+            log::debug!("start_tt_ms: {}", start_tt_ms);
             loop {
                 let msg = xous::receive_message(pub_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -339,6 +335,7 @@ pub fn start_time_server() {
                 let msg = xous::receive_message(priv_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(PrivTimeOp::ResetRtc) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        log::warn!("RTC time reset command received.");
                         settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
                         let mut start_time = trng.get_u64().unwrap();
                         // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years

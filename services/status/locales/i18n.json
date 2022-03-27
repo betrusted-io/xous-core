@@ -25,10 +25,16 @@
         "en-tts": "Set Time"
     },
     "stats.mount_pddb": {
-        "ja": "ログイン？",
-        "en": "Login? ",
-        "zh": "登录？",
-        "en-tts": "Login? "
+        "ja": " ",
+        "en": " ",
+        "zh": " ",
+        "en-tts": " "
+    },
+    "stats.please_mount": {
+        "ja": "PDDBをマウントして、再試行してください。",
+        "en": "Please mount the PDDB and try again.",
+        "zh": "请挂载 PDDB 并重试。",
+        "en-tts": "Please mount the PDDB and try again."
     },
     "secnote.usb_unlock": {
         "en": " USB unlocked",
