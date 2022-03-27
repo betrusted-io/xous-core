@@ -36,7 +36,6 @@ impl PddbMountPoller {
         PddbMountPoller { conn }
     }
     pub fn is_mounted_nonblocking(&self) -> bool {
-        log::info!("mount poll");
         match send_message(self.conn,
             Message::new_blocking_scalar(PollOp::Poll.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't poll mount poller") {
