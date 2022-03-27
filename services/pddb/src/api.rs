@@ -13,6 +13,11 @@ use std::num::NonZeroU32;
 // note this name cannot be changed because it is baked into `libstd`
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 pub(crate) const SERVER_NAME_PDDB_POLLER: &str     = "_PDDB Mount Poller_";
+/// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
+/// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
+/// depend upon this constant.
+pub const TIME_SERVER_PDDB: &'static str = "_dedicated pddb timeserver connection_";
+
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.
 #[allow(dead_code)]
@@ -28,8 +33,8 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_01_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
-//pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
-pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
+// pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// range for the starting point of a journal number, picked from a random seed
 /// the goal is to reduce info leakage about the age of structures relative to each other
