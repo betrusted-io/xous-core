@@ -5,7 +5,7 @@ use net::XousServerId;
 use net::{Duration, NetPingCallback};
 use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::{SocketAddr, IpAddr};
+use std::net::{SocketAddr, IpAddr, TcpStream};
 use std::io::Write;
 use std::io::Read;
 use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
@@ -73,45 +73,37 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     if let Some(url) = tokens.next() {
                         match url.split_once('/') {
                             Some((host, path)) => {
-                                match self.dns.lookup(host) {
-                                    Ok(ipaddr) => {
-                                        log::info!("resolved {} to {:?}", host, ipaddr);
-                                        match net::TcpStream::connect_xous((IpAddr::from(ipaddr), 80),
-                                        Some(Duration::from_millis(5000)),
-                                        None) {
-                                            Ok(mut stream) => {
-                                                log::trace!("stream open, setting timeouts");
-                                                stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
-                                                stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
-                                                log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().total_millis());
-                                                log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().total_millis());
-                                                log::info!("my socket: {:?}", stream.socket_addr());
-                                                log::info!("peer addr: {:?}", stream.peer_addr());
-                                                log::info!("sending GET request");
-                                                match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
-                                                    Ok(_) => log::trace!("sent GET"),
-                                                    Err(e) => {
-                                                        log::error!("GET err {:?}", e);
-                                                        write!(ret, "Error sending GET: {:?}", e).unwrap();
-                                                    }
-                                                }
-                                                write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
-                                                write!(stream, "Connection: close\r\n").expect("stream error");
-                                                write!(stream, "\r\n").expect("stream error");
-                                                log::info!("fetching response....");
-                                                let mut buf = [0u8; 512];
-                                                match stream.read(&mut buf) {
-                                                    Ok(len) => {
-                                                        log::trace!("raw response ({}): {:?}", len, &buf[..len]);
-                                                        write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).unwrap();
-                                                    }
-                                                    Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
-                                                }
+                                match TcpStream::connect((host, 80)) {
+                                    Ok(mut stream) => {
+                                        log::trace!("stream open, setting timeouts");
+                                        stream.set_read_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
+                                        stream.set_write_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
+                                        log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().as_millis());
+                                        log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().as_millis());
+                                        log::info!("my socket: {:?}", stream.local_addr());
+                                        log::info!("peer addr: {:?}", stream.peer_addr());
+                                        log::info!("sending GET request");
+                                        match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
+                                            Ok(_) => log::trace!("sent GET"),
+                                            Err(e) => {
+                                                log::error!("GET err {:?}", e);
+                                                write!(ret, "Error sending GET: {:?}", e).unwrap();
                                             }
-                                            Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
+                                        }
+                                        write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
+                                        write!(stream, "Connection: close\r\n").expect("stream error");
+                                        write!(stream, "\r\n").expect("stream error");
+                                        log::info!("fetching response....");
+                                        let mut buf = [0u8; 512];
+                                        match stream.read(&mut buf) {
+                                            Ok(len) => {
+                                                log::trace!("raw response ({}): {:?}", len, &buf[..len]);
+                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).unwrap();
+                                            }
+                                            Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
                                         }
                                     }
-                                    _ => write!(ret, "Couldn't resolve {}", host).unwrap(),
+                                    Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
                                 }
                             }
                             _ => write!(ret, "Usage: tcpget bunniefoo.com/bunnie/test.txt").unwrap(),

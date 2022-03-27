@@ -121,11 +121,20 @@ pub(crate) enum Opcode {
     /// debug USB status
     DebugUsbOp,
 
-    /// Read the date and time from the RTC. Warning: blocking call, operation takes ~10-20ms
-    DateTime,
-
     /// SuspendResume callback
     SuspendResume,
+
+    /// sets a wake-up alarm. This forces the SoC into power-on state, if it happens to be off.
+    /// primarily used to trigger cold reboots, but could have other reasons
+    SetWakeupAlarm, //(u8, TimeUnits),
+    /// clear any wakeup alarms that have been set
+    ClearWakeupAlarm,
+    /// sets an RTC alarm. This just triggers a regular interrupt, no other side-effect
+    SetRtcAlarm,
+    /// clears any RTC alarms that have been set
+    ClearRtcAlarm,
+    /// reads the current RTC count as a value in seconds
+    GetRtcValue,
 
     /// Exit the server
     Quit,
@@ -149,4 +158,3 @@ pub(crate) struct ScalarHook {
     pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
     pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
 }
-

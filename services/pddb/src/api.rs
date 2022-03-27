@@ -10,7 +10,14 @@ use std::num::NonZeroU32;
 // get configured out in some builds). Thus, we tell clippy to just shut up and stick them all
 // here, because sometimes, clippy just can't see the big picture.
 
+// note this name cannot be changed because it is baked into `libstd`
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
+pub(crate) const SERVER_NAME_PDDB_POLLER: &str     = "_PDDB Mount Poller_";
+/// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
+/// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
+/// depend upon this constant.
+pub const TIME_SERVER_PDDB: &'static str = "_dedicated pddb timeserver connection_";
+
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.
 #[allow(dead_code)]
@@ -110,6 +117,11 @@ pub(crate) enum Opcode {
     /// Suspend/resume callback
     SuspendResume,
     /// quit the server
+    Quit,
+}
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum PollOp {
+    Poll,
     Quit,
 }
 

@@ -382,12 +382,46 @@ impl Llio {
             Message::new_scalar(Opcode::UartMux.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
-    pub fn read_rtc_blocking(&self) -> Result<DateTime, xous::Error> {
-        let alloc = DateTime::default();
-        let mut buf = Buffer::into_buf(alloc).expect("couldn't transform into IPC memory");
-        buf.lend_mut(self.conn, Opcode::DateTime.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-        let dt = buf.to_original::<DateTime, _>().expect("couldn't transform back from IPC memory");
-        Ok(dt)
+    /// wakeup alarm will force the system on if it is off, but does not trigger an interrupt on the CPU
+    pub fn set_wakeup_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::SetWakeupAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
+        ).map(|_|())
+    }
+    pub fn clear_wakeup_alarm(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ClearWakeupAlarm.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_|())
+    }
+    /// the rtc alarm will not turn the system on, but it will trigger an interrupt on the CPU
+    pub fn set_rtc_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::SetRtcAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
+        ).map(|_|())
+    }
+    pub fn clear_rtc_alarm(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_|())
+    }
+    /// This returns the elapsed seconds on the RTC since an arbitrary start point in the past.
+    /// The translation of this is handled by `libstd::SystemTime`; you may use this call, but
+    /// the interpretation is not terribly meaningful on its own.
+    pub fn get_rtc_secs(&self) -> Result<u64, xous::Error> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetRtcValue.to_usize().unwrap(), 0, 0, 0, 0)
+        )? {
+            xous::Result::Scalar2(hi, lo) => {
+                if hi & 0x8000_0000 != 0 {
+                    Err(xous::Error::InternalError)
+                } else {
+                    Ok(((hi as u64) << 32) | lo as u64)
+                }
+            }
+            _ => {
+                Err(xous::Error::InternalError)
+            }
+        }
     }
 }
 

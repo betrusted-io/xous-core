@@ -18,6 +18,24 @@
         "zh": "运行",
         "en-tts": "Up"
     },
+    "stats.set_time": {
+        "ja": "設定時間",
+        "en": "Set Time",
+        "zh": "设置时间",
+        "en-tts": "Set Time"
+    },
+    "stats.mount_pddb": {
+        "ja": " ",
+        "en": " ",
+        "zh": " ",
+        "en-tts": " "
+    },
+    "stats.please_mount": {
+        "ja": "PDDBをマウントして、再試行してください。",
+        "en": "Please mount the PDDB and try again.",
+        "zh": "请挂载 PDDB 并重试。",
+        "en-tts": "Please mount the PDDB and try again."
+    },
     "secnote.usb_unlock": {
         "en": " USB unlocked",
         "ja": "USBロック解除",
@@ -96,6 +114,12 @@
         "zh": "设置时间",
         "en-tts": "Set time"
     },
+    "mainmenu.set_tz": {
+        "en": "Set timezone",
+        "ja": "タイムゾーンを設定",
+        "zh": "设置本地时区",
+        "en-tts": "Set timezone"
+    },
     "mainmenu.pddb": {
         "en": "PDDB Submenu",
         "ja": "PDDBサブメニュー",
@@ -143,5 +167,107 @@
         "ja": "Shellchat",
         "zh": "外壳聊天",
         "en-tts": "Shellchat"
+    },
+    "rtc.month": {
+        "en": "Enter month (1-12)",
+        "ja": "月（1-12）を入力してください。",
+        "zh": "输入月份 (1-12)",
+        "en-tts": "Enter month one through twelve"
+    },
+    "rtc.day": {
+        "en": "Enter day (1-31)",
+        "ja": "日数 (1-31) を入力してください。",
+        "zh": "输入日期 (1-31)",
+        "en-tts": "Enter day one through 31"
+    },
+    "rtc.year": {
+        "en": "Enter last two digits of year",
+        "ja": "西暦の下2桁を入力してください。",
+        "zh": "输入年份 (最后两位数)",
+        "en-tts": "Enter last two digits of year"
+    },
+    "rtc.hour": {
+        "en": "Enter hours in local timezone (0-23)",
+        "ja": "時間（0-23）を入力してください。",
+        "zh": "输入小时 (0-23)",
+        "en-tts": "Enter hours for local timezone as 24 hour format"
+    },
+    "rtc.minute": {
+        "en": "Enter minutes (0-59)",
+        "ja": "分（0-59）を入力してください。",
+        "zh": "输入分钟 (0-59)",
+        "en-tts": "Enter minutes"
+    },
+    "rtc.seconds": {
+        "en": "Enter seconds (0-59)",
+        "ja": "秒 (0-59) を入力してください。",
+        "zh": "输入秒数 (0-59)",
+        "en-tts": "Enter seconds"
+    },
+    "rtc.day_of_week": {
+        "en": "Select the day of week",
+        "ja": "曜日を選択してください。",
+        "zh": "[星期几]清单框",
+        "en-tts": "Select the day of week"
+    },
+    "rtc.monday": {
+        "en": "Monday",
+        "ja": "月曜日",
+        "zh": "星期一",
+        "en-tts": "Monday"
+    },
+    "rtc.tuesday": {
+        "en": "Tuesday",
+        "ja": "火曜日",
+        "zh": "星期二",
+        "en-tts": "Tuesday"
+    },
+    "rtc.wednesday": {
+        "en": "Wednesday",
+        "ja": "水曜日",
+        "zh": "星期三",
+        "en-tts": "Wednesday"
+    },
+    "rtc.thursday": {
+        "en": "Thursday",
+        "ja": "木曜日",
+        "zh": "星期四",
+        "en-tts": "Thursday"
+    },
+    "rtc.friday": {
+        "en": "Friday",
+        "ja": "金曜日",
+        "zh": "星期五",
+        "en-tts": "Friday"
+    },
+    "rtc.saturday": {
+        "en": "Saturday",
+        "ja": "土曜日",
+        "zh": "星期六",
+        "en-tts": "Saturday"
+    },
+    "rtc.sunday": {
+        "en": "Sunday",
+        "ja": "日曜日",
+        "zh": "星期日",
+        "en-tts": "Sunday"
+    },
+    "rtc.timezone": {
+        "en": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours).\nNote: Precursor does not yet track daylight savings.",
+        "ja": "UTCからのローカルオフセットを時間単位で入力してください（-12.0〜 + 14.0時間)：",
+        "zh": "请以小时为单位输入您与 UTC 的本地偏移量（-12.0 到 +14.0 小时):",
+        "en-tts": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours):"
+    },
+    "rtc.integer_err": {
+        "en": "Error: entry was not numeric",
+        "ja": "エラー:エントリは数値ではありませんでした。",
+        "zh": "错误：输入不是数字",
+        "en-tts": "Error: entry was not numeric"
+    },
+    "rtc.range_err": {
+        "en": "Error: input out of range",
+        "ja": "エラー:入力が範囲外です。",
+        "zh": "错误：输入超出范围",
+        "en-tts": "Error: input out of range"
     }
 }

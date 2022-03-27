@@ -17,12 +17,47 @@ use std::thread::JoinHandle;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+pub(crate) static POLLER_REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum CbOp {
     Change,
     Quit
 }
+
+pub struct PddbMountPoller {
+    conn: CID
+}
+impl PddbMountPoller {
+    pub fn new() -> Self {
+        POLLER_REFCOUNT.fetch_add(1, Ordering::Relaxed);
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB_POLLER).expect("can't connect to Pddb mount poller server");
+        PddbMountPoller { conn }
+    }
+    pub fn is_mounted_nonblocking(&self) -> bool {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(PollOp::Poll.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't poll mount poller") {
+            xous::Result::Scalar1(is_mounted) => {
+                if is_mounted == 0 {
+                    false
+                } else {
+                    true
+                }
+            }
+            _ => false
+        }
+    }
+}
+impl Drop for PddbMountPoller {
+    fn drop(&mut self) {
+        if POLLER_REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
+    }
+}
+
 
 /// The intention is that one Pddb management object is made per process, and this serves
 /// as the gateway for parcelling out PddbKey objects, which are the equivalent of a File
@@ -402,7 +437,7 @@ impl Pddb {
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-        buf.lend_mut(self.conn, Opcode::DeleteKey.to_u32().unwrap())
+        buf.lend_mut(self.conn, Opcode::DeleteDict.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
 
         let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
@@ -410,6 +445,23 @@ impl Pddb {
             PddbRequestCode::NoErr => Ok(()),
             PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
             _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
+    }
+
+    pub fn sync(&mut self) -> Result<()> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::WriteKeyFlush.to_usize().unwrap(), 0, 0, 0, 0)
+        ).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        if let xous::Result::Scalar1(rcode) = response {
+            match FromPrimitive::from_u8(rcode as u8) {
+                Some(PddbRetcode::Ok) => Ok(()),
+                Some(PddbRetcode::BasisLost) => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
+                Some(PddbRetcode::DiskFull) => Err(Error::new(ErrorKind::OutOfMemory, "Out of disk space, some data lost on sync")),
+                _ => Err(Error::new(ErrorKind::Interrupted, "Flush failed for unspecified reasons")),
+            }
+        } else {
+            Err(Error::new(ErrorKind::Other, "Xous internal error"))
         }
     }
 

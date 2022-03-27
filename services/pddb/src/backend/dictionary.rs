@@ -121,6 +121,7 @@ impl DictCacheEntry {
         } else {
             let mut index_cache = PlaintextCache { data: None, tag: None };
             let mut data_cache = PlaintextCache { data: None, tag: None };
+            let mut errcnt = 0;
             while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
                 // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
                 // be a substantial savings in effort.
@@ -129,7 +130,10 @@ impl DictCacheEntry {
 
                 if index_cache.data.is_none() || index_cache.tag.is_none() {
                     // somehow we hit a page where nothing was allocated (perhaps it was previously deleted?), or less likely, the data was corrupted. Note the isuse, skip past it.
-                    log::warn!("Dictionary fill: encountered unallocated page at {} in the dictionary map. {}/{}", try_entry, key_count, self.key_count);
+                    if (errcnt < 4) || (errcnt % 8192 == 0) {
+                        log::warn!("Dictionary fill: encountered unallocated page at {} in the dictionary map. {}/{}", try_entry, key_count, self.key_count);
+                    }
+                    errcnt += 1;
                     try_entry += DK_PER_VPAGE;
                 } else {
                     let cache_pp = index_cache.tag.as_ref().expect("PP should be in existence, it was already checked...");
@@ -213,6 +217,7 @@ impl DictCacheEntry {
             let mut try_entry = 1;
             let mut key_count = 0;
             let mut index_cache = PlaintextCache { data: None, tag: None };
+            let mut warn_count = 0;
             while try_entry < KEY_MAXCOUNT && key_count < self.key_count && try_entry <= self.last_disk_key_index as usize {
                 // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
                 // be a substantial savings in effort.
@@ -225,7 +230,10 @@ impl DictCacheEntry {
                     // this case "should not happen" in practice, because the last_disk_key_index would either be correctly set as
                     // short by a dict_add(), or a mount() operation would have limited the extent of the search.
                     // if we are hitting this, that means the last_disk_key_index operator was not managed correctly.
-                    log::warn!("expensive search op");
+                    if warn_count < 4 || (warn_count % 8192 == 0) {
+                        log::warn!("expensive search op");
+                    }
+                    warn_count += 1;
                     try_entry += DK_PER_VPAGE;
                 } else {
                     let cache = index_cache.data.as_ref().expect("Cache should be full, it was already checked...");

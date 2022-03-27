@@ -4,7 +4,7 @@ use xous_ipc::Buffer;
 
 use num_traits::*;
 use std::io::{Result, Error, ErrorKind};
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek, SeekFrom};
 
 pub struct PddbKey<'a> {
     pub(crate) token: ApiToken,
@@ -28,6 +28,44 @@ impl<'a> PddbKey<'a> {
             PddbRequestCode::NoErr => Ok(ret.to_attributes()),
             PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Key not found")),
             _ => Err(Error::new(ErrorKind::Other, "Internal error requesting key attributes")),
+        }
+    }
+}
+
+impl<'a> Seek for PddbKey<'a> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        match pos {
+            SeekFrom::Start(p) => {
+                self.pos = p;
+                Ok(p)
+            }
+            SeekFrom::Current(p) => {
+                if self.pos as i64 + p >= 0 {
+                    self.pos = (self.pos as i64 + p) as u64;
+                    Ok(self.pos)
+                } else {
+                    Err(Error::new(ErrorKind::InvalidInput, "Seek to negative offset"))
+                }
+            }
+            SeekFrom::End(p) => {
+                let req = PddbKeyAttrIpc::new(self.token);
+                let mut buf = Buffer::into_buf(req).expect("Couldn't convert memory structure");
+                buf.lend_mut(self.conn, Opcode::KeyAttributes.to_u32().unwrap()).expect("couldn't execute KeyAttributes opcode");
+                let ret = buf.to_original::<PddbKeyAttrIpc, _>().expect("couldn't restore req structure");
+                match ret.code {
+                    PddbRequestCode::NoErr => {
+                        let len = ret.to_attributes().len as i64;
+                        if len + p >= 0 {
+                            self.pos = (len + p) as u64;
+                            Ok(self.pos)
+                        } else {
+                            Err(Error::new(ErrorKind::InvalidInput, "Seek to negative offset"))
+                        }
+                    },
+                    PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Key not found")),
+                    _ => Err(Error::new(ErrorKind::Other, "Internal error requesting key attributes")),
+                }
+            }
         }
     }
 }
