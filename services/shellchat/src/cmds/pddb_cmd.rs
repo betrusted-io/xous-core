@@ -18,7 +18,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "pddb [basislist] [dictlist] [keylist] [query] [delete]";
+        let helpstring = "pddb [basislist] [dictlist] [keylist] [query] [dictdelete] [keydelete]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -74,14 +74,19 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         write!(ret, "Missing query of form 'dict:key'").unwrap();
                     }
                 }
-                "deletekey" => {
+                "keydelete" => {
                     if let Some(descriptor) = tokens.next() {
                         if let Some((dict, keyname)) = descriptor.split_once(':') {
                             match self.pddb.delete_key(dict, keyname, None) {
                                 Ok(_) => {
-                                    write!(ret, "Deleted {}:{}", dict, keyname).unwrap()
+                                    write!(ret, "Deleted {}:{}\n", dict, keyname).unwrap();
+                                    // you must call sync after all deletions are done
+                                    write!(ret, "Sync: {}",
+                                        self.pddb.sync()
+                                        .map_or_else(|e| e.to_string(), |_| "Ok".to_string())
+                                    ).unwrap();
                                 }
-                                _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
+                                Err(e) => write!(ret, "{}:{} not found or other error: {:?}", dict, keyname, e).unwrap(),
                             }
                         } else {
                             write!(ret, "Specify key with form 'dict:key'").unwrap();
@@ -90,13 +95,18 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         write!(ret, "Missing spec of form 'dict:key'").unwrap();
                     }
                 }
-                "deletedict" => {
+                "dictdelete" => {
                     if let Some(dict) = tokens.next() {
                         match self.pddb.delete_dict(dict, None) {
                             Ok(_) => {
-                                write!(ret, "Deleted dictionary {}", dict).unwrap()
+                                write!(ret, "Deleted dictionary {}\n", dict).unwrap();
+                                // you must call sync after all deletions are done
+                                write!(ret, "Sync: {}",
+                                    self.pddb.sync()
+                                    .map_or_else(|e| e.to_string(), |_| "Ok".to_string())
+                                ).unwrap();
                             }
-                            _ => write!(ret, "{} not found or other error", dict).unwrap()
+                            Err(e) => write!(ret, "{} not found or other error: {:?}", dict, e).unwrap()
                         }
                     } else {
                         write!(ret, "Missing dictionary name").unwrap();
