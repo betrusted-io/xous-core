@@ -362,7 +362,7 @@ pub fn start_time_server() {
 }
 
 fn is_rtc_invalid(settings: &[u8]) -> bool {
-    (settings[CTL3] != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
+    ((settings[CTL3] & 0xE0) != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
     || ((settings[SECS] & 0x80) != 0)  // clock integrity should be guaranteed
     || (to_binary(settings[SECS]) > 59)
     || (to_binary(settings[MINS]) > 59)

@@ -161,6 +161,7 @@ fn xmain() -> ! {
     let mut i2c = llio::I2c::new(&xns);
     let mut rtc_alarm_enabled = false;
     let mut wakeup_alarm_enabled = false;
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     log::trace!("starting main loop");
     loop {
@@ -522,14 +523,26 @@ fn xmain() -> ! {
                 // Note that we start the RTC at somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
                 // of continuous uptime service out of the RTC.
                 let mut settings = [0u8; 8];
-                match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings, None) {
-                    Ok(llio::I2cStatus::ResponseReadOk) => {},
-                    _ => {
-                        log::error!("Couldn't read seconds from RTC!");
-                        xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
-                        continue;
-                    },
-                };
+                let mut success = false;
+                while !success {
+                    // retry loop is necessary because this function can get called during "congested" periods
+                    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings, None) {
+                        Ok(llio::I2cStatus::ResponseReadOk) => success = true,
+                        Err(xous::Error::ServerQueueFull) => {
+                            success = false;
+                            // give it a short pause before trying again, to avoid hammering the I2C bus at busy times
+                            tt.sleep_ms(38).unwrap();
+                        },
+                        _ => {
+                            log::error!("Couldn't read seconds from RTC!");
+                            xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                            break;
+                        },
+                    };
+                }
+                if !success {
+                    continue
+                }
                 log::debug!("GetRtcValue regs: {:?}", settings);
                 let total_secs = match rtc_to_seconds(&settings) {
                     Some(s) => s,

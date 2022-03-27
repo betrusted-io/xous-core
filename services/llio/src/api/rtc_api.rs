@@ -217,9 +217,9 @@ pub fn rtc_to_seconds(settings: &[u8]) -> Option<u64> {
     // note 5 is skipped - this is weekdays, and is unused
     const MONTHS: usize = 6;
     const YEARS: usize = 7;
-    if (settings[CTL3] != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
+    if ((settings[CTL3] & 0xE0) != (Control3::BATT_STD_BL_EN).bits()) // power switchover setting should be initialized
     || (settings[SECS] & 0x80 != 0) { // clock integrity should be guaranteed
-        log::error!("RTC is in an uninitialized state!");
+        log::error!("RTC is in an uninitialized state!, {:?}", settings);
         return None;
     }
     // this is a secondary check -- I have seen RTC return non-sensical time results before
