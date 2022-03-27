@@ -1224,6 +1224,12 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
         {
             pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
+            let _ = xous::send_message(time_resetter,
+                xous::Message::new_blocking_scalar(
+                    0, // the ID is "hard coded" using enumerated discriminants
+                    0, 0, 0, 0
+                )
+            ).expect("couldn't reset time");
             pddb_os.dbg_dump(Some("full".to_string()), None);
             if let Some(sys_basis) = pddb_os.pddb_mount() {
                 log::info!("PDDB mount operation finished successfully");
