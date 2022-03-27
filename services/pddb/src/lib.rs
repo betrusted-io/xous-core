@@ -437,7 +437,7 @@ impl Pddb {
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-        buf.lend_mut(self.conn, Opcode::DeleteKey.to_u32().unwrap())
+        buf.lend_mut(self.conn, Opcode::DeleteDict.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
 
         let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
@@ -445,6 +445,23 @@ impl Pddb {
             PddbRequestCode::NoErr => Ok(()),
             PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
             _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
+    }
+
+    pub fn sync(&mut self) -> Result<()> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::WriteKeyFlush.to_usize().unwrap(), 0, 0, 0, 0)
+        ).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        if let xous::Result::Scalar1(rcode) = response {
+            match FromPrimitive::from_u8(rcode as u8) {
+                Some(PddbRetcode::Ok) => Ok(()),
+                Some(PddbRetcode::BasisLost) => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
+                Some(PddbRetcode::DiskFull) => Err(Error::new(ErrorKind::OutOfMemory, "Out of disk space, some data lost on sync")),
+                _ => Err(Error::new(ErrorKind::Interrupted, "Flush failed for unspecified reasons")),
+            }
+        } else {
+            Err(Error::new(ErrorKind::Other, "Xous internal error"))
         }
     }
 

@@ -822,7 +822,8 @@ impl PddbOs {
                                     self.fspace_cache.replace(pp);
                                 } else if pp.journal() == prev_pp.journal() {
                                     log::error!("got two identical journal revisions -- this shouldn't happen, prev: {:?}, candidate: {:?}", prev_pp, pp);
-                                    panic!("Inconsistent FSCB state");
+                                    log::error!("replacing the previous version with the candidate, but this might not be the right decision!");
+                                    self.fspace_cache.replace(pp);
                                 }
                             } else {
                                 log::warn!("Strange...we have a journal entry for a free space page that isn't already in our cache. Guru meditation: {:?}", pp);

@@ -830,6 +830,7 @@ fn xmain() -> ! {
                     None
                 };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                log::debug!("attempting to remove dict {} basis {:?}", dict, bname);
                 match basis_cache.dict_remove(&mut pddb_os, dict, bname, false) {
                     Ok(_) => {
                         let mut evict_list = Vec::<ApiToken>::new();
