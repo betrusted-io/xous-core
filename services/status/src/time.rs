@@ -79,23 +79,18 @@ pub(crate) enum PrivTimeOp {
 }
 
 pub fn start_time_server() {
-    // the public SID is well known and accessible by anyone who uses `libstd`
-    let pub_sid = xous::create_server_with_address(&TIME_SERVER_PUBLIC)
-        .expect("Couldn't create Ticktimer server");
-
-    let xns = xous_names::XousNames::new().unwrap();
-    // we expect exactly one connection from the PDDB
-    let priv_sid = xns.register_name(pddb::TIME_SERVER_PDDB, Some(1)).expect("can't register server");
-    let mut i2c = llio::I2c::new(&xns);
-    let trng = trng::Trng::new(&xns).unwrap();
-    let llio = llio::Llio::new(&xns);
-
     let rtc_checked = Arc::new(AtomicBool::new(false));
 
     // this thread handles reading & updating the time offset from the PDDB
     thread::spawn({
         let rtc_checked = rtc_checked.clone();
         move || {
+            // the public SID is well known and accessible by anyone who uses `libstd`
+            let pub_sid = xous::create_server_with_address(&TIME_SERVER_PUBLIC)
+                .expect("Couldn't create Ticktimer server");
+            let xns = xous_names::XousNames::new().unwrap();
+            let llio = llio::Llio::new(&xns);
+
             let mut utc_offset_ms = 0i64;
             let mut tz_offset_ms = 0i64;
             let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -109,7 +104,7 @@ pub fn start_time_server() {
             log::trace!("start_tt_ms: {}", start_tt_ms);
 
             // register a suspend/resume listener
-            let sr_cid = xous::connect(priv_sid).expect("couldn't create suspend callback connection");
+            let sr_cid = xous::connect(pub_sid).expect("couldn't create suspend callback connection");
             let mut susres = susres::Susres::new(
                 Some(susres::SuspendOrder::Early),
                 &xns,
@@ -301,6 +296,12 @@ pub fn start_time_server() {
     thread::spawn({
         let rtc_checked = rtc_checked.clone();
         move || {
+            let xns = xous_names::XousNames::new().unwrap();
+            // we expect exactly one connection from the PDDB
+            let priv_sid = xns.register_name(pddb::TIME_SERVER_PDDB, Some(1)).expect("can't register server");
+            let mut i2c = llio::I2c::new(&xns);
+            let trng = trng::Trng::new(&xns).unwrap();
+
             // on boot, do the validation checks of the RTC. If it is not initialized or corrupted, fix it.
             let mut settings = [0u8; 8];
             loop {
