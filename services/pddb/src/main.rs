@@ -514,6 +514,10 @@ fn xmain() -> ! {
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
 
+    // the PDDB resets the hardware RTC to a new random starting point every time it is reformatted
+    // it is the only server capable of doing this.
+    let time_resetter = xns.request_connection_blocking(crate::TIME_SERVER_PDDB).unwrap();
+
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
@@ -541,7 +545,7 @@ fn xmain() -> ! {
                     } else {
                         match ensure_password(&modals, &mut pddb_os) {
                             PasswordState::Correct => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct) {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
@@ -549,7 +553,7 @@ fn xmain() -> ! {
                                 }
                             },
                             PasswordState::Uninit => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit) {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
@@ -1137,7 +1141,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordSta
         }
     }
 }
-fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState) -> bool {
+fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState, time_resetter: xous::CID) -> bool {
     log::info!("Attempting to mount the PDDB");
     if pw_state == PasswordState::Correct {
         if let Some(sys_basis) = pddb_os.pddb_mount() {
@@ -1189,6 +1193,17 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 }
 
                 pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
+
+                // reset the RTC at the point of PDDB format. It is done now because at this point we know that
+                // no time offset keys can exist in the PDDB, and as a measure of good hygeine we want to restart
+                // our RTC counter from a random duration between epoch and 10 years to give some deniability about
+                // how long the device has been in use.
+                let _ = xous::send_message(time_resetter,
+                    xous::Message::new_blocking_scalar(
+                        0, // the ID is "hard coded" using enumerated discriminants
+                        0, 0, 0, 0
+                    )
+                ).expect("couldn't reset time");
 
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
