@@ -561,7 +561,7 @@ fn xmain() -> ! {
             Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 use chrono::prelude::*;
                 let now = Local::now();
-                let total_secs = now.timestamp_millis() - 148409348; // sets the offset to something like 1974, which is roughly where an RTC value ends up in reality
+                let total_secs = now.timestamp_millis() / 1000 - 148409348; // sets the offset to something like 1974, which is roughly where an RTC value ends up in reality
                 xous::return_scalar2(msg.sender,
                     ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
                     (total_secs & 0xFFFF_FFFF) as usize,

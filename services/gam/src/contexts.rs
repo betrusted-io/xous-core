@@ -94,6 +94,7 @@ pub(crate) struct ContextManager {
     main_menu_app_token: Option<[u32; 4]>, // app_token of the main menu, if it has been registered
     /// for internal generation of deface states
     pub trng: trng::Trng,
+    tt: ticktimer_server::Ticktimer,
 }
 impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -114,6 +115,7 @@ impl ContextManager {
             kbd,
             main_menu_app_token: None,
             trng: trng::Trng::new(&xns).expect("couldn't connect to trng"),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
@@ -465,10 +467,15 @@ impl ContextManager {
     pub(crate) fn redraw(&self) -> Result<(), xous::Error> { // redraws the currently focused context
         if let Some(token) = self.focused_app() {
             if let Some(context) = self.contexts.get(&token) {
-                log::trace!("redraw msg to {}, id {}", context.listener, context.redraw_id);
-                return xous::send_message(context.listener,
+                log::info!("redraw msg to {}, id {}", context.listener, context.redraw_id);
+                let ret = xous::send_message(context.listener,
                     xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
-                ).map(|_| ())
+                ).map(|_| ());
+                // this delay helps ensure that the previously requested UX redraw has time to complete
+                // in particular, this helps sequence the case where one modal is erased, and the next one is
+                // raised, in quick succession.
+                self.tt.sleep_ms(20).unwrap();
+                return ret
             }
         } else {
             return Err(xous::Error::UseBeforeInit)

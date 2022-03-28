@@ -88,7 +88,7 @@ fn xmain() -> ! {
     let _redraw_handle = thread::spawn({
         let op = Arc::clone(&op);
         move || {
-            #[cfg(any(feature="tts", not(any(target_os = "none", target_os = "xous"))))]
+            #[cfg(feature="tts")]
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             // build the core data structure here
             let text_action = TextEntry {
@@ -132,8 +132,6 @@ fn xmain() -> ! {
 
             loop {
                 let msg = xous::receive_message(renderer_sid).unwrap();
-                #[cfg(not(any(target_os = "none", target_os = "xous")))]
-                tt.sleep_ms(100).unwrap(); // hosted mode needs delays to work
                 log::debug!("renderer message: {:?}", msg);
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(RendererOp::InitiateOp) => {
@@ -439,8 +437,6 @@ fn xmain() -> ! {
     ];
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        tt.sleep_ms(100).unwrap(); // hosted mode needs delays to work
         log::debug!("message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::GetMutex) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
