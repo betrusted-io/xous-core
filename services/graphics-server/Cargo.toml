@@ -25,9 +25,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
-# this is forked from minifb because the `set_key_state` callback was dropped in later versions of minifb (or maybe it was never there?)
-# the working branch is thus `set-key-state-cb`
-minifb = {version = "0.19.2", git = "https://github.com/betrusted-io/rust_minifb.git", rev = "1717ec60830c1f9592b77ce875e492afef1aa533"}
+minifb = "0.22.0"
 
 [features]
 debugprint = []
