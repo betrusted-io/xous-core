@@ -467,7 +467,7 @@ impl ContextManager {
     pub(crate) fn redraw(&self) -> Result<(), xous::Error> { // redraws the currently focused context
         if let Some(token) = self.focused_app() {
             if let Some(context) = self.contexts.get(&token) {
-                log::info!("redraw msg to {}, id {}", context.listener, context.redraw_id);
+                log::debug!("redraw msg to {}, id {}", context.listener, context.redraw_id);
                 let ret = xous::send_message(context.listener,
                     xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
                 ).map(|_| ());
