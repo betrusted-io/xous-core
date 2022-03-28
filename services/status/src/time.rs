@@ -28,6 +28,11 @@ use llio::*;
 use pddb::{Pddb, PddbMountPoller};
 use std::io::{Read, Write, Seek, SeekFrom};
 use num_traits::*;
+// imports for time ux
+use locales::t;
+use chrono::prelude::*;
+use xous::Message;
+use gam::modal::*;
 
 /// This is a "well known name" used by `libstd` to connect to the time server
 /// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
@@ -83,6 +88,13 @@ pub(crate) enum TimeOp {
 pub(crate) enum PrivTimeOp {
     /// Reset the hardware RTC count
     ResetRtc = 0,
+}
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum TimeUxOp {
+    SetTime,
+    SetTimeZone,
+    Quit,
 }
 
 pub fn start_time_server() {
@@ -418,4 +430,222 @@ fn to_bcd(binary: u8) -> u8 {
     }
 
     (msd << 4) | lsd
+}
+
+pub fn start_time_ux(sid: xous::SID) {
+    thread::spawn({
+        move || {
+            // some RTC UX structures
+            let xns = xous_names::XousNames::new().unwrap();
+            let modals = modals::Modals::new(&xns).unwrap();
+            let timeserver_cid = xous::connect(xous::SID::from_bytes(crate::time::TIME_SERVER_PUBLIC).unwrap()).unwrap();
+            let pddb_poller = pddb::PddbMountPoller::new();
+
+            loop {
+                let msg = xous::receive_message(sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(TimeUxOp::SetTime) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                        if !pddb_poller.is_mounted_nonblocking() {
+                            modals.show_notification(t!("stats.please_mount", xous::LANG)).expect("couldn't show notification");
+                            continue;
+                        }
+                        let mut tz_set_handle = pddb::Pddb::new();
+                        let mut tz_set = false;
+                        let mut tz_offset_ms = 0i64;
+                        let maybe_tz_set_key = tz_set_handle.get(
+                            TIME_SERVER_DICT,
+                            TIME_SERVER_TZ_OFFSET,
+                            None, false, false,
+                            None,
+                            None::<fn()>
+                        ).ok();
+                        if let Some(mut tz_set_key) = maybe_tz_set_key {
+                            let mut tz_buf = [0u8; 8];
+                            if tz_set_key.read(&mut tz_buf).unwrap_or(0) == 8 {
+                                tz_offset_ms = i64::from_le_bytes(tz_buf);
+                                tz_set = true;
+                            }
+                        }
+                        // note that we don't do an "else" here because we also want to catch the case of
+                        // a key exists, but nothing was written to it (length of key was 0 or inappropriate)
+                        if !tz_set {
+                            let tz = modals.get_text(
+                                t!("rtc.timezone", xous::LANG),
+                                Some(tz_ux_validator), None
+                            ).expect("couldn't get timezone").as_str()
+                            .parse::<f32>().expect("pre-validated input failed to re-parse!");
+                            log::info!("got tz offset {}", tz);
+                            tz_offset_ms = (tz * 3600.0 * 1000.0) as i64;
+                            xous::send_message(timeserver_cid,
+                                Message::new_scalar(
+                                    crate::time::TimeOp::SetTzOffsetMs.to_usize().unwrap(),
+                                    (tz_offset_ms >> 32) as usize,
+                                    (tz_offset_ms & 0xFFFF_FFFF) as usize,
+                                    0, 0,
+                                )
+                            ).expect("couldn't set timezone");
+                        }
+
+                        let secs: u8;
+                        let mins: u8;
+                        let hours: u8;
+                        let months: u8;
+                        let days: u8;
+                        let years: u8;
+
+                        months = modals.get_text(
+                            t!("rtc.month", xous::LANG),
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap())
+                        ).expect("couldn't get month").as_str()
+                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                        log::debug!("got months {}", months);
+
+                        days = modals.get_text(
+                            t!("rtc.day", xous::LANG),
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap())
+                        ).expect("couldn't get month").as_str()
+                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                        log::debug!("got days {}", days);
+
+                        years = modals.get_text(
+                            t!("rtc.year", xous::LANG),
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap())
+                        ).expect("couldn't get month").as_str()
+                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                        log::debug!("got years {}", years);
+
+                        hours = modals.get_text(
+                            t!("rtc.hour", xous::LANG),
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap())
+                        ).expect("couldn't get hour").as_str()
+                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                        log::debug!("got hours {}", hours);
+
+                        mins = modals.get_text(
+                            t!("rtc.minute", xous::LANG),
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap())
+                        ).expect("couldn't get minutes").as_str()
+                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                        log::debug!("got minutes {}", mins);
+
+                        secs = modals.get_text(
+                            t!("rtc.seconds", xous::LANG),
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap())
+                        ).expect("couldn't get seconds").as_str()
+                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
+                        log::debug!("got seconds {}", secs);
+
+                        log::info!("Setting time: {}/{}/{} {}:{}:{}", months, days, years, hours, mins, secs);
+                        let new_dt = chrono::FixedOffset::east((tz_offset_ms / 1000) as i32).ymd(years as i32 + 2000, months as u32, days as u32)
+                        .and_hms(hours as u32, mins as u32, secs as u32);
+                        xous::send_message(timeserver_cid,
+                            Message::new_scalar(
+                                crate::time::TimeOp::SetUtcTimeMs.to_usize().unwrap(),
+                                ((new_dt.timestamp_millis() as u64) >> 32) as usize,
+                                (new_dt.timestamp_millis() as u64 & 0xFFFF_FFFF) as usize,
+                                0, 0,
+                            )
+                        ).expect("couldn't set time");
+                    }),
+                    Some(TimeUxOp::SetTimeZone) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                        if !pddb_poller.is_mounted_nonblocking() {
+                            modals.show_notification(t!("stats.please_mount", xous::LANG)).expect("couldn't show notification");
+                            continue;
+                        }
+                        let tz = modals.get_text(
+                            t!("rtc.timezone", xous::LANG),
+                            Some(tz_ux_validator), None
+                        ).expect("couldn't get timezone").as_str()
+                        .parse::<f32>().expect("pre-validated input failed to re-parse!");
+                        log::info!("got tz offset {}", tz);
+                        let tzoff_ms = (tz * 3600.0 * 1000.0) as i64;
+                        xous::send_message(timeserver_cid,
+                            Message::new_scalar(
+                                crate::time::TimeOp::SetTzOffsetMs.to_usize().unwrap(),
+                                (tzoff_ms >> 32) as usize,
+                                (tzoff_ms & 0xFFFF_FFFF) as usize,
+                                0, 0,
+                            )
+                        ).expect("couldn't set timezone");
+                    }),
+                    Some(TimeUxOp::Quit) => {
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                        break;
+                    }
+                    None => {
+                        log::warn!("unhandled opcode: {:?}", msg);
+                    }
+                }
+            }
+            xous::destroy_server(sid).ok();
+        }
+    });
+}
+
+// RTC Ux helper functions
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum ValidatorOp {
+    UxMonth,
+    UxDay,
+    UxYear,
+    UxHour,
+    UxMinute,
+    UxSeconds,
+}
+
+fn tz_ux_validator(input: TextEntryPayload, _opcode: u32) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+    match text_str.parse::<f32>() {
+        Ok(input) => if input < -12.0 || input > 14.0 {
+            return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)));
+        },
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
+    }
+    None
+}
+
+fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+    let input_int = match text_str.parse::<u32>() {
+        Ok(input_int) => input_int,
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
+    };
+    log::trace!("validating input {}, parsed as {} for opcode {}", text_str, input_int, opcode);
+    match FromPrimitive::from_u32(opcode) {
+        Some(ValidatorOp::UxMonth) => {
+            if input_int < 1 || input_int > 12 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxDay) => {
+            if input_int < 1 || input_int > 31 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxYear) => {
+            if input_int > 99 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxHour) => {
+            if input_int > 23 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxMinute) => {
+            if input_int > 59 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        Some(ValidatorOp::UxSeconds) => {
+            if input_int > 59 {
+                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+            }
+        }
+        _ => {
+            log::error!("internal error: invalid opcode was sent to validator: {:?}", opcode);
+            panic!("internal error: invalid opcode was sent to validator");
+        }
+    }
+    None
 }
