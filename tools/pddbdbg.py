@@ -145,6 +145,9 @@ def main():
     parser.add_argument(
         "--loglevel", required=False, help="set logging level (INFO/DEBUG/WARNING/ERROR)", type=str, default="INFO",
     )
+    parser.add_argument(
+        "--dump", required=False, help="Only dump the image, skip the automated CI checks", action="store_true"
+    )
     args = parser.parse_args()
 
     if args.name == None:
@@ -261,14 +264,18 @@ def main():
                     #logging.info("listing {} keys".format(len(d2.keys)))
                     #for key in d2.keys:
                     #    logging.info("{}".format(key))
-
-                    logging.info("CI checks:")
-                    for bdict in basis_dicts.values():
-                        bdict.ci_check()
-                    if found_all_dicts:
-                        logging.info("All dicts were found.")
+                    if args.dump == False:
+                        logging.info("CI checks:")
+                        for bdict in basis_dicts.values():
+                            bdict.ci_check()
+                        if found_all_dicts:
+                            logging.info("All dicts were found.")
+                        else:
+                            logging.error("Missing dictionaries, something is wrong.")
                     else:
-                        logging.error("Missing dictionaries, something is wrong.")
+                        for bdict in basis_dicts.values():
+                            logging.info("==================================================================")
+                            logging.info("Dict {}".format(bdict.as_str()))
 
                 except ValueError:
                     logging.error("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
