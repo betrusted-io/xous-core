@@ -753,6 +753,8 @@ class Fscb:
             if pp.valid() and (cur_pp.journal() < pp.journal()):
                 logging.debug("FSCB replace {} /with/ {}".format(cur_pp.as_str(), pp.as_str()))
                 self.free_space[pp.page_number() * 4096] = pp
+            elif cur_pp.journal() == pp.journal():
+                logging.warning("Duplicate journal number found:\n   {} (in table)\n   {} (incoming)".format(cur_pp.as_str(), pp.as_str()))
 
     # this is the "AAD" used to encrypt the FastSpace
     def aad(version=0x01_01, dna=0):
