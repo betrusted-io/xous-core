@@ -17,7 +17,7 @@ pub struct Cursor {
 #[allow(dead_code)]
 impl Cursor {
     // Make a new Cursor. When in doubt, set line_height = 0.
-    pub fn new(x: usize, y: usize, line_height: usize) -> Cursor {
+    pub fn new(x: i16, y: i16, line_height: usize) -> Cursor {
         Cursor {
             pt: Pt { x, y },
             line_height,
@@ -33,13 +33,13 @@ impl Cursor {
     }
 
     pub fn update_glyph(&mut self, glyph: &GlyphSprite) {
-        self.pt.x += glyph.wide as usize;
+        self.pt.x += glyph.wide as i16;
         self.line_height = self.line_height.max(glyph.high as usize);
     }
 
     pub(crate) fn update_word(&mut self, word: &TypesetWord) {
         self.pt.x += word.width;
-        self.line_height = self.line_height.max(word.height);
+        self.line_height = self.line_height.max(word.height as usize);
     }
 
     pub fn add(&self, other: Cursor) -> Cursor {

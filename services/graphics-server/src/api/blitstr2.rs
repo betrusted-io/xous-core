@@ -42,9 +42,9 @@ pub(crate) struct TypesetWord {
     /// top left origin point for rendering of the glyphs
     pub origin: Pt,
     /// width of the word
-    pub width: usize,
+    pub width: i16,
     /// overall height for the word
-    pub height: usize,
+    pub height: i16,
     /// set if this `word` is not drawable, e.g. a newline placeholder.
     /// *however* the Vec<GlyphSprite> should still be checked for an insertion point, so that
     /// successive newlines properly get their insertion point drawn

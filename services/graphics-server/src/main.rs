@@ -230,15 +230,15 @@ fn xmain() -> ! {
 
                 let typeset_extent = match tv.bounds_hint {
                     TextBounds::BoundingBox(r) =>
-                        Pt::new((r.br().x - r.tl().x - tv.margin.x * 2) as usize, (r.br().y - r.tl().y - tv.margin.y * 2) as usize),
+                        Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
                     TextBounds::GrowableFromBr(br, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, br.y as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, br.y - tv.margin.y * 2),
                     TextBounds::GrowableFromBl(bl, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, bl.y as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, bl.y - tv.margin.y * 2),
                     TextBounds::GrowableFromTl(tl, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2),
                     TextBounds::GrowableFromTr(tr, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2),
                 };
                 let mut typesetter = Typesetter::setup(
                     tv.to_str(),
