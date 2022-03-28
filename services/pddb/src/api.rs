@@ -118,6 +118,9 @@ pub(crate) enum Opcode {
     SuspendResume,
     /// quit the server
     Quit,
+    /// Write debug dump (only available in hosted mode)
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    DbgDump,
 }
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum PollOp {

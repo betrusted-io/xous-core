@@ -18,7 +18,10 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
+        #[cfg(not(feature="pddbtest"))]
         let helpstring = "pddb [basislist] [dictlist] [keylist] [query] [dictdelete] [keydelete]";
+        #[cfg(feature="pddbtest")]
+        let helpstring = "pddb [basislist] [dictlist] [keylist] [query] [dictdelete] [keydelete] [test]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -163,6 +166,21 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                         Err(_) => write!(ret, "Error encountered listing dictionaries").ok().unwrap_or(()),
                     }
+                }
+                // note that this feature only works in hosted mode
+                #[cfg(feature="pddbtest")]
+                "test" => {
+                    let mut test_handle = pddb::Pddb::new();
+                    let test_key = test_handle.get(
+                        "test",
+                        "zerolength",
+                        None, true, true,
+                        Some(8),
+                        None::<fn()>
+                    ).expect("couldn't build empty key");
+                    // test_handle.sync().expect("couldn't sync");
+                    self.pddb.dbg_dump("std_test1").unwrap();
+                    write!(ret, "dumped std_test1").unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

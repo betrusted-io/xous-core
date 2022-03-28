@@ -583,6 +583,12 @@ impl Pddb {
         }
         Ok(dict_list)
     }
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pub fn dbg_dump(&self, name: &str) -> Result<()> {
+        let ipc_str = xous_ipc::String::<128>::from_str(name);
+        ipc_str.send(self.conn).expect("couldn't initiate debug dump");
+        Ok(())
+    }
 }
 
 impl Drop for Pddb {

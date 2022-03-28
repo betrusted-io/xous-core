@@ -1088,6 +1088,12 @@ fn xmain() -> ! {
                 }
                 modals.show_notification(&note).expect("couldn't show basis list");
             },
+            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            Some(Opcode::DbgDump) => {
+                let dumpname = xous_ipc::String::<128>::from_message(msg.body.memory_message().unwrap()).unwrap();
+                log::info!("dumping {}", dumpname);
+                pddb_os.dbg_dump(Some(dumpname.as_str().unwrap().to_string()), None);
+            }
             Some(Opcode::Quit) => {
                 log::warn!("quitting the PDDB server");
                 send_message(
