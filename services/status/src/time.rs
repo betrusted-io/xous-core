@@ -219,8 +219,8 @@ pub fn start_time_server() {
             if tz_key.read(&mut tz_buf).unwrap_or(0) == 8 {
                 tz_offset_ms = i64::from_le_bytes(tz_buf);
             }
-            log::debug!("offset_key: {}", utc_offset_ms);
-            log::debug!("tz_key: {}", tz_offset_ms);
+            log::debug!("offset_key: {}", utc_offset_ms / 1000);
+            log::debug!("tz_key: {}", tz_offset_ms / 1000);
             log::debug!("start_rtc_secs: {}", start_rtc_secs);
             log::debug!("start_tt_ms: {}", start_tt_ms);
             loop {
