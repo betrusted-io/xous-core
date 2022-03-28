@@ -822,7 +822,7 @@ impl PddbOs {
                                     self.fspace_cache.replace(pp);
                                 } else if pp.journal() == prev_pp.journal() {
                                     log::error!("got two identical journal revisions -- this shouldn't happen, prev: {:?}, candidate: {:?}", prev_pp, pp);
-                                    log::error!("replacing the previous version with the candidate, but this might not be the right decision!");
+                                    log::error!("replacing the previous version with the candidate! wish us luck.");
                                     self.fspace_cache.replace(pp);
                                 }
                             } else {
@@ -987,8 +987,10 @@ impl PddbOs {
     pub fn fast_space_free(&mut self, pp: &mut PhysPage) {
         self.fast_space_ensure_next_log();
         // update the fspace cache
+        log::debug!("fast_space_free pp incoming: {:?}/{}", pp, pp.journal());
         pp.set_space_state(SpaceState::Dirty);
         pp.set_journal(pp.journal() + 1);
+        log::debug!("fast_space_free pp cloned: {:?}/{}", pp.clone(), pp.clone().journal());
 
         // re-cycle the space into the fspace_cache
         self.fspace_cache.insert(pp.clone());
