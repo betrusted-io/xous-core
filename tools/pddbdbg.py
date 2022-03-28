@@ -13,6 +13,7 @@ SYSTEM_BASIS = '.System'
 PAGE_SIZE = 4096
 VPAGE_SIZE = 4064
 MBBB_PAGES = 10
+DO_CI_TESTS = True
 
 # build a table mapping all non-printable characters to None
 NOPRINT_TRANS_TABLE = {
@@ -138,6 +139,7 @@ def keycommit_decrypt(key, aad, pp_data):
 
 
 def main():
+    global DO_CI_TESTS
     parser = argparse.ArgumentParser(description="Debug PDDB Images")
     parser.add_argument(
         "--name", required=False, help="pddb disk image root name", type=str, nargs='?', metavar=('name'), const='./pddb'
@@ -156,6 +158,9 @@ def main():
     else:
         keyfile = './tools/pddb-images/{}.key'.format(args.name)
         imagefile = './tools/pddb-images/{}.bin'.format(args.name)
+
+    if args.dump:
+        DO_CI_TESTS = False
 
     numeric_level = getattr(logging, args.loglevel.upper(), None)
     if not isinstance(numeric_level, int):
@@ -336,17 +341,19 @@ class KeyDescriptor:
                 except ValueError:
                     logging.error("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(page_addr), pp_start)
                 page_addr += VPAGE_SIZE
-            # CI check -- if it doesn't pass, it doesn't mean we've failed -- could also just be a "normal" record that doesn't have the checksum appended
-            check_data = self.data[:-4]
-            while len(check_data) % 4 != 0:
-                check_data += bytes([0])
-            checksum = mm3_hash(check_data)
-            refcheck = int.from_bytes(self.data[len(self.data)-4:], 'little')
-            if checksum == refcheck:
-                self.ci_ok = True
-            else:
-                self.ci_ok = False
-                logging.error('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
+            global DO_CI_TESTS
+            if DO_CI_TESTS:
+                # CI check -- if it doesn't pass, it doesn't mean we've failed -- could also just be a "normal" record that doesn't have the checksum appended
+                check_data = self.data[:-4]
+                while len(check_data) % 4 != 0:
+                    check_data += bytes([0])
+                checksum = mm3_hash(check_data)
+                refcheck = int.from_bytes(self.data[len(self.data)-4:], 'little')
+                if checksum == refcheck:
+                    self.ci_ok = True
+                else:
+                    self.ci_ok = False
+                    logging.error('checksum: {:x}, refchecksum: {:x}\n'.format(checksum, refcheck))
         else:
             # print('invalid key')
             pass
@@ -355,6 +362,7 @@ class KeyDescriptor:
     def as_str(self, indent=''):
         PRINT_LEN = 64
         global PRINTED_FULL
+        global DO_CI_TESTS
         desc = ''
         if self.start > 0x7e_fff02_0000:
             desc += indent + 'Start: 0x{:x} (lg)\n'.format(self.start)
@@ -370,7 +378,8 @@ class KeyDescriptor:
             desc += indent + 'UNRESOLVED'
 
         desc += ' | Age: {}'.format(self.age)
-        desc += ' | CI OK: {}'.format(self.ci_ok)
+        if DO_CI_TESTS:
+            desc += ' | CI OK: {}'.format(self.ci_ok)
         desc += '\n'
         if len(self.data) < PRINT_LEN:
             print_len = len(self.data)
