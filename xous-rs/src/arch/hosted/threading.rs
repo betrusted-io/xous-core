@@ -210,10 +210,10 @@ pub(crate) fn thread_id() -> TID {
         let call = crate::SysCall::CreateThread(ThreadInit {});
 
         let fake_tid = FAKE_THREAD_COUNTER.fetch_add(1, Ordering::SeqCst);
-        println!(
-            "Thread ID not defined! Creating a fake thread. Syscall TID: {}.",
-            fake_tid
-        );
+        // println!(
+        //     "Thread ID not defined! Creating a fake thread. Syscall TID: {}.",
+        //     fake_tid
+        // );
 
         // assert!(SERVER_CONNECTION
         //     .call_tracker
@@ -236,7 +236,7 @@ pub(crate) fn thread_id() -> TID {
         } else {
             panic!("unable to get new TID, got response: {:?}", response)
         };
-        println!("Created a fake thread ID: {}", new_tid);
+        // println!("Created a fake thread ID: {}", new_tid);
         *tid.borrow_mut() = Some(new_tid);
         new_tid
     })
