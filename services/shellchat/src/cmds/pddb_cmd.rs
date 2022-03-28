@@ -1,5 +1,6 @@
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
+use std::io::{Write, Read, Seek, SeekFrom};
 
 pub struct PddbCmd {
     pddb: pddb::Pddb,
@@ -47,7 +48,6 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                             match self.pddb.get(dict, keyname, None,
                                 false, false, None, None::<fn()>) {
                                 Ok(mut key) => {
-                                    use std::io::Read;
                                     let mut readbuf = [0u8; 512]; // up to the first 512 chars of the key
                                     match key.read(&mut readbuf) {
                                         Ok(len) => {
@@ -183,7 +183,77 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     self.pddb.sync().unwrap();
                     self.pddb.dbg_remount().unwrap();
                     self.pddb.dbg_dump("std_test1").unwrap();
-                    write!(ret, "dumped std_test1").unwrap();
+                    write!(ret, "dumped std_test1\n").unwrap();
+                    log::info!("finished zero-length alloc");
+
+                    // delete this dictionary with a zero-length key.
+                    self.pddb.delete_dict("test", None).expect("couldn't delete test dictionary");
+                    self.pddb.sync().unwrap();
+                    self.pddb.dbg_dump("std_test2").unwrap();
+                    write!(ret, "dumped std_test2\n").unwrap();
+                    log::info!("finished dict delete with zero-length key");
+
+                    // seek test - a bunch of terrible, handcrafted test cases to exercise Start, Current, End cases of seeking.
+                    let mut test_handle = pddb::Pddb::new();
+                    // build a key, but don't write to it.
+                    let mut seekwrite = test_handle.get(
+                        "test",
+                        "seekwrite",
+                        None, true, true,
+                        Some(64),
+                        None::<fn()>
+                    ).expect("couldn't build empty key");
+                    // 1, 1, 1, 1
+                    log::info!("wrote {} bytes at offset 0",
+                        seekwrite.write(&[1, 1, 1, 1]).unwrap()
+                    );
+                    log::info!("seek to {}",
+                        seekwrite.seek(SeekFrom::Current(-2)).unwrap()
+                    );
+                    // 1, 1, 2, 2, 2, 2
+                    log::info!("wrote {} bytes at offset 2",
+                        seekwrite.write(&[2, 2, 2, 2]).unwrap()
+                    );
+                    // 1, 1, 2, 2, 2, 2, 0, 0, 3, 3
+                    log::info!("seek to {}",
+                        seekwrite.seek(SeekFrom::Start(8)).unwrap()
+                    );
+                    log::info!("wrote {} bytes at offset 8",
+                        seekwrite.write(&[3, 3]).unwrap()
+                    );
+                    // 1, 1, 2, 2, 2, 2, 0, 10, 3, 3
+                    log::info!("seek to {}",
+                        seekwrite.seek(SeekFrom::End(-3)).unwrap()
+                    );
+                    log::info!("wrote {} bytes at offset 8",
+                        seekwrite.write(&[10]).unwrap()
+                    );
+                    let mut readout = [0u8; 64];
+                    let check = [1u8, 1u8, 2u8, 2u8, 2u8, 2u8, 0u8, 10u8, 3u8, 3u8];
+                    seekwrite.seek(SeekFrom::Start(0)).unwrap();
+                    log::info!("read {} bytes from 0", seekwrite.read(&mut readout).unwrap());
+                    let mut pass = true;
+                    for (i, (&src, &dst)) in readout.iter().zip(check.iter()).enumerate() {
+                        if src != dst {
+                            log::info!("mismatch at {}: read {}, check {}", i, src, dst);
+                            pass = false;
+                        }
+                    }
+                    if pass {
+                        log::info!("check 1 PASSED");
+                    } else {
+                        log::info!("check 1 FAILED");
+                    }
+                    seekwrite.seek(SeekFrom::Start(7)).unwrap();
+                    let mut readout2 = [0u8];
+                    log::info!("read {} bytes from 7", seekwrite.read(&mut readout2).unwrap());
+                    log::info!("readout2: {}, should be 10", readout2[0]);
+
+                    self.pddb.sync().unwrap();
+                    self.pddb.dbg_remount().unwrap();
+                    self.pddb.dbg_dump("std_test3").unwrap();
+                    write!(ret, "dumped std_test3\n").unwrap();
+
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
