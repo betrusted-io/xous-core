@@ -68,7 +68,7 @@ pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
 pub(crate) const FSCB_FILL_UNCERTAINTY: f32 = 0.1;
 
 #[allow(dead_code)]
-pub(crate) const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
+pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 // this isn't an "official" basis, but it is used for the AAD for encrypting the FastSpace structure
 #[allow(dead_code)]
 pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
@@ -120,7 +120,7 @@ pub(crate) enum Opcode {
     Quit,
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    DbgDump,
+    DangerousDebug,
 }
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum PollOp {
@@ -320,6 +320,19 @@ impl PddbKeyAttrIpc {
     }
 }
 
+/// Debugging commands, available only in hosted mode
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbDangerousDebug {
+    pub request: DebugRequest,
+    pub dump_name: xous_ipc::String::<128>,
+}
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum DebugRequest {
+    Dump,
+    Remount,
+}
 
 #[cfg(test)]
 mod tests {

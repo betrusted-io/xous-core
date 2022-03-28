@@ -730,13 +730,29 @@ fn xmain() -> ! {
                         buffer.replace(req).unwrap(); continue
                     }
                 }
+                let alloc_hint = if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None};
                 if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
                     if !req.create_key {
                         req.result = PddbRequestCode::NotFound;
                         buffer.replace(req).unwrap(); continue
+                    } else {
+                        // create an empty key placeholder
+                        let empty: [u8; 0] = [];
+                        match basis_cache.key_update(&mut pddb_os,
+                            dict, key, &empty, None, alloc_hint, bname, true
+                        ) {
+                            Ok(_) => {},
+                            Err(e) => {
+                                log::error!("Couldn't allocate key: {:?}", e);
+                                match e.kind() {
+                                    std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotMounted,
+                                    std::io::ErrorKind::OutOfMemory => req.result = PddbRequestCode::NoFreeSpace,
+                                    _ => req.result = PddbRequestCode::InternalError,
+                                }
+                                buffer.replace(req).unwrap(); continue
+                            }
+                        }
                     }
-                    // by default keys are created when they are written on the first try.
-                    // ...do need to remember to create an "empty" key if we try to read a key that doesn't already exist, tho...
                 }
                 // at this point, we have established a basis/dict/key tuple.
                 let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
@@ -746,7 +762,7 @@ fn xmain() -> ! {
                     key: String::from(key),
                     basis: if let Some(name) = bname {Some(String::from(name))} else {None},
                     conn: cid,
-                    alloc_hint: if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None},
+                    alloc_hint,
                 };
                 token_dict.insert(token, token_record);
                 req.token = Some(token);
@@ -1089,10 +1105,25 @@ fn xmain() -> ! {
                 modals.show_notification(&note).expect("couldn't show basis list");
             },
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
-            Some(Opcode::DbgDump) => {
-                let dumpname = xous_ipc::String::<128>::from_message(msg.body.memory_message().unwrap()).unwrap();
-                log::info!("dumping {}", dumpname);
-                pddb_os.dbg_dump(Some(dumpname.as_str().unwrap().to_string()), None);
+            Some(Opcode::DangerousDebug) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let dbg = buffer.to_original::<PddbDangerousDebug, _>().unwrap();
+                match dbg.request {
+                    DebugRequest::Dump => {
+                        log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
+                        pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
+                    },
+                    DebugRequest::Remount => {
+                        log::info!("attempting remount");
+                        basis_cache = BasisCache::new(); // this effectively erases the PDDB from memory
+                        if let Some(sys_basis) = pddb_os.pddb_mount() {
+                            log::info!("remount successful");
+                            basis_cache.basis_add(sys_basis);
+                        } else {
+                            log::info!("remount failed");
+                        }
+                    }
+                }
             }
             Some(Opcode::Quit) => {
                 log::warn!("quitting the PDDB server");

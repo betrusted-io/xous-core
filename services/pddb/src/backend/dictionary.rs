@@ -419,7 +419,6 @@ impl DictCacheEntry {
                 if let KeyCacheData::Small(cache_data) = kcache.data.as_mut().expect("small pool should all have their data 'hot' if the index entry is also in cache") {
                     cache_data.clean = false;
                     // grow the data cache to accommodate the necessary length; this should be efficient because we reserved space when the vector was allocated
-                    assert!(cache_data.data.len() != 0, "(temporary assert - expected data in the cache for a particular test. Remove this assert if you're hitting this on an actual zero-lenth data set.");
                     while cache_data.data.len() < data.len() + offset {
                         cache_data.data.push(0);
                     }

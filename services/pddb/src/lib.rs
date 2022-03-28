@@ -583,11 +583,30 @@ impl Pddb {
         }
         Ok(dict_list)
     }
+    /// Triggers a dump of the PDDB to host disk
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {
-        let ipc_str = xous_ipc::String::<128>::from_str(name);
-        ipc_str.send(self.conn).expect("couldn't initiate debug dump");
-        Ok(())
+        let ipc = PddbDangerousDebug {
+            request: DebugRequest::Dump,
+            dump_name: xous_ipc::String::from_str(name),
+        };
+        let buf = Buffer::into_buf(ipc)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
+    }
+    /// Triggers an umount/remount, forcing a read of the PDDB from disk back into the cache structures.
+    /// It's a cheesy way to test a power cycle, without having to power cycle.
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pub fn dbg_remount(&self) -> Result<()> {
+        let ipc = PddbDangerousDebug {
+            request: DebugRequest::Remount,
+            dump_name: xous_ipc::String::new(),
+        };
+        let buf = Buffer::into_buf(ipc)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
     }
 }
 
@@ -595,7 +614,7 @@ impl Drop for Pddb {
     fn drop(&mut self) {
         let cid = xous::connect(self.cb_sid).unwrap();
         send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-        unsafe{xous::disconnect(cid).unwrap();}
+        unsafe{xous::disconnect(cid).ok();}
         if let Some(handle) = self.cb_handle.take() {
             handle.join().expect("couldn't terminate callback helper thread");
         }
