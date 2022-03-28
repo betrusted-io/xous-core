@@ -170,15 +170,18 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 // note that this feature only works in hosted mode
                 #[cfg(feature="pddbtest")]
                 "test" => {
+                    // zero-length key test
                     let mut test_handle = pddb::Pddb::new();
-                    let test_key = test_handle.get(
+                    // build a key, but don't write to it.
+                    let _ = test_handle.get(
                         "test",
                         "zerolength",
                         None, true, true,
                         Some(8),
                         None::<fn()>
                     ).expect("couldn't build empty key");
-                    // test_handle.sync().expect("couldn't sync");
+                    self.pddb.sync().unwrap();
+                    self.pddb.dbg_remount().unwrap();
                     self.pddb.dbg_dump("std_test1").unwrap();
                     write!(ret, "dumped std_test1").unwrap();
                 }
