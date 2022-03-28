@@ -32,6 +32,9 @@ jobs:
 
       - name: Install RISC-V toolkit
         run: cargo xtask install-toolkit --force
-      
+
+      - name: Clean out old target directory (in case of libstd change)
+        run: rm -rf target/*
+
       - name: Build hosted-ci
         run: cargo xtask ${{ matrix.task }}
