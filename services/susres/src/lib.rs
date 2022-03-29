@@ -79,7 +79,8 @@ impl Susres {
         if self.suspend_cb_sid.is_none() { // this happens if you created without a hook
             return Err(xous::Error::UseBeforeInit)
         }
-        log::trace!("telling the server we're ready to suspend");
+        log::debug!("token {} pid {} suspending", token, xous::process::id()); // <-- use this to debug s/r
+        xous::yield_slice();
         // first tell the susres server that we're ready to suspend
         send_message(self.conn,
             Message::new_scalar(Opcode::SuspendReady.to_usize().unwrap(), token, 0, 0, 0)
@@ -160,7 +161,7 @@ fn suspend_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(SuspendEventCallback::Event) => msg_scalar_unpack!(msg, cid, id, token, _, {
                 // directly pass the scalar message onto the CID with the ID memorized in the original hook
-                log::info!("PID {} has s/r token {}", xous::current_pid().unwrap().get(), token);
+                log::debug!("PID {} has s/r token {}", xous::current_pid().unwrap().get(), token); // <-- use this to debug s/r
                 send_message(cid as u32,
                     Message::new_scalar(id, token, 0, 0, 0)
                 ).unwrap();

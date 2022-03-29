@@ -553,7 +553,7 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(susres_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Last), &xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     let main_cid = xns.request_connection_blocking(api::SERVER_NAME_SPINOR).expect("couldn't connect to our main thread for susres coordination");
 

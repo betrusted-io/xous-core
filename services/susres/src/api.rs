@@ -16,6 +16,7 @@ pub enum SuspendOrder {
     Early,
     Normal,
     Late,
+    Later,
     Last,
 }
 impl SuspendOrder {
@@ -23,7 +24,8 @@ impl SuspendOrder {
         match self {
             SuspendOrder::Early => SuspendOrder::Normal,
             SuspendOrder::Normal => SuspendOrder::Late,
-            SuspendOrder::Late => SuspendOrder::Last,
+            SuspendOrder::Late => SuspendOrder::Later,
+            SuspendOrder::Later => SuspendOrder::Last,
             SuspendOrder::Last => SuspendOrder::Last,
         }
     }

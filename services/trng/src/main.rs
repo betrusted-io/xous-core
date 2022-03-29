@@ -789,7 +789,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(trng_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, api::Opcode::SuspendResume as u32, sr_cid)
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, api::Opcode::SuspendResume as u32, sr_cid)
         .expect("couldn't create suspend/resume object");
 
     let mut error_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];

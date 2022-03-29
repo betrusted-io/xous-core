@@ -39,7 +39,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(codec_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Late), &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Normal), &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
     /*
     let trng = trng::Trng::new(&xns).unwrap();
     let mut noise: [u32; codec::FIFO_DEPTH] = [0; codec::FIFO_DEPTH];

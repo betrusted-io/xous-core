@@ -117,7 +117,7 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, Opcode::SuspendResume as u32, sr_cid)
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, Opcode::SuspendResume as u32, sr_cid)
         .expect("couldn't create suspend/resume object");
 
     let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read

@@ -210,7 +210,7 @@ impl Llio {
     }
     pub fn suspend(&mut self) {
         self.uartmux_cache = self.gpio_csr.rf(UARTSEL_UARTSEL).into();
-        self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // set the kernel UART so we can catch KPs on boot
+        self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // set to console to watch on boot: 0 = kernel, 1 = console, 2 = application
 
         self.event_susres.suspend();
         // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values

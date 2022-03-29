@@ -28,7 +28,7 @@ fn i2c_thread(i2c_sid: xous::SID) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     let mut suspend_pending_token: Option<usize> = None;
     log::trace!("starting i2c main loop");
