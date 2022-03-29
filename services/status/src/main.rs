@@ -358,6 +358,7 @@ fn xmain() -> ! {
         }
     });
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
+    llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
