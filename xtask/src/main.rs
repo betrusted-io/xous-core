@@ -188,13 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(
-                false,
-                &hw_pkgs,
-                &[],
-                None,
-                None,
-            )?
+            renode_image(false, &hw_pkgs, &[], None, None)?
         }
         Some("renode-test") => {
             let mut args = env::args();
@@ -1113,7 +1107,6 @@ fn ensure_compiler(
             target_loader.push("target");
             target_loader.push(PROGRAM_TARGET);
             std::fs::remove_dir_all(target_loader).ok();
-
         } else {
             DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
             return Ok(());
@@ -1140,10 +1133,14 @@ fn ensure_compiler(
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     println!();
-    println!(
-        "Error: Toolchain for {} was not found on this system!",
-        target
-    );
+    if force_install {
+        println!("Downloading toolchain");
+    } else {
+        println!(
+            "Error: Toolchain for {} was not found on this system!",
+            target
+        );
+    }
     loop {
         if force_install {
             break;
@@ -1177,44 +1174,38 @@ fn ensure_compiler(
     );
     println!("Downloading from {}...", toolchain_url);
 
-    print!("Download rogress: 0%");
+    print!("Download in progress...");
     stdout.flush().unwrap();
     let mut zip_data = vec![];
     {
-        let mut easy = curl::easy::Easy::new();
-        easy.url(&toolchain_url).unwrap();
-        easy.follow_location(true).unwrap();
-        easy.progress(true).unwrap();
-        let mut transfer = easy.transfer();
-        transfer
-            .progress_function(
-                |total_bytes, bytes_so_far, _total_uploaded, _uploaded_so_far| {
-                    // If either number is infinite, don't print anything and just continue.
-                    if total_bytes.is_infinite() || bytes_so_far.is_infinite() {
-                        return true;
-                    }
+        let agent = ureq::builder()
+            // .middleware(CounterMiddleware(shared_state.clone()))
+            .build();
 
-                    // Display progress.
-                    print!(
-                        "\rDownload progress: {:3.02}% ",
-                        bytes_so_far / total_bytes * 100.0
-                    );
-                    stdout.flush().unwrap();
+        let mut freader = agent
+            .get(&toolchain_url)
+            .call()
+            .map_err(|e| format!("{}", e))?
+            .into_reader();
+        freader
+            .read_to_end(&mut zip_data)
+            .map_err(|e| format!("{}", e))?;
+        // |total_bytes, bytes_so_far, _total_uploaded, _uploaded_so_far| {
+        //     // If either number is infinite, don't print anything and just continue.
+        //     if total_bytes.is_infinite() || bytes_so_far.is_infinite() {
+        //         return true;
+        //     }
 
-                    // Return `true` to continue the transfer.
-                    true
-                },
-            )
-            .unwrap();
-        transfer
-            .write_function(|data| {
-                zip_data.extend_from_slice(data);
-                Ok(data.len())
-            })
-            .unwrap();
-        transfer
-            .perform()
-            .map_err(|e| format!("Unable to download toolchain: {}", e))?;
+        //     // Display progress.
+        //     print!(
+        //         "\rDownload progress: {:3.02}% ",
+        //         bytes_so_far / total_bytes * 100.0
+        //     );
+        //     stdout.flush().unwrap();
+
+        //     // Return `true` to continue the transfer.
+        //     true
+        // },
         println!();
     }
     println!(
