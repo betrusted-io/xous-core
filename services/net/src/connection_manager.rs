@@ -142,12 +142,14 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
             let mut susres = susres::Susres::new(
                 Some(susres::SuspendOrder::Late), &xns,
                 0, sus_cid).expect("couldn't create suspend/resume object");
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
             loop {
                 let msg = xous::receive_message(sus_server).unwrap();
                 xous::msg_scalar_unpack!(msg, token, _, _, _, {
                     // for now, nothing to do to prepare for suspend...
                     susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                     // but on resume, kick a message to the main loop to tell it to recheck its connections!
+                    tt.sleep_ms(1000).unwrap(); // wait a full second before kicking out this message, so other services can normalize before attempting a re-connect
                     xous::send_message(main_cid,
                         Message::new_scalar(ConnectionManagerOpcode::SuspendResume.to_usize().unwrap(), 0, 0, 0, 0)
                     ).expect("couldn't send the resume message to the main thread");
