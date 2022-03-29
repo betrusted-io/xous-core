@@ -166,19 +166,20 @@ fn xmain() -> ! {
     // layout: 336 px wide
     // 0                   150 150 200
     // Feb 05 15:00 (00:06:23) xxxx     3.72V/-100mA/99%
-    const CPU_BAR_WIDTH: i16 = 50;
+    const CPU_BAR_WIDTH: i16 = 48;
+    const CPU_BAR_OFFSET: i16 = 4;
     let time_rect = Rectangle::new_with_style(
         Point::new(0, 0),
-        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1, screensize.y / 2 - 1),
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1 + CPU_BAR_OFFSET, screensize.y / 2 - 1),
         DrawStyle::new(PixelColor::Light, PixelColor::Light, 0)
     );
     let cpuload_rect = Rectangle::new_with_style(
-        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, 0),
-        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2, screensize.y / 2 + 1),
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 + CPU_BAR_OFFSET, 0),
+        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2 + CPU_BAR_OFFSET, screensize.y / 2 + 1),
         DrawStyle::new(PixelColor::Light, PixelColor::Dark, 1),
     );
     let stats_rect = Rectangle::new_with_style(
-        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2 + 1, 0),
+        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2 + 1 + CPU_BAR_OFFSET, 0),
         Point::new(screensize.x, screensize.y / 2 - 1),
         DrawStyle::new(PixelColor::Light, PixelColor::Light, 0),
     );
