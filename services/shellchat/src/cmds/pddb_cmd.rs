@@ -1,5 +1,6 @@
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
+#[allow(unused_imports)]
 use std::io::{Write, Read, Seek, SeekFrom};
 
 pub struct PddbCmd {

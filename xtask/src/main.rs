@@ -384,7 +384,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            run(false, &pkgs, None, false)?
+            // for hosted runs, compile in the pddb test routines by default...for now.
+            run(false, &pkgs, Some(&["--features", "pddbtest"]), false)?
         }
         Some("hosted-ci") => {
             let mut pkgs = hw_pkgs.to_vec();
