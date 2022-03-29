@@ -916,6 +916,7 @@ impl BasisCache {
             for page in basis.v2p_map.values_mut() {
                 hw.trng_slice(&mut temp);
                 hw.patch_data(&temp, page.page_number() * PAGE_SIZE as u32);
+                log::trace!("fast_space_free basis delete {} before", page.journal());
                 hw.fast_space_free(page);
             }
             basis.pt_sync(hw);
@@ -1182,10 +1183,14 @@ impl BasisCacheEntry {
                         hw.trng_slice(&mut random);
                         hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
                     }
+                    log::trace!("fast_space_free small page delete {} before", pp.journal());
                     hw.fast_space_free(pp);
                     assert!(pp.valid() == false, "pp is still marked as valid!");
                 }
             }
+            /* for pp in self.v2p_map.values() {
+                log::info!("v2p entry: {:x?}", pp);
+            } */
             // erase the entire dictionary + key allocation area by writing over with random data. It's important to
             // do a comprehensive erase, because if the dictionary slot is re-used, the previously allocated key entries
             // decrypt correctly, are interpreted as valid keys, and thus cause consistency errors.
@@ -1199,6 +1204,7 @@ impl BasisCacheEntry {
                     let mut random = [0u8; PAGE_SIZE];
                     hw.trng_slice(&mut random);
                     hw.patch_data(&random, pp.page_number() * PAGE_SIZE as u32);
+                    log::trace!("fast_space_free dict_delete {} before", pp.journal());
                     hw.fast_space_free(pp);
                     assert!(pp.valid() == false, "pp is still marked as valid!");
                 } else {

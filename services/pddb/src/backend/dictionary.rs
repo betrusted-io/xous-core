@@ -536,6 +536,7 @@ impl DictCacheEntry {
                             for vpage in (vpage_end_offset.as_u64()..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
                                 if let Some(pp) = v2p_map.get_mut(&VirtAddr::new(vpage).unwrap()) {
                                     assert!(pp.valid(), "v2p returned an invalid page");
+                                    log::trace!("fast_space_free key_update {} before", pp.journal());
                                     hw.fast_space_free(pp);
                                     assert!(pp.valid() == false, "pp is still marked as valid!");
                                 }
@@ -726,6 +727,7 @@ impl DictCacheEntry {
                                 hw.trng_slice(&mut noise);
                                 hw.patch_data(&noise, pp.page_number() * PAGE_SIZE as u32);
                             }
+                            log::trace!("fast_space_free key_remove {} before", pp.journal());
                             hw.fast_space_free(pp);
                             assert!(pp.valid() == false, "pp is still marked as valid!");
                         }
