@@ -79,8 +79,8 @@ impl XousDisplay {
         }
         // ignore attempts to turn off devboot
     }
-    pub fn suspend(&self, _flag: bool) {}
-    pub fn resume(&self, _flag: bool) {}
+    pub fn suspend(&self) {}
+    pub fn resume(&self) {}
 
     pub fn screen_size(&self) -> Point {
         Point::new(WIDTH as i16, HEIGHT as i16)
