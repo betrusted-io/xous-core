@@ -175,9 +175,9 @@ pub struct PddbBasisRequest {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDictRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub key: xous_ipc::String::<KEY_NAME_LEN>,
     pub index: u32,
     pub token: [u32; 4],
     pub code: PddbRequestCode,
@@ -187,9 +187,9 @@ pub struct PddbDictRequest {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbKeyRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub key: xous_ipc::String::<KEY_NAME_LEN>,
     pub token: Option<ApiToken>,
     pub create_dict: bool,
     pub create_key: bool,
@@ -272,8 +272,8 @@ pub struct PddbKeyAttrIpc {
     pub len: u64,
     pub reserved: u64,
     pub age: u64,
-    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
     pub flags: u32,
     pub index: u32,
     pub token: ApiToken,
