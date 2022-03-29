@@ -57,11 +57,11 @@ impl XousDisplay {
         .expect("couldn't map control port");
 
         let mut display = XousDisplay {
-            fb: fb,
-            hwfb: hwfb,
+            fb,
+            hwfb,
             csr: CSR::new(control.as_mut_ptr() as *mut u32),
             susres: RegManager::new(control.as_mut_ptr() as *mut u32),
-            srfb: ManagedMem::new(hwfb),
+            srfb: ManagedMem::new(fb),
         };
 
         display.set_clock(CONFIG_CLOCK_FREQUENCY);
@@ -80,69 +80,62 @@ impl XousDisplay {
         display
     }
 
-    pub fn suspend(&mut self, draw_note: bool) {
+    pub fn suspend(&mut self) {
         while self.busy() {
             // just wait until any pending FB operations are done
+        }
+        let fb: *mut [u32; FB_SIZE] = self.fb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        for lines in 0..FB_LINES {
+            // set the dirty bits prior to stashing the frame buffer
+            unsafe {
+                (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+            }
         }
         self.srfb.suspend();
         self.susres.suspend();
 
-        if draw_note {
-            let note = crate::sleep_note::LOGO_MAP;
-            let note_lines = note.len() / FB_WIDTH_WORDS;
-            let note_start_line = (FB_LINES - note_lines) / 2;
-            let note_end_line = note_start_line + note_lines;
-            let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        let note = crate::sleep_note::LOGO_MAP;
+        let note_lines = note.len() / FB_WIDTH_WORDS;
+        let note_start_line = (FB_LINES - note_lines) / 2;
+        let note_end_line = note_start_line + note_lines;
+        let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
 
-            for lines in 0..FB_LINES {
-                for words in 0..FB_WIDTH_WORDS {
-                    if lines >= note_start_line && lines < note_end_line {
-                        // We're on a line that has the 'Sleeping...' note.
-                        // Draw it into the frame buffer.
-                        let note_index = ((lines - note_start_line) * FB_WIDTH_WORDS) + words;
-                        unsafe {
-                            (*hwfb)[words + lines * FB_WIDTH_WORDS] = note[note_index];
-                        }
-                    } else {
-                        // We're not on a line that has the note. Clear the pixels,
-                        // since we don't want any secrets to linger in the framebuffer
-                        // and stay visible on the persistent display while the device is
-                        // sleeping.
-                        unsafe {
-                            (*hwfb)[words + lines * FB_WIDTH_WORDS] = 0xFFFF_FFFF;
-                        }
+        for lines in 0..FB_LINES {
+            for words in 0..FB_WIDTH_WORDS {
+                if lines >= note_start_line && lines < note_end_line {
+                    // We're on a line that has the 'Sleeping...' note.
+                    // Draw it into the frame buffer.
+                    let note_index = ((lines - note_start_line) * FB_WIDTH_WORDS) + words;
+                    unsafe {
+                        (*hwfb)[words + lines * FB_WIDTH_WORDS] = note[note_index];
+                    }
+                } else {
+                    // We're not on a line that has the note. Clear the pixels,
+                    // since we don't want any secrets to linger in the framebuffer
+                    // and stay visible on the persistent display while the device is
+                    // sleeping.
+                    unsafe {
+                        (*hwfb)[words + lines * FB_WIDTH_WORDS] = 0xFFFF_FFFF;
                     }
                 }
-
-                // set the dirty bits
-                unsafe {
-                    (*hwfb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
-                }
             }
 
-            self.update_dirty();
-            while self.busy() {
-                // busy wait, blocking suspend until this has happened
+             // set the dirty bits
+            unsafe {
+                (*hwfb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
             }
         }
+
+        self.update_dirty();
+        while self.busy() {
+            // busy wait, blocking suspend until this has happened
+        }
     }
-    pub fn resume(&mut self, drew_note: bool) {
+    pub fn resume(&mut self) {
         self.susres.resume();
         self.srfb.resume();
 
-        if drew_note {
-            let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
-            for lines in 0..FB_LINES {
-                // set the dirty bits of all lines to force a redraw of the restored data
-                unsafe {
-                    (*hwfb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
-                }
-            }
-            self.update_dirty();
-            while self.busy() {
-                // busy wait, blocking resume until this has happened
-            }
-        }
+        self.redraw();
     }
 
     pub fn screen_size(&self) -> Point {
