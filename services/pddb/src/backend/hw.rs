@@ -411,6 +411,7 @@ impl PddbOs {
                     // the state is clean because this entry is, by definition, synchronized with the disk
                     pp.set_clean(true);
                     pp.set_valid(true);
+                    pp.set_space_state(SpaceState::Used);
                     // handle conflicting journal versions here
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
                         let cipher = Aes256GcmSiv::new(Key::from_slice(key));
@@ -427,6 +428,7 @@ impl PddbOs {
                                     log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
                                 }
                             } else {
+                                self.resolve_pp_journal(&mut pp);
                                 // prev data was bogus anyways, replace with the new entry
                                 map.insert(pte.vaddr(), pp);
                             }
@@ -434,6 +436,7 @@ impl PddbOs {
                             // new data is bogus, ignore it
                         }
                     } else {
+                        self.resolve_pp_journal(&mut pp);
                         map.insert(pte.vaddr(), pp);
                     }
                 }
@@ -443,6 +446,18 @@ impl PddbOs {
             Some(map)
         } else {
             None
+        }
+    }
+    /// Pages drawn from disk might already have come from the FSCB. We need to make the journal number
+    /// of these consistent with those in the FSCB so later on when they are retired we don't have journal conflicts.
+    fn resolve_pp_journal(&self, pp: &mut PhysPage) {
+        for fs_pp in self.fspace_cache.iter() {
+            if pp.page_number() == fs_pp.page_number() {
+                if pp.journal() < fs_pp.journal() {
+                    log::debug!("bumping journal {}->{}: {:x?}", pp.journal(), fs_pp.journal(), pp);
+                    pp.set_journal(fs_pp.journal());
+                }
+            }
         }
     }
 
@@ -821,7 +836,7 @@ impl PddbOs {
                                 if pp.journal() > prev_pp.journal() {
                                     self.fspace_cache.replace(pp);
                                 } else if pp.journal() == prev_pp.journal() {
-                                    log::error!("got two identical journal revisions -- this shouldn't happen, prev: {:?}, candidate: {:?}", prev_pp, pp);
+                                    log::error!("got two identical journal revisions -- this shouldn't happen\n{:x?} (prev)\n{:x?}(candidate)", prev_pp, pp);
                                     log::error!("replacing the previous version with the candidate! wish us luck.");
                                     self.fspace_cache.replace(pp);
                                 }
@@ -936,41 +951,50 @@ impl PddbOs {
             log::warn!("Couldn't ensure fast space log entry: {}", self.fspace_log_len);
             None
         } else {
-            // 2. find the first page that is Free or Dirty. The order is already randomized, so we can do a stupid linear search.
+            // 2. find the first page that is Free or Dirty.
+            // We made a mistake early on and assumed that the HashSet underlying type would have enough randomness,
+            // but unfortunately, it tends to be an MRU list of pages: so, recently de-allocated pages are returned
+            // preferentially. This is the opposite of what we want. Thus, we are now paying a bit of a price in
+            // computational efficiency to map the HashSet into a Vec and then pick a random entry to get the
+            // propreties that we were originally hoping for :-/
             let mut maybe_alloc = None;
+            let mut candidates = Vec::<PhysPage>::new();
             for pp in self.fspace_cache.iter() {
                 if (pp.space_state() == SpaceState::Free || pp.space_state() == SpaceState::Dirty) && (pp.journal() < PHYS_PAGE_JOURNAL_MAX) {
-                    let mut ppc = pp.clone();
-                    // take the state directly to Used, skipping MaybeUsed. If the system crashes between now and
-                    // when the page is actually used, the consequence is a "lost" entry in the FastSpace cache. However,
-                    // the entry will be reclaimed on the next full-space scan. This is a less-bad outcome than filling up
-                    // the log with 2x the number of operations to record MaybeUsed and then Used.
-                    ppc.set_space_state(SpaceState::Used);
-                    ppc.set_clean(false); // the allocated page is not clean, because it hasn't been written to disk
-                    ppc.set_valid(true); // the allocated page is now valid, so it should be flushed to disk
-                    ppc.set_journal(pp.journal() + 1); // this is guaranteed not to overflow because of a check in the "if" clause above
-
-                    // commit the usage to the journal
-                    self.syskey_ensure();
-                    let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
-                    let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
-                    let mut block = Block::from_mut_slice(update.deref_mut());
-                    log::trace!("block: {:x?}", block);
-                    cipher.encrypt_block(&mut block);
-                    let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
-                    log::trace!("patch: {:x?}", block);
-                    self.patch_fscb(&block, log_addr);
-                    self.fspace_log_len += 1;
-                    let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
-                    if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
-                        self.fspace_log_next_addr = Some(next_addr as PhysAddr);
-                    } else {
-                        // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
-                        // next journal entry the next time around.
-                    }
-                    maybe_alloc = Some(ppc);
-                    break;
+                    candidates.push(pp.clone());
                 }
+            }
+            // now pull a random candidate out of the pool
+            if candidates.len() > 0 {
+                let mut ppc = candidates[self.entropy.borrow_mut().get_u32() as usize % candidates.len()];
+                // take the state directly to Used, skipping MaybeUsed. If the system crashes between now and
+                // when the page is actually used, the consequence is a "lost" entry in the FastSpace cache. However,
+                // the entry will be reclaimed on the next full-space scan. This is a less-bad outcome than filling up
+                // the log with 2x the number of operations to record MaybeUsed and then Used.
+                ppc.set_space_state(SpaceState::Used);
+                ppc.set_clean(false); // the allocated page is not clean, because it hasn't been written to disk
+                ppc.set_valid(true); // the allocated page is now valid, so it should be flushed to disk
+                ppc.set_journal(ppc.journal() + 1); // this is guaranteed not to overflow because of a check in the "if" clause above
+
+                // commit the usage to the journal
+                self.syskey_ensure();
+                let cipher = self.cipher_ecb.as_ref().expect("Inconsistent internal state - syskey_ensure() failed");
+                let mut update = SpaceUpdate::new(self.entropy.borrow_mut().get_u64(), ppc);
+                let mut block = Block::from_mut_slice(update.deref_mut());
+                log::trace!("block: {:x?}", block);
+                cipher.encrypt_block(&mut block);
+                let log_addr = self.fspace_log_next_addr.take().unwrap() as PhysAddr;
+                log::trace!("patch: {:x?}", block);
+                self.patch_fscb(&block, log_addr);
+                self.fspace_log_len += 1;
+                let next_addr = log_addr + aes::BLOCK_SIZE as PhysAddr;
+                if (next_addr & (PAGE_SIZE as PhysAddr - 1)) != 0 {
+                    self.fspace_log_next_addr = Some(next_addr as PhysAddr);
+                } else {
+                    // fspace_log_next_addr is already None because we used "take()". We'll find a free spot for the
+                    // next journal entry the next time around.
+                }
+                maybe_alloc = Some(ppc);
             }
             if maybe_alloc.is_none() {
                 log::warn!("Ran out of free space. fspace cache has {} entries", self.fspace_cache.len());
@@ -986,11 +1010,13 @@ impl PddbOs {
     }
     pub fn fast_space_free(&mut self, pp: &mut PhysPage) {
         self.fast_space_ensure_next_log();
+        if !self.fspace_cache.remove(&pp) {
+            log::warn!("Freeing a page that's not already in cache: {:x?}", pp);
+        }
         // update the fspace cache
-        log::debug!("fast_space_free pp incoming: {:?}/{}", pp, pp.journal());
+        log::debug!("fast_space_free pp incoming: {:x?}", pp);
         pp.set_space_state(SpaceState::Dirty);
         pp.set_journal(pp.journal() + 1);
-        log::debug!("fast_space_free pp cloned: {:?}/{}", pp.clone(), pp.clone().journal());
 
         // re-cycle the space into the fspace_cache
         self.fspace_cache.insert(pp.clone());
@@ -1579,6 +1605,7 @@ impl PddbOs {
             let mut rpte = alloc.clone();
             rpte.set_clean(true); // it's not clean _right now_ but it will be by the time this routine is done...
             rpte.set_valid(true);
+            rpte.set_space_state(SpaceState::Used);
             let va = VirtAddr::new((1 * VPAGE_SIZE) as u64).unwrap(); // page 1 is where the root goes, by definition
             log::info!("adding basis va {:x?} with pte {:?}", va, rpte);
             basis_v2p_map.insert(va, rpte);
