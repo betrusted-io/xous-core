@@ -451,12 +451,10 @@ impl PddbOs {
     /// Pages drawn from disk might already have come from the FSCB. We need to make the journal number
     /// of these consistent with those in the FSCB so later on when they are retired we don't have journal conflicts.
     fn resolve_pp_journal(&self, pp: &mut PhysPage) {
-        for fs_pp in self.fspace_cache.iter() {
-            if pp.page_number() == fs_pp.page_number() {
-                if pp.journal() < fs_pp.journal() {
-                    log::debug!("bumping journal {}->{}: {:x?}", pp.journal(), fs_pp.journal(), pp);
-                    pp.set_journal(fs_pp.journal());
-                }
+        if let Some(fs_pp) = self.fspace_cache.get(pp) {
+            if pp.journal() < fs_pp.journal() {
+                log::debug!("bumping journal {}->{}: {:x?}", pp.journal(), fs_pp.journal(), pp);
+                pp.set_journal(fs_pp.journal());
             }
         }
     }
