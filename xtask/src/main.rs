@@ -14,9 +14,7 @@ type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
 const KERNEL_TARGET: &str = "riscv32imac-unknown-xous-elf";
-const TOOLCHAIN_URL_PREFIX: &str =
-    "https://github.com/betrusted-io/rust/releases/latest/download/riscv32imac-unknown-xous_";
-const TOOLCHAIN_URL_SUFFIX: &str = ".zip";
+const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 
 enum MemorySpec {
     SvdFile(String),
@@ -188,13 +186,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(
-                false,
-                &hw_pkgs,
-                &[],
-                None,
-                None,
-            )?
+            renode_image(false, &hw_pkgs, &[], None, None)?
         }
         Some("renode-test") => {
             let mut args = env::args();
@@ -1113,7 +1105,6 @@ fn ensure_compiler(
             target_loader.push("target");
             target_loader.push(PROGRAM_TARGET);
             std::fs::remove_dir_all(target_loader).ok();
-
         } else {
             DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
             return Ok(());
@@ -1139,11 +1130,14 @@ fn ensure_compiler(
     let mut buffer = String::new();
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
-    println!();
-    println!(
-        "Error: Toolchain for {} was not found on this system!",
-        target
-    );
+    if force_install {
+        println!("Downloading toolchain");
+    } else {
+        println!(
+            "Error: Toolchain for {} was not found on this system!",
+            target
+        );
+    }
     loop {
         if force_install {
             break;
@@ -1166,55 +1160,107 @@ fn ensure_compiler(
         println!();
     }
 
-    let toolchain_url = format!(
-        "{}{}.{}.{}{}",
-        TOOLCHAIN_URL_PREFIX, ver.major, ver.minor, ver.patch, TOOLCHAIN_URL_SUFFIX
-    );
+    fn get_toolchain_url(major: u64, minor: u64, patch: u64) -> Result<String, String> {
+        let j: serde_json::Value = ureq::get(TOOLCHAIN_RELEASE_URL)
+            .set("Accept", "application/vnd.github.v3+json")
+            .call()
+            .map_err(|e| format!("{}", e))?
+            .into_json()
+            .map_err(|e| format!("{}", e))?;
+        // let j: serde_json::Value = serde_json::from_str(CONTENT).expect("Cannot parse manifest file");
+
+        let releases = j.as_array().unwrap();
+        let mut tag_urls = std::collections::BTreeMap::new();
+
+        let target_prefix = format!("{}.{}.{}", major, minor, patch);
+        for r in releases {
+            // println!(">>> Value: {}", r);
+
+            let keys = match r.as_object() {
+                None => continue,
+                Some(r) => r,
+            };
+            let release = match keys.get("tag_name") {
+                None => continue,
+                Some(s) => match s.as_str() {
+                    None => continue,
+                    Some(s) => s,
+                },
+            };
+            if !release.starts_with(&target_prefix) {
+                continue;
+            }
+
+            let assets = match keys.get("assets") {
+                None => continue,
+                Some(s) => match s.as_array() {
+                    None => continue,
+                    Some(s) => s,
+                },
+            };
+
+            let first_asset = match assets.get(0) {
+                None => continue,
+                Some(s) => s,
+            };
+
+            let download_url = match first_asset.get("browser_download_url") {
+                None => continue,
+                Some(s) => match s.as_str() {
+                    None => continue,
+                    Some(s) => s,
+                },
+            };
+            // println!("Candidate Release: {}", download_url);
+            tag_urls.insert(release.to_owned(), download_url.to_owned());
+        }
+
+        if let Some((_k, v)) = tag_urls.into_iter().last() {
+            // println!("Found candidate entry: v{} url {}", k, v);
+            return Ok(v);
+        }
+        Err(format!("No toolchains found for Rust {}", target_prefix))
+    }
+    let toolchain_url = get_toolchain_url(ver.major, ver.minor, ver.patch)?;
 
     println!(
         "Attempting to install toolchain for {} into {}",
         target, toolchain_path
     );
-    println!("Downloading from {}...", toolchain_url);
+    println!("Downloading toolchain from {}...", toolchain_url);
 
-    print!("Download rogress: 0%");
+    print!("Download in progress...");
     stdout.flush().unwrap();
     let mut zip_data = vec![];
     {
-        let mut easy = curl::easy::Easy::new();
-        easy.url(&toolchain_url).unwrap();
-        easy.follow_location(true).unwrap();
-        easy.progress(true).unwrap();
-        let mut transfer = easy.transfer();
-        transfer
-            .progress_function(
-                |total_bytes, bytes_so_far, _total_uploaded, _uploaded_so_far| {
-                    // If either number is infinite, don't print anything and just continue.
-                    if total_bytes.is_infinite() || bytes_so_far.is_infinite() {
-                        return true;
-                    }
+        let agent = ureq::builder()
+            // .middleware(CounterMiddleware(shared_state.clone()))
+            .build();
 
-                    // Display progress.
-                    print!(
-                        "\rDownload progress: {:3.02}% ",
-                        bytes_so_far / total_bytes * 100.0
-                    );
-                    stdout.flush().unwrap();
+        let mut freader = agent
+            .get(&toolchain_url)
+            .call()
+            .map_err(|e| format!("{}", e))?
+            .into_reader();
+        freader
+            .read_to_end(&mut zip_data)
+            .map_err(|e| format!("{}", e))?;
+        // |total_bytes, bytes_so_far, _total_uploaded, _uploaded_so_far| {
+        //     // If either number is infinite, don't print anything and just continue.
+        //     if total_bytes.is_infinite() || bytes_so_far.is_infinite() {
+        //         return true;
+        //     }
 
-                    // Return `true` to continue the transfer.
-                    true
-                },
-            )
-            .unwrap();
-        transfer
-            .write_function(|data| {
-                zip_data.extend_from_slice(data);
-                Ok(data.len())
-            })
-            .unwrap();
-        transfer
-            .perform()
-            .map_err(|e| format!("Unable to download toolchain: {}", e))?;
+        //     // Display progress.
+        //     print!(
+        //         "\rDownload progress: {:3.02}% ",
+        //         bytes_so_far / total_bytes * 100.0
+        //     );
+        //     stdout.flush().unwrap();
+
+        //     // Return `true` to continue the transfer.
+        //     true
+        // },
         println!();
     }
     println!(
