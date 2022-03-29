@@ -14,9 +14,7 @@ type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
 const KERNEL_TARGET: &str = "riscv32imac-unknown-xous-elf";
-const TOOLCHAIN_URL_PREFIX: &str =
-    "https://github.com/betrusted-io/rust/releases/latest/download/riscv32imac-unknown-xous_";
-const TOOLCHAIN_URL_SUFFIX: &str = ".zip";
+const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 
 enum MemorySpec {
     SvdFile(String),
@@ -1132,7 +1130,6 @@ fn ensure_compiler(
     let mut buffer = String::new();
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
-    println!();
     if force_install {
         println!("Downloading toolchain");
     } else {
@@ -1163,16 +1160,74 @@ fn ensure_compiler(
         println!();
     }
 
-    let toolchain_url = format!(
-        "{}{}.{}.{}{}",
-        TOOLCHAIN_URL_PREFIX, ver.major, ver.minor, ver.patch, TOOLCHAIN_URL_SUFFIX
-    );
+    fn get_toolchain_url(major: u64, minor: u64, patch: u64) -> Result<String, String> {
+        let j: serde_json::Value = ureq::get(TOOLCHAIN_RELEASE_URL)
+            .set("Accept", "application/vnd.github.v3+json")
+            .call()
+            .map_err(|e| format!("{}", e))?
+            .into_json()
+            .map_err(|e| format!("{}", e))?;
+        // let j: serde_json::Value = serde_json::from_str(CONTENT).expect("Cannot parse manifest file");
+
+        let releases = j.as_array().unwrap();
+        let mut tag_urls = std::collections::BTreeMap::new();
+
+        let target_prefix = format!("{}.{}.{}", major, minor, patch);
+        for r in releases {
+            // println!(">>> Value: {}", r);
+
+            let keys = match r.as_object() {
+                None => continue,
+                Some(r) => r,
+            };
+            let release = match keys.get("tag_name") {
+                None => continue,
+                Some(s) => match s.as_str() {
+                    None => continue,
+                    Some(s) => s,
+                },
+            };
+            if !release.starts_with(&target_prefix) {
+                continue;
+            }
+
+            let assets = match keys.get("assets") {
+                None => continue,
+                Some(s) => match s.as_array() {
+                    None => continue,
+                    Some(s) => s,
+                },
+            };
+
+            let first_asset = match assets.get(0) {
+                None => continue,
+                Some(s) => s,
+            };
+
+            let download_url = match first_asset.get("browser_download_url") {
+                None => continue,
+                Some(s) => match s.as_str() {
+                    None => continue,
+                    Some(s) => s,
+                },
+            };
+            // println!("Candidate Release: {}", download_url);
+            tag_urls.insert(release.to_owned(), download_url.to_owned());
+        }
+
+        if let Some((_k, v)) = tag_urls.into_iter().last() {
+            // println!("Found candidate entry: v{} url {}", k, v);
+            return Ok(v);
+        }
+        Err(format!("No toolchains found for Rust {}", target_prefix))
+    }
+    let toolchain_url = get_toolchain_url(ver.major, ver.minor, ver.patch)?;
 
     println!(
         "Attempting to install toolchain for {} into {}",
         target, toolchain_path
     );
-    println!("Downloading from {}...", toolchain_url);
+    println!("Downloading toolchain from {}...", toolchain_url);
 
     print!("Download in progress...");
     stdout.flush().unwrap();
