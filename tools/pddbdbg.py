@@ -274,7 +274,7 @@ def main():
                         for bdict in basis_dicts.values():
                             bdict.ci_check()
                         if found_all_dicts:
-                            logging.info("All dicts were found.")
+                            logging.info("All dicts were found.") # this message is searched for in CI, don't change it
                         else:
                             logging.error("Missing dictionaries, something is wrong.")
                     else:
