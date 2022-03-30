@@ -840,6 +840,18 @@ fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     {
         if order == crate::api::SuspendOrder::Last {
+            let tt_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
+            send_message(
+                tt_conn,
+                xous::Message::new_blocking_scalar(
+                    1,
+                    1000,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .map(|_| ()).unwrap();
             xous::rsyscall(xous::SysCall::Shutdown).expect("unable to quit");
         }
     }*/
