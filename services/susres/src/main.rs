@@ -835,6 +835,14 @@ fn unhook(cb_conns: &mut Vec::<ScalarCallback>) {
 fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder) -> (bool, crate::api::SuspendOrder) {
     let mut at_least_one_event_sent = false;
     log::info!("Sending suspend to {:?} stage", order);
+    /*
+    // abortive attempt to get suspend to shut down the system. Doesn't work, results in a panic because too many messages are still moving around.
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    {
+        if order == crate::api::SuspendOrder::Last {
+            xous::rsyscall(xous::SysCall::Shutdown).expect("unable to quit");
+        }
+    }*/
     for scb in cb_conns.iter() {
         if scb.order == order {
             at_least_one_event_sent = true;
