@@ -47,6 +47,8 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
+chrono = {version = "0.4.19", default-features = false, features = ["std"]}
+
 # for audio self-test analysis
 spectrum-analyzer = "0.5.2"
 # used to parse net connectivity results
@@ -81,6 +83,7 @@ debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
 tts = [] # adds text to speech plugin
+pddbtest = []
 default = [] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]

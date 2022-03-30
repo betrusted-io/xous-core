@@ -1,6 +1,5 @@
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
-use std::sync::Arc;
 use std::thread;
 
 #[derive(Debug)]
@@ -71,18 +70,18 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                 }
                 "stress" => {
                     let _ = thread::spawn({
-                        let rtc = Arc::clone(&env.rtc);
                         move || {
                             log::info!("suspend/resume stress test active");
 
                             let xns = xous_names::XousNames::new().unwrap();
+                            let llio = llio::Llio::new(&xns);
                             let susres = susres::Susres::new_without_hook(&xns).unwrap();
                             let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
                             ticktimer.sleep_ms(1500).unwrap();
                             let mut iters = 0;
                             loop {
                                 log::info!("suspend/resume cycle: {}", iters);
-                                rtc.lock().unwrap().set_wakeup_alarm(4).unwrap();
+                                llio.set_wakeup_alarm(4).unwrap();
                                 susres.initiate_suspend().unwrap();
                                 ticktimer.sleep_ms(8000).unwrap();
                                 iters += 1;
@@ -156,7 +155,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
 
                             // set a wakeup alarm a couple seconds from now -- this is the coldboot
-                            env.rtc.lock().unwrap().set_wakeup_alarm(4).unwrap();
+                            env.llio.set_wakeup_alarm(4).unwrap();
 
                             // allow EC to snoop, so that it can wake up the system
                             env.llio.allow_ec_snoop(true).unwrap();

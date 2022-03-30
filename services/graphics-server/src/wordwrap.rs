@@ -46,21 +46,21 @@ impl TypesetWord {
         TypesetWord {
             gs: vec![gs],
             origin,
-            width: gs.wide as usize,
-            height: gs.high as usize,
+            width: gs.wide as i16,
+            height: gs.high as i16,
             non_drawable: false,
             strpos,
         }
     }
     pub fn push(&mut self, gs: GlyphSprite) {
-        self.width += (gs.wide + gs.kern) as usize;
-        self.height = self.height.max(gs.high as usize);
+        self.width += (gs.wide + gs.kern) as i16;
+        self.height = self.height.max(gs.high as i16);
         self.gs.push(gs);
     }
     /// if the pop is invalid, we'll return an invalid character. Just...don't do that. k?
     pub fn pop(&mut self) -> GlyphSprite {
         let gs = self.gs.pop().unwrap_or(NULL_GLYPH_SPRITE);
-        self.width -= (gs.wide + gs.kern) as usize;
+        self.width -= (gs.wide + gs.kern) as i16;
         // we can't undo any height transformations, unfortunately, because we don't know what the previous state was
         // but it's fairly minor if text is set funny on a line because text overflowed and had e.g. emoji buried amongst
         // small font text...
@@ -102,10 +102,10 @@ impl ComposedType {
             cursor,
         }
     }
-    pub fn bb_width(&self) -> usize {
+    pub fn bb_width(&self) -> i16 {
         self.bounding_box.max.x - self.bounding_box.min.x
     }
-    pub fn bb_height(&self) -> usize {
+    pub fn bb_height(&self) -> i16 {
         self.bounding_box.max.y - self.bounding_box.min.y
     }
     /// Note: it is up to the caller to ensure that clip_rect is within the renderable screen area. We do no
@@ -132,14 +132,14 @@ impl ComposedType {
                     log::trace!("not renderable maybe_y: {}, {:?}", maybe_y, clip_rect);
                     renderable = false;
                 }
-                point.x += (glyph.wide + glyph.kern) as usize; // keep scorekeeping on this, because it could eventually become renderable
+                point.x += (glyph.wide + glyph.kern) as i16; // keep scorekeeping on this, because it could eventually become renderable
                 if !renderable {
                     // quickly short circuit over any text that is definitely outside of our clipping rectangle
                     continue;
                 } else {
                     let cr = ClipRect::new(
-                        clip_rect.tl().x as usize, clip_rect.tl().y as usize,
-                        clip_rect.br().x as usize, clip_rect.br().y as usize
+                        clip_rect.tl().x, clip_rect.tl().y,
+                        clip_rect.br().x, clip_rect.br().y
                     );
                     if !glyph.double {
                         blitstr2::xor_glyph(
@@ -211,7 +211,7 @@ pub(crate) struct Typesetter {
     s: String,
     base_style: GlyphStyle,
     overflow: bool,
-    max_width: usize,
+    max_width: i16,
     last_line_height: usize, // scorecarding for the very last line on the loop exit
 }
 impl Typesetter {
@@ -261,7 +261,7 @@ impl Typesetter {
         // going out of scope at the end of the call.
         let mut composition = Vec::<TypesetWord>::new();
 
-        if self.bb.max.x - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) {
+        if self.bb.max.x - self.bb.min.y < glyph_to_height_hint(GlyphStyle::Regular) as i16 {
             // we flag this because the typesetter algorithm may never converge if it can't set any characters
             // because the region is just too narrow.
             log::error!("Words cannot be typset because the width of the typset region is too narrow.");
@@ -420,7 +420,7 @@ impl Typesetter {
         let ret = ComposedType::new(composition,
             ClipRect::new(
                 self.bb.min.x, self.bb.min.y,
-                self.max_width, self.cursor.pt.y + self.last_line_height,
+                self.max_width as i16, self.cursor.pt.y + self.last_line_height as i16,
             ),
             self.cursor
         );
@@ -439,12 +439,12 @@ impl Typesetter {
     fn is_newline_available(&self) -> bool {
         // repeated, bare newlines will have a candidate height of 0, as it contains no glyphs. correct for that.
         let corrected_height = if self.candidate.height == 0 {
-            self.cursor.line_height
+            self.cursor.line_height as i16
         } else {
             self.candidate.height
         };
-        log::trace!("{} < {}", corrected_height + self.cursor.pt.y + self.cursor.line_height, self.bb.max.y);
-        corrected_height + self.cursor.pt.y + self.cursor.line_height < self.bb.max.y
+        log::trace!("{} < {}", corrected_height + self.cursor.pt.y + self.cursor.line_height as i16, self.bb.max.y);
+        corrected_height + self.cursor.pt.y + (self.cursor.line_height as i16) < self.bb.max.y
     }
     fn does_word_fit_on_line(&self) -> bool {
         self.candidate.width + self.cursor.pt.x < self.bb.max.x
@@ -467,7 +467,7 @@ impl Typesetter {
         if !self.candidate.non_drawable { // this is mainly for "non-drawable spaces" at the beginning of a line
             self.max_width = self.max_width.max(self.candidate.width + self.candidate.origin.x);
             self.cursor.pt.x += self.candidate.width;
-            self.cursor.line_height = self.cursor.line_height.max(self.candidate.height);
+            self.cursor.line_height = self.cursor.line_height.max(self.candidate.height as usize);
             self.last_line_height = self.cursor.line_height;
         }
         if false {tsw_debug(&self.candidate)};
@@ -493,9 +493,9 @@ impl Typesetter {
     fn move_candidate_to_newline(&mut self) {
         // advance the rendering line, without inserting a newline placeholder
         self.last_line_height = self.cursor.line_height;
-        self.cursor.pt.y += self.cursor.line_height;
+        self.cursor.pt.y += self.cursor.line_height as i16;
         self.cursor.pt.x = self.bb.min.x;
-        self.cursor.line_height = self.candidate.height;
+        self.cursor.line_height = self.candidate.height as usize;
         // now set the current candidate word's origin to the beginning of this new line
         self.candidate.origin = self.cursor.pt;
     }
@@ -524,7 +524,7 @@ impl Typesetter {
     /// set to our space point, because the caller will have already stashed the previously formed word
     fn try_append_space(&mut self, composition: &mut Vec::<TypesetWord>) -> bool {
         assert!(self.candidate.gs.len() == 0, "self.candidate was not set to a new state prior to this call");
-        if (self.cursor.pt.x + self.space.wide as usize) < self.bb.max.x {
+        if (self.cursor.pt.x + self.space.wide as i16) < self.bb.max.x {
             // our candidate word is "just as space"
             let mut candidate_space = self.space.clone();
             if self.is_insert_point() {

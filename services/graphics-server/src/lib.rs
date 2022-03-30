@@ -217,15 +217,6 @@ impl Gfx {
             .map(|_| ())
     }
 
-    pub fn draw_sleep_note(&self, flag: bool) -> Result<(), xous::Error> {
-        let arg = if flag { 1 } else { 0 };
-        send_message(
-            self.conn,
-            Message::new_scalar(Opcode::SetSleepNote.to_usize().unwrap(), arg, 0, 0, 0),
-        )
-        .map(|_| ())
-    }
-
     /// this is a one-way door, once you've set it, you can't unset it.
     pub fn set_devboot(&self, enable: bool) -> Result<(), xous::Error> {
         let ena = if enable { 1 } else { 0 };

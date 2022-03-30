@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 # populate with an invalid default so the equals compares work downstream
@@ -29,23 +29,13 @@ else
     LOCALE=""
 fi
 
-wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
-./usb_update.py -l /tmp/loader.bin
-rm /tmp/loader.bin
-
+./usb_update.py --disable-boot
 echo "waiting for device to reboot"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/xous$LOCALE.img -O /tmp/xous.img
 ./usb_update.py -k /tmp/xous.img
 rm /tmp/xous.img
-
-echo "waiting for device to reboot"
-sleep 5
-
-wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
-./usb_update.py --soc /tmp/soc_csr.bin --force
-rm /tmp/soc_csr.bin
 
 echo "waiting for device to reboot"
 sleep 5
@@ -60,5 +50,16 @@ wget https://ci.betrusted.io/$REVISION/wf200_fw.bin -O /tmp/wf200_fw.bin
 ./usb_update.py -w /tmp/wf200_fw.bin
 rm /tmp/wf200_fw.bin
 
-echo " "
+echo "waiting for device to reboot"
+sleep 5
+
+# this should sequence last because it overwrites all of the CSR values on the currently loaded SoC
+wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
+wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
+./usb_update.py --enable-boot --soc /tmp/soc_csr.bin -l /tmp/loader.bin
+rm /tmp/loader.bin
+rm /tmp/soc_csr.bin
+
+echo "Please insert a paperclip in the hard reset hole in the lower right hand corner to ensure the new FPGA gateware is loaded."
+echo "After inserting the paperclip you will need to apply power via USB to boot."
 echo "IMPORTANT: you must run 'ecup auto' to update the EC with the staged firmware objects."

@@ -567,6 +567,9 @@ fn xmain() -> ! {
     let mut susres_hw = implementation::SusResHw::new();
 
     log_server::init_wait().unwrap();
+    // debugging note: it's actually easiest to debug using client-side hooks. Search for
+    // "<-- use this to debug s/r" in the lib.rs file and switch that to an "info" level
+    // and you will get a nice readout of caller PID + token lists.
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
@@ -647,11 +650,19 @@ fn xmain() -> ! {
                     }
                     scb.ready_to_suspend = true;
 
+                    // DEBUG NOTES:
+                    // "<-- use this to debug s/r" in the lib.rs file and switch that to an "info" level
+                    // in order to get the best-quality debug info (lib-side hook can give us caller PID)
+
+                    // also, note that llio's suspend call will map out the UART on suspend. If you want to
+                    // debug a kernel panic on resume, you must set the mux to 0, but then you lose
+                    // visibility on suspend once the llio triggers its suspend. If you want to debug suspend
+                    // order problems, set the mux to 1, but you lose visibility into KP on resume.
                     let mut all_ready = true;
                     for sub in suspend_subscribers.iter() {
                         if sub.order == current_op_order {
                             if !sub.ready_to_suspend {
-                                log::trace!("not ready: {}", sub.token);
+                                log::trace!("  -> NOT READY: {}", sub.token);
                                 all_ready = false;
                                 break;
                             }
@@ -693,6 +704,11 @@ fn xmain() -> ! {
                     }
                 }),
                 Some(Opcode::SuspendRequest) => {
+                    /*
+                    log::info!("registered suspend listeners:");
+                    for sub in suspend_subscribers.iter() {
+                        log::info!("{:?}", sub);
+                    }*/
                     // if the 2-second timeout is still pending from a previous suspend, deny the suspend request.
                     // ...just don't suspend that quickly after resuming???
                     if allow_suspend && !timeout_pending {
@@ -819,6 +835,14 @@ fn unhook(cb_conns: &mut Vec::<ScalarCallback>) {
 fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder) -> (bool, crate::api::SuspendOrder) {
     let mut at_least_one_event_sent = false;
     log::info!("Sending suspend to {:?} stage", order);
+    /*
+    // abortive attempt to get suspend to shut down the system. Doesn't work, results in a panic because too many messages are still moving around.
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    {
+        if order == crate::api::SuspendOrder::Last {
+            xous::rsyscall(xous::SysCall::Shutdown).expect("unable to quit");
+        }
+    }*/
     for scb in cb_conns.iter() {
         if scb.order == order {
             at_least_one_event_sent = true;

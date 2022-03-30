@@ -197,10 +197,16 @@ class PrecursorUsb:
             self.spinor_command_value(exec=1, lock_reads=1, cmd_code=self.PP4B, has_arg=1, data_words=(data_bytes//2))
         )
 
-    def load_csrs(self):
+    def load_csrs(self, fname=None):
         LOC_CSRCSV = 0x20277000 # this address shouldn't change because it's how we figure out our version number
+        # CSR extraction:
+        # dd if=soc_csr.bin of=csr_data_0.9.6.bin skip=2524 count=32 bs=1024
+        if fname == None:
+            csr_data = self.burst_read(LOC_CSRCSV, 0x8000)
+        else:
+            with open(fname, "rb") as f:
+                csr_data = f.read(0x8000)
 
-        csr_data = self.burst_read(LOC_CSRCSV, 0x8000)
         hasher = hashlib.sha512()
         hasher.update(csr_data[:0x7FC0])
         digest = hasher.digest()
@@ -405,6 +411,12 @@ def main():
         "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-xous-elf/release/loader.bin'
     )
     parser.add_argument(
+        "--disable-boot", required=False, action='store_true', help="Disable system boot (for use in multi-stage updates)"
+    )
+    parser.add_argument(
+        "--enable-boot", required=False, action='store_true', help="Re-enable system boot. Requires both a loader and a soc spec."
+    )
+    parser.add_argument(
         "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='../target/riscv32imac-unknown-xous-elf/release/xous.img'
     )
     parser.add_argument(
@@ -445,6 +457,9 @@ def main():
     )
     parser.add_argument(
         "--factory-new", help="reset the entire image to mimic exactly what comes out of the factory, including temp files for testing. Warning: this will take a long time.", action="store_true"
+    )
+    parser.add_argument(
+        "--override-csr", required=False, help="CSR file to use instead of CSR values stored with the image. Used to recover in case of partial update of soc_csr.bin", type=str,
     )
     args = parser.parse_args()
 
@@ -488,7 +503,7 @@ def main():
         #     print("match")
         exit(0)
 
-    pc_usb.load_csrs() # prime the CSR values
+    pc_usb.load_csrs(args.override_csr) # prime the CSR values
     if "v0.8" in pc_usb.gitrev:
         locs = {
            "LOC_SOC"    : [0x0000_0000, "soc_csr.bin"],
@@ -527,7 +542,7 @@ def main():
            "LOC_PDDB"   : [0x01D80000, "pass"],
         }
     else:
-        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
+        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
@@ -538,6 +553,38 @@ def main():
     if args.erase_pddb:
         print("Erasing PDDB region")
         pc_usb.erase_region(locs['LOC_PDDB'][0], locs['LOC_EC'][0] - locs['LOC_PDDB'][0])
+
+    if args.disable_boot:
+        print("Disabling boot")
+        pc_usb.erase_region(locs['LOC_LOADER'][0], 1024 * 256)
+
+    if args.enable_boot:
+        if args.loader == None:
+            print("Must provide both a loader and soc image")
+        if args.soc == None:
+            print("Must provide both a soc and loader image")
+        print("Enabling boot with {} and {}".format(args.loader, args.soc))
+        print("Programming loader image {}".format(args.loader))
+        with open(args.loader, "rb") as f:
+            image = f.read()
+            pc_usb.flash_program(locs['LOC_LOADER'][0], image, verify=verify)
+        print("Programming SoC gateware".format(args.soc))
+        with open(args.soc, "rb") as f:
+            image = f.read()
+            pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+
+        print("Erasing PDDB root structures")
+        pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
+
+        print("Resuming CPU.")
+        pc_usb.poke(vexdbg_addr, 0x02000000)
+
+        print("Resetting SOC...")
+        try:
+            pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
+        except usb.core.USBError:
+            pass # we expect an error because we reset the SOC and that includes the USB core
+        exit(0)
 
     if args.image:
         image_file, addr_str = args.image

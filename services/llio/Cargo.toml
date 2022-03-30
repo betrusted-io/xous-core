@@ -27,10 +27,15 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
-chrono = "0.4"
+chrono = "0.4.19"
+
+[dev-dependencies]
+"chrono" = "0.4.19"
+"rand" = "0.8.5"
 
 [features]
 debugprint = []
 wfi_off = [] # useful for serial port debugging, forces power on so the UART characters can finish printing
+tts = []
 default = [] # "debugprint"
 #default = ["debugprint"] # , "fccagent"

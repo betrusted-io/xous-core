@@ -10,7 +10,14 @@ use std::num::NonZeroU32;
 // get configured out in some builds). Thus, we tell clippy to just shut up and stick them all
 // here, because sometimes, clippy just can't see the big picture.
 
+// note this name cannot be changed because it is baked into `libstd`
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
+pub(crate) const SERVER_NAME_PDDB_POLLER: &str     = "_PDDB Mount Poller_";
+/// This is the registered name for a dedicated private API channel to the PDDB for doing the time reset
+/// Even though nobody but the PDDB should connect to this, we have to share it publicly so the PDDB can
+/// depend upon this constant.
+pub const TIME_SERVER_PDDB: &'static str = "_dedicated pddb timeserver connection_";
+
 #[allow(dead_code)]
 pub(crate) const BASIS_NAME_LEN: usize = 64; // don't want this too long anyways, because it's not recorded anywhere - users have to type it in.
 #[allow(dead_code)]
@@ -61,7 +68,7 @@ pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
 pub(crate) const FSCB_FILL_UNCERTAINTY: f32 = 0.1;
 
 #[allow(dead_code)]
-pub(crate) const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
+pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 // this isn't an "official" basis, but it is used for the AAD for encrypting the FastSpace structure
 #[allow(dead_code)]
 pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
@@ -110,6 +117,14 @@ pub(crate) enum Opcode {
     /// Suspend/resume callback
     SuspendResume,
     /// quit the server
+    Quit,
+    /// Write debug dump (only available in hosted mode)
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    DangerousDebug,
+}
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum PollOp {
+    Poll,
     Quit,
 }
 
@@ -160,9 +175,9 @@ pub struct PddbBasisRequest {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDictRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub key: xous_ipc::String::<KEY_NAME_LEN>,
     pub index: u32,
     pub token: [u32; 4],
     pub code: PddbRequestCode,
@@ -172,9 +187,9 @@ pub struct PddbDictRequest {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbKeyRequest {
     pub basis_specified: bool,
-    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub key: xous_ipc::String::</*KEY_NAME_LEN*/ 95>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
+    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub key: xous_ipc::String::<KEY_NAME_LEN>,
     pub token: Option<ApiToken>,
     pub create_dict: bool,
     pub create_key: bool,
@@ -257,8 +272,8 @@ pub struct PddbKeyAttrIpc {
     pub len: u64,
     pub reserved: u64,
     pub age: u64,
-    pub dict: xous_ipc::String::</*DICT_NAME_LEN*/ 111>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub basis: xous_ipc::String::</* BASIS_NAME_LEN */ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub dict: xous_ipc::String::<DICT_NAME_LEN>,
+    pub basis: xous_ipc::String::<BASIS_NAME_LEN>,
     pub flags: u32,
     pub index: u32,
     pub token: ApiToken,
@@ -305,6 +320,19 @@ impl PddbKeyAttrIpc {
     }
 }
 
+/// Debugging commands, available only in hosted mode
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct PddbDangerousDebug {
+    pub request: DebugRequest,
+    pub dump_name: xous_ipc::String::<128>,
+}
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum DebugRequest {
+    Dump,
+    Remount,
+}
 
 #[cfg(test)]
 mod tests {

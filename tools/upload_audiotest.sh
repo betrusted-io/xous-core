@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 SHORT8=short_8khz.wav
 SHORTCD=short_cd.wav

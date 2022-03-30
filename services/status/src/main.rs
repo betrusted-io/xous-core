@@ -8,6 +8,7 @@ use appmenu::*;
 mod kbdmenu;
 use kbdmenu::*;
 mod app_autogen;
+mod time;
 
 use com::api::*;
 use core::fmt::Write;
@@ -16,9 +17,8 @@ use xous::{msg_scalar_unpack, send_message, Message, CID};
 use graphics_server::*;
 use graphics_server::api::GlyphStyle;
 use locales::t;
-use gam::modal::*;
 use gam::{GamObjectList, GamObjectType};
-use llio::Weekday;
+use chrono::prelude::*;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -37,12 +37,8 @@ const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 pub(crate) enum StatusOpcode {
     /// for passing battstats on to the main thread from the callback
     BattStats,
-    /// for passing DateTime
-    DateTime,
     /// indicates time for periodic update of the status bar
     Pump,
-    /// Pulls up the time setting UI
-    UxSetTime,
     /// Initiates a reboot
     Reboot,
 
@@ -63,6 +59,8 @@ pub(crate) enum StatusOpcode {
 
     /// Suspend handler from the main menu
     TrySuspend,
+    /// Ship mode handler for the main menu
+    BatteryDisconnect,
     /// for returning wifi stats
     WifiStats,
     Quit,
@@ -83,17 +81,6 @@ fn battstats_cb(stats: BattStats) {
             ),
         )
         .unwrap();
-    }
-}
-
-pub fn dt_callback(dt: llio::DateTime) {
-    //log::info!("dt_callback received with {:?}", dt);
-    if let Some(cb_to_main_conn) = unsafe { CB_TO_MAIN_CONN } {
-        let buf = xous_ipc::Buffer::into_buf(dt)
-            .or(Err(xous::Error::InternalError))
-            .unwrap();
-        buf.send(cb_to_main_conn, StatusOpcode::DateTime.to_u32().unwrap())
-            .unwrap();
     }
 }
 
@@ -118,6 +105,10 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+
+    // this kicks off the thread that services the `libstd` calls for time-related things.
+    // we want this started really early, because it sanity checks the RTC and a bunch of other stuff.
+    time::start_time_server();
 
     let xns = xous_names::XousNames::new().unwrap();
     // 1 connection exactly -- from the GAM to set our canvas GID
@@ -154,7 +145,7 @@ fn xmain() -> ! {
     // create a connection for callback hooks
     let cb_cid = xous::connect(status_sid).unwrap();
     unsafe { CB_TO_MAIN_CONN = Some(cb_cid) };
-    let pump_run = Arc::new(AtomicBool::new(true));
+    let pump_run = Arc::new(AtomicBool::new(false));
     let pump_conn = xous::connect(status_sid).unwrap();
     let _ = thread::spawn({
         let pump_run = pump_run.clone();
@@ -175,19 +166,20 @@ fn xmain() -> ! {
     // layout: 336 px wide
     // 0                   150 150 200
     // Feb 05 15:00 (00:06:23) xxxx     3.72V/-100mA/99%
-    const CPU_BAR_WIDTH: i16 = 50;
+    const CPU_BAR_WIDTH: i16 = 48;
+    const CPU_BAR_OFFSET: i16 = 4;
     let time_rect = Rectangle::new_with_style(
         Point::new(0, 0),
-        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1, screensize.y / 2 - 1),
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1 + CPU_BAR_OFFSET, screensize.y / 2 - 1),
         DrawStyle::new(PixelColor::Light, PixelColor::Light, 0)
     );
     let cpuload_rect = Rectangle::new_with_style(
-        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2, 0),
-        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2, screensize.y / 2 + 1),
+        Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 + CPU_BAR_OFFSET, 0),
+        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2 + CPU_BAR_OFFSET, screensize.y / 2 + 1),
         DrawStyle::new(PixelColor::Light, PixelColor::Dark, 1),
     );
     let stats_rect = Rectangle::new_with_style(
-        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2 + 1, 0),
+        Point::new(screensize.x / 2 + CPU_BAR_WIDTH / 2 + 1 + CPU_BAR_OFFSET, 0),
         Point::new(screensize.x, screensize.y / 2 - 1),
         DrawStyle::new(PixelColor::Light, PixelColor::Light, 0),
     );
@@ -227,14 +219,6 @@ fn xmain() -> ! {
         remaining_capacity: 650,
     };
 
-    log::debug!("initializing RTC...");
-    let mut rtc = llio::Rtc::new(&xns);
-
-    #[cfg(any(target_os = "none", target_os = "xous"))]
-    rtc.clear_wakeup_alarm().unwrap(); // clear any wakeup alarm state, if it was set
-
-    rtc.hook_rtc_callback(dt_callback).unwrap();
-    let mut datetime: Option<llio::DateTime> = None;
     let llio = llio::Llio::new(&xns);
 
     log::debug!("usb unlock notice...");
@@ -313,7 +297,6 @@ fn xmain() -> ! {
 
     let mut stats_phase: usize = 0;
 
-    let dt_pump_interval = 15;
     let charger_pump_interval = 180;
     let batt_interval;
     let secnotes_interval;
@@ -340,28 +323,46 @@ fn xmain() -> ! {
     com.req_batt_stats()
         .expect("Can't get battery stats from COM");
 
+    // spawn a time UX manager thread
+    let time_sid = xous::create_server().unwrap();
+    let time_cid = xous::connect(time_sid).unwrap();
+    time::start_time_ux(time_sid);
+    // this is used by the main loop to get the localtime to show on the status bar
+    let mut localtime = llio::LocalTime::new();
+    // used to hide time when the PDDB is not mounted
+    let pddb_poller = pddb::PddbMountPoller::new();
+
+    // used to show notifications, e.g. can't sleep while power is engaged.
+    let modals = modals::Modals::new(&xns).unwrap();
+
     log::debug!("starting main menu thread");
-    create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com);
+    create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com, time_cid);
     create_app_menu(xous::connect(status_sid).unwrap());
     let kbd_mgr = xous::create_server().unwrap();
     let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
     let kbd = keyboard::Keyboard::new(&xns).unwrap();
 
-    // some RTC UX structures
-    let modals = modals::Modals::new(&xns).unwrap();
-    let day_of_week_list = [
-        t!("rtc.monday", xous::LANG),
-        t!("rtc.tuesday", xous::LANG),
-        t!("rtc.wednesday", xous::LANG),
-        t!("rtc.thursday", xous::LANG),
-        t!("rtc.friday", xous::LANG),
-        t!("rtc.saturday", xous::LANG),
-        t!("rtc.sunday", xous::LANG),
-    ];
     log::debug!("subscribe to wifi updates");
     netmgr.wifi_state_subscribe(cb_cid, StatusOpcode::WifiStats.to_u32().unwrap()).unwrap();
     let mut wifi_status: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
+
+    #[cfg(feature="tts")]
+    thread::spawn({
+        move || {
+            // indicator of boot-up for blind users
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            tt.sleep_ms(1500).unwrap();
+            let xns = xous_names::XousNames::new().unwrap();
+            let llio = llio::Llio::new(&xns);
+            llio.vibe(llio::VibePattern::Double).unwrap();
+        }
+    });
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
+
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
+
+    pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
         log::trace!("|status: Message: {:?}", msg);
@@ -517,53 +518,38 @@ fn xmain() -> ! {
                         }
                     }
                 }
-                if (stats_phase % dt_pump_interval) == 2 {
-                    #[cfg(any(target_os = "none", target_os = "xous"))]
-                    rtc.request_datetime()
-                        .expect("|status: can't request datetime from RTC");
-                    #[cfg(not(any(target_os = "none", target_os = "xous")))]
-                    {
-                        log::trace!("hosted request of date time - short circuiting server call");
-                        use chrono::prelude::*;
-                        use llio::Weekday;
-                        let now = Local::now();
-                        let wday: Weekday = match now.weekday() {
-                            chrono::Weekday::Mon => Weekday::Monday,
-                            chrono::Weekday::Tue => Weekday::Tuesday,
-                            chrono::Weekday::Wed => Weekday::Wednesday,
-                            chrono::Weekday::Thu => Weekday::Thursday,
-                            chrono::Weekday::Fri => Weekday::Friday,
-                            chrono::Weekday::Sat => Weekday::Saturday,
-                            chrono::Weekday::Sun => Weekday::Sunday,
-                        };
-                        datetime = Some(llio::DateTime {
-                            seconds: now.second() as u8,
-                            minutes: now.minute() as u8,
-                            hours: now.hour() as u8,
-                            months: now.month() as u8,
-                            days: now.day() as u8,
-                            years: (now.year() - 2000) as u8,
-                            weekday: wday,
-                        });
-                    }
-                }
-
                 { // update the time field
                     // have to clear the entire rectangle area, because the text has a variable width and dirty text will remain if the text is shortened
                     gam.draw_rectangle(status_gid, time_rect).ok();
                     uptime_tv.clear_str();
-                    if let Some(dt) = datetime {
+                    if let Some(timestamp) = localtime.get_local_time_ms() {
+                        // we "say" UTC but actually local time is in whatever the local time is
+                        let dt = chrono::DateTime::<Utc>::from_utc(
+                            NaiveDateTime::from_timestamp(timestamp as i64 / 1000, 0),
+                            chrono::offset::Utc
+                        );
+                        let timestr = dt.format("%H:%M %m/%d").to_string();
+                        // TODO: convert dt to an actual local time using the chrono library
                         write!(
                             &mut uptime_tv,
-                            "{:02}:{:02} {}/{}",
-                            dt.hours, dt.minutes, dt.months, dt.days
+                            "{}",
+                            timestr
                         )
                         .unwrap();
                     } else {
-                        write!(
-                            &mut uptime_tv,
-                            "Invalid RTC"
-                        ).unwrap();
+                        if pddb_poller.is_mounted_nonblocking() {
+                            write!(
+                                &mut uptime_tv,
+                                "{}",
+                                t!("stats.set_time", xous::LANG)
+                            ).unwrap();
+                        } else {
+                            write!(
+                                &mut uptime_tv,
+                                "{}",
+                                t!("stats.mount_pddb", xous::LANG)
+                            ).unwrap();
+                        }
                     }
                     // use ticktimer, not stats_phase, because stats_phase encodes some phase drift due to task-switching overhead
                     write!(
@@ -591,101 +577,6 @@ fn xmain() -> ! {
 
                 stats_phase = stats_phase.wrapping_add(1);
             }
-            Some(StatusOpcode::DateTime) => {
-                //log::info!("got DateTime update");
-                let buffer = unsafe {
-                    xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
-                };
-                let dt = buffer.to_original::<llio::DateTime, _>().unwrap();
-                datetime = Some(dt);
-            }
-            Some(StatusOpcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
-                pump_run.store(false, Ordering::Relaxed); // stop status updates while we do this
-                let secs: u8;
-                let mins: u8;
-                let hours: u8;
-                let months: u8;
-                let days: u8;
-                let years: u8;
-                let weekday: Weekday;
-
-                months = modals.get_text(
-                    t!("rtc.month", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap())
-                ).expect("couldn't get month").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got months {}", months);
-
-                days = modals.get_text(
-                    t!("rtc.day", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap())
-                ).expect("couldn't get month").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got days {}", days);
-
-                years = modals.get_text(
-                    t!("rtc.year", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap())
-                ).expect("couldn't get month").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got years {}", years);
-
-                for dow in day_of_week_list.iter() {
-                    modals.add_list_item(dow).expect("couldn't build day of week list");
-                }
-                let payload = modals.get_radiobutton(t!("rtc.day_of_week", xous::LANG)).expect("couldn't get day of week");
-                weekday =
-                    if payload.as_str() == t!("rtc.monday", xous::LANG) {
-                        Weekday::Monday
-                    } else if payload.as_str() == t!("rtc.tuesday", xous::LANG) {
-                        Weekday::Tuesday
-                    } else if payload.as_str() == t!("rtc.wednesday", xous::LANG) {
-                        Weekday::Wednesday
-                    } else if payload.as_str() == t!("rtc.thursday", xous::LANG) {
-                        Weekday::Thursday
-                    } else if payload.as_str() == t!("rtc.friday", xous::LANG) {
-                        Weekday::Friday
-                    } else if payload.as_str() == t!("rtc.saturday", xous::LANG) {
-                        Weekday::Saturday
-                    } else {
-                        Weekday::Sunday
-                    };
-                log::debug!("got weekday {:?}", weekday);
-
-                hours = modals.get_text(
-                    t!("rtc.hour", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap())
-                ).expect("couldn't get hour").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got hours {}", hours);
-
-                mins = modals.get_text(
-                    t!("rtc.minute", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap())
-                ).expect("couldn't get minutes").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got minutes {}", mins);
-
-                secs = modals.get_text(
-                    t!("rtc.seconds", xous::LANG),
-                    Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap())
-                ).expect("couldn't get seconds").as_str()
-                .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                log::debug!("got seconds {}", secs);
-
-                log::info!("Setting time: {}/{}/{} {}:{}:{} {:?}", months, days, years, hours, mins, secs, weekday);
-                let dt = llio::DateTime {
-                    seconds: secs,
-                    minutes: mins,
-                    hours,
-                    days,
-                    months,
-                    years,
-                    weekday
-                };
-                rtc.set_rtc(dt).expect("couldn't set the current time");
-                pump_run.store(true, Ordering::Relaxed); // stop status updates while we do this
-            }),
             Some(StatusOpcode::Reboot) => {
                 if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
                     // power plugged in, do a reboot using a warm boot method
@@ -697,7 +588,7 @@ fn xmain() -> ! {
                     // do a full cold-boot if the power is cut. This will force a re-load of the SoC contents.
                     gam.shipmode_blank_request().ok();
                     ticktimer.sleep_ms(500).ok(); // screen redraw time after the blank request
-                    rtc.set_wakeup_alarm(4).expect("couldn't set wakeup alarm");
+                    llio.set_wakeup_alarm(4).expect("couldn't set wakeup alarm");
                     llio.allow_ec_snoop(true).ok();
                     llio.allow_power_off(true).ok();
                     com.power_off_soc().ok();
@@ -714,11 +605,11 @@ fn xmain() -> ! {
                 gam.raise_menu(gam::APP_MENU_NAME).expect("couldn't raise App submenu");
             },
             Some(StatusOpcode::SubmenuKbd) => {
-                log::info!("getting keyboard map");
+                log::debug!("getting keyboard map");
                 let map = kbd.get_keymap().expect("couldn't get key mapping");
-                log::info!("setting index to {:?}", map);
+                log::info!("setting keymap index to {:?}", map);
                 kbd_menumatic.set_index(map.into());
-                log::info!("raising keyboard menu");
+                log::debug!("raising keyboard menu");
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::KBD_MENU_NAME).expect("couldn't raise keyboard layout submenu");
             },
@@ -756,6 +647,18 @@ fn xmain() -> ! {
                     susres.initiate_suspend().expect("couldn't initiate suspend op");
                 }
             },
+            Some(StatusOpcode::BatteryDisconnect) => {
+                if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG)).expect("couldn't notify that power is plugged in");
+                } else {
+                    gam.shipmode_blank_request().ok();
+                    ticktimer.sleep_ms(500).unwrap();
+                    llio.allow_ec_snoop(true).unwrap();
+                    llio.allow_power_off(true).unwrap();
+                    com.ship_mode().unwrap();
+                    com.power_off_soc().unwrap();
+                }
+            },
             Some(StatusOpcode::Quit) => {
                 break;
             }
@@ -779,59 +682,3 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-// RTC helper functions
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum ValidatorOp {
-    UxMonth,
-    UxDay,
-    UxYear,
-    UxHour,
-    UxMinute,
-    UxSeconds,
-}
-
-fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<ValidatorErr> {
-    let text_str = input.as_str();
-    let input_int = match text_str.parse::<u32>() {
-        Ok(input_int) => input_int,
-        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
-    };
-    log::trace!("validating input {}, parsed as {} for opcode {}", text_str, input_int, opcode);
-    match FromPrimitive::from_u32(opcode) {
-        Some(ValidatorOp::UxMonth) => {
-            if input_int < 1 || input_int > 12 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxDay) => {
-            if input_int < 1 || input_int > 31 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxYear) => {
-            if input_int > 99 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxHour) => {
-            if input_int > 23 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxMinute) => {
-            if input_int > 59 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxSeconds) => {
-            if input_int > 59 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        _ => {
-            log::error!("internal error: invalid opcode was sent to validator: {:?}", opcode);
-            panic!("internal error: invalid opcode was sent to validator");
-        }
-    }
-    None
-}

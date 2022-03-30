@@ -5,12 +5,43 @@ mod api;
 use api::*;
 
 use num_traits::FromPrimitive;
-use xous::msg_blocking_scalar_unpack;
+use xous::{msg_blocking_scalar_unpack, MessageEnvelope};
 use xous_ipc::{Buffer, String};
 
 use log::{error, info};
 
 use std::collections::HashMap;
+
+#[derive(PartialEq)]
+#[repr(C)]
+enum ConnectError {
+    /// The length of the memory buffer was invalid
+    InvalidMemoryBuffer = 1,
+
+    /// The `connect_for_process()` call failed
+    KernelConnectFailure = 2,
+
+    /// The specified nameserver string was not UTF-8
+    InvalidString = 3,
+
+    /// The message was not a mutable memory message
+    InvalidMessageType = 4,
+}
+
+#[derive(PartialEq)]
+#[repr(C)]
+enum ConnectSuccess {
+    /// The server connection was successfully made
+    Connected(
+        xous::CID,        /* Connection ID */
+        Option<[u32; 4]>, /* Disconnection token */
+    ),
+
+    /// There is no server with that name -- block this message
+    Wait,
+    // /// The client needs to make an authentication request
+    // AuthenticationRequest
+}
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
@@ -79,7 +110,7 @@ struct Connection {
     pub current_conns: u32, // number of unauthenticated (inherentely trusted) connections
     pub max_conns: Option<u32>, // if None, unlimited connections allowed
     pub _allow_authenticate: bool,
-    pub _auth_conns: u32,         // number of authenticated connections
+    pub _auth_conns: u32,        // number of authenticated connections
     pub token: Option<[u32; 4]>, // a random number that must be presented to allow for disconnection for single-connection servers
 }
 #[derive(Debug)]
@@ -138,36 +169,42 @@ impl CheckedHashMap {
 
         removed_name
     }
+
     pub fn contains_key(&self, name: &XousServerName) -> bool {
         self.map.contains_key(name)
     }
-    pub fn connect(&mut self, name: &XousServerName) -> (Option<&xous::SID>, Option<[u32; 4]>) {
-        let maybe_entry = self.map.get_mut(name);
-        if let Some(entry) = maybe_entry {
-            if Some(1) == entry.max_conns {
+
+    pub fn connect(&mut self, name: &XousServerName) -> (Option<xous::SID>, Option<[u32; 4]>) {
+        if let Some(entry) = self.map.get_mut(name) {
+            match entry.max_conns {
                 // single-connection case
-                if entry.current_conns < 1 {
-                    (*entry).current_conns = 1;
-                    return (Some(&entry.sid), entry.token);
-                } else {
-                    return (None, None);
+                Some(1) => {
+                    if entry.current_conns < 1 {
+                        (*entry).current_conns = 1;
+                        (Some(entry.sid), entry.token)
+                    } else {
+                        (None, None)
+                    }
                 }
-            }
-            if let Some(max) = entry.max_conns {
-                if entry.current_conns < max {
+                Some(max) => {
+                    if entry.current_conns < max {
+                        (*entry).current_conns += 1;
+                        (Some(entry.sid), None)
+                    } else {
+                        (None, None)
+                    }
+                }
+                _ => {
+                    // unlimited connections allowed
                     (*entry).current_conns += 1;
-                    return (Some(&entry.sid), None);
-                } else {
-                    return (None, None);
+                    (Some(entry.sid), None)
                 }
-            } else {
-                // unlimited connections allowed
-                (*entry).current_conns += 1;
-                return (Some(&entry.sid), None);
             }
+        } else {
+            (None, None)
         }
-        (None, None)
     }
+
     pub fn trusted_init_done(&self) -> bool {
         let mut trusted_done = true;
         for (name, entry) in self.map.iter() {
@@ -185,12 +222,12 @@ impl CheckedHashMap {
         }
         trusted_done
     }
+
     // this function is slightly unsafe because we can't guarantee that the presenter of the SID
     // has actually discarded the SID. However, we don't currently anticipate using this path a lot.
     // If it does get used in security-critical routes, it should be refactored to regenerate the SID
     // and publish it to the server every time a disconnect is called, to ensure that after a disconnection
     // the caller can never talk to the server again.
-    #[allow(dead_code)]
     pub fn disconnect(&mut self, sid: xous::SID) -> Option<XousServerName> {
         for (name, mapping) in self.map.iter_mut() {
             if mapping.sid == sid {
@@ -202,6 +239,7 @@ impl CheckedHashMap {
         }
         None
     }
+
     // this is a safer version of disconnect. we track servers that allow exactly one connection at a time
     // and give them a one-time-use token that a connector can use to disconnect.
     pub fn disconnect_with_token(&mut self, name: &XousServerName, token: [u32; 4]) -> bool {
@@ -223,6 +261,97 @@ impl CheckedHashMap {
     }
 }
 
+fn name_from_msg(env: &MessageEnvelope) -> Result<XousServerName, ConnectError> {
+    let msg = env
+        .body
+        .memory_message()
+        .ok_or(ConnectError::InvalidMessageType)?;
+    let valid_bytes = msg.valid.map(|v| v.get()).unwrap_or_else(|| msg.buf.len());
+    if valid_bytes > msg.buf.len() {
+        log::error!("valid bytes exceeded entire buffer length");
+        return Err(ConnectError::InvalidMemoryBuffer);
+    }
+    // Safe because we've already validated that it's a valid range
+    let str_slice = unsafe { core::slice::from_raw_parts(msg.buf.as_ptr(), valid_bytes) };
+    let name_string = core::str::from_utf8(str_slice).map_err(|_| ConnectError::InvalidString)?;
+
+    Ok(XousServerName::from_str(name_string))
+}
+
+/// Connect to the server named in the message. If the server exists, attempt the connection
+/// and return either the connection ID or an error.
+///
+/// If the server does not exist, return `Ok(None)`
+fn blocking_connect(
+    env: &mut MessageEnvelope,
+    name_table: &mut CheckedHashMap,
+) -> Result<ConnectSuccess, ConnectError> {
+    let name = name_from_msg(env)?;
+    let sender_pid = env.sender.pid().expect("kernel provided us a PID of None");
+    log::trace!(
+        "BlockingConnect request for '{}' for process {:?}",
+        name,
+        sender_pid
+    );
+
+    // If the server already exists, attempt to make the connection. The connection can
+    // only succeed if the
+    if let (Some(server_sid), token) = name_table.connect(&name) {
+        log::trace!("Found entry in the table (sid: {:?}, token: {:?}) -- attempting to call connect_for_process()", server_sid, token);
+        let result = xous::connect_for_process(sender_pid, server_sid);
+        if let Ok(xous::Result::ConnectionID(connection_id)) = result {
+            log::trace!(
+                "Connected to '{}' for process {:?} with CID {} and disconnect token of {:?}",
+                name,
+                sender_pid,
+                connection_id,
+                token
+            );
+            return Ok(ConnectSuccess::Connected(connection_id, token));
+        } else {
+            log::error!(
+                "error when making connection, perhaps the server crashed? {:?}",
+                result
+            );
+
+            // The server connection process failed inside the kernel for one reason or
+            // another, so remove the entry from the `name_table` and return an error
+            name_table.disconnect(server_sid);
+            return Err(ConnectError::KernelConnectFailure);
+        }
+    }
+
+    // There is no connection, so block the sender
+    log::trace!("No server currently registered to '{}', blocking...", name);
+    Ok(ConnectSuccess::Wait)
+}
+
+fn respond_connect_error(mut msg: MessageEnvelope, result: ConnectError) {
+    let mem = msg.body.memory_message_mut().unwrap();
+    let s = unsafe {
+        core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr() as *mut u32, mem.buf.len() / 4)
+    };
+    s[0] = 1;
+    s[1] = result as u32;
+    mem.valid = None;
+    mem.offset = None;
+}
+
+fn respond_connect_success(mut msg: MessageEnvelope, cid: xous::CID, disc: Option<[u32; 4]>) {
+    let mem = msg.body.memory_message_mut().unwrap();
+    let s = unsafe {
+        core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr() as *mut u32, mem.buf.len() / 4)
+    };
+    s[0] = 0;
+    s[1] = cid as u32;
+    s[2] = disc.map(|d| d[0]).unwrap_or_default();
+    s[3] = disc.map(|d| d[1]).unwrap_or_default();
+    s[4] = disc.map(|d| d[2]).unwrap_or_default();
+    s[5] = disc.map(|d| d[3]).unwrap_or_default();
+    mem.valid = None;
+    mem.offset = None;
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     use implementation::*;
@@ -235,6 +364,10 @@ fn xmain() -> ! {
 
     let d11ctimeout = D11cTimeout::new();
 
+    // When a connection is requested but the serevr does not yet exist, it gets
+    // placed into this pool.
+    let mut waiting_connections: Vec<MessageEnvelope> = vec![];
+
     // this limits the number of available servers to be requested to 128...!
     //let mut name_table = FnvIndexMap::<XousServerName, xous::SID, 128>::new();
     let mut name_table = CheckedHashMap::new();
@@ -242,7 +375,7 @@ fn xmain() -> ! {
     info!("started");
     loop {
         let mut msg = xous::receive_message(name_server).unwrap();
-        log::trace!("received message");
+        log::trace!("received message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::Register) => {
                 let mem = msg.body.memory_message_mut().unwrap();
@@ -256,6 +389,7 @@ fn xmain() -> ! {
                 );
 
                 let response: api::Return;
+                let mut should_connect = false;
 
                 log::trace!("registration request for '{}'", name);
                 if !name_table.contains_key(&name) {
@@ -265,7 +399,7 @@ fn xmain() -> ! {
                         .insert(name, new_sid, registration.conn_limit)
                         .expect("register name failure, maybe out of HashMap capacity?");
                     log::trace!("request successful, SID is {:?}", new_sid);
-
+                    should_connect = true;
                     response = api::Return::SID(new_sid.into());
                 } else {
                     info!("request failed, waiting for deterministic timeout");
@@ -276,6 +410,35 @@ fn xmain() -> ! {
                 buffer
                     .replace(response)
                     .expect("Register can't serialize return value");
+
+                // Drop the message, which causes it to get sent back to the sender.
+                // The sender will then create the server immediately, allowing us
+                // to connect any waiters to it.
+                drop(buffer);
+                drop(msg);
+
+                if should_connect {
+                    // See if we have any requests matching this server ID. If so, make the
+                    // connection. Note that this could be replaced by `drain_filter()` when
+                    // that is stabilized
+                    let mut i = 0;
+                    while i < waiting_connections.len() {
+                        if name_from_msg(&waiting_connections[i]) == Ok(name) {
+                            let mut msg = waiting_connections.remove(i);
+                            match blocking_connect(&mut msg, &mut name_table) {
+                                Err(e) => respond_connect_error(msg, e),
+                                Ok(ConnectSuccess::Connected(cid, disc)) => {
+                                    respond_connect_success(msg, cid, disc)
+                                }
+                                Ok(ConnectSuccess::Wait) => {
+                                    panic!("message connection attempt resulted in `Wait` even though it ought to exist");
+                                }
+                            }
+                        } else {
+                            i += 1;
+                        }
+                    }
+                }
             }
             Some(api::Opcode::Unregister) => msg_blocking_scalar_unpack!(msg, s0, s1, s2, s3, {
                 let gid = xous::SID::from_u32(s0 as u32, s1 as u32, s2 as u32, s3 as u32);
@@ -288,6 +451,27 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
+            Some(api::Opcode::BlockingConnect) => {
+                if !msg.body.is_blocking() {
+                    continue;
+                }
+                if !msg.body.has_memory() {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                    continue;
+                }
+
+                match blocking_connect(&mut msg, &mut name_table) {
+                    Err(e) => respond_connect_error(msg, e),
+                    Ok(ConnectSuccess::Connected(cid, disc)) => {
+                        respond_connect_success(msg, cid, disc)
+                    }
+                    Ok(ConnectSuccess::Wait) => {
+                        // Push waiting connections here, which will prevent it from getting
+                        // dropped and responded to.
+                        waiting_connections.push(msg);
+                    }
+                }
+            }
             Some(api::Opcode::Lookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
@@ -304,7 +488,7 @@ fn xmain() -> ! {
                         .sender
                         .pid()
                         .expect("can't extract sender PID on Lookup");
-                    match xous::connect_for_process(sender_pid, *server_sid)
+                    match xous::connect_for_process(sender_pid, server_sid)
                         .expect("can't broker connection")
                     {
                         xous::Result::ConnectionID(connection_id) => {

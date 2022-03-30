@@ -17,12 +17,47 @@ use std::thread::JoinHandle;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+pub(crate) static POLLER_REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum CbOp {
     Change,
     Quit
 }
+
+pub struct PddbMountPoller {
+    conn: CID
+}
+impl PddbMountPoller {
+    pub fn new() -> Self {
+        POLLER_REFCOUNT.fetch_add(1, Ordering::Relaxed);
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB_POLLER).expect("can't connect to Pddb mount poller server");
+        PddbMountPoller { conn }
+    }
+    pub fn is_mounted_nonblocking(&self) -> bool {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(PollOp::Poll.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't poll mount poller") {
+            xous::Result::Scalar1(is_mounted) => {
+                if is_mounted == 0 {
+                    false
+                } else {
+                    true
+                }
+            }
+            _ => false
+        }
+    }
+}
+impl Drop for PddbMountPoller {
+    fn drop(&mut self) {
+        if POLLER_REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
+    }
+}
+
 
 /// The intention is that one Pddb management object is made per process, and this serves
 /// as the gateway for parcelling out PddbKey objects, which are the equivalent of a File
@@ -47,6 +82,7 @@ pub struct Pddb {
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
     trng: trng::Trng,
+    tt: ticktimer_server::Ticktimer,
 }
 impl Pddb {
     pub fn new() -> Self {
@@ -86,6 +122,7 @@ impl Pddb {
             cb_handle: Some(handle),
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
     pub fn is_mounted(&self) -> bool {
@@ -96,6 +133,19 @@ impl Pddb {
                 if code == 0 {false} else {true}
             },
             _ => panic!("Internal error"),
+        }
+    }
+    /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
+    /// A random interval between 1 and 2 seconds is chosen for the poll wait time. Randomizing the waiting time
+    /// helps to level out the task scheduler in the case that many threads are waiting on the PDDB simultaneously.
+    pub fn is_mounted_blocking(&self, poll_interval_ms: Option<u32>) {
+        let interval = if let Some(i) = poll_interval_ms {
+            i
+        } else {
+            (self.trng.get_u32().unwrap() % 1000) + 1000
+        };
+        while !self.is_mounted() {
+            self.tt.sleep_ms(interval as usize).unwrap();
         }
     }
     pub fn try_mount(&self) -> bool {
@@ -387,7 +437,7 @@ impl Pddb {
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-        buf.lend_mut(self.conn, Opcode::DeleteKey.to_u32().unwrap())
+        buf.lend_mut(self.conn, Opcode::DeleteDict.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
 
         let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
@@ -395,6 +445,23 @@ impl Pddb {
             PddbRequestCode::NoErr => Ok(()),
             PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
             _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+        }
+    }
+
+    pub fn sync(&mut self) -> Result<()> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::WriteKeyFlush.to_usize().unwrap(), 0, 0, 0, 0)
+        ).or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        if let xous::Result::Scalar1(rcode) = response {
+            match FromPrimitive::from_u8(rcode as u8) {
+                Some(PddbRetcode::Ok) => Ok(()),
+                Some(PddbRetcode::BasisLost) => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
+                Some(PddbRetcode::DiskFull) => Err(Error::new(ErrorKind::OutOfMemory, "Out of disk space, some data lost on sync")),
+                _ => Err(Error::new(ErrorKind::Interrupted, "Flush failed for unspecified reasons")),
+            }
+        } else {
+            Err(Error::new(ErrorKind::Other, "Xous internal error"))
         }
     }
 
@@ -429,6 +496,7 @@ impl Pddb {
         let response = buf.to_original::<PddbDictRequest, _>().unwrap();
         let count = match response.code {
             PddbRequestCode::NoErr => response.index,
+            PddbRequestCode::NotFound => return Err(Error::new(ErrorKind::NotFound, "dictionary not found")),
             _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
         };
         // very non-optimal, slow way of doing this, but let's just get it working first and optimize later.
@@ -515,13 +583,38 @@ impl Pddb {
         }
         Ok(dict_list)
     }
+    /// Triggers a dump of the PDDB to host disk
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pub fn dbg_dump(&self, name: &str) -> Result<()> {
+        let ipc = PddbDangerousDebug {
+            request: DebugRequest::Dump,
+            dump_name: xous_ipc::String::from_str(name),
+        };
+        let buf = Buffer::into_buf(ipc)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
+    }
+    /// Triggers an umount/remount, forcing a read of the PDDB from disk back into the cache structures.
+    /// It's a cheesy way to test a power cycle, without having to power cycle.
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    pub fn dbg_remount(&self) -> Result<()> {
+        let ipc = PddbDangerousDebug {
+            request: DebugRequest::Remount,
+            dump_name: xous_ipc::String::new(),
+        };
+        let buf = Buffer::into_buf(ipc)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
+    }
 }
 
 impl Drop for Pddb {
     fn drop(&mut self) {
         let cid = xous::connect(self.cb_sid).unwrap();
         send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-        unsafe{xous::disconnect(cid).unwrap();}
+        unsafe{xous::disconnect(cid).ok();}
         if let Some(handle) = self.cb_handle.take() {
             handle.join().expect("couldn't terminate callback helper thread");
         }

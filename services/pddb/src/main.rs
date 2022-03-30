@@ -388,6 +388,8 @@ use std::thread;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use core::fmt::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use locales::t;
 
@@ -436,6 +438,34 @@ fn xmain() -> ! {
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
     let mut token_dict = HashMap::<ApiToken, TokenRecord>::new();
 
+    // mount poller thread
+    let is_mounted = Arc::new(AtomicBool::new(false));
+    let _ = thread::spawn({
+        let is_mounted = is_mounted.clone();
+        move || {
+            let xns = xous_names::XousNames::new().unwrap();
+            let poller_sid = xns.register_name(api::SERVER_NAME_PDDB_POLLER, None).expect("can't register server");
+            loop {
+                let msg = xous::receive_message(poller_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PollOp::Poll) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        if is_mounted.load(Ordering::SeqCst) {
+                            xous::return_scalar(msg.sender, 1).unwrap();
+                        } else {
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        }
+                    }),
+                    Some(PollOp::Quit) => {
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                        break;
+                    }
+                    None => log::warn!("got unrecognized message: {:?}", msg),
+                }
+            }
+            xous::destroy_server(poller_sid).ok();
+        }
+    });
+
     // run the CI tests if the option has been selected
     #[cfg(all(
         not(any(target_os = "none", target_os = "xous")),
@@ -468,7 +498,6 @@ fn xmain() -> ! {
         }
     });
     // spawn a delayed mount command, shortly after boot. There's too much going on at boot, and it blocks other things from coming up.
-    #[cfg(not(any(windows, unix)))] // skip this step if running in hosted mode
     let _ = thread::spawn({
         let my_cid = my_cid.clone();
         move || {
@@ -484,6 +513,10 @@ fn xmain() -> ! {
     let mut key_token: Option<[u32; 4]> = None;
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
+
+    // the PDDB resets the hardware RTC to a new random starting point every time it is reformatted
+    // it is the only server capable of doing this.
+    let time_resetter = xns.request_connection_blocking(crate::TIME_SERVER_PDDB).unwrap();
 
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
@@ -512,14 +545,16 @@ fn xmain() -> ! {
                     } else {
                         match ensure_password(&modals, &mut pddb_os) {
                             PasswordState::Correct => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct) {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
+                                    is_mounted.store(true, Ordering::SeqCst);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
                                 }
                             },
                             PasswordState::Uninit => {
-                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit) {
+                                if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
+                                    is_mounted.store(true, Ordering::SeqCst);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -695,13 +730,29 @@ fn xmain() -> ! {
                         buffer.replace(req).unwrap(); continue
                     }
                 }
+                let alloc_hint = if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None};
                 if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
                     if !req.create_key {
                         req.result = PddbRequestCode::NotFound;
                         buffer.replace(req).unwrap(); continue
+                    } else {
+                        // create an empty key placeholder
+                        let empty: [u8; 0] = [];
+                        match basis_cache.key_update(&mut pddb_os,
+                            dict, key, &empty, None, alloc_hint, bname, true
+                        ) {
+                            Ok(_) => {},
+                            Err(e) => {
+                                log::error!("Couldn't allocate key: {:?}", e);
+                                match e.kind() {
+                                    std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotMounted,
+                                    std::io::ErrorKind::OutOfMemory => req.result = PddbRequestCode::NoFreeSpace,
+                                    _ => req.result = PddbRequestCode::InternalError,
+                                }
+                                buffer.replace(req).unwrap(); continue
+                            }
+                        }
                     }
-                    // by default keys are created when they are written on the first try.
-                    // ...do need to remember to create an "empty" key if we try to read a key that doesn't already exist, tho...
                 }
                 // at this point, we have established a basis/dict/key tuple.
                 let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
@@ -711,7 +762,7 @@ fn xmain() -> ! {
                     key: String::from(key),
                     basis: if let Some(name) = bname {Some(String::from(name))} else {None},
                     conn: cid,
-                    alloc_hint: if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None},
+                    alloc_hint,
                 };
                 token_dict.insert(token, token_record);
                 req.token = Some(token);
@@ -795,6 +846,7 @@ fn xmain() -> ! {
                     None
                 };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                log::debug!("attempting to remove dict {} basis {:?}", dict, bname);
                 match basis_cache.dict_remove(&mut pddb_os, dict, bname, false) {
                     Ok(_) => {
                         let mut evict_list = Vec::<ApiToken>::new();
@@ -1030,6 +1082,9 @@ fn xmain() -> ! {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
                 // we don't nede a "replace" operation because all ops happen in-place
+
+                // for now, do an expensive sync operation after every write to ensure data integrity
+                basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
             }
             Some(Opcode::WriteKeyFlush) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 match basis_cache.sync(&mut pddb_os, None) {
@@ -1049,6 +1104,27 @@ fn xmain() -> ! {
                 }
                 modals.show_notification(&note).expect("couldn't show basis list");
             },
+            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            Some(Opcode::DangerousDebug) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let dbg = buffer.to_original::<PddbDangerousDebug, _>().unwrap();
+                match dbg.request {
+                    DebugRequest::Dump => {
+                        log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
+                        pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
+                    },
+                    DebugRequest::Remount => {
+                        log::info!("attempting remount");
+                        basis_cache = BasisCache::new(); // this effectively erases the PDDB from memory
+                        if let Some(sys_basis) = pddb_os.pddb_mount() {
+                            log::info!("remount successful");
+                            basis_cache.basis_add(sys_basis);
+                        } else {
+                            log::info!("remount failed");
+                        }
+                    }
+                }
+            }
             Some(Opcode::Quit) => {
                 log::warn!("quitting the PDDB server");
                 send_message(
@@ -1103,7 +1179,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordSta
         }
     }
 }
-fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState) -> bool {
+fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState, time_resetter: xous::CID) -> bool {
     log::info!("Attempting to mount the PDDB");
     if pw_state == PasswordState::Correct {
         if let Some(sys_basis) = pddb_os.pddb_mount() {
@@ -1156,6 +1232,17 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
 
                 pddb_os.pddb_format(fast, Some(&modals)).expect("couldn't format PDDB");
 
+                // reset the RTC at the point of PDDB format. It is done now because at this point we know that
+                // no time offset keys can exist in the PDDB, and as a measure of good hygeine we want to restart
+                // our RTC counter from a random duration between epoch and 10 years to give some deniability about
+                // how long the device has been in use.
+                let _ = xous::send_message(time_resetter,
+                    xous::Message::new_blocking_scalar(
+                        0, // the ID is "hard coded" using enumerated discriminants
+                        0, 0, 0, 0
+                    )
+                ).expect("couldn't reset time");
+
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
                     basis_cache.basis_add(sys_basis);
@@ -1174,6 +1261,12 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
         {
             pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
+            let _ = xous::send_message(time_resetter,
+                xous::Message::new_blocking_scalar(
+                    0, // the ID is "hard coded" using enumerated discriminants
+                    0, 0, 0, 0
+                )
+            ).expect("couldn't reset time");
             pddb_os.dbg_dump(Some("full".to_string()), None);
             if let Some(sys_basis) = pddb_os.pddb_mount() {
                 log::info!("PDDB mount operation finished successfully");

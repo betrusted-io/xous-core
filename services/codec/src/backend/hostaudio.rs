@@ -90,7 +90,7 @@ impl Codec {
     pub fn set_speaker_gain_db(&mut self, _gain_db: f32) {
     }
 
-    pub fn set_headphone_gain_db(&mut self, _gain_db: f32) {
+    pub fn set_headphone_gain_db(&mut self, _gain_db_l: f32, _gain_db_r: f32) {
     }
 
 }

@@ -292,6 +292,8 @@ impl<'a> Menu<'a> {
                     // give up focus before issuing the command, as some commands conflict with loss of focus...
                     if mi.close_on_select {
                         self.gam.relinquish_focus().unwrap();
+                        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                        ticktimer_server::Ticktimer::new().unwrap().sleep_ms(100).unwrap();
                     }
                     if let Some(action) = mi.action_conn {
                         log::debug!("doing menu action for {}", mi.name);
@@ -314,8 +316,10 @@ impl<'a> Menu<'a> {
                         }
                     }
                     self.index = 0; // reset the index to 0
-                    log::trace!("menu redraw## select key");
-                    self.gam.redraw().unwrap();
+                    if !mi.close_on_select { // fix a double-redraw issue. I relinquish_focus() maps to active() which contains a redraw() already.
+                        log::trace!("menu redraw## select key");
+                        self.gam.redraw().unwrap();
+                    }
                     break; // drop any characters that happened to trail the select key, it's probably a fat-finger error.
                 },
                 '←' => {

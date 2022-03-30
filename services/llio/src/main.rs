@@ -4,602 +4,21 @@
 mod api;
 use api::*;
 mod i2c;
-mod rtc;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+mod llio_hw;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use llio_hw::*;
+
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+mod llio_hosted;
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+use llio_hosted::*;
 
 use num_traits::*;
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 use std::thread;
-
-#[cfg(any(target_os = "none", target_os = "xous"))]
-mod implementation {
-    use crate::api::*;
-    use log::{error, info};
-    use utralib::{generated::*, utra::gpio::UARTSEL_UARTSEL};
-    use num_traits::ToPrimitive;
-    use susres::{RegManager, RegOrField, SuspendResume};
-
-    #[allow(dead_code)]
-    pub struct Llio {
-        crg_csr: utralib::CSR<u32>,
-        gpio_csr: utralib::CSR<u32>,
-        gpio_susres: RegManager::<{utra::gpio::GPIO_NUMREGS}>,
-        info_csr: utralib::CSR<u32>,
-        identifier_csr: utralib::CSR<u32>,
-        handler_conn: Option<xous::CID>,
-        event_csr: utralib::CSR<u32>,
-        event_susres: RegManager::<{utra::btevents::BTEVENTS_NUMREGS}>,
-        power_csr: utralib::CSR<u32>,
-        power_susres: RegManager::<{utra::power::POWER_NUMREGS}>,
-        xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
-        ticktimer: ticktimer_server::Ticktimer,
-        activity_period: u32, // 12mhz clock cycles over which to sample activity
-        destruct_armed: bool,
-        uartmux_cache: u32, // stash a value of the uartmux -- restore from override into kernel so we can record KPs on resume
-    }
-
-    fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
-        let xl = unsafe { &mut *(arg as *mut Llio) };
-        if xl.event_csr.rf(utra::btevents::EV_PENDING_COM_INT) != 0 {
-            if let Some(conn) = xl.handler_conn {
-                xous::try_send_message(conn,
-                    xous::Message::new_scalar(Opcode::EventComHappened.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
-            } else {
-                log::error!("|handle_event_irq: COM interrupt, but no connection for notification!")
-            }
-        }
-        if xl.event_csr.rf(utra::btevents::EV_PENDING_RTC_INT) != 0 {
-            if let Some(conn) = xl.handler_conn {
-                xous::try_send_message(conn,
-                    xous::Message::new_scalar(Opcode::EventRtcHappened.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
-            } else {
-                log::error!("|handle_event_irq: RTC interrupt, but no connection for notification!")
-            }
-        }
-        xl.event_csr
-            .wo(utra::btevents::EV_PENDING, xl.event_csr.r(utra::btevents::EV_PENDING));
-    }
-    fn handle_gpio_irq(_irq_no: usize, arg: *mut usize) {
-        let xl = unsafe { &mut *(arg as *mut Llio) };
-        if let Some(conn) = xl.handler_conn {
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(Opcode::GpioIntHappened.to_usize().unwrap(),
-                    xl.gpio_csr.r(utra::gpio::EV_PENDING) as _, 0, 0, 0)).map(|_|()).unwrap();
-        } else {
-            log::error!("|handle_event_irq: GPIO interrupt, but no connection for notification!")
-        }
-        xl.gpio_csr
-            .wo(utra::gpio::EV_PENDING, xl.gpio_csr.r(utra::gpio::EV_PENDING));
-    }
-    fn handle_power_irq(_irq_no: usize, arg: *mut usize) {
-        let xl = unsafe { &mut *(arg as *mut Llio) };
-        if xl.power_csr.rf(utra::power::EV_PENDING_USB_ATTACH) != 0 {
-            if let Some(conn) = xl.handler_conn {
-                xous::try_send_message(conn,
-                    xous::Message::new_scalar(Opcode::EventUsbHappened.to_usize().unwrap(),
-                        0, 0, 0, 0)).map(|_|()).unwrap();
-            } else {
-                log::error!("|handle_event_irq: USB interrupt, but no connection for notification!")
-            }
-        } else if xl.power_csr.rf(utra::power::EV_PENDING_ACTIVITY_UPDATE) != 0 {
-            if let Some(conn) = xl.handler_conn {
-                let activity = xl.power_csr.rf(utra::power::ACTIVITY_RATE_COUNTS_AWAKE);
-                xous::try_send_message(conn,
-                    xous::Message::new_scalar(Opcode::EventActivityHappened.to_usize().unwrap(),
-                        activity as usize, 0, 0, 0)).map(|_|()).unwrap();
-            } else {
-                log::error!("|handle_event_irq: activity interrupt, but no connection for notification!")
-            }
-        }
-        xl.power_csr
-            .wo(utra::power::EV_PENDING, xl.power_csr.r(utra::power::EV_PENDING));
-    }
-
-    pub fn log_init() -> *mut u32 {
-        let gpio_base = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map GPIO CSR range");
-        let mut gpio_csr = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        // setup the initial logging output
-        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, crate::api::BOOT_UART);
-
-        gpio_base.as_mut_ptr() as *mut u32
-    }
-
-    impl Llio {
-        pub fn new(handler_conn: xous::CID, gpio_base: *mut u32) -> Llio {
-            let crg_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::crg::HW_CRG_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map CRG CSR range");
-            let info_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::info::HW_INFO_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Info CSR range");
-            let identifier_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::identifier_mem::HW_IDENTIFIER_MEM_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Identifier CSR range");
-            let event_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::btevents::HW_BTEVENTS_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map BtEvents CSR range");
-            let power_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::power::HW_POWER_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Power CSR range");
-            let xadc_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::trng::HW_TRNG_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Xadc CSR range"); // note that Xadc is "in" the TRNG because TRNG can override Xadc in hardware
-
-            let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-
-            let mut xl = Llio {
-                crg_csr: CSR::new(crg_csr.as_mut_ptr() as *mut u32),
-                gpio_csr: CSR::new(gpio_base),
-                gpio_susres: RegManager::new(gpio_base),
-                info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
-                identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
-                handler_conn: Some(handler_conn), // connection for messages from IRQ handler
-                event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
-                event_susres: RegManager::new(event_csr.as_mut_ptr() as *mut u32),
-                power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
-                power_susres: RegManager::new(power_csr.as_mut_ptr() as *mut u32),
-                xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
-                ticktimer,
-                activity_period: 24_000_000, // 2 second interval initially
-                destruct_armed: false,
-                uartmux_cache: BOOT_UART.into(),
-            };
-
-            xous::claim_interrupt(
-                utra::btevents::BTEVENTS_IRQ,
-                handle_event_irq,
-                (&mut xl) as *mut Llio as *mut usize,
-            )
-            .expect("couldn't claim BtEvents irq");
-
-            xous::claim_interrupt(
-                utra::gpio::GPIO_IRQ,
-                handle_gpio_irq,
-                (&mut xl) as *mut Llio as *mut usize,
-            )
-            .expect("couldn't claim GPIO irq");
-
-            xous::claim_interrupt(
-                utra::power::POWER_IRQ,
-                handle_power_irq,
-                (&mut xl) as *mut Llio as *mut usize,
-            )
-            .expect("couldn't claim Power irq");
-
-            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::DRIVE), None);
-            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::OUTPUT), None);
-            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::INTPOL), None);
-            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::INTENA), None);
-            xl.gpio_susres.push_fixed_value(RegOrField::Reg(utra::gpio::EV_PENDING), 0xFFFF_FFFF);
-            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::EV_ENABLE), None);
-            xl.gpio_susres.push(RegOrField::Field(utra::gpio::UARTSEL_UARTSEL), None);
-            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::USBDISABLE), None);
-
-            xl.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
-            xl.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
-
-            xl.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0); // save power on crypto block
-            xl.power_susres.push(RegOrField::Reg(utra::power::POWER), None);
-            xl.power_susres.push(RegOrField::Reg(utra::power::VIBE), None);
-
-            xl.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, xl.activity_period); // 2 second sampling intervals
-            xl.power_susres.push(RegOrField::Reg(utra::power::SAMPLING_PERIOD), None);
-            xl.power_csr.wfo(utra::power::EV_PENDING_ACTIVITY_UPDATE, 1);
-            xl.power_csr.rmwf(utra::power::EV_ENABLE_ACTIVITY_UPDATE, 1);
-
-            xl.power_susres.push_fixed_value(RegOrField::Reg(utra::power::EV_PENDING), 0xFFFF_FFFF);
-            xl.power_susres.push(RegOrField::Reg(utra::power::EV_ENABLE), None);
-
-            xl
-        }
-        pub fn suspend(&mut self) {
-            self.uartmux_cache = self.gpio_csr.rf(UARTSEL_UARTSEL).into();
-            self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // set the kernel UART so we can catch KPs on boot
-
-            self.event_susres.suspend();
-            // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values
-            self.event_csr.wo(utra::btevents::EV_ENABLE, 0);
-            self.event_csr.wo(utra::btevents::EV_PENDING, 0xFFFF_FFFF); // really make sure we don't have any spurious events in the queue
-
-            self.gpio_susres.suspend();
-            self.gpio_csr.wo(utra::gpio::EV_ENABLE, 0);
-            self.gpio_csr.wo(utra::gpio::EV_PENDING, 0xFFFF_FFFF);
-
-            self.power_susres.suspend();
-            self.power_csr.wo(utra::power::EV_ENABLE, 0);
-            self.power_csr.wo(utra::power::EV_PENDING, 0xFFFF_FFFF);
-        }
-        pub fn resume(&mut self) {
-            self.power_susres.resume();
-
-            // reset these to "on" in case the "off" value was captured and stored on suspend
-            // (these "should" be redundant)
-            self.power_csr.rmwf(utra::power::POWER_SELF, 1);
-            self.power_csr.rmwf(utra::power::POWER_STATE, 1);
-            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1);
-
-            self.event_susres.resume();
-            self.gpio_susres.resume();
-            // restore the UART mux setting after resume
-            self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, self.uartmux_cache);
-        }
-        #[allow(dead_code)]
-        pub fn activity_set_period(&mut self, period: u32) {
-            self.activity_period =  period;
-            self.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, period);
-        }
-        pub fn activity_get_period(&mut self) -> u32 {
-            self.activity_period
-        }
-
-        pub fn gpio_dout(&mut self, d: u32) {
-            self.gpio_csr.wfo(utra::gpio::OUTPUT_OUTPUT, d);
-        }
-        pub fn gpio_din(&self) -> u32 {
-            self.gpio_csr.rf(utra::gpio::INPUT_INPUT)
-        }
-        pub fn gpio_drive(&mut self, d: u32) {
-            self.gpio_csr.wfo(utra::gpio::DRIVE_DRIVE, d);
-        }
-        pub fn gpio_int_mask(&mut self, d: u32) {
-            self.gpio_csr.wfo(utra::gpio::INTENA_INTENA, d);
-        }
-        pub fn gpio_int_as_falling(&mut self, d: u32) {
-            self.gpio_csr.wfo(utra::gpio::INTPOL_INTPOL, d);
-        }
-        pub fn gpio_int_pending(&self) -> u32 {
-            self.gpio_csr.r(utra::gpio::EV_PENDING) & 0xff
-        }
-        pub fn gpio_int_ena(&mut self, d: u32) {
-            self.gpio_csr.wo(utra::gpio::EV_ENABLE, d & 0xff);
-        }
-        pub fn set_uart_mux(&mut self, mux: UartType) {
-            match mux {
-                UartType::Kernel => {
-                    log::warn!("disabling WFI so that kernel console works as expected");
-                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
-                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
-                },
-                UartType::Log => {
-                    // this is a command mainly for debugging, so we'll accept the chance that we re-enabled WFI e.g.
-                    // during a critical operation like SPINOR flashing because we swapped consoles at a bad time. Should be
-                    // very rare and only affect devs...
-                    log::warn!("unsafe re-enabling WFI -- if you issued this command at a bad time, could have side effects");
-                    if true {
-                        self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
-                    } else {
-                        log::warn!("sticking WFI override to 1 for keyboard debug, remove this path when done!");
-                        self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
-                    }
-                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1)
-                },
-                UartType::Application => {
-                    log::warn!("disabling WFI so that app console works as expected");
-                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
-                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 2)
-                },
-                _ => info!("invalid UART type specified for mux, doing nothing."),
-            }
-        }
-
-        pub fn get_info_dna(&self) -> (usize, usize) {
-            (self.info_csr.r(utra::info::DNA_ID0) as usize, self.info_csr.r(utra::info::DNA_ID1) as usize)
-        }
-        pub fn get_info_git(&self) -> (usize, usize) {
-            (
-                ((self.info_csr.rf(utra::info::GIT_MAJOR_GIT_MAJOR) as u32) << 24 |
-                (self.info_csr.rf(utra::info::GIT_MINOR_GIT_MINOR) as u32) << 16 |
-                (self.info_csr.rf(utra::info::GIT_REVISION_GIT_REVISION) as u32) << 8 |
-                (self.info_csr.rf(utra::info::GIT_GITEXTRA_GIT_GITEXTRA) as u32) & 0xFF << 0) as usize,
-
-                self.info_csr.rf(utra::info::GIT_GITREV_GIT_GITREV) as usize
-            )
-        }
-        pub fn get_info_platform(&self) -> (usize, usize) {
-            (self.info_csr.r(utra::info::PLATFORM_PLATFORM0) as usize, self.info_csr.r(utra::info::PLATFORM_PLATFORM1) as usize)
-        }
-        pub fn get_info_target(&self) -> (usize, usize) {
-            (self.info_csr.r(utra::info::PLATFORM_TARGET0) as usize, self.info_csr.r(utra::info::PLATFORM_TARGET1) as usize)
-        }
-
-        pub fn power_audio(&mut self, power_on: bool) {
-            if power_on {
-                self.power_csr.rmwf(utra::power::POWER_AUDIO, 1);
-            } else {
-                self.power_csr.rmwf(utra::power::POWER_AUDIO, 0);
-            }
-        }
-        pub fn power_crypto(&mut self, power_on: bool) {
-            if power_on {
-                self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 1);
-            } else {
-                self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0);
-            }
-        }
-        // apparently "override" is a reserved keyword in Rust???
-        pub fn wfi_override(&mut self, override_: bool) {
-            if override_ {
-                self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
-            } else {
-                self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
-            }
-        }
-        pub fn debug_powerdown(&mut self, ena: bool) {
-            if ena {
-                self.power_csr.rmwf(utra::gpio::DEBUG_WFI, 1);
-            } else {
-                self.power_csr.rmwf(utra::gpio::DEBUG_WFI, 0);
-            }
-        }
-        pub fn debug_wakeup(&mut self, ena: bool) {
-            if ena {
-                self.power_csr.rmwf(utra::gpio::DEBUG_WAKEUP, 1);
-            } else {
-                self.power_csr.rmwf(utra::gpio::DEBUG_WAKEUP, 0);
-            }
-        }
-        pub fn power_crypto_status(&self) -> (bool, bool, bool, bool) {
-            let sha = if self.power_csr.rf(utra::power::CLK_STATUS_SHA_ON) == 0 {false} else {true};
-            let engine = if self.power_csr.rf(utra::power::CLK_STATUS_ENGINE_ON) == 0 {false} else {true};
-            let force = if self.power_csr.rf(utra::power::CLK_STATUS_BTPOWER_ON) == 0 {false} else {true};
-            let overall = if self.power_csr.rf(utra::power::CLK_STATUS_CRYPTO_ON) == 0 {false} else {true};
-            (overall, sha, engine, force)
-        }
-        pub fn power_self(&mut self, power_on: bool) {
-            if power_on {
-                info!("setting self-power state to on");
-                self.power_csr.rmwf(utra::power::POWER_SELF, 1);
-            } else {
-                info!("setting self-power state to OFF");
-                self.power_csr.rmwf(utra::power::POWER_STATE, 0);
-                self.power_csr.rmwf(utra::power::POWER_SELF, 0);
-            }
-        }
-        pub fn power_boost_mode(&mut self, boost_on: bool) {
-            if boost_on {
-                self.power_csr.rmwf(utra::power::POWER_BOOSTMODE, 1);
-            } else {
-                self.power_csr.rmwf(utra::power::POWER_BOOSTMODE, 0);
-            }
-        }
-        pub fn ec_snoop_allow(&mut self, allow: bool) {
-            if allow {
-                self.power_csr.rmwf(utra::power::POWER_EC_SNOOP, 1);
-            } else {
-                self.power_csr.rmwf(utra::power::POWER_EC_SNOOP, 0);
-            }
-        }
-        pub fn ec_reset(&mut self) {
-            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1); // make sure the power is "on" if we're resetting it
-            self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
-            self.ticktimer.sleep_ms(20).unwrap();
-            self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
-        }
-        pub fn ec_power_on(&mut self) {
-            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1);
-        }
-        pub fn self_destruct(&mut self, code: u32) {
-            if self.destruct_armed && code == 0x3141_5926 {
-                self.ticktimer.sleep_ms(100).unwrap(); // give a moment for any last words (like clearing the screen, powering down, etc.)
-                self.power_csr.rmwf(utra::power::POWER_SELFDESTRUCT, 1);
-            } else if !self.destruct_armed && code == 0x2718_2818 {
-                self.destruct_armed = true;
-            } else {
-                self.destruct_armed = false;
-                error!("self destruct attempted, but incorrect code sequence presented.");
-            }
-        }
-        pub fn vibe(&mut self, pattern: VibePattern) {
-            match pattern {
-                VibePattern::Short => {
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    self.ticktimer.sleep_ms(80).unwrap();
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                },
-                VibePattern::Long => {
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    self.ticktimer.sleep_ms(1000).unwrap();
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                },
-                VibePattern::Double => {
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    self.ticktimer.sleep_ms(150).unwrap();
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                    self.ticktimer.sleep_ms(250).unwrap();
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    self.ticktimer.sleep_ms(150).unwrap();
-                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                },
-            }
-        }
-        pub fn xadc_vbus(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_VBUS_XADC_VBUS) as u16
-        }
-        pub fn xadc_vccint(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_VCCINT_XADC_VCCINT) as u16
-        }
-        pub fn xadc_vccaux(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_VCCAUX_XADC_VCCAUX) as u16
-        }
-        pub fn xadc_vccbram(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_VCCBRAM_XADC_VCCBRAM) as u16
-        }
-        pub fn xadc_usbn(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_USB_N_XADC_USB_N) as u16
-        }
-        pub fn xadc_usbp(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_USB_P_XADC_USB_P) as u16
-        }
-        pub fn xadc_temperature(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_TEMPERATURE_XADC_TEMPERATURE) as u16
-        }
-        pub fn xadc_gpio5(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_GPIO5_XADC_GPIO5) as u16
-        }
-        pub fn xadc_gpio2(&self) -> u16 {
-            self.xadc_csr.rf(utra::trng::XADC_GPIO2_XADC_GPIO2) as u16
-        }
-        pub fn rtc_int_ena(&mut self, ena: bool) {
-            let value = if ena {1} else {0};
-            self.event_csr.rmwf(utra::btevents::EV_ENABLE_RTC_INT, value);
-        }
-        pub fn com_int_ena(&mut self, ena: bool) {
-            let value = if ena {1} else {0};
-            self.event_csr.rmwf(utra::btevents::EV_ENABLE_COM_INT, value);
-        }
-        pub fn usb_int_ena(&mut self, ena: bool) {
-            let value = if ena {1} else {0};
-            self.power_csr.rmwf(utra::power::EV_PENDING_USB_ATTACH, value);
-        }
-        pub fn get_usb_disable(&self) -> bool {
-            if self.gpio_csr.rf(utra::gpio::USBDISABLE_USBDISABLE) != 0 {
-                true
-            } else {
-                false
-            }
-        }
-        pub fn set_usb_disable(&mut self, state: bool) {
-            if state {
-                self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 1);
-            } else {
-                self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 0);
-            }
-        }
-    }
-}
-
-// a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-mod implementation {
-    use llio::api::*;
-
-    #[derive(Copy, Clone, Debug)]
-    pub struct Llio {
-        usb_disable: bool,
-    }
-    pub fn log_init() -> *mut u32 { 0 as *mut u32 }
-
-    impl Llio {
-        pub fn new(_handler_conn: xous::CID, _gpio_base: *mut u32) -> Llio {
-            Llio {
-                usb_disable: false,
-            }
-        }
-        pub fn suspend(&self) {}
-        pub fn resume(&self) {}
-        pub fn gpio_dout(&self, _d: u32) {}
-        pub fn gpio_din(&self, ) -> u32 { 0xDEAD_BEEF }
-        pub fn gpio_drive(&self, _d: u32) {}
-        pub fn gpio_int_mask(&self, _d: u32) {}
-        pub fn gpio_int_as_falling(&self, _d: u32) {}
-        pub fn gpio_int_pending(&self, ) -> u32 { 0x0 }
-        pub fn gpio_int_ena(&self, _d: u32) {}
-        pub fn set_uart_mux(&self, _mux: UartType) {}
-        pub fn get_info_dna(&self, ) ->  (usize, usize) { (0, 0) }
-        pub fn get_info_git(&self, ) ->  (usize, usize) { (0, 0) }
-        pub fn get_info_platform(&self, ) ->  (usize, usize) { (0, 0) }
-        pub fn get_info_target(&self, ) ->  (usize, usize) { (0, 0) }
-        pub fn power_audio(&self, _power_on: bool) {}
-        pub fn power_crypto(&self, _power_on: bool) {}
-        pub fn power_crypto_status(&self) -> (bool, bool, bool, bool) {
-            (true, true, true, true)
-        }
-        pub fn power_self(&self, _power_on: bool) {}
-        pub fn power_boost_mode(&self, _power_on: bool) {}
-        pub fn ec_snoop_allow(&self, _power_on: bool) {}
-        pub fn ec_reset(&self, ) {}
-        pub fn ec_power_on(&self, ) {}
-        pub fn self_destruct(&self, _code: u32) {}
-        pub fn vibe(&self, pattern: VibePattern) {
-            log::info!("Imagine your keyboard vibrating: {:?}", pattern);
-        }
-
-
-        pub fn xadc_vbus(&self) -> u16 {
-            2 // some small but non-zero value to represent typical noise
-        }
-        pub fn xadc_vccint(&self) -> u16 {
-            1296
-        }
-        pub fn xadc_vccaux(&self) -> u16 {
-            2457
-        }
-        pub fn xadc_vccbram(&self) -> u16 {
-            2450
-        }
-        pub fn xadc_usbn(&self) -> u16 {
-            3
-        }
-        pub fn xadc_usbp(&self) -> u16 {
-            4
-        }
-        pub fn xadc_temperature(&self) -> u16 {
-            2463
-        }
-        pub fn xadc_gpio5(&self) -> u16 {
-            0
-        }
-        pub fn xadc_gpio2(&self) -> u16 {
-            0
-        }
-
-        pub fn rtc_int_ena(self, _ena: bool) {
-        }
-        pub fn com_int_ena(self, _ena: bool) {
-        }
-        pub fn usb_int_ena(self, _ena: bool) {
-        }
-        pub fn debug_powerdown(&mut self, _ena: bool) {
-        }
-        pub fn debug_wakeup(&mut self, _ena: bool) {
-        }
-        #[allow(dead_code)]
-        pub fn activity_get_period(&mut self) -> u32 {
-            12_000_000
-        }
-        pub fn wfi_override(&mut self, _override_: bool) {
-        }
-
-        pub fn get_usb_disable(&self) -> bool {
-            self.usb_disable
-        }
-        pub fn set_usb_disable(&mut self, state: bool) {
-            self.usb_disable = state;
-        }
-
-    }
-}
 
 fn i2c_thread(i2c_sid: xous::SID) {
     let xns = xous_names::XousNames::new().unwrap();
@@ -609,7 +28,7 @@ fn i2c_thread(i2c_sid: xous::SID) {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     let mut suspend_pending_token: Option<usize> = None;
     log::trace!("starting i2c main loop");
@@ -678,10 +97,8 @@ struct ScalarCallback {
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    use crate::implementation::Llio;
-
     // very early on map in the GPIO base so we can have the right logging enabled
-    let gpio_base = crate::implementation::log_init();
+    let gpio_base = crate::log_init();
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -706,8 +123,8 @@ fn xmain() -> ! {
 
     // create the I2C handler thread
     // - codec
-    // - rtc
-    // - shellchat
+    // - time server
+    // - llio
     // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
@@ -717,20 +134,6 @@ fn xmain() -> ! {
             i2c_thread(i2c_sid);
         }
     });
-    log::trace!("spawning RTC server");
-    // expected connections:
-    // - status (for setting time)
-    // - shellchat (for testing)
-    // - rootkeys (for coordinating self-reboot)
-    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(3)).expect("can't register server");
-    log::trace!("registered with NS -- {:?}", rtc_sid);
-    let _ = thread::spawn({
-        let rtc_sid = rtc_sid.clone();
-        move || {
-            crate::rtc::rtc_server(rtc_sid);
-        }
-    });
-    let rtc_conn = xous::connect(rtc_sid).unwrap();
 
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
@@ -754,15 +157,25 @@ fn xmain() -> ! {
 
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
 
+    // create a self-connection to I2C to handle the public, non-security sensitive RTC API calls
+    let mut i2c = llio::I2c::new(&xns);
+    let mut rtc_alarm_enabled = false;
+    let mut wakeup_alarm_enabled = false;
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
+
     log::trace!("starting main loop");
     loop {
-        let mut msg = xous::receive_message(llio_sid).unwrap();
+        let msg = xous::receive_message(llio_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 llio.suspend();
+                #[cfg(feature="tts")]
+                llio.tts_sleep_indicate(); // this happens after the suspend call because we don't want the sleep indicator to be restored on resume
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 llio.resume();
+                #[cfg(feature="tts")]
+                llio.vibe(VibePattern::Double);
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
             }),
             Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
@@ -1010,24 +423,157 @@ fn xmain() -> ! {
                 xous::return_scalar2(msg.sender, is_locked, force_update).expect("couldn't return status");
                 lockstatus_force_update = false;
             }),
-            Some(Opcode::DateTime) => {
-                let alloc = DateTime::default();
-                let mut buf = Buffer::into_buf(alloc).expect("couldn't transform to IPC memory");
-                buf.lend_mut(rtc_conn, RtcOpcode::RequestDateTimeBlocking.to_u32().unwrap()).expect("RTC blocking get failed");
-                let dt = buf.to_original::<DateTime, _>().expect("couldn't revert IPC memory");
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                buffer.replace(dt).unwrap();
-            }
+            Some(Opcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
+                if delay > u8::MAX as usize {
+                    log::error!("Wakeup must be no longer than {} secs in the future", u8::MAX);
+                    xous::return_scalar(msg.sender, 1).expect("couldn't return to caller");
+                    continue;
+                }
+                let seconds = delay as u8;
+                wakeup_alarm_enabled = true;
+                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
+                // set clock units to 1 second, output pulse length to ~218ms
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
+                // program elapsed time
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB, &[seconds]).expect("RTC access error");
+                // enable timerb countdown interrupt, also clears any prior interrupt flag
+                let mut control2 = (Control2::COUNTDOWN_B_INT).bits();
+                if rtc_alarm_enabled {
+                    control2 |= Control2::COUNTDOWN_A_INT.bits();
+                }
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
+                // turn on the timer proper -- the system will wakeup in 5..4..3....
+                let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE).bits();
+                if rtc_alarm_enabled {
+                    config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
+                }
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
+            }),
+            Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                wakeup_alarm_enabled = false;
+                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
+                let mut config = Config::CLKOUT_DISABLE.bits();
+                if rtc_alarm_enabled {
+                    config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
+                }
+                // turn off RTC wakeup timer, in case previously set
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
+                // clear my interrupts and flags
+                let mut control2 = 0;
+                if rtc_alarm_enabled {
+                    control2 |= Control2::COUNTDOWN_A_INT.bits();
+                }
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
+            }),
+             Some(Opcode::SetRtcAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
+                if delay > u8::MAX as usize {
+                    log::error!("Alarm must be no longer than {} secs in the future", u8::MAX);
+                    xous::return_scalar(msg.sender, 1).expect("couldn't return to caller");
+                    continue;
+                }
+                let seconds = delay as u8;
+                rtc_alarm_enabled = true;
+                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
+                // set clock units to 1 second, output pulse length to ~218ms
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERA_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
+                // program elapsed time
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERA, &[seconds]).expect("RTC access error");
+                // enable timerb countdown interrupt, also clears any prior interrupt flag
+                let mut control2 = (Control2::COUNTDOWN_A_INT).bits();
+                if wakeup_alarm_enabled {
+                    control2 |= Control2::COUNTDOWN_B_INT.bits();
+                }
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
+                // turn on the timer proper -- interrupt in 5..4..3....
+                let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
+                if wakeup_alarm_enabled {
+                    config |= (Config::TIMER_B_ENABLE).bits();
+                }
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
+            }),
+            Some(Opcode::ClearRtcAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                rtc_alarm_enabled = false;
+                // turn off RTC wakeup timer, in case previously set
+                let mut config = Config::CLKOUT_DISABLE.bits();
+                if wakeup_alarm_enabled {
+                    config |= (Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
+                }
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
+                // clear my interrupts and flags
+                let mut control2 = 0;
+                if wakeup_alarm_enabled {
+                    control2 |= Control2::COUNTDOWN_B_INT.bits();
+                }
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
+            }),
+            #[cfg(any(target_os = "none", target_os = "xous"))]
+            Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                // There is a possibility that the RTC hardware is actually in an invalid state.
+                // Thus, this will return a u64 which is formatted as follows:
+                // [63] - invalid (0 for valid, 1 for invalid)
+                // [62:0] - time in seconds
+                // This is okay because 2^63 is much larger than the total number of seconds trackable by the RTC hardware.
+                // The RTC hardware can only count up to 100 years before rolling over, which is 3.1*10^9 seconds.
+                // Note that we start the RTC at somewhere between 0-10 years, so in practice, a user can expect between 90-100 years
+                // of continuous uptime service out of the RTC.
+                let mut settings = [0u8; 8];
+                let mut success = false;
+                while !success {
+                    // retry loop is necessary because this function can get called during "congested" periods
+                    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings, None) {
+                        Ok(llio::I2cStatus::ResponseReadOk) => success = true,
+                        Err(xous::Error::ServerQueueFull) => {
+                            success = false;
+                            // give it a short pause before trying again, to avoid hammering the I2C bus at busy times
+                            tt.sleep_ms(38).unwrap();
+                        },
+                        _ => {
+                            log::error!("Couldn't read seconds from RTC!");
+                            xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                            break;
+                        },
+                    };
+                }
+                if !success {
+                    continue
+                }
+                log::debug!("GetRtcValue regs: {:?}", settings);
+                let total_secs = match rtc_to_seconds(&settings) {
+                    Some(s) => s,
+                    None => {
+                        xous::return_scalar2(msg.sender, 0x8000_0000, 0).expect("couldn't return to caller");
+                        continue;
+                    }
+                };
+                xous::return_scalar2(msg.sender,
+                    ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
+                    (total_secs & 0xFFFF_FFFF) as usize,
+                ).expect("couldn't return to caller");
+            }),
+            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                use chrono::prelude::*;
+                let now = Local::now();
+                let total_secs = now.timestamp_millis() / 1000 - 148409348; // sets the offset to something like 1974, which is roughly where an RTC value ends up in reality
+                xous::return_scalar2(msg.sender,
+                    ((total_secs >> 32) & 0xFFFF_FFFF) as usize,
+                    (total_secs & 0xFFFF_FFFF) as usize,
+                ).expect("couldn't return to caller");
+                // use the tt variable so we don't get a warning
+                let _ = tt.elapsed_ms();
+            }),
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting.");
                 let dropconn = xous::connect(i2c_sid).unwrap();
                 xous::send_message(dropconn,
                     xous::Message::new_scalar(I2cOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-                unsafe{xous::disconnect(dropconn).unwrap();}
-
-                let dropconn = xous::connect(i2c_sid).unwrap();
-                xous::send_message(dropconn,
-                    xous::Message::new_scalar(RtcOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
                 unsafe{xous::disconnect(dropconn).unwrap();}
                 break;
             }
@@ -1106,5 +652,91 @@ fn send_event(cb_conns: &[Option<ScalarCallback>; 32], which: usize) {
                 }
             }
         };
+    }
+}
+
+// run with `cargo test -- --nocapture --test-threads=1`:
+//   --nocapture to see the print output (while debugging)
+//   --test-threads=1 so we can see the output in sequence
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{DateTime, Utc};
+    use llio::rtc_to_seconds;
+    use rand::Rng;
+
+    fn to_bcd(binary: u8) -> u8 {
+        let mut lsd: u8 = binary % 10;
+        if lsd > 9 {
+            lsd = 9;
+        }
+        let mut msd: u8 = binary / 10;
+        if msd > 9 {
+            msd = 9;
+        }
+        (msd << 4) | lsd
+    }
+
+    #[test]
+    fn test_rtc_to_secs() {
+        let mut rng = rand::thread_rng();
+        let rtc_base = DateTime::<Utc>::from_utc(chrono::NaiveDate::from_ymd(2000, 1, 1)
+        .and_hms(0, 0, 0), Utc);
+
+        // test every year, every month, every day, with a random time stamp
+        for year in 0..99 {
+            for month in 1..=12 {
+                let days = match month {
+                    1 => 1..=31,
+                    2 => if (year % 4) == 0 {
+                        1..=29
+                    } else {
+                        1..=28
+                    }
+                    3 => 1..=31,
+                    4 => 1..=30,
+                    5 => 1..=31,
+                    6 => 1..=30,
+                    7 => 1..=31,
+                    8 => 1..=31,
+                    9 => 1..=30,
+                    10 => 1..=31,
+                    11 => 1..=30,
+                    12 => 1..=31,
+                    _ => {panic!("invalid month")},
+                };
+                for day in days {
+                    let h = rng.gen_range(0..24);
+                    let m = rng.gen_range(0..60);
+                    let s = rng.gen_range(0..60);
+                    let rtc_test = DateTime::<Utc>::from_utc(
+                        chrono::NaiveDate::from_ymd(2000 + year, month, day)
+                    .and_hms(h, m, s), Utc);
+
+                    let diff = rtc_test.signed_duration_since(rtc_base);
+                    let settings = [
+                        (Control3::BATT_STD_BL_EN).bits(),
+                        to_bcd(s as u8),
+                        to_bcd(m as u8),
+                        to_bcd(h as u8),
+                        to_bcd(day as u8),
+                        0,
+                        to_bcd(month as u8),
+                        to_bcd(year as u8),
+                    ];
+                    if diff.num_seconds() != rtc_to_seconds(&settings).unwrap() as i64 {
+                        println!("{} vs {}", diff.num_seconds(), rtc_to_seconds(&settings).unwrap());
+                        println!("Duration to {}/{}/{}-{}:{}:{} -- {}",
+                            2000 + year,
+                            month,
+                            day,
+                            h, m, s,
+                            diff.num_seconds()
+                        );
+                    }
+                    assert!(diff.num_seconds() == rtc_to_seconds(&settings).unwrap() as i64);
+                }
+            }
+        }
     }
 }

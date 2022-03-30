@@ -19,6 +19,13 @@ const CHECKBOX_TEST: [&'static str; 5] = [
     "...something else!",
 ];
 
+/// This is an integration test of the Modals crate. It creates two competing threads
+/// that both try to throw up dialog boxes at the same time. Normally you *don't* want
+/// to do that, but we should still handle that case gracefully since it does happen
+/// sometimes.
+///
+/// Each thread will create a series of Modal primitives, including progess bars, notifications,
+/// check boxes and radio boxes.
 pub(crate) fn spawn_test() {
     // spawn two threads that compete for modal resources, to test the interlocking mechanisms
     thread::spawn({
@@ -27,7 +34,9 @@ pub(crate) fn spawn_test() {
             let modals = modals::Modals::new(&xns).unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
-            // test progress bar
+            // 1. test progress bar
+            // The start and end items are deliberately structured to be not zero-indexed; the use of PDDB_LOC is just a
+            // convenient global constant.
             modals.start_progress("Progress Quest", xous::PDDB_LOC, xous::PDDB_LOC + 64*1024*128, xous::PDDB_LOC).expect("couldn't raise progress bar");
             for i in (xous::PDDB_LOC..xous::PDDB_LOC + 64*1024*128).step_by(64*1024) {
                 modals.update_progress(i).expect("couldn't update progress bar");
@@ -35,7 +44,7 @@ pub(crate) fn spawn_test() {
             }
             modals.finish_progress().expect("couldn't dismiss progress bar");
 
-            // test check box
+            // 2. test check box
             for item in CHECKBOX_TEST {
                 modals.add_list_item(item).expect("couldn't build checkbox list");
             }
@@ -49,7 +58,7 @@ pub(crate) fn spawn_test() {
                 _ => log::error!("get_checkbox failed"),
             }
 
-            // test notificatons
+            // 3. test notificatons
             log::info!("testing notification");
             modals.show_notification("This is a test!").expect("notification failed");
             log::info!("notification test done");
@@ -61,7 +70,7 @@ pub(crate) fn spawn_test() {
             let xns = XousNames::new().unwrap();
             let modals = modals::Modals::new(&xns).unwrap();
 
-            // test radio box
+            // 1. test radio box
             for item in RADIO_TEST {
                 modals.add_list_item(item).expect("couldn't build radio item list");
             }
@@ -70,7 +79,7 @@ pub(crate) fn spawn_test() {
                 _ => log::error!("get_radiobutton failed"),
             }
 
-            // test the modal dialog box function
+            // 2. test the modal dialog box function
             log::info!("test text input");
             match modals.get_text("Test input", Some(test_validator), None) {
                 Ok(text) => {
@@ -82,7 +91,7 @@ pub(crate) fn spawn_test() {
             }
             log::info!("text input test done");
 
-            // test notificatons
+            // 3. test notificatons
             log::info!("testing notification");
             modals.show_notification("这是一个测验!").expect("notification failed");
             log::info!("notification test done");

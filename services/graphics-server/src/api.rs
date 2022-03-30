@@ -29,8 +29,8 @@ pub use blitstr2::*;
 
 use std::hash::{Hash, Hasher};
 
-pub const LINES: usize = 536;
-pub const WIDTH: usize = 336;
+pub const LINES: i16 = 536;
+pub const WIDTH: i16 = 336;
 
 //////////////// IPC APIs
 #[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -92,9 +92,6 @@ pub(crate) enum Opcode {
 
     /// draws the sleep screen; assumes requests are vetted by GAM/xous-names
     DrawSleepScreen,
-
-    /// sets whether a sleep note should be rendered or not on suspend
-    SetSleepNote,
 
     /// permanently turns on the Devboot mark
     Devboot,

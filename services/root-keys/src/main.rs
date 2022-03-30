@@ -320,7 +320,6 @@ fn xmain() -> ! {
 
     // create the servers necessary to coordinate an auto-reboot sequence...
     let llio = llio::Llio::new(&xns);
-    let rtc = llio::Rtc::new(&xns);
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     let com = com::Com::new(&xns).unwrap();
 
@@ -596,7 +595,7 @@ fn xmain() -> ! {
                 ticktimer.sleep_ms(1500).unwrap();
                 if !reboot_initiated {
                     // set a wakeup alarm a couple seconds from now -- this is the coldboot
-                    rtc.set_wakeup_alarm(3).unwrap();
+                    llio.set_wakeup_alarm(3).unwrap();
 
                     // allow EC to snoop, so that it can wake up the system
                     llio.allow_ec_snoop(true).unwrap();

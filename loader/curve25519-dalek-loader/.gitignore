@@ -1,0 +1,12 @@
+target
+Cargo.lock
+
+*~
+\#*
+.\#*
+*.swp
+*.orig
+*.bak
+
+*.s
+*.bin

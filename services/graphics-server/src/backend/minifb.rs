@@ -4,14 +4,14 @@ use crate::api::Point;
 use minifb::{Key, Window, WindowOptions};
 use crate::api::{LINES, WIDTH};
 
-const HEIGHT: usize = LINES;
+const HEIGHT: i16 = LINES;
 
 /// Width of the screen in 32-bit words
 const WIDTH_WORDS: usize = 11;
 pub const FB_WIDTH_WORDS: usize = WIDTH_WORDS;
-pub const FB_WIDTH_PIXELS: usize = WIDTH;
-pub const FB_LINES: usize = HEIGHT;
-pub const FB_SIZE: usize = WIDTH_WORDS * HEIGHT; // 44 bytes by 536 lines
+pub const FB_WIDTH_PIXELS: usize = WIDTH as usize;
+pub const FB_LINES: usize = HEIGHT as usize;
+pub const FB_SIZE: usize = WIDTH_WORDS * HEIGHT as usize; // 44 bytes by 536 lines
 
 const MAX_FPS: u64 = 60;
 const DARK_COLOUR: u32 = 0xB5B5AD;
@@ -34,8 +34,8 @@ impl XousDisplay {
     pub fn new() -> XousDisplay {
         let mut window = Window::new(
             "Precursor",
-            WIDTH,
-            HEIGHT,
+            WIDTH as usize,
+            HEIGHT as usize,
             WindowOptions {
                 scale_mode: minifb::ScaleMode::AspectRatioStretch,
                 resize: true,
@@ -51,9 +51,9 @@ impl XousDisplay {
         //     1000 * 1000 / MAX_FPS,
         // )));
 
-        let native_buffer = vec![DARK_COLOUR; WIDTH * HEIGHT];
+        let native_buffer = vec![DARK_COLOUR; WIDTH as usize * HEIGHT as usize];
         window
-            .update_with_buffer(&native_buffer, WIDTH, HEIGHT)
+            .update_with_buffer(&native_buffer, WIDTH as usize, HEIGHT as usize)
             .unwrap();
 
         let xns = xous_names::XousNames::new().unwrap();
@@ -79,8 +79,8 @@ impl XousDisplay {
         }
         // ignore attempts to turn off devboot
     }
-    pub fn suspend(&self, _flag: bool) {}
-    pub fn resume(&self, _flag: bool) {}
+    pub fn suspend(&self) {}
+    pub fn resume(&self) {}
 
     pub fn screen_size(&self) -> Point {
         Point::new(WIDTH as i16, HEIGHT as i16)
@@ -102,7 +102,7 @@ impl XousDisplay {
     pub fn redraw(&mut self) {
         self.emulated_to_native();
         self.window
-            .update_with_buffer(&self.native_buffer, WIDTH, HEIGHT)
+            .update_with_buffer(&self.native_buffer, WIDTH as usize, HEIGHT as usize)
             .unwrap();
     }
 

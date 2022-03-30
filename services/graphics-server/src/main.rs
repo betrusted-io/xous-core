@@ -111,32 +111,13 @@ fn xmain() -> ! {
     draw_boot_logo(&mut display);
 
     let fontregion = map_fonts();
-
-    let mut use_sleep_note = true;
-    if false {
-        // leave this test case around
-        // for some reason, the top right quadrant draws an extra pixel inside the fill area
-        // when a fill color of "Light" is specified. However, if `None` fill is specified, it
-        // works correctly. This is really puzzling, because the test for filled drawing happens
-        // after the test for border drawing.
-        use api::Point;
-        let mut r = Rectangle::new(Point::new(20, 200), Point::new(151, 301));
-        r.style = DrawStyle {
-            fill_color: Some(PixelColor::Light),
-            stroke_color: Some(PixelColor::Dark),
-            stroke_width: 1,
-        };
-        let rr = RoundedRectangle::new(r, 16);
-        op::rounded_rectangle(display.native_buffer(), rr, None);
-    }
-
     let screen_clip = Rectangle::new(Point::new(0, 0), display.screen_size());
 
     display.redraw();
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, Opcode::SuspendResume as u32, sr_cid)
+    let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Later), &xns, Opcode::SuspendResume as u32, sr_cid)
         .expect("couldn't create suspend/resume object");
 
     let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read
@@ -148,18 +129,11 @@ fn xmain() -> ! {
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                display.suspend(use_sleep_note);
+                display.suspend();
                 susres
                     .suspend_until_resume(token)
                     .expect("couldn't execute suspend/resume");
-                display.resume(use_sleep_note);
-            }),
-            Some(Opcode::SetSleepNote) => xous::msg_scalar_unpack!(msg, set_use, _, _, _, {
-                if set_use == 0 {
-                    use_sleep_note = false;
-                } else {
-                    use_sleep_note = true;
-                }
+                display.resume();
             }),
             Some(Opcode::DrawClipObject) => {
                 let buffer =
@@ -230,15 +204,15 @@ fn xmain() -> ! {
 
                 let typeset_extent = match tv.bounds_hint {
                     TextBounds::BoundingBox(r) =>
-                        Pt::new((r.br().x - r.tl().x - tv.margin.x * 2) as usize, (r.br().y - r.tl().y - tv.margin.y * 2) as usize),
+                        Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
                     TextBounds::GrowableFromBr(br, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, br.y as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, br.y - tv.margin.y * 2),
                     TextBounds::GrowableFromBl(bl, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, bl.y as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, bl.y - tv.margin.y * 2),
                     TextBounds::GrowableFromTl(tl, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2),
                     TextBounds::GrowableFromTr(tr, width) =>
-                        Pt::new(width as usize - tv.margin.x as usize * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) as usize - tv.margin.y as usize * 2),
+                        Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2),
                 };
                 let mut typesetter = Typesetter::setup(
                     tv.to_str(),

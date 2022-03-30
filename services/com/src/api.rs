@@ -1,7 +1,7 @@
 // NOTE: the use of ComState "verbs" as commands is not meant as a 1:1 mapping of commands
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
-pub(crate) const SERVER_NAME_COM: &str      = "_COM manager_";
+pub(crate) const SERVER_NAME_COM: &str = "_COM manager_";
 pub use com_rs_ref::serdes::Ipv4Conf;
 #[allow(dead_code)]
 pub const WF200_PASS_MAX_LEN: usize = 64;
@@ -51,7 +51,7 @@ pub(crate) enum FlashOp {
     /// programming more efficient, while taking full advantage of the 1280-deep receive FIFO on the EC.
     /// Address + up to 4 pages. page 0 is at address, page 1 is at address + 256, etc.
     /// Pages stored as None are skipped, yet the address pointer is still incremented.
-    Program(u32, [Option<[u8; 256]>; 4])
+    Program(u32, [Option<[u8; 256]>; 4]),
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) enum FlashResult {
@@ -67,13 +67,16 @@ pub(crate) struct FlashRecord {
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SsidRecord {
-    pub name: xous_ipc::String::<32>,
+    pub name: xous_ipc::String<32>,
     /// rssi is reported as the negative of actual rssi in dBm. Example: an rssi of -42dBm is reported as `42u8`.
     pub rssi: u8,
 }
 impl Default for SsidRecord {
     fn default() -> Self {
-        SsidRecord { name: xous_ipc::String::<32>::new(), rssi: 0 }
+        SsidRecord {
+            name: xous_ipc::String::<32>::new(),
+            rssi: 0,
+        }
     }
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -141,156 +144,156 @@ pub struct WlanDebug {
     pub alloc_free_count: u16,
 }
 
-
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[repr(C)]
 pub(crate) enum Opcode {
     /// A ping back, used to determine when the COM has finished initializing
-    Ping,
+    Ping = 0,
 
     /// Reset the COM link - useful after an EC reset
-    LinkReset,
+    LinkReset = 1,
 
     /// Refresh the TRNG seed for the EC
-    ReseedTrng,
+    ReseedTrng = 2,
 
     /// Fetch the uptime of the EC
-    GetUptime,
+    GetUptime = 3,
 
     /// Battery stats
-    BattStats,
+    BattStats = 4,
 
     /// Standby current -- only valid if a BattStats command was previously issued
-    StandbyCurrent,
+    StandbyCurrent = 5,
 
     /// Battery stats, non-blocking
-    BattStatsNb,
+    BattStatsNb = 6,
 
     /// Query Full charge capacity of the battery
-    //BattFullCapacity,
+    //BattFullCapacity = 7,
 
     /// More charger and gas gauge status, primarily for diagnostics
-    MoreStats,
+    MoreStats = 8,
 
     /// Poll the USB CC chip
-    PollUsbCc,
+    PollUsbCc = 9,
 
     /// Turn Boost Mode On
-    BoostOn,
+    BoostOn = 10,
 
     /// Turn Boost Mode Off
-    BoostOff,
+    BoostOff = 11,
 
     /// Read the current accelerations off the IMU; this blocks while the read takes place
-    ImuAccelReadBlocking,
+    ImuAccelReadBlocking = 12,
 
     /// Power off the SoC
-    PowerOffSoc,
+    PowerOffSoc = 13,
 
     /// Ship mode (battery disconnect)
-    ShipMode,
+    ShipMode = 14,
 
     /// Is the battery charging?
-    IsCharging,
+    IsCharging = 15,
 
     /// Set the backlight brightness
-    SetBackLight,
+    SetBackLight = 16,
 
     /// Request charging
-    RequestCharging,
+    RequestCharging = 17,
 
     /// Erase or program a region of EC FLASH
-    FlashOp,
+    FlashOp = 18,
 
     /// Take the mutex on EC update operations.
     /// Only one process is allowed to acquire this ever, right now, for security reasons.
-    FlashAcquire,
+    FlashAcquire = 19,
 
     /// Checks if an updated SSID list is available
-    SsidCheckUpdate,
+    SsidCheckUpdate = 20,
 
     /// Return the latest SSID list
-    SsidFetchAsString,
-    SsidFetchAsStringV2,
+    SsidFetchAsString = 21,
+    SsidFetchAsStringV2 = 22,
 
     /// Fetch the git ID of the EC
-    EcGitRev,
+    EcGitRev = 23,
     /// Fetch the SW tag of the EC as a {00|maj|min|rev} u32
-    EcSwTag,
+    EcSwTag = 24,
 
     /// Fetch the firmware rev of the WF200
-    Wf200Rev,
+    Wf200Rev = 25,
 
     /// Send a line of PDS data
-    Wf200PdsLine, //String<512>
+    Wf200PdsLine = 26, //String<512>
 
     /// request for a listener to BattStats events
-    RegisterBattStatsListener, //String<64>
+    RegisterBattStatsListener = 27, //String<64>
 
     /// Reset the wifi chip
-    Wf200Reset,
+    Wf200Reset = 28,
 
     /// Disable the wifi chip
-    Wf200Disable,
+    Wf200Disable = 29,
 
     /// start passive SSID scanning
-    ScanOn,
+    ScanOn = 30,
 
     /// stop passive SSID scanning
-    ScanOff,
+    ScanOff = 31,
 
     /// suspend/resume callback
-    SuspendResume,
+    SuspendResume = 32,
 
     /// wlan: make sure radio is on (reset from standby if needed)
-    WlanOn,
+    WlanOn = 33,
 
     /// wlan: switch radio to lowest power standby mode
-    WlanOff,
+    WlanOff = 34,
 
     /// wlan: set SSID to use for joining AP
-    WlanSetSSID,
+    WlanSetSSID = 35,
 
     /// wlan: set password to use for joining AP
-    WlanSetPass,
+    WlanSetPass = 36,
 
     /// wlan: join AP using previously set SSID & password
-    WlanJoin,
+    WlanJoin = 37,
 
     /// wlan: disconnect from AP
-    WlanLeave,
+    WlanLeave = 38,
 
     /// wlan: get wlan radio status (power state? connected? AP info?)
-    WlanStatus,
+    WlanStatus = 39,
 
     /// wlan: get current config
-    WlanGetConfig,
+    WlanGetConfig = 40,
 
     /// wlan: get net packet
-    WlanFetchPacket,
+    WlanFetchPacket = 41,
 
     /// wlan: send net packet
-    WlanSendPacket,
+    WlanSendPacket = 42,
 
     /// wlan: debug infos
-    WlanDebug,
+    WlanDebug = 43,
 
     /// wlan: get RSSI
-    WlanRssi,
+    WlanRssi = 44,
 
     /// wlan: sync state (for resume)
-    WlanSyncState,
+    WlanSyncState = 45,
 
     /// sets the EC-side com interrupt mask
-    IntSetMask,
+    IntSetMask = 46,
 
     /// gets the EC-side com interrupt mask
-    IntGetMask,
+    IntGetMask = 47,
 
     /// acknowledges interrupts with the given mask
-    IntAck,
+    IntAck = 48,
 
     /// gets more details on the latest interrupt
-    IntFetchVector,
+    IntFetchVector = 49,
 }
 
 /// These enums indicate what kind of callback type we're sending.

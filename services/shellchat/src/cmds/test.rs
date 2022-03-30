@@ -2,16 +2,16 @@ use crate::oqc_test::OqcOp;
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 use xous::{MessageEnvelope, Message};
-use llio::I2cStatus;
 
 use codec::*;
 use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
 use spectrum_analyzer::windows::hann_window;
-use llio::{DateTime, Weekday};
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
 use std::sync::Arc;
 use num_traits::*;
+
+use std::time::Instant;
 
 static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
 
@@ -30,8 +30,8 @@ pub struct Test {
     right_play: bool,
     speaker_play: bool,
     freq: f32,
-    start_time: Option<DateTime>,
-    end_time: Option<DateTime>,
+    start_time: Option<u64>,
+    end_time: Option<u64>,
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
     oqc_cid: Option<xous::CID>,
@@ -106,14 +106,22 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "instant" => {
+                    write!(ret, "start elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
+                    let now = Instant::now();
+                    env.ticktimer.sleep_ms(5000).unwrap();
+                    write!(ret, "Duration (ms): {}\n", now.elapsed().as_millis()).unwrap();
+                    write!(ret, "end elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
+                }
                 "factory" => {
-                    // force a specified time to make sure the elapsed time computation later on works
-                    if !rtc_set(&mut env.i2c, 0, 0, 10, 1, 6, 21) {
-                        log::info!("{}|RTC|FAIL|SET|", SENTINEL);
-                    }
-
+                    self.start_time = match env.llio.get_rtc_secs() {
+                        Ok(s) => Some(s),
+                        _ => {
+                            log::info!("{}|RTC|FAIL|SET|", SENTINEL);
+                            None
+                        },
+                    };
                     self.start_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.start_time = rtc_get(&mut env.i2c);
 
                     // set uart MUX, and turn off WFI so UART reports are "clean" (no stuck characters when CPU is in WFI)
                     env.llio.set_uart_mux(llio::UartType::Log).unwrap();
@@ -218,25 +226,12 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     env.ticktimer.sleep_ms(6000).unwrap(); // wait so we have some realistic delta on the datetime function
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
-                    self.end_time = rtc_get(&mut env.i2c);
+                    self.end_time = env.llio.get_rtc_secs().ok();
 
                     let exact_time_secs = ((self.end_elapsed.unwrap() - self.start_elapsed.unwrap()) / 1000) as i32;
-                    if let Some(end_dt) = self.end_time {
-                        if let Some(start_dt) = self.start_time {
-                            // this method of computation fails if the test was started just before midnight
-                            // on the last day of the month and completes just after. we set the time so we ensure this
-                            // can't happen.
-                            let end_secs =
-                                end_dt.days as i32 * 24 * 60 * 60 +
-                                end_dt.hours as i32 * 60 * 60 +
-                                end_dt.minutes as i32 * 60 +
-                                end_dt.seconds as i32;
-                            let start_secs =
-                                start_dt.days as i32 * 24 * 60 * 60 +
-                                start_dt.hours as i32 * 60 * 60 +
-                                start_dt.minutes as i32 * 60 +
-                                start_dt.seconds as i32;
-                            let elapsed_secs = end_secs - start_secs;
+                    if let Some(end_secs) = self.end_time {
+                        if let Some(start_secs) = self.start_time {
+                            let elapsed_secs = (end_secs - start_secs) as i32;
 
                             let delta = exact_time_secs - elapsed_secs;
                             if delta.abs() > 2 {
@@ -778,95 +773,6 @@ fn asciiplot(fs: &FrequencySpectrum) {
         log::debug!("{:>5} | {:width$}*", freq.val() as u32, " ", width = pos);
     }
     log::debug!("max freq: {}, max_val: {}", max_f, max_val);
-}
-
-
-/// convert binary to BCD
-fn to_bcd(binary: u8) -> u8 {
-    let mut lsd: u8 = binary % 10;
-    if lsd > 9 {
-        lsd = 9;
-    }
-    let mut msd: u8 = binary / 10;
-    if msd > 9 {
-        msd = 9;
-    }
-
-    (msd << 4) | lsd
-}
-
-fn to_binary(bcd: u8) -> u8 {
-    (bcd & 0xf) + ((bcd >> 4) * 10)
-}
-
-fn to_weekday(bcd: u8) -> Weekday {
-    match bcd {
-        0 => Weekday::Sunday,
-        1 => Weekday::Monday,
-        2 => Weekday::Tuesday,
-        3 => Weekday::Wednesday,
-        4 => Weekday::Thursday,
-        5 => Weekday::Friday,
-        6 => Weekday::Saturday,
-        _ => Weekday::Sunday,
-    }
-}
-const ABRTCMC_I2C_ADR: u8 = 0x68;
-const ABRTCMC_CONTROL3: u8 = 0x02;
-const ABRTCMC_SECONDS: u8 = 0x3;
-
-// vendor in the RTC code -- the RTC system was not architected to do our test sets
-// in particular we need a synchronous callback on the date/time, which is not terribly useful in most other contexts
-// so instead of burdening the OS with it, we just incorprate it specifically into this test function
-fn rtc_set(i2c: &mut llio::I2c, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8) -> bool {
-    let mut txbuf: [u8; 8] = [0; 8];
-
-    // convert enum to bitfields
-    let d = 1;
-
-    // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-    txbuf[0] = 0;
-    txbuf[1] = to_bcd(secs);
-    txbuf[2] = to_bcd(mins);
-    txbuf[3] = to_bcd(hours);
-    txbuf[4] = to_bcd(days);
-    txbuf[5] = to_bcd(d);
-    txbuf[6] = to_bcd(months);
-    txbuf[7] = to_bcd(years);
-
-    match i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf) {
-        Ok(status) => {
-            match status {
-                I2cStatus::ResponseWriteOk => true,
-                I2cStatus::ResponseBusy => {log::error!("i2c server busy on RTC test function"); false},
-                _ => {log::error!("try_send_i2c unhandled response: {:?}", status); false},
-            }
-        }
-        _ => {log::error!("try_send_i2c unhandled error"); false}
-    }
-}
-fn rtc_get(i2c: &mut llio::I2c) -> Option<DateTime> {
-    let mut rxbuf = [0; 7];
-    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, None) {
-        Ok(status) => {
-            match status {
-                I2cStatus::ResponseReadOk => {
-                    let dt = DateTime {
-                        seconds: to_binary(rxbuf[0] & 0x7f),
-                        minutes: to_binary(rxbuf[1] & 0x7f),
-                        hours: to_binary(rxbuf[2] & 0x3f),
-                        days: to_binary(rxbuf[3] & 0x3f),
-                        weekday: to_weekday(rxbuf[4] & 0x7f),
-                        months: to_binary(rxbuf[5] & 0x1f),
-                        years: to_binary(rxbuf[6]),
-                    };
-                    Some(dt)
-                },
-                _ => None,
-            }
-        }
-        _ => None
-    }
 }
 
 fn oqc_status(conn: xous::CID) -> Option<bool> { // None if still running or not yet run; Some(true) if pass; Some(false) if fail

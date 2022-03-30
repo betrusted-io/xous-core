@@ -18,6 +18,7 @@ fn main() {
         println!("cargo:rustc-link-lib=static={}", name);
         println!("cargo:rustc-link-search={}", out_dir.display());
         println!("cargo:rerun-if-changed=bin/{}.a", target);
+        println!("cargo:rustc-link-arg=-Tlink.x");
     }
     println!("cargo:rustc-link-arg=-Map=loader.map");
 
