@@ -71,17 +71,29 @@ impl ItemName {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
-pub struct TextEntryPayload(pub String::<256>);
+pub struct TextEntryPayload {
+    pub id: u32,
+    pub content: String::<256>
+    //pub placeholder: String::<265>,
+}
+
 impl TextEntryPayload {
     pub fn new() -> Self {
-        TextEntryPayload(String::<256>::new())
+        TextEntryPayload{
+            id: Default::default(),
+            content: Default::default(),
+        }
+    }
+
+    pub fn new_with_fields(id: u32, content: String::<256>) -> Self {
+        TextEntryPayload { id: id, content: content }
     }
     /// Ensures that 0's are written to the storage of this struct, and not optimized out; important for password fields.
     pub fn volatile_clear(&mut self) {
-        self.0.volatile_clear();
+        self.content.volatile_clear();
     }
     pub fn as_str(&self) -> &str {
-        self.0.as_str().expect("couldn't convert textentry string")
+        self.content.as_str().expect("couldn't convert textentry string")
     }
 }
 

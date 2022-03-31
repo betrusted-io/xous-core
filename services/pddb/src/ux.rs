@@ -86,19 +86,19 @@ pub(crate) fn password_ux_manager(
         let plaintext_pw = Arc::clone(&plaintext_pw);
         move || {
             // build the core data structure here
-            let password_action = TextEntry {
-                is_password: true,
-                visibility: TextEntryVisibility::LastChars,
-                action_conn: renderer_cid,
-                action_opcode: PwRendererOpcode::PwReturn.to_u32().unwrap(),
-                action_payload: TextEntryPayload::new(),
-                validator: None,
-            };
+            let password_action = TextEntry::new(
+        true,
+        TextEntryVisibility::LastChars,
+        renderer_cid,
+        PwRendererOpcode::PwReturn.to_u32().unwrap(),
+        vec![TextEntryPayload::new()],
+        None,
+            );
 
             let mut pddb_modal =
                 Modal::new(
                     gam::PDDB_MODAL_NAME,
-                    ActionType::TextEntry(password_action),
+                    ActionType::TextEntry(password_action.clone()),
                     Some(t!("pddb.password", xous::LANG)),
                     None,
                     GlyphStyle::Regular,
@@ -118,7 +118,7 @@ pub(crate) fn password_ux_manager(
                         let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let db_name = buffer.to_original::<xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>, _>().unwrap();
                         pddb_modal.modify(
-                            Some(ActionType::TextEntry(password_action)),
+                            Some(ActionType::TextEntry(password_action.clone())),
                             Some(t!("pddb.password", xous::LANG)), false,
                             Some(db_name.as_str().unwrap()), false, None
                         );

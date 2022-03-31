@@ -83,7 +83,7 @@ pub(crate) fn spawn_test() {
             log::info!("test text input");
             match modals.get_text("Test input", Some(test_validator), None) {
                 Ok(text) => {
-                    log::info!("Input: {}", text.0);
+                    log::info!("Input: {}", text.content);
                 }
                 _ => {
                     log::error!("get_text failed");

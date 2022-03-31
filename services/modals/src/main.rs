@@ -91,14 +91,14 @@ fn xmain() -> ! {
             #[cfg(feature="tts")]
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             // build the core data structure here
-            let text_action = TextEntry {
-                is_password: false,
-                visibility: TextEntryVisibility::Visible,
-                action_conn: renderer_cid,
-                action_opcode: RendererOp::TextEntryReturn.to_u32().unwrap(),
-                action_payload: TextEntryPayload::new(),
-                validator: None,
-            };
+            let text_action = TextEntry::new(
+            false,
+            TextEntryVisibility::Visible,
+            renderer_cid,
+            RendererOp::TextEntryReturn.to_u32().unwrap(),
+            vec![TextEntryPayload::new()],
+            None,
+            );
             let mut fixed_items = Vec::<ItemName>::new();
             let notification = gam::modal::Notification::new(
                 renderer_cid,
@@ -118,7 +118,7 @@ fn xmain() -> ! {
             let mut renderer_modal =
                 Modal::new(
                     gam::SHARED_MODAL_NAME,
-                    ActionType::TextEntry(text_action),
+                    ActionType::TextEntry(text_action.clone()),
                     Some("Placeholder"),
                     None,
                     GlyphStyle::Regular,
@@ -143,7 +143,7 @@ fn xmain() -> ! {
                                 #[cfg(feature="tts")]
                                 tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
                                 renderer_modal.modify(
-                                    Some(ActionType::TextEntry(text_action)),
+                                    Some(ActionType::TextEntry(text_action.clone())),
                                     Some(config.prompt.as_str().unwrap()), false,
                                     None, true, None
                                 );
@@ -324,7 +324,7 @@ fn xmain() -> ! {
                                     if let Some(err) = response {
                                         // try again
                                         renderer_modal.modify(
-                                            Some(ActionType::TextEntry(text_action)),
+                                            Some(ActionType::TextEntry(text_action.clone())),
                                             Some(config.prompt.as_str().unwrap()), false,
                                             Some(err.as_str().unwrap()), false, None
                                         );
