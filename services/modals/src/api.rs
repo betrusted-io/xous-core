@@ -31,6 +31,8 @@ pub struct ManagedPromptWithTextResponse {
     pub validator: Option<[u32; 4]>,
     /// the opcode to pass the validator
     pub validator_op: u32,
+    /// the amount of fields to read
+    pub fields: u32,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedNotification {

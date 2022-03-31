@@ -70,7 +70,7 @@ impl ItemName {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
 pub struct TextEntryPayload {
     pub id: u32,
     pub content: String::<256>

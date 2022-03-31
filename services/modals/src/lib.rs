@@ -33,6 +33,20 @@ impl Modals {
         maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
         maybe_validator_op: Option<u32>,
     ) -> Result<TextEntryPayload, xous::Error> {
+        match self.get_text_multi(prompt, maybe_validator, maybe_validator_op, 1) {
+            Ok(res) => {
+                return Ok(res.first())
+            },
+            Err(error) => return Err(error),
+        }
+    }
+
+    pub fn get_text_multi(&self,
+        prompt: &str,
+        maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
+        maybe_validator_op: Option<u32>,
+        fields: u32,
+    ) -> Result<TextEntryPayloads, xous::Error> {
         self.lock();
         let validator = if let Some(validator) = maybe_validator {
             // create a one-time use server
@@ -70,7 +84,8 @@ impl Modals {
             token: self.token,
             prompt: xous_ipc::String::from_str(prompt),
             validator,
-            validator_op: maybe_validator_op.unwrap_or(0)
+            validator_op: maybe_validator_op.unwrap_or(0),
+            fields: fields,
         };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithTextResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
@@ -80,7 +95,7 @@ impl Modals {
             unsafe{xous::disconnect(cid).unwrap()}; // must disconnect before destroy to avoid the CID from hanging out in our outbound table which is limited to 32 entries
             xous::destroy_server(SID::from_array(server)).expect("couldn't destroy temporary server");
         }
-        match buf.to_original::<TextEntryPayload, _>() {
+        match buf.to_original::<TextEntryPayloads, _>() {
             Ok(response) => Ok(response),
             _ => Err(xous::Error::InternalError)
         }

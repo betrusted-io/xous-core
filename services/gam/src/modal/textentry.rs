@@ -12,6 +12,15 @@ const MAX_FIELDS: i16 = 10;
 
 pub type ValidatorErr = xous_ipc::String::<256>;
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
+pub struct TextEntryPayloads ([TextEntryPayload; MAX_FIELDS as usize]);
+
+impl TextEntryPayloads {
+    pub fn first(&self) -> TextEntryPayload {
+        self.0[0]
+    }
+}
+
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum TextEntryVisibility {
     /// text is fully visible
@@ -33,6 +42,7 @@ pub struct TextEntry {
     pub validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
     pub action_payloads: Vec<TextEntryPayload>,
 
+    max_field_amount: u32,
     selected_field: i16,
 }
 
@@ -46,6 +56,7 @@ impl Default for TextEntry {
             validator: Default::default(),
             selected_field: Default::default(),
             action_payloads: Default::default(),
+            max_field_amount: 0,
         }
     }
 }
@@ -75,6 +86,11 @@ impl TextEntry {
             ..Default::default()
         }
     }
+
+    pub fn reset_action_payloads(&mut self, fields: u32) { 
+        self.action_payloads = vec![TextEntryPayload::default(); fields as usize];
+        self.max_field_amount = fields;
+    }
 }
 
 
@@ -99,7 +115,7 @@ impl ActionApi for TextEntry {
 
         let glyph_height = match self.action_payloads.len() {
             0 | 1 => 1,
-            _ => glyph_height * self.action_payloads.len() as i16 + 2,
+            _ => glyph_height * (self.action_payloads.len() as i16 + 2),
         } as i16;
 
         if self.is_password {
@@ -116,13 +132,21 @@ impl ActionApi for TextEntry {
             PixelColor::Dark
         };
 
-        for payload in self.action_payloads.clone() {
+        let mut current_height = at_height;
+        let payloads = self.action_payloads.clone();
+
+        for (index, payload) in payloads.iter().enumerate() {
+            current_height = match index {
+                0 => at_height,
+                _ => current_height + at_height,
+            };
+
             // draw the currently entered text
             let mut tv = TextView::new(
                 modal.canvas,
                 TextBounds::BoundingBox(Rectangle::new(
-                    Point::new(modal.margin, at_height),
-                    Point::new(modal.canvas_width - modal.margin, at_height + modal.line_height))
+                    Point::new(modal.margin, current_height),
+                    Point::new(modal.canvas_width - modal.margin, current_height + modal.line_height))
             ));
             tv.ellipsis = true;
             tv.invert = self.is_password;
@@ -266,14 +290,18 @@ impl ActionApi for TextEntry {
 
             // draw a line for where text gets entered (don't use a box, fitting could be awkward)
             modal.gam.draw_line(modal.canvas, Line::new_with_style(
-                Point::new(modal.margin, at_height + modal.line_height + 4),
-                Point::new(modal.canvas_width - modal.margin, at_height + modal.line_height + 4),
+                Point::new(modal.margin, current_height + modal.line_height + 4),
+                Point::new(modal.canvas_width - modal.margin, current_height + modal.line_height + 4),
                 DrawStyle::new(color, color, 1))
                 ).expect("couldn't draw entry line");
+
         }
     }
     fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         let mut payload = self.action_payloads[self.selected_field as usize];
+
+        let can_move_downwards = !(self.selected_field+1 == self.max_field_amount as i16);
+        let can_move_upwards =  !(self.selected_field-1 < 0); 
 
         log::trace!("key_action: {}", k);
         match k {
@@ -311,16 +339,23 @@ impl ActionApi for TextEntry {
                     }
                 }
 
-                let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
+                let mut payloads: TextEntryPayloads = Default::default();
+                payloads.0[..self.max_field_amount as usize].copy_from_slice(&self.action_payloads[..self.max_field_amount as usize]);
+                let buf = Buffer::into_buf(payloads).expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
                 payload.volatile_clear(); // ensure the local copy of text is zero'd out
+                // TODO: zero out EVERYTHING here!
                 return (None, true)
             }
             '↑' => {
-                self.selected_field -= 1
+                if can_move_upwards {
+                    self.selected_field -= 1
+                }
             }
             '↓' => {
-                self.selected_field += 1
+                if can_move_downwards {
+                    self.selected_field += 1
+                }
             }
             '\u{0}' => {
                 // ignore null messages

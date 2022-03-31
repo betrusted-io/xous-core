@@ -8,7 +8,7 @@ pub struct Ver {
 // TODO: remove me
 impl Ver {
     fn modal(&self, env: &mut CommonEnv) {
-        log::info!("modal data: {:?}", env.modals.get_text("Get Text", None, None))
+        log::info!("modal data: {:#?}", env.modals.get_text_multi("Get Text", None, None, 4))
     }
 }
 

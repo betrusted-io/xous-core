@@ -34,7 +34,7 @@ enum RendererState {
     RunProgress(ManagedProgress),
     RunNotification(ManagedNotification),
     /// response ready state
-    ResponseText(TextEntryPayload),
+    ResponseText(TextEntryPayloads),
     ResponseRadio(ItemName),
     ResponseCheckBox(CheckBoxPayload),
     RunDynamicNotification(DynamicNotification),
@@ -142,8 +142,14 @@ fn xmain() -> ! {
                                 log::debug!("initiating text entry modal");
                                 #[cfg(feature="tts")]
                                 tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
+                                
                                 renderer_modal.modify(
-                                    Some(ActionType::TextEntry(text_action.clone())),
+                                    Some(ActionType::TextEntry({
+                                        let mut ta = text_action.clone();
+                                        ta.reset_action_payloads(config.fields);
+
+                                        ta
+                                    })),
                                     Some(config.prompt.as_str().unwrap()), false,
                                     None, true, None
                                 );
@@ -310,9 +316,10 @@ fn xmain() -> ! {
                             RendererState::RunText(config) => {
                                 log::trace!("validating text entry modal");
                                 let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                                let text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                                let text = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+                                // TODO: figure out how to associate validation with id's.
                                 if let Some(validator_sid) = config.validator {
-                                    let cid = xous::connect(SID::from_array(validator_sid)).unwrap();
+                                    /*let cid = xous::connect(SID::from_array(validator_sid)).unwrap();
                                     let validation = Validation {
                                         text,
                                         opcode: config.validator_op,
@@ -332,7 +339,7 @@ fn xmain() -> ! {
                                     } else {
                                         // the change in mutex_op enum type will signal the state change to the caller
                                         *mutex_op = RendererState::ResponseText(text);
-                                    }
+                                    }*/
                                 } else {
                                     *mutex_op = RendererState::ResponseText(text);
                                 }
