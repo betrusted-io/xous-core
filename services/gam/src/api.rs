@@ -97,6 +97,7 @@ pub struct UxRegistration {
     /// optional opcode ID for raw keystrokes. They are passed on to the caller in real-time.
     pub rawkeys_id: Option<u32>,
     /// optional opcode ID code for focus change notifications. Most applications will want to provide this to stop hogging resources when backgrounded
+    /// If the LayoutType is not an App, this field is ignored and does nothing
     pub focuschange_id: Option<u32>,
 }
 
