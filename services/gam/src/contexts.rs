@@ -457,18 +457,15 @@ impl ContextManager {
                 xous::send_message(old_context.listener,
                     xous::Message::new_scalar(focuschange_id as usize, gam::FocusState::Background as usize, 0, 0, 0)
                 ).map(|_| ())?;
-            } else {
-                return Err(xous::Error::ServerNotFound);
             }
         }
+
         if let Some(new_context) = self.get_context_by_token(new_app_token) {
             if let Some(focuschange_id) = new_context.focuschange_id {
                 log::trace!("Foreground focus change to {}, id {}", new_context.listener, new_context.redraw_id);
                 xous::send_message(new_context.listener,
                     xous::Message::new_scalar(focuschange_id as usize, gam::FocusState::Foreground as usize, 0, 0, 0)
                 ).map(|_| ())?;
-            } else {
-                return Err(xous::Error::ServerNotFound);
             }
         }
         Ok(())
