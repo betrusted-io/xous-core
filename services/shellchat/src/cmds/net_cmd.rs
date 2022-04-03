@@ -1,4 +1,5 @@
 use crate::{ShellCmdApi, CommonEnv};
+use com::api::NET_MTU;
 use xous_ipc::String;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use net::XousServerId;
@@ -196,6 +197,39 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     });
                     write!(ret, "TCP listener started on port 80").unwrap();
+                }
+                "udpstd" => {
+                    let socket = if let Some(tok_str) = tokens.next() {
+                        tok_str
+                    } else {
+                        "127.0.0.1:6502"
+                    }.to_string();
+                    let _ = std::thread::spawn({
+                        let self_cid = self.callback_conn;
+                        move || {
+                            use std::net::UdpSocket;
+                            let udp = match UdpSocket::bind(socket) {
+                                Ok(udp) => udp,
+                                Err(e) => {
+                                    log::error!("Couldn't bind UDP socket: {:?}", e);
+                                    return;
+                                }
+                            };
+                            loop {
+                                let mut buf = [0u8; NET_MTU];
+                                match udp.recv_from(&mut buf) {
+                                    Ok((bytes, addr)) => {
+                                        let mut s = xous_ipc::String::<512>::new();
+                                        write!(s, "UDP rx {} bytes: {:?}: {}", bytes, addr, std::str::from_utf8(&buf[..bytes]).unwrap()).unwrap();
+                                        s.send(self_cid).unwrap();
+                                    }
+                                    Err(e) => {
+                                        log::error!("UDP rx failed with {:?}", e);
+                                    }
+                                }
+                            }
+                        }
+                    });
                 }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data

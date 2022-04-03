@@ -7,6 +7,8 @@ mod std_tcpstream;
 use std_tcpstream::*;
 mod std_glue;
 use std_glue::*;
+mod std_udp;
+use std_udp::*;
 
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 use num_traits::*;
@@ -104,6 +106,12 @@ struct WaitingSocket {
     expiry: Option<NonZeroU64>,
 }
 
+pub struct UdpStdState {
+    pub msg: xous::MessageEnvelope,
+    pub handle: SocketHandle,
+    pub expiry: Option<u64>,
+}
+
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -158,11 +166,12 @@ fn xmain() -> ! {
     // storage for all our sockets
     let mut sockets = SocketSet::new(vec![]);
 
+    // ------------- libstd variant -----------
     // Each process keeps track of its own sockets. These are kept in a Vec. When a handle
     // is destroyed, it is turned into a `None`.
     let mut process_sockets: HashMap<Option<xous::PID>, Vec<Option<SocketHandle>>> = HashMap::new();
 
-    // When a client issues a Receive request, it will get placed here while the packet data
+    // When a TCP client issues a Receive request, it will get placed here while the packet data
     // is being accumulated.
     let mut tcp_rx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
@@ -182,6 +191,11 @@ fn xmain() -> ! {
         )>,
     > = Vec::new();
 
+    // When a UDP client opens a socket, an entry is automatically created here to accumulate
+    // incoming UDP socket data.
+    let mut udp_rx_waiting: Vec<Option<UdpStdState>> = Vec::new();
+
+    // ------------- native variant -----------
     // ping storage
     // up to four concurrent pings in the queue
     let icmp_rx_buffer = IcmpSocketBuffer::new(
@@ -986,6 +1000,27 @@ fn xmain() -> ! {
                 }
                 buf.replace(tcpspec).unwrap();
             }
+
+            Some(Opcode::StdUdpBind) => {
+                let pid = msg.sender.pid();
+                std_udp_bind(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+            }
+
+            Some(Opcode::StdUdpRx) => {
+                let pid = msg.sender.pid();
+                std_udp_rx(
+                    msg,
+                    &timer,
+                    &mut sockets,
+                    &mut udp_rx_waiting,
+                    process_sockets.entry(pid).or_default(),
+                );
+            }
+
             Some(Opcode::UdpBind) => {
                 let mut buf = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
@@ -1643,6 +1678,58 @@ fn xmain() -> ! {
                                 // do nothing
                             }
                         };
+                    }
+                }
+
+                // this block handles StdUdp
+                for connection in udp_rx_waiting.iter_mut() {
+                    let mut socket;
+                    let UdpStdState {
+                        mut msg,
+                        handle: _,
+                        expiry: _,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<UdpSocket>(s.handle);
+                                if !socket.can_recv() {
+                                    if let Some(trigger) = s.expiry {
+                                        if trigger < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                } // we don't process the Rx here because we need to `take()` the message first, so that its lifetime ends
+                            }
+                        }
+                        // remove the connection from the list, allowing subsequent code to operate on it and then .drop()
+                        connection.take().unwrap()
+                    };
+
+                    // If it can't receive, then the only explanation was that it timed out
+                    if !socket.can_recv() {
+                        udp_rx_failure(msg, NetError::TimedOut);
+                        continue;
+                    }
+
+                    // Extract the receive data here; the `msg` will go out of scope at this point.
+                    match socket.recv() {
+                        Ok((data, endpoint)) => {
+                            udp_rx_success(
+                                // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
+                                data,
+                                endpoint
+                            );
+                        }
+                        Err(e) => {
+                            log::error!("unable to receive: {:?}", e);
+                            udp_rx_failure(msg, NetError::LibraryError);
+                        }
                     }
                 }
 

@@ -64,7 +64,9 @@ pub(crate) fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError)
     let s: &mut [u8] = body.buf.as_slice_mut();
     let mut i = s.iter_mut();
 
-    // Duplicate error to ensure it's seen as an error regardless of byte order
+    // Duplicate error to ensure it's seen as an error regardless of byte order/return type
+    // This is necessary because errors are encoded as `u8` slices, but "good"
+    // responses may be encoded as `u16` or `u32` slices.
     *i.next()? = 1;
     *i.next()? = 1;
     *i.next()? = 1;
