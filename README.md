@@ -55,6 +55,9 @@ it is easy to extend the hardware peripherals without recompiling the
 entire emulator.
 
 [Download Renode](https://renode.io/#downloads) and ensure it is in your path.
+For now, you need to [download the nightly build](https://dl.antmicro.com/projects/renode/builds/),
+until `DecodedOperation` is included in the release.
+
 Then, build Xous:
 
 ```sh
