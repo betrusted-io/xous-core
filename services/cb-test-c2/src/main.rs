@@ -33,7 +33,7 @@ fn xmain() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     let sid = xns
-        .register_name(SERVER_NAME)
+        .register_name(SERVER_NAME, None)
         .expect("can't register server");
     log::trace!("registered with NS -- {:?}", sid);
 
