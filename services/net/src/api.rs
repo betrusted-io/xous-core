@@ -196,7 +196,7 @@ pub(crate) enum Opcode {
     ///
     /// # Returns
     ///
-    /// u16 array
+    /// u8 array
     /// -------|---------
     /// offset | Contents
     /// =======|=========

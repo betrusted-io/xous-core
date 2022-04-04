@@ -58,10 +58,10 @@ pub(crate) fn std_udp_bind(
     let handle = sockets.add(udp_socket);
 
     // Add the socket into our process' list of sockets, and pass the index back as the `fd` parameter for future reference.
-    let idx = insert_or_append(our_sockets, handle) as u16;
+    let idx = insert_or_append(our_sockets, handle) as u8;
 
     let body = msg.body.memory_message_mut().unwrap();
-    let bfr = body.buf.as_slice_mut::<u16>();
+    let bfr = body.buf.as_slice_mut::<u8>();
     log::trace!("successfully connected: {}", idx);
     bfr[0] = 0;
     bfr[1] = idx;
@@ -107,7 +107,7 @@ pub(crate) fn std_udp_rx(
         None
     };
     let do_peek = body.offset.is_some();
-
+    log::trace!("udp rx from fd {}", connection_handle_index);
     let mut socket = sockets.get::<UdpSocket>(*handle);
     if socket.can_recv() {
         log::trace!("receiving data right away");
@@ -190,6 +190,7 @@ pub(crate) fn std_udp_tx(
     };
     let len = u16::from_le_bytes([bytes[19], bytes[20]]);
     // attempt the tx
+    log::trace!("udp tx to fd {}", connection_handle_index);
     let mut socket = sockets.get::<UdpSocket>(*handle);
     match socket.send_slice(&bytes[21..21 + len as usize], IpEndpoint::new(address, remote_port)) {
         Ok(_) => {
@@ -198,6 +199,7 @@ pub(crate) fn std_udp_tx(
         Err(_e) => {
             // the only type of error returned from smoltcp in this case is if the destination is not addressible.
             udp_failure(msg, NetError::Unaddressable);
+            return;
         }
     }
 }

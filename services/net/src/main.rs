@@ -471,7 +471,7 @@ fn xmain() -> ! {
             }),
 
             Some(Opcode::StdTcpConnect) => {
-                // Pick a random locak port using the system's TRNG
+                // Pick a random local port using the system's TRNG
                 let local_port = (trng.get_u32().unwrap() % 16384 + 49152) as u16;
                 let pid = msg.sender.pid();
 
@@ -482,6 +482,13 @@ fn xmain() -> ! {
                     &mut tcp_connect_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpTx) => {
@@ -493,6 +500,13 @@ fn xmain() -> ! {
                     &mut tcp_tx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpPeek) => {
@@ -1025,6 +1039,13 @@ fn xmain() -> ! {
                     &mut sockets,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdUdpClose) => {
@@ -1815,7 +1836,6 @@ fn xmain() -> ! {
                 if let Some(delay) = iface.poll_delay(&sockets, timestamp) {
                     let delay_ms = delay.total_millis();
                     if delay_ms < 2 {
-                        log::info!("immediate pump");
                         xous::try_send_message(
                             net_conn,
                             Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
@@ -1824,7 +1844,7 @@ fn xmain() -> ! {
                     } else {
                         if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
                             let prev_count = delay_threads.fetch_add(1, Ordering::SeqCst);
-                            log::info!(
+                            log::trace!(
                                 "spawning checkup thread for {}ms. New total threads: {}",
                                 delay_ms,
                                 prev_count + 1
