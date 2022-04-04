@@ -19,7 +19,7 @@ pub(crate) fn std_udp_bind(
         Some(b) => b,
         None => {
             log::trace!("invalid message type");
-            respond_with_error(msg, NetError::LibraryError);
+            udp_failure(msg, NetError::LibraryError);
             return;
         }
     };
@@ -30,7 +30,7 @@ pub(crate) fn std_udp_bind(
         Some(addr) => addr,
         None => {
             log::trace!("couldn't parse address");
-            respond_with_error(msg, NetError::LibraryError);
+            udp_failure(msg, NetError::LibraryError);
             return;
         }
     };
@@ -51,7 +51,7 @@ pub(crate) fn std_udp_bind(
         })
     {
         log::trace!("couldn't connect: {:?}", e);
-        respond_with_error(msg, e);
+        udp_failure(msg, e);
         return;
     }
 
@@ -78,7 +78,7 @@ pub(crate) fn std_udp_rx(
     let body = match msg.body.memory_message_mut() {
         Some(body) => body,
         None => {
-            udp_rx_failure(msg, NetError::LibraryError);
+            udp_failure(msg, NetError::LibraryError);
             return;
         }
     };
@@ -89,7 +89,7 @@ pub(crate) fn std_udp_rx(
     let handle = match our_sockets.get(connection_handle_index) {
         Some(Some(val)) => val,
         _ => {
-            udp_rx_failure(msg, NetError::Invalid);
+            udp_failure(msg, NetError::Invalid);
             return;
         }
     };
@@ -106,23 +106,38 @@ pub(crate) fn std_udp_rx(
     } else {
         None
     };
+    let do_peek = body.offset.is_some();
 
     let mut socket = sockets.get::<UdpSocket>(*handle);
     if socket.can_recv() {
         log::trace!("receiving data right away");
-        match socket.recv() {
-            Ok((data, endpoint)) => {
-                udp_rx_success(body.buf.as_slice_mut(), data, endpoint);
+        if do_peek {
+            // have to duplicate the code because Endpoint on peek is &, but on recv is not. This
+            // difference in types means you can't do a pattern match assign to a common variable.
+            match socket.peek() {
+                Ok((data, endpoint)) => {
+                    udp_rx_success(body.buf.as_slice_mut(), data, *endpoint);
+                }
+                Err(e) => {
+                    log::error!("unable to receive: {:?}", e);
+                    udp_failure(msg, NetError::LibraryError);
+                }
             }
-            Err(e) => {
-                log::error!("unable to receive: {:?}", e);
-                udp_rx_failure(msg, NetError::LibraryError);
+        } else {
+            match socket.recv() {
+                Ok((data, endpoint)) => {
+                    udp_rx_success(body.buf.as_slice_mut(), data, endpoint);
+                }
+                Err(e) => {
+                    log::error!("unable to receive: {:?}", e);
+                    udp_failure(msg, NetError::LibraryError);
+                }
             }
-        }
+        };
         return;
     }
     if nonblocking {
-        udp_rx_failure(msg, NetError::WouldBlock);
+        udp_failure(msg, NetError::WouldBlock);
         return;
     }
     log::trace!("UDP socket was not ready to receive, adding it to list of waiting messages");
@@ -138,6 +153,53 @@ pub(crate) fn std_udp_rx(
             expiry,
         },
     );
+}
+
+pub(crate) fn std_udp_tx(
+    mut msg: xous::MessageEnvelope,
+    sockets: &mut SocketSet,
+    our_sockets: &Vec<Option<SocketHandle>>,
+) {
+    // unpack meta
+    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
+    let body = match msg.body.memory_message_mut() {
+        Some(body) => body,
+        None => {
+            udp_failure(msg, NetError::LibraryError);
+            return;
+        }
+    };
+    let handle = match our_sockets.get(connection_handle_index) {
+        Some(Some(val)) => val,
+        _ => {
+            udp_failure(msg, NetError::Invalid);
+            return;
+        }
+    };
+
+    // unpack arguments
+    let bytes = body.buf.as_slice::<u8>();
+    let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
+    let address = match parse_address(&bytes[2..]) {
+        Some(addr) => addr,
+        None => {
+            log::trace!("couldn't parse address");
+            udp_failure(msg, NetError::LibraryError);
+            return;
+        }
+    };
+    let len = u16::from_le_bytes([bytes[19], bytes[20]]);
+    // attempt the tx
+    let mut socket = sockets.get::<UdpSocket>(*handle);
+    match socket.send_slice(&bytes[21..21 + len as usize], IpEndpoint::new(address, remote_port)) {
+        Ok(_) => {
+            body.buf.as_slice_mut()[0] = 0;
+        }
+        Err(_e) => {
+            // the only type of error returned from smoltcp in this case is if the destination is not addressible.
+            udp_failure(msg, NetError::Unaddressable);
+        }
+    }
 }
 
 pub(crate) fn udp_rx_success(buf: &mut [u8], rx: &[u8], ep: IpEndpoint) {
@@ -170,7 +232,7 @@ pub(crate) fn udp_rx_success(buf: &mut [u8], rx: &[u8], ep: IpEndpoint) {
     }
 }
 
-pub(crate) fn udp_rx_failure(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
+pub(crate) fn udp_failure(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
     // If it's not a memory message, don't fill in the return information.
     let body = match env.body.memory_message_mut() {
         None => {

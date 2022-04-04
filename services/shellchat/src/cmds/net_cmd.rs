@@ -56,10 +56,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         #[cfg(any(target_os = "none", target_os = "xous"))]
-        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]] [tcpget host/path]";
+        let helpstring = "net [udp [rx socket] [tx dest socket]] [ping [host] [count]] [tcpget host/path]";
         // no ping in hosted mode -- why would you need it? we're using the host's network connection.
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [count]] [tcpget host/path]";
+        let helpstring = "net [udp [port]] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -198,87 +198,74 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     });
                     write!(ret, "TCP listener started on port 80").unwrap();
                 }
-                "udpstd" => {
-                    let socket = if let Some(tok_str) = tokens.next() {
-                        tok_str
-                    } else {
-                        "127.0.0.1:6502"
-                    }.to_string();
-                    let _ = std::thread::spawn({
-                        let self_cid = self.callback_conn;
-                        move || {
-                            use std::net::UdpSocket;
-                            let udp = match UdpSocket::bind(socket) {
-                                Ok(udp) => udp,
-                                Err(e) => {
-                                    log::error!("Couldn't bind UDP socket: {:?}", e);
-                                    return;
-                                }
-                            };
-                            loop {
-                                let mut buf = [0u8; NET_MTU];
-                                match udp.recv_from(&mut buf) {
-                                    Ok((bytes, addr)) => {
-                                        let mut s = xous_ipc::String::<512>::new();
-                                        write!(s, "UDP rx {} bytes: {:?}: {}", bytes, addr, std::str::from_utf8(&buf[..bytes]).unwrap()).unwrap();
-                                        s.send(self_cid).unwrap();
-                                    }
-                                    Err(e) => {
-                                        log::error!("UDP rx failed with {:?}", e);
-                                    }
-                                }
-                            }
-                        }
-                    });
-                }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
                 // to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received
                 "udp" => {
-                    if let Some(udp_socket) = &self.udp {
-                        write!(ret, "Socket listener already installed on {:?}.", udp_socket.socket_addr().unwrap()).unwrap();
+                    let socket = if let Some(tok_str) = tokens.next() {
+                        tok_str
                     } else {
-                        let socket = if let Some(tok_str) = tokens.next() {
-                            tok_str
-                        } else {
-                            "127.0.0.1:6502"
-                        };
-                        let mut udp = net::UdpSocket::bind_xous(
-                            socket,
-                            Some(UDP_TEST_SIZE as u16)
-                        ).unwrap();
-                        udp.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
-                        udp.set_scalar_notification(
-                            self.callback_conn,
-                            self.callback_id.unwrap() as usize, // this is guaranteed in the prelude
-                            [Some(NetCmdDispatch::UdpTest1.to_usize().unwrap()), None, None, None]
-                        );
-                        self.udp = Some(udp);
-                        write!(ret, "Created UDP socket listener on socket {}", socket).unwrap();
-                    }
-                }
-                "udpclose" => {
-                    self.udp = None;
-                    write!(ret, "Closed primary UDP socket").unwrap();
-                }
-                "udpclone" => {
-                    if let Some(udp_socket) = &self.udp {
-                        let mut udp_clone = udp_socket.duplicate().unwrap();
-                        udp_clone.set_scalar_notification(
-                            self.callback_conn,
-                            self.callback_id.unwrap() as usize, // this is guaranteed in the prelude
-                            [Some(NetCmdDispatch::UdpTest2.to_usize().unwrap()), None, None, None]
-                        );
-                        let sa = udp_clone.socket_addr().unwrap();
-                        self.udp_clone = Some(udp_clone);
-                        write!(ret, "Cloned UDP socket on {:?}", sa).unwrap();
+                        write!(ret, "Usage: net udp precursor_ip:6502 [sender_ip]:6502, where precursor_ip is the IP address of the device itself").unwrap();
+                        return Ok(Some(ret));
+                    }.to_string();
+                    let (response_addr, do_response) = if let Some(r) = tokens.next() {
+                        (r.to_string(), true)
                     } else {
-                        write!(ret, "Run `net udp` before cloning.").unwrap();
+                        (std::string::String::new(), false)
+                    };
+                    use std::net::UdpSocket;
+                    let udp = match UdpSocket::bind(socket.clone()) {
+                        Ok(udp) => udp,
+                        Err(e) => {
+                            write!(ret, "Couldn't bind UDP socket: {:?}\n", e).unwrap();
+                            return Ok(Some(ret));
+                        }
+                    };
+                    udp.set_write_timeout(Some(std::time::Duration::from_millis(500))).expect("couldn't set write timeout");
+                    for index in 0..2 {
+                        let _ = std::thread::spawn({
+                            let self_cid = self.callback_conn;
+                            let udp = udp.try_clone().expect("couldn't clone socket");
+                            let response = response_addr.clone();
+                            move || {
+                                const ITERS: usize = 4;
+                                let mut iters = 0;
+                                let mut s = xous_ipc::String::<512>::new();
+                                write!(s, "UDP server {} started", index).unwrap();
+                                s.send(self_cid).unwrap();
+                                loop {
+                                    s.clear();
+                                    let mut buf = [0u8; NET_MTU];
+                                    match udp.recv_from(&mut buf) {
+                                        Ok((bytes, addr)) => {
+                                            write!(s, "UDP server {} rx {} bytes: {:?}: {}\r\n", index, bytes, addr, std::str::from_utf8(&buf[..bytes]).unwrap()).unwrap();
+                                            s.send(self_cid).unwrap();
+                                            if do_response {
+                                                match udp.send_to(
+                                                    format!("Server {} received {} bytes", index, bytes).as_bytes(),
+                                                    &response,
+                                                ) {
+                                                    Ok(len) => log::info!("server {} sent response of {} bytes", index, len),
+                                                    Err(e) => log::info!("server {} UDP tx err: {:?}", index, e),
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::error!("UDP rx failed with {:?}", e);
+                                        }
+                                    }
+                                    iters += 1;
+                                    if iters >= ITERS {
+                                        break;
+                                    }
+                                }
+                                s.clear();
+                                write!(s, "UDP server {} rx closed after {} iters", index, iters).unwrap();
+                                s.send(self_cid).unwrap();
+                            }
+                        });
                     }
-                }
-                "udpcloneclose" => {
-                    self.udp_clone = None;
-                    write!(ret, "Closed cloned UDP socket").unwrap();
+                    write!(ret, "Started multi-threaded UDP responder").unwrap();
                 }
                 "dns" => {
                     if let Some(name) = tokens.next() {

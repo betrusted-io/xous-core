@@ -13,7 +13,7 @@ use smoltcp::{
     time::Duration,
 };
 
-use xous::{CID, Message, SID, msg_blocking_scalar_unpack, send_message};
+use xous::{CID, Message, SID, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use crate::NetConn;
 use crate::api::*;
@@ -362,6 +362,7 @@ impl UdpSocket {
         Ok(cloned_socket)
     }
 
+    /*
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
         if ttl > 255 {
             return Err(Error::new(ErrorKind::InvalidInput, "TTL must be less than 256"))
@@ -383,7 +384,7 @@ impl UdpSocket {
             Err(Error::new(ErrorKind::ConnectionRefused, "can't get TTL value from Net server"))
         }
     }
-
+    */
     pub fn take_error(&self) -> io::Result<Option<io::Error>> {
         // we don't have stateful errors, yet?...
         Ok(None)

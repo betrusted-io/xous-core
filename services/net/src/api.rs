@@ -35,12 +35,12 @@ pub const MIN_EC_REV: u32 = 0x00_09_06_00;
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 #[repr(C)]
 pub(crate) enum Opcode {
-    /// Calls for UDP implementation
+    /// Calls for UDP implementation (now deprecated to libstd)
     UdpBind = 0,
     UdpClose = 1,
     UdpTx = 2,
-    UdpSetTtl = 3,
-    UdpGetTtl = 4,
+    //UdpSetTtl = 3,
+    //UdpGetTtl = 4,
 
     /// Calls for TCP implementation
     TcpConnect = 5,
@@ -172,6 +172,7 @@ pub(crate) enum Opcode {
     StdGetTtl = 36,
 
     /// BlockingScalar call to set the maximum hop count of this connection
+    /// arg4: 0 => TCP, 1 => UDP
     StdSetTtl = 37,
 
     /// BlockingScalar call to get the NODELAY / "Nagle" value of this connection
@@ -209,18 +210,19 @@ pub(crate) enum Opcode {
     /// offset | Contents
     /// =======|=========
     ///      0 | 1 indicating error
-    ///      1 | 1 indicating error (duplicated)
-    ///      2 | 1 indicating error (duplicated)
-    ///      3 | 1 indicating error (duplicated)
-    ///      4 | Error code
+    ///      1 | Error code
     StdUdpBind = 40,
 
-    //StdUdpClose = 41,
+    /// Close the UDP connection. The connection ID is specified in the upper 16 bits
+    /// of the opcode. This may be any kind of message (scalar, blockingscalar, memory,
+    /// etc.)
+    StdUdpClose = 41,
 
-    /// Receives data from the specified TCP Connection.
+    /// Receives data from the specified UDP Connection.
     ///
-    /// - The UDP connection number is passed in the upper 16 bits of the opcode.
-    /// - The arguments are passed as follows:
+    /// - The UDP connection number (fd) is passed in the upper 16 bits of the opcode.
+    /// # Argumesnts
+    ///  The arguments are passed as follows:
     ///  u8 array
     /// -------|---------
     /// offset | Contents
@@ -229,7 +231,8 @@ pub(crate) enum Opcode {
     ///      1 | bytes:u64 LSB timeout in ms
     ///      ...
     ///      8 | bytes:u64 LSB timeout in ms
-    /// - The return buffer is the `buf` parameter, which is split as follows:
+    /// # Returns
+    /// The return buffer is the `buf` parameter, which is split as follows:
     ///  u8 array
     /// -------|---------
     /// offset | Contents
@@ -251,9 +254,36 @@ pub(crate) enum Opcode {
     /// - The `valid` and `offset` parameters are not used.
     StdUdpRx = 42,
 
-    //StdUdpTx = 43,
-    //StdUdpSetTtl = 44,
-    //StdUdpGetTtl = 45,
+    /// Send UDP data to a remote host
+    ///
+    /// - The UDP connection number (fd) is passed in the upper 16 bits of the opcode.
+    /// - The `offset` parameter is not used.
+    /// - The `valid` parameter is not used.
+    /// # Arguments
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | port:u16, low byte
+    ///      1 | port:u16, high byte
+    ///      2 | address type -- 4 = ipv4, 6 = ipv6, 0 = invalid/err
+    ///      3 | LSB ip address
+    ///      ...
+    ///      6 | MSB ipv4 address
+    ///      ...
+    ///      18| MSW ipv6 address
+    ///      19| len:u16, low byte
+    ///      20| len:u16, high byte
+    ///      21| beginning of &data[..len] to transmit
+    /// # Returns
+    ///
+    /// u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 1 indicating error, 0 indicating success
+    ///      1 | Error code (only valid on error)
+    StdUdpTx = 43,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]

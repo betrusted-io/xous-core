@@ -593,10 +593,17 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let socket = sockets.get::<TcpSocket>(*connection);
+                    let args = msg.body.scalar_message().unwrap();
+                    let limit = if args.arg4 == 1 {
+                        let socket = sockets.get::<UdpSocket>(*connection);
+                        socket.hop_limit().unwrap_or(64) as usize
+                    } else {
+                        let socket = sockets.get::<TcpSocket>(*connection);
+                        socket.hop_limit().unwrap_or(64) as usize
+                    };
                     xous::return_scalar(
                         msg.sender,
-                        socket.hop_limit().unwrap_or_default() as usize,
+                        limit,
                     )
                     .ok();
                 } else {
@@ -619,14 +626,19 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let mut socket = sockets.get::<TcpSocket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
-                    let hop_limit = if args.arg1 == 0 {
+                    let hop_limit = if (args.arg1 == 0) || (args.arg1 > 255) {
                         None
                     } else {
                         Some(args.arg1 as u8)
                     };
-                    socket.set_hop_limit(hop_limit);
+                    if args.arg4 == 1 {
+                        let mut socket = sockets.get::<UdpSocket>(*connection);
+                        socket.set_hop_limit(hop_limit);
+                    } else {
+                        let mut socket = sockets.get::<TcpSocket>(*connection);
+                        socket.set_hop_limit(hop_limit);
+                    }
                     xous::return_scalar(msg.sender, 0).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
@@ -1021,6 +1033,42 @@ fn xmain() -> ! {
                 );
             }
 
+            Some(Opcode::StdUdpTx) => {
+                let pid = msg.sender.pid();
+                std_udp_tx(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+            }
+
+            Some(Opcode::StdUdpClose) => {
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
+                    } else {
+                        udp_failure(msg, NetError::Invalid);
+                        continue;
+                    }
+                } else {
+                    udp_failure(msg, NetError::Invalid);
+                    continue;
+                };
+                sockets.get::<UdpSocket>(handle).close();
+                sockets.remove(handle);
+                if let Some(response) = msg.body.memory_message_mut() {
+                    response.buf.as_slice_mut::<u8>()[0] = 0;
+                } else if !msg.body.is_blocking() && msg.body.is_blocking() {
+                    xous::return_scalar(msg.sender, 0).ok();
+                }
+            }
+
             Some(Opcode::UdpBind) => {
                 let mut buf = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
@@ -1173,38 +1221,6 @@ fn xmain() -> ! {
                     _ => buf.replace(NetMemResponse::Invalid).unwrap(),
                 }
             }
-            Some(Opcode::UdpSetTtl) => msg_scalar_unpack!(msg, ttl, port, _, _, {
-                match udp_handles.get_mut(&(port as u16)) {
-                    Some(udpstate) => {
-                        let mut socket = sockets.get::<UdpSocket>(udpstate.handle);
-                        let checked_ttl = if ttl > 255 || ttl == 0 { 64 } else { ttl as u8 };
-                        socket.set_hop_limit(Some(checked_ttl));
-                    }
-                    None => {
-                        log::error!(
-                            "Set TTL message received, but no port was bound! port {} ttl {}",
-                            port,
-                            ttl
-                        );
-                    }
-                }
-            }),
-            Some(Opcode::UdpGetTtl) => msg_blocking_scalar_unpack!(msg, port, _, _, _, {
-                match udp_handles.get_mut(&(port as u16)) {
-                    Some(udpstate) => {
-                        let socket = sockets.get::<UdpSocket>(udpstate.handle);
-                        let ttl = socket.hop_limit().unwrap_or(64); // 64 is the value used by smoltcp if hop limit isn't set
-                        xous::return_scalar(msg.sender, ttl as usize).expect("couldn't return TTL");
-                    }
-                    None => {
-                        log::error!(
-                            "Set TTL message received, but no port was bound! port {}",
-                            port
-                        );
-                        xous::return_scalar(msg.sender, usize::MAX).expect("couldn't return TTL");
-                    }
-                }
-            }),
 
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
@@ -1712,23 +1728,41 @@ fn xmain() -> ! {
 
                     // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
-                        udp_rx_failure(msg, NetError::TimedOut);
+                        udp_failure(msg, NetError::TimedOut);
                         continue;
                     }
 
                     // Extract the receive data here; the `msg` will go out of scope at this point.
-                    match socket.recv() {
-                        Ok((data, endpoint)) => {
-                            udp_rx_success(
-                                // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
-                                msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
-                                data,
-                                endpoint
-                            );
+                    let do_peek = msg.body.memory_message().unwrap().offset.is_some();
+                    if do_peek {
+                        match socket.peek() {
+                            Ok((data, endpoint)) => {
+                                udp_rx_success(
+                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
+                                    data,
+                                    *endpoint // have to duplicate the code between peek and recv because of this type difference
+                                );
+                            }
+                            Err(e) => {
+                                log::error!("unable to receive: {:?}", e);
+                                udp_failure(msg, NetError::LibraryError);
+                            }
                         }
-                        Err(e) => {
-                            log::error!("unable to receive: {:?}", e);
-                            udp_rx_failure(msg, NetError::LibraryError);
+                    } else {
+                        match socket.recv() {
+                            Ok((data, endpoint)) => {
+                                udp_rx_success(
+                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
+                                    data,
+                                    endpoint
+                                );
+                            }
+                            Err(e) => {
+                                log::error!("unable to receive: {:?}", e);
+                                udp_failure(msg, NetError::LibraryError);
+                            }
                         }
                     }
                 }
