@@ -117,6 +117,7 @@ for examples of idiomatic ways to write code for Xous.
 - `pddb` major bug fixed where zero-length file allocations were not being committed to disk.
 - `TcpStream` is now part of `libstd`
 - `UdpSocket` is now part of `libstd`. DNS and all test routines switched over to `libstd`, and all prior scaffolding implementations have been removed.
+- `NetPump` call added after Tx (UDP/TCP) and connect (TCP) events. This should improve the transmit latency.
 - `Duration` and `Instant` are now part of `libstd`
 - Timezone and time setting has been refactored. The HW RTC is now simply treated as a seconds counter since arbitrary time in the past; the BCD data that the hardware device tries to return is mapped into seconds since epoch. On first boot or invalid RTC detection, a random time is picked since epoch as the offset, between 1-10 years, to provide some deniability about how long the device has been used.
 - One can now switch the local time by just updating the Timezone offset. The actual timezone offsets are not dynamically updated with DST; one has to explicitly program in the offset from UTC upon daylight savings.
