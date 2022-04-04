@@ -35,12 +35,12 @@ pub const MIN_EC_REV: u32 = 0x00_09_06_00;
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 #[repr(C)]
 pub(crate) enum Opcode {
-    /// Calls for UDP implementation
-    UdpBind = 0,
-    UdpClose = 1,
-    UdpTx = 2,
-    UdpSetTtl = 3,
-    UdpGetTtl = 4,
+    /// Calls for UDP implementation (now deprecated to libstd)
+    //UdpBind = 0,
+    //UdpClose = 1,
+    //UdpTx = 2,
+    //UdpSetTtl = 3,
+    //UdpGetTtl = 4,
 
     /// Calls for TCP implementation
     TcpConnect = 5,
@@ -152,9 +152,12 @@ pub(crate) enum Opcode {
     /// is returned as part of the `Valid` parameter. This is not blocking.
     StdTcpPeek = 32,
 
-    /// Receives data from the specified TCP Connection. The TCP connection number is
-    /// passed in the upper 16 bits of the opcode, and the number of received bytes
-    /// is returned as part of the `Valid` parameter.
+    /// Receives data from the specified TCP Connection.
+    ///
+    /// - The TCP connection number is passed in the upper 16 bits of the opcode.
+    /// - The return buffer is the `buf` parameter
+    /// - The read timeout is passed as the `offset` parameter.
+    /// - The number of received bytes is returned as part of the `valid` parameter.
     StdTcpRx = 33,
 
     /// Close the TCP connection. The connection ID is specified in the upper 16 bits
@@ -169,6 +172,7 @@ pub(crate) enum Opcode {
     StdGetTtl = 36,
 
     /// BlockingScalar call to set the maximum hop count of this connection
+    /// arg4: 0 => TCP, 1 => UDP
     StdSetTtl = 37,
 
     /// BlockingScalar call to get the NODELAY / "Nagle" value of this connection
@@ -176,6 +180,110 @@ pub(crate) enum Opcode {
 
     /// BlockingScalar call to set the NODELAY / "Nagle" value of this connection
     StdSetNodelay = 39,
+
+    /// Bind a UDP listener to the specified SocketAddr
+    ///
+    /// # Arguments
+    ///
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | port number, low byte
+    ///      1 | port number, high byte
+    ///      2 | address type -- 4 = ipv4, 6 = ipv6
+    ///    ... | remaining bytes are the address
+    ///
+    /// # Returns
+    ///
+    /// u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 0 indicating success
+    ///      1 | Connection index
+    ///
+    /// # Errors
+    ///
+    /// u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 1 indicating error
+    ///      1 | Error code
+    StdUdpBind = 40,
+
+    /// Close the UDP connection. The connection ID is specified in the upper 16 bits
+    /// of the opcode. This may be any kind of message (scalar, blockingscalar, memory,
+    /// etc.)
+    StdUdpClose = 41,
+
+    /// Receives data from the specified UDP Connection.
+    ///
+    /// - The UDP connection number (fd) is passed in the upper 16 bits of the opcode.
+    /// # Argumesnts
+    ///  The arguments are passed as follows:
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 0 indicates nonblocking; 1 indicates blocking
+    ///      1 | bytes:u64 LSB timeout in ms
+    ///      ...
+    ///      8 | bytes:u64 LSB timeout in ms
+    /// # Returns
+    /// The return buffer is the `buf` parameter, which is split as follows:
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 0 indicates success; 1 indicates error
+    ///      1 | bytes:u16 received, low byte
+    ///      2 | bytes:u16 received, high byte
+    ///      3 | address type -- 4 = ipv4, 6 = ipv6, 0 = invalid/err
+    ///      4 | LSB ip address
+    ///      ...
+    ///      7 | MSB ipv4 address
+    ///      ...
+    ///      19| MSW ipv6 address
+    ///      20| remote port:u16, low byte
+    ///      21| remote port:u16, high byte
+    ///      22| received data byte 0
+    ///      ...
+    ///      22+BUFLEN-1| max last data byte (nominally equal to NET_MTU)
+    /// - The `valid` and `offset` parameters are not used.
+    StdUdpRx = 42,
+
+    /// Send UDP data to a remote host
+    ///
+    /// - The UDP connection number (fd) is passed in the upper 16 bits of the opcode.
+    /// - The `offset` parameter is not used.
+    /// - The `valid` parameter is not used.
+    /// # Arguments
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | port:u16, low byte
+    ///      1 | port:u16, high byte
+    ///      2 | address type -- 4 = ipv4, 6 = ipv6, 0 = invalid/err
+    ///      3 | LSB ip address
+    ///      ...
+    ///      6 | MSB ipv4 address
+    ///      ...
+    ///      18| MSW ipv6 address
+    ///      19| len:u16, low byte
+    ///      20| len:u16, high byte
+    ///      21| beginning of &data[..len] to transmit
+    /// # Returns
+    ///
+    /// u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 1 indicating error, 0 indicating success
+    ///      1 | Error code (only valid on error)
+    StdUdpTx = 43,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
@@ -250,6 +358,7 @@ pub enum NetError {
     LibraryError = 6,
     // AlreadyUsed = 7,
     TimedOut = 8,
+    WouldBlock = 9,
 }
 
 /////// a bunch of structures are re-derived here so we can infer `rkyv` traits on them

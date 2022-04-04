@@ -166,8 +166,8 @@ fn xmain() -> ! {
     // layout: 336 px wide
     // 0                   150 150 200
     // Feb 05 15:00 (00:06:23) xxxx     3.72V/-100mA/99%
-    const CPU_BAR_WIDTH: i16 = 48;
-    const CPU_BAR_OFFSET: i16 = 4;
+    const CPU_BAR_WIDTH: i16 = 46;
+    const CPU_BAR_OFFSET: i16 = 8;
     let time_rect = Rectangle::new_with_style(
         Point::new(0, 0),
         Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1 + CPU_BAR_OFFSET, screensize.y / 2 - 1),
