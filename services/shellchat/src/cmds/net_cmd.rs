@@ -6,17 +6,14 @@ use net::XousServerId;
 use net::{Duration, NetPingCallback};
 use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::{SocketAddr, IpAddr, TcpStream};
+use std::net::{IpAddr, TcpStream};
 use std::io::Write;
 use std::io::Read;
 use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
 
 pub struct NetCmd {
-    udp: Option<net::UdpSocket>,
-    udp_clone: Option<net::UdpSocket>,
     callback_id: Option<u32>,
     callback_conn: u32,
-    udp_count: u32,
     dns: Dns,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     ping: Option<net::Ping>,
@@ -24,11 +21,8 @@ pub struct NetCmd {
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         NetCmd {
-            udp: None,
-            udp_clone: None,
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
-            udp_count: 0,
             dns: dns::Dns::new(&xns).unwrap(),
             #[cfg(any(target_os = "none", target_os = "xous"))]
             ping: None,
@@ -42,7 +36,6 @@ pub(crate) enum NetCmdDispatch {
     UdpTest2 =  0x1_0001,
 }
 
-pub const UDP_TEST_SIZE: usize = 64;
 impl<'a> ShellCmdApi<'a> for NetCmd {
     cmd_api!(net); // inserts boilerplate for command API
 
@@ -205,7 +198,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     let socket = if let Some(tok_str) = tokens.next() {
                         tok_str
                     } else {
-                        write!(ret, "Usage: net udp precursor_ip:6502 [sender_ip]:6502, where precursor_ip is the IP address of the device itself").unwrap();
+                        // you could also pass e.g. 127.0.0.1 to check that udp doesn't respond to remote pings, etc.
+                        write!(ret, "Usage: net udp 0.0.0.0:6502 [sender_ip:6502], where sender_ip is only necessary if you want the echo-back").unwrap();
                         return Ok(Some(ret));
                     }.to_string();
                     let (response_addr, do_response) = if let Some(r) = tokens.next() {
@@ -238,11 +232,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     let mut buf = [0u8; NET_MTU];
                                     match udp.recv_from(&mut buf) {
                                         Ok((bytes, addr)) => {
-                                            write!(s, "UDP server {} rx {} bytes: {:?}: {}\r\n", index, bytes, addr, std::str::from_utf8(&buf[..bytes]).unwrap()).unwrap();
+                                            write!(s, "UDP server {} rx {} bytes: {:?}: {}", index, bytes, addr, std::str::from_utf8(&buf[..bytes]).unwrap()).unwrap();
                                             s.send(self_cid).unwrap();
                                             if do_response {
                                                 match udp.send_to(
-                                                    format!("Server {} received {} bytes", index, bytes).as_bytes(),
+                                                    format!("Server {} received {} bytes\r\n", index, bytes).as_bytes(),
                                                     &response,
                                                 ) {
                                                     Ok(len) => log::info!("server {} sent response of {} bytes", index, len),
@@ -346,70 +340,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 let dispatch = *arg1;
                 match FromPrimitive::from_usize(dispatch) {
                     Some(NetCmdDispatch::UdpTest1) => {
-                        if let Some(udp_socket) = &mut self.udp {
-                            let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
-                            match udp_socket.recv_from(&mut pkt) {
-                                Ok((len, addr)) => {
-                                    write!(ret, "UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
-                                    log::info!("UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
-                                    self.udp_count += 1;
-
-                                    if addr.ip() != IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)) {
-                                        let response_addr = SocketAddr::new(
-                                            addr.ip(),
-                                            udp_socket.socket_addr().unwrap().port()
-                                        );
-                                        match udp_socket.send_to(
-                                            format!("Received {} packets\n\r", self.udp_count).as_bytes(),
-                                            &response_addr
-                                        ) {
-                                            Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                            Err(_) => write!(ret, "UDP tx err").unwrap(),
-                                        }
-                                    } else {
-                                        log::info!("localhost UDP origin detected (are you testing in hosted mode?), not reflecting packet as this would create a loop");
-                                    }
-                                },
-                                Err(e) => {
-                                    log::error!("Net UDP error: {:?}", e);
-                                    write!(ret, "UDP receive error: {:?}", e).unwrap();
-                                }
-                            }
-                        } else {
-                            log::error!("Got NetCmd callback from uninitialized socket");
-                            write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
-                        }
+                        // Not used after udp to libstd, but left in case we want to repurpose
                     },
                     Some(NetCmdDispatch::UdpTest2) => {
-                        if let Some(udp_socket) = &mut self.udp_clone {
-                            let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
-                            match udp_socket.recv_from(&mut pkt) {
-                                Ok((len, addr)) => {
-                                    write!(ret, "Clone UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
-                                    log::info!("Clone UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
-                                    self.udp_count += 1;
-
-                                    let response_addr = SocketAddr::new(
-                                        addr.ip(),
-                                        udp_socket.socket_addr().unwrap().port()
-                                    );
-                                    match udp_socket.send_to(
-                                        format!("Clone received {} packets\n\r", self.udp_count).as_bytes(),
-                                        &response_addr
-                                    ) {
-                                        Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                        Err(e) => write!(ret, "UDP tx err: {:?}", e).unwrap(),
-                                    }
-                                },
-                                Err(e) => {
-                                    log::error!("Net UDP error: {:?}", e);
-                                    write!(ret, "UDP receive error: {:?}", e).unwrap();
-                                }
-                            }
-                        } else {
-                            log::error!("Got NetCmd callback from uninitialized socket");
-                            write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
-                        }
+                        // Not used after udp to libstd
                     },
                     None => {
                         // rebind the scalar args to the Ping convention

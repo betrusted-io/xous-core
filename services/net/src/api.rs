@@ -36,9 +36,9 @@ pub const MIN_EC_REV: u32 = 0x00_09_06_00;
 #[repr(C)]
 pub(crate) enum Opcode {
     /// Calls for UDP implementation (now deprecated to libstd)
-    UdpBind = 0,
-    UdpClose = 1,
-    UdpTx = 2,
+    //UdpBind = 0,
+    //UdpClose = 1,
+    //UdpTx = 2,
     //UdpSetTtl = 3,
     //UdpGetTtl = 4,
 
