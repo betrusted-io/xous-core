@@ -1049,6 +1049,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdUdpClose) => {
+                log::debug!("StdUdpClose");
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
                 let handle = if let Some(connection) = process_sockets
@@ -1070,7 +1071,7 @@ fn xmain() -> ! {
                 sockets.remove(handle);
                 if let Some(response) = msg.body.memory_message_mut() {
                     response.buf.as_slice_mut::<u8>()[0] = 0;
-                } else if !msg.body.is_blocking() && msg.body.is_blocking() {
+                } else if msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
             }
@@ -1560,6 +1561,7 @@ fn xmain() -> ! {
                     } else {
                         match socket.recv() {
                             Ok((data, endpoint)) => {
+                                log::debug!("netpump udp rx");
                                 udp_rx_success(
                                     // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
                                     msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),

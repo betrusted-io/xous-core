@@ -33,6 +33,9 @@ use locales::t;
 use chrono::prelude::*;
 use xous::Message;
 use gam::modal::*;
+// ntp imports
+use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 
 /// This is a "well known name" used by `libstd` to connect to the time server
 /// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
@@ -95,6 +98,49 @@ pub(crate) enum TimeUxOp {
     SetTime,
     SetTimeZone,
     Quit,
+}
+#[derive(Copy, Clone, Default)]
+struct StdTimestampGen {
+    duration: std::time::Duration,
+}
+impl NtpTimestampGenerator for StdTimestampGen {
+    fn init(&mut self) {
+        self.duration = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap();
+    }
+
+    fn timestamp_sec(&self) -> u64 {
+        self.duration.as_secs()
+    }
+
+    fn timestamp_subsec_micros(&self) -> u32 {
+        self.duration.subsec_micros()
+    }
+}
+
+
+#[derive(Debug)]
+struct UdpSocketWrapper(UdpSocket);
+
+impl NtpUdpSocket for UdpSocketWrapper {
+    fn send_to<T: ToSocketAddrs>(
+        &self,
+        buf: &[u8],
+        addr: T,
+    ) -> Result<usize> {
+        match self.0.send_to(buf, addr) {
+            Ok(usize) => Ok(usize),
+            Err(_) => Err(Error::Network),
+        }
+    }
+
+    fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)> {
+        match self.0.recv_from(buf) {
+            Ok((size, addr)) => Ok((size, addr)),
+            Err(_) => Err(Error::Network),
+        }
+    }
 }
 
 pub fn start_time_server() {
@@ -440,6 +486,7 @@ pub fn start_time_ux(sid: xous::SID) {
             let modals = modals::Modals::new(&xns).unwrap();
             let timeserver_cid = xous::connect(xous::SID::from_bytes(crate::time::TIME_SERVER_PUBLIC).unwrap()).unwrap();
             let pddb_poller = pddb::PddbMountPoller::new();
+            let trng = trng::Trng::new(&xns).unwrap();
 
             loop {
                 let msg = xous::receive_message(sid).unwrap();
@@ -484,6 +531,51 @@ pub fn start_time_ux(sid: xous::SID) {
                                     0, 0,
                                 )
                             ).expect("couldn't set timezone");
+                        }
+
+                        // see if we want to try to use NTP or not
+                        modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                        modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                        let mut try_ntp = true;
+                        match modals.get_radiobutton(t!("rtc.try_ntp", xous::LANG)) {
+                            Ok(selection) => {
+                                if selection == t!("pddb.no", xous::LANG) {
+                                    try_ntp = false;
+                                }
+                            },
+                            _ => log::error!("get_radiobutton failed"),
+                        }
+                        if try_ntp {
+                            let local_port = (trng.get_u32().unwrap() % 16384 + 49152) as u16;
+                            let socket_addr = SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), local_port);
+                            let socket = UdpSocket::bind(socket_addr).expect("Unable to create UDP socket");
+                            log::debug!("NTP rx socket created {:?}", socket);
+                            socket
+                                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                                .expect("Unable to set UDP socket read timeout");
+                            let sock_wrapper = UdpSocketWrapper(socket);
+                            let ntp_context = NtpContext::new(StdTimestampGen::default());
+                            let result = sntpc::get_time("time.google.com:123", sock_wrapper, ntp_context);
+                            match result {
+                                Ok(time) => {
+                                    log::info!("Got NTP time: {}.{}", time.sec(), time.sec_fraction());
+                                    let current_time = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0) + chrono::Duration::seconds(time.sec() as i64);
+                                    log::info!("Setting UTC time: {:?}", current_time.to_string());
+                                    xous::send_message(timeserver_cid,
+                                        Message::new_scalar(
+                                            crate::time::TimeOp::SetUtcTimeMs.to_usize().unwrap(),
+                                            ((current_time.timestamp_millis() as u64) >> 32) as usize,
+                                            (current_time.timestamp_millis() as u64 & 0xFFFF_FFFF) as usize,
+                                            0, 0,
+                                        )
+                                    ).expect("couldn't set time");
+                                    continue;
+                                }
+                                Err(err) => {
+                                    log::info!("Err: {:?}", err);
+                                    modals.show_notification(t!("rtc.ntp_fail", xous::LANG)).expect("couldn't show NTP error");
+                                },
+                            }
                         }
 
                         let secs: u8;

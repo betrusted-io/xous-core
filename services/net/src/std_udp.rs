@@ -62,7 +62,7 @@ pub(crate) fn std_udp_bind(
 
     let body = msg.body.memory_message_mut().unwrap();
     let bfr = body.buf.as_slice_mut::<u8>();
-    log::trace!("successfully connected: {}", idx);
+    log::trace!("successfully connected: {} -> {:?}:{}", idx, address, local_port);
     bfr[0] = 0;
     bfr[1] = idx;
 }
@@ -126,6 +126,7 @@ pub(crate) fn std_udp_rx(
         } else {
             match socket.recv() {
                 Ok((data, endpoint)) => {
+                    log::debug!("immediate udp rx");
                     udp_rx_success(body.buf.as_slice_mut(), data, endpoint);
                 }
                 Err(e) => {
@@ -190,7 +191,7 @@ pub(crate) fn std_udp_tx(
     };
     let len = u16::from_le_bytes([bytes[19], bytes[20]]);
     // attempt the tx
-    log::trace!("udp tx to fd {}", connection_handle_index);
+    log::debug!("udp tx to fd {} -> {:?}:{} {:?}", connection_handle_index, address, remote_port, &bytes[21..21 + len as usize]);
     let mut socket = sockets.get::<UdpSocket>(*handle);
     match socket.send_slice(&bytes[21..21 + len as usize], IpEndpoint::new(address, remote_port)) {
         Ok(_) => {
@@ -205,6 +206,7 @@ pub(crate) fn std_udp_tx(
 }
 
 pub(crate) fn udp_rx_success(buf: &mut [u8], rx: &[u8], ep: IpEndpoint) {
+    log::debug!("udp_rx: {:?} -> {:x?}", ep, rx);
     buf[0] = 0;
     let rx_len = (rx.len() as u16).to_le_bytes();
     buf[1] = rx_len[0];
@@ -235,6 +237,7 @@ pub(crate) fn udp_rx_success(buf: &mut [u8], rx: &[u8], ep: IpEndpoint) {
 }
 
 pub(crate) fn udp_failure(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
+    log::trace!("udp_failure: {:?}", code);
     // If it's not a memory message, don't fill in the return information.
     let body = match env.body.memory_message_mut() {
         None => {

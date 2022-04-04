@@ -164,7 +164,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
-        log::debug!("got msg: {:?}", msg);
+        log::trace!("got msg: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ConnectionManagerOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                 // this doesn't follow the usual "suspender" pattern. In fact, we don't do anything special on suspend;
