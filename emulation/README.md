@@ -4,7 +4,7 @@ Platonic is an ideal system useful for developing an operating system.  It does 
 
 ## Usage
 
-For emulation, you will need to install Renode. Then, run `renode` on `xous-release.resc`. For example:
+For emulation, you will need to install Renode (use the [nightly](https://dl.antmicro.com/projects/renode/builds/) to get `SPI.NORFlash` peripheral support). Then, run `renode` on `xous-release.resc`. For example:
 
 ```
 renode emulation/xous-resc.repl
