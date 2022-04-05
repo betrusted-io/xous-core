@@ -547,7 +547,7 @@ fn xmain() -> ! {
                 sockets.remove(handle);
                 if let Some(response) = msg.body.memory_message_mut() {
                     response.buf.as_slice_mut::<u8>()[0] = 0;
-                } else if !msg.body.is_blocking() && msg.body.is_blocking() {
+                } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
             }
@@ -1071,7 +1071,7 @@ fn xmain() -> ! {
                 sockets.remove(handle);
                 if let Some(response) = msg.body.memory_message_mut() {
                     response.buf.as_slice_mut::<u8>()[0] = 0;
-                } else if msg.body.is_blocking() {
+                } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
             }
