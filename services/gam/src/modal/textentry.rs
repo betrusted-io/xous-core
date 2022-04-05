@@ -383,8 +383,11 @@ impl ActionApi for TextEntry {
                 payloads.0[..self.max_field_amount as usize].copy_from_slice(&self.action_payloads[..self.max_field_amount as usize]);
                 let buf = Buffer::into_buf(payloads).expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
-                payload.volatile_clear(); // ensure the local copy of text is zero'd out
-                // TODO: zero out EVERYTHING here!
+                
+                for payload in self.action_payloads.iter_mut() {
+                    payload.volatile_clear();
+                }
+
                 return (None, true)
             }
             '↑' => {
