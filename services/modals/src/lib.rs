@@ -32,8 +32,9 @@ impl Modals {
         prompt: &str,
         maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
         maybe_validator_op: Option<u32>,
+        placeholder: Option<String>
     ) -> Result<TextEntryPayload, xous::Error> {
-        match self.get_text_multi(prompt, maybe_validator, maybe_validator_op, 1, None) {
+        match self.get_text_multi(prompt, maybe_validator, maybe_validator_op, 1, Some(vec![placeholder])) {
             Ok(res) => {
                 return Ok(res.first())
             },

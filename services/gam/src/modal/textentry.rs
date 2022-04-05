@@ -147,7 +147,7 @@ impl ActionApi for TextEntry {
                 _ => current_height + at_height,
             };
 
-            if index as i16 == self.selected_field {
+            if index as i16 == self.selected_field && payloads.len() > 1 {
                 // draw the dot
                 let mut tv = TextView::new(
                     modal.canvas,
@@ -163,7 +163,10 @@ impl ActionApi for TextEntry {
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
             }
 
-            let left_text_margin = modal.margin + 15;
+            let left_text_margin = match payloads.len() {
+                1 => modal.margin,
+                _ => modal.margin + 15,
+            };
 
             // draw the currently entered text
             let mut tv = TextView::new(

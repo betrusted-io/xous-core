@@ -471,7 +471,7 @@ pub fn start_time_ux(sid: xous::SID) {
                         if !tz_set {
                             let tz = modals.get_text(
                                 t!("rtc.timezone", xous::LANG),
-                                Some(tz_ux_validator), None
+                                Some(tz_ux_validator), None, None
                             ).expect("couldn't get timezone").as_str()
                             .parse::<f32>().expect("pre-validated input failed to re-parse!");
                             log::info!("got tz offset {}", tz);
@@ -495,42 +495,42 @@ pub fn start_time_ux(sid: xous::SID) {
 
                         months = modals.get_text(
                             t!("rtc.month", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap())
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap()), None,
                         ).expect("couldn't get month").as_str()
                         .parse::<u8>().expect("pre-validated input failed to re-parse!");
                         log::debug!("got months {}", months);
 
                         days = modals.get_text(
                             t!("rtc.day", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap())
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap()), None
                         ).expect("couldn't get month").as_str()
                         .parse::<u8>().expect("pre-validated input failed to re-parse!");
                         log::debug!("got days {}", days);
 
                         years = modals.get_text(
                             t!("rtc.year", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap())
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap()), None
                         ).expect("couldn't get month").as_str()
                         .parse::<u8>().expect("pre-validated input failed to re-parse!");
                         log::debug!("got years {}", years);
 
                         hours = modals.get_text(
                             t!("rtc.hour", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap())
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap()), None
                         ).expect("couldn't get hour").as_str()
                         .parse::<u8>().expect("pre-validated input failed to re-parse!");
                         log::debug!("got hours {}", hours);
 
                         mins = modals.get_text(
                             t!("rtc.minute", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap())
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap()), None
                         ).expect("couldn't get minutes").as_str()
                         .parse::<u8>().expect("pre-validated input failed to re-parse!");
                         log::debug!("got minutes {}", mins);
 
                         secs = modals.get_text(
                             t!("rtc.seconds", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap())
+                            Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap()), None
                         ).expect("couldn't get seconds").as_str()
                         .parse::<u8>().expect("pre-validated input failed to re-parse!");
                         log::debug!("got seconds {}", secs);
@@ -554,7 +554,7 @@ pub fn start_time_ux(sid: xous::SID) {
                         }
                         let tz = modals.get_text(
                             t!("rtc.timezone", xous::LANG),
-                            Some(tz_ux_validator), None
+                            Some(tz_ux_validator), None, None
                         ).expect("couldn't get timezone").as_str()
                         .parse::<f32>().expect("pre-validated input failed to re-parse!");
                         log::info!("got tz offset {}", tz);

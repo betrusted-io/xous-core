@@ -81,7 +81,7 @@ pub(crate) fn spawn_test() {
 
             // 2. test the modal dialog box function
             log::info!("test text input");
-            match modals.get_text("Test input", Some(test_validator), None) {
+            match modals.get_text("Test input", Some(test_validator), None, None) {
                 Ok(text) => {
                     log::info!("Input: {}", text.content);
                 }
