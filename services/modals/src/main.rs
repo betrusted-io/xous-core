@@ -146,7 +146,7 @@ fn xmain() -> ! {
                                 renderer_modal.modify(
                                     Some(ActionType::TextEntry({
                                         let mut ta = text_action.clone();
-                                        ta.reset_action_payloads(config.fields);
+                                        ta.reset_action_payloads(config.fields, config.placeholders);
 
                                         ta
                                     })),

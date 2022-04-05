@@ -23,6 +23,7 @@ pub struct ManagedListItem {
     pub token: [u32; 4],
     pub item: ItemName,
 }
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithTextResponse {
     pub token: [u32; 4],
@@ -33,7 +34,10 @@ pub struct ManagedPromptWithTextResponse {
     pub validator_op: u32,
     /// the amount of fields to read
     pub fields: u32,
+    /// placeholders
+    pub placeholders: Option<[Option<xous_ipc::String::<256>>; 10]>,
 }
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedNotification {
     pub token: [u32; 4],

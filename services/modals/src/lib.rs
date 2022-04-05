@@ -33,7 +33,7 @@ impl Modals {
         maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
         maybe_validator_op: Option<u32>,
     ) -> Result<TextEntryPayload, xous::Error> {
-        match self.get_text_multi(prompt, maybe_validator, maybe_validator_op, 1) {
+        match self.get_text_multi(prompt, maybe_validator, maybe_validator_op, 1, None) {
             Ok(res) => {
                 return Ok(res.first())
             },
@@ -46,6 +46,7 @@ impl Modals {
         maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
         maybe_validator_op: Option<u32>,
         fields: u32,
+        placeholders: Option<Vec<Option<String>>>,
     ) -> Result<TextEntryPayloads, xous::Error> {
         self.lock();
         let validator = if let Some(validator) = maybe_validator {
@@ -80,12 +81,40 @@ impl Modals {
         } else {
             None
         };
+
+        let mut final_placeholders: Option<[Option<xous_ipc::String<256>>; 10]> = None;
+
+        match placeholders {
+            Some(placeholders) => {
+                let mut pl:[Option<xous_ipc::String<256>>; 10] = Default::default();
+                 //final_placeholders = Some(Default::default());
+                
+                if fields != placeholders.len() as u32 {
+                    log::warn!("can't have more fields than placeholders");
+                    return Err(xous::Error::UnknownError);
+                }
+        
+                for (index, placeholder) in placeholders.iter().enumerate() {
+                    match placeholder {
+                        Some(string) => {
+                            pl[index] = Some(xous_ipc::String::from_str(&string))
+                        },
+                        None => pl[index] = None,
+                    }
+                }
+
+                final_placeholders = Some(pl)
+            }
+            None => (),
+        }
+
         let spec = ManagedPromptWithTextResponse {
             token: self.token,
             prompt: xous_ipc::String::from_str(prompt),
             validator,
             validator_op: maybe_validator_op.unwrap_or(0),
             fields: fields,
+            placeholders: final_placeholders,
         };
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithTextResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;

@@ -61,8 +61,6 @@ impl Default for TextEntry {
     }
 }
 
-
-
 impl TextEntry {
     pub fn new(
         is_password: bool,
@@ -87,8 +85,16 @@ impl TextEntry {
         }
     }
 
-    pub fn reset_action_payloads(&mut self, fields: u32) { 
-        self.action_payloads = vec![TextEntryPayload::default(); fields as usize];
+    pub fn reset_action_payloads(&mut self, fields: u32, placeholders: Option<[Option<xous_ipc::String<256>>; 10]>) { 
+        let mut payload = vec![TextEntryPayload::default(); fields as usize];
+
+        if let Some(placeholders) = placeholders {
+            for (index, element) in payload.iter_mut().enumerate() {
+                element.placeholder = placeholders[index];
+            }
+        }
+        
+        self.action_payloads = payload;
         self.max_field_amount = fields;
     }
 }
@@ -141,11 +147,29 @@ impl ActionApi for TextEntry {
                 _ => current_height + at_height,
             };
 
+            if index as i16 == self.selected_field {
+                // draw the dot
+                let mut tv = TextView::new(
+                    modal.canvas,
+                    TextBounds::BoundingBox(Rectangle::new(
+                        Point::new(modal.margin, current_height),
+                        Point::new(modal.canvas_width - modal.margin, current_height + modal.line_height))
+                ));
+
+                tv.text.clear();
+                tv.bounds_computed = None;
+                tv.draw_border = false;
+                write!(tv, "•").unwrap();
+                modal.gam.post_textview(&mut tv).expect("couldn't post tv");
+            }
+
+            let left_text_margin = modal.margin + 15;
+
             // draw the currently entered text
             let mut tv = TextView::new(
                 modal.canvas,
                 TextBounds::BoundingBox(Rectangle::new(
-                    Point::new(modal.margin, current_height),
+                    Point::new(left_text_margin, current_height),
                     Point::new(modal.canvas_width - modal.margin, current_height + modal.line_height))
             ));
             tv.ellipsis = true;
@@ -153,7 +177,11 @@ impl ActionApi for TextEntry {
             tv.style = if self.is_password {
                 GlyphStyle::Monospace
             } else {
-                modal.style
+                if payload.placeholder.is_some() && payload.content.len().is_zero() {
+                    GlyphStyle::Small
+                } else {
+                    modal.style
+                }
             };
             tv.margin = Point::new(0, 0);
             tv.draw_border = false;
@@ -163,11 +191,20 @@ impl ActionApi for TextEntry {
             // TODO: condense the "above MAX_CHARS" chars length path a bit -- written out "the dumb way" just to reason out the logic a bit
             match self.visibility {
                 TextEntryVisibility::Visible => {
-                    log::trace!("action payload: {}", payload.content.as_str().unwrap());
+                    let content = {
+                        if payload.placeholder.is_some() && payload.content.len().is_zero() {
+                            let placeholder_content = payload.placeholder.unwrap();
+                            placeholder_content.to_string()
+                        } else {
+                            payload.content.to_string()
+                        }
+                    };
+
+                    log::trace!("action payload: {}", content);
                     if payload_chars < MAX_CHARS {
-                        write!(tv.text, "{}", payload.content.as_str().unwrap()).unwrap();
+                        write!(tv.text, "{}", content).unwrap();
                     } else {
-                        write!(tv.text, "...{}", &payload.content.as_str().unwrap()[payload_chars-(MAX_CHARS - 3)..]).unwrap();
+                        write!(tv.text, "...{}", &content[content.chars().count()-(MAX_CHARS - 3)..]).unwrap();
                     }
                     modal.gam.post_textview(&mut tv).expect("couldn't post textview");
                 },
@@ -290,7 +327,7 @@ impl ActionApi for TextEntry {
 
             // draw a line for where text gets entered (don't use a box, fitting could be awkward)
             modal.gam.draw_line(modal.canvas, Line::new_with_style(
-                Point::new(modal.margin, current_height + modal.line_height + 4),
+                Point::new(left_text_margin, current_height + modal.line_height + 4),
                 Point::new(modal.canvas_width - modal.margin, current_height + modal.line_height + 4),
                 DrawStyle::new(color, color, 1))
                 ).expect("couldn't draw entry line");
