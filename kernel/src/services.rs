@@ -42,7 +42,7 @@ pub struct SystemServices {
     pub processes: [Process; MAX_PROCESS_COUNT],
 
     /// A table of all servers in the system
-    servers: [Option<Server>; MAX_SERVER_COUNT],
+    pub servers: [Option<Server>; MAX_SERVER_COUNT],
 }
 
 #[derive(Copy, Clone, PartialEq)]

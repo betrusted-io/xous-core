@@ -272,6 +272,18 @@ fn process_irq_character(b: u8) {
             });
             println!("{} k total", total_bytes / 1024);
         }
+        b's' => {
+            println!("Servers in use:");
+            crate::services::SystemServices::with(|system_services| {
+                println!(" idx | pid | sid");
+                println!(" --- + --- + -------------------");
+                for (idx, server) in system_services.servers.iter().enumerate() {
+                    if let Some(s) = server {
+                        println!(" {:3} | {:3} | {:x?}", idx, s.pid, s.sid);
+                    }
+                }
+            });
+        }
         #[cfg(all(feature = "gdbserver", baremetal))]
         b'g' => {
             println!("Starting GDB server -- attach your debugger now");
@@ -288,6 +300,7 @@ fn process_irq_character(b: u8) {
             println!(" p  | print all processes");
             println!(" P  | print all processes and threads");
             println!(" r  | report RAM usage of all processes");
+            println!(" s  | print all allocated servers");
         }
         _ => {}
     }
