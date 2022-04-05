@@ -121,6 +121,7 @@ for examples of idiomatic ways to write code for Xous.
 - `Duration` and `Instant` are now part of `libstd`
 - Timezone and time setting has been refactored. The HW RTC is now simply treated as a seconds counter since arbitrary time in the past; the BCD data that the hardware device tries to return is mapped into seconds since epoch. On first boot or invalid RTC detection, a random time is picked since epoch as the offset, between 1-10 years, to provide some deniability about how long the device has been used.
 - One can now switch the local time by just updating the Timezone offset. The actual timezone offsets are not dynamically updated with DST; one has to explicitly program in the offset from UTC upon daylight savings.
+- NTP option for time setting introduced with fallback to manual option
 - CPU load meter has been shifting around in the `status` bar to accommodate worst-case proportional font layouts. Maybe we're there?
 - Focus events refactored for the GAM to only send to apps (and not to menus and dialogs); it is strongly encouraged that all apps take advantage of them.
 - Sleep screen is now blanked of all prior content and just the sentinel message is held
