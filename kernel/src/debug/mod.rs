@@ -275,11 +275,17 @@ fn process_irq_character(b: u8) {
         b's' => {
             println!("Servers in use:");
             crate::services::SystemServices::with(|system_services| {
-                println!(" idx | pid | sid");
-                println!(" --- + --- + -------------------");
+                println!(" idx | pid | process              | sid");
+                println!(" --- + --- + -------------------- | ------------------");
                 for (idx, server) in system_services.servers.iter().enumerate() {
                     if let Some(s) = server {
-                        println!(" {:3} | {:3} | {:x?}", idx, s.pid, s.sid);
+                        println!(
+                            " {:3} | {:3} | {:20} | {:x?}",
+                            idx,
+                            s.pid,
+                            system_services.process_name(s.pid).unwrap_or(""),
+                            s.sid
+                        );
                     }
                 }
             });
