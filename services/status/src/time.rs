@@ -371,7 +371,7 @@ pub fn start_time_server() {
             // on boot, do the validation checks of the RTC. If it is not initialized or corrupted, fix it.
             let mut settings = [0u8; 8];
             loop {
-                match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings, None) {
+                match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
                     Ok(I2cStatus::ResponseReadOk) => break,
                     _ => {
                         log::error!("Couldn't check RTC, retrying!");

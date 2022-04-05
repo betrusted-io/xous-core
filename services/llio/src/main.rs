@@ -33,7 +33,7 @@ fn i2c_thread(i2c_sid: xous::SID) {
     let mut suspend_pending_token: Option<usize> = None;
     log::trace!("starting i2c main loop");
     loop {
-        let mut msg = xous::receive_message(i2c_sid).unwrap();
+        let msg = xous::receive_message(i2c_sid).unwrap();
         log::trace!("i2c message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(I2cOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
@@ -64,11 +64,11 @@ fn i2c_thread(i2c_sid: xous::SID) {
                 // I2C state machine handler irq result
                 i2c.report_read_done();
             }),
+            Some(I2cOpcode::IrqI2cTrace) => {
+                i2c.trace();
+            },
             Some(I2cOpcode::I2cTxRx) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let i2c_txrx = buffer.to_original::<api::I2cTransaction, _>().unwrap();
-                let status = i2c.initiate(i2c_txrx);
-                buffer.replace(status).unwrap();
+                i2c.initiate(msg);
             },
             Some(I2cOpcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let busy = if i2c.is_busy() {1} else {0};
@@ -527,7 +527,7 @@ fn xmain() -> ! {
                 let mut success = false;
                 while !success {
                     // retry loop is necessary because this function can get called during "congested" periods
-                    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings, None) {
+                    match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
                         Ok(llio::I2cStatus::ResponseReadOk) => success = true,
                         Err(xous::Error::ServerQueueFull) => {
                             success = false;
