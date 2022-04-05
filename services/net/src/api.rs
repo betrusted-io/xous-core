@@ -1,7 +1,3 @@
-pub(crate) mod udp;
-// needed to keep hosted mode quiet, since the Udp implementation is a bodge
-#[allow(unused_imports)]
-pub(crate) use udp::*;
 pub(crate) mod ping;
 pub(crate) use ping::*;
 pub(crate) mod tcp;
