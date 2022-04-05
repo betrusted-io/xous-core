@@ -112,6 +112,22 @@ for examples of idiomatic ways to write code for Xous.
 - `pddb` has salamanders fixed (https://eprint.iacr.org/2020/1456.pdf). This changes the root basis record storage, causing all prior versions to be unrecognized.
 - `betrusted-soc` was updated to the latest Litex in prep for some work optimizing CPU performance and USB cores
 
+## New in 0.9.8 (not yet released)
+- `pddb` critical bug fixed where page table entries were not having their journal numbers synchronized with the free space table when read off of the disk. This would cause inconsistency glitches in the `pddb`. This release fixes the problem, but, it may require you to reformat the `pddb` once the patch is in place.
+- `pddb` major bug fixed where zero-length file allocations were not being committed to disk.
+- `TcpStream` is now part of `libstd`
+- `UdpSocket` is now part of `libstd`. DNS and all test routines switched over to `libstd`, and all prior scaffolding implementations have been removed.
+- `NetPump` call added after Tx (UDP/TCP) and connect (TCP) events. This should improve the transmit latency.
+- `Duration` and `Instant` are now part of `libstd`
+- Timezone and time setting has been refactored. The HW RTC is now simply treated as a seconds counter since arbitrary time in the past; the BCD data that the hardware device tries to return is mapped into seconds since epoch. On first boot or invalid RTC detection, a random time is picked since epoch as the offset, between 1-10 years, to provide some deniability about how long the device has been used.
+- One can now switch the local time by just updating the Timezone offset. The actual timezone offsets are not dynamically updated with DST; one has to explicitly program in the offset from UTC upon daylight savings.
+- NTP option for time setting introduced with fallback to manual option
+- CPU load meter has been shifting around in the `status` bar to accommodate worst-case proportional font layouts. Maybe we're there?
+- Focus events refactored for the GAM to only send to apps (and not to menus and dialogs); it is strongly encouraged that all apps take advantage of them.
+- Sleep screen is now blanked of all prior content and just the sentinel message is held
+- Sleep/suspend lightly refactored to fix some bugs. Ticktimer is now the sole `Last` event.
+- Preliminary text to speech (TTS) support added; compile with `cargo xtask tts` or set the LOCALE to `en-tts` to try it out.
+
 ## Roadmap to 1.0
 
 The items that are still missing before we can hit a 1.0 release include:

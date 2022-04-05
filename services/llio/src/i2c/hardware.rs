@@ -5,11 +5,19 @@ use utralib::*;
 use num_traits::ToPrimitive;
 use susres::{RegManager, RegOrField, SuspendResume};
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum I2cState {
     Idle,
     Write,
     Read,
+}
+#[derive(Eq, PartialEq, Debug)]
+enum I2cIntError {
+    NoErr,
+    NoTxn,
+    MissingTx,
+    MissingRx,
+    UnexpectedState,
 }
 
 // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
@@ -26,7 +34,12 @@ fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
                 xous::try_send_message(conn,
                     xous::Message::new_scalar(I2cOpcode::IrqI2cTxrxReadDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
             },
-            _ => {}, // don't send any message if we're in progress
+            I2cHandlerReport::InProgress => {
+                if i2c.trace {
+                    xous::try_send_message(conn,
+                        xous::Message::new_scalar(I2cOpcode::IrqI2cTrace.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
+                }
+            },
         }
     } else {
         panic!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
@@ -46,15 +59,17 @@ pub(crate) struct I2cStateMachine {
     i2c_susres: RegManager::<{utra::i2c::I2C_NUMREGS}>,
     handler_conn: Option<xous::CID>,
 
-    transaction: I2cTransaction,
+    transaction: Option<I2cTransaction>,
+    callback: Option<xous::MessageEnvelope>,
+    expiry: Option<u64>, // timeout of any pending transaction
+
     state: I2cState,
     index: u32,  // index of the current buffer in the state machine
-    timestamp: u64, // timestamp of the last transaction
     ticktimer: ticktimer_server::Ticktimer, // a connection to the ticktimer so we can measure timeouts
-    listener: Option<xous::SID>,
-    error: bool, // set if the interrupt handler encountered some kind of error
+    error: I2cIntError, // set if the interrupt handler encountered some kind of error
+    trace: bool, // set to true for detailed tracing of I2C irq handler state behavior; note that the trace outputs are delayed and may not reflect actual status
 
-    workqueue: Vec<I2cTransaction>,
+    workqueue: Vec<(I2cTransaction, xous::MessageEnvelope)>,
 }
 
 impl I2cStateMachine {
@@ -73,13 +88,15 @@ impl I2cStateMachine {
             i2c_susres: RegManager::new(i2c_csr.as_mut_ptr() as *mut u32),
             handler_conn: Some(handler_conn),
 
-            transaction: I2cTransaction::new(),
+            transaction: None,
+            callback: None,
+
             state: I2cState::Idle,
-            timestamp: ticktimer.elapsed_ms(),
+            expiry: None,
             ticktimer,
             index: 0,
-            listener: None,
-            error: false,
+            error: I2cIntError::NoErr,
+            trace: false,
 
             workqueue: Vec::new(),
         };
@@ -112,6 +129,10 @@ impl I2cStateMachine {
 
         i2c
     }
+    #[allow(dead_code)]
+    pub fn set_trace(&mut self, trace: bool) {
+        self.trace = trace;
+    }
     pub fn suspend(&mut self) {
         self.i2c_susres.suspend();
 
@@ -122,147 +143,163 @@ impl I2cStateMachine {
         self.i2c_susres.resume();
     }
 
-    pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
-        // state idle means the transaction is done
-        // listener None means any callback notifications are also done
-        // workqueue empty means, we have a clear path to do our thing
-        if self.workqueue.is_empty() && self.state == I2cState::Idle && self.listener == None {
-            self.checked_initiate(transaction)
+    pub fn initiate(&mut self, msg: xous::MessageEnvelope) {
+        let transaction = {
+            let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+            buffer.to_original::<I2cTransaction, _>().unwrap().clone()
+        };
+
+        if let Some(expiry) = self.expiry {
+            if (self.ticktimer.elapsed_ms() > expiry) || self.error != I2cIntError::NoErr {
+                // previous transaction was in progress, and it timed out
+                if self.error != I2cIntError::NoErr {
+                    log::error!("I2C interrupt handler error: {:?}", self.error);
+                    self.report_response(I2cStatus::ResponseInterruptError, None);
+                } else {
+                    self.report_response(I2cStatus::ResponseTimeout, None); // this resets all state variables back to defaults
+                }
+                // execution continues after here because we simply drop the response message back in the sender's queue, and then return here to do more
+                log::warn!("I2C timeout; resetting hardware block");
+                self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
+                // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
+                let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
+                self.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+                // clear any interrupts pending
+                self.i2c_csr.wo(utra::i2c::EV_PENDING, self.i2c_csr.r(utra::i2c::EV_PENDING));
+                // enable the block
+                self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+            }
+        }
+        if self.callback.is_none() {
+            assert!(self.state == I2cState::Idle, "previous call did not clean up correctly (state)");
+            assert!(self.expiry.is_none(), "previous call did not clean up correctly (expiry)");
+            assert!(self.transaction.is_none(), "previous call did not clean up correctly (transaction)");
+            self.checked_initiate(transaction, msg);
         } else {
-            self.workqueue.push(transaction);
-            I2cStatus::ResponseInProgress
+            log::debug!("I2C block is busy, pushing to work queue");
+            self.workqueue.push((transaction, msg));
         }
     }
 
-    fn checked_initiate(&mut self, transaction: I2cTransaction) -> I2cStatus {
-        log::trace!("I2C initated with {:x?}", transaction);
+    /// Assumes we are initiating on a "clean" I2C machine (idle, no errors, no callbacks or state mapped)
+    fn checked_initiate(&mut self, transaction: I2cTransaction, msg: xous::MessageEnvelope) {
+        log::debug!("I2C initated with {:x?}", transaction);
         // sanity-check the bounds limits
         if transaction.txlen > 258 || transaction.rxlen > 258 {
-            return I2cStatus::ResponseFormatError
+            self.report_response(I2cStatus::ResponseFormatError, None);
+            return;
         }
+        self.callback = Some(msg);
+        self.expiry = Some(self.ticktimer.elapsed_ms() + transaction.timeout_ms as u64);
 
-        let now = self.ticktimer.elapsed_ms();
-        if self.state != I2cState::Idle && ((now - self.timestamp) < self.transaction.timeout_ms as u64) {
-            // we're in a transaction that hadn't timed out, can't accept a new one
-            log::trace!("bus is busy");
-            I2cStatus::ResponseBusy
+        // now do the BusAddr stuff, so that the we can get the irq response
+        self.error = I2cIntError::NoErr;
+        if transaction.txbuf.is_some() {
+            // initiate bus address with write bit set
+            self.state = I2cState::Write;
+            self.i2c_csr.wfo(utra::i2c::TXR_TXR, (transaction.bus_addr << 1 | 0) as u32);
+            self.transaction = Some(transaction);
+            self.index = 0;
+            self.i2c_csr.wo(utra::i2c::COMMAND,
+                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
+                self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
+            );
+            log::debug!("Initiate write");
+            self.trace();
+        } else if transaction.rxbuf.is_some() {
+            // initiate bus address with read bit set
+            self.state = I2cState::Read;
+            self.i2c_csr.wfo(utra::i2c::TXR_TXR, (transaction.bus_addr << 1 | 1) as u32);
+            self.transaction = Some(transaction);
+            self.index = 0;
+            self.i2c_csr.wo(utra::i2c::COMMAND,
+                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
+                self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
+            );
+            log::debug!("Initiate read");
+            self.trace();
         } else {
-            if self.state != I2cState::Idle {
-                // we're in a transaction, but previous transaction had timed out...
-                self.report_timeout();
-                // reset our state parameter
-                self.state = I2cState::Idle;
-                self.index = 0;
-                // reset the block - this resest just the state machine and not the prescaler or interrupt enable configs
-            }
-            self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
-            self.error = false;
-            self.timestamp = now;
-            self.transaction = transaction.clone();
-            assert!(self.listener == None, "initiating when previous transaction is still in progress!");
-            match transaction.listener {
-                None => self.listener = None,
-                Some((s0, s1, s2, s3)) => self.listener = Some(xous::SID::from_u32(s0, s1, s2, s3)),
-            }
-            log::trace!("initiate with listener {:?}", self.listener);
+            // no buffers specified, erase everything and go to idle
+            log::error!("Initiation error");
+            self.trace();
+            self.report_response(I2cStatus::ResponseFormatError, None);
+            return;
+        }
+    }
 
-            if self.transaction.status == I2cStatus::RequestIncoming {
-                self.transaction.status = I2cStatus::ResponseInProgress;
-                // now do the BusAddr stuff, so that the we can get the irq response
-                if let Some(_txbuf) = self.transaction.txbuf {
-                    // initiate bus address with write bit set
-                    self.state = I2cState::Write;
-                    self.i2c_csr.wfo(utra::i2c::TXR_TXR, (self.transaction.bus_addr << 1 | 0) as u32);
-                    self.index = 0;
-                    self.i2c_csr.wo(utra::i2c::COMMAND,
-                        self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                        self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
-                    );
-                    self.trace();
-                    I2cStatus::ResponseInProgress
-                } else if let Some(_rxbuf) = self.transaction.rxbuf {
-                    // initiate bus address with read bit set
-                    self.state = I2cState::Read;
-                    self.i2c_csr.wfo(utra::i2c::TXR_TXR, (self.transaction.bus_addr << 1 | 1) as u32);
-                    self.index = 0;
-                    self.i2c_csr.wo(utra::i2c::COMMAND,
-                        self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                        self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
-                    );
-                    self.trace();
-                    I2cStatus::ResponseInProgress
-                } else {
-                    // no buffers specified, erase everything and go to idle
-                    self.state = I2cState::Idle;
-                    self.transaction = I2cTransaction::new();
-                    self.trace();
-                    I2cStatus::ResponseFormatError
+    fn report_response(&mut self, status: I2cStatus, rx: Option<&[u8]>) {
+        // the .take() will cause the msg to go out of scope, triggering Drop which unblocks the caller
+        if let Some(mut msg) = self.callback.take() {
+            let mut response = I2cResult {
+                rxbuf: [0u8; I2C_MAX_LEN],
+                rxlen: 0,
+                status,
+            };
+            if let Some(data) = rx {
+                for (&src, dst) in data.iter().zip(response.rxbuf.iter_mut()) {
+                    *dst = src;
                 }
-            } else {
-                log::trace!("initiation format error");
-                self.trace();
-                I2cStatus::ResponseFormatError  // the status field was not formatted correctly to accept the transaction
+                response.rxlen = data.len() as _;
             }
-        }
-    }
-
-    fn i2c_followup(&mut self, trans: I2cTransaction) -> Result<(), xous::Error> {
-        if let Some(listener) = self.listener.take() {
-            log::trace!("followup to listener {:?}: {:?}", listener, trans);
-            let cid = xous::connect(listener).unwrap();
-            let buf = xous_ipc::Buffer::into_buf(trans).or(Err(xous::Error::InternalError))?;
-            buf.lend(cid, I2cCallback::Result.to_u32().unwrap()).map(|_|())?;
-            unsafe{xous::disconnect(cid).unwrap()};
+            let mut buf = unsafe {
+                xous_ipc::Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+            };
+            buf.replace(response).expect("couldn't serialize response to sender");
+            log::debug!("transaction to None");
+            self.transaction.take();
+            self.expiry = None;
+            self.state = I2cState::Idle;
+            self.index = 0;
+            self.error = I2cIntError::NoErr;
         } else {
-            log::trace!("completed with transaction, but no listener! {:?}", trans);
-        };
-        if self.workqueue.len() > 0 {
-            let work = self.workqueue.remove(0);
-            if self.checked_initiate(work) != I2cStatus::ResponseInProgress {
-                log::error!("Unable to initiate I2C transaction even though machine should be idle: {:?}.", work);
-                log::error!("Probably, the I2C engine is going off the rails from here...");
-            }
+            panic!("Invalid state: response requested but no request pending {:?}", status);
         }
-        Ok(())
+        if self.workqueue.len() > 0 {
+            log::debug!("workqueue has pending items: {}", self.workqueue.len());
+            let (transaction, msg) = self.workqueue.remove(0);
+            self.checked_initiate(transaction, msg);
+        }
     }
 
-    #[allow(dead_code)] // keep this around in case we figure out the NACK issue
-    fn report_nack(&mut self) {
-        log::trace!("NACK");
-        // report the NACK situation to the listener
-        let mut nack = I2cTransaction::new();
-        nack.status = I2cStatus::ResponseNack;
-        self.i2c_followup(nack).expect("couldn't send NACK to listeners");
-    }
-    fn report_timeout(&mut self) {
-        log::error!("I2C timeout on transaction {:?}", self.transaction);
-        let mut timeout = I2cTransaction::new();
-        timeout.status = I2cStatus::ResponseTimeout;
-        self.i2c_followup(timeout).expect("couldn't send timeout error to liseners");
-    }
     pub fn report_write_done(&mut self) {
-        log::trace!("write_done");
+        log::debug!("write_done");
         // report the end of a write-only transaction to all the listeners
-        let mut ack = I2cTransaction::new();
-        ack.status = I2cStatus::ResponseWriteOk;
-        self.i2c_followup(ack).expect("couldn't send write ACK to listeners");
+        self.report_response(I2cStatus::ResponseWriteOk, None);
     }
     pub fn report_read_done(&mut self) {
-        log::trace!("read_done");
         // report the result of a read transaction to all the listeners
-        self.transaction.status = I2cStatus::ResponseReadOk;
-        log::trace!("Sending read done {:?}", self.transaction);
-        self.i2c_followup(self.transaction).expect("couldn't send read response to listeners");
+        log::debug!("Sending read done {:?}", self.transaction);
+        if let Some(transaction) = self.transaction {
+            if let Some(rxbuf) = transaction.rxbuf {
+                let mut rx = [0u8; I2C_MAX_LEN];
+                for (&src, dst) in rxbuf[..transaction.rxlen as usize].iter().zip(rx.iter_mut()) {
+                    *dst = src;
+                }
+                self.report_response(I2cStatus::ResponseReadOk, Some(&rx[..transaction.rxlen as usize]));
+            } else {
+                log::error!("Rx response but no buffer of data!");
+                self.report_response(I2cStatus::ResponseFormatError, None);
+            }
+        } else {
+            log::error!("Rx response but no transaction!");
+            self.report_response(I2cStatus::ResponseFormatError, None);
+        }
     }
+    /// This will indicate the interface is busy if there is a transaction in progress or if there is
+    /// work in the queue. The intention of this use case is if a caller is planning on doing a fairly
+    /// extensive set of reads/writes sequentially and they want to volunarily back-off so they aren't overflowing
+    /// the work queues or thrashing the bus by pulling it between two different peripherals.
     pub fn is_busy(&self) -> bool {
-        if self.state == I2cState::Idle {
+        if self.state == I2cState::Idle || self.workqueue.len() == 0 {
             false
         } else {
             true
         }
     }
-    fn trace(&self) {
-        log::trace!("I2C trace: PENDING: {:x}, ENABLE: {:x}, CMD: {:x}, STATUS: {:x}, CONTROL: {:x}, PRESCALE: {:x}",
+    pub(crate) fn trace(&self) {
+        log::debug!("I2C trace '{:?}/{:?}'=> PENDING: {:x}, ENABLE: {:x}, CMD: {:x}, STATUS: {:x}, CONTROL: {:x}, PRESCALE: {:x}",
+            self.state,
+            self.error,
             self.i2c_csr.r(utra::i2c::EV_PENDING),
             self.i2c_csr.r(utra::i2c::EV_ENABLE),
             self.i2c_csr.r(utra::i2c::COMMAND),
@@ -276,71 +313,76 @@ impl I2cStateMachine {
     pub(crate) fn handler_i(&mut self) -> I2cHandlerReport {
         let mut report = I2cHandlerReport::InProgress;
 
-        match self.state {
-            I2cState::Write => {
-                if let Some(txbuf) = self.transaction.txbuf {
-                    // send next byte if there is one
-                    if self.index < self.transaction.txlen {
-                        self.i2c_csr.wfo(utra::i2c::TXR_TXR, txbuf[self.index as usize] as u32);
-                        if self.index == (self.transaction.txlen - 1) && self.transaction.rxbuf.is_none() {
-                            // send a stop bit if this is the very last in the series
-                            self.i2c_csr.wo(utra::i2c::COMMAND,
-                                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                                self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1)
-                            );
+        if let Some(transaction) = &mut self.transaction {
+            match self.state {
+                I2cState::Write => {
+                    if let Some(txbuf) = transaction.txbuf {
+                        // send next byte if there is one
+                        if self.index < transaction.txlen {
+                            self.i2c_csr.wfo(utra::i2c::TXR_TXR, txbuf[self.index as usize] as u32);
+                            if self.index == (transaction.txlen - 1) && transaction.rxbuf.is_none() {
+                                // send a stop bit if this is the very last in the series
+                                self.i2c_csr.wo(utra::i2c::COMMAND,
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1)
+                                );
+                            } else {
+                                self.i2c_csr.wfo(utra::i2c::COMMAND_WR, 1);
+                            }
+                            self.index += 1;
                         } else {
-                            self.i2c_csr.wfo(utra::i2c::COMMAND_WR, 1);
+                            if let Some(_rxbuf) = transaction.rxbuf {
+                                // initiate bus address with read bit set
+                                self.state = I2cState::Read;
+                                self.i2c_csr.wfo(utra::i2c::TXR_TXR, (transaction.bus_addr << 1 | 1) as u32);
+                                self.index = 0;
+                                self.i2c_csr.wo(utra::i2c::COMMAND,
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
+                                );
+                            } else {
+                                report = I2cHandlerReport::WriteDone;
+                                self.state = I2cState::Idle;
+                            }
                         }
-                        self.index += 1;
                     } else {
-                        if let Some(_rxbuf) = self.transaction.rxbuf {
-                            // initiate bus address with read bit set
-                            self.state = I2cState::Read;
-                            self.i2c_csr.wfo(utra::i2c::TXR_TXR, (self.transaction.bus_addr << 1 | 1) as u32);
-                            self.index = 0;
-                            self.i2c_csr.wo(utra::i2c::COMMAND,
-                                self.i2c_csr.ms(utra::i2c::COMMAND_WR, 1) |
-                                self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
-                            );
+                        // we should never get here, because txbuf was checked as Some() by the setup routine
+                        self.error = I2cIntError::MissingTx;
+                    }
+                },
+                I2cState::Read => {
+                    if let Some(rxbuf) = &mut transaction.rxbuf {
+                        if self.index > 0 {
+                            // we are re-entering from a previous call, store the read value from the previous call
+                            rxbuf[self.index as usize - 1] = self.i2c_csr.rf(utra::i2c::RXR_RXR) as u8;
+                        }
+                        if self.index < transaction.rxlen {
+                            if self.index == (transaction.rxlen - 1) {
+                                self.i2c_csr.wo(utra::i2c::COMMAND,
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_RD, 1) |
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1) |
+                                    self.i2c_csr.ms(utra::i2c::COMMAND_ACK, 1)
+                                );
+                            } else {
+                                self.i2c_csr.wfo(utra::i2c::COMMAND_RD, 1);
+                            }
+                            self.index += 1;
                         } else {
-                            report = I2cHandlerReport::WriteDone;
+                            report = I2cHandlerReport::ReadDone;
                             self.state = I2cState::Idle;
                         }
-                    }
-                } else {
-                    // we should never get here, because txbuf was checked as Some() by the setup routine
-                }
-            },
-            I2cState::Read => {
-                if let Some(mut rxbuf) = self.transaction.rxbuf {
-                    if self.index > 0 {
-                        // we are re-entering from a previous call, store the read value from the previous call
-                        rxbuf[self.index as usize - 1] = self.i2c_csr.rf(utra::i2c::RXR_RXR) as u8;
-                        self.transaction.rxbuf = Some(rxbuf);
-                    }
-                    if self.index < self.transaction.rxlen {
-                        if self.index == (self.transaction.rxlen - 1) {
-                            self.i2c_csr.wo(utra::i2c::COMMAND,
-                                self.i2c_csr.ms(utra::i2c::COMMAND_RD, 1) |
-                                self.i2c_csr.ms(utra::i2c::COMMAND_STO, 1) |
-                                self.i2c_csr.ms(utra::i2c::COMMAND_ACK, 1)
-                            );
-                        } else {
-                            self.i2c_csr.wfo(utra::i2c::COMMAND_RD, 1);
-                        }
-                        self.index += 1;
                     } else {
-                        report = I2cHandlerReport::ReadDone;
-                        self.state = I2cState::Idle;
+                        // we should never get here, because rxbuf was checked as Some() by the setup routine
+                        self.error = I2cIntError::MissingRx;
                     }
-                } else {
-                    // we should never get here, because rxbuf was checked as Some() by the setup routine
+                },
+                I2cState::Idle => {
+                    // this shouldn't happen, all we can do is flag an error
+                    self.error = I2cIntError::UnexpectedState;
                 }
-            },
-            I2cState::Idle => {
-                // this shouldn't happen, all we can do is flag an error
-                self.error = true;
             }
+        } else {
+            self.error = I2cIntError::NoTxn;
         }
 
         report
