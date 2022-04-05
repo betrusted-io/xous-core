@@ -9,6 +9,8 @@ use utralib::generated::*;
 #[cfg(baremetal)]
 pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
 
+pub use crate::arch::process::Process as ArchProcess;
+
 #[macro_use]
 #[cfg(all(
     not(test),
@@ -211,12 +213,21 @@ fn process_irq_character(b: u8) {
                 let current_pid = system_services.current_pid();
                 for process in &system_services.processes {
                     if !process.free() {
+                        process.activate().unwrap();
+                        let mut connection_count = 0;
+                        ArchProcess::with_inner(|process_inner| {
+                            for conn in &process_inner.connection_map {
+                                if conn.is_some() {
+                                    connection_count += 1;
+                                }
+                            }
+                        });
                         println!(
-                            "{:?} {}:",
+                            "{:?} conns:{}/32 {}",
                             process,
+                            connection_count,
                             system_services.process_name(process.pid).unwrap_or("")
                         );
-                        process.activate().unwrap();
                     }
                 }
                 system_services
