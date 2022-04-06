@@ -4,7 +4,6 @@
 use utralib::generated::*;
 
 pub(crate) const SERVER_NAME_SUSRES: &str     = "_Suspend/resume manager_";
-pub(crate) const SERVER_NAME_EXEC_GATE: &str  = "_Suspend/resume execution gate_";
 
 /// Note: there must be at least one subscriber to the `Last` suspend order event, otherwise
 /// the logic will never terminate. There may be multiple `Last` subscribers, but the order at
@@ -61,6 +60,9 @@ pub(crate) enum Opcode {
     /// not tested - reboot address
     RebootVector, //(u32),
 
+    /// used by processes to indicate they are suspending now; this blocks until resume using the "execution gate"
+    SuspendingNow,
+
     /// exit the server
     Quit,
 }
@@ -79,11 +81,6 @@ pub(crate) enum SuspendEventCallback {
     Drop,
 }
 
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-pub(crate) enum ExecGateOpcode {
-    SuspendingNow,
-    Drop,
-}
 
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////// suspend-resume hardware management primitives

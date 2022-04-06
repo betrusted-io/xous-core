@@ -35,6 +35,11 @@ impl PddbMountPoller {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB_POLLER).expect("can't connect to Pddb mount poller server");
         PddbMountPoller { conn }
     }
+    /// This call is guaranteed to *never* block and return the instantaneous state of the PDDB, even if the server itself
+    /// is currently busy processing other requests. This has to be done with a separate server from the main one, because
+    /// the main server will block during the mount operations, as it owns the PDDB data objects and cannot concurrently process
+    /// the mount check task while manipulating them. Instead, this routine queries a separate thread that shares an AtomicBool
+    /// with the main thread that reports the mount state.
     pub fn is_mounted_nonblocking(&self) -> bool {
         match send_message(self.conn,
             Message::new_blocking_scalar(PollOp::Poll.to_usize().unwrap(), 0, 0, 0, 0)
@@ -82,7 +87,6 @@ pub struct Pddb {
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
     trng: trng::Trng,
-    tt: ticktimer_server::Ticktimer,
 }
 impl Pddb {
     pub fn new() -> Self {
@@ -122,30 +126,21 @@ impl Pddb {
             cb_handle: Some(handle),
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
-            tt: ticktimer_server::Ticktimer::new().unwrap(),
-        }
-    }
-    pub fn is_mounted(&self) -> bool {
-        let ret = send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
-        match ret {
-            xous::Result::Scalar1(code) => {
-                if code == 0 {false} else {true}
-            },
-            _ => panic!("Internal error"),
         }
     }
     /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
     /// A random interval between 1 and 2 seconds is chosen for the poll wait time. Randomizing the waiting time
     /// helps to level out the task scheduler in the case that many threads are waiting on the PDDB simultaneously.
-    pub fn is_mounted_blocking(&self, poll_interval_ms: Option<u32>) {
-        let interval = if let Some(i) = poll_interval_ms {
-            i
-        } else {
-            (self.trng.get_u32().unwrap() % 1000) + 1000
-        };
-        while !self.is_mounted() {
-            self.tt.sleep_ms(interval as usize).unwrap();
+    ///
+    /// This is typically the API call one would use to hold execution of a service until the PDDB is mounted.
+    pub fn is_mounted_blocking(&self) {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+        match ret {
+            xous::Result::Scalar1(_code) => {
+                ()
+            },
+            _ => panic!("Internal error"),
         }
     }
     pub fn try_mount(&self) -> bool {

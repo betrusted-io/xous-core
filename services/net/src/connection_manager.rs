@@ -107,7 +107,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let pddb = pddb::Pddb::new();
-            pddb.is_mounted_blocking(None);
+            pddb.is_mounted_blocking();
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
