@@ -8,10 +8,12 @@ use xous::{CID, SID, send_message, Message};
 use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
 use std::thread;
+use core::cell::Cell;
 
 pub struct Modals {
     conn: CID,
     token: [u32; 4],
+    have_lock: Cell::<bool>,
 }
 impl Modals {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -23,6 +25,7 @@ impl Modals {
         Ok(Modals {
             conn,
             token,
+            have_lock: Cell::new(false),
         })
     }
 
@@ -78,6 +81,7 @@ impl Modals {
             unsafe{xous::disconnect(cid).unwrap()}; // must disconnect before destroy to avoid the CID from hanging out in our outbound table which is limited to 32 entries
             xous::destroy_server(SID::from_array(server)).expect("couldn't destroy temporary server");
         }
+        self.unlock();
         match buf.to_original::<TextEntryPayload, _>() {
             Ok(response) => Ok(response),
             _ => Err(xous::Error::InternalError)
@@ -93,6 +97,7 @@ impl Modals {
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        self.unlock();
         Ok(())
     }
 
@@ -131,6 +136,7 @@ impl Modals {
             self.token[3] as usize,
             )
         ).expect("couldn't stop progress");
+        self.unlock();
         Ok(())
     }
 
@@ -154,6 +160,7 @@ impl Modals {
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithFixedResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let itemname = buf.to_original::<ItemName, _>().unwrap();
+        self.unlock();
         Ok(String::from(itemname.as_str()))
     }
 
@@ -172,6 +179,7 @@ impl Modals {
                 ret.push(String::from(item.as_str()));
             }
         }
+        self.unlock();
         Ok(ret)
     }
 
@@ -197,7 +205,6 @@ impl Modals {
         Ok(())
     }
     pub fn dynamic_notification_close(&self) -> Result<(), xous::Error> {
-        self.lock();
         send_message(self.conn,
             Message::new_scalar(Opcode::CloseDynamicNotification.to_usize().unwrap(),
             self.token[0] as usize,
@@ -206,28 +213,35 @@ impl Modals {
             self.token[3] as usize,
             )
         ).expect("couldn't stop progress");
+        self.unlock();
         Ok(())
     }
 
     /// Blocks until we have a lock on the modals server
     fn lock(&self) {
-        match send_message(
-            self.conn,
-            Message::new_blocking_scalar(Opcode::GetMutex.to_usize().unwrap(),
-            self.token[0] as usize,
-            self.token[1] as usize,
-            self.token[2] as usize,
-            self.token[3] as usize,
-        )).expect("couldn't send mutex acquisition message") {
-            xous::Result::Scalar1(code) => {
-                if code != 1 {
-                    log::warn!("Unexpected return from lock acquisition.");
+        if !self.have_lock.get() {
+            match send_message(
+                self.conn,
+                Message::new_blocking_scalar(Opcode::GetMutex.to_usize().unwrap(),
+                self.token[0] as usize,
+                self.token[1] as usize,
+                self.token[2] as usize,
+                self.token[3] as usize,
+            )).expect("couldn't send mutex acquisition message") {
+                xous::Result::Scalar1(code) => {
+                    if code != 1 {
+                        log::warn!("Unexpected return from lock acquisition.");
+                    }
+                },
+                _ => {
+                    log::error!("Internal error trying to acquire mutex");
                 }
-            },
-            _ => {
-                log::error!("Internal error trying to acquire mutex");
             }
         }
+        self.have_lock.set(true);
+    }
+    fn unlock(&self) {
+        self.have_lock.set(false);
     }
 }
 

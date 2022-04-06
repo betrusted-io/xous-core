@@ -89,7 +89,31 @@ pub(crate) enum Opcode {
     /// close dynamic notification
     CloseDynamicNotification,
 
+    /// used by libraries to get the mutex on the server
     GetMutex,
+
+    // these are used internally by the modals to handle intermediate state. Do not call from the outside.
+    // these were originally handled in a separate thread for deferred responses using busy-waits. They are
+    // now handled with deferred responses with makes code less complicated and less load on the CPU but
+    // it does expose some of the internal API mechanics to outside processes. This is fine for the modals
+    // box because it's a convenience routine used by "everyone"; password boxes are always handled within
+    // a given secured server so that the attack surface for these do not extend into the modals boundary.
+    InitiateOp,
+    DoUpdateProgress,
+    FinishProgress,
+
+    TextEntryReturn,
+    RadioReturn,
+    CheckBoxReturn,
+    NotificationReturn,
+
+    DoUpdateDynamicNotification,
+    DoCloseDynamicNotification,
+
+    ModalRedraw,
+    ModalKeypress,
+    ModalDrop,
+    Gutter,
 
     Quit,
 }
