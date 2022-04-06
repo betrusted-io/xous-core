@@ -5,8 +5,6 @@ mod api;
 use api::*;
 mod tests;
 
-use xous::SID;
-
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
 
@@ -455,49 +453,17 @@ fn xmain() -> ! {
             },
             Some(Opcode::TextEntryReturn) => {
                 match op {
-                    RendererState::RunText(config) => {
+                    RendererState::RunText(_config) => {
                         log::trace!("validating text entry modal");
                         let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
-                        if let Some(validator_sid) = config.validator {
-                            let cid = xous::connect(SID::from_array(validator_sid)).unwrap();
-                            let validation = Validation {
-                                text,
-                                opcode: config.validator_op,
-                            };
-                            let mut buf = Buffer::into_buf(validation).expect("couldn't convert validator structure");
-                            buf.lend_mut(cid, ValidationOp::Validate.to_u32().unwrap()).expect("validation call failed");
-                            let response = buf.to_original::<Option<xous_ipc::String::<256>>, _>().expect("couldn't unpack validation response");
-                            unsafe{xous::disconnect(cid).unwrap();}
-                            if let Some(err) = response {
-                                // try again
-                                renderer_modal.modify(
-                                    Some(ActionType::TextEntry(text_action)),
-                                    Some(config.prompt.as_str().unwrap()), false,
-                                    Some(err.as_str().unwrap()), false, None
-                                );
-                                renderer_modal.activate();
-                            } else {
-                                if let Some(mut origin) = dr.take() {
-                                    let mut response = unsafe { Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap()) };
-                                    response.replace(text).unwrap();
-                                    op = RendererState::None;
-                                } else {
-                                    log::error!("Ux routine returned but no origin was recorded");
-                                    panic!("Ux routine returned but no origin was recorded");
-                                }
-                                token_lock = next_lock(&mut work_queue);
-                            }
+                        if let Some(mut origin) = dr.take() {
+                            let mut response = unsafe { Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap()) };
+                            response.replace(text).unwrap();
+                            op = RendererState::None;
                         } else {
-                            if let Some(mut origin) = dr.take() {
-                                let mut response = unsafe { Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap()) };
-                                response.replace(text).unwrap();
-                                op = RendererState::None;
-                            } else {
-                                log::error!("Ux routine returned but no origin was recorded");
-                                panic!("Ux routine returned but no origin was recorded");
-                            }
-                            token_lock = next_lock(&mut work_queue);
+                            log::error!("Ux routine returned but no origin was recorded");
+                            panic!("Ux routine returned but no origin was recorded");
                         }
                     }
                     RendererState::None => log::warn!("Text entry detected a fat finger event, ignoring."),
@@ -507,6 +473,15 @@ fn xmain() -> ! {
                     }
                 }
             }
+            Some(Opcode::TextResponseValid) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
+                let incoming_token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
+                if incoming_token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                } else {
+                    token_lock = next_lock(&mut work_queue);
+                }
+                xous::return_scalar(msg.sender, 1).unwrap();
+            }),
             Some(Opcode::NotificationReturn) => {
                 match op {
                     RendererState::RunNotification(_) => {
