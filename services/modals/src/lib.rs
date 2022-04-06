@@ -12,7 +12,6 @@ use std::thread;
 pub struct Modals {
     conn: CID,
     token: [u32; 4],
-    tt: ticktimer_server::Ticktimer,
 }
 impl Modals {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -24,7 +23,6 @@ impl Modals {
         Ok(Modals {
             conn,
             token,
-            tt: ticktimer_server::Ticktimer::new().unwrap(),
         })
     }
 
@@ -211,14 +209,8 @@ impl Modals {
         Ok(())
     }
 
-    /// busy-wait until we have acquired a mutex on the Modals server
+    /// Blocks until we have a lock on the modals server
     fn lock(&self) {
-        while !self.try_get_mutex() {
-            self.tt.sleep_ms(1000).unwrap();
-        }
-    }
-
-    fn try_get_mutex(&self) -> bool {
         match send_message(
             self.conn,
             Message::new_blocking_scalar(Opcode::GetMutex.to_usize().unwrap(),
@@ -228,18 +220,14 @@ impl Modals {
             self.token[3] as usize,
         )).expect("couldn't send mutex acquisition message") {
             xous::Result::Scalar1(code) => {
-                if code == 1 {
-                    true
-                } else {
-                    false
+                if code != 1 {
+                    log::warn!("Unexpected return from lock acquisition.");
                 }
             },
             _ => {
                 log::error!("Internal error trying to acquire mutex");
-                false
             }
         }
-
     }
 }
 

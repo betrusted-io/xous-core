@@ -435,6 +435,8 @@ fn xmain() -> ! {
     let default_nonce = [
         trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(),
     ];
+    let mut work_queue = Vec::<(xous::MessageSender, [u32; 4])>::new();
+
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
         log::debug!("message: {:?}", msg);
@@ -445,7 +447,7 @@ fn xmain() -> ! {
                     if token == incoming_token {
                         xous::return_scalar(msg.sender, 1).unwrap();
                     } else {
-                        xous::return_scalar(msg.sender, 0).unwrap();
+                        work_queue.push((msg.sender, incoming_token));
                     }
                 } else {
                     token_lock = Some(incoming_token);
@@ -470,7 +472,7 @@ fn xmain() -> ! {
                         RendererState::RunRadio(_) => (),
                         RendererState::ResponseRadio(item) => {
                             buffer.replace(item).unwrap();
-                            token_lock = None;
+                            token_lock = next_lock(&mut work_queue);
                             break;
                         },
                         _ => {
@@ -499,7 +501,7 @@ fn xmain() -> ! {
                         RendererState::RunCheckBox(_) => (),
                         RendererState::ResponseCheckBox(items) => {
                             buffer.replace(items).unwrap();
-                            token_lock = None;
+                            token_lock = next_lock(&mut work_queue);
                             break;
                         },
                         _ => {
@@ -528,7 +530,7 @@ fn xmain() -> ! {
                         RendererState::RunText(_) => (),
                         RendererState::ResponseText(text) => {
                             buffer.replace(text).unwrap();
-                            token_lock = None;
+                            token_lock = next_lock(&mut work_queue);
                             break;
                         },
                         _ => {
@@ -554,7 +556,7 @@ fn xmain() -> ! {
                 loop {
                     match *op.lock().unwrap() {
                         RendererState::RunNotification(_) => (),
-                        RendererState::None => {token_lock = None; break},
+                        RendererState::None => {token_lock = next_lock(&mut work_queue); break},
                         _ => {
                             log::error!("Illegal state transition in renderer");
                             panic!("Illegal state transition in renderer");
@@ -592,7 +594,7 @@ fn xmain() -> ! {
                     renderer_cid,
                     Message::new_scalar(RendererOp::FinishProgress.to_usize().unwrap(), 0, 0, 0, 0)
                 ).expect("couldn't update progress bar");
-                token_lock = None;
+                token_lock = next_lock(&mut work_queue);
             }),
             Some(Opcode::AddModalItem) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -640,7 +642,7 @@ fn xmain() -> ! {
                     renderer_cid,
                     Message::new_scalar(RendererOp::CloseDynamicNotification.to_usize().unwrap(), 0, 0, 0, 0)
                 ).expect("couldn't close dynamic notification");
-                token_lock = None;
+                token_lock = next_lock(&mut work_queue);
             }),
             Some(Opcode::Quit) => {
                 log::warn!("Shared modal UX handler exiting.");
@@ -675,5 +677,15 @@ fn compute_checked_percentage(current: u32, start: u32, end: u32) -> u32 {
             // do math in higher precision because we could overflow a u32
             (((current as u64 - start as u64) * 100) / (end as u64 - start as u64)) as u32
         }
+    }
+}
+
+fn next_lock(work_queue: &mut Vec::<(xous::MessageSender, [u32; 4])>) -> Option<[u32; 4]> {
+    if work_queue.len() > 0 {
+        let (unblock_pid, token) = work_queue.remove(0);
+        xous::return_scalar(unblock_pid, 1).unwrap();
+        Some(token)
+    } else {
+        None
     }
 }
