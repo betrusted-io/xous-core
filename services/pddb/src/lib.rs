@@ -35,6 +35,11 @@ impl PddbMountPoller {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB_POLLER).expect("can't connect to Pddb mount poller server");
         PddbMountPoller { conn }
     }
+    /// This call is guaranteed to *never* block and return the instantaneous state of the PDDB, even if the server itself
+    /// is currently busy processing other requests. This has to be done with a separate server from the main one, because
+    /// the main server will block during the mount operations, as it owns the PDDB data objects and cannot concurrently process
+    /// the mount check task while manipulating them. Instead, this routine queries a separate thread that shares an AtomicBool
+    /// with the main thread that reports the mount state.
     pub fn is_mounted_nonblocking(&self) -> bool {
         match send_message(self.conn,
             Message::new_blocking_scalar(PollOp::Poll.to_usize().unwrap(), 0, 0, 0, 0)
@@ -125,7 +130,9 @@ impl Pddb {
             tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
-    pub fn is_mounted(&self) -> bool {
+    /// This call "sometimes blocks". It will block when the PDDB is busy performing other tasks, such as
+    /// mounting the PDDB, or requesting the user's password.
+    pub fn is_mounted_maybe_blocking(&self) -> bool {
         let ret = send_message(self.conn, Message::new_blocking_scalar(
             Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
         match ret {
@@ -144,7 +151,7 @@ impl Pddb {
         } else {
             (self.trng.get_u32().unwrap() % 1000) + 1000
         };
-        while !self.is_mounted() {
+        while !self.is_mounted_maybe_blocking() {
             self.tt.sleep_ms(interval as usize).unwrap();
         }
     }
