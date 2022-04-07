@@ -127,6 +127,7 @@ for examples of idiomatic ways to write code for Xous.
 - Sleep screen is now blanked of all prior content and just the sentinel message is held
 - Sleep/suspend lightly refactored to fix some bugs. Ticktimer is now the sole `Last` event.
 - Preliminary text to speech (TTS) support added; compile with `cargo xtask tts` or set the LOCALE to `en-tts` to try it out.
+- Introduce deferred-response pattern into modals, pddb, and susres.
 
 ## Roadmap to 1.0
 

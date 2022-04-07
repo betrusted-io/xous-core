@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
+pub use api::*;
 use xous::{CID, send_message};
 use num_traits::ToPrimitive;
 
@@ -8,12 +9,13 @@ pub struct Codec {
     conn: CID,
 }
 impl Codec {
-    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new() -> Self {
+        let xns = xous_names::XousNames::new().expect("couldn't connect to XousNames");
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_CODEC).expect("Can't connect to Codec server");
-        Ok(Codec {
+        Codec {
             conn
-        })
+        }
     }
 }
 
