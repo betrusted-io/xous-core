@@ -410,7 +410,7 @@ struct TokenRecord {
     pub key: String,
     pub basis: Option<String>,
     pub alloc_hint: Option<usize>,
-    pub conn: xous::CID, // callback connection
+    pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
 
 #[xous::xous_main]
@@ -683,6 +683,7 @@ fn xmain() -> ! {
             Some(Opcode::CloseBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Close => {
                         match basis_cache.basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
@@ -702,6 +703,7 @@ fn xmain() -> ! {
             Some(Opcode::DeleteBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Delete => {
                         match basis_cache.basis_delete(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
@@ -771,7 +773,11 @@ fn xmain() -> ! {
                 }
                 // at this point, we have established a basis/dict/key tuple.
                 let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
-                let cid = xous::connect(xous::SID::from_array(req.cb_sid)).expect("couldn't connect for callback");
+                let cid = if let Some(cb_sid) = req.cb_sid {
+                    Some(xous::connect(xous::SID::from_array(cb_sid)).expect("couldn't connect for callback"))
+                } else {
+                    None
+                };
                 let token_record = TokenRecord {
                     dict: String::from(dict),
                     key: String::from(key),
@@ -789,15 +795,23 @@ fn xmain() -> ! {
                 if let Some(rec) = token_dict.remove(&token) {
                     // now check if we can safely disconnect and recycle our connection number.
                     // This is important because we can only have 32 outgoing connections...
-                    let mut has_cid = false;
-                    for r in token_dict.values() {
-                        if r.conn == rec.conn {
-                            has_cid = true;
-                            break;
+                    if let Some(conn_to_remove) = rec.conn {
+                        let mut still_needs_cid = false;
+                        for r in token_dict.values() {
+                            // check through the remaining dictionary values to see if they have a connection that is the same as our number
+                            if let Some(existing_conn) = r.conn {
+                                if existing_conn == conn_to_remove {
+                                    still_needs_cid = true;
+                                    break;
+                                }
+                            }
                         }
-                    }
-                    if !has_cid {
-                        unsafe{xous::disconnect(rec.conn).expect("couldn't disconnect from callback server")};
+                        // if nobody else had my connection number, disconnect it.
+                        if !still_needs_cid {
+                            unsafe{xous::disconnect(conn_to_remove).expect("couldn't disconnect from callback server")};
+                        }
+                    } else {
+                        // if there was no/never a connection allocated, there's no connection to remove. do nothing.
                     }
                 }
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack KeyDrop");
@@ -1392,3 +1406,33 @@ pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
     pddb_os.dbg_dump(Some("manual".to_string()), None);
 }
 
+fn notify_of_disconnect(pddb_os: &mut PddbOs, token_dict: &HashMap::<ApiToken, TokenRecord>, basis_cache: &mut BasisCache) {
+    // 1. search to see if any of the active tokens are are in our token_dict
+    // 2. notify them of the disconnect, if there is a callback set.
+    for (api_key, entry) in token_dict.iter() {
+        if let Some(cb) = entry.conn {
+            match basis_cache.key_attributes(pddb_os, &entry.dict, &entry.key, entry.basis.as_deref()) {
+                Ok(_) => {
+                    match send_message(cb, Message::new_scalar(
+                        pddb::CbOp::Change.to_usize().unwrap(),
+                        api_key[0] as _,
+                        api_key[1] as _,
+                        api_key[2] as _,
+                        0,
+                    )) {
+                        Err(e) => {
+                            log::warn!("Callback on {}:{} for basis removal failed: {:?}", &entry.dict, &entry.key, e);
+                        },
+                        _ => {
+                            log::debug!("Callback on {}:{} for basis removal success", &entry.dict, &entry.key);
+                        }
+                    }
+                },
+                Err(_) => {
+                    // do nothing. It's probably not right that a key doesn't exist that we don't have in our records, but don't crash the system.
+                    log::warn!("Disconnect basis inconsistent state, {}:{} not found", &entry.dict, &entry.key);
+                }
+            }
+        }
+    }
+}

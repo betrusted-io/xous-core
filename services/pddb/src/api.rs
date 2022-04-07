@@ -194,7 +194,7 @@ pub struct PddbKeyRequest {
     pub create_dict: bool,
     pub create_key: bool,
     pub alloc_hint: Option<u64>, // this is a usize but for IPC we must have defined memory sizes, so we pick the big option.
-    pub cb_sid: [u32; 4],
+    pub cb_sid: Option<[u32; 4]>,
     pub result: PddbRequestCode,
 }
 
