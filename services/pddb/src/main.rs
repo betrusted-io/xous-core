@@ -649,24 +649,28 @@ fn xmain() -> ! {
                                     basis_cache.basis_add(basis);
                                     finished = true;
                                     mgmt.code = PddbRequestCode::NoErr;
+                                } else {
+                                    modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                                    modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                                    match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
+                                        Ok(response) => {
+                                            if response.as_str() == t!("pddb.yes", xous::LANG) {
+                                                finished = false;
+                                                // this will cause just another go-around
+                                            } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                                                finished = true;
+                                                mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
+                                            } else {
+                                                panic!("Got unexpected return from radiobutton");
+                                            }
+                                        }
+                                        _ => panic!("get_radiobutton failed"),
+                                    }
+                                    xous::yield_slice(); // allow a redraw to happen before repeating the request
                                 }
                             } else {
-                                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
-                                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
-                                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
-                                    Ok(response) => {
-                                        if response.as_str() == t!("pddb.yes", xous::LANG) {
-                                            finished = false;
-                                            // this will cause just another go-around
-                                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
-                                            finished = true;
-                                            mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
-                                        } else {
-                                            panic!("Got unexpected return from radiobutton");
-                                        }
-                                    }
-                                    _ => panic!("get_radiobutton failed"),
-                                }
+                                finished = true;
+                                log::error!("internal error in basis unlock, aborting!");
                             }
                         }
                     }

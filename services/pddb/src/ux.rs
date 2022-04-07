@@ -104,7 +104,7 @@ pub(crate) fn password_ux_manager(
                 pddb_modal.modify(
                     Some(ActionType::TextEntry(password_action)),
                     Some(t!("pddb.password", xous::LANG)), false,
-                    Some(db_name.as_str().unwrap()), false, None
+                    Some(format!("{}'{}'", t!("pddb.password_for", xous::LANG), db_name.as_str().unwrap()).as_str()), false, None
                 );
                 pddb_modal.activate();
                 dr = Some(msg);
