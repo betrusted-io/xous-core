@@ -3,9 +3,15 @@
 
 mod api;
 use api::*;
+mod std_tcpstream;
+use std_tcpstream::*;
+mod std_glue;
+use std_glue::*;
+mod std_udp;
+use std_udp::*;
+
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 use num_traits::*;
-use ticktimer_server::Ticktimer;
 
 mod connection_manager;
 mod device;
@@ -19,7 +25,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 use smoltcp::iface::{Interface, InterfaceBuilder, NeighborCache, Routes};
 use smoltcp::phy::{Device, Medium};
 use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
 use core::num::NonZeroU64;
@@ -51,14 +57,6 @@ enum WaitOp {
     WaitMs,
     PollAt,
     Quit,
-}
-
-/// UdpState will return a full custom datastructure, and is designed to work with
-/// a one-time use dedicated server created as part of the Net library code.
-pub struct UdpState {
-    handle: SocketHandle,
-    cid: CID,
-    sid: SID,
 }
 
 /// PingConnection can return a Scalar: because of the simplicity of the return data
@@ -100,6 +98,12 @@ struct WaitingSocket {
     expiry: Option<NonZeroU64>,
 }
 
+pub struct UdpStdState {
+    pub msg: xous::MessageEnvelope,
+    pub handle: SocketHandle,
+    pub expiry: Option<u64>,
+}
+
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -110,359 +114,6 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.push(ComIntSources::WlanSsidScanUpdate);
     com_int_list.push(ComIntSources::WlanSsidScanFinished);
     com_int_list.push(ComIntSources::WfxErr);
-}
-
-fn parse_address(data: &[u8]) -> Option<smoltcp::wire::IpAddress> {
-    let mut i = data.iter();
-    match i.next() {
-        Some(&4) => Some(smoltcp::wire::IpAddress::v4(
-            *i.next()?,
-            *i.next()?,
-            *i.next()?,
-            *i.next()?,
-        )),
-        Some(&6) => {
-            let mut new_addr = [0u8; 16];
-            for octet in new_addr.iter_mut() {
-                *octet = *i.next()?;
-            }
-            let v6: std::net::Ipv6Addr = new_addr.into();
-            Some(v6.into())
-        }
-        _ => None,
-    }
-}
-
-fn write_address(address: IpAddress, data: &mut [u8]) -> Option<usize> {
-    let mut i = data.iter_mut();
-    match address {
-        IpAddress::Ipv4(a) => {
-            *i.next()? = 4;
-            for (dest, src) in i.zip(a.as_bytes().iter()) {
-                *dest = *src;
-            }
-            Some(5)
-        }
-        IpAddress::Ipv6(a) => {
-            *i.next()? = 6;
-            for (dest, src) in i.zip(a.as_bytes().iter()) {
-                *dest = *src;
-            }
-            Some(16)
-        }
-        _ => {
-            *i.next()? = 0;
-            Some(1)
-        }
-    }
-}
-
-fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
-    // If it's not a memory message, don't fill in the return information.
-    let body = match env.body.memory_message_mut() {
-        None => {
-            // But do respond to the scalar message, if it's a BlockingScalar
-            if env.body.scalar_message().is_some() && env.body.is_blocking() {
-                xous::return_scalar(env.sender, code as usize).ok();
-            }
-            return None;
-        }
-        Some(b) => b,
-    };
-
-    body.valid = None;
-    let s: &mut [u8] = body.buf.as_slice_mut();
-    let mut i = s.iter_mut();
-
-    // Duplicate error to ensure it's seen as an error regardless of byte order
-    *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = code as u8;
-    *i.next()? = 0;
-    *i.next()? = 0;
-    *i.next()? = 0;
-    None
-}
-
-fn respond_with_connected(
-    mut env: xous::MessageEnvelope,
-    idx: u16,
-    local_port: u16,
-    remote_port: u16,
-) {
-    let body = env.body.memory_message_mut().unwrap();
-    let bfr = body.buf.as_slice_mut::<u16>();
-
-    log::trace!("successfully connected: {}", idx);
-    bfr[0] = 0;
-    bfr[1] = idx;
-    bfr[2] = local_port;
-    bfr[3] = remote_port;
-}
-
-/// Insert `Some(value)` into the first slot in the Vec that is `None`,
-/// or append it to the end if there is no free slot
-fn insert_or_append<T>(arr: &mut Vec<Option<T>>, val: T) -> usize {
-    // Look for a free index, or add it onto the end.
-    let mut idx = None;
-    for (i, elem) in arr.iter_mut().enumerate() {
-        if elem.is_none() {
-            idx = Some(i);
-            break;
-        }
-    }
-    if let Some(idx) = idx {
-        arr[idx] = Some(val);
-        idx
-    } else {
-        let idx = arr.len();
-        arr.push(Some(val));
-        idx
-    }
-}
-
-fn std_tcp_connect(
-    mut msg: xous::MessageEnvelope,
-    local_port: u16,
-    sockets: &mut SocketSet,
-    tcp_connect_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle, u16, u16, u16)>>,
-    our_sockets: &mut Vec<Option<SocketHandle>>,
-) {
-    // Ignore nonblocking and scalar messages
-    let body = match msg.body.memory_message_mut() {
-        Some(b) => b,
-        None => {
-            log::trace!("invalid message type");
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    let bytes = body.buf.as_slice::<u8>();
-    let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
-    let timeout_ms = NonZeroU64::new(u64::from_le_bytes(bytes[2..10].try_into().unwrap()));
-    let address = match parse_address(&bytes[10..]) {
-        Some(addr) => addr,
-        None => {
-            log::trace!("couldn't parse address");
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    // initiates a new connection to a remote server consisting of an (Address:Port) tuple.
-    // multiple connections can exist to a server, and they are further differentiated by the return port
-    let mut tcp_socket = TcpSocket::new(
-        TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]),
-        TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]),
-    );
-
-    // Attempt to connect, returning the error if there is one
-    if let Err(e) = tcp_socket
-        .connect((address, remote_port), local_port)
-        .map_err(|e| match e {
-            smoltcp::Error::Illegal => NetError::SocketInUse,
-            smoltcp::Error::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
-        })
-    {
-        log::trace!("couldn't connect: {:?}", e);
-        respond_with_error(msg, e);
-        return;
-    }
-
-    tcp_socket.set_timeout(timeout_ms.map(|t| Duration::from_millis(t.get())));
-
-    let handle = sockets.add(tcp_socket);
-
-    // Add the socket onto the list of sockets waiting to connect, since the connection will
-    // take time.
-    let idx = insert_or_append(our_sockets, handle) as u16;
-    insert_or_append(
-        tcp_connect_waiting,
-        (msg, handle, idx, local_port, remote_port),
-    );
-}
-
-fn std_tcp_tx(
-    mut msg: xous::MessageEnvelope,
-    timer: &Ticktimer,
-    sockets: &mut SocketSet,
-    tcp_tx_waiting: &mut Vec<Option<WaitingSocket>>,
-    our_sockets: &Vec<Option<SocketHandle>>,
-) {
-    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
-    let body = match msg.body.memory_message_mut() {
-        Some(body) => body,
-        None => {
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    let handle = match our_sockets.get(connection_handle_index) {
-        Some(Some(val)) => val,
-        _ => {
-            respond_with_error(msg, NetError::Invalid);
-            return;
-        }
-    };
-
-    let mut socket = sockets.get::<TcpSocket>(*handle);
-    if !socket.can_send() {
-        log::trace!("tx can't send, will retry");
-        let expiry = body
-            .offset
-            .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
-        // Add the message to the TcpRxWaiting list, which will prevent it from getting
-        // responded to right away.
-        insert_or_append(
-            tcp_tx_waiting,
-            WaitingSocket {
-                env: msg,
-                handle: *handle,
-                expiry,
-            },
-        );
-        return;
-    }
-
-    // Perform the transfer
-    let sent_octets = {
-        let data = body.buf.as_slice::<u8>();
-        let length = body
-            .valid
-            .map(|v| {
-                if v.get() > data.len() {
-                    data.len()
-                } else {
-                    v.get()
-                }
-            })
-            .unwrap_or_else(|| data.len());
-
-        match socket.send_slice(&data[..length]) {
-            Ok(octets) => octets,
-            Err(_) => {
-                respond_with_error(msg, NetError::LibraryError);
-                return;
-            }
-        }
-    };
-
-    log::trace!("sent {}", sent_octets);
-    let response_data = body.buf.as_slice_mut::<u32>();
-    body.valid = xous::MemorySize::new(sent_octets);
-    response_data[0] = 0;
-    response_data[1] = sent_octets as u32;
-}
-
-fn std_tcp_rx(
-    mut msg: xous::MessageEnvelope,
-    timer: &Ticktimer,
-    sockets: &mut SocketSet,
-    tcp_rx_waiting: &mut Vec<Option<WaitingSocket>>,
-    our_sockets: &Vec<Option<SocketHandle>>,
-) {
-    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
-    let body = match msg.body.memory_message_mut() {
-        Some(body) => body,
-        None => {
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    // Default to having no valid data upon return, indicating an error
-    body.valid = None;
-
-    let handle = match our_sockets.get(connection_handle_index) {
-        Some(Some(val)) => val,
-        _ => {
-            respond_with_error(msg, NetError::Invalid);
-            return;
-        }
-    };
-
-    let mut socket = sockets.get::<TcpSocket>(*handle);
-    if socket.can_recv() {
-        log::trace!("receiving data right away");
-        match socket.recv_slice(body.buf.as_slice_mut()) {
-            Ok(bytes) => {
-                body.valid = xous::MemorySize::new(bytes);
-                log::trace!("set body.valid = {:?}", body.valid);
-            }
-            Err(e) => {
-                log::error!("unable to receive: {:?}", e);
-                respond_with_error(msg, NetError::LibraryError);
-            }
-        }
-        return;
-    }
-
-    log::trace!("socket was not able to receive, adding it to list of waiting messages");
-
-    // Add the message to the TcpRxWaiting list, which will prevent it from getting
-    // responded to right away.
-    let expiry = body
-        .offset
-        .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
-    insert_or_append(
-        tcp_rx_waiting,
-        WaitingSocket {
-            env: msg,
-            handle: *handle,
-            expiry,
-        },
-    );
-}
-
-fn std_tcp_peek(
-    mut msg: xous::MessageEnvelope,
-    sockets: &mut SocketSet,
-    our_sockets: &Vec<Option<SocketHandle>>,
-) {
-    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
-    let body = match msg.body.memory_message_mut() {
-        Some(body) => body,
-        None => {
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    // Default to having no valid data upon return, indicating an error
-    body.valid = None;
-
-    let handle = match our_sockets.get(connection_handle_index) {
-        Some(Some(val)) => val,
-        _ => {
-            respond_with_error(msg, NetError::Invalid);
-            return;
-        }
-    };
-
-    let mut socket = sockets.get::<TcpSocket>(*handle);
-    if socket.can_recv() {
-        log::trace!("receiving data right away");
-        match socket.peek_slice(body.buf.as_slice_mut()) {
-            Ok(bytes) => {
-                body.valid = xous::MemorySize::new(bytes);
-                log::trace!("set body.valid = {:?}", body.valid);
-            }
-            Err(e) => {
-                log::error!("unable to receive: {:?}", e);
-                respond_with_error(msg, NetError::LibraryError);
-            }
-        }
-    } else {
-        // No data available, so indicate `None`
-        body.valid = None;
-        // Also indicate no error
-        body.buf.as_slice_mut::<u32>()[0] = 0;
-    }
 }
 
 #[xous::xous_main]
@@ -507,11 +158,12 @@ fn xmain() -> ! {
     // storage for all our sockets
     let mut sockets = SocketSet::new(vec![]);
 
+    // ------------- libstd variant -----------
     // Each process keeps track of its own sockets. These are kept in a Vec. When a handle
     // is destroyed, it is turned into a `None`.
     let mut process_sockets: HashMap<Option<xous::PID>, Vec<Option<SocketHandle>>> = HashMap::new();
 
-    // When a client issues a Receive request, it will get placed here while the packet data
+    // When a TCP client issues a Receive request, it will get placed here while the packet data
     // is being accumulated.
     let mut tcp_rx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
@@ -531,6 +183,11 @@ fn xmain() -> ! {
         )>,
     > = Vec::new();
 
+    // When a UDP client opens a socket, an entry is automatically created here to accumulate
+    // incoming UDP socket data.
+    let mut udp_rx_waiting: Vec<Option<UdpStdState>> = Vec::new();
+
+    // ------------- native variant -----------
     // ping storage
     // up to four concurrent pings in the queue
     let icmp_rx_buffer = IcmpSocketBuffer::new(
@@ -561,13 +218,6 @@ fn xmain() -> ! {
     // this record stores the origin time + IP address of the outgoing ping sequence number
     let mut ping_destinations = HashMap::<PingConnection, HashMap<u16, u64>>::new();
     let mut ping_timeout_ms = PING_DEFAULT_TIMEOUT_MS;
-
-    // udp storage
-    let mut udp_handles = HashMap::<u16, UdpState>::new();
-    // UDP requires multiple copies. The way it works is that Tx can come from anyone;
-    // for Rx, copies of a CID,SID tuple are kept for every clone is kept in a HashMap. This
-    // allows for the Rx data to be cc:'d to each clone, and identified by SID upon drop
-    let mut udp_clones = HashMap::<u16, HashMap<[u32; 4], CID>>::new(); // additional clones for UDP responders
 
     // tcp storage
     let mut tcp_handles = HashMap::<TcpConnection, TcpState>::new();
@@ -821,7 +471,7 @@ fn xmain() -> ! {
             }),
 
             Some(Opcode::StdTcpConnect) => {
-                // Pick a random locak port using the system's TRNG
+                // Pick a random local port using the system's TRNG
                 let local_port = (trng.get_u32().unwrap() % 16384 + 49152) as u16;
                 let pid = msg.sender.pid();
 
@@ -832,6 +482,13 @@ fn xmain() -> ! {
                     &mut tcp_connect_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpTx) => {
@@ -843,6 +500,13 @@ fn xmain() -> ! {
                     &mut tcp_tx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpPeek) => {
@@ -883,7 +547,7 @@ fn xmain() -> ! {
                 sockets.remove(handle);
                 if let Some(response) = msg.body.memory_message_mut() {
                     response.buf.as_slice_mut::<u8>()[0] = 0;
-                } else if !msg.body.is_blocking() && msg.body.is_blocking() {
+                } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
             }
@@ -928,10 +592,17 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let socket = sockets.get::<TcpSocket>(*connection);
+                    let args = msg.body.scalar_message().unwrap();
+                    let limit = if args.arg4 == 1 {
+                        let socket = sockets.get::<UdpSocket>(*connection);
+                        socket.hop_limit().unwrap_or(64) as usize
+                    } else {
+                        let socket = sockets.get::<TcpSocket>(*connection);
+                        socket.hop_limit().unwrap_or(64) as usize
+                    };
                     xous::return_scalar(
                         msg.sender,
-                        socket.hop_limit().unwrap_or_default() as usize,
+                        limit,
                     )
                     .ok();
                 } else {
@@ -954,14 +625,19 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let mut socket = sockets.get::<TcpSocket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
-                    let hop_limit = if args.arg1 == 0 {
+                    let hop_limit = if (args.arg1 == 0) || (args.arg1 > 255) {
                         None
                     } else {
                         Some(args.arg1 as u8)
                     };
-                    socket.set_hop_limit(hop_limit);
+                    if args.arg4 == 1 {
+                        let mut socket = sockets.get::<UdpSocket>(*connection);
+                        socket.set_hop_limit(hop_limit);
+                    } else {
+                        let mut socket = sockets.get::<TcpSocket>(*connection);
+                        socket.set_hop_limit(hop_limit);
+                    }
                     xous::return_scalar(msg.sender, 0).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
@@ -1335,190 +1011,70 @@ fn xmain() -> ! {
                 }
                 buf.replace(tcpspec).unwrap();
             }
-            Some(Opcode::UdpBind) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
 
-                let buflen = if let Some(maxlen) = udpspec.max_payload {
-                    maxlen as usize
-                } else {
-                    NET_MTU as usize
-                };
-                if udp_handles.contains_key(&udpspec.port) {
-                    // if we're already connected, just register the extra listener in the clones array
-                    let sid = udpspec.cb_sid;
-                    let cid = xous::connect(SID::from_array(sid)).unwrap();
-                    if let Some(clone_map) = udp_clones.get_mut(&udpspec.port) {
-                        // if a clone already exists, put the additional clone into the map
-                        match clone_map.insert(sid, cid) {
-                            Some(_) => {
-                                log::error!("Something went wrong in a UDP clone operation -- same SID registered twice");
-                                buf.replace(NetMemResponse::SocketInUse).unwrap()
-                            } // the same SID has double-registered, this is an error
-                            None => buf.replace(NetMemResponse::Ok).unwrap(),
-                        }
+            Some(Opcode::StdUdpBind) => {
+                let pid = msg.sender.pid();
+                std_udp_bind(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+            }
+
+            Some(Opcode::StdUdpRx) => {
+                let pid = msg.sender.pid();
+                std_udp_rx(
+                    msg,
+                    &timer,
+                    &mut sockets,
+                    &mut udp_rx_waiting,
+                    process_sockets.entry(pid).or_default(),
+                );
+            }
+
+            Some(Opcode::StdUdpTx) => {
+                let pid = msg.sender.pid();
+                std_udp_tx(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
+            }
+
+            Some(Opcode::StdUdpClose) => {
+                log::debug!("StdUdpClose");
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
                     } else {
-                        // otherwise, create the clone mapping entry
-                        let mut newmap = HashMap::new();
-                        newmap.insert(sid, cid);
-                        udp_clones.insert(udpspec.port, newmap);
+                        udp_failure(msg, NetError::Invalid);
+                        continue;
                     }
-                    buf.replace(NetMemResponse::Ok).unwrap();
                 } else {
-                    let udp_rx_buffer =
-                        UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
-                    let udp_tx_buffer =
-                        UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
-                    let mut udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
-                    match udp_socket.bind(udpspec.port) {
-                        Ok(_) => {
-                            let sid = SID::from_array(udpspec.cb_sid);
-                            let udpstate = UdpState {
-                                handle: sockets.add(udp_socket),
-                                cid: xous::connect(sid).unwrap(),
-                                sid,
-                            };
-                            udp_handles.insert(udpspec.port, udpstate);
-                            buf.replace(NetMemResponse::Ok).unwrap();
-                        }
-                        Err(e) => {
-                            log::error!("Udp couldn't bind to socket: {:?}", e);
-                            buf.replace(NetMemResponse::Invalid).unwrap();
-                        }
-                    }
-                }
-            }
-            Some(Opcode::UdpClose) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                    udp_failure(msg, NetError::Invalid);
+                    continue;
                 };
-                let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
-                // need to find the SID that matches either in the clone array, or the primary binding.
-                // first check the clone array, then fall back to the primary binding
-                match udp_clones.get_mut(&udpspec.port) {
-                    Some(clone_map) => match clone_map.remove(&udpspec.cb_sid) {
-                        Some(cid) => {
-                            cid_to_disconnect = Some(cid);
-                            buf.replace(NetMemResponse::Ok).unwrap();
-                            continue;
-                        }
-                        None => {}
-                    },
-                    None => {}
-                }
-                match udp_handles.remove(&udpspec.port) {
-                    Some(udpstate) => {
-                        if udpstate.sid == SID::from_array(udpspec.cb_sid) {
-                            match udp_clones.get_mut(&udpspec.port) {
-                                // if the clone map is nil, close the socket, we're done
-                                None => {
-                                    sockets.get::<UdpSocket>(udpstate.handle).close();
-                                    sockets.remove(udpstate.handle);
-                                    buf.replace(NetMemResponse::Ok).unwrap();
-                                }
-                                // if the clone map has entries, promote an arbitrary map entry to the primary handle
-                                Some(clone_map) => {
-                                    if clone_map.len() == 0 {
-                                        // removing SIDs doesn't remove the map, so it's possible to have an empty mapping. Get rid of it, and we're done.
-                                        udp_clones.remove(&udpspec.port);
-                                        sockets.get::<UdpSocket>(udpstate.handle).close();
-                                        sockets.remove(udpstate.handle);
-                                        buf.replace(NetMemResponse::Ok).unwrap();
-                                    } else {
-                                        // take an arbitrary key, re-insert it into the handles map.
-                                        let new_primary_sid = *clone_map.keys().next().unwrap(); // unwrap is appropriate because len already checked as not 0
-                                        let udpstate = UdpState {
-                                            handle: udpstate.handle,
-                                            cid: *clone_map.get(&new_primary_sid).unwrap(),
-                                            sid: SID::from_array(new_primary_sid),
-                                        };
-                                        udp_handles.insert(udpspec.port, udpstate);
-                                        // now remove it from the clone map
-                                        clone_map.remove(&new_primary_sid);
-                                        // clean up the clone map if it's empty
-                                        if clone_map.len() == 0 {
-                                            udp_clones.remove(&udpspec.port);
-                                        }
-                                        buf.replace(NetMemResponse::Ok).unwrap();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => buf.replace(NetMemResponse::Invalid).unwrap(),
+                sockets.get::<UdpSocket>(handle).close();
+                sockets.remove(handle);
+                if let Some(response) = msg.body.memory_message_mut() {
+                    response.buf.as_slice_mut::<u8>()[0] = 0;
+                } else if !msg.body.has_memory() && msg.body.is_blocking() {
+                    xous::return_scalar(msg.sender, 0).ok();
                 }
             }
-            Some(Opcode::UdpTx) => {
-                use std::convert::TryInto;
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let udp_tx = buf.to_original::<NetUdpTransmit, _>().unwrap();
-                match udp_handles.get_mut(&udp_tx.local_port) {
-                    Some(udpstate) => {
-                        if let Some(dest_socket) = udp_tx.dest_socket {
-                            let endpoint = IpEndpoint::new(
-                                dest_socket.addr.try_into().unwrap(),
-                                dest_socket.port,
-                            );
-                            let mut socket = sockets.get::<UdpSocket>(udpstate.handle);
-                            match socket.send_slice(&udp_tx.data[..udp_tx.len as usize], endpoint) {
-                                Ok(_) => buf.replace(NetMemResponse::Sent(udp_tx.len)).unwrap(),
-                                _ => buf.replace(NetMemResponse::LibraryError).unwrap(),
-                            }
-                            // fire off a Pump to get the stack to actually transmit the ping; the send call merely queues it for sending
-                            xous::try_send_message(
-                                net_conn,
-                                Message::new_scalar(
-                                    Opcode::NetPump.to_usize().unwrap(),
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                ),
-                            )
-                            .ok();
-                        } else {
-                            buf.replace(NetMemResponse::Invalid).unwrap()
-                        }
-                    }
-                    _ => buf.replace(NetMemResponse::Invalid).unwrap(),
-                }
-            }
-            Some(Opcode::UdpSetTtl) => msg_scalar_unpack!(msg, ttl, port, _, _, {
-                match udp_handles.get_mut(&(port as u16)) {
-                    Some(udpstate) => {
-                        let mut socket = sockets.get::<UdpSocket>(udpstate.handle);
-                        let checked_ttl = if ttl > 255 || ttl == 0 { 64 } else { ttl as u8 };
-                        socket.set_hop_limit(Some(checked_ttl));
-                    }
-                    None => {
-                        log::error!(
-                            "Set TTL message received, but no port was bound! port {} ttl {}",
-                            port,
-                            ttl
-                        );
-                    }
-                }
-            }),
-            Some(Opcode::UdpGetTtl) => msg_blocking_scalar_unpack!(msg, port, _, _, _, {
-                match udp_handles.get_mut(&(port as u16)) {
-                    Some(udpstate) => {
-                        let socket = sockets.get::<UdpSocket>(udpstate.handle);
-                        let ttl = socket.hop_limit().unwrap_or(64); // 64 is the value used by smoltcp if hop limit isn't set
-                        xous::return_scalar(msg.sender, ttl as usize).expect("couldn't return TTL");
-                    }
-                    None => {
-                        log::error!(
-                            "Set TTL message received, but no port was bound! port {}",
-                            port
-                        );
-                        xous::return_scalar(msg.sender, usize::MAX).expect("couldn't return TTL");
-                    }
-                }
-            }),
 
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
@@ -1950,48 +1506,74 @@ fn xmain() -> ! {
                     }
                 }
 
-                // this block handles UDP
-                {
-                    for (port, udpstate) in udp_handles.iter() {
-                        let handle = udpstate.handle;
-                        let mut socket = sockets.get::<UdpSocket>(handle);
+                // this block handles StdUdp
+                for connection in udp_rx_waiting.iter_mut() {
+                    let mut socket;
+                    let UdpStdState {
+                        mut msg,
+                        handle: _,
+                        expiry: _,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<UdpSocket>(s.handle);
+                                if !socket.can_recv() {
+                                    if let Some(trigger) = s.expiry {
+                                        if trigger < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                } // we don't process the Rx here because we need to `take()` the message first, so that its lifetime ends
+                            }
+                        }
+                        // remove the connection from the list, allowing subsequent code to operate on it and then .drop()
+                        connection.take().unwrap()
+                    };
+
+                    // If it can't receive, then the only explanation was that it timed out
+                    if !socket.can_recv() {
+                        udp_failure(msg, NetError::TimedOut);
+                        continue;
+                    }
+
+                    // Extract the receive data here; the `msg` will go out of scope at this point.
+                    let do_peek = msg.body.memory_message().unwrap().offset.is_some();
+                    if do_peek {
+                        match socket.peek() {
+                            Ok((data, endpoint)) => {
+                                udp_rx_success(
+                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
+                                    data,
+                                    *endpoint // have to duplicate the code between peek and recv because of this type difference
+                                );
+                            }
+                            Err(e) => {
+                                log::error!("unable to receive: {:?}", e);
+                                udp_failure(msg, NetError::LibraryError);
+                            }
+                        }
+                    } else {
                         match socket.recv() {
                             Ok((data, endpoint)) => {
-                                log::trace!(
-                                    "udp:{} recv data: {:x?} from {}",
-                                    port,
+                                log::debug!("netpump udp rx");
+                                udp_rx_success(
+                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
                                     data,
                                     endpoint
                                 );
-                                // return the data/endpoint tuple to the caller
-                                let mut response = NetUdpResponse {
-                                    endpoint_ip_addr: NetIpAddr::from(endpoint.addr),
-                                    len: data.len() as u16,
-                                    endpoint_port: endpoint.port,
-                                    data: [0; UDP_RESPONSE_MAX_LEN],
-                                };
-                                for (&src, dst) in data.iter().zip(response.data.iter_mut()) {
-                                    *dst = src;
-                                }
-                                let buf = Buffer::into_buf(response)
-                                    .expect("couldn't convert UDP response to memory message");
-                                buf.send(udpstate.cid, NetUdpCallback::RxData.to_u32().unwrap())
-                                    .expect("couldn't send UDP response");
-                                // now send copies to the cloned receiver array, if they exist
-                                if let Some(clone_map) = udp_clones.get(port) {
-                                    for &cids in clone_map.values() {
-                                        let buf = Buffer::into_buf(response).expect(
-                                            "couldn't convert UDP response to memory message",
-                                        );
-                                        buf.send(cids, NetUdpCallback::RxData.to_u32().unwrap())
-                                            .expect("couldn't send UDP response");
-                                    }
-                                }
                             }
-                            Err(_) => {
-                                // do nothing
+                            Err(e) => {
+                                log::error!("unable to receive: {:?}", e);
+                                udp_failure(msg, NetError::LibraryError);
                             }
-                        };
+                        }
                     }
                 }
 

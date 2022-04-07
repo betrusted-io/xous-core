@@ -38,7 +38,7 @@ pub(crate) fn spawn_test() {
             // The start and end items are deliberately structured to be not zero-indexed; the use of PDDB_LOC is just a
             // convenient global constant.
             modals.start_progress("Progress Quest", xous::PDDB_LOC, xous::PDDB_LOC + 64*1024*128, xous::PDDB_LOC).expect("couldn't raise progress bar");
-            for i in (xous::PDDB_LOC..xous::PDDB_LOC + 64*1024*128).step_by(64*1024) {
+            for i in (xous::PDDB_LOC..xous::PDDB_LOC + 64*1024*128).step_by(64*1024*16) {
                 modals.update_progress(i).expect("couldn't update progress bar");
                 tt.sleep_ms(100).unwrap();
             }

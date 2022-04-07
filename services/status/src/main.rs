@@ -30,7 +30,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 )]
 use std::thread;
 
-const SERVER_NAME_STATUS: &str = "_Status bar manager_";
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -138,10 +137,8 @@ fn xmain() -> ! {
     log::trace!("|status: my canvas {:?}", status_gid);
 
     log::debug!("|status: registering GAM|status thread");
-    // we have one connection, from the status main loop; but we make it with a local call, not using xns. so there's 0 in xns.
-    let status_sid = xns
-        .register_name(SERVER_NAME_STATUS, Some(0))
-        .expect("|status: can't register server");
+
+    let status_sid = xous::create_server().unwrap(); // completely private to this crate
     // create a connection for callback hooks
     let cb_cid = xous::connect(status_sid).unwrap();
     unsafe { CB_TO_MAIN_CONN = Some(cb_cid) };
@@ -166,8 +163,8 @@ fn xmain() -> ! {
     // layout: 336 px wide
     // 0                   150 150 200
     // Feb 05 15:00 (00:06:23) xxxx     3.72V/-100mA/99%
-    const CPU_BAR_WIDTH: i16 = 48;
-    const CPU_BAR_OFFSET: i16 = 4;
+    const CPU_BAR_WIDTH: i16 = 46;
+    const CPU_BAR_OFFSET: i16 = 8;
     let time_rect = Rectangle::new_with_style(
         Point::new(0, 0),
         Point::new(screensize.x / 2 - CPU_BAR_WIDTH / 2 - 1 + CPU_BAR_OFFSET, screensize.y / 2 - 1),

@@ -1281,7 +1281,9 @@ pub fn claim_interrupt(
 ///
 /// # Errors
 ///
-/// * **OutOfMemory**: No more servers may be created
+/// * **OutOfMemory**: No more servers may be created because the server
+///                    count limit has been reached, or the system does not
+///                    have enough memory for the backing store.
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
 pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
@@ -1304,7 +1306,9 @@ pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result
 ///
 /// # Errors
 ///
-/// * **OutOfMemory**: No more servers may be created
+/// * **OutOfMemory**: No more servers may be created because the server
+///                    count limit has been reached, or the system does not
+///                    have enough memory for the backing store.
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
 pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
@@ -1326,6 +1330,9 @@ pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
 /// # Errors
 ///
 /// * **ServerNotFound**: No more servers may be created
+/// * **OutOfMemory**: No more servers may be created because the server
+///                    count limit has been reached, or the system does not
+///                    have enough memory for the backing store.
 pub fn create_server() -> core::result::Result<SID, Error> {
     let result = rsyscall(SysCall::CreateServer)?;
     if let Result::NewServerID(sid, _cid) = result {

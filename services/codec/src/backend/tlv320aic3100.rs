@@ -294,7 +294,7 @@ impl Codec {
         }
     }
     fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
-        match self.i2c.i2c_read(TLV320AIC3100_I2C_ADR, adr, data, None) {
+        match self.i2c.i2c_read(TLV320AIC3100_I2C_ADR, adr, data) {
             Ok(status) => {
                 match status {
                     I2cStatus::ResponseReadOk => true,

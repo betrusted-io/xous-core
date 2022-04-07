@@ -42,7 +42,7 @@ pub struct SystemServices {
     pub processes: [Process; MAX_PROCESS_COUNT],
 
     /// A table of all servers in the system
-    servers: [Option<Server>; MAX_SERVER_COUNT],
+    pub servers: [Option<Server>; MAX_SERVER_COUNT],
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -140,7 +140,12 @@ impl Default for Process {
     fn default() -> Self {
         Process {
             ppid: unsafe { PID::new_unchecked(1) },
-            ..Default::default()
+            state: ProcessState::Allocated,
+            pid: unsafe { PID::new_unchecked(2) },
+            current_thread: 0,
+            previous_thread: 0,
+            exception_handler: None,
+            mapping: Default::default(),
         }
     }
 }

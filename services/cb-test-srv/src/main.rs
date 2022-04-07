@@ -43,7 +43,7 @@ fn shell_main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     let server = xns
-        .register_name(api::SERVER_NAME)
+        .register_name(api::SERVER_NAME, None)
         .expect("can't register server");
 
     xous::create_thread_0(pump_thread).unwrap();
