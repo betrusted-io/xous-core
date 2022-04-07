@@ -226,9 +226,15 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         "zerolength",
                         None, true, true,
                         Some(8),
-                        None::<fn()>
+                        None::<fn()>,
                     ).expect("couldn't build empty key");
                     self.pddb.sync().unwrap();
+                    if let Some(name) = bname {
+                        match self.pddb.lock_basis(name) {
+                            Ok(_) => log::info!("basis {} lock successful", name),
+                            Err(e) => log::info!("basis {} could not be unmounted: {:?}", name, e),
+                        }
+                    }
                     self.pddb.dbg_remount().unwrap();
                     if let Some(name) = bname {
                         match self.pddb.unlock_basis(name, None) {
@@ -255,7 +261,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         "seekwrite",
                         None, true, true,
                         Some(64),
-                        None::<fn()>
+                        Some(|| {
+                            log::info!("test:seekwrite key was unmounted");
+                        })
                     ).expect("couldn't build empty key");
                     // 1, 1, 1, 1
                     log::info!("wrote {} bytes at offset 0",
@@ -268,6 +276,18 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     log::info!("wrote {} bytes at offset 2",
                         seekwrite.write(&[2, 2, 2, 2]).unwrap()
                     );
+                    if let Some(name) = bname {
+                        match self.pddb.lock_basis(name) {
+                            Ok(_) => log::info!("basis {} lock successful", name),
+                            Err(e) => log::info!("basis {} could not be unmounted: {:?}", name, e),
+                        }
+                    }
+                    if let Some(name) = bname {
+                        match self.pddb.unlock_basis(name, None) {
+                            Ok(_) => log::info!("basis {} unlocked successfully", name),
+                            Err(e) => log::info!("basis {} could not be unlocked: {:?}", name, e),
+                        }
+                    }
                     // 1, 1, 2, 2, 2, 2, 0, 0, 3, 3
                     log::info!("seek to {}",
                         seekwrite.seek(SeekFrom::Start(8)).unwrap()

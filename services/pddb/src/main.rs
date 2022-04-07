@@ -405,6 +405,7 @@ pub(crate) enum PasswordState {
     Uninit,
 }
 
+#[derive(Debug)]
 struct TokenRecord {
     pub dict: String,
     pub key: String,
@@ -1410,6 +1411,7 @@ fn notify_of_disconnect(pddb_os: &mut PddbOs, token_dict: &HashMap::<ApiToken, T
     // 1. search to see if any of the active tokens are are in our token_dict
     // 2. notify them of the disconnect, if there is a callback set.
     for (api_key, entry) in token_dict.iter() {
+        log::debug!("disconnect notify searching {:?}", entry);
         if let Some(cb) = entry.conn {
             match basis_cache.key_attributes(pddb_os, &entry.dict, &entry.key, entry.basis.as_deref()) {
                 Ok(_) => {
