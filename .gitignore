@@ -1,7 +1,4 @@
-/target
-/kernel/target
-/loader/target
-/locales/target
+target
 **/*.rs.bk
 /emulation/peripherals.csproj
 /emulation/obj
