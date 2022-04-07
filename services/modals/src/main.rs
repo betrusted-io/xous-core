@@ -82,11 +82,10 @@ fn xmain() -> ! {
     let mut dr: Option<xous::MessageEnvelope> = None;
 
     // build the core data structure here
-    let text_action = TextEntry {
-        action_conn: renderer_cid,
-        action_opcode: Opcode::TextEntryReturn.to_u32().unwrap(),
-        ..Default::default()
-    };
+    let mut text_action: TextEntry = Default::default();
+    text_action.action_conn = renderer_cid;
+    text_action.action_opcode = Opcode::TextEntryReturn.to_u32().unwrap();
+
     let mut fixed_items = Vec::<ItemName>::new();
     let notification = gam::modal::Notification::new(
         renderer_cid,
@@ -106,7 +105,7 @@ fn xmain() -> ! {
     let mut renderer_modal =
         Modal::new(
             gam::SHARED_MODAL_NAME,
-            ActionType::TextEntry(text_action),
+            ActionType::TextEntry(text_action.clone()),
             Some("Placeholder"),
             None,
             GlyphStyle::Regular,
@@ -305,7 +304,7 @@ fn xmain() -> ! {
                         #[cfg(feature="tts")]
                         tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
                         renderer_modal.modify(
-                            Some(ActionType::TextEntry(text_action)),
+                            Some(ActionType::TextEntry(text_action.clone())),
                             Some(config.prompt.as_str().unwrap()), false,
                             None, true, None
                         );

@@ -28,11 +28,6 @@ pub struct ManagedListItem {
 pub struct ManagedPromptWithTextResponse {
     pub token: [u32; 4],
     pub prompt: xous_ipc::String::<1024>,
-    /// SID of a validator
-    pub validator: Option<[u32; 4]>,
-    /// the opcode to pass the validator
-    pub validator_op: u32,
-    /// the amount of fields to read
     pub fields: u32,
     /// placeholders
     pub placeholders: Option<[Option<xous_ipc::String::<256>>; 10]>,
