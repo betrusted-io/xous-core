@@ -20,7 +20,7 @@ pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 pub(crate) static POLLER_REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-enum CbOp {
+pub enum CbOp {
     Change,
     Quit
 }
@@ -73,8 +73,7 @@ impl Drop for PddbMountPoller {
 pub struct Pddb {
     conn: CID,
     /// a SID that we can directly share with the PDDB server for the purpose of handling key change callbacks
-    cb_sid: SID,
-    cb_handle: Option<JoinHandle::<()>>,
+    cb: Option<(SID, JoinHandle::<()>)>,
     /// Handle key change updates. The general intent is that the closure implements a
     /// `send` of a message to the server to deal with a key change appropriately,
     /// but no mutable data is allowed within the closure itself due to safety problems.
@@ -93,39 +92,43 @@ impl Pddb {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("can't connect to Pddb server");
-        let sid = xous::create_server().unwrap();
         let keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>> = Arc::new(Mutex::new(HashMap::new()));
-        let handle = thread::spawn({
-            let keys = Arc::clone(&keys);
-            let sid = sid.clone();
-            move || {
-                loop {
-                    let msg = xous::receive_message(sid).unwrap();
-                    match FromPrimitive::from_usize(msg.body.id()) {
-                        Some(CbOp::Change) => msg_scalar_unpack!(msg, t0, t1, t2, _, {
-                            let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
-                            if let Some(cb) = keys.lock().unwrap().get(&token) {
-                                cb();
-                            } else {
-                                log::warn!("Key changed but no callback was hooked to receive it");
-                            }
-                        }),
-                        Some(CbOp::Quit) => { // blocking scalar
-                            xous::return_scalar(msg.sender, 0).unwrap();
-                            break;
-                        },
-                        _ =>log::warn!("Got unknown opcode: {:?}", msg),
-                    }
-                }
-                xous::destroy_server(sid).unwrap();
-            }
-        });
         Pddb {
             conn,
-            cb_sid: sid,
-            cb_handle: Some(handle),
+            cb: None,
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
+        }
+    }
+    fn ensure_async_responder(&mut self) {
+        if self.cb.is_none() {
+            let sid = xous::create_server().unwrap();
+            let handle = thread::spawn({
+                let keys = Arc::clone(&self.keys);
+                let sid = sid.clone();
+                move || {
+                    loop {
+                        let msg = xous::receive_message(sid).unwrap();
+                        match FromPrimitive::from_usize(msg.body.id()) {
+                            Some(CbOp::Change) => msg_scalar_unpack!(msg, t0, t1, t2, _, {
+                                let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
+                                if let Some(cb) = keys.lock().unwrap().get(&token) {
+                                    cb();
+                                } else {
+                                    log::warn!("Key changed but no callback was hooked to receive it");
+                                }
+                            }),
+                            Some(CbOp::Quit) => { // blocking scalar
+                                xous::return_scalar(msg.sender, 0).unwrap();
+                                break;
+                            },
+                            _ =>log::warn!("Got unknown opcode: {:?}", msg),
+                        }
+                    }
+                    xous::destroy_server(sid).unwrap();
+                }
+            });
+            self.cb = Some((sid, handle));
         }
     }
     /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
@@ -310,6 +313,14 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
+        if key_changed_cb.is_some() {
+            self.ensure_async_responder();
+        }
+        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+            Some(sid.to_array())
+        } else {
+            None
+        };
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -319,7 +330,7 @@ impl Pddb {
             create_key,
             token: None,
             result: PddbRequestCode::Uninit,
-            cb_sid: self.cb_sid.to_array(),
+            cb_sid,
             alloc_hint: if let Some(a) = alloc_hint {Some(a as u64)} else {None},
         };
         let mut buf = Buffer::into_buf(request)
@@ -380,6 +391,11 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
+        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+            Some(sid.to_array())
+        } else {
+            None
+        };
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -389,7 +405,7 @@ impl Pddb {
             create_key: false,
             token: None,
             result: PddbRequestCode::Uninit,
-            cb_sid: self.cb_sid.to_array(),
+            cb_sid,
             alloc_hint: None,
         };
         let mut buf = Buffer::into_buf(request)
@@ -418,6 +434,11 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
+        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+            Some(sid.to_array())
+        } else {
+            None
+        };
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -427,7 +448,7 @@ impl Pddb {
             create_key: false,
             token: None,
             result: PddbRequestCode::Uninit,
-            cb_sid: self.cb_sid.to_array(),
+            cb_sid,
             alloc_hint: None,
         };
         let mut buf = Buffer::into_buf(request)
@@ -607,10 +628,10 @@ impl Pddb {
 
 impl Drop for Pddb {
     fn drop(&mut self) {
-        let cid = xous::connect(self.cb_sid).unwrap();
-        send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-        unsafe{xous::disconnect(cid).ok();}
-        if let Some(handle) = self.cb_handle.take() {
+        if let Some((cb_sid, handle)) = self.cb.take() {
+            let cid = xous::connect(cb_sid).unwrap();
+            send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).ok();}
             handle.join().expect("couldn't terminate callback helper thread");
         }
 

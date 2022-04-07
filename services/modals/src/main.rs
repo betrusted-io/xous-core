@@ -1,6 +1,31 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+/// A modals initiator will:
+///
+/// 1. unpack the specification from the incoming message
+/// 2. check the API token
+/// 3. if valid, set the `op` with the appropriate enum to encapsulate the spec
+/// 4. store the memory message in the `dr` (deferred response) Option
+/// 5. send a message to itself to initiate the operation
+///
+/// The operation proceeds within this server, perhaps through multiple states.
+///
+/// On completion, the final state(s) do the following:
+///
+/// 1. unpack the return data message, which came from an internal (within-modals) state
+/// 2. `take()` the `dr` record, preparing for its lifetime to be ended
+/// 3. unpack the `memory_message` inside the `dr` record into a Buffer
+/// 4. `replace()` the return data into the `Buffer`
+/// 5. Set the op to `RenderState::None`
+/// 6. (implicit) the memory_message previously held in the `dr` record is dropped, trigging the caller to unblock
+/// 7. once you are sure you're finished, call `token_lock = next_lock(&mut work_queue);` to pull any waiting work from the work queue
+///
+/// Between 5 & 7 is where the TextEntry is weird: because you can "fail" on the return,
+/// it doesn't automatically do step 7. It's an extra step that the library implementation
+/// does after it does the text validation on its side, once it validates the caller sends
+/// a `TextResponseValid` message which pumps the work queue.
+
 mod api;
 use api::*;
 mod tests;

@@ -15,7 +15,7 @@ use num_traits::*;
 /// formatter, but it's built into the socket handle itself. The reasoning behind
 /// this was to keep memory allocations small and static.
 ///
-/// In a single-threaded implemnetation, one would normally have no problem simply
+/// In a single-threaded implementation, one would normally have no problem simply
 /// pulling up the socket handle and jamming or unpacking data using that handle.
 /// Unfortunately, in Xous, we want to keep smoltcp inside the Net crate, and not
 /// have it bleed into other parts of the OS. The first take at implementing this
