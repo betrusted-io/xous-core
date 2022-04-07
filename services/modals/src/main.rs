@@ -304,7 +304,12 @@ fn xmain() -> ! {
                         #[cfg(feature="tts")]
                         tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
                         renderer_modal.modify(
-                            Some(ActionType::TextEntry(text_action.clone())),
+                            Some(ActionType::TextEntry({
+                                let mut ta = text_action.clone();
+                                ta.reset_action_payloads(config.fields, config.placeholders);
+
+                                ta
+                            })),
                             Some(config.prompt.as_str().unwrap()), false,
                             None, true, None
                         );
@@ -477,7 +482,7 @@ fn xmain() -> ! {
                     RendererState::RunText(_config) => {
                         log::trace!("validating text entry modal");
                         let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                        let text = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
                         if let Some(mut origin) = dr.take() {
                             let mut response = unsafe { Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap()) };
                             response.replace(text).unwrap();
