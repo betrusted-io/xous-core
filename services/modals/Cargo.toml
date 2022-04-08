@@ -27,4 +27,4 @@ utralib = { path = "../../utralib"}
 [features]
 ux_tests = []
 tts = []
-default = []
+default = ["ux_tests"]
