@@ -518,6 +518,9 @@ fn xmain() -> ! {
     // it is the only server capable of doing this.
     let time_resetter = xns.request_connection_blocking(crate::TIME_SERVER_PDDB).unwrap();
 
+    // track processes that want a notification of a mount event
+    let mut mount_notifications = Vec::<xous::MessageSender>::new();
+
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
@@ -532,7 +535,7 @@ fn xmain() -> ! {
                 if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                 } else {
-                    xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
+                    mount_notifications.push(msg.sender); // defer response until later
                 }
             }),
             Some(Opcode::TryMount) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -547,6 +550,10 @@ fn xmain() -> ! {
                             PasswordState::Correct => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
+                                    for requester in mount_notifications.drain(..) {
+                                        xous::return_scalar(requester, 1).expect("couldn't return scalar");
+                                    }
+                                    assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -555,6 +562,10 @@ fn xmain() -> ! {
                             PasswordState::Uninit => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
+                                    for requester in mount_notifications.drain(..) {
+                                        xous::return_scalar(requester, 1).expect("couldn't return scalar");
+                                    }
+                                    assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
