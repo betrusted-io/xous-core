@@ -93,7 +93,7 @@ pub(crate) fn spawn_test() {
 
             // 3. test notificatons
             log::info!("testing notification");
-            modals.show_notification("这是一个测验!", false).expect("notification failed");
+            modals.show_notification("这是一个测验!", true).expect("notification failed");
             log::info!("notification test done");
 
             // 4. test qrcode
