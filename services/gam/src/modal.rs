@@ -14,8 +14,6 @@ mod progressbar;
 pub use progressbar::*;
 mod consoleinput;
 pub use consoleinput::*;
-mod qrcode;
-pub use self::qrcode::*;
 
 use enum_dispatch::enum_dispatch;
 
@@ -39,7 +37,6 @@ pub enum ActionType {
     CheckBoxes,
     Slider,
     Notification,
-    Qrcode,
     ConsoleInput
 }
 

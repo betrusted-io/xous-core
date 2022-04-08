@@ -55,7 +55,7 @@ impl Notification {
             None => {
                 self.qrcode = Vec::new();
                 self.qrwidth = 0;
-            },            
+            },
         }
     }
     fn draw_text(&self, at_height: i16, modal: &Modal) {
@@ -105,7 +105,7 @@ impl Notification {
         let mod_size_px: i16 = canvas_width / modules;
         let qrcode_width_px = qrcode_modules * mod_size_px;
         let quiet_px: i16 = (canvas_width - qrcode_width_px) / 2;
-        
+
         // Iterate thru qrcode and draw each module as a rectangle (square)
         let black = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         let top = at_height + 4 * modal.margin + quiet_px;
@@ -114,7 +114,7 @@ impl Notification {
         let mut bot_right;
         let mut x: i16;
         let mut y: i16;
-        let mut j: i16;        
+        let mut j: i16;
         for (i, module) in self.qrcode.iter().enumerate() {
             j = i.try_into().unwrap();
             x = left + (j % qrcode_modules) * mod_size_px;

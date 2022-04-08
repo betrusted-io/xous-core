@@ -60,7 +60,7 @@ pub(crate) fn spawn_test() {
 
             // 3. test notificatons
             log::info!("testing notification");
-            modals.show_notification("This is a test!").expect("notification failed");
+            modals.show_notification("This is a test!", false).expect("notification failed");
             log::info!("notification test done");
         }
     });
@@ -93,12 +93,12 @@ pub(crate) fn spawn_test() {
 
             // 3. test notificatons
             log::info!("testing notification");
-            modals.show_notification("这是一个测验!").expect("notification failed");
+            modals.show_notification("这是一个测验!", false).expect("notification failed");
             log::info!("notification test done");
 
             // 4. test qrcode
             log::info!("testing qrcode");
-            modals.show_qrcode("https://github.com/betrusted-io/xous-core").expect("qrcode failed");
+            modals.show_notification("https://github.com/betrusted-io/xous-core", true).expect("qrcode failed");
             log::info!("qrcode test done");
         }
     });
