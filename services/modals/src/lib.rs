@@ -89,6 +89,7 @@ impl Modals {
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        self.unlock();
         Ok(())
     }
 
