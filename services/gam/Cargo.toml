@@ -32,6 +32,8 @@ locales = {path = "../../locales"}
 
 tts-frontend = {path="../tts"}
 
+qrcode = { version = "0.12", default-features = false }
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 

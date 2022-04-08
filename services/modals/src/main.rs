@@ -100,15 +100,6 @@ fn xmain() -> ! {
                 validator: None,
             };
             let mut fixed_items = Vec::<ItemName>::new();
-            let notification = gam::modal::Notification::new(
-                renderer_cid,
-                RendererOp::NotificationReturn.to_u32().unwrap()
-            );
-            let mut gutter = gam::modal::Notification::new(
-                renderer_cid,
-                RendererOp::Gutter.to_u32().unwrap()
-            );
-            gutter.set_manual_dismiss(false);
             let mut progress_action = Slider::new(renderer_cid, RendererOp::Gutter.to_u32().unwrap(),
                 0, 100, 1, Some("%"), 0, true, true
             );
@@ -151,11 +142,19 @@ fn xmain() -> ! {
                                 log::debug!("should be active!");
                             },
                             RendererState::RunNotification(config) => {
+                                let mut notification = gam::modal::Notification::new(
+                                    renderer_cid,
+                                    RendererOp::NotificationReturn.to_u32().unwrap()
+                                );
+                                let text = config.message.as_str().unwrap();
+                                if config.as_qrcode {
+                                    notification.set_as_qrcode(Some(text));
+                                }
                                 #[cfg(feature="tts")]
                                 tts.tts_simple(config.message.as_str().unwrap()).unwrap();
                                 renderer_modal.modify(
                                     Some(ActionType::Notification(notification)),
-                                    Some(config.message.as_str().unwrap()), false,
+                                    Some(text), false,
                                     None, true, None
                                 );
                                 renderer_modal.activate();
@@ -230,8 +229,13 @@ fn xmain() -> ! {
                                     #[cfg(feature="tts")]
                                     tts.tts_simple(text.as_str().unwrap()).unwrap();
                                     bot_text.push_str(text.as_str().unwrap());
-                                }
-                                renderer_modal.modify(
+                                }                                                              
+                                let mut gutter = gam::modal::Notification::new(
+                                    renderer_cid,
+                                    RendererOp::Gutter.to_u32().unwrap()
+                                );
+                                gutter.set_manual_dismiss(false);
+                                renderer_modal.modify(  
                                     Some(ActionType::Notification(gutter)),
                                     Some(&top_text), config.title.is_none(),
                                     Some(&bot_text), config.text.is_none(),

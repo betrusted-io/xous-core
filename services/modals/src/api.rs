@@ -36,6 +36,7 @@ pub struct ManagedPromptWithTextResponse {
 pub struct ManagedNotification {
     pub token: [u32; 4],
     pub message: xous_ipc::String::<1024>,
+    pub as_qrcode: bool,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
