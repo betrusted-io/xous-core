@@ -111,9 +111,17 @@ impl Modals {
     /// but, progress updates are meant to be fast and frequent, and generally if a progress bar shows
     /// something whacky it's not going to affect a security outcome
     pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::UpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
-        ).expect("couldn't update progress");
+        match xous::try_send_message(self.conn,
+            Message::new_scalar(Opcode::DoUpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
+        ) {
+            Ok(_) => (),
+            Err(e) => {
+                log::warn!("update_progress failed with {:?}, skipping request", e);
+                // most likely issue is that the server queue is overfull because too many progress updates were sent
+                // sleep the sending thread to rate-limit requests, while discarding the current request.
+                xous::yield_slice()
+            }
+        }
         Ok(())
     }
 

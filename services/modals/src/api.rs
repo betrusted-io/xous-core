@@ -81,7 +81,7 @@ pub(crate) enum Opcode {
     /// raise a progress bar
     StartProgress,
     /// update the progress bar
-    UpdateProgress,
+    DoUpdateProgress,
     /// lower a progress bar
     StopProgress,
     /// update a dynamic notification's text
@@ -99,7 +99,6 @@ pub(crate) enum Opcode {
     // box because it's a convenience routine used by "everyone"; password boxes are always handled within
     // a given secured server so that the attack surface for these do not extend into the modals boundary.
     InitiateOp,
-    DoUpdateProgress,
     FinishProgress,
 
     TextEntryReturn,
