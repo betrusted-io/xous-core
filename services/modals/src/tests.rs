@@ -95,6 +95,11 @@ pub(crate) fn spawn_test() {
             log::info!("testing notification");
             modals.show_notification("这是一个测验!").expect("notification failed");
             log::info!("notification test done");
+
+            // 4. test qrcode
+            log::info!("testing qrcode");
+            modals.show_qrcode("https://github.com/betrusted-io/xous-core").expect("qrcode failed");
+            log::info!("qrcode test done");
         }
     });
 }

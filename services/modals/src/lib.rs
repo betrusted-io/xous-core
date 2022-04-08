@@ -85,6 +85,20 @@ impl Modals {
         let spec = ManagedNotification {
             token: self.token,
             message: xous_ipc::String::from_str(notification),
+            as_qrcode: false,
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+
+    /// this blocks until the qrcode has been acknowledged.
+    pub fn show_qrcode(&self, text: &str) -> Result<(), xous::Error> {
+        self.lock();
+        let spec = ManagedNotification {
+            token: self.token,
+            message: xous_ipc::String::from_str(text),
+            as_qrcode: true,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
