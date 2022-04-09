@@ -27,7 +27,9 @@ use xous_ipc::Buffer;
 mod fontmap;
 use api::BulkRead;
 
+#[cfg(any(target_os = "none", target_os = "xous"))] // only install for hardware targets; hosted mode uses host's panic handler
 mod panic;
+
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
