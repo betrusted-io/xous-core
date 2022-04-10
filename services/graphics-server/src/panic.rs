@@ -34,7 +34,6 @@ const TOP_OFFSET: usize = 48;
 /// Width and height of the panic box in characters
 const WIDTH_CHARS: usize = 40;
 const HEIGHT_CHARS: usize = 24;
-const TOTAL_CHARS: usize = WIDTH_CHARS * HEIGHT_CHARS;
 /// these are fixed by the monospace font
 const GLYPH_HEIGHT: usize = 15;
 const GLYPH_WIDTH: usize = 7;
@@ -57,7 +56,6 @@ pub(crate) fn panic_handler_thread(
             .expect("Couldn't create panic server");
 
             let mut display = unsafe { PanicDisplay::new(hwfb, control) };
-            let mut panic_text = xous_ipc::String::<TOTAL_CHARS>::new();
             loop {
                 let msg = xous::receive_message(panic_server).unwrap();
 
@@ -67,7 +65,6 @@ pub(crate) fn panic_handler_thread(
                     is_panic.store(true, Ordering::Relaxed);
                     display.panic_rectangle();
                     display.append_string("          ~~Guru Meditation~~\n\n");
-                    display.update_dirty();
                 }
                 let body = match msg.body.memory_message() {
                     Some(body) => body,
@@ -84,13 +81,7 @@ pub(crate) fn panic_handler_thread(
                     &body.buf.as_slice()[..len]
                 )};
                 display.append_string(s);
-                panic_text.append(
-                    unsafe{
-                        core::str::from_utf8_unchecked(
-                            &body.buf.as_slice()[..len]
-                        )
-                    }
-                ).ok();
+                display.update_dirty();
             }
 
         }

@@ -106,6 +106,9 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "panic" => {
+                    assert!(1 == 0, "Panic test: 1 == 0 failure!");
+                }
                 "instant" => {
                     write!(ret, "start elapsed_ms {}\n", env.ticktimer.elapsed_ms()).unwrap();
                     let now = Instant::now();
