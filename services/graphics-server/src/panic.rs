@@ -15,30 +15,33 @@ const PANIC_STD_SERVER: &[u8; 16] = b"panic-to-screen!";
 ///   - Only Latin, monospace (16-px wide) characters from the `mono` font set.
 ///   - Panics occupy a fixed area in the center of the screen, that can only hold
 ///     a limited amount of text: 304-px x 384-px text area = 40 char x 24 lines = 960 chars
-///   - The Panic frame is slightly larger to give a cosmetic border, a total of 320 x 400 px
+///   - The Panic frame is slightly larger to give a cosmetic border
 ///   - Panics are black background with white text to distinguish them as secured system messages.
-///   - The glyph set is passed into the handler as a static structure.
 ///   - Panics can't be dismissed, and should persist even if other threads are capable of running.
-///     Thus there is a variable shared with the parent thread to stop redraws permanently in the
-///     case of a panic.
+///   - The Panic handler can conflict with the regular display routines because it unsafely
+///     creates a copy of all the hardware access structures. Thus there is a variable
+///     shared with the parent thread to stop redraws permanently in the case of a panic.
 ///
-/// Frame buffer is 336 px wide, which is 10.5 32-bit words. The excess 16 bits are the dirty bit field.
+/// Note that the frame buffer is 336 px wide, which is 10.5 32-bit words.
+/// The excess 16 bits are the dirty bit field.
 
 use crate::{
     backend::{FB_WIDTH_PIXELS, FB_WIDTH_WORDS, FB_SIZE},
     api::{PixelColor, GlyphSprite}, blitstr2::NULL_GLYPH_SPRITE
 };
+/// How far down the screen the panic box draws
 const TOP_OFFSET: usize = 48;
+/// Width and height of the panic box in characters
 const WIDTH_CHARS: usize = 40;
 const HEIGHT_CHARS: usize = 24;
 const TOTAL_CHARS: usize = WIDTH_CHARS * HEIGHT_CHARS;
-// these are fixed by the monospace font
+/// these are fixed by the monospace font
 const GLYPH_HEIGHT: usize = 15;
 const GLYPH_WIDTH: usize = 7;
-// this can be adjusted to create more border around the panic box
+/// this can be adjusted to create more border around the panic box
 const TEXT_MARGIN: usize = 8;
 
-// some derived constants to help with layout
+/// some derived constants to help with layout
 const BOTTOM_LINE: usize = TOP_OFFSET + HEIGHT_CHARS * GLYPH_HEIGHT + TEXT_MARGIN * 2;
 const LEFT_EDGE: usize = (FB_WIDTH_PIXELS - (WIDTH_CHARS * GLYPH_WIDTH + TEXT_MARGIN * 2)) / 2; // 24
 const RIGHT_EDGE: usize = FB_WIDTH_PIXELS - LEFT_EDGE; // 312
@@ -96,8 +99,11 @@ pub(crate) fn panic_handler_thread(
 
 /// All-in-one object to manage a framebuffer and layout text.
 struct PanicDisplay<'a> {
+    /// hardware framebuffer (no double buffering)
     fb: &'a mut [u32],
+    /// hardware register copy (very dangerous)
     csr: CSR::<u32>,
+    /// current x/y position of the latest character to add to the panic box
     x: usize,
     y: usize,
 }
@@ -113,14 +119,17 @@ impl<'a> PanicDisplay<'a> {
         PanicDisplay {
             fb: core::slice::from_raw_parts_mut(raw_fb as *mut u32, FB_SIZE),
             csr: CSR::new(control as *mut u32),
+            // initialize to top left of panic box's margin
             x: TEXT_MARGIN,
             y: TEXT_MARGIN,
         }
     }
+    /// commits the data in the framebuffer to the screen
     fn update_dirty(&mut self) {
         self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1);
         while self.busy() {}
     }
+    /// indicates if a commit is in progress
     fn busy(&self) -> bool {
         self.csr.rf(utra::memlcd::BUSY_BUSY) == 1
     }
@@ -133,7 +142,8 @@ impl<'a> PanicDisplay<'a> {
         // set the dirty bit on the line that contains the pixel
         self.fb[y * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
     }
-    /// draw a black rectangle into which all the characters are placed.
+    /// draw a black rectangle into which all the characters are placed. This could
+    /// probably be optimized to do its work in words instead of as pixels, but it works.
     fn panic_rectangle(&mut self) {
         for y in TOP_OFFSET..BOTTOM_LINE {
             for x in LEFT_EDGE..RIGHT_EDGE {
@@ -145,6 +155,8 @@ impl<'a> PanicDisplay<'a> {
     /// Examples of word alignment for destination frame buffer:
     /// 1. Fits in word: xr:1..7   => (data[0].bit_30)->(data[0].bit_26), mask:0x7c00_0000
     /// 2. Spans words:  xr:30..36 => (data[0].bit_01)->(data[1].bit_29), mask:[0x0000_0003,0xe000_000]
+    ///
+    /// This is copied out of the blitstr2 module and adapted for the panic handler.
     ///
     fn draw_glyph(&mut self, x: usize, y: usize, gs: GlyphSprite) {
         const SPRITE_PX: i16 = 16;
