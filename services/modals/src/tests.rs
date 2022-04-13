@@ -81,9 +81,12 @@ pub(crate) fn spawn_test() {
 
             // 2. test the modal dialog box function
             log::info!("test text input");
-            match modals.get_text("Test input", Some(test_validator), None, None) {
+            match modals
+                .alert_builder("Test input")
+                .field(None, Some(test_validator))
+                .build() {
                 Ok(text) => {
-                    log::info!("Input: {}", text.content);
+                    log::info!("Input: {}", text.content()[0].content);
                 }
                 _ => {
                     log::error!("get_text failed");
@@ -99,7 +102,7 @@ pub(crate) fn spawn_test() {
     });
 }
 
-fn test_validator(input: TextEntryPayload, _opcode: u32) -> Option<xous_ipc::String::<256>> {
+fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String::<256>> {
     let text_str = input.as_str();
     match text_str.parse::<u32>() {
         Ok(_input_int) => None,
