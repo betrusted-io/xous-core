@@ -15,8 +15,6 @@ pub struct AlertModalBuilder<'a> {
     prompt: String,
     validators: Vec<Option<TextValidationFn>>,
     placeholders: Vec<Option<String>>,
-    fields_amt: u8, // TODO: this can go away, len(validators) and len(placeholders) are equal, which means
-                    // fields_amt == len(validators) || len(placeholders)
     modals: &'a Modals,
 }
 
@@ -24,20 +22,21 @@ impl<'a> AlertModalBuilder<'a> {
     pub fn field(&'a mut self, placeholder: Option<String>, validator: Option<TextValidationFn>) -> &'a mut Self {
         self.validators.push(validator);
         self.placeholders.push(placeholder);
-        self.fields_amt += 1;
         self
     }
 
     pub fn build(&self) -> Result<TextEntryPayloads, xous::Error> {
         self.modals.lock();
         let mut final_placeholders: Option<[Option<xous_ipc::String<256>>; 10]> = None;
+        let fields_amt = self.validators.len();
 
         match self.placeholders.len() {
             1.. =>  {
                 let mut pl:[Option<xous_ipc::String<256>>; 10] = Default::default();
                 
-                if self.fields_amt != self.placeholders.len() as u8 {
+                if fields_amt != self.placeholders.len() {
                     log::warn!("can't have more fields than placeholders");
+                    self.modals.unlock();
                     return Err(xous::Error::UnknownError);
                 }
         
@@ -58,7 +57,7 @@ impl<'a> AlertModalBuilder<'a> {
         let mut spec = ManagedPromptWithTextResponse {
             token: self.modals.token,
             prompt: xous_ipc::String::from_str(&self.prompt),
-            fields: self.fields_amt as u32,
+            fields: fields_amt as u32,
             placeholders: final_placeholders,
         };
 
@@ -130,7 +129,6 @@ impl Modals {
             prompt: String::from(prompt), 
             validators: vec![], 
             placeholders: vec![], 
-            fields_amt: 0, 
             modals: self
         }
     }
