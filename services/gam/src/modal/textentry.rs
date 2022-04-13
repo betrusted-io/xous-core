@@ -12,12 +12,21 @@ const MAX_FIELDS: i16 = 10;
 
 pub type ValidatorErr = xous_ipc::String::<256>;
 
+pub type Payloads = [TextEntryPayload; MAX_FIELDS as usize];
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
-pub struct TextEntryPayloads ([TextEntryPayload; MAX_FIELDS as usize]);
+pub struct TextEntryPayloads (Payloads);
 
 impl TextEntryPayloads {
     pub fn first(&self) -> TextEntryPayload {
         self.0[0]
+    }
+
+    pub fn content(&self) -> Vec<TextEntryPayload> {
+        self.0
+        .iter().cloned()
+        .filter(|payload| payload.dirty)
+        .collect()
     }
 }
 
@@ -434,6 +443,7 @@ impl ActionApi for TextEntry {
                     _ => {
                         payload.content.push(k).expect("ran out of space storing password");
                         log::trace!("****update payload: {}", payload.content);
+                        payload.dirty = true;
                         self.action_payloads[self.selected_field as usize] = payload;
                     }
                 }
