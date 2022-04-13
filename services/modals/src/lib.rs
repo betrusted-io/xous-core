@@ -30,6 +30,12 @@ impl<'a> AlertModalBuilder<'a> {
         let mut final_placeholders: Option<[Option<xous_ipc::String<256>>; 10]> = None;
         let fields_amt = self.validators.len();
 
+        if fields_amt == 0 {
+            log::error!("must add at least one field to alert");
+            self.modals.unlock();
+            return Err(xous::Error::UnknownError);
+        }
+
         match self.placeholders.len() {
             1.. =>  {
                 let mut pl:[Option<xous_ipc::String<256>>; 10] = Default::default();
