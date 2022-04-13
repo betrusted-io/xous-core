@@ -8,13 +8,14 @@ pub struct Ver {
 // TODO: remove me
 impl Ver {
     fn modal(&self, env: &mut CommonEnv) {
-        log::info!("modal data: {:#?}", env.modals.alert_builder("Get Text")
-                                        .field(Some("first".to_string()), None)
-                                        .field(Some("second".to_string()), None)
-                                        .field(None, None)
-                                        .field(Some("fourth".to_string()), None)
-                                        .build()
-                                    );
+        log::info!("modal data: {:#?}", 
+            env.modals.alert_builder("Get Text")
+                .field(Some("first".to_string()), None)
+                .field(Some("second".to_string()), None)
+                .field(None, None)
+                .field(Some("fourth".to_string()), None)
+                .build()
+        );
     }
 }
 
