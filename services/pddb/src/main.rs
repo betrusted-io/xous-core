@@ -1132,7 +1132,7 @@ fn xmain() -> ! {
                 for basis in bases.iter() {
                     note.push_str(basis);
                 }
-                modals.show_notification(&note).expect("couldn't show basis list");
+                modals.show_notification(&note, false).expect("couldn't show basis list");
             },
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Some(Opcode::DangerousDebug) => {
@@ -1281,7 +1281,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                     log::error!("Despite formatting, no PDDB was found!");
                     let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                     err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
-                    modals.show_notification(err.as_str()).expect("notification failed");
+                    modals.show_notification(err.as_str(), false).expect("notification failed");
                     false
                 }
             } else {
@@ -1306,7 +1306,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 log::error!("Despite formatting, no PDDB was found!");
                 let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                 err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
-                modals.show_notification(err.as_str()).expect("notification failed");
+                modals.show_notification(err.as_str(), false).expect("notification failed");
                 false
             }
         }

@@ -91,15 +91,6 @@ fn xmain() -> ! {
         validator: None,
     };
     let mut fixed_items = Vec::<ItemName>::new();
-    let notification = gam::modal::Notification::new(
-        renderer_cid,
-        Opcode::NotificationReturn.to_u32().unwrap()
-    );
-    let mut gutter = gam::modal::Notification::new(
-        renderer_cid,
-        Opcode::Gutter.to_u32().unwrap()
-    );
-    gutter.set_manual_dismiss(false);
     let mut progress_action = Slider::new(renderer_cid, Opcode::Gutter.to_u32().unwrap(),
         0, 100, 1, Some("%"), 0, true, true
     );
@@ -233,12 +224,6 @@ fn xmain() -> ! {
                     Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0)
                 ).expect("couldn't initiate UX op");
             },
-            Some(Opcode::UpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
-                send_message(
-                    renderer_cid,
-                    Message::new_scalar(Opcode::DoUpdateProgress.to_usize().unwrap(), current, 0, 0, 0)
-                ).expect("couldn't update progress bar");
-            }),
             Some(Opcode::StopProgress) => msg_scalar_unpack!(msg, t0, t1, t2, t3, {
                 let token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
                 if token != token_lock.unwrap_or(default_nonce) {
@@ -298,6 +283,30 @@ fn xmain() -> ! {
                     Message::new_scalar(Opcode::DoCloseDynamicNotification.to_usize().unwrap(), 0, 0, 0, 0)
                 ).expect("couldn't close dynamic notification");
             }),
+            // this got promoted to an external API during the deferred response refactor to eliminate an intermediate state
+            Some(Opcode::DoUpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
+                let new_percentage = compute_checked_percentage(
+                    current as u32, start_work, end_work);
+                log::trace!("percentage: {}, current: {}, start: {}, end: {}", new_percentage, current, start_work, end_work);
+                if new_percentage != last_percentage {
+                    last_percentage = new_percentage;
+                    progress_action.set_state(last_percentage);
+                    #[cfg(feature="tts")]
+                    {
+                        if tt.elapsed_ms() - last_tick > TICK_INTERVAL {
+                            tts.tts_blocking(t!("progress.increment", xous::LANG)).unwrap();
+                            last_tick = tt.elapsed_ms();
+                        }
+                    }
+                    renderer_modal.modify(
+                        Some(ActionType::Slider(progress_action)),
+                        None, false,
+                        None, false, None
+                    );
+                    renderer_modal.redraw();
+                    xous::yield_slice(); // give time for the GAM to redraw
+                }
+            }),
 
             // ------------------ INTERNAL APIS --------------------
             Some(Opcode::InitiateOp) => {
@@ -316,11 +325,19 @@ fn xmain() -> ! {
                         log::debug!("should be active!");
                     },
                     RendererState::RunNotification(config) => {
+                        let mut notification = gam::modal::Notification::new(
+                            renderer_cid,
+                            Opcode::NotificationReturn.to_u32().unwrap()
+                        );
+                        let text = config.message.as_str().unwrap();
+                        if config.as_qrcode {
+                            notification.set_as_qrcode(Some(text));
+                        }
                         #[cfg(feature="tts")]
                         tts.tts_simple(config.message.as_str().unwrap()).unwrap();
                         renderer_modal.modify(
                             Some(ActionType::Notification(notification)),
-                            Some(config.message.as_str().unwrap()), false,
+                            Some(text), false,
                             None, true, None
                         );
                         renderer_modal.activate();
@@ -396,6 +413,11 @@ fn xmain() -> ! {
                             tts.tts_simple(text.as_str().unwrap()).unwrap();
                             bot_text.push_str(text.as_str().unwrap());
                         }
+                        let mut gutter = gam::modal::Notification::new(
+                            renderer_cid,
+                            Opcode::Gutter.to_u32().unwrap()
+                        );
+                        gutter.set_manual_dismiss(false);
                         renderer_modal.modify(
                             Some(ActionType::Notification(gutter)),
                             Some(&top_text), config.title.is_none(),
@@ -410,29 +432,6 @@ fn xmain() -> ! {
                     }
                 }
             },
-            Some(Opcode::DoUpdateProgress) => msg_scalar_unpack!(msg, current, _, _, _, {
-                let new_percentage = compute_checked_percentage(
-                    current as u32, start_work, end_work);
-                log::trace!("percentage: {}, current: {}, start: {}, end: {}", new_percentage, current, start_work, end_work);
-                if new_percentage != last_percentage {
-                    last_percentage = new_percentage;
-                    progress_action.set_state(last_percentage);
-                    #[cfg(feature="tts")]
-                    {
-                        if tt.elapsed_ms() - last_tick > TICK_INTERVAL {
-                            tts.tts_blocking(t!("progress.increment", xous::LANG)).unwrap();
-                            last_tick = tt.elapsed_ms();
-                        }
-                    }
-                    renderer_modal.modify(
-                        Some(ActionType::Slider(progress_action)),
-                        None, false,
-                        None, false, None
-                    );
-                    renderer_modal.redraw();
-                    xous::yield_slice(); // give time for the GAM to redraw
-                }
-            }),
             Some(Opcode::FinishProgress) => {
                 renderer_modal.gam.relinquish_focus().unwrap();
                 op = RendererState::None;
