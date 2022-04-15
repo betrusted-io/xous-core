@@ -9,6 +9,8 @@ mod std_glue;
 use std_glue::*;
 mod std_udp;
 use std_udp::*;
+mod std_tcplistener;
+use std_tcplistener::*;
 
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 use num_traits::*;
@@ -25,7 +27,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 use smoltcp::iface::{Interface, InterfaceBuilder, NeighborCache, Routes};
 use smoltcp::phy::{Device, Medium};
 use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
 use core::num::NonZeroU64;
@@ -96,6 +98,12 @@ struct WaitingSocket {
     env: xous::MessageEnvelope,
     handle: SocketHandle,
     expiry: Option<NonZeroU64>,
+}
+
+struct AcceptingSocket {
+    env: xous::MessageEnvelope,
+    handle: SocketHandle,
+    fd: usize,
 }
 
 pub struct UdpStdState {
@@ -182,6 +190,9 @@ fn xmain() -> ! {
             u16, /* remote_port */
         )>,
     > = Vec::new();
+
+    // When a client issues an Accept request, it gets placed here for later processing.
+    let mut tcp_accept_waiting: Vec<Option<AcceptingSocket>> = Vec::new();
 
     // When a UDP client opens a socket, an entry is automatically created here to accumulate
     // incoming UDP socket data.
@@ -550,6 +561,41 @@ fn xmain() -> ! {
                 } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
+            }
+
+            Some(Opcode::StdTcpListen) => {
+                let pid = msg.sender.pid();
+
+                std_tcp_listen(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
+            }
+
+            Some(Opcode::StdTcpAccept) => {
+                let pid = msg.sender.pid();
+
+                std_tcp_accept(
+                    msg,
+                    &mut sockets,
+                    &mut tcp_accept_waiting,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdGetAddress) => {
@@ -1060,11 +1106,11 @@ fn xmain() -> ! {
                     if let Some(connection) = connection.take() {
                         connection
                     } else {
-                        udp_failure(msg, NetError::Invalid);
+                        std_failure(msg, NetError::Invalid);
                         continue;
                     }
                 } else {
-                    udp_failure(msg, NetError::Invalid);
+                    std_failure(msg, NetError::Invalid);
                     continue;
                 };
                 sockets.get::<UdpSocket>(handle).close();
@@ -1438,6 +1484,31 @@ fn xmain() -> ! {
                     response_data[1] = sent_octets as u32;
                 }
 
+                // this handles TCP std listeners
+                for connection in tcp_accept_waiting.iter_mut() {
+                    let ep: IpEndpoint;
+                    let AcceptingSocket {
+                        mut env,
+                        handle: _,
+                        fd,
+                    } = match connection {
+                        &mut None => continue,
+                        Some(s) => {
+                            let socket = sockets.get::<TcpSocket>(s.handle);
+                            if socket.is_active() {
+                                ep = socket.remote_endpoint();
+                                connection.take().unwrap()
+                            } else {
+                                continue;
+                            }
+                        }
+                    };
+                    let body = env.body.memory_message_mut().unwrap();
+                    let buf = body.buf.as_slice_mut::<u8>();
+
+                    tcp_accept_success(buf, fd as u16, ep);
+                }
+
                 // this block handles TCP listeners
                 // There is no lock on sending Rx messages to the listener as it is being transformed
                 // because all messages come from *this thread* and by definition it is not re-entrant.
@@ -1537,7 +1608,7 @@ fn xmain() -> ! {
 
                     // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
-                        udp_failure(msg, NetError::TimedOut);
+                        std_failure(msg, NetError::TimedOut);
                         continue;
                     }
 
@@ -1555,7 +1626,7 @@ fn xmain() -> ! {
                             }
                             Err(e) => {
                                 log::error!("unable to receive: {:?}", e);
-                                udp_failure(msg, NetError::LibraryError);
+                                std_failure(msg, NetError::LibraryError);
                             }
                         }
                     } else {
@@ -1571,7 +1642,7 @@ fn xmain() -> ! {
                             }
                             Err(e) => {
                                 log::error!("unable to receive: {:?}", e);
-                                udp_failure(msg, NetError::LibraryError);
+                                std_failure(msg, NetError::LibraryError);
                             }
                         }
                     }
