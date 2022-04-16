@@ -523,6 +523,13 @@ fn xmain() -> ! {
             Some(Opcode::StdTcpPeek) => {
                 let pid = msg.sender.pid();
                 std_tcp_peek(msg, &mut sockets, process_sockets.entry(pid).or_default());
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpRx) => {
@@ -534,6 +541,13 @@ fn xmain() -> ! {
                     &mut tcp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpClose) => {
@@ -561,6 +575,102 @@ fn xmain() -> ! {
                 } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
+            }
+
+            Some(Opcode::StdTcpStreamShutdown) => {
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                let shutdown_code = msg.body.scalar_message().unwrap().arg1;
+                if let Some(Some(connection)) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get(connection_idx)
+                {
+                    if (shutdown_code & 1) != 0 { // read shutdown
+                        // search for the handle in the rxwaiting set
+                        for rx_waiter in tcp_rx_waiting.iter_mut() {
+                            let WaitingSocket {
+                                env: mut msg,
+                                handle,
+                                expiry: _,
+                            } = match rx_waiter {
+                                &mut None => continue,
+                                Some(s) => {
+                                    if s.handle == *connection {
+                                        rx_waiter.take().unwrap() // removes the message from the waiting queue
+                                    } else {
+                                        continue
+                                    }
+                                }
+                            };
+                            // if we got here, we found a message that needs to be aborted
+                            log::info!("TcpShutdown: aborting rx waiting handle: {:?}", handle);
+                            match msg.body.memory_message_mut() {
+                                Some(body) => {
+                                    // u32::MAX indicates a zero-length receive
+                                    body.valid = xous::MemorySize::new(u32::MAX as usize);
+                                },
+                                None => {
+                                    respond_with_error(msg, NetError::LibraryError);
+                                }
+                            }
+                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            break;
+                        }
+                    }
+                    if (shutdown_code & 1) != 0 { // write shutdown
+                        // search for the handle in the txwaiting set
+                        for tx_waiter in tcp_tx_waiting.iter_mut() {
+                            let WaitingSocket {
+                                env: mut msg,
+                                handle,
+                                expiry: _,
+                            } = match tx_waiter {
+                                &mut None => continue,
+                                Some(s) => {
+                                    if s.handle == *connection {
+                                        tx_waiter.take().unwrap() // removes the message from the waiting queue
+                                    } else {
+                                        continue
+                                    }
+                                }
+                            };
+                            // if we got here, we found a message that needs to be aborted
+                            log::info!("TcpShutdown: aborting tx waiting handle: {:?}", handle);
+                            match msg.body.memory_message_mut() {
+                                Some(body) => {
+                                    // u32::MAX indicates a zero-length receive
+                                    body.valid = xous::MemorySize::new(u32::MAX as usize);
+                                    let response_data = body.buf.as_slice_mut::<u32>();
+                                    response_data[0] = 0;
+                                    response_data[1] = 0;
+                                },
+                                None => {
+                                    respond_with_error(msg, NetError::LibraryError);
+                                }
+                            }
+                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            break;
+                        }
+                    }
+                }
+
+                // unblock the sender
+                xous::return_scalar(msg.sender, 1).ok();
+                // pump the rx to process any shutdowns
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpListen) => {

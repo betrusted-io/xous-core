@@ -146,6 +146,8 @@ pub(crate) enum Opcode {
     /// Receives data from the specified TCP Connection. The TCP connection number is
     /// passed in the upper 16 bits of the opcode, and the number of received bytes
     /// is returned as part of the `Valid` parameter. This is not blocking.
+    ///   Unfortunately, it is *valid* to receive zero bytes, but the xous::Message parameter does not allow it.
+    ///   Thus the value of u32::MAX is mapped to "zero" bytes received.
     StdTcpPeek = 32,
 
     /// Receives data from the specified TCP Connection.
@@ -154,6 +156,8 @@ pub(crate) enum Opcode {
     /// - The return buffer is the `buf` parameter
     /// - The read timeout is passed as the `offset` parameter.
     /// - The number of received bytes is returned as part of the `valid` parameter.
+    ///   Unfortunately, it is *valid* to receive zero bytes, but the xous::Message parameter does not allow it.
+    ///   Thus the value of u32::MAX is mapped to "zero" bytes received.
     StdTcpRx = 33,
 
     /// Close the TCP connection. The connection ID is specified in the upper 16 bits
@@ -347,6 +351,8 @@ pub(crate) enum Opcode {
     ///
     /// - The `valid` and `offset` parameters are not used.
     StdTcpAccept = 45,
+
+    StdTcpStreamShutdown = 46,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
