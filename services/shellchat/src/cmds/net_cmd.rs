@@ -115,7 +115,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     // a complete HTTP life cycle.
                     let _ = std::thread::spawn({
                         let listener = std::net::TcpListener::bind(
-                            "127.0.0.1:80"
+                            "0.0.0.0:80"
                         ).unwrap();
                         let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
                         let callback_conn = self.callback_conn.clone();
@@ -132,7 +132,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         let mut request = [0u8; 1024];
                                         // this is probably not the "right way" to handle this -- but the "keep-alive" from the browser makes us hang on the read
                                         // which prevents us from answering requests from other browsers (because this is a single-threaded implementation of a server)
-                                        stream.set_read_timeout(Some(std::time::Duration::from_millis(2_000))).unwrap();
+                                        // stream.set_read_timeout(Some(std::time::Duration::from_millis(2_000))).unwrap();
                                         match stream.read(&mut request) {
                                             Ok(len) => {
                                                 let r = std::string::String::from_utf8_lossy(&request[..len]);
