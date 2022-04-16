@@ -38,13 +38,13 @@ pub(crate) enum Opcode {
     //UdpSetTtl = 3,
     //UdpGetTtl = 4,
 
-    /// Calls for TCP implementation
-    TcpConnect = 5,
-    TcpTx = 6,
-    TcpClose = 7,
-    TcpManage = 8,
-    TcpListen = 9,
-    TcpManageListener = 10,
+    /// Calls for TCP implementation (now deprecated to libstd)
+    //TcpConnect = 5,
+    //TcpTx = 6,
+    //TcpClose = 7,
+    //TcpManage = 8,
+    //TcpListen = 9,
+    //TcpManageListener = 10,
 
     // The DNS server can hook the Net crate for notifications on config updates
     /// Adds an Ipv4 as a DNS server
