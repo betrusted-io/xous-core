@@ -3,7 +3,7 @@ use com::api::NET_MTU;
 use xous_ipc::String;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use net::XousServerId;
-use net::{Duration, NetPingCallback};
+use net::NetPingCallback;
 use xous::MessageEnvelope;
 use num_traits::*;
 use std::net::{IpAddr, TcpStream};
@@ -92,7 +92,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         match stream.read(&mut buf) {
                                             Ok(len) => {
                                                 log::trace!("raw response ({}): {:?}", len, &buf[..len]);
-                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).unwrap();
+                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).ok(); // let it run off the end
                                             }
                                             Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
                                         }
@@ -114,7 +114,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     // such as Firefox reporting that connections have been reset because this doesn't implement
                     // a complete HTTP life cycle.
                     let _ = std::thread::spawn({
-                        let mut listener = net::TcpListener::bind_xous(
+                        let listener = std::net::TcpListener::bind(
                             "127.0.0.1:80"
                         ).unwrap();
                         let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
@@ -132,7 +132,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         let mut request = [0u8; 1024];
                                         // this is probably not the "right way" to handle this -- but the "keep-alive" from the browser makes us hang on the read
                                         // which prevents us from answering requests from other browsers (because this is a single-threaded implementation of a server)
-                                        stream.set_read_timeout(Some(Duration::from_millis(2_000))).unwrap();
+                                        stream.set_read_timeout(Some(std::time::Duration::from_millis(2_000))).unwrap();
                                         match stream.read(&mut request) {
                                             Ok(len) => {
                                                 let r = std::string::String::from_utf8_lossy(&request[..len]);
