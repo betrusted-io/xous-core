@@ -6,10 +6,11 @@ use net::XousServerId;
 use net::NetPingCallback;
 use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::{IpAddr, TcpStream};
+use std::net::{IpAddr, TcpStream, TcpListener};
 use std::io::Write;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use std::thread;
 use std::sync::mpsc;
 use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
@@ -73,8 +74,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 match TcpStream::connect((host, 80)) {
                                     Ok(mut stream) => {
                                         log::trace!("stream open, setting timeouts");
-                                        stream.set_read_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
-                                        stream.set_write_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
+                                        stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                        stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
                                         log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().as_millis());
                                         log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().as_millis());
                                         log::info!("my socket: {:?}", stream.local_addr());
@@ -114,7 +115,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     thread::spawn({
                         let boot_instant = env.boot_instant.clone();
                         move || {
-                            let listener = std::net::TcpListener::bind("0.0.0.0:80").unwrap();
+                            let listener = TcpListener::bind("0.0.0.0:80").unwrap();
                             // limit to 2 because we're a bit shy on space in shellchat right now; there is a 32-thread limit per process, and shellchat has the kitchen sink.
                             let pool = ThreadPool::new(4);
 
@@ -165,7 +166,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             return Ok(Some(ret));
                         }
                     };
-                    udp.set_write_timeout(Some(std::time::Duration::from_millis(500))).expect("couldn't set write timeout");
+                    udp.set_write_timeout(Some(Duration::from_millis(500))).expect("couldn't set write timeout");
                     for index in 0..2 {
                         let _ = std::thread::spawn({
                             let self_cid = self.callback_conn;
@@ -222,6 +223,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     }
+                }
+                "tls" => {
+
                 }
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {
@@ -353,9 +357,9 @@ enum Responses {
     Buzz,
 }
 
-fn handle_connection(mut stream: TcpStream, boot_instant: std::time::Instant) {
+fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
     // the result is implementation dependent, on Xous hardware, this is effectively the same as ticktimer.elapsed_ms()
-    let elapsed_time = std::time::Instant::now().duration_since(boot_instant);
+    let elapsed_time = Instant::now().duration_since(boot_instant);
     let uptime = std::format!("Hello from Precursor!\n\rI have been up for {}:{:02}:{:02}.\n\r",
         (elapsed_time.as_millis() / 3_600_000),
         (elapsed_time.as_millis() / 60_000) % 60,
@@ -372,7 +376,7 @@ fn handle_connection(mut stream: TcpStream, boot_instant: std::time::Instant) {
     let (status_line, response_index) = if buffer.starts_with(get) {
         ("HTTP/1.1 200 OK", Responses::Uptime)
     } else if buffer.starts_with(sleep) {
-        thread::sleep(std::time::Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(5));
         ("HTTP/1.1 200 OK", Responses::Uptime)
     } else if buffer.starts_with(buzz) {
         ("HTTP/1.1 200 OK", Responses::Buzz)
