@@ -40,6 +40,7 @@ use std::sync::Arc;
 use std::thread;
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
+const MAX_DELAY_THREADS: u32 = 16; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
 
 fn set_ipv4_addr<DeviceT>(iface: &mut Interface<'_, DeviceT>, cidr: Ipv4Cidr)
 where
@@ -146,7 +147,6 @@ fn xmain() -> ! {
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list).ok();
     log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
-    const MAX_DELAY_THREADS: u32 = 10; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
     let delay_threads = Arc::new(AtomicU32::new(0));
     let mut net_config: Option<Ipv4Conf> = None;
 
@@ -486,6 +486,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdTcpTx) => {
+                log::debug!("StdTcpTx");
                 let pid = msg.sender.pid();
                 std_tcp_tx(
                     msg,
@@ -504,6 +505,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdTcpPeek) => {
+                log::debug!("StdTcpPeek");
                 let pid = msg.sender.pid();
                 std_tcp_peek(msg, &mut sockets, process_sockets.entry(pid).or_default());
                 xous::try_send_message(
@@ -516,6 +518,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdTcpRx) => {
+                log::debug!("StdTcpRx");
                 let pid = msg.sender.pid();
                 std_tcp_rx(
                     msg,
@@ -534,6 +537,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdTcpClose) => {
+                log::debug!("StdTcpClose");
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
                 let handle = if let Some(connection) = process_sockets
@@ -561,6 +565,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdTcpStreamShutdown) => {
+                log::debug!("StdTcpStreamShutdown");
                 // Only work with blockingscalar messages
                 if !msg.body.is_blocking() || msg.body.has_memory() {
                     respond_with_error(msg, NetError::LibraryError);
