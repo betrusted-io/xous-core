@@ -115,7 +115,9 @@ for examples of idiomatic ways to write code for Xous.
 ## New in 0.9.8 (not yet released)
 - `pddb` critical bug fixed where page table entries were not having their journal numbers synchronized with the free space table when read off of the disk. This would cause inconsistency glitches in the `pddb`. This release fixes the problem, but, it may require you to reformat the `pddb` once the patch is in place.
 - `pddb` major bug fixed where zero-length file allocations were not being committed to disk.
-- `TcpStream` is now part of `libstd`
+- `TcpStream` is now part of `libstd`. Legacy TcpStream has been removed.
+- `TcpListener` is now part of `libstd`. Legacy TcpListener has been removed.
+- `net server` demo program has been upgraded to use multiple worker threads + MPSC for communications. Users can now attempt to access `buzz/` to cause the vibration motor to run, and there is now a 404 response for pages not found.
 - `UdpSocket` is now part of `libstd`. DNS and all test routines switched over to `libstd`, and all prior scaffolding implementations have been removed.
 - `NetPump` call added after Tx (UDP/TCP) and connect (TCP) events. This should improve the transmit latency.
 - `Duration` and `Instant` are now part of `libstd`
