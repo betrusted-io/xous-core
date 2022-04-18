@@ -547,7 +547,7 @@ fn xmain() -> ! {
                         // can't mount if we have no root keys
                         xous::return_scalar(msg.sender, 0).expect("could't return scalar");
                     } else {
-                        match ensure_password(&modals, &mut pddb_os) {
+                        match ensure_password(&modals, &mut pddb_os, pw_cid) {
                             PasswordState::Correct => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
@@ -1178,7 +1178,7 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordState {
+fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
     loop {
         match pddb_os.try_login() {
@@ -1189,7 +1189,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordSta
                 // check for a migration event
                 #[cfg(feature="migration1")]
                 {
-                    if pddb_os.migration_v1_to_v2() == PasswordState::Correct {
+                    if pddb_os.migration_v1_to_v2(pw_cid) == PasswordState::Correct {
                         if pddb_os.try_login() == PasswordState::Correct {
                             log::info!("Migration v1->v2 successful");
                             return PasswordState::Correct
