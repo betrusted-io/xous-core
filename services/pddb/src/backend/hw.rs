@@ -1220,6 +1220,15 @@ impl PddbOs {
         aad.extend_from_slice(&self.dna.to_le_bytes());
         aad
     }
+    #[cfg(feature="migration1")]
+    pub(crate) fn data_aad_v1(&self, name: &str) -> Vec::<u8> {
+        let mut aad = Vec::<u8>::new();
+        aad.extend_from_slice(&name.as_bytes());
+        let (old_version, _new_version) = PDDB_MIGRATE_1;
+        aad.extend_from_slice(&old_version.to_le_bytes());
+        aad.extend_from_slice(&self.dna.to_le_bytes());
+        aad
+    }
 
     /// returns a decrypted page that still includes the journal number at the very beginning
     /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
@@ -1261,7 +1270,7 @@ impl PddbOs {
     /// We stripe the MAC at the end just in case the MAC has some arithmetic property that can betray the existence
     /// of a basis root record with key commitment. The committed key and the nonce both should be indistinguishable
     /// from ciphertext.
-    pub(crate) fn data_decrypt_page_with_commit(&mut self, key: &[u8], aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
+    pub(crate) fn data_decrypt_page_with_commit(&self, key: &[u8], aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
         const KCOM_NONCE_LEN: usize = 32;
         const KCOM_LEN: usize = 32;
         const MAC_LEN: usize = 16;
@@ -1743,7 +1752,7 @@ impl PddbOs {
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
             *dst = src;
         }
-        let syskey = self.system_basis_key.take().unwrap(); // take they key out
+        let syskey = self.system_basis_key.take().unwrap(); // take the key out
         self.data_encrypt_and_patch_page_with_commit(&syskey.data, &aad, &mut block, &pp);
         self.system_basis_key = Some(syskey); // put the key back
         if let Some(modals) = progress {
@@ -1965,4 +1974,205 @@ impl PddbOs {
         key
     }
 
+    /// Migrates a v1 database to a v2 database. The main change is a modification to the key
+    /// derivation schedule to make different keys for the page table versus the pages themselves.
+    ///
+    /// note that v1 also had an error where page tables were encoded in full addresess, when
+    /// we meant to encode them using page numbers. This code also handles that migration.
+    #[cfg(feature="migration1")]
+    pub(crate) fn migration_v1_to_v2(&mut self) -> PasswordState {
+        let scd = self.static_crypto_data_get_v1();
+        if scd.version == 0xFFFF_FFFF { // system is in the blank state
+            return PasswordState::Uninit
+        }
+        if scd.version != SCD_VERSION_MIGRATION1 {
+            return PasswordState::Uninit;
+        }
+        log::info!("v1 PDDB detected. Attempting to migrate from v1->v2.");
+
+        // derive a v1 key
+
+        match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
+            Ok(mut syskey) => {
+                // build a modals for migration messages
+                let xns = xous_names::XousNames::new().unwrap();
+                let modals = modals::Modals::new(&xns).unwrap();
+                // v1->v2 messages willl only be in English, because we don't have any non-English users yet (afaik)
+
+                let cipher_v1 = Aes256::new(GenericArray::from_slice(&syskey));
+                let mut system_key_v1: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+                for (&src, dst) in syskey.iter().zip(system_key_v1.iter_mut()) {
+                    *dst = src;
+                }
+                // erase the old vector completely, now that the key is in system_key_v1
+                let nuke = syskey.as_mut_ptr();
+                for i in 0..syskey.len() {
+                    unsafe{nuke.add(i).write_volatile(0)};
+                }
+                modals.dynamic_notification(Some("PDDB v1->v2 migration"), Some("Migrating System keys to v2"));
+
+                // ------ I. migrate the system basis -------
+                // *** 0. generate v2 keys. This will immediately overwrite the SCD -- if we have an error or power outage
+                // after this point, we lose the entire PDDB. The other option is to commit the v2 keys at the end, but,
+                // similarly, we end up with a partial migration either way.
+                let mut system_basis_key_pt: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+                let mut system_basis_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+                let mut syskey_data_copy: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE]; // we will need a copy of this later on for re-encrypting with key commit
+                self.entropy.borrow_mut().get_slice(&mut system_basis_key_pt);
+                self.entropy.borrow_mut().get_slice(&mut system_basis_key);
+                for (&s, d) in system_basis_key.iter().zip(syskey_data_copy.iter_mut()) {
+                    *d = s;
+                }
+                // build the ECB cipher for page table entries, and data cipher for data pages
+                self.cipher_ecb = Some(Aes256::new(GenericArray::from_slice(&system_basis_key_pt)));
+                let cipher_v2 = Aes256::new(GenericArray::from_slice(&system_basis_key_pt)); // a second copy for patching the page table later in this routine interior mutability blah blah work around oops
+                let data_cipher_v2 = Aes256GcmSiv::new(Key::from_slice(&system_basis_key));
+                let aad_v2 = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
+                // now wrap the key for storage
+                let wrapped_key = self.rootkeys.wrap_key(&system_basis_key).expect("Internal error wrapping our encryption key");
+                let wrapped_key_pt = self.rootkeys.wrap_key(&system_basis_key_pt).expect("Internal error wrapping our encryption key");
+                self.system_basis_key = Some(
+                    BasisKeys {
+                        pt: system_basis_key_pt,
+                        data: system_basis_key,
+                    }
+                ); // this causes system_basis_key to be owned by self and go out of scope
+                let mut crypto_keys = StaticCryptoData::default();
+                crypto_keys.version = SCD_VERSION; // should already be set by `default()` but let's be sure.
+
+                // copy the encrypted key into the data structure for commit to Flash
+                // the wrapped key should have a well-defined length of 40 bytes
+                for (&src, dst) in wrapped_key.iter().zip(crypto_keys.system_key.iter_mut()) {
+                    *dst = src;
+                }
+                for (&src, dst) in wrapped_key_pt.iter().zip(crypto_keys.system_key_pt.iter_mut()) {
+                    *dst = src;
+                }
+                // initialize the salt
+                self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
+                // commit keys
+                self.patch_keys(crypto_keys.deref(), 0);
+                // now we have a copy of the AES key necessary to re-encrypt all the basis
+                // build the data cipher for v1 pages
+                let data_cipher_v1 = Aes256GcmSiv::new(Key::from_slice(&system_key_v1));
+                let aad_v1 = self.data_aad_v1(PDDB_DEFAULT_SYSTEM_BASIS);
+
+                // track used pages so we can create the FSCB at the end
+                let mut used_pages = BinaryHeap::new();
+
+                // *** 1. scan the page table
+                let blank = [0xffu8; aes::BLOCK_SIZE];
+                modals.dynamic_notification_update(None, Some("Migrating System Basis"));
+                let pt = self.pt_as_slice();
+                for (page_index, pt_page) in pt.chunks(PAGE_SIZE).enumerate() {
+                    let clean_page = if pt_page[..aes::BLOCK_SIZE] == blank {
+                        if let Some(page) = self.mbbb_retrieve() {
+                            page
+                        } else {
+                            log::debug!("Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!");
+                            pt_page
+                        }
+                    } else {
+                        pt_page
+                    };
+                    for (index, candidate) in clean_page.chunks(aes::BLOCK_SIZE).enumerate() {
+                        let mut block = Block::clone_from_slice(candidate);
+                        cipher_v1.decrypt_block(&mut block);
+                        // *** 2. if an entry matches, also decrypt the target page and store it here
+                        if let Some(pte) = Pte::try_from_slice(block.as_slice()) {
+                            // compute the physical page number that correspons to this entry, and store it in `pp`
+                            let mut pp = PhysPage(0);
+                            pp.set_page_number(((page_index * PAGE_SIZE / aes::BLOCK_SIZE) + index) as PhysAddr);
+
+                            // root records require key commitment (to avoid AES-GCM-SIV salamanders), so detect & handle that
+                            if pte.vaddr_v1().get() == VPAGE_SIZE as u64 { // v1 addresses were full vaddrs, not page numbers
+                                // retrieve the data at `pp`
+                                let migrating_data = self.data_decrypt_page_with_commit(&system_key_v1, &aad_v1, &pp);
+                                if let Some(vpage) = migrating_data {
+                                    let mut basis_root = BasisRoot::default();
+                                    for (&src, dst) in (&vpage)[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
+                                        *dst = src;
+                                    }
+                                    let (previous, _) = PDDB_MIGRATE_1;
+                                    if basis_root.version != previous {
+                                        log::warn!("Root basis record did not match expected version during migration. Ignoring and attempting to move on...");
+                                    }
+                                    basis_root.version = PDDB_VERSION; // update the version to our current one
+                                    let slice_iter =
+                                        (&vpage[..size_of::<JournalType>()]).iter() // just copy the journal rev
+                                        .chain(basis_root.as_ref().iter());
+                                    let mut block = [0 as u8; KCOM_CT_LEN];
+                                    for (&src, dst) in slice_iter.zip(block.iter_mut()) {
+                                        *dst = src;
+                                    }
+                                    self.data_encrypt_and_patch_page_with_commit(&syskey_data_copy, &aad_v2, &mut block, &pp);
+                                } else {
+                                    // could be a checksum collision that triggers this, so it's not a hard error. A later "real" version will succeed and all would be fine.
+                                    log::warn!("Root basis record did not decrypt correctly, ignoring and hoping for the best, but your chances are slim.");
+                                }
+                            } else {
+                                // retrieve the data at `pp`
+                                let migrating_data = self.data_decrypt_page(&data_cipher_v1, &aad_v1, &pp);
+                                // store the data back to the same location, but with the new keys
+                                if let Some(mut vpage) = migrating_data {
+                                    self.data_encrypt_and_patch_page(&data_cipher_v2, &aad_v2, &mut vpage, &pp);
+                                } else {
+                                    log::warn!("Potential checksum collision found at pp {}; ignoring", pp.page_number());
+                                }
+                            }
+
+                            // *** 3. re-encrypt the PTE and the target page to the v2 keys and corrected addressing scheme
+                            // the pt_patch_mapping call will automatically insert the correct v2 addressing scheme
+                            self.pt_patch_mapping(pte.vaddr_v1(), pp.page_number(), &cipher_v2);
+                            // track the used pages
+                            used_pages.push(Reverse(pp.page_number()));
+                        }
+                    }
+                }
+                // *** 5. The MBBB is natively migrated as part of this process, so nothing explictly needs to be done here.
+
+                // ------ II. migrate any hidden basis ------
+                // break out the above scanning routine to an "inner" call that takes ciphers
+
+                // ------ III. nuke and regnerate fast space -----
+                modals.dynamic_notification_update(None, Some("Regenerate FastSpace"));
+                let free_pool = self.fast_space_generate(used_pages);
+                let mut fast_space = FastSpace {
+                    free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+                };
+                for pp in fast_space.free_pool.iter_mut() {
+                    pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
+                }
+                for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
+                    *dst = src;
+                }
+                // write just commits a new record to disk, but doesn't update our internal data cache
+                // this also clears the fast space log.
+                self.fast_space_write(&fast_space);
+                // this will ensure the data cache is fully in sync
+                self.fast_space_read();
+
+                modals.dynamic_notification_close();
+
+                // clear out the v1 key
+                let sk_ptr = system_key_v1.as_mut_ptr();
+                for i in 0..system_key_v1.len() {
+                    unsafe{sk_ptr.add(i).write_volatile(core::mem::zeroed());}
+                }
+                // clear out the copy of the v2 system data key, required for key commits of the basis
+                let sk_ptr = syskey_data_copy.as_mut_ptr();
+                for i in 0..syskey_data_copy.len() {
+                    unsafe{sk_ptr.add(i).write_volatile(core::mem::zeroed());}
+                }
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+                // indicate the migration worked
+                PasswordState::Correct
+            }
+            Err(e) => {
+                log::error!("Couldn't unwrap our system key: {:?}", e);
+                PasswordState::Incorrect
+            }
+        }
+    }
 }

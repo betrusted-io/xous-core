@@ -1186,6 +1186,19 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordSta
                 return PasswordState::Correct
             }
             PasswordState::Incorrect => {
+                // check for a migration event
+                #[cfg(feature="migration1")]
+                {
+                    if pddb_os.migration_v1_to_v2() == PasswordState::Correct {
+                        if pddb_os.try_login() == PasswordState::Correct {
+                            log::info!("Migration v1->v2 successful");
+                            return PasswordState::Correct
+                        } else {
+                            log::warn!("Migration v1->v2 succeeded, but somehow the v2 remount failed.");
+                        }
+                    }
+                }
+
                 pddb_os.clear_password(); // clear the bad password entry
                 // check if the user wants to re-try or not.
                 modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
