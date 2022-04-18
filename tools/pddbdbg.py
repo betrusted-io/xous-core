@@ -608,7 +608,7 @@ class Pte:
         return self.bytes
 
     def addr(self):
-        return int.from_bytes(self.bytes[:7], 'little')
+        return int.from_bytes(self.bytes[:7], 'little') * VPAGE_SIZE
     def flags(self):
         if self.bytes[6] == 1:
             return 'CLN'
