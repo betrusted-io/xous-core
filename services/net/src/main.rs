@@ -1153,9 +1153,11 @@ fn xmain() -> ! {
                     match socket.recv_slice(body.buf.as_slice_mut()) {
                         Ok(count) => {
                             body.valid = xous::MemorySize::new(count);
+                            body.offset = xous::MemoryAddress::new(1);
                         }
                         Err(e) => {
                             log::trace!("unable to receive: {:?}", e);
+                            body.offset = None;
                             body.valid = None;
                         }
                     }
@@ -1221,7 +1223,6 @@ fn xmain() -> ! {
 
                     log::trace!("sent {}", sent_octets);
                     let response_data = body.buf.as_slice_mut::<u32>();
-                    body.valid = xous::MemorySize::new(sent_octets);
                     response_data[0] = 0;
                     response_data[1] = sent_octets as u32;
                 }

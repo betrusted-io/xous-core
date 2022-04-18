@@ -141,12 +141,6 @@ pub(crate) fn std_tcp_tx(
 
     log::trace!("sent {}", sent_octets);
     let response_data = body.buf.as_slice_mut::<u32>();
-    if sent_octets == 0 {
-        // map u32::MAX to 0, because this `valid` is a NonZeroUsize type but 0 is a valid amount of data to send
-        body.valid = xous::MemorySize::new(u32::MAX as usize);
-    } else {
-        body.valid = xous::MemorySize::new(sent_octets);
-    }
     response_data[0] = 0;
     response_data[1] = sent_octets as u32;
 }
@@ -167,8 +161,8 @@ pub(crate) fn std_tcp_rx(
         }
     };
 
-    // Default to having no valid data upon return, indicating an error
-    body.valid = None;
+    // Offset is used as a flag to indicate an error. `None` means an error occured. `Some` means no error.
+    body.offset = None;
 
     let handle = match our_sockets.get(connection_handle_index) {
         Some(Some(val)) => val,
@@ -183,16 +177,11 @@ pub(crate) fn std_tcp_rx(
         log::trace!("receiving data right away");
         match socket.recv_slice(body.buf.as_slice_mut()) {
             Ok(bytes) => {
-                if bytes == 0 {
-                    // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
-                    // so, we re-use the "MAX" value to indicate 0. I don't like this, but the other option is to
-                    // bit-stuff a length field at the front of the body.buf slice, and that's also ugly for other reasons.
-                    // u32::MAX is a fairly "safe" number to use, because it's well beyond the maximum length
-                    // of a TCP packet (64k)
-                    body.valid = xous::MemorySize::new(u32::MAX as usize);
-                } else {
-                    body.valid = xous::MemorySize::new(bytes);
-                }
+                // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
+                // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned
+                // as the "error" when you try to create a NonZeroUsize with 0.
+                body.valid = xous::MemorySize::new(bytes);
+                body.offset = xous::MemoryAddress::new(1);
                 log::trace!("set body.valid = {:?}", body.valid);
             }
             Err(e) => {
@@ -234,8 +223,8 @@ pub(crate) fn std_tcp_peek(
         }
     };
 
-    // Default to having no valid data upon return, indicating an error
-    body.valid = None;
+    // Offset is used to indicate an error. None=>Error, Some=>no error
+    body.offset = None;
 
     let handle = match our_sockets.get(connection_handle_index) {
         Some(Some(val)) => val,
@@ -250,16 +239,11 @@ pub(crate) fn std_tcp_peek(
         log::trace!("receiving data right away");
         match socket.peek_slice(body.buf.as_slice_mut()) {
             Ok(bytes) => {
-                if bytes == 0 {
-                    // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
-                    // so, we re-use the "MAX" value to indicate 0. I don't like this, but the other option is to
-                    // bit-stuff a length field at the front of the body.buf slice, and that's also ugly for other reasons.
-                    // u32::MAX is a fairly "safe" number to use, because it's well beyond the maximum length
-                    // of a TCP packet (64k)
-                    body.valid = xous::MemorySize::new(u32::MAX as usize);
-                } else {
-                    body.valid = xous::MemorySize::new(bytes);
-                }
+                // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
+                // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned
+                // as the "error" when you try to create a NonZeroUsize with 0.
+                body.valid = xous::MemorySize::new(bytes);
+                body.offset = xous::MemoryAddress::new(1);
                 log::trace!("set body.valid = {:?}", body.valid);
             }
             Err(e) => {
@@ -271,6 +255,7 @@ pub(crate) fn std_tcp_peek(
         // No data available, so indicate `None`
         body.valid = None;
         // Also indicate no error
+        body.offset = xous::MemoryAddress::new(1);
         body.buf.as_slice_mut::<u32>()[0] = 0;
     }
 }
