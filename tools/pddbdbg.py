@@ -672,7 +672,7 @@ def decode_pagetable(img, entries, keys, mbbb):
             for pte in encrypted_ptes:
                 maybe_pte = Pte(cipher.decrypt(pte))
                 if maybe_pte.is_valid():
-                    logging.debug(maybe_pte.as_str(page_num))
+                    logging.debug(maybe_pte.as_str(page_num // Pte.PTE_LEN))
                     p_addr = page_num * (4096 // Pte.PTE_LEN)
                     if maybe_pte.addr() in v2p_table:
                         logging.warning("duplicate V2P PTE entry, evicting {:x}:{:x}", maybe_pte.addr(), p_addr)
