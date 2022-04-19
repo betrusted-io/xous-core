@@ -71,4 +71,4 @@ tts = []
 migration1 = []
 # hazardous debug flag decorates any debug paths that might accidentally leak key material
 hazardous-debug = []
-default = ["mbbb", "migration1", "hazardous-debug"]
+default = ["mbbb", "migration1"]

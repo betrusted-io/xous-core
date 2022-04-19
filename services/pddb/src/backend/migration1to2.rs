@@ -13,6 +13,15 @@ pub(crate) struct StaticCryptoDataV1 {
     /// a pool of fixed data used as a salt
     pub(crate) salt_base: [u8; 4096 - WRAPPED_AES_KEYSIZE - size_of::<u32>()],
 }
+impl StaticCryptoDataV1 {
+    pub fn default() -> StaticCryptoDataV1 {
+        StaticCryptoDataV1 {
+            version: SCD_VERSION_MIGRATION1,
+            system_key: [0u8; WRAPPED_AES_KEYSIZE],
+            salt_base: [0u8; 4096 - WRAPPED_AES_KEYSIZE - size_of::<u32>()],
+        }
+    }
+}
 impl Deref for StaticCryptoDataV1 {
     type Target = [u8];
     fn deref(&self) -> &[u8] {

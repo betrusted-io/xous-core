@@ -1178,7 +1178,7 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, pw_cid: xous::CID) -> PasswordState {
+fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
     loop {
         match pddb_os.try_login() {
@@ -1186,19 +1186,6 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, pw_cid: xous::
                 return PasswordState::Correct
             }
             PasswordState::Incorrect => {
-                // check for a migration event
-                #[cfg(feature="migration1")]
-                {
-                    if pddb_os.migration_v1_to_v2(pw_cid) == PasswordState::Correct {
-                        if pddb_os.try_login() == PasswordState::Correct {
-                            log::info!("Migration v1->v2 successful");
-                            return PasswordState::Correct
-                        } else {
-                            log::warn!("Migration v1->v2 succeeded, but somehow the v2 remount failed.");
-                        }
-                    }
-                }
-
                 pddb_os.clear_password(); // clear the bad password entry
                 // check if the user wants to re-try or not.
                 modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
@@ -1217,6 +1204,18 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, pw_cid: xous::
                 }
             }
             PasswordState::Uninit => {
+                // check for a migration event
+                #[cfg(feature="migration1")]
+                {
+                    if pddb_os.migration_v1_to_v2(_pw_cid) == PasswordState::Correct {
+                        if pddb_os.try_login() == PasswordState::Correct {
+                            log::info!("Migration v1->v2 successful");
+                            return PasswordState::Correct
+                        } else {
+                            log::warn!("Migration v1->v2 succeeded, but somehow the v2 remount failed.");
+                        }
+                    }
+                }
                 return PasswordState::Uninit;
             }
         }

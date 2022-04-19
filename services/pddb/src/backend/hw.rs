@@ -510,9 +510,14 @@ impl PddbOs {
     }
     #[cfg(feature="migration1")]
     /// needs to reside in this object because it accesses the key_phys_base registers, which have good reason to be private
-    fn static_crypto_data_get_v1(&self) -> &StaticCryptoDataV1 {
+    /// this needs to return a full copy of the data, because the copy on disk is going away.
+    fn static_crypto_data_get_v1(&self) -> StaticCryptoDataV1 {
+        let mut scd = StaticCryptoDataV1::default();
         let scd_ptr = self.pddb_mr.as_slice::<u8>()[self.key_phys_base.as_usize()..self.key_phys_base.as_usize() + PAGE_SIZE].as_ptr() as *const StaticCryptoDataV1;
-        let scd: &StaticCryptoDataV1 = unsafe{scd_ptr.as_ref().unwrap()};
+        let scd_flash: &StaticCryptoDataV1 = unsafe{scd_ptr.as_ref().unwrap()};
+        scd.version = scd_flash.version;
+        scd.system_key = scd_flash.system_key;
+        scd.salt_base = scd_flash.salt_base;
         scd
     }
     /// takes the key and writes it with zero, using hard pointer math and a compiler fence to ensure
@@ -1825,6 +1830,7 @@ impl PddbOs {
         for (&src, dst) in result.iter().zip(salt.iter_mut()) {
             *dst = src;
         }
+        #[cfg(feature="hazardous-debug")]
         log::info!("derived salt: {:x?}", salt);
 
         // 3. use the salt + password and run bcrypt on it to derive a key.
@@ -1870,8 +1876,10 @@ impl PddbOs {
 
     /// legacy key derivation for migrations. This can be removed once the migration is de-supported.
     /// Must be within this structure because it accesses the rootkeys, and we don't want to make that public.
+    /// Need to pass this the old version of the StaticCryptoData, because it's already erased and replaced
+    /// by updated keys by the time this routine is called.
     #[cfg(feature="migration1")]
-    pub(crate) fn basis_derive_key_v00_00_01_01(&self, basis_name: &str, password: &str) -> [u8; AES_KEYSIZE] {
+    pub(crate) fn basis_derive_key_v00_00_01_01(&self, basis_name: &str, password: &str, scd: &StaticCryptoDataV1) -> [u8; AES_KEYSIZE] {
         use sha2::{FallbackStrategy, Sha512Trunc256};
         use digest::Digest;
         use backend::bcrypt::*;
@@ -1893,7 +1901,6 @@ impl PddbOs {
         // uses Sha512Trunc256 on the salt array to generate a compressed version of
         // the basis name and plaintext password, which forms the Salt that is fed into bcrypt
         // our salt is probably way too big but what else are we going to use all that page's data for?
-        let scd = self.static_crypto_data_get_v1();
         let mut salt = [0u8; 16];
         let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
         hasher.update(&scd.salt_base);
@@ -1903,6 +1910,7 @@ impl PddbOs {
         for (&src, dst) in result.iter().zip(salt.iter_mut()) {
             *dst = src;
         }
+        #[cfg(feature="hazardous-debug")]
         log::info!("derived salt: {:x?}", salt);
 
         // 3. use the salt + password and run bcrypt on it to derive a key.
@@ -1953,20 +1961,40 @@ impl PddbOs {
         let blank = [0xffu8; aes::BLOCK_SIZE];
         let pt = self.pt_as_slice();
         let mut found_basis = false;
+
+        // move over the MBBB, if it exists
         for (page_index, pt_page) in pt.chunks(PAGE_SIZE).enumerate() {
-            let clean_page = if pt_page[..aes::BLOCK_SIZE] == blank {
+            if pt_page[..aes::BLOCK_SIZE] == blank {
                 if let Some(page) = self.mbbb_retrieve() {
-                    page
+                    log::info!("Found MBBB, restoring 0x100 pages @ ppn {:x} & erasing MBBB", (page_index * PAGE_SIZE / aes::BLOCK_SIZE));
+                    self.spinor.patch(
+                        self.pddb_mr.as_slice(),
+                        xous::PDDB_LOC,
+                        &page,
+                        self.pt_phys_base.as_u32() + (page_index * PAGE_SIZE) as u32,
+                    ).expect("couldn't write to page table");
+                    self.mbbb_erase();
                 } else {
-                    log::debug!("Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!");
-                    pt_page
+                    log::info!("Blank page in PT found, but no MBBB entry exists. PT is either corrupted or not initialized!");
                 }
-            } else {
-                pt_page
-            };
-            for (index, candidate) in clean_page.chunks(aes::BLOCK_SIZE).enumerate() {
+            }
+        }
+
+        // now do the full page table scan
+        for (page_index, pt_page) in pt.chunks(PAGE_SIZE).enumerate() {
+            for (index, candidate) in pt_page.chunks(aes::BLOCK_SIZE).enumerate() {
                 let mut block = Block::clone_from_slice(candidate);
                 cipher_pt_v1.decrypt_block(&mut block);
+                /* // some focused debugging code for reference in the future
+                let dbg_pagenum = (page_index * PAGE_SIZE / aes::BLOCK_SIZE) + index;
+                if dbg_pagenum == 0x5091 {
+                    log::info!("c: {:x?}", candidate);
+                    log::info!("p: {:x?}", block.as_slice());
+                }
+                if dbg_pagenum >= 0x5077 && dbg_pagenum <= 0x5094 {
+                    log::info!("c{:x}: {:x?}", dbg_pagenum, candidate);
+                }
+                */
                 // *** 2. if an entry matches, also decrypt the target page and store it here
                 if let Some(pte) = Pte::try_from_slice(block.as_slice()) {
                     // compute the physical page number that correspons to this entry, and store it in `pp`
@@ -1975,9 +2003,11 @@ impl PddbOs {
 
                     // root records require key commitment (to avoid AES-GCM-SIV salamanders), so detect & handle that
                     if pte.vaddr_v1().get() == VPAGE_SIZE as u64 { // v1 addresses were full vaddrs, not page numbers
+                        log::info!("migration: potential root block at (pp){:x}/(vp){:x}", pp.page_number(), pte.vaddr_v1().get());
                         // retrieve the data at `pp`
                         let migrating_data = self.data_decrypt_page_with_commit(key_v1, aad_v1, &pp);
                         if let Some(vpage) = migrating_data {
+                            log::info!("migration: found root block!");
                             found_basis = true;
                             let mut basis_root = BasisRoot::default();
                             for (&src, dst) in (&vpage)[size_of::<JournalType>()..].iter().zip(basis_root.deref_mut().iter_mut()) {
@@ -1988,6 +2018,7 @@ impl PddbOs {
                                 log::warn!("Root basis record did not match expected version during migration. Ignoring and attempting to move on...");
                             }
                             basis_root.version = PDDB_VERSION; // update the version to our current one
+                            log::info!("Basis root: {:?}", basis_root);
                             let slice_iter =
                                 (&vpage[..size_of::<JournalType>()]).iter() // just copy the journal rev
                                 .chain(basis_root.as_ref().iter());
@@ -2001,6 +2032,7 @@ impl PddbOs {
                             log::warn!("Root basis record did not decrypt correctly, ignoring and hoping for the best, but your chances are slim.");
                         }
                     } else {
+                        log::info!("migrating (pp){:x}/(vp){:x}", pp.page_number(), pte.vaddr_v1().get());
                         // retrieve the data at `pp`
                         let migrating_data = self.data_decrypt_page(&cipher_data_v1, aad_v1, &pp);
                         // store the data back to the same location, but with the new keys
@@ -2012,8 +2044,12 @@ impl PddbOs {
                     }
 
                     // *** 3. re-encrypt the PTE and the target page to the v2 keys and corrected addressing scheme
-                    // the pt_patch_mapping call will automatically insert the correct v2 addressing scheme
-                    self.pt_patch_mapping(pte.vaddr_v1(), pp.page_number(), &cipher_pt_v2);
+                    // a deconstructed pt_patch_mapping() call -- because the normal call would insert a MBBB block, which is not what we want in this case.
+                    let mut pte = Pte::new(pte.vaddr_v1(), PtFlags::CLEAN, Rc::clone(&self.entropy));
+                    let mut pt_block = Block::from_mut_slice(pte.deref_mut());
+                    cipher_pt_v2.encrypt_block(&mut pt_block);
+                    self.patch_pagetable_raw(&pt_block, pp.page_number() * aes::BLOCK_SIZE as u32);
+
                     // track the used pages
                     used_pages.push(Reverse(pp.page_number()));
                 }
@@ -2038,6 +2074,10 @@ impl PddbOs {
             return PasswordState::Uninit;
         }
         log::info!("v1 PDDB detected. Attempting to migrate from v1->v2.");
+        log::info!("old SCD block: {:x?}", &scd.deref()[..128]); // this is not hazardous because the keys were wrapped
+
+        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        let mut export = Vec::<KeyExport>::new(); // export any basis keys for verification in hosted mode
 
         // derive a v1 key
 
@@ -2100,7 +2140,9 @@ impl PddbOs {
                 // initialize the salt
                 self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
                 // commit keys
+                log::info!("patching new SCD block in: {:x?}", &crypto_keys.deref()[..128]); // this is not hazardous because the keys were wrapped
                 self.patch_keys(crypto_keys.deref(), 0);
+
                 // now we have a copy of the AES key necessary to re-encrypt all the basis
                 // build the data cipher for v1 pages
                 let data_cipher_v1 = Aes256GcmSiv::new(Key::from_slice(&system_key_v1));
@@ -2132,11 +2174,11 @@ impl PddbOs {
 
                 // ------ II. migrate any hidden basis ------
                 modals.dynamic_notification_close().unwrap();
-                let mut prompt = String::from("All secret Bases must be unlocked now to complete migration, or else their data will be lost. Unlock a Basis?");
+                let mut prompt = String::from("Any secret Bases must be migrated now, or else their data will be lost.\n\nUnlock a Basis for migration?");
                 loop {
                     modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
                     modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
-                    match modals.get_radiobutton("Unlock a secret basis for migration?") {
+                    match modals.get_radiobutton(&prompt) {
                         Ok(response) => {
                             if response.as_str() == t!("pddb.yes", xous::LANG) {
                                 match modals.get_text("Enter the Basis name", None, None) {
@@ -2150,7 +2192,11 @@ impl PddbOs {
                                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                                         if let Some(pw) = ret.plaintext_pw {
                                             // derive old and new keys
-                                            let basis_key_v1 = self.basis_derive_key_v00_00_01_01(bname.as_str(), pw.as_str().unwrap_or("UTF8-error"));
+                                            let basis_key_v1 = self.basis_derive_key_v00_00_01_01(
+                                                bname.as_str(),
+                                                pw.as_str().unwrap_or("UTF8-error"),
+                                                &scd
+                                            );
                                             let basis_aad_v1 = data_aad_v1(&self, bname.as_str());
                                             let basis_aad_v2 = self.data_aad(bname.as_str());
                                             let basis_pt_cipher_v1 = Aes256::new(GenericArray::from_slice(&basis_key_v1));
@@ -2169,11 +2215,25 @@ impl PddbOs {
                                                 &basis_data_cipher_2,
                                                 &mut used_pages,
                                             ) {
+                                                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                                                {
+                                                    let mut name = [0 as u8; 64];
+                                                    for (&src, dst) in bname.as_str().as_bytes().iter().zip(name.iter_mut()) {
+                                                        *dst = src;
+                                                    }
+                                                    export.push(
+                                                        KeyExport {
+                                                            basis_name: name,
+                                                            key: basis_keys.data,
+                                                            pt_key: basis_keys.pt,
+                                                        }
+                                                    );
+                                                }
                                                 prompt.clear();
-                                                prompt.push_str("Migration success, add another secret Basis?");
+                                                prompt.push_str("Migration success, migrate another secret Basis?");
                                             } else {
                                                 prompt.clear();
-                                                prompt.push_str("Migration failure, retry and/or add another secret Basis?");
+                                                prompt.push_str("Migration failure, retry and/or migrate another secret Basis?");
                                             }
                                         } else {
                                             log::warn!("Couldn't retrieve password for the basis, ignoring and moving on");
@@ -2228,6 +2288,9 @@ impl PddbOs {
                     unsafe{sk_ptr.add(i).write_volatile(core::mem::zeroed());}
                 }
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                self.dbg_dump(Some("migration".to_string()), Some(&export));
 
                 // indicate the migration worked
                 PasswordState::Correct
