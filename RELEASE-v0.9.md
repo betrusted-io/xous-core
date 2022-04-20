@@ -127,6 +127,7 @@ for examples of idiomatic ways to write code for Xous.
 - Sleep screen is now blanked of all prior content and just the sentinel message is held
 - Sleep/suspend lightly refactored to fix some bugs. Ticktimer is now the sole `Last` event.
 - Preliminary text to speech (TTS) support added; compile with `cargo xtask tts` or set the LOCALE to `en-tts` to try it out.
+- QR code rendering option added to `modals` (thank you nworbnhoj!)
 - Introduce deferred-response pattern into modals, pddb, and susres.
 - `pddb` critical bug fixed where page table entries were not having their journal numbers synchronized with the free space table when read off of the disk. This would cause inconsistency glitches in the `pddb`. This release fixes the problem, but, it may require you to reformat the `pddb` once the patch is in place. Because this is a genuine bug, if you're unlucky to be hit by this, there is no effective migration path. :(
 - `pddb` major bug fixed where zero-length file allocations were not being committed to disk.
@@ -135,6 +136,12 @@ for examples of idiomatic ways to write code for Xous.
   - HKDF is now used to derive two separate keys for each
   - A second problem was identified where the virtual page number was being stored as a fully expanded address in the paget able, and not as a page number. Due to the compressed encoding of the page table entry, this means that the virtual address space would be shrunk by ~4000x. This is now fixed, so we have the full as-designed virtual memory space once again.
   - A migration routine was created to go from v1 -> v2 databases. It automatically detects the older version and attempts to guide the user through a migration. Although we don't have many users and databases today, this is a "best practice" for breaking revisions and this serves as a basis for forward-looking changes that are migrateable.
+- Various fixes and improvements to the USB update scripts to improve reliability.
+- Graphical panic outputs: when there is a panic, you get a "Guru Meditation" error box plus the panic message.
+  - Currently all panics are hard crashes
+  - Most of the time the system will reboot itself within a few seconds of displaying the panic
+  - There will be occassions where you will need to insert a paperclip into the reset port on the lower right hand corner to recover from the panic.
+  - If you get a panic, please snap a photo of it and drop it in a new issue in the `xous-core` repo, along with a description of what you were doing at the time.
 
 ## Roadmap to 1.0
 
