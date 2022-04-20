@@ -14,23 +14,13 @@ if ($decision -eq 0) {
     Exit
 }
 
-Invoke-WebRequest https://ci.betrusted.io/latest-ci/loader.bin -OutFile loader.bin
-python usb_update.py -l loader.bin
-Remove-Item loader.bin
-
+python usb_update.py --disable-boot
 Write-Output "waiting for device to reboot"
 Start-Sleep 5
 
 Invoke-WebRequest https://ci.betrusted.io/latest-ci/xous-$LOCALE.img -OutFile xous.img
 python usb_update.py -k xous.img
 Remove-Item xous.img
-
-Write-Output "waiting for device to reboot"
-Start-Sleep 5
-
-Invoke-WebRequest https://ci.betrusted.io/latest-ci/soc_csr.bin -OutFile soc_csr.bin
-python usb_update.py -s soc_csr.bin
-Remove-Item soc_csr.bin
 
 Write-Output "waiting for device to reboot"
 Start-Sleep 5
@@ -45,6 +35,15 @@ Start-Sleep 5
 Invoke-WebRequest https://ci.betrusted.io/latest-ci/wf200_fw.bin -OutFile wf200_fw.bin
 python usb_update.py -w wf200_fw.bin
 Remove-Item wf200_fw.bin
+
+Write-Output "waiting for device to reboot"
+Start-Sleep 5
+
+Invoke-WebRequest https://ci.betrusted.io/latest-ci/loader.bin -OutFile loader.bin
+Invoke-WebRequest https://ci.betrusted.io/latest-ci/soc_csr.bin -OutFile soc_csr.bin
+python usb_update.py --enable-boot --soc soc_csr.bin -l loader.bin
+Remove-Item loader.bin
+Remove-Item soc_csr.bin
 
 Write-Output "IMPORTANT: you must select 'Install gateware update' on the Precursor device to update the SoC."
 Write-Output "IMPORTANT: you must also run 'ecup auto' to update the EC with the staged firmware objects."
