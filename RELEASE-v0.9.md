@@ -112,7 +112,7 @@ for examples of idiomatic ways to write code for Xous.
 - `pddb` has salamanders fixed (https://eprint.iacr.org/2020/1456.pdf). This changes the root basis record storage, causing all prior versions to be unrecognized.
 - `betrusted-soc` was updated to the latest Litex in prep for some work optimizing CPU performance and USB cores
 
-## New in 0.9.8 (not yet released)
+## New in 0.9.8
 - `TcpStream` is now part of `libstd`. Legacy TcpStream has been removed.
 - `TcpListener` is now part of `libstd`. Legacy TcpListener has been removed.
 - `net server` demo program has been upgraded to use multiple worker threads + MPSC for communications. Users can now attempt to access `buzz/` to cause the vibration motor to run, and there is now a 404 response for pages not found.
