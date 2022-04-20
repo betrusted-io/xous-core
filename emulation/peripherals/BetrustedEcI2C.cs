@@ -258,8 +258,8 @@ namespace Antmicro.Renode.Peripherals.I2C
                 this.Log(LogLevel.Error, "selectedSlave is NULL!");
                 return;
             }
-            if (dataFromSlave.Count == 0)
-            {
+            // if (dataFromSlave.Count == 0)
+            // {
                 foreach (var b in selectedSlave.Read())
                 {
                     dataFromSlave.Enqueue(b);
@@ -271,7 +271,7 @@ namespace Antmicro.Renode.Peripherals.I2C
                     receiveBuffer.Value = 0;
                     return;
                 }
-            }
+            // }
 
             if (receiveBuffer == null) {
                 this.Log(LogLevel.Error, "receiveBuffer is NULL!");
