@@ -655,6 +655,7 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     cs_peripherals.insert("engine", "Miscellaneous.Engine");
     cs_peripherals.insert("com", "SPI.BetrustedSocCom");
     cs_peripherals.insert("i2c", "I2C.BetrustedSocI2C");
+    cs_peripherals.insert("jtag", "Miscellaneous.BetrustedJtag");
     cs_peripherals.insert("keyboard", "Input.BetrustedKbd");
     cs_peripherals.insert("keyrom", "Miscellaneous.Keyrom");
     cs_peripherals.insert("memlcd", "Video.BetrustedLCD");
