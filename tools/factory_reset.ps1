@@ -40,7 +40,7 @@ Start-Sleep 5
 
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/soc_csr.bin -OutFile soc_csr.bin
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/loader.bin -OutFile loader.bin
-python usb_update.py --enable-boot --soc soc_csr.bin -l loader.bin
+python usb_update.py --enable-boot-wipe --soc soc_csr.bin -l loader.bin
 Remove-Item soc_csr.bin
 Remove-Item loader.bin
 

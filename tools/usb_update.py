@@ -414,7 +414,10 @@ def main():
         "--disable-boot", required=False, action='store_true', help="Disable system boot (for use in multi-stage updates)"
     )
     parser.add_argument(
-        "--enable-boot", required=False, action='store_true', help="Re-enable system boot. Requires both a loader and a soc spec."
+        "--enable-boot-wipe", required=False, action='store_true', help="Re-enable system boot for factory reset. Requires both a loader (-l) and a soc (--soc) spec. Overwrites root keys."
+    )
+    parser.add_argument(
+        "--enable-boot-update", required=False, action='store_true', help="Re-enable system boot for updates. Requires both a loader (-l) and a staging (-s) spec. Stages SOC without overwriting root keys."
     )
     parser.add_argument(
         "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='../target/riscv32imac-unknown-xous-elf/release/xous.img'
@@ -558,7 +561,7 @@ def main():
         print("Disabling boot")
         pc_usb.erase_region(locs['LOC_LOADER'][0], 1024 * 256)
 
-    if args.enable_boot:
+    if args.enable_boot_wipe:
         if args.loader == None:
             print("Must provide both a loader and soc image")
         if args.soc == None:
@@ -575,6 +578,31 @@ def main():
 
         print("Erasing PDDB root structures")
         pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
+
+        print("Resuming CPU.")
+        pc_usb.poke(vexdbg_addr, 0x02000000)
+
+        print("Resetting SOC...")
+        try:
+            pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
+        except usb.core.USBError:
+            pass # we expect an error because we reset the SOC and that includes the USB core
+        exit(0)
+
+    if args.enable_boot_update:
+        if args.loader == None:
+            print("Must provide both a loader and soc image")
+        if args.staging == None:
+            print("Must provide both a soc and loader image")
+        print("Enabling boot with {} and {}".format(args.loader, args.staging))
+        print("Programming loader image {}".format(args.loader))
+        with open(args.loader, "rb") as f:
+            image = f.read()
+            pc_usb.flash_program(locs['LOC_LOADER'][0], image, verify=verify)
+        print("Staging SoC gateware".format(args.staging))
+        with open(args.staging, "rb") as f:
+            image = f.read()
+            pc_usb.flash_program(locs['LOC_STAGING'][0], image, verify=verify)
 
         print("Resuming CPU.")
         pc_usb.poke(vexdbg_addr, 0x02000000)
@@ -607,7 +635,7 @@ def main():
             pc_usb.flash_program(locs['LOC_WF200'][0], image, verify=verify)
 
     if args.staging != None:
-        print("Programming SoC gateware {}".format(args.soc))
+        print("Staging SoC gateware {}".format(args.soc))
         with open(args.staging, "rb") as f:
             image = f.read()
             pc_usb.flash_program(locs['LOC_STAGING'][0], image, verify=verify)

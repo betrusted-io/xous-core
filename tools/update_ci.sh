@@ -58,7 +58,7 @@ sleep 5
 
 wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
 wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
-./usb_update.py --enable-boot --soc /tmp/soc_csr.bin -l /tmp/loader.bin
+./usb_update.py --enable-boot-update -s /tmp/soc_csr.bin -l /tmp/loader.bin
 rm /tmp/loader.bin
 rm /tmp/soc_csr.bin
 
