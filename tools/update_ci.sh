@@ -63,6 +63,8 @@ rm /tmp/loader.bin
 rm /tmp/soc_csr.bin
 
 echo " "
+echo "Please insert a paperclip into the hole in the lower right hand corner to force a full reset."
+echo " "
 echo "NOTE: This script merely stages the SOC update object."
 echo "You must run 'Install gateware update' from the root menu on the device itself"
 echo "for the SOC update to take hold!"
