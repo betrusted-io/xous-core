@@ -15,28 +15,28 @@ if ($decision -eq 0) {
 }
 
 python usb_update.py --disable-boot
-Write-Output "waiting for device to reboot"
+Write-Output "waiting for device to reconnect"
 Start-Sleep 5
 
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/xous-$LOCALE.img -OutFile xous.img
 python usb_update.py -k xous.img
 Remove-Item xous.img
 
-Write-Output "waiting for device to reboot"
+Write-Output "waiting for device to reconnect"
 Start-Sleep 5
 
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/ec_fw.bin -OutFile ec_fw.bin
 python usb_update.py -e ec_fw.bin
 Remove-Item ec_fw.bin
 
-Write-Output "waiting for device to reboot"
+Write-Output "waiting for device to reconnect"
 Start-Sleep 5
 
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/wf200_fw.bin -OutFile wf200_fw.bin
 python usb_update.py -w wf200_fw.bin
 Remove-Item wf200_fw.bin
 
-Write-Output "waiting for device to reboot"
+Write-Output "waiting for device to reconnect"
 Start-Sleep 5
 
 Invoke-WebRequest https://ci.betrusted.io/releases/latest/loader.bin -OutFile loader.bin
