@@ -619,11 +619,8 @@ Various debug configurations:
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
  ffi-test                builds an image for testing C-FFI bindings and integration
  tts                     builds an image with text to speech support via externally linked C executable
-<<<<<<< HEAD
  usbdev                  minimal, insecure build for new USB core bringup
-=======
  install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
->>>>>>> origin/main
 "
     )
 }
