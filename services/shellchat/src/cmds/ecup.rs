@@ -487,6 +487,9 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         }
 
                         env.netmgr.connection_manager_stop().unwrap();
+                        env.com.wlan_leave().ok();
+                        env.ticktimer.sleep_ms(4000).unwrap(); // give a few seconds for any packets/updates to clear so we don't tigger panics as the EC is about to disappear...
+
                         self.in_progress = true;
                         let start = env.ticktimer.elapsed_ms();
                         self.start_time = Some(start);

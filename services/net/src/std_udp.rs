@@ -19,7 +19,7 @@ pub(crate) fn std_udp_bind(
         Some(b) => b,
         None => {
             log::trace!("invalid message type");
-            udp_failure(msg, NetError::LibraryError);
+            std_failure(msg, NetError::LibraryError);
             return;
         }
     };
@@ -30,7 +30,7 @@ pub(crate) fn std_udp_bind(
         Some(addr) => addr,
         None => {
             log::trace!("couldn't parse address");
-            udp_failure(msg, NetError::LibraryError);
+            std_failure(msg, NetError::LibraryError);
             return;
         }
     };
@@ -51,7 +51,7 @@ pub(crate) fn std_udp_bind(
         })
     {
         log::trace!("couldn't connect: {:?}", e);
-        udp_failure(msg, e);
+        std_failure(msg, e);
         return;
     }
 
@@ -78,7 +78,7 @@ pub(crate) fn std_udp_rx(
     let body = match msg.body.memory_message_mut() {
         Some(body) => body,
         None => {
-            udp_failure(msg, NetError::LibraryError);
+            std_failure(msg, NetError::LibraryError);
             return;
         }
     };
@@ -89,7 +89,7 @@ pub(crate) fn std_udp_rx(
     let handle = match our_sockets.get(connection_handle_index) {
         Some(Some(val)) => val,
         _ => {
-            udp_failure(msg, NetError::Invalid);
+            std_failure(msg, NetError::Invalid);
             return;
         }
     };
@@ -120,7 +120,7 @@ pub(crate) fn std_udp_rx(
                 }
                 Err(e) => {
                     log::error!("unable to receive: {:?}", e);
-                    udp_failure(msg, NetError::LibraryError);
+                    std_failure(msg, NetError::LibraryError);
                 }
             }
         } else {
@@ -131,14 +131,14 @@ pub(crate) fn std_udp_rx(
                 }
                 Err(e) => {
                     log::error!("unable to receive: {:?}", e);
-                    udp_failure(msg, NetError::LibraryError);
+                    std_failure(msg, NetError::LibraryError);
                 }
             }
         };
         return;
     }
     if nonblocking {
-        udp_failure(msg, NetError::WouldBlock);
+        std_failure(msg, NetError::WouldBlock);
         return;
     }
     log::trace!("UDP socket was not ready to receive, adding it to list of waiting messages");
@@ -166,14 +166,14 @@ pub(crate) fn std_udp_tx(
     let body = match msg.body.memory_message_mut() {
         Some(body) => body,
         None => {
-            udp_failure(msg, NetError::LibraryError);
+            std_failure(msg, NetError::LibraryError);
             return;
         }
     };
     let handle = match our_sockets.get(connection_handle_index) {
         Some(Some(val)) => val,
         _ => {
-            udp_failure(msg, NetError::Invalid);
+            std_failure(msg, NetError::Invalid);
             return;
         }
     };
@@ -185,7 +185,7 @@ pub(crate) fn std_udp_tx(
         Some(addr) => addr,
         None => {
             log::trace!("couldn't parse address");
-            udp_failure(msg, NetError::LibraryError);
+            std_failure(msg, NetError::LibraryError);
             return;
         }
     };
@@ -199,7 +199,7 @@ pub(crate) fn std_udp_tx(
         }
         Err(_e) => {
             // the only type of error returned from smoltcp in this case is if the destination is not addressible.
-            udp_failure(msg, NetError::Unaddressable);
+            std_failure(msg, NetError::Unaddressable);
             return;
         }
     }
@@ -236,8 +236,8 @@ pub(crate) fn udp_rx_success(buf: &mut [u8], rx: &[u8], ep: IpEndpoint) {
     }
 }
 
-pub(crate) fn udp_failure(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
-    log::trace!("udp_failure: {:?}", code);
+pub(crate) fn std_failure(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
+    log::trace!("std_failure: {:?}", code);
     // If it's not a memory message, don't fill in the return information.
     let body = match env.body.memory_message_mut() {
         None => {

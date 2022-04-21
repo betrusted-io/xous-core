@@ -1,2 +1,5 @@
 [alias]
 xtask = "run --package xtask --"
+
+# [net]
+# offline = true              # do not access the network

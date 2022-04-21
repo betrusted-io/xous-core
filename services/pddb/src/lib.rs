@@ -20,7 +20,7 @@ pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 pub(crate) static POLLER_REFCOUNT: AtomicU32 = AtomicU32::new(0);
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-enum CbOp {
+pub enum CbOp {
     Change,
     Quit
 }
@@ -35,6 +35,11 @@ impl PddbMountPoller {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB_POLLER).expect("can't connect to Pddb mount poller server");
         PddbMountPoller { conn }
     }
+    /// This call is guaranteed to *never* block and return the instantaneous state of the PDDB, even if the server itself
+    /// is currently busy processing other requests. This has to be done with a separate server from the main one, because
+    /// the main server will block during the mount operations, as it owns the PDDB data objects and cannot concurrently process
+    /// the mount check task while manipulating them. Instead, this routine queries a separate thread that shares an AtomicBool
+    /// with the main thread that reports the mount state.
     pub fn is_mounted_nonblocking(&self) -> bool {
         match send_message(self.conn,
             Message::new_blocking_scalar(PollOp::Poll.to_usize().unwrap(), 0, 0, 0, 0)
@@ -68,8 +73,7 @@ impl Drop for PddbMountPoller {
 pub struct Pddb {
     conn: CID,
     /// a SID that we can directly share with the PDDB server for the purpose of handling key change callbacks
-    cb_sid: SID,
-    cb_handle: Option<JoinHandle::<()>>,
+    cb: Option<(SID, JoinHandle::<()>)>,
     /// Handle key change updates. The general intent is that the closure implements a
     /// `send` of a message to the server to deal with a key change appropriately,
     /// but no mutable data is allowed within the closure itself due to safety problems.
@@ -82,70 +86,64 @@ pub struct Pddb {
     /// like this are probably OK.
     keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>>,
     trng: trng::Trng,
-    tt: ticktimer_server::Ticktimer,
 }
 impl Pddb {
     pub fn new() -> Self {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("can't connect to Pddb server");
-        let sid = xous::create_server().unwrap();
         let keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>> = Arc::new(Mutex::new(HashMap::new()));
-        let handle = thread::spawn({
-            let keys = Arc::clone(&keys);
-            let sid = sid.clone();
-            move || {
-                loop {
-                    let msg = xous::receive_message(sid).unwrap();
-                    match FromPrimitive::from_usize(msg.body.id()) {
-                        Some(CbOp::Change) => msg_scalar_unpack!(msg, t0, t1, t2, _, {
-                            let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
-                            if let Some(cb) = keys.lock().unwrap().get(&token) {
-                                cb();
-                            } else {
-                                log::warn!("Key changed but no callback was hooked to receive it");
-                            }
-                        }),
-                        Some(CbOp::Quit) => { // blocking scalar
-                            xous::return_scalar(msg.sender, 0).unwrap();
-                            break;
-                        },
-                        _ =>log::warn!("Got unknown opcode: {:?}", msg),
-                    }
-                }
-                xous::destroy_server(sid).unwrap();
-            }
-        });
         Pddb {
             conn,
-            cb_sid: sid,
-            cb_handle: Some(handle),
+            cb: None,
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
-            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
-    pub fn is_mounted(&self) -> bool {
-        let ret = send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
-        match ret {
-            xous::Result::Scalar1(code) => {
-                if code == 0 {false} else {true}
-            },
-            _ => panic!("Internal error"),
+    fn ensure_async_responder(&mut self) {
+        if self.cb.is_none() {
+            let sid = xous::create_server().unwrap();
+            let handle = thread::spawn({
+                let keys = Arc::clone(&self.keys);
+                let sid = sid.clone();
+                move || {
+                    loop {
+                        let msg = xous::receive_message(sid).unwrap();
+                        match FromPrimitive::from_usize(msg.body.id()) {
+                            Some(CbOp::Change) => msg_scalar_unpack!(msg, t0, t1, t2, _, {
+                                let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
+                                if let Some(cb) = keys.lock().unwrap().get(&token) {
+                                    cb();
+                                } else {
+                                    log::warn!("Key changed but no callback was hooked to receive it");
+                                }
+                            }),
+                            Some(CbOp::Quit) => { // blocking scalar
+                                xous::return_scalar(msg.sender, 0).unwrap();
+                                break;
+                            },
+                            _ =>log::warn!("Got unknown opcode: {:?}", msg),
+                        }
+                    }
+                    xous::destroy_server(sid).unwrap();
+                }
+            });
+            self.cb = Some((sid, handle));
         }
     }
     /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
     /// A random interval between 1 and 2 seconds is chosen for the poll wait time. Randomizing the waiting time
     /// helps to level out the task scheduler in the case that many threads are waiting on the PDDB simultaneously.
-    pub fn is_mounted_blocking(&self, poll_interval_ms: Option<u32>) {
-        let interval = if let Some(i) = poll_interval_ms {
-            i
-        } else {
-            (self.trng.get_u32().unwrap() % 1000) + 1000
-        };
-        while !self.is_mounted() {
-            self.tt.sleep_ms(interval as usize).unwrap();
+    ///
+    /// This is typically the API call one would use to hold execution of a service until the PDDB is mounted.
+    pub fn is_mounted_blocking(&self) {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+        match ret {
+            xous::Result::Scalar1(_code) => {
+                ()
+            },
+            _ => panic!("Internal error"),
         }
     }
     pub fn try_mount(&self) -> bool {
@@ -315,6 +313,14 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
+        if key_changed_cb.is_some() {
+            self.ensure_async_responder();
+        }
+        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+            Some(sid.to_array())
+        } else {
+            None
+        };
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -324,7 +330,7 @@ impl Pddb {
             create_key,
             token: None,
             result: PddbRequestCode::Uninit,
-            cb_sid: self.cb_sid.to_array(),
+            cb_sid,
             alloc_hint: if let Some(a) = alloc_hint {Some(a as u64)} else {None},
         };
         let mut buf = Buffer::into_buf(request)
@@ -385,6 +391,11 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
+        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+            Some(sid.to_array())
+        } else {
+            None
+        };
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -394,7 +405,7 @@ impl Pddb {
             create_key: false,
             token: None,
             result: PddbRequestCode::Uninit,
-            cb_sid: self.cb_sid.to_array(),
+            cb_sid,
             alloc_hint: None,
         };
         let mut buf = Buffer::into_buf(request)
@@ -423,6 +434,11 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
+        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+            Some(sid.to_array())
+        } else {
+            None
+        };
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -432,7 +448,7 @@ impl Pddb {
             create_key: false,
             token: None,
             result: PddbRequestCode::Uninit,
-            cb_sid: self.cb_sid.to_array(),
+            cb_sid,
             alloc_hint: None,
         };
         let mut buf = Buffer::into_buf(request)
@@ -612,10 +628,10 @@ impl Pddb {
 
 impl Drop for Pddb {
     fn drop(&mut self) {
-        let cid = xous::connect(self.cb_sid).unwrap();
-        send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-        unsafe{xous::disconnect(cid).ok();}
-        if let Some(handle) = self.cb_handle.take() {
+        if let Some((cb_sid, handle)) = self.cb.take() {
+            let cid = xous::connect(cb_sid).unwrap();
+            send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).ok();}
             handle.join().expect("couldn't terminate callback helper thread");
         }
 

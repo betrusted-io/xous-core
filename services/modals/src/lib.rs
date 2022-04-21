@@ -4,15 +4,15 @@ pub mod api;
 use api::*;
 
 use gam::*;
-use xous::{CID, SID, send_message, Message};
-use num_traits::{ToPrimitive, FromPrimitive};
+use xous::{CID, send_message, Message};
+use num_traits::*;
 use xous_ipc::Buffer;
-use std::thread;
+use core::cell::Cell;
 
 pub struct Modals {
     conn: CID,
     token: [u32; 4],
-    tt: ticktimer_server::Ticktimer,
+    have_lock: Cell::<bool>,
 }
 impl Modals {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -24,7 +24,7 @@ impl Modals {
         Ok(Modals {
             conn,
             token,
-            tt: ticktimer_server::Ticktimer::new().unwrap(),
+            have_lock: Cell::new(false),
         })
     }
 
@@ -34,67 +34,62 @@ impl Modals {
         maybe_validator_op: Option<u32>,
     ) -> Result<TextEntryPayload, xous::Error> {
         self.lock();
-        let validator = if let Some(validator) = maybe_validator {
-            // create a one-time use server
-            let validator_server = xous::create_server().unwrap();
-            thread::spawn({
-                let vsid = validator_server.to_array();
-                move || {
-                    loop {
-                        let mut msg = xous::receive_message(SID::from_array(vsid)).unwrap();
-                        log::debug!("validator message: {:?}", msg);
-                        match FromPrimitive::from_usize(msg.body.id()) {
-                            Some(ValidationOp::Validate) => {
-                                let mut buffer = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
-                                let validation = buffer.to_original::<Validation, _>().unwrap();
-                                let result = validator(validation.text, validation.opcode);
-                                buffer.replace(result).expect("couldn't place validation result");
-                            }
-                            Some(ValidationOp::Quit) => {
-                                // this is a blocking scalar, have to return a dummy value to unblock the caller
-                                xous::return_scalar(msg.sender, 0).unwrap();
-                                break;
-                            }
-                            _ => {
-                                log::error!("received unknown message: {:?}", msg);
-                            }
-                        }
-                    }
-                }
-            });
-            Some(validator_server.to_array())
-        } else {
-            None
-        };
-        let spec = ManagedPromptWithTextResponse {
+
+        let mut spec = ManagedPromptWithTextResponse {
             token: self.token,
             prompt: xous_ipc::String::from_str(prompt),
-            validator,
-            validator_op: maybe_validator_op.unwrap_or(0)
         };
-        let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::PromptWithTextResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-        if let Some(server) = validator {
-            let cid = xous::connect(SID::from_array(server)).unwrap();
-            send_message(cid, Message::new_blocking_scalar(ValidationOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-            unsafe{xous::disconnect(cid).unwrap()}; // must disconnect before destroy to avoid the CID from hanging out in our outbound table which is limited to 32 entries
-            xous::destroy_server(SID::from_array(server)).expect("couldn't destroy temporary server");
-        }
-        match buf.to_original::<TextEntryPayload, _>() {
-            Ok(response) => Ok(response),
-            _ => Err(xous::Error::InternalError)
+        // question: do we want to add a retry limit?
+        loop {
+            let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+            buf.lend_mut(self.conn, Opcode::PromptWithTextResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+            match buf.to_original::<TextEntryPayload, _>() {
+                Ok(response) => {
+                    if let Some(validator) = maybe_validator {
+                        if let Some(err_msg) = validator(response, maybe_validator_op.unwrap_or(0)) {
+                            spec.prompt.clear();
+                            spec.prompt.append(err_msg.as_str().unwrap_or("UTF-8 error")).ok();
+                        } else {
+                            send_message(self.conn,
+                                Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
+                                self.token[0] as _, self.token[1] as _, self.token[2] as _, self.token[3] as _,
+                            )).expect("couldn't acknowledge text entry");
+                            self.unlock();
+                            return Ok(response)
+                        }
+                    } else {
+                        send_message(self.conn,
+                            Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
+                            self.token[0] as _, self.token[1] as _, self.token[2] as _, self.token[3] as _,
+                        )).expect("couldn't acknowledge text entry");
+                        self.unlock();
+                        return Ok(response)
+                    }
+                },
+                _ => {
+                    // we send the valid response token even in this case because we want the modals server to move on and not get stuck on this error.
+                    send_message(self.conn,
+                        Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
+                        self.token[0] as _, self.token[1] as _, self.token[2] as _, self.token[3] as _,
+                    )).expect("couldn't acknowledge text entry");
+                    self.unlock();
+                    return Err(xous::Error::InternalError);
+                }
+            }
         }
     }
 
     /// this blocks until the notification has been acknowledged.
-    pub fn show_notification(&self, notification: &str) -> Result<(), xous::Error> {
+    pub fn show_notification(&self, notification: &str, as_qrcode: bool) -> Result<(), xous::Error> {
         self.lock();
         let spec = ManagedNotification {
             token: self.token,
             message: xous_ipc::String::from_str(notification),
+            as_qrcode,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        self.unlock();
         Ok(())
     }
 
@@ -116,9 +111,17 @@ impl Modals {
     /// but, progress updates are meant to be fast and frequent, and generally if a progress bar shows
     /// something whacky it's not going to affect a security outcome
     pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::UpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
-        ).expect("couldn't update progress");
+        match xous::try_send_message(self.conn,
+            Message::new_scalar(Opcode::DoUpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
+        ) {
+            Ok(_) => (),
+            Err(e) => {
+                log::warn!("update_progress failed with {:?}, skipping request", e);
+                // most likely issue is that the server queue is overfull because too many progress updates were sent
+                // sleep the sending thread to rate-limit requests, while discarding the current request.
+                xous::yield_slice()
+            }
+        }
         Ok(())
     }
 
@@ -133,6 +136,7 @@ impl Modals {
             self.token[3] as usize,
             )
         ).expect("couldn't stop progress");
+        self.unlock();
         Ok(())
     }
 
@@ -156,6 +160,7 @@ impl Modals {
         let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::PromptWithFixedResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let itemname = buf.to_original::<ItemName, _>().unwrap();
+        self.unlock();
         Ok(String::from(itemname.as_str()))
     }
 
@@ -174,6 +179,7 @@ impl Modals {
                 ret.push(String::from(item.as_str()));
             }
         }
+        self.unlock();
         Ok(ret)
     }
 
@@ -199,7 +205,6 @@ impl Modals {
         Ok(())
     }
     pub fn dynamic_notification_close(&self) -> Result<(), xous::Error> {
-        self.lock();
         send_message(self.conn,
             Message::new_scalar(Opcode::CloseDynamicNotification.to_usize().unwrap(),
             self.token[0] as usize,
@@ -208,38 +213,35 @@ impl Modals {
             self.token[3] as usize,
             )
         ).expect("couldn't stop progress");
+        self.unlock();
         Ok(())
     }
 
-    /// busy-wait until we have acquired a mutex on the Modals server
+    /// Blocks until we have a lock on the modals server
     fn lock(&self) {
-        while !self.try_get_mutex() {
-            self.tt.sleep_ms(1000).unwrap();
-        }
-    }
-
-    fn try_get_mutex(&self) -> bool {
-        match send_message(
-            self.conn,
-            Message::new_blocking_scalar(Opcode::GetMutex.to_usize().unwrap(),
-            self.token[0] as usize,
-            self.token[1] as usize,
-            self.token[2] as usize,
-            self.token[3] as usize,
-        )).expect("couldn't send mutex acquisition message") {
-            xous::Result::Scalar1(code) => {
-                if code == 1 {
-                    true
-                } else {
-                    false
+        if !self.have_lock.get() {
+            match send_message(
+                self.conn,
+                Message::new_blocking_scalar(Opcode::GetMutex.to_usize().unwrap(),
+                self.token[0] as usize,
+                self.token[1] as usize,
+                self.token[2] as usize,
+                self.token[3] as usize,
+            )).expect("couldn't send mutex acquisition message") {
+                xous::Result::Scalar1(code) => {
+                    if code != 1 {
+                        log::warn!("Unexpected return from lock acquisition.");
+                    }
+                },
+                _ => {
+                    log::error!("Internal error trying to acquire mutex");
                 }
-            },
-            _ => {
-                log::error!("Internal error trying to acquire mutex");
-                false
             }
         }
-
+        self.have_lock.set(true);
+    }
+    fn unlock(&self) {
+        self.have_lock.set(false);
     }
 }
 

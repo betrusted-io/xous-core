@@ -33,6 +33,9 @@ tts-frontend = {path="../tts"}
 # passwords
 sha2 = {path = "../engine-sha512"}
 digest = "0.9.0"
+hkdf = "0.11.0"
+zeroize = "1.3.0"
+zeroize_derive = "1.1.0"
 
 # bcrypt
 blowfish = { version = "0.8.0", features = ["bcrypt"] }
@@ -64,4 +67,8 @@ deterministic = []
 ci = []
 # this feature is for text-to-speech support
 tts = []
-default = ["mbbb"]
+# support migration type 1, from version 00.00.01.01 -> 00.00.02.01
+migration1 = []
+# hazardous debug flag decorates any debug paths that might accidentally leak key material
+hazardous-debug = []
+default = ["mbbb", "migration1"]

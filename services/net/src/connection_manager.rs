@@ -79,7 +79,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         log::warn!("EC firmware is too old to interoperate with the connec tion manager.");
         let mut note = String::from(t!("net.ec_rev_old", xous::LANG));
         note.push_str(&format!("\n\n{}{}.{}.{}+{}", t!("net.ec_current_rev", xous::LANG), maj, min, rev, commits));
-        modals.show_notification(&note).unwrap();
+        modals.show_notification(&note, false).unwrap();
     }
 
     let run = Arc::new(AtomicBool::new(rev_ok));
@@ -107,7 +107,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let pddb = pddb::Pddb::new();
-            pddb.is_mounted_blocking(None);
+            pddb.is_mounted_blocking();
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
