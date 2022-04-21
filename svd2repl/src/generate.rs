@@ -662,6 +662,7 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     cs_peripherals.insert("sha512", "Miscellaneous.Sha512");
     cs_peripherals.insert("spinor_soft_int", "Miscellaneous.SpinorSoftInt");
     cs_peripherals.insert("spinor", "SPI.BetrustedSpinor");
+    cs_peripherals.insert("susres", "Timers.SusRes");
     cs_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
     cs_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
     cs_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");
