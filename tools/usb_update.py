@@ -622,6 +622,8 @@ def main():
         print("Staging SoC gateware".format(args.staging))
         with open(args.staging, "rb") as f:
             image = f.read()
+            if verify == True:
+                print("Note: staging area verification is not possible as readback is locked for security purposes")
             pc_usb.flash_program(locs['LOC_STAGING'][0], image, verify=verify)
 
         print("Resuming CPU.")
@@ -658,6 +660,8 @@ def main():
         print("Staging SoC gateware {}".format(args.soc))
         with open(args.staging, "rb") as f:
             image = f.read()
+            if verify == True:
+                print("Note: staging area verification is not possible as readback is locked for security purposes")
             pc_usb.flash_program(locs['LOC_STAGING'][0], image, verify=verify)
 
     if args.kernel != None:
