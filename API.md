@@ -1,5 +1,12 @@
+The [Xous Book](https://betrusted.io/xous-book/ch07-02-caller-idioms.html) reviews the system architecture and breaks down the various API idioms chapter-by-chapter.
+
+This document conveys much of the similar information, but in a more monolithic form. This document also does not cover [deferred response](https://betrusted.io/xous-book/ch07-06-deferred.html) idioms.
 
 ## Xous Messaging API In Practice
+
+All Messages passed between Xous Servers undergo serialization and de-serialization.
+- Internal `struct` are readily serialized with [rkyv](https://docs.rs/rkyv/0.4.3/rkyv/) and `#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]`with manual serialization as an alternative ([example](services/net/src/std_udp.rs))
+- External `struct` may employ [bincode](https://docs.rs/bincode/latest/bincode/)
 
 Here are the idioms for building servers and passing messages.
 

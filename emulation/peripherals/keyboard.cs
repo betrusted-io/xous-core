@@ -63,7 +63,8 @@ namespace Antmicro.Renode.Peripherals.Input
                     },
                     writeCallback: (_, value) =>
                     {
-                        if (value != 0) {
+                        if (value != 0)
+                        {
                             injectedKeys.Enqueue((char)value);
                             UpdateInterrupts();
                         }
@@ -230,6 +231,18 @@ namespace Antmicro.Renode.Peripherals.Input
             this.irqKeyPressedStatus = true;
             this.UpdateInterrupts();
             this.irqKeyPressedStatus = false;
+
+            // Wake the machine if it's suspended.
+            if (PressedKeys.ContainsKey(KeyScanCode.F1)
+             && PressedKeys.ContainsKey(KeyScanCode.F4)
+             && (scanCode == KeyScanCode.F1 || scanCode == KeyScanCode.F4)
+             && isPress
+             && machine.IsPaused
+            )
+            {
+                this.Log(LogLevel.Debug, "Resuming machine");
+                machine.Start();
+            }
             return;
         }
 
@@ -256,6 +269,7 @@ namespace Antmicro.Renode.Peripherals.Input
             irqKeyPressedPending.Value = false;
             irqInjectEnabled.Value = false;
             irqInjectPending.Value = false;
+            RegistersCollection.Reset();
         }
 
         private Dictionary<KeyScanCode, bool> PressedKeys = new Dictionary<KeyScanCode, bool> { };

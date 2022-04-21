@@ -3,9 +3,17 @@
 
 mod api;
 use api::*;
+mod std_tcpstream;
+use std_tcpstream::*;
+mod std_glue;
+use std_glue::*;
+mod std_udp;
+use std_udp::*;
+mod std_tcplistener;
+use std_tcplistener::*;
+
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 use num_traits::*;
-use ticktimer_server::Ticktimer;
 
 mod connection_manager;
 mod device;
@@ -19,7 +27,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 use smoltcp::iface::{Interface, InterfaceBuilder, NeighborCache, Routes};
 use smoltcp::phy::{Device, Medium};
 use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
 use core::num::NonZeroU64;
@@ -32,6 +40,7 @@ use std::sync::Arc;
 use std::thread;
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
+const MAX_DELAY_THREADS: u32 = 16; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
 
 fn set_ipv4_addr<DeviceT>(iface: &mut Interface<'_, DeviceT>, cidr: Ipv4Cidr)
 where
@@ -51,14 +60,6 @@ enum WaitOp {
     WaitMs,
     PollAt,
     Quit,
-}
-
-/// UdpState will return a full custom datastructure, and is designed to work with
-/// a one-time use dedicated server created as part of the Net library code.
-pub struct UdpState {
-    handle: SocketHandle,
-    cid: CID,
-    sid: SID,
 }
 
 /// PingConnection can return a Scalar: because of the simplicity of the return data
@@ -81,23 +82,22 @@ pub struct PingConnection {
     retop: usize,
 }
 
-#[derive(Hash, PartialEq, Eq)]
-pub struct TcpConnection {
-    remote: IpAddress,
-    remote_port: u16,
-    local_port: u16,
-}
-#[derive(Copy, Clone, Debug)]
-pub struct TcpState {
-    handle: SocketHandle,
-    cid: CID,
-    shutdown_rx: bool,
-}
-
 struct WaitingSocket {
     env: xous::MessageEnvelope,
     handle: SocketHandle,
     expiry: Option<NonZeroU64>,
+}
+
+struct AcceptingSocket {
+    env: xous::MessageEnvelope,
+    handle: SocketHandle,
+    fd: usize,
+}
+
+pub struct UdpStdState {
+    pub msg: xous::MessageEnvelope,
+    pub handle: SocketHandle,
+    pub expiry: Option<u64>,
 }
 
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
@@ -110,359 +110,6 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.push(ComIntSources::WlanSsidScanUpdate);
     com_int_list.push(ComIntSources::WlanSsidScanFinished);
     com_int_list.push(ComIntSources::WfxErr);
-}
-
-fn parse_address(data: &[u8]) -> Option<smoltcp::wire::IpAddress> {
-    let mut i = data.iter();
-    match i.next() {
-        Some(&4) => Some(smoltcp::wire::IpAddress::v4(
-            *i.next()?,
-            *i.next()?,
-            *i.next()?,
-            *i.next()?,
-        )),
-        Some(&6) => {
-            let mut new_addr = [0u8; 16];
-            for octet in new_addr.iter_mut() {
-                *octet = *i.next()?;
-            }
-            let v6: std::net::Ipv6Addr = new_addr.into();
-            Some(v6.into())
-        }
-        _ => None,
-    }
-}
-
-fn write_address(address: IpAddress, data: &mut [u8]) -> Option<usize> {
-    let mut i = data.iter_mut();
-    match address {
-        IpAddress::Ipv4(a) => {
-            *i.next()? = 4;
-            for (dest, src) in i.zip(a.as_bytes().iter()) {
-                *dest = *src;
-            }
-            Some(5)
-        }
-        IpAddress::Ipv6(a) => {
-            *i.next()? = 6;
-            for (dest, src) in i.zip(a.as_bytes().iter()) {
-                *dest = *src;
-            }
-            Some(16)
-        }
-        _ => {
-            *i.next()? = 0;
-            Some(1)
-        }
-    }
-}
-
-fn respond_with_error(mut env: xous::MessageEnvelope, code: NetError) -> Option<()> {
-    // If it's not a memory message, don't fill in the return information.
-    let body = match env.body.memory_message_mut() {
-        None => {
-            // But do respond to the scalar message, if it's a BlockingScalar
-            if env.body.scalar_message().is_some() && env.body.is_blocking() {
-                xous::return_scalar(env.sender, code as usize).ok();
-            }
-            return None;
-        }
-        Some(b) => b,
-    };
-
-    body.valid = None;
-    let s: &mut [u8] = body.buf.as_slice_mut();
-    let mut i = s.iter_mut();
-
-    // Duplicate error to ensure it's seen as an error regardless of byte order
-    *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = 1;
-    *i.next()? = code as u8;
-    *i.next()? = 0;
-    *i.next()? = 0;
-    *i.next()? = 0;
-    None
-}
-
-fn respond_with_connected(
-    mut env: xous::MessageEnvelope,
-    idx: u16,
-    local_port: u16,
-    remote_port: u16,
-) {
-    let body = env.body.memory_message_mut().unwrap();
-    let bfr = body.buf.as_slice_mut::<u16>();
-
-    log::trace!("successfully connected: {}", idx);
-    bfr[0] = 0;
-    bfr[1] = idx;
-    bfr[2] = local_port;
-    bfr[3] = remote_port;
-}
-
-/// Insert `Some(value)` into the first slot in the Vec that is `None`,
-/// or append it to the end if there is no free slot
-fn insert_or_append<T>(arr: &mut Vec<Option<T>>, val: T) -> usize {
-    // Look for a free index, or add it onto the end.
-    let mut idx = None;
-    for (i, elem) in arr.iter_mut().enumerate() {
-        if elem.is_none() {
-            idx = Some(i);
-            break;
-        }
-    }
-    if let Some(idx) = idx {
-        arr[idx] = Some(val);
-        idx
-    } else {
-        let idx = arr.len();
-        arr.push(Some(val));
-        idx
-    }
-}
-
-fn std_tcp_connect(
-    mut msg: xous::MessageEnvelope,
-    local_port: u16,
-    sockets: &mut SocketSet,
-    tcp_connect_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle, u16, u16, u16)>>,
-    our_sockets: &mut Vec<Option<SocketHandle>>,
-) {
-    // Ignore nonblocking and scalar messages
-    let body = match msg.body.memory_message_mut() {
-        Some(b) => b,
-        None => {
-            log::trace!("invalid message type");
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    let bytes = body.buf.as_slice::<u8>();
-    let remote_port = u16::from_le_bytes([bytes[0], bytes[1]]);
-    let timeout_ms = NonZeroU64::new(u64::from_le_bytes(bytes[2..10].try_into().unwrap()));
-    let address = match parse_address(&bytes[10..]) {
-        Some(addr) => addr,
-        None => {
-            log::trace!("couldn't parse address");
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    // initiates a new connection to a remote server consisting of an (Address:Port) tuple.
-    // multiple connections can exist to a server, and they are further differentiated by the return port
-    let mut tcp_socket = TcpSocket::new(
-        TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]),
-        TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]),
-    );
-
-    // Attempt to connect, returning the error if there is one
-    if let Err(e) = tcp_socket
-        .connect((address, remote_port), local_port)
-        .map_err(|e| match e {
-            smoltcp::Error::Illegal => NetError::SocketInUse,
-            smoltcp::Error::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
-        })
-    {
-        log::trace!("couldn't connect: {:?}", e);
-        respond_with_error(msg, e);
-        return;
-    }
-
-    tcp_socket.set_timeout(timeout_ms.map(|t| Duration::from_millis(t.get())));
-
-    let handle = sockets.add(tcp_socket);
-
-    // Add the socket onto the list of sockets waiting to connect, since the connection will
-    // take time.
-    let idx = insert_or_append(our_sockets, handle) as u16;
-    insert_or_append(
-        tcp_connect_waiting,
-        (msg, handle, idx, local_port, remote_port),
-    );
-}
-
-fn std_tcp_tx(
-    mut msg: xous::MessageEnvelope,
-    timer: &Ticktimer,
-    sockets: &mut SocketSet,
-    tcp_tx_waiting: &mut Vec<Option<WaitingSocket>>,
-    our_sockets: &Vec<Option<SocketHandle>>,
-) {
-    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
-    let body = match msg.body.memory_message_mut() {
-        Some(body) => body,
-        None => {
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    let handle = match our_sockets.get(connection_handle_index) {
-        Some(Some(val)) => val,
-        _ => {
-            respond_with_error(msg, NetError::Invalid);
-            return;
-        }
-    };
-
-    let mut socket = sockets.get::<TcpSocket>(*handle);
-    if !socket.can_send() {
-        log::trace!("tx can't send, will retry");
-        let expiry = body
-            .offset
-            .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
-        // Add the message to the TcpRxWaiting list, which will prevent it from getting
-        // responded to right away.
-        insert_or_append(
-            tcp_tx_waiting,
-            WaitingSocket {
-                env: msg,
-                handle: *handle,
-                expiry,
-            },
-        );
-        return;
-    }
-
-    // Perform the transfer
-    let sent_octets = {
-        let data = body.buf.as_slice::<u8>();
-        let length = body
-            .valid
-            .map(|v| {
-                if v.get() > data.len() {
-                    data.len()
-                } else {
-                    v.get()
-                }
-            })
-            .unwrap_or_else(|| data.len());
-
-        match socket.send_slice(&data[..length]) {
-            Ok(octets) => octets,
-            Err(_) => {
-                respond_with_error(msg, NetError::LibraryError);
-                return;
-            }
-        }
-    };
-
-    log::trace!("sent {}", sent_octets);
-    let response_data = body.buf.as_slice_mut::<u32>();
-    body.valid = xous::MemorySize::new(sent_octets);
-    response_data[0] = 0;
-    response_data[1] = sent_octets as u32;
-}
-
-fn std_tcp_rx(
-    mut msg: xous::MessageEnvelope,
-    timer: &Ticktimer,
-    sockets: &mut SocketSet,
-    tcp_rx_waiting: &mut Vec<Option<WaitingSocket>>,
-    our_sockets: &Vec<Option<SocketHandle>>,
-) {
-    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
-    let body = match msg.body.memory_message_mut() {
-        Some(body) => body,
-        None => {
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    // Default to having no valid data upon return, indicating an error
-    body.valid = None;
-
-    let handle = match our_sockets.get(connection_handle_index) {
-        Some(Some(val)) => val,
-        _ => {
-            respond_with_error(msg, NetError::Invalid);
-            return;
-        }
-    };
-
-    let mut socket = sockets.get::<TcpSocket>(*handle);
-    if socket.can_recv() {
-        log::trace!("receiving data right away");
-        match socket.recv_slice(body.buf.as_slice_mut()) {
-            Ok(bytes) => {
-                body.valid = xous::MemorySize::new(bytes);
-                log::trace!("set body.valid = {:?}", body.valid);
-            }
-            Err(e) => {
-                log::error!("unable to receive: {:?}", e);
-                respond_with_error(msg, NetError::LibraryError);
-            }
-        }
-        return;
-    }
-
-    log::trace!("socket was not able to receive, adding it to list of waiting messages");
-
-    // Add the message to the TcpRxWaiting list, which will prevent it from getting
-    // responded to right away.
-    let expiry = body
-        .offset
-        .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
-    insert_or_append(
-        tcp_rx_waiting,
-        WaitingSocket {
-            env: msg,
-            handle: *handle,
-            expiry,
-        },
-    );
-}
-
-fn std_tcp_peek(
-    mut msg: xous::MessageEnvelope,
-    sockets: &mut SocketSet,
-    our_sockets: &Vec<Option<SocketHandle>>,
-) {
-    let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
-    let body = match msg.body.memory_message_mut() {
-        Some(body) => body,
-        None => {
-            respond_with_error(msg, NetError::LibraryError);
-            return;
-        }
-    };
-
-    // Default to having no valid data upon return, indicating an error
-    body.valid = None;
-
-    let handle = match our_sockets.get(connection_handle_index) {
-        Some(Some(val)) => val,
-        _ => {
-            respond_with_error(msg, NetError::Invalid);
-            return;
-        }
-    };
-
-    let mut socket = sockets.get::<TcpSocket>(*handle);
-    if socket.can_recv() {
-        log::trace!("receiving data right away");
-        match socket.peek_slice(body.buf.as_slice_mut()) {
-            Ok(bytes) => {
-                body.valid = xous::MemorySize::new(bytes);
-                log::trace!("set body.valid = {:?}", body.valid);
-            }
-            Err(e) => {
-                log::error!("unable to receive: {:?}", e);
-                respond_with_error(msg, NetError::LibraryError);
-            }
-        }
-    } else {
-        // No data available, so indicate `None`
-        body.valid = None;
-        // Also indicate no error
-        body.buf.as_slice_mut::<u32>()[0] = 0;
-    }
 }
 
 #[xous::xous_main]
@@ -500,18 +147,18 @@ fn xmain() -> ! {
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list).ok();
     log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
-    const MAX_DELAY_THREADS: u32 = 10; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
     let delay_threads = Arc::new(AtomicU32::new(0));
     let mut net_config: Option<Ipv4Conf> = None;
 
     // storage for all our sockets
     let mut sockets = SocketSet::new(vec![]);
 
+    // ------------- libstd variant -----------
     // Each process keeps track of its own sockets. These are kept in a Vec. When a handle
     // is destroyed, it is turned into a `None`.
     let mut process_sockets: HashMap<Option<xous::PID>, Vec<Option<SocketHandle>>> = HashMap::new();
 
-    // When a client issues a Receive request, it will get placed here while the packet data
+    // When a TCP client issues a Receive request, it will get placed here while the packet data
     // is being accumulated.
     let mut tcp_rx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
@@ -531,6 +178,14 @@ fn xmain() -> ! {
         )>,
     > = Vec::new();
 
+    // When a client issues an Accept request, it gets placed here for later processing.
+    let mut tcp_accept_waiting: Vec<Option<AcceptingSocket>> = Vec::new();
+
+    // When a UDP client opens a socket, an entry is automatically created here to accumulate
+    // incoming UDP socket data.
+    let mut udp_rx_waiting: Vec<Option<UdpStdState>> = Vec::new();
+
+    // ------------- native variant -----------
     // ping storage
     // up to four concurrent pings in the queue
     let icmp_rx_buffer = IcmpSocketBuffer::new(
@@ -561,17 +216,6 @@ fn xmain() -> ! {
     // this record stores the origin time + IP address of the outgoing ping sequence number
     let mut ping_destinations = HashMap::<PingConnection, HashMap<u16, u64>>::new();
     let mut ping_timeout_ms = PING_DEFAULT_TIMEOUT_MS;
-
-    // udp storage
-    let mut udp_handles = HashMap::<u16, UdpState>::new();
-    // UDP requires multiple copies. The way it works is that Tx can come from anyone;
-    // for Rx, copies of a CID,SID tuple are kept for every clone is kept in a HashMap. This
-    // allows for the Rx data to be cc:'d to each clone, and identified by SID upon drop
-    let mut udp_clones = HashMap::<u16, HashMap<[u32; 4], CID>>::new(); // additional clones for UDP responders
-
-    // tcp storage
-    let mut tcp_handles = HashMap::<TcpConnection, TcpState>::new();
-    let mut tcp_listeners = HashMap::<u16, Vec<TcpState>>::new();
 
     // other link storage
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -821,7 +465,7 @@ fn xmain() -> ! {
             }),
 
             Some(Opcode::StdTcpConnect) => {
-                // Pick a random locak port using the system's TRNG
+                // Pick a random local port using the system's TRNG
                 let local_port = (trng.get_u32().unwrap() % 16384 + 49152) as u16;
                 let pid = msg.sender.pid();
 
@@ -832,9 +476,17 @@ fn xmain() -> ! {
                     &mut tcp_connect_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpTx) => {
+                log::debug!("StdTcpTx");
                 let pid = msg.sender.pid();
                 std_tcp_tx(
                     msg,
@@ -843,14 +495,30 @@ fn xmain() -> ! {
                     &mut tcp_tx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpPeek) => {
+                log::debug!("StdTcpPeek");
                 let pid = msg.sender.pid();
                 std_tcp_peek(msg, &mut sockets, process_sockets.entry(pid).or_default());
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpRx) => {
+                log::debug!("StdTcpRx");
                 let pid = msg.sender.pid();
                 std_tcp_rx(
                     msg,
@@ -859,9 +527,17 @@ fn xmain() -> ! {
                     &mut tcp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpClose) => {
+                log::debug!("StdTcpClose");
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
                 let handle = if let Some(connection) = process_sockets
@@ -883,9 +559,141 @@ fn xmain() -> ! {
                 sockets.remove(handle);
                 if let Some(response) = msg.body.memory_message_mut() {
                     response.buf.as_slice_mut::<u8>()[0] = 0;
-                } else if !msg.body.is_blocking() && msg.body.is_blocking() {
+                } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
+            }
+
+            Some(Opcode::StdTcpStreamShutdown) => {
+                log::debug!("StdTcpStreamShutdown");
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                let shutdown_code = msg.body.scalar_message().unwrap().arg1;
+                if let Some(Some(connection)) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get(connection_idx)
+                {
+                    if (shutdown_code & 1) != 0 { // read shutdown
+                        // search for the handle in the rxwaiting set
+                        for rx_waiter in tcp_rx_waiting.iter_mut() {
+                            let WaitingSocket {
+                                env: mut msg,
+                                handle,
+                                expiry: _,
+                            } = match rx_waiter {
+                                &mut None => continue,
+                                Some(s) => {
+                                    if s.handle == *connection {
+                                        rx_waiter.take().unwrap() // removes the message from the waiting queue
+                                    } else {
+                                        continue
+                                    }
+                                }
+                            };
+                            // if we got here, we found a message that needs to be aborted
+                            log::info!("TcpShutdown: aborting rx waiting handle: {:?}", handle);
+                            match msg.body.memory_message_mut() {
+                                Some(body) => {
+                                    // u32::MAX indicates a zero-length receive
+                                    body.valid = xous::MemorySize::new(u32::MAX as usize);
+                                },
+                                None => {
+                                    respond_with_error(msg, NetError::LibraryError);
+                                }
+                            }
+                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            break;
+                        }
+                    }
+                    if (shutdown_code & 2) != 0 { // write shutdown
+                        // search for the handle in the txwaiting set
+                        for tx_waiter in tcp_tx_waiting.iter_mut() {
+                            let WaitingSocket {
+                                env: mut msg,
+                                handle,
+                                expiry: _,
+                            } = match tx_waiter {
+                                &mut None => continue,
+                                Some(s) => {
+                                    if s.handle == *connection {
+                                        tx_waiter.take().unwrap() // removes the message from the waiting queue
+                                    } else {
+                                        continue
+                                    }
+                                }
+                            };
+                            // if we got here, we found a message that needs to be aborted
+                            log::info!("TcpShutdown: aborting tx waiting handle: {:?}", handle);
+                            match msg.body.memory_message_mut() {
+                                Some(body) => {
+                                    // u32::MAX indicates a zero-length receive
+                                    body.valid = xous::MemorySize::new(u32::MAX as usize);
+                                    let response_data = body.buf.as_slice_mut::<u32>();
+                                    response_data[0] = 0;
+                                    response_data[1] = 0;
+                                },
+                                None => {
+                                    respond_with_error(msg, NetError::LibraryError);
+                                }
+                            }
+                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            break;
+                        }
+                    }
+                }
+
+                // unblock the sender
+                xous::return_scalar(msg.sender, 1).ok();
+                // pump the rx to process any shutdowns
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
+            }
+
+            Some(Opcode::StdTcpListen) => {
+                let pid = msg.sender.pid();
+
+                std_tcp_listen(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
+            }
+
+            Some(Opcode::StdTcpAccept) => {
+                let pid = msg.sender.pid();
+
+                std_tcp_accept(
+                    msg,
+                    &mut sockets,
+                    &mut tcp_accept_waiting,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdGetAddress) => {
@@ -928,10 +736,17 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let socket = sockets.get::<TcpSocket>(*connection);
+                    let args = msg.body.scalar_message().unwrap();
+                    let limit = if args.arg4 == 1 {
+                        let socket = sockets.get::<UdpSocket>(*connection);
+                        socket.hop_limit().unwrap_or(64) as usize
+                    } else {
+                        let socket = sockets.get::<TcpSocket>(*connection);
+                        socket.hop_limit().unwrap_or(64) as usize
+                    };
                     xous::return_scalar(
                         msg.sender,
-                        socket.hop_limit().unwrap_or_default() as usize,
+                        limit,
                     )
                     .ok();
                 } else {
@@ -954,14 +769,19 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let mut socket = sockets.get::<TcpSocket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
-                    let hop_limit = if args.arg1 == 0 {
+                    let hop_limit = if (args.arg1 == 0) || (args.arg1 > 255) {
                         None
                     } else {
                         Some(args.arg1 as u8)
                     };
-                    socket.set_hop_limit(hop_limit);
+                    if args.arg4 == 1 {
+                        let mut socket = sockets.get::<UdpSocket>(*connection);
+                        socket.set_hop_limit(hop_limit);
+                    } else {
+                        let mut socket = sockets.get::<TcpSocket>(*connection);
+                        socket.set_hop_limit(hop_limit);
+                    }
                     xous::return_scalar(msg.sender, 0).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
@@ -1021,504 +841,69 @@ fn xmain() -> ! {
                 };
             }
 
-            Some(Opcode::TcpConnect) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap(); // need to define this
-                let address = IpAddress::from(tcpspec.ip_addr);
-                let remote_port = tcpspec.remote_port;
-
-                // initiates a new connection to a remote server consisting of an (Address:Port) tuple.
-                // multiple connections can exist to a server, and they are further differentiated by the return port
-                let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-                if let Some(timeout) = tcpspec.timeout_ms {
-                    tcp_socket.set_timeout(Some(Duration::from_millis(timeout)));
-                }
-                if let Some(keepalive) = tcpspec.keepalive_ms {
-                    tcp_socket.set_keep_alive(Some(Duration::from_millis(keepalive)));
-                }
-                let local_port = (49152 + trng.get_u32().unwrap() % 16384) as u16;
-                match tcp_socket.connect((address, remote_port), local_port) {
-                    Ok(_) => {
-                        let connection = TcpConnection {
-                            remote: address,
-                            remote_port,
-                            local_port,
-                        };
-                        let handle = sockets.add(tcp_socket);
-                        let sid = tcpspec.cb_sid;
-                        let cid = xous::connect(SID::from_array(sid)).unwrap();
-                        let tcp_cb_state = TcpState {
-                            handle,
-                            cid,
-                            shutdown_rx: false,
-                        };
-                        tcp_handles.insert(connection, tcp_cb_state);
-                        tcpspec.local_port = Some(local_port);
-                        tcpspec.result = Some(NetMemResponse::Ok);
-                    }
-                    Err(e) => match e {
-                        smoltcp::Error::Illegal => {
-                            tcpspec.result = Some(NetMemResponse::SocketInUse);
-                        }
-                        smoltcp::Error::Unaddressable => {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                        _ => {
-                            tcpspec.result = Some(NetMemResponse::LibraryError);
-                        }
-                    },
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-            Some(Opcode::TcpManage) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap();
-                if let Some(local_port) = tcpspec.local_port {
-                    let connection = TcpConnection {
-                        remote: IpAddress::from(tcpspec.ip_addr),
-                        remote_port: tcpspec.remote_port,
-                        local_port,
-                    };
-                    if let Some(tcp_state) = tcp_handles.get_mut(&connection) {
-                        if let Some(code) = tcpspec.mgmt_code {
-                            match code {
-                                TcpMgmtCode::SetRxShutdown => {
-                                    tcp_state.shutdown_rx = true;
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::SetNoDelay(value) => {
-                                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    socket.set_nagle_enabled(value);
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::GetNoDelay(_) => {
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    let value = socket.nagle_enabled().is_some();
-                                    tcpspec.mgmt_code = Some(TcpMgmtCode::GetNoDelay(value));
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::SetTtl(mut ttl) => {
-                                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    if ttl > 255 {
-                                        ttl = 255;
-                                    }
-                                    if ttl > 0 {
-                                        socket.set_hop_limit(Some(ttl as u8));
-                                    } else {
-                                        socket.set_hop_limit(None);
-                                    }
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::GetTtl(_) => {
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    let value = socket.hop_limit().unwrap_or(64); // because that's what smoltcp does
-                                    tcpspec.mgmt_code = Some(TcpMgmtCode::GetTtl(value as u32));
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::ErrorCheck(_) => {
-                                    /* // I don't think there is actually any error check reporting available? `recv_error_check()` is a private function for smoltcp...
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    tcpspec.mgmt_code = Some(TcpMgmtCode::ErrorCheck(
-                                        match socket.recv_error_check() {
-                                            Ok(_) => NetMemResponse::Ok,
-                                            Err(smoltcp::Error::Finished) => NetMemResponse::Finished,
-                                            Err(smoltcp::Error::Illegal) => NetMemResponse::Invalid,
-                                            _ => Some(NetMemResponse::LibraryError),
-                                        }
-                                    ));*/
-                                    tcpspec.mgmt_code =
-                                        Some(TcpMgmtCode::ErrorCheck(NetMemResponse::Ok));
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::Flush(_) => {
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    if socket.send_queue() == 0 {
-                                        tcpspec.mgmt_code = Some(TcpMgmtCode::Flush(true));
-                                    } else {
-                                        tcpspec.mgmt_code = Some(TcpMgmtCode::Flush(false));
-                                    }
-                                }
-                                TcpMgmtCode::CloseListener => {
-                                    // this is used for listener management, should never be sent to this routine
-                                    tcpspec.result = Some(NetMemResponse::LibraryError);
-                                }
-                            }
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    } else {
-                        tcpspec.result = Some(NetMemResponse::Invalid);
-                    }
-                } else {
-                    tcpspec.result = Some(NetMemResponse::Invalid);
-                }
-                buf.replace(tcpspec).unwrap();
+            Some(Opcode::StdUdpBind) => {
+                let pid = msg.sender.pid();
+                std_udp_bind(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
             }
 
-            Some(Opcode::TcpTx) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcp_tx = buf.to_original::<NetTcpTransmit, _>().unwrap();
-                let connection = TcpConnection {
-                    remote: IpAddress::from(tcp_tx.remote_addr),
-                    remote_port: tcp_tx.remote_port,
-                    local_port: tcp_tx.local_port,
-                };
-                if let Some(tcp_state) = tcp_handles.get(&connection) {
-                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                    if socket.can_send() {
-                        tcp_tx.result = match socket.send_slice(&tcp_tx.data[..tcp_tx.len as usize])
-                        {
-                            Ok(octets) => {
-                                log::trace!("sent {}", octets);
-                                tcp_tx.len = octets as u16;
-                                Some(NetMemResponse::Sent(octets as u16))
-                            }
-                            Err(_) => Some(NetMemResponse::LibraryError),
-                        }
-                    } else {
-                        log::trace!("tx can't send, please retry");
-                        // inform the sender it should retry
-                        tcp_tx.result = Some(NetMemResponse::SocketInUse);
-                    }
-                } else {
-                    log::trace!("tx spec invalid");
-                    tcp_tx.result = Some(NetMemResponse::Invalid);
-                }
-                buf.replace(tcp_tx).unwrap();
+            Some(Opcode::StdUdpRx) => {
+                let pid = msg.sender.pid();
+                std_udp_rx(
+                    msg,
+                    &timer,
+                    &mut sockets,
+                    &mut udp_rx_waiting,
+                    process_sockets.entry(pid).or_default(),
+                );
             }
-            Some(Opcode::TcpClose) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap(); // need to define this
-                if let Some(local_port) = tcpspec.local_port {
-                    let connection = TcpConnection {
-                        remote: IpAddress::from(tcpspec.ip_addr),
-                        remote_port: tcpspec.remote_port,
-                        local_port,
-                    };
-                    if let Some(tcp_state) = tcp_handles.remove(&connection) {
-                        sockets.get::<TcpSocket>(tcp_state.handle).close();
-                        sockets.remove(tcp_state.handle);
-                        tcpspec.result = Some(NetMemResponse::Ok);
-                    } else {
-                        tcpspec.result = Some(NetMemResponse::Invalid);
-                    }
-                } else {
-                    tcpspec.result = Some(NetMemResponse::Invalid);
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-            Some(Opcode::TcpListen) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpListen, _>().unwrap();
 
-                let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-                log::debug!("adding listener to local port {}", tcpspec.local_port);
-                match tcp_socket.listen(tcpspec.local_port) {
-                    Ok(_) => {
-                        if let Some(list) = tcp_listeners.get(&tcpspec.local_port) {
-                            if list.len() > 0 {
-                                // empty check necessary because an empty vector is left if a socket went from listening->active, or was dropped
-                                // guarantee that all TTLs are same even if we're inserting a new socket
-                                let ttl = sockets.get::<TcpSocket>(list[0].handle).hop_limit();
-                                tcp_socket.set_hop_limit(ttl);
-                            }
-                        }
-                        let handle = sockets.add(tcp_socket);
-                        let sid = tcpspec.cb_sid;
-                        let cid = xous::connect(SID::from_array(sid)).unwrap();
-                        log::trace!("Listener with cid {}, sid {:x?} registered", cid, sid);
-                        let tcp_cb_state = TcpState {
-                            handle,
-                            cid,
-                            shutdown_rx: false,
-                        };
-                        if let Some(list) = tcp_listeners.get_mut(&tcpspec.local_port) {
-                            list.push(tcp_cb_state);
-                            log::trace!(
-                                "total listeners on port {}: {}",
-                                tcpspec.local_port,
-                                list.len()
-                            );
-                        } else {
-                            tcp_listeners.insert(tcpspec.local_port, vec![tcp_cb_state]);
-                            log::trace!("creating first listener on port {}", tcpspec.local_port);
-                        }
-                        tcpspec.result = Some(NetMemResponse::Ok);
-                    }
-                    Err(e) => match e {
-                        smoltcp::Error::Illegal => {
-                            tcpspec.result = Some(NetMemResponse::SocketInUse);
-                        }
-                        smoltcp::Error::Unaddressable => {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                        _ => {
-                            tcpspec.result = Some(NetMemResponse::LibraryError);
-                        }
-                    },
-                }
-                buf.replace(tcpspec).unwrap();
+            Some(Opcode::StdUdpTx) => {
+                let pid = msg.sender.pid();
+                std_udp_tx(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
-            Some(Opcode::TcpManageListener) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap();
-                match tcpspec.mgmt_code {
-                    Some(TcpMgmtCode::CloseListener) => {
-                        if let Some(listener) = tcp_listeners.get_mut(&tcpspec.local_port.unwrap())
-                        {
-                            if let Some(tcp_state) = listener.pop() {
-                                sockets.get::<TcpSocket>(tcp_state.handle).close();
-                                log::debug!(
-                                    "closing one listener on port {:?}",
-                                    tcpspec.local_port
-                                );
-                                sockets.remove(tcp_state.handle);
-                                tcpspec.result = Some(NetMemResponse::Ok);
-                                // this may leave an empty vector in the tcp_listeners structure, but I think that's OK
-                            }
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    }
-                    Some(TcpMgmtCode::SetTtl(mut ttl)) => {
-                        if let Some(listener_vec) =
-                            tcp_listeners.get_mut(&tcpspec.local_port.unwrap())
-                        {
-                            for listener in listener_vec.iter_mut() {
-                                let mut socket = sockets.get::<TcpSocket>(listener.handle);
-                                if ttl > 255 {
-                                    ttl = 255;
-                                }
-                                if ttl > 0 {
-                                    socket.set_hop_limit(Some(ttl as u8));
-                                } else {
-                                    socket.set_hop_limit(None);
-                                }
-                            }
-                            tcpspec.result = Some(NetMemResponse::Ok);
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    }
-                    Some(TcpMgmtCode::GetTtl(_)) => {
-                        if let Some(listener) = tcp_listeners.get(&tcpspec.local_port.unwrap()) {
-                            if listener.len() > 0 {
-                                // all listeners "should" have an identical setting, so, just return the setting of the 0th one
-                                let socket = sockets.get::<TcpSocket>(listener[0].handle);
-                                let value = socket.hop_limit().unwrap_or(64); // because that's what smoltcp does
-                                tcpspec.mgmt_code = Some(TcpMgmtCode::GetTtl(value as u32));
-                                tcpspec.result = Some(NetMemResponse::Ok);
-                            } else {
-                                tcpspec.result = Some(NetMemResponse::Invalid);
-                            }
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    }
-                    _ => tcpspec.result = Some(NetMemResponse::LibraryError),
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-            Some(Opcode::UdpBind) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
 
-                let buflen = if let Some(maxlen) = udpspec.max_payload {
-                    maxlen as usize
-                } else {
-                    NET_MTU as usize
-                };
-                if udp_handles.contains_key(&udpspec.port) {
-                    // if we're already connected, just register the extra listener in the clones array
-                    let sid = udpspec.cb_sid;
-                    let cid = xous::connect(SID::from_array(sid)).unwrap();
-                    if let Some(clone_map) = udp_clones.get_mut(&udpspec.port) {
-                        // if a clone already exists, put the additional clone into the map
-                        match clone_map.insert(sid, cid) {
-                            Some(_) => {
-                                log::error!("Something went wrong in a UDP clone operation -- same SID registered twice");
-                                buf.replace(NetMemResponse::SocketInUse).unwrap()
-                            } // the same SID has double-registered, this is an error
-                            None => buf.replace(NetMemResponse::Ok).unwrap(),
-                        }
+            Some(Opcode::StdUdpClose) => {
+                log::debug!("StdUdpClose");
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                let handle = if let Some(connection) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get_mut(connection_idx)
+                {
+                    if let Some(connection) = connection.take() {
+                        connection
                     } else {
-                        // otherwise, create the clone mapping entry
-                        let mut newmap = HashMap::new();
-                        newmap.insert(sid, cid);
-                        udp_clones.insert(udpspec.port, newmap);
+                        std_failure(msg, NetError::Invalid);
+                        continue;
                     }
-                    buf.replace(NetMemResponse::Ok).unwrap();
                 } else {
-                    let udp_rx_buffer =
-                        UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
-                    let udp_tx_buffer =
-                        UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
-                    let mut udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
-                    match udp_socket.bind(udpspec.port) {
-                        Ok(_) => {
-                            let sid = SID::from_array(udpspec.cb_sid);
-                            let udpstate = UdpState {
-                                handle: sockets.add(udp_socket),
-                                cid: xous::connect(sid).unwrap(),
-                                sid,
-                            };
-                            udp_handles.insert(udpspec.port, udpstate);
-                            buf.replace(NetMemResponse::Ok).unwrap();
-                        }
-                        Err(e) => {
-                            log::error!("Udp couldn't bind to socket: {:?}", e);
-                            buf.replace(NetMemResponse::Invalid).unwrap();
-                        }
-                    }
-                }
-            }
-            Some(Opcode::UdpClose) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                    std_failure(msg, NetError::Invalid);
+                    continue;
                 };
-                let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
-                // need to find the SID that matches either in the clone array, or the primary binding.
-                // first check the clone array, then fall back to the primary binding
-                match udp_clones.get_mut(&udpspec.port) {
-                    Some(clone_map) => match clone_map.remove(&udpspec.cb_sid) {
-                        Some(cid) => {
-                            cid_to_disconnect = Some(cid);
-                            buf.replace(NetMemResponse::Ok).unwrap();
-                            continue;
-                        }
-                        None => {}
-                    },
-                    None => {}
-                }
-                match udp_handles.remove(&udpspec.port) {
-                    Some(udpstate) => {
-                        if udpstate.sid == SID::from_array(udpspec.cb_sid) {
-                            match udp_clones.get_mut(&udpspec.port) {
-                                // if the clone map is nil, close the socket, we're done
-                                None => {
-                                    sockets.get::<UdpSocket>(udpstate.handle).close();
-                                    sockets.remove(udpstate.handle);
-                                    buf.replace(NetMemResponse::Ok).unwrap();
-                                }
-                                // if the clone map has entries, promote an arbitrary map entry to the primary handle
-                                Some(clone_map) => {
-                                    if clone_map.len() == 0 {
-                                        // removing SIDs doesn't remove the map, so it's possible to have an empty mapping. Get rid of it, and we're done.
-                                        udp_clones.remove(&udpspec.port);
-                                        sockets.get::<UdpSocket>(udpstate.handle).close();
-                                        sockets.remove(udpstate.handle);
-                                        buf.replace(NetMemResponse::Ok).unwrap();
-                                    } else {
-                                        // take an arbitrary key, re-insert it into the handles map.
-                                        let new_primary_sid = *clone_map.keys().next().unwrap(); // unwrap is appropriate because len already checked as not 0
-                                        let udpstate = UdpState {
-                                            handle: udpstate.handle,
-                                            cid: *clone_map.get(&new_primary_sid).unwrap(),
-                                            sid: SID::from_array(new_primary_sid),
-                                        };
-                                        udp_handles.insert(udpspec.port, udpstate);
-                                        // now remove it from the clone map
-                                        clone_map.remove(&new_primary_sid);
-                                        // clean up the clone map if it's empty
-                                        if clone_map.len() == 0 {
-                                            udp_clones.remove(&udpspec.port);
-                                        }
-                                        buf.replace(NetMemResponse::Ok).unwrap();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => buf.replace(NetMemResponse::Invalid).unwrap(),
+                sockets.get::<UdpSocket>(handle).close();
+                sockets.remove(handle);
+                if let Some(response) = msg.body.memory_message_mut() {
+                    response.buf.as_slice_mut::<u8>()[0] = 0;
+                } else if !msg.body.has_memory() && msg.body.is_blocking() {
+                    xous::return_scalar(msg.sender, 0).ok();
                 }
             }
-            Some(Opcode::UdpTx) => {
-                use std::convert::TryInto;
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let udp_tx = buf.to_original::<NetUdpTransmit, _>().unwrap();
-                match udp_handles.get_mut(&udp_tx.local_port) {
-                    Some(udpstate) => {
-                        if let Some(dest_socket) = udp_tx.dest_socket {
-                            let endpoint = IpEndpoint::new(
-                                dest_socket.addr.try_into().unwrap(),
-                                dest_socket.port,
-                            );
-                            let mut socket = sockets.get::<UdpSocket>(udpstate.handle);
-                            match socket.send_slice(&udp_tx.data[..udp_tx.len as usize], endpoint) {
-                                Ok(_) => buf.replace(NetMemResponse::Sent(udp_tx.len)).unwrap(),
-                                _ => buf.replace(NetMemResponse::LibraryError).unwrap(),
-                            }
-                            // fire off a Pump to get the stack to actually transmit the ping; the send call merely queues it for sending
-                            xous::try_send_message(
-                                net_conn,
-                                Message::new_scalar(
-                                    Opcode::NetPump.to_usize().unwrap(),
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                ),
-                            )
-                            .ok();
-                        } else {
-                            buf.replace(NetMemResponse::Invalid).unwrap()
-                        }
-                    }
-                    _ => buf.replace(NetMemResponse::Invalid).unwrap(),
-                }
-            }
-            Some(Opcode::UdpSetTtl) => msg_scalar_unpack!(msg, ttl, port, _, _, {
-                match udp_handles.get_mut(&(port as u16)) {
-                    Some(udpstate) => {
-                        let mut socket = sockets.get::<UdpSocket>(udpstate.handle);
-                        let checked_ttl = if ttl > 255 || ttl == 0 { 64 } else { ttl as u8 };
-                        socket.set_hop_limit(Some(checked_ttl));
-                    }
-                    None => {
-                        log::error!(
-                            "Set TTL message received, but no port was bound! port {} ttl {}",
-                            port,
-                            ttl
-                        );
-                    }
-                }
-            }),
-            Some(Opcode::UdpGetTtl) => msg_blocking_scalar_unpack!(msg, port, _, _, _, {
-                match udp_handles.get_mut(&(port as u16)) {
-                    Some(udpstate) => {
-                        let socket = sockets.get::<UdpSocket>(udpstate.handle);
-                        let ttl = socket.hop_limit().unwrap_or(64); // 64 is the value used by smoltcp if hop limit isn't set
-                        xous::return_scalar(msg.sender, ttl as usize).expect("couldn't return TTL");
-                    }
-                    None => {
-                        log::error!(
-                            "Set TTL message received, but no port was bound! port {}",
-                            port
-                        );
-                        xous::return_scalar(msg.sender, usize::MAX).expect("couldn't return TTL");
-                    }
-                }
-            }),
 
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
@@ -1700,47 +1085,6 @@ fn xmain() -> ! {
                     }
                 }
 
-                // this block handles TCP rx
-                {
-                    for (_connection, tcp_state) in tcp_handles.iter() {
-                        if !tcp_state.shutdown_rx {
-                            let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                            if socket.can_recv() {
-                                match socket.recv(|data| {
-                                    let mut response = NetTcpResponse {
-                                        len: data.len() as u16,
-                                        data: [0; TCP_BUFFER_SIZE],
-                                    };
-                                    for (&src, dst) in data.iter().zip(response.data.iter_mut()) {
-                                        *dst = src;
-                                    }
-                                    let buf = Buffer::into_buf(response)
-                                        .expect("couldn't convert TCP response to memory message");
-                                    buf.send(
-                                        tcp_state.cid,
-                                        NetTcpCallback::RxData.to_u32().unwrap(),
-                                    )
-                                    .expect("couldn't send TCP response");
-                                    (data.len(), ())
-                                }) {
-                                    Ok(_) => (),
-                                    Err(e) => match e {
-                                        smoltcp::Error::Illegal => {
-                                            log::warn!("TCP fast open not supported");
-                                        }
-                                        smoltcp::Error::Finished => {
-                                            log::warn!("TCP packet received after close");
-                                        }
-                                        _ => {
-                                            log::warn!("Unknown TCP error");
-                                        }
-                                    },
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Connect calls take time to establish. This block checks to see if connections
                 // have been made and issues callbacks as necessary.
                 for connection in tcp_connect_waiting.iter_mut() {
@@ -1809,9 +1153,11 @@ fn xmain() -> ! {
                     match socket.recv_slice(body.buf.as_slice_mut()) {
                         Ok(count) => {
                             body.valid = xous::MemorySize::new(count);
+                            body.offset = xous::MemoryAddress::new(1);
                         }
                         Err(e) => {
                             log::trace!("unable to receive: {:?}", e);
+                            body.offset = None;
                             body.valid = None;
                         }
                     }
@@ -1877,121 +1223,103 @@ fn xmain() -> ! {
 
                     log::trace!("sent {}", sent_octets);
                     let response_data = body.buf.as_slice_mut::<u32>();
-                    body.valid = xous::MemorySize::new(sent_octets);
                     response_data[0] = 0;
                     response_data[1] = sent_octets as u32;
                 }
 
-                // this block handles TCP listeners
-                // There is no lock on sending Rx messages to the listener as it is being transformed
-                // because all messages come from *this thread* and by definition it is not re-entrant.
-                // If you end up splitting the Tcp Rx task and the Tcp Listener tasks into separate threads,
-                // Then you must worry about the possibility of a race condition between the transition of a
-                // TcpListener to a regular TcpStream client (that is, an Rx packet forwarded before the
-                // TcpStream is fully built).
-                if tcp_listeners.len() > 0 {
-                    // skip the whole chunk if we don't have any tcp listeners
-                    log::trace!("checking {} TCP listener sockets", tcp_listeners.len());
-                    for (&local_port, tcp_state_vec) in tcp_listeners.iter_mut() {
-                        let mut remove_indices = Vec::<usize>::new();
-                        for (index, tcp_state) in tcp_state_vec.iter().enumerate() {
-                            let socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                // this handles TCP std listeners
+                for connection in tcp_accept_waiting.iter_mut() {
+                    let ep: IpEndpoint;
+                    let AcceptingSocket {
+                        mut env,
+                        handle: _,
+                        fd,
+                    } = match connection {
+                        &mut None => continue,
+                        Some(s) => {
+                            let socket = sockets.get::<TcpSocket>(s.handle);
                             if socket.is_active() {
-                                log::info!(
-                                    "Promoting a Listener on port {:?} from {:?} to a Stream",
-                                    socket.local_endpoint(),
-                                    socket.remote_endpoint()
-                                );
-                                // 1. promote this socket to a TCP rx socket (this creates a double-entry that is cleaned up in step 3)
-                                let connection = TcpConnection {
-                                    remote: socket.remote_endpoint().addr,
-                                    remote_port: socket.remote_endpoint().port,
-                                    local_port,
-                                };
-                                tcp_handles.insert(connection, *tcp_state);
-
-                                // 2. notify the listener
-                                let note = NetTcpListenCallback {
-                                    ip_addr: NetIpAddr::from(socket.remote_endpoint().addr),
-                                    remote_port: socket.remote_endpoint().port,
-                                    local_port,
-                                };
-                                log::debug!(
-                                    "Listener active, notification sent to {}: {:x?}",
-                                    tcp_state.cid,
-                                    note
-                                );
-                                let buf =
-                                    Buffer::into_buf(note).expect("can't transform memory message");
-                                buf.send(
-                                    tcp_state.cid,
-                                    NetTcpCallback::ListenerActive.to_u32().unwrap(),
-                                )
-                                .expect("can't inform callback of active status");
-                                log::trace!("listener index {} to remove", index);
-                                remove_indices.push(index);
-                                break;
+                                ep = socket.remote_endpoint();
+                                connection.take().unwrap()
                             } else {
-                                log::trace!("socket not active: {:?}", socket.remote_endpoint());
+                                continue;
                             }
                         }
-                        // 3. now cleanup and remove the ports from the listeners status
-                        remove_indices.sort(); // this should be in ascending order, but let's do this just to be sure.
-                        remove_indices.reverse();
-                        for index in remove_indices {
-                            tcp_state_vec.remove(index);
-                            log::trace!("removing listener index {}", index);
-                        }
-                        log::trace!("listeners remaining: {}", tcp_state_vec.len());
-                        // 4. At this point, the Listener is no more. However, the caller side will "renew" the
-                        // listener if the TcpListener is being used in an `incoming` loop.
+                    };
+                    let body = env.body.memory_message_mut().unwrap();
+                    let buf = body.buf.as_slice_mut::<u8>();
 
-                        // 5. Side note: an empty vector could be left in the tcp_listeners array. 🔥This is fine🔥.
-                    }
+                    tcp_accept_success(buf, fd as u16, ep);
                 }
 
-                // this block handles UDP
-                {
-                    for (port, udpstate) in udp_handles.iter() {
-                        let handle = udpstate.handle;
-                        let mut socket = sockets.get::<UdpSocket>(handle);
+                // this block handles StdUdp
+                for connection in udp_rx_waiting.iter_mut() {
+                    let mut socket;
+                    let UdpStdState {
+                        mut msg,
+                        handle: _,
+                        expiry: _,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = sockets.get::<UdpSocket>(s.handle);
+                                if !socket.can_recv() {
+                                    if let Some(trigger) = s.expiry {
+                                        if trigger < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                } // we don't process the Rx here because we need to `take()` the message first, so that its lifetime ends
+                            }
+                        }
+                        // remove the connection from the list, allowing subsequent code to operate on it and then .drop()
+                        connection.take().unwrap()
+                    };
+
+                    // If it can't receive, then the only explanation was that it timed out
+                    if !socket.can_recv() {
+                        std_failure(msg, NetError::TimedOut);
+                        continue;
+                    }
+
+                    // Extract the receive data here; the `msg` will go out of scope at this point.
+                    let do_peek = msg.body.memory_message().unwrap().offset.is_some();
+                    if do_peek {
+                        match socket.peek() {
+                            Ok((data, endpoint)) => {
+                                udp_rx_success(
+                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
+                                    data,
+                                    *endpoint // have to duplicate the code between peek and recv because of this type difference
+                                );
+                            }
+                            Err(e) => {
+                                log::error!("unable to receive: {:?}", e);
+                                std_failure(msg, NetError::LibraryError);
+                            }
+                        }
+                    } else {
                         match socket.recv() {
                             Ok((data, endpoint)) => {
-                                log::trace!(
-                                    "udp:{} recv data: {:x?} from {}",
-                                    port,
+                                log::debug!("netpump udp rx");
+                                udp_rx_success(
+                                    // unwrap is safe here because the message was type-checked prior to insertion into the waiting queue
+                                    msg.body.memory_message_mut().unwrap().buf.as_slice_mut(),
                                     data,
                                     endpoint
                                 );
-                                // return the data/endpoint tuple to the caller
-                                let mut response = NetUdpResponse {
-                                    endpoint_ip_addr: NetIpAddr::from(endpoint.addr),
-                                    len: data.len() as u16,
-                                    endpoint_port: endpoint.port,
-                                    data: [0; UDP_RESPONSE_MAX_LEN],
-                                };
-                                for (&src, dst) in data.iter().zip(response.data.iter_mut()) {
-                                    *dst = src;
-                                }
-                                let buf = Buffer::into_buf(response)
-                                    .expect("couldn't convert UDP response to memory message");
-                                buf.send(udpstate.cid, NetUdpCallback::RxData.to_u32().unwrap())
-                                    .expect("couldn't send UDP response");
-                                // now send copies to the cloned receiver array, if they exist
-                                if let Some(clone_map) = udp_clones.get(port) {
-                                    for &cids in clone_map.values() {
-                                        let buf = Buffer::into_buf(response).expect(
-                                            "couldn't convert UDP response to memory message",
-                                        );
-                                        buf.send(cids, NetUdpCallback::RxData.to_u32().unwrap())
-                                            .expect("couldn't send UDP response");
-                                    }
-                                }
                             }
-                            Err(_) => {
-                                // do nothing
+                            Err(e) => {
+                                log::error!("unable to receive: {:?}", e);
+                                std_failure(msg, NetError::LibraryError);
                             }
-                        };
+                        }
                     }
                 }
 

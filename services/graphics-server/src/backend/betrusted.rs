@@ -80,6 +80,27 @@ impl XousDisplay {
         display
     }
 
+    /// This should only be called to initialize the panic handler with its own
+    /// copy of hardware registers.
+    ///
+    /// # Safety
+    ///
+    /// The addresses of these structures are passed as `u32` and unsafely cast back
+    /// into pointers on the user's side. We do this because the panic handler is special:
+    /// it grabs ahold of the low-level hardware, yanking control from the higher level
+    /// control functons, without having to map its own separate pages.
+    ///
+    /// Of course, "anyone" with a copy of this data can clobber existing graphics operations. Thus,
+    /// any access to these registers have to be protected with a mutex of some form. In the case of
+    /// the panic handler, the `is_panic` `AtomicBool` will suppress graphics loop operation
+    /// in the case of a panic.
+    pub unsafe fn hw_regs(&self) -> (u32, u32) {
+        (
+            self.hwfb.as_mut_ptr() as u32,
+            self.csr.base as u32
+        )
+    }
+
     pub fn suspend(&mut self) {
         while self.busy() {
             // just wait until any pending FB operations are done

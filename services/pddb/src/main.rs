@@ -405,12 +405,13 @@ pub(crate) enum PasswordState {
     Uninit,
 }
 
+#[derive(Debug)]
 struct TokenRecord {
     pub dict: String,
     pub key: String,
     pub basis: Option<String>,
     pub alloc_hint: Option<usize>,
-    pub conn: xous::CID, // callback connection
+    pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
 
 #[xous::xous_main]
@@ -518,6 +519,9 @@ fn xmain() -> ! {
     // it is the only server capable of doing this.
     let time_resetter = xns.request_connection_blocking(crate::TIME_SERVER_PDDB).unwrap();
 
+    // track processes that want a notification of a mount event
+    let mut mount_notifications = Vec::<xous::MessageSender>::new();
+
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
@@ -532,7 +536,7 @@ fn xmain() -> ! {
                 if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                 } else {
-                    xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
+                    mount_notifications.push(msg.sender); // defer response until later
                 }
             }),
             Some(Opcode::TryMount) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -543,10 +547,14 @@ fn xmain() -> ! {
                         // can't mount if we have no root keys
                         xous::return_scalar(msg.sender, 0).expect("could't return scalar");
                     } else {
-                        match ensure_password(&modals, &mut pddb_os) {
+                        match ensure_password(&modals, &mut pddb_os, pw_cid) {
                             PasswordState::Correct => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
+                                    for requester in mount_notifications.drain(..) {
+                                        xous::return_scalar(requester, 1).expect("couldn't return scalar");
+                                    }
+                                    assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -555,6 +563,10 @@ fn xmain() -> ! {
                             PasswordState::Uninit => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
+                                    for requester in mount_notifications.drain(..) {
+                                        xous::return_scalar(requester, 1).expect("couldn't return scalar");
+                                    }
+                                    assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -638,24 +650,28 @@ fn xmain() -> ! {
                                     basis_cache.basis_add(basis);
                                     finished = true;
                                     mgmt.code = PddbRequestCode::NoErr;
+                                } else {
+                                    modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                                    modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                                    match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
+                                        Ok(response) => {
+                                            if response.as_str() == t!("pddb.yes", xous::LANG) {
+                                                finished = false;
+                                                // this will cause just another go-around
+                                            } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                                                finished = true;
+                                                mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
+                                            } else {
+                                                panic!("Got unexpected return from radiobutton");
+                                            }
+                                        }
+                                        _ => panic!("get_radiobutton failed"),
+                                    }
+                                    xous::yield_slice(); // allow a redraw to happen before repeating the request
                                 }
                             } else {
-                                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
-                                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
-                                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
-                                    Ok(response) => {
-                                        if response.as_str() == t!("pddb.yes", xous::LANG) {
-                                            finished = false;
-                                            // this will cause just another go-around
-                                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
-                                            finished = true;
-                                            mgmt.code = PddbRequestCode::AccessDenied; // this will cause a return of AccessDenied
-                                        } else {
-                                            panic!("Got unexpected return from radiobutton");
-                                        }
-                                    }
-                                    _ => panic!("get_radiobutton failed"),
-                                }
+                                finished = true;
+                                log::error!("internal error in basis unlock, aborting!");
                             }
                         }
                     }
@@ -668,6 +684,7 @@ fn xmain() -> ! {
             Some(Opcode::CloseBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Close => {
                         match basis_cache.basis_unmount(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
@@ -687,6 +704,7 @@ fn xmain() -> ! {
             Some(Opcode::DeleteBasis) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
+                notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
                 match mgmt.code {
                     PddbRequestCode::Delete => {
                         match basis_cache.basis_delete(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8")) {
@@ -756,7 +774,11 @@ fn xmain() -> ! {
                 }
                 // at this point, we have established a basis/dict/key tuple.
                 let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
-                let cid = xous::connect(xous::SID::from_array(req.cb_sid)).expect("couldn't connect for callback");
+                let cid = if let Some(cb_sid) = req.cb_sid {
+                    Some(xous::connect(xous::SID::from_array(cb_sid)).expect("couldn't connect for callback"))
+                } else {
+                    None
+                };
                 let token_record = TokenRecord {
                     dict: String::from(dict),
                     key: String::from(key),
@@ -774,15 +796,23 @@ fn xmain() -> ! {
                 if let Some(rec) = token_dict.remove(&token) {
                     // now check if we can safely disconnect and recycle our connection number.
                     // This is important because we can only have 32 outgoing connections...
-                    let mut has_cid = false;
-                    for r in token_dict.values() {
-                        if r.conn == rec.conn {
-                            has_cid = true;
-                            break;
+                    if let Some(conn_to_remove) = rec.conn {
+                        let mut still_needs_cid = false;
+                        for r in token_dict.values() {
+                            // check through the remaining dictionary values to see if they have a connection that is the same as our number
+                            if let Some(existing_conn) = r.conn {
+                                if existing_conn == conn_to_remove {
+                                    still_needs_cid = true;
+                                    break;
+                                }
+                            }
                         }
-                    }
-                    if !has_cid {
-                        unsafe{xous::disconnect(rec.conn).expect("couldn't disconnect from callback server")};
+                        // if nobody else had my connection number, disconnect it.
+                        if !still_needs_cid {
+                            unsafe{xous::disconnect(conn_to_remove).expect("couldn't disconnect from callback server")};
+                        }
+                    } else {
+                        // if there was no/never a connection allocated, there's no connection to remove. do nothing.
                     }
                 }
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack KeyDrop");
@@ -1102,7 +1132,7 @@ fn xmain() -> ! {
                 for basis in bases.iter() {
                     note.push_str(basis);
                 }
-                modals.show_notification(&note).expect("couldn't show basis list");
+                modals.show_notification(&note, false).expect("couldn't show basis list");
             },
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Some(Opcode::DangerousDebug) => {
@@ -1148,7 +1178,7 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordState {
+fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
     loop {
         match pddb_os.try_login() {
@@ -1174,6 +1204,18 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordSta
                 }
             }
             PasswordState::Uninit => {
+                // check for a migration event
+                #[cfg(feature="migration1")]
+                {
+                    if pddb_os.migration_v1_to_v2(_pw_cid) == PasswordState::Correct {
+                        if pddb_os.try_login() == PasswordState::Correct {
+                            log::info!("Migration v1->v2 successful");
+                            return PasswordState::Correct
+                        } else {
+                            log::warn!("Migration v1->v2 succeeded, but somehow the v2 remount failed.");
+                        }
+                    }
+                }
                 return PasswordState::Uninit;
             }
         }
@@ -1251,7 +1293,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                     log::error!("Despite formatting, no PDDB was found!");
                     let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                     err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
-                    modals.show_notification(err.as_str()).expect("notification failed");
+                    modals.show_notification(err.as_str(), false).expect("notification failed");
                     false
                 }
             } else {
@@ -1276,7 +1318,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 log::error!("Despite formatting, no PDDB was found!");
                 let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                 err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
-                modals.show_notification(err.as_str()).expect("notification failed");
+                modals.show_notification(err.as_str(), false).expect("notification failed");
                 false
             }
         }
@@ -1377,3 +1419,34 @@ pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
     pddb_os.dbg_dump(Some("manual".to_string()), None);
 }
 
+fn notify_of_disconnect(pddb_os: &mut PddbOs, token_dict: &HashMap::<ApiToken, TokenRecord>, basis_cache: &mut BasisCache) {
+    // 1. search to see if any of the active tokens are are in our token_dict
+    // 2. notify them of the disconnect, if there is a callback set.
+    for (api_key, entry) in token_dict.iter() {
+        log::debug!("disconnect notify searching {:?}", entry);
+        if let Some(cb) = entry.conn {
+            match basis_cache.key_attributes(pddb_os, &entry.dict, &entry.key, entry.basis.as_deref()) {
+                Ok(_) => {
+                    match send_message(cb, Message::new_scalar(
+                        pddb::CbOp::Change.to_usize().unwrap(),
+                        api_key[0] as _,
+                        api_key[1] as _,
+                        api_key[2] as _,
+                        0,
+                    )) {
+                        Err(e) => {
+                            log::warn!("Callback on {}:{} for basis removal failed: {:?}", &entry.dict, &entry.key, e);
+                        },
+                        _ => {
+                            log::debug!("Callback on {}:{} for basis removal success", &entry.dict, &entry.key);
+                        }
+                    }
+                },
+                Err(_) => {
+                    // do nothing. It's probably not right that a key doesn't exist that we don't have in our records, but don't crash the system.
+                    log::warn!("Disconnect basis inconsistent state, {}:{} not found", &entry.dict, &entry.key);
+                }
+            }
+        }
+    }
+}

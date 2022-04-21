@@ -23,6 +23,8 @@ pub enum I2cStatus {
     ResponseReadOk,
     /// everything is OK, write finished. data fields have no meaning
     ResponseWriteOk,
+    /// interrupt handler error
+    ResponseInterruptError,
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum I2cCallback {
@@ -42,14 +44,11 @@ pub struct I2cTransaction {
     pub txlen: u32,
     pub rxbuf: Option<[u8; I2C_MAX_LEN]>,
     pub rxlen: u32,
-    pub listener: Option<(u32, u32, u32, u32)>, // where Rx split transactions should be routed to
     pub timeout_ms: u32,
-    pub status: I2cStatus,
-    pub callback_id: u32, // used by callback routines to help identify a return value
 }
 impl I2cTransaction {
     pub fn new() -> Self {
-        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500, status: I2cStatus::Uninitialized, listener: None, callback_id: 0 }
+        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500 }
     }
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -59,6 +58,7 @@ pub(crate) enum I2cOpcode {
     /// from i2c interrupt handler (internal API only)
     IrqI2cTxrxWriteDone,
     IrqI2cTxrxReadDone,
+    IrqI2cTrace,
     /// checks if the I2C engine is currently busy, for polling implementations
     I2cIsBusy,
     /// SuspendResume callback
@@ -66,15 +66,9 @@ pub(crate) enum I2cOpcode {
     Quit,
 }
 
-/// Routing information for the AsyncRead reporting od I2cReadResult
-#[derive(Debug, Copy, Clone)]
-pub struct I2cAsyncReadHook {
-    pub conn: xous::CID,
-    pub id: u32,
-}
 /// The data reported by an I2cAsycReadHook message
 #[derive(Debug, Copy, Clone, Archive, Serialize, Deserialize)]
-pub struct I2cReadResult {
+pub struct I2cResult {
     pub rxbuf: [u8; I2C_MAX_LEN],
     pub rxlen: u32,
     pub status: I2cStatus,

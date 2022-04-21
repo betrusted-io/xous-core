@@ -108,10 +108,16 @@
         "en-tts": "Enter name of Basis"
     },
     "pddb.password": {
-        "en": "Basis Password:",
+        "en": "Enter Basis password",
         "ja": "Basis パスワード",
         "zh": "基础密码",
         "en-tts": "Enter password for Basis"
+    },
+    "pddb.password_for": {
+        "en": "For basis: ",
+        "ja": "Basis 名前: ",
+        "zh": "基础姓名: ",
+        "en-tts": "For basis: "
     },
     "pddb.menu.listbasis": {
         "en": "List unlocked bases",

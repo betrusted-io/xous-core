@@ -26,7 +26,7 @@ pub struct TextEntry {
     pub action_opcode: u32,
     pub action_payload: TextEntryPayload,
     // validator borrows the text entry payload, and returns an error message if something didn't go well.
-    // validator takes as ragument the current action_payload, and the current action_opcode
+    // validator takes as argument the current action_payload, and the current action_opcode
     pub validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr> >,
 }
 impl ActionApi for TextEntry {

@@ -44,7 +44,6 @@ pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC; // must be 64k-aligned (bulk
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 use core::sync::atomic::AtomicU64;
 
-
 // Secretly, you can change this by setting the XOUS_SEED environment variable.
 // I don't lke environment variables because where do you document features like this?
 // But, this was the most expedient way to get all the threads in Hosted mode to pick up a seed.
@@ -331,10 +330,33 @@ pub struct MemoryMessage {
     /// message is moved between processes.
     pub buf: MemoryRange,
 
-    /// The offset within the buffer where the interesting stuff starts.
+    /// The offset within the buffer where the interesting stuff starts. The usage
+    /// of this field is purely advisory, is not checked by the kernel, should not
+    /// be trusted by the receiver. It is perfectly legal for this to be larger
+    /// than the buffer size.
+    ///
+    /// As a result, this field may be repurposed for other uses. For example,
+    /// you can store a `usize` in this field by setting
+    /// `message.offset = MemoryAddress::new(val)`, and get a `usize` back by
+    /// reading `message.offset.map(|v| v.get()).unwrap_or_default()`.
+    /// 
+    /// For `MutableBorrow` messages this value will be returned to the sender and the
+    /// field will be updated when the Message is returned. Therefore you may also use
+    /// this field to communicate additional information to the message sender.
     pub offset: Option<MemoryAddress>,
 
-    /// How many bytes in the buffer are valid
+    /// How many bytes in the buffer are valid. This field is advisory, and is not
+    /// checked by the kernel. It is legal for the sender to specify a `valid` range
+    /// that is larger than `buf.len()`, so this value should not be blindly trusted.
+    ///
+    /// As a result, this field may be repurposed for other uses. For example,
+    /// you can store a `usize` in this field by setting
+    /// `message.valid = MemoryAddress::new(val)`, and get a `usize` back by
+    /// reading `message.valid.map(|v| v.get()).unwrap_or_default()`.
+    /// 
+    /// For `MutableBorrow` messages this value will be returned to the sender and the
+    /// field will be updated when the Message is returned. Therefore you may also use
+    /// this field to communicate additional information to the message sender.
     pub valid: Option<MemorySize>,
 }
 

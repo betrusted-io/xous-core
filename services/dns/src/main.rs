@@ -4,14 +4,15 @@
 mod api;
 use api::*;
 
-use net::{Duration, NetIpAddr};
+use net::NetIpAddr;
 use num_traits::*;
 use xous::msg_scalar_unpack;
 
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io::ErrorKind;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
+use std::time::Duration;
 use std::thread;
 use xous_ipc::{Buffer, String};
 
@@ -306,7 +307,7 @@ impl Message {
 pub struct Resolver {
     /// DnsServerManager is a service of the Net crate that automatically updates the DNS server list
     mgr: net::DnsServerManager,
-    socket: net::UdpSocket,
+    socket: UdpSocket,
     buf: [u8; DNS_PKT_MAX_LEN],
     trng: trng::Trng,
     freeze: bool,
@@ -315,9 +316,8 @@ impl Resolver {
     pub fn new(xns: &xous_names::XousNames) -> Resolver {
         let trng = trng::Trng::new(&xns).unwrap();
         let local_port = (49152 + trng.get_u32().unwrap() % 16384) as u16;
-        let mut socket = net::UdpSocket::bind_xous(
-            format!("127.0.0.1:{}", local_port),
-            Some(DNS_PKT_MAX_LEN as u16),
+        let socket = UdpSocket::bind(
+            format!("0.0.0.0:{}", local_port),
         )
         .expect("couldn't create socket for DNS resolver");
         let timeout = Duration::from_millis(10_000); // 10 seconds for DNS to resolve by default

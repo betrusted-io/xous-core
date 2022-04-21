@@ -79,7 +79,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         log::warn!("EC firmware is too old to interoperate with the connec tion manager.");
         let mut note = String::from(t!("net.ec_rev_old", xous::LANG));
         note.push_str(&format!("\n\n{}{}.{}.{}+{}", t!("net.ec_current_rev", xous::LANG), maj, min, rev, commits));
-        modals.show_notification(&note).unwrap();
+        modals.show_notification(&note, false).unwrap();
     }
 
     let run = Arc::new(AtomicBool::new(rev_ok));
@@ -107,7 +107,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let pddb = pddb::Pddb::new();
-            pddb.is_mounted_blocking(None);
+            pddb.is_mounted_blocking();
             loop {
                 let msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -164,7 +164,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
-        log::debug!("got msg: {:?}", msg);
+        log::trace!("got msg: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ConnectionManagerOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                 // this doesn't follow the usual "suspender" pattern. In fact, we don't do anything special on suspend;

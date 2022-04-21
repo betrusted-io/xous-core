@@ -323,6 +323,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         {
             this.sha512.Initialize();
             this.digestedLength = 0;
+            RegistersCollection.Reset();
         }
 
         private readonly Machine machine;

@@ -27,15 +27,12 @@ pub struct ManagedListItem {
 pub struct ManagedPromptWithTextResponse {
     pub token: [u32; 4],
     pub prompt: xous_ipc::String::<1024>,
-    /// SID of a validator
-    pub validator: Option<[u32; 4]>,
-    /// the opcode to pass the validator
-    pub validator_op: u32,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedNotification {
     pub token: [u32; 4],
     pub message: xous_ipc::String::<1024>,
+    pub as_qrcode: bool,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
@@ -67,12 +64,15 @@ pub(crate) enum Opcode {
     PromptWithFixedResponse,
     /// ask a question, get multiple responses from a list of defined items (check box)
     PromptWithMultiResponse,
-    /// ask a question, get a free-form answer back
-    PromptWithTextResponse,
     /// simple notification
     Notification,
     /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically updated
     DynamicNotification,
+
+    /// ask a question, get a free-form answer back
+    PromptWithTextResponse,
+    /// must be used by the PromptWithTextResponse caller to acknowledge correct input
+    TextResponseValid,
 
     // these are non-blocking calls
     /// add an item to the radio box or check box. Note that all added items
@@ -81,7 +81,7 @@ pub(crate) enum Opcode {
     /// raise a progress bar
     StartProgress,
     /// update the progress bar
-    UpdateProgress,
+    DoUpdateProgress,
     /// lower a progress bar
     StopProgress,
     /// update a dynamic notification's text
@@ -89,7 +89,30 @@ pub(crate) enum Opcode {
     /// close dynamic notification
     CloseDynamicNotification,
 
+    /// used by libraries to get the mutex on the server
     GetMutex,
+
+    // these are used internally by the modals to handle intermediate state. Do not call from the outside.
+    // these were originally handled in a separate thread for deferred responses using busy-waits. They are
+    // now handled with deferred responses with makes code less complicated and less load on the CPU but
+    // it does expose some of the internal API mechanics to outside processes. This is fine for the modals
+    // box because it's a convenience routine used by "everyone"; password boxes are always handled within
+    // a given secured server so that the attack surface for these do not extend into the modals boundary.
+    InitiateOp,
+    FinishProgress,
+
+    TextEntryReturn,
+    RadioReturn,
+    CheckBoxReturn,
+    NotificationReturn,
+
+    DoUpdateDynamicNotification,
+    DoCloseDynamicNotification,
+
+    ModalRedraw,
+    ModalKeypress,
+    ModalDrop,
+    Gutter,
 
     Quit,
 }

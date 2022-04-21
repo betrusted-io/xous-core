@@ -168,6 +168,18 @@
         "zh": "外壳聊天",
         "en-tts": "Shellchat"
     },
+    "rtc.try_ntp": {
+        "en": "Attempt to automatically set time with NTP?",
+        "ja": "NTPで時間を設定しようとしますか?",
+        "zh": "尝试用 NTP 设置时间?",
+        "en-tts": "Attempt to automatically set time with NTP?"
+    },
+    "rtc.ntp_fail": {
+        "en": "NTP query failed, please enter time manually.",
+        "ja": "NTPクエリが失敗しました。時間を手動で入力してください。",
+        "zh": "NTP 查询失败，请手动输入时间。",
+        "en-tts": "NTP query failed, please enter time manually."
+    },
     "rtc.month": {
         "en": "Enter month (1-12)",
         "ja": "月（1-12）を入力してください。",

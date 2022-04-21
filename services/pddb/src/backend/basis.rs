@@ -788,10 +788,10 @@ impl BasisCache {
     pub(crate) fn basis_unlock(&mut self, hw: &mut PddbOs, name: &str, password: &str,
     policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         let basis_key =  hw.basis_derive_key(name, password);
-        if let Some(basis_map) = hw.pt_scan_key(&basis_key, name) {
+        if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, name) {
             let aad = hw.data_aad(name);
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
-                let vpage = match hw.data_decrypt_page_with_commit(&basis_key, &aad, root_page) {
+                let vpage = match hw.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
                     Some(data) => data,
                     None => {log::error!("Could not find basis {} root", name); return None;},
                 };
@@ -863,9 +863,9 @@ impl BasisCache {
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
             *dst = src;
         }
-        hw.data_encrypt_and_patch_page_with_commit(&basis_key, &aad, &mut block, &pp);
+        hw.data_encrypt_and_patch_page_with_commit(&basis_key.data, &aad, &mut block, &pp);
 
-        let cipher =  Aes256::new(GenericArray::from_slice(&basis_key));
+        let cipher =  Aes256::new(GenericArray::from_slice(&basis_key.pt));
         for (&virt, phys) in basis_v2p_map.iter_mut() {
             hw.pt_patch_mapping(virt, phys.page_number(), &cipher);
             // mark the entry as clean, as it has been sync'd to disk
@@ -1008,13 +1008,13 @@ impl BasisCacheEntry {
     /// the basis. If `lazy` is true, it stops with the minimal amount of effort to respond to a query.
     /// If it `lazy` is false, it will populate the dictionary cache and key cache entries, as well as
     /// discover the location of the `large_alloc_ptr`.
-    pub(crate) fn mount(hw: &mut PddbOs, name: &str, key: &[u8; AES_KEYSIZE], lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
-        if let Some(basis_map) = hw.pt_scan_key(key, name) {
-            let cipher = Aes256GcmSiv::new(Key::from_slice(key));
+    pub(crate) fn mount(hw: &mut PddbOs, name: &str,  key: &BasisKeys, lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
+        if let Some(basis_map) = hw.pt_scan_key(&key.pt, name) {
+            let cipher = Aes256GcmSiv::new(Key::from_slice(&key.data));
             let aad = hw.data_aad(name);
             // get the first page, where the basis root is guaranteed to be
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
-                let vpage = match hw.data_decrypt_page_with_commit(key, &aad, root_page) {
+                let vpage = match hw.data_decrypt_page_with_commit(&key.data, &aad, root_page) {
                     Some(data) => data,
                     None => {log::error!("System basis decryption did not authenticate. Unrecoverable error."); return None;},
                 };
@@ -1044,8 +1044,8 @@ impl BasisCacheEntry {
                     num_dicts: basis_root.num_dictionaries,
                     dicts: HashMap::<String, DictCacheEntry>::new(),
                     cipher,
-                    cipher_ecb: Aes256::new(GenericArray::from_slice(key)),
-                    key: GenericArray::clone_from_slice(key),
+                    cipher_ecb: Aes256::new(GenericArray::from_slice(&key.pt)),
+                    key: GenericArray::clone_from_slice(&key.data),
                     aad,
                     age: basis_root.age,
                     free_dict_offset: None,

@@ -1,21 +1,23 @@
 use crate::{ShellCmdApi, CommonEnv};
+use com::api::NET_MTU;
 use xous_ipc::String;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use net::XousServerId;
-use net::{Duration, NetPingCallback};
+use net::NetPingCallback;
 use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::{SocketAddr, IpAddr, TcpStream};
+use std::net::{IpAddr, TcpStream, TcpListener};
 use std::io::Write;
 use std::io::Read;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use std::thread;
+use std::sync::mpsc;
 use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
 
 pub struct NetCmd {
-    udp: Option<net::UdpSocket>,
-    udp_clone: Option<net::UdpSocket>,
     callback_id: Option<u32>,
     callback_conn: u32,
-    udp_count: u32,
     dns: Dns,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     ping: Option<net::Ping>,
@@ -23,11 +25,8 @@ pub struct NetCmd {
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         NetCmd {
-            udp: None,
-            udp_clone: None,
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
-            udp_count: 0,
             dns: dns::Dns::new(&xns).unwrap(),
             #[cfg(any(target_os = "none", target_os = "xous"))]
             ping: None,
@@ -41,7 +40,6 @@ pub(crate) enum NetCmdDispatch {
     UdpTest2 =  0x1_0001,
 }
 
-pub const UDP_TEST_SIZE: usize = 64;
 impl<'a> ShellCmdApi<'a> for NetCmd {
     cmd_api!(net); // inserts boilerplate for command API
 
@@ -55,10 +53,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         #[cfg(any(target_os = "none", target_os = "xous"))]
-        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]] [tcpget host/path]";
+        let helpstring = "net [udp [rx socket] [tx dest socket]] [ping [host] [count]] [tcpget host/path]";
         // no ping in hosted mode -- why would you need it? we're using the host's network connection.
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [count]] [tcpget host/path]";
+        let helpstring = "net [udp [port]] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -76,8 +74,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                 match TcpStream::connect((host, 80)) {
                                     Ok(mut stream) => {
                                         log::trace!("stream open, setting timeouts");
-                                        stream.set_read_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
-                                        stream.set_write_timeout(Some(std::time::Duration::from_millis(10_000))).unwrap();
+                                        stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                        stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
                                         log::debug!("read timeout: {:?}", stream.read_timeout().unwrap().unwrap().as_millis());
                                         log::debug!("write timeout: {:?}", stream.write_timeout().unwrap().unwrap().as_millis());
                                         log::info!("my socket: {:?}", stream.local_addr());
@@ -98,7 +96,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         match stream.read(&mut buf) {
                                             Ok(len) => {
                                                 log::trace!("raw response ({}): {:?}", len, &buf[..len]);
-                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).unwrap();
+                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).ok(); // let it run off the end
                                             }
                                             Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
                                         }
@@ -113,86 +111,33 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 "server" => {
-                    // PLEASE NOTE:
-                    // Trying to make a TCP server of some kind? Don't be shy to open an issue at
-                    // https://github.com/betrusted-io/xous-core/issues. The TCP stack is very thinly
-                    // tested. Also, this is not a "real" web server, obviously -- so it's going to have quirks,
-                    // such as Firefox reporting that connections have been reset because this doesn't implement
-                    // a complete HTTP life cycle.
-                    let _ = std::thread::spawn({
-                        let mut listener = net::TcpListener::bind_xous(
-                            "127.0.0.1:80"
-                        ).unwrap();
-                        let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-                        let callback_conn = self.callback_conn.clone();
+                    // this is adapted from https://doc.rust-lang.org/book/ch20-03-graceful-shutdown-and-cleanup.html
+                    thread::spawn({
+                        let boot_instant = env.boot_instant.clone();
                         move || {
-                            loop {
-                                match listener.accept() {
-                                    Ok((mut stream, addr)) => {
-                                        let elapsed_time = ticktimer.elapsed_ms();
-                                        let test_string = std::format!("Hello from Precursor!\n\rI have been up for {}:{:02}:{:02}.\n\r",
-                                            (elapsed_time / 3_600_000),
-                                            (elapsed_time / 60_000) % 60,
-                                            (elapsed_time / 1000) % 60,
-                                        );
-                                        let mut request = [0u8; 1024];
-                                        // this is probably not the "right way" to handle this -- but the "keep-alive" from the browser makes us hang on the read
-                                        // which prevents us from answering requests from other browsers (because this is a single-threaded implementation of a server)
-                                        stream.set_read_timeout(Some(Duration::from_millis(2_000))).unwrap();
-                                        match stream.read(&mut request) {
-                                            Ok(len) => {
-                                                let r = std::string::String::from_utf8_lossy(&request[..len]);
-                                                log::info!("Request received from {:?}: {}", stream.peer_addr().unwrap(), r);
-                                                // this works because the recipient will take only one type of memory message and it's a 512-byte length string.
-                                                xous_ipc::String::<512>::from_str(&r).send(callback_conn).unwrap();
-                                                let mut tokens = r.split(' ');
-                                                let mut valid = true;
-                                                if let Some(verb) = tokens.next() {
-                                                    if verb != "GET" {
-                                                        log::info!("Expected GET, got {}", verb);
-                                                        valid = false;
-                                                    }
-                                                }
-                                                if let Some(path) = tokens.next() {
-                                                    if path != "/" {
-                                                        log::info!("We only know /, got {}", path);
-                                                        valid = false;
-                                                    }
-                                                }
-                                                if valid {
-                                                    // now send a page back...
-                                                    let page = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\rConnection: close\n\r\n\r{}\n\r",
-                                                        test_string.len(),
-                                                        test_string);
-                                                    log::info!("Responding with: {}", page);
-                                                    write!(stream, "{}", page).unwrap();
-                                                    stream.flush().unwrap();
-                                                    log::info!("Sent a response {:?}", addr);
-                                                    xous_ipc::String::<512>::from_str(format!("Sent 200 to {:?}", addr)).send(callback_conn).unwrap();
-                                                } else {
-                                                    let errstring = "Sorry, I have only one trick, and it's pretty dumb.";
-                                                    let notfound = format!("HTTP/1.1 404 Not Found\n\rConnection: close\n\rContent-Type: text/plain; charset=utf-8\n\rContent-Length: {}\n\r\n\r{}\n\r",
-                                                        errstring.len(),
-                                                        errstring
-                                                    );
-                                                    log::info!("Responding with: {}", notfound);
-                                                    write!(stream, "{}", notfound).unwrap();
-                                                    stream.flush().unwrap();
-                                                    xous_ipc::String::<512>::from_str(format!("Sent 404 to {:?}", addr)).send(callback_conn).unwrap();
-                                                }
-                                            }
-                                            Err(e) => {
-                                                log::info!("Stream was opened, but no request received: {:?}", e);
-                                                xous_ipc::String::<512>::from_str(format!("Socket opened but no request data received: {:?}", e)).send(callback_conn).unwrap();
-                                            }
-                                        }
-                                        // stream should close automatically as `stream` goes out of scope here and Drop is called.
-                                    }
+                            let listener = TcpListener::bind("0.0.0.0:80").unwrap();
+                            // limit to 2 because we're a bit shy on space in shellchat right now; there is a 32-thread limit per process, and shellchat has the kitchen sink.
+                            let pool = ThreadPool::new(4);
+
+                            for stream in listener.incoming() {
+                                let stream = match stream {
+                                    Ok(s) => s,
                                     Err(e) => {
-                                        xous_ipc::String::<512>::from_str(format!("Got error on TCP accept: {:?}", e)).send(callback_conn).unwrap();
+                                        log::warn!("Listener returned error: {:?}", e);
+                                        continue;
                                     }
-                                }
+                                };
+
+                                pool.execute({
+                                    let bi = boot_instant.clone();
+                                    move || {
+                                        handle_connection(stream, bi);
+                                        log::info!("connection closed");
+                                    }
+                                });
                             }
+
+                            log::info!("demo server shutting down.");
                         }
                     });
                     write!(ret, "TCP listener started on port 80").unwrap();
@@ -201,50 +146,71 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
                 // to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received
                 "udp" => {
-                    if let Some(udp_socket) = &self.udp {
-                        write!(ret, "Socket listener already installed on {:?}.", udp_socket.socket_addr().unwrap()).unwrap();
+                    let socket = if let Some(tok_str) = tokens.next() {
+                        tok_str
                     } else {
-                        let socket = if let Some(tok_str) = tokens.next() {
-                            tok_str
-                        } else {
-                            "127.0.0.1:6502"
-                        };
-                        let mut udp = net::UdpSocket::bind_xous(
-                            socket,
-                            Some(UDP_TEST_SIZE as u16)
-                        ).unwrap();
-                        udp.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
-                        udp.set_scalar_notification(
-                            self.callback_conn,
-                            self.callback_id.unwrap() as usize, // this is guaranteed in the prelude
-                            [Some(NetCmdDispatch::UdpTest1.to_usize().unwrap()), None, None, None]
-                        );
-                        self.udp = Some(udp);
-                        write!(ret, "Created UDP socket listener on socket {}", socket).unwrap();
-                    }
-                }
-                "udpclose" => {
-                    self.udp = None;
-                    write!(ret, "Closed primary UDP socket").unwrap();
-                }
-                "udpclone" => {
-                    if let Some(udp_socket) = &self.udp {
-                        let mut udp_clone = udp_socket.duplicate().unwrap();
-                        udp_clone.set_scalar_notification(
-                            self.callback_conn,
-                            self.callback_id.unwrap() as usize, // this is guaranteed in the prelude
-                            [Some(NetCmdDispatch::UdpTest2.to_usize().unwrap()), None, None, None]
-                        );
-                        let sa = udp_clone.socket_addr().unwrap();
-                        self.udp_clone = Some(udp_clone);
-                        write!(ret, "Cloned UDP socket on {:?}", sa).unwrap();
+                        // you could also pass e.g. 127.0.0.1 to check that udp doesn't respond to remote pings, etc.
+                        write!(ret, "Usage: net udp 0.0.0.0:6502 [sender_ip:6502], where sender_ip is only necessary if you want the echo-back").unwrap();
+                        return Ok(Some(ret));
+                    }.to_string();
+                    let (response_addr, do_response) = if let Some(r) = tokens.next() {
+                        (r.to_string(), true)
                     } else {
-                        write!(ret, "Run `net udp` before cloning.").unwrap();
+                        (std::string::String::new(), false)
+                    };
+                    use std::net::UdpSocket;
+                    let udp = match UdpSocket::bind(socket.clone()) {
+                        Ok(udp) => udp,
+                        Err(e) => {
+                            write!(ret, "Couldn't bind UDP socket: {:?}\n", e).unwrap();
+                            return Ok(Some(ret));
+                        }
+                    };
+                    udp.set_write_timeout(Some(Duration::from_millis(500))).expect("couldn't set write timeout");
+                    for index in 0..2 {
+                        let _ = std::thread::spawn({
+                            let self_cid = self.callback_conn;
+                            let udp = udp.try_clone().expect("couldn't clone socket");
+                            let response = response_addr.clone();
+                            move || {
+                                const ITERS: usize = 4;
+                                let mut iters = 0;
+                                let mut s = xous_ipc::String::<512>::new();
+                                write!(s, "UDP server {} started", index).unwrap();
+                                s.send(self_cid).unwrap();
+                                loop {
+                                    s.clear();
+                                    let mut buf = [0u8; NET_MTU];
+                                    match udp.recv_from(&mut buf) {
+                                        Ok((bytes, addr)) => {
+                                            write!(s, "UDP server {} rx {} bytes: {:?}: {}", index, bytes, addr, std::str::from_utf8(&buf[..bytes]).unwrap()).unwrap();
+                                            s.send(self_cid).unwrap();
+                                            if do_response {
+                                                match udp.send_to(
+                                                    format!("Server {} received {} bytes\r\n", index, bytes).as_bytes(),
+                                                    &response,
+                                                ) {
+                                                    Ok(len) => log::info!("server {} sent response of {} bytes", index, len),
+                                                    Err(e) => log::info!("server {} UDP tx err: {:?}", index, e),
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::error!("UDP rx failed with {:?}", e);
+                                        }
+                                    }
+                                    iters += 1;
+                                    if iters >= ITERS {
+                                        break;
+                                    }
+                                }
+                                s.clear();
+                                write!(s, "UDP server {} rx closed after {} iters", index, iters).unwrap();
+                                s.send(self_cid).unwrap();
+                            }
+                        });
                     }
-                }
-                "udpcloneclose" => {
-                    self.udp_clone = None;
-                    write!(ret, "Closed cloned UDP socket").unwrap();
+                    write!(ret, "Started multi-threaded UDP responder").unwrap();
                 }
                 "dns" => {
                     if let Some(name) = tokens.next() {
@@ -257,6 +223,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     }
+                }
+                "tls" => {
+
                 }
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {
@@ -325,70 +294,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 let dispatch = *arg1;
                 match FromPrimitive::from_usize(dispatch) {
                     Some(NetCmdDispatch::UdpTest1) => {
-                        if let Some(udp_socket) = &mut self.udp {
-                            let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
-                            match udp_socket.recv_from(&mut pkt) {
-                                Ok((len, addr)) => {
-                                    write!(ret, "UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
-                                    log::info!("UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
-                                    self.udp_count += 1;
-
-                                    if addr.ip() != IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)) {
-                                        let response_addr = SocketAddr::new(
-                                            addr.ip(),
-                                            udp_socket.socket_addr().unwrap().port()
-                                        );
-                                        match udp_socket.send_to(
-                                            format!("Received {} packets\n\r", self.udp_count).as_bytes(),
-                                            &response_addr
-                                        ) {
-                                            Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                            Err(_) => write!(ret, "UDP tx err").unwrap(),
-                                        }
-                                    } else {
-                                        log::info!("localhost UDP origin detected (are you testing in hosted mode?), not reflecting packet as this would create a loop");
-                                    }
-                                },
-                                Err(e) => {
-                                    log::error!("Net UDP error: {:?}", e);
-                                    write!(ret, "UDP receive error: {:?}", e).unwrap();
-                                }
-                            }
-                        } else {
-                            log::error!("Got NetCmd callback from uninitialized socket");
-                            write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
-                        }
+                        // Not used after udp to libstd, but left in case we want to repurpose
                     },
                     Some(NetCmdDispatch::UdpTest2) => {
-                        if let Some(udp_socket) = &mut self.udp_clone {
-                            let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
-                            match udp_socket.recv_from(&mut pkt) {
-                                Ok((len, addr)) => {
-                                    write!(ret, "Clone UDP rx {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
-                                    log::info!("Clone UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
-                                    self.udp_count += 1;
-
-                                    let response_addr = SocketAddr::new(
-                                        addr.ip(),
-                                        udp_socket.socket_addr().unwrap().port()
-                                    );
-                                    match udp_socket.send_to(
-                                        format!("Clone received {} packets\n\r", self.udp_count).as_bytes(),
-                                        &response_addr
-                                    ) {
-                                        Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
-                                        Err(e) => write!(ret, "UDP tx err: {:?}", e).unwrap(),
-                                    }
-                                },
-                                Err(e) => {
-                                    log::error!("Net UDP error: {:?}", e);
-                                    write!(ret, "UDP receive error: {:?}", e).unwrap();
-                                }
-                            }
-                        } else {
-                            log::error!("Got NetCmd callback from uninitialized socket");
-                            write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
-                        }
+                        // Not used after udp to libstd
                     },
                     None => {
                         // rebind the scalar args to the Ping convention
@@ -439,5 +348,159 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
             }
         }
         Ok(Some(ret))
+    }
+}
+
+enum Responses {
+    Uptime,
+    NotFound,
+    Buzz,
+}
+
+fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
+    // the result is implementation dependent, on Xous hardware, this is effectively the same as ticktimer.elapsed_ms()
+    let elapsed_time = Instant::now().duration_since(boot_instant);
+    let uptime = std::format!("Hello from Precursor!\n\rI have been up for {}:{:02}:{:02}.\n\r",
+        (elapsed_time.as_millis() / 3_600_000),
+        (elapsed_time.as_millis() / 60_000) % 60,
+        (elapsed_time.as_millis() / 1000) % 60,
+    );
+
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
+
+    let get = b"GET / HTTP/1.1\r\n";
+    let sleep = b"GET /sleep HTTP/1.1\r\n";
+    let buzz = b"GET /buzz HTTP/1.1\r\n";
+
+    let (status_line, response_index) = if buffer.starts_with(get) {
+        ("HTTP/1.1 200 OK", Responses::Uptime)
+    } else if buffer.starts_with(sleep) {
+        thread::sleep(Duration::from_secs(5));
+        ("HTTP/1.1 200 OK", Responses::Uptime)
+    } else if buffer.starts_with(buzz) {
+        ("HTTP/1.1 200 OK", Responses::Buzz)
+    } else {
+        ("HTTP/1.1 404 NOT FOUND", Responses::NotFound)
+    };
+
+    let contents = match response_index {
+        Responses::Uptime => {
+            uptime.as_str()
+        },
+        Responses::Buzz => {
+            let xns = xous_names::XousNames::new().unwrap();
+            llio::Llio::new(&xns).vibe(llio::VibePattern::Double).ok();
+            "The motor on the Precursor goes bzz bzz"
+        }
+        Responses::NotFound => {
+            "Ceci n'est pas une page vide"
+        },
+    };
+
+    let response = format!(
+        "{}\r\nContent-Length: {}\r\n\r\n{}",
+        status_line,
+        contents.len(),
+        contents
+    );
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Message>,
+}
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+enum Message {
+    NewJob(Job),
+    Terminate,
+}
+
+impl ThreadPool {
+    /// Create a new ThreadPool.
+    ///
+    /// The size is the number of threads in the pool.
+    ///
+    /// # Panics
+    ///
+    /// The `new` function will panic if the size is zero.
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+
+        let (sender, receiver) = mpsc::channel();
+
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
+        }
+
+        ThreadPool { workers, sender }
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+        self.sender.send(Message::NewJob(job)).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        log::info!("Sending terminate message to all workers.");
+
+        for _ in &self.workers {
+            self.sender.send(Message::Terminate).unwrap();
+        }
+
+        log::info!("Shutting down all workers.");
+
+        for worker in &mut self.workers {
+            log::info!("Shutting down worker {}", worker.id);
+
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let message = receiver.lock().unwrap().recv().unwrap();
+
+            match message {
+                Message::NewJob(job) => {
+                    log::info!("Worker {} got a job; executing.", id);
+
+                    job();
+                }
+                Message::Terminate => {
+                    log::info!("Worker {} was told to terminate.", id);
+
+                    break;
+                }
+            }
+        });
+
+        Worker {
+            id,
+            thread: Some(thread),
+        }
     }
 }

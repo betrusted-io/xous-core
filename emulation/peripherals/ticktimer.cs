@@ -34,6 +34,7 @@ namespace Antmicro.Renode.Peripherals.Timers
             tickValue = 0;
             paused = true;
             msleepTarget = 0;
+            RegistersCollection.Reset();
         }
 
         private void OnTick()
@@ -43,6 +44,16 @@ namespace Antmicro.Renode.Peripherals.Timers
                 this.irqStatus = Interlocked.Increment(ref tickValue) >= (long)this.msleepTarget;
                 this.UpdateInterrupts();
             }
+        }
+
+        public uint Time0()
+        {
+            return (uint)(tickValue >> 0);
+        }
+
+        public uint Time1()
+        {
+            return (uint)(tickValue >> 32);
         }
 
         private void UpdateInterrupts()
@@ -77,14 +88,14 @@ namespace Antmicro.Renode.Peripherals.Timers
             Registers.Time1.Define32(this)
                 .WithValueField(0, 32, FieldMode.Read, name: "Time1", valueProviderCallback: _ =>
                 {
-                    return (uint)(tickValue >> 32);
+                    return Time1();
                 })
             ;
 
             Registers.Time0.Define32(this)
                 .WithValueField(0, 32, FieldMode.Read, name: "Time0", valueProviderCallback: _ =>
                 {
-                    return (uint)(tickValue >> 0);
+                    return Time0();
                 })
             ;
 
@@ -131,8 +142,8 @@ namespace Antmicro.Renode.Peripherals.Timers
         private IFlagRegisterField irqPending;
         private bool irqStatus;
 
-        bool paused;
-        long tickValue;
+        public bool paused;
+        public long tickValue;
         ulong msleepTarget;
         public GPIO IRQ { get; private set; }
 

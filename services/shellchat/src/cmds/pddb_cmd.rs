@@ -21,9 +21,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
-        let helpstring = "pddb [basislist] [dictlist] [keylist] [query] [dictdelete] [keydelete]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete]";
         #[cfg(feature="pddbtest")]
-        let helpstring = "pddb [basislist] [dictlist] [keylist] [query] [dictdelete] [keydelete] [test]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete]\n[test]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -42,6 +42,52 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                             xous::send_message(cid, xous::Message::new_scalar(0, counter as usize, 0, 0, 0)).expect("couldn't send");
                         }})
                     ).unwrap();*/
+                }
+                "default" => {
+                    match self.pddb.latest_basis() {
+                        Some(latest) => write!(ret, "The current default basis is: {}", latest).unwrap(),
+                        None => write!(ret, "No open basis detected").unwrap(),
+                    }
+                }
+                "basiscreate" => {
+                    if let Some(bname) = tokens.next() {
+                        match self.pddb.create_basis(bname) {
+                            Ok(_) => write!(ret, "basis {} created successfully", bname).unwrap(),
+                            Err(e) => write!(ret, "basis {} could not be created: {:?}", bname, e).unwrap(),
+                        }
+                    } else {
+                        write!(ret, "usage: pddb basiscreate [basis name]").unwrap()
+                    }
+                }
+                "basisunlock" => {
+                    if let Some(bname) = tokens.next() {
+                        match self.pddb.unlock_basis(bname, None) {
+                            Ok(_) => write!(ret, "basis {} unlocked successfully", bname).unwrap(),
+                            Err(e) => write!(ret, "basis {} could not be unlocked: {:?}", bname, e).unwrap(),
+                        }
+                    } else {
+                        write!(ret, "usage: pddb basisunlock [basis name]").unwrap()
+                    }
+                }
+                "basislock" => {
+                    if let Some(bname) = tokens.next() {
+                        match self.pddb.lock_basis(bname) {
+                            Ok(_) => write!(ret, "basis {} locked successfully", bname).unwrap(),
+                            Err(e) => write!(ret, "basis {} could not be locked: {:?}", bname, e).unwrap(),
+                        }
+                    } else {
+                        write!(ret, "usage: pddb basisunlock [basis name]").unwrap()
+                    }
+                }
+                "basisdelete" => {
+                    if let Some(bname) = tokens.next() {
+                        match self.pddb.delete_basis(bname) {
+                            Ok(_) => write!(ret, "basis {} deleted successfully", bname).unwrap(),
+                            Err(e) => write!(ret, "basis {} could not be deleted: {:?}", bname, e).unwrap(),
+                        }
+                    } else {
+                        write!(ret, "usage: pddb basisdelete [basis name]").unwrap()
+                    }
                 }
                 "query" => {
                     if let Some(descriptor) = tokens.next() {
@@ -171,6 +217,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 // note that this feature only works in hosted mode
                 #[cfg(feature="pddbtest")]
                 "test" => {
+                    let bname = tokens.next();
                     // zero-length key test
                     let mut test_handle = pddb::Pddb::new();
                     // build a key, but don't write to it.
@@ -179,10 +226,22 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         "zerolength",
                         None, true, true,
                         Some(8),
-                        None::<fn()>
+                        None::<fn()>,
                     ).expect("couldn't build empty key");
                     self.pddb.sync().unwrap();
+                    if let Some(name) = bname {
+                        match self.pddb.lock_basis(name) {
+                            Ok(_) => log::info!("basis {} lock successful", name),
+                            Err(e) => log::info!("basis {} could not be unmounted: {:?}", name, e),
+                        }
+                    }
                     self.pddb.dbg_remount().unwrap();
+                    if let Some(name) = bname {
+                        match self.pddb.unlock_basis(name, None) {
+                            Ok(_) => log::info!("basis {} unlocked successfully", name),
+                            Err(e) => log::info!("basis {} could not be unlocked: {:?}", name, e),
+                        }
+                    }
                     self.pddb.dbg_dump("std_test1").unwrap();
                     write!(ret, "dumped std_test1\n").unwrap();
                     log::info!("finished zero-length alloc");
@@ -202,7 +261,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         "seekwrite",
                         None, true, true,
                         Some(64),
-                        None::<fn()>
+                        Some(|| {
+                            log::info!("test:seekwrite key was unmounted");
+                        })
                     ).expect("couldn't build empty key");
                     // 1, 1, 1, 1
                     log::info!("wrote {} bytes at offset 0",
@@ -215,6 +276,18 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     log::info!("wrote {} bytes at offset 2",
                         seekwrite.write(&[2, 2, 2, 2]).unwrap()
                     );
+                    if let Some(name) = bname {
+                        match self.pddb.lock_basis(name) {
+                            Ok(_) => log::info!("basis {} lock successful", name),
+                            Err(e) => log::info!("basis {} could not be unmounted: {:?}", name, e),
+                        }
+                    }
+                    if let Some(name) = bname {
+                        match self.pddb.unlock_basis(name, None) {
+                            Ok(_) => log::info!("basis {} unlocked successfully", name),
+                            Err(e) => log::info!("basis {} could not be unlocked: {:?}", name, e),
+                        }
+                    }
                     // 1, 1, 2, 2, 2, 2, 0, 0, 3, 3
                     log::info!("seek to {}",
                         seekwrite.seek(SeekFrom::Start(8)).unwrap()

@@ -49,7 +49,8 @@ btevents: GPIOPort.BtEvents @ sysbus 0xf000f000
 ticktimer: Timers.TickTimer @ sysbus 0xf0012000
     IRQ -> cpu @ 1008
 
-// Unrecognized peripheral: susres @ 0xf0013000
+susres: Timers.SusRes @ sysbus 0xf0013000
+    IRQ -> cpu @ 1009
 
 // Unrecognized peripheral: power @ 0xf0014000
 
@@ -88,7 +89,7 @@ engine: Miscellaneous.Engine @ sysbus 0xf0020000
     memSize: 0x20000
     IRQ -> cpu @ 1018
 
-// Unrecognized peripheral: jtag @ 0xf0021000
+jtag: Miscellaneous.BetrustedJtag @ sysbus 0xf0021000
 
 wdt: Timers.BetrustedWatchdog @ sysbus 0xf0022000
 
@@ -118,6 +119,8 @@ audio: Memory.MappedMemory @ sysbus 0xe0000000
 
 
 abracom_rtc: Sensors.ABRTCMC @ i2c 0x68
+
+audio_codec: Sensors.TLV320AIC3100 @ i2c 0x18
 
 flash: SPI.MXIC_MX66UM1G45G @ spinor
     underlyingMemory: spiflash
