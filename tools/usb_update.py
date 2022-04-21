@@ -109,6 +109,13 @@ class PrecursorUsb:
         if len(data) == 0:
             return
 
+        # the actual "addr" doesn't matter for a burst_write, because it's specified
+        # as an argument to the flash_pp4b command. We lock out access to the base of
+        # SPINOR because it's part of the gateware, so, we pick a "safe" address to
+        # write to instead. The page write responder will aggregate any write data
+        # to anywhere in the SPINOR address range.
+        writebuf_addr = 0x2098_0000 # the current start address of the kernel, for example
+
         maxlen = 4096
         packet_count = len(data) // maxlen
         if (len(data) % maxlen) != 0:
@@ -126,7 +133,8 @@ class PrecursorUsb:
 
             wdata = array.array('B', data[(pkt_num * maxlen):(pkt_num * maxlen) + bufsize])
             numwritten = self.dev.ctrl_transfer(bmRequestType=(0x00 | 0x43), bRequest=0,
-                wValue=(cur_addr & 0xffff), wIndex=((cur_addr >> 16) & 0xffff),
+                # note use of writebuf_addr instead of cur_addr -> see comment above about the quirk of write addressing
+                wValue=(writebuf_addr & 0xffff), wIndex=((writebuf_addr >> 16) & 0xffff),
                 data_or_wLength=wdata, timeout=500)
 
             if numwritten != bufsize:
@@ -363,7 +371,7 @@ class PrecursorUsb:
                 if status & 0x02 != 0:
                     break
 
-            self.burst_write(flash_region, data[written:(written+chunklen)])
+            self.burst_write(self.register('spinor_wdata'), data[written:(written+chunklen)])
             self.flash_pp4b(addr + written, chunklen)
 
             written += chunklen
@@ -387,7 +395,17 @@ class PrecursorUsb:
             self.ping_wdt()
             rbk_data = self.burst_read(addr + flash_region, len(data))
             if rbk_data != data:
+                errs = 0
+                err_thresh = 64
+                for i in range(0, len(rbk_data)):
+                    if rbk_data[i] != data[i]:
+                        if errs < err_thresh:
+                            print("Error at 0x{:x}: {:x}->{:x}".format(i, data[i], rbk_data[i]))
+                        errs += 1
+                    if errs == err_thresh:
+                        print("Too many errors, stopping print...")
                 print("Errors were found in verification, programming failed")
+                print("Total byte errors: {}".format(errs))
                 exit(1)
             else:
                 print("Verification passed.")
@@ -574,7 +592,9 @@ def main():
         print("Programming SoC gateware".format(args.soc))
         with open(args.soc, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+            if verify == True:
+                print("Note: SoC verification is not possible as readback is locked for security purposes")
+            pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=False)
 
         print("Erasing PDDB root structures")
         pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
@@ -657,7 +677,9 @@ def main():
             print("Programming SoC gateware {}".format(args.soc))
             with open(args.soc, "rb") as f:
                 image = f.read()
-                pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+                if verify == True:
+                    print("Note: SoC verification is not possible as readback is locked for security purposes")
+                pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=False)
                 print("Erasing PDDB root structures")
                 pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
         else:
@@ -667,7 +689,9 @@ def main():
                 print("Programming SoC gateware {}".format(args.soc))
                 with open(args.soc, "rb") as f:
                     image = f.read()
-                    pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=verify)
+                    if verify == True:
+                        print("Note: SoC verification is not possible as readback is locked for security purposes")
+                    pc_usb.flash_program(locs['LOC_SOC'][0], image, verify=False)
                     print("Erasing PDDB root structures")
                     pc_usb.erase_region(locs['LOC_PDDB'][0], 1024 * 1024)
 
