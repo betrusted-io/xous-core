@@ -1,0 +1,4 @@
+i @emulation/betrusted.resc
+i @emulation/linux-server.resc
+
+start

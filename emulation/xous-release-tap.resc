@@ -1,0 +1,13 @@
+i @emulation/betrusted.resc
+
+# Create network
+emulation CreateSwitch "switch"
+emulation CreateTap "renodetap" "tap"
+connector Connect host.tap switch
+
+# Connect EC to the switch
+mach set "EC"
+connector Connect sysbus.wifi.wf200 switch
+mach clear
+
+start
