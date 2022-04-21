@@ -501,6 +501,8 @@ fn print_footer<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
 abracom_rtc: Sensors.ABRTCMC @ i2c 0x68
 
+audio_codec: Sensors.TLV320AIC3100 @ i2c 0x18
+
 flash: SPI.MXIC_MX66UM1G45G @ spinor
     underlyingMemory: spiflash
 

@@ -38,6 +38,7 @@ i @peripherals/spinor_soft_int.cs
 i @peripherals/ticktimer.cs
 i @peripherals/trng_kernel.cs
 i @peripherals/trng_server.cs
+i @peripherals/TLV320AIC3100.cs
 i @peripherals/TUSB320LAI.cs
 i @peripherals/WF200.cs
 i @peripherals/wfi.cs
