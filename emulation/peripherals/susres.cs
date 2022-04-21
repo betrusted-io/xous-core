@@ -118,7 +118,15 @@ namespace Antmicro.Renode.Peripherals.Timers
             ;
 
             Registers.Powerdown.Define32(this)
-                .WithFlag(0, FieldMode.Read | FieldMode.Write)
+                .WithFlag(0, FieldMode.Read | FieldMode.Write, changeCallback: (_, val) => {
+                    if (val) {
+                        this.Log(LogLevel.Info, "Pausing and resetting machine");
+                        machine.LocalTimeSource.ExecuteInNearestSyncedState(ts => {
+                            machine.Pause();
+                            machine.Reset();
+                        });
+                    }
+                })
             ;
 
             Registers.Wfi.Define32(this)

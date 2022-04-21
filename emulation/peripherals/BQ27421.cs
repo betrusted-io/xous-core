@@ -46,7 +46,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
             firstByte = true;
             secondByte = false;
             Temperature = 298.1M;
-            Voltage = 3700;
+            Voltage = 4000;
             SoC = 90;
             AvgCur = 300;
             RemainingCapacity = 4000;

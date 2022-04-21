@@ -309,6 +309,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         public void Reset()
         {
             State = JtagState.TestLogicReset;
+            RegistersCollection.Reset();
         }
 
         private enum JtagState
