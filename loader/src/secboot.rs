@@ -1,5 +1,3 @@
-#![cfg(feature = "renode-bypass")]
-#![allow(dead_code)]
 use crate::println;
 
 pub const SIGBLOCK_SIZE: usize = 0x1000;
@@ -234,7 +232,6 @@ impl Keyrom {
         }
         true
     }
-    #[cfg(not(feature = "renode-bypass"))]
     fn read_ed25519(&mut self, key_base: KeyLoc) -> Result<ed25519_dalek_loader::PublicKey, &'static str> {
         let mut pk_bytes: [u8; 32] = [0; 32];
         for (offset, pk_word) in pk_bytes.chunks_exact_mut(4).enumerate() {
@@ -254,37 +251,8 @@ impl Keyrom {
     }
 }
 
-#[cfg(feature = "renode-bypass")]
-pub fn validate_xous_img(_xous_img_offset: *const u32) -> bool {
-    // conjure the signature struct directly out of memory. super unsafe.
-    let mut cursor = Point {x: LEFT_MARGIN, y: (FB_LINES as i16 / 2) + 10}; // draw on bottom half
-
-    // clear screen to all black
-    let mut gfx = Gfx {
-        csr: CSR::new(utra::memlcd::HW_MEMLCD_BASE as *mut u32),
-        fb: unsafe{core::slice::from_raw_parts_mut(utralib::HW_MEMLCD_MEM as *mut u32, FB_SIZE)},
-    };
-    gfx.init(100_000_000);
-
-    let (_top, bottom) = gfx.fb.split_at_mut(gfx.fb.len() / 2);
-    for (_i, word) in bottom.iter_mut().enumerate() {
-        *word = 0xff00_ff00;
-    }
-    gfx.flush();
-    gfx.msg("RENODE BYPASS SELECTED\n\r", &mut cursor);
-    gfx.msg("THIS IS A SECURITY VIOLATION\n\r", &mut cursor);
-    gfx.msg("ALL SIGCHECKS SKIPPED\n\r", &mut cursor);
-    let mut keyrom = Keyrom::new();
-    keyrom.lock();
-    gfx.set_devboot();
-    gfx.flush();
-    return true;
-    // this will emit a warning -- we want that. this is not a natural or intended normal code exit!
-}
-
 // returns true if the kernel is valid
 // side-effects the "devboot" register in the gfx engine if devkeys were detected
-#[cfg(not(feature = "renode-bypass"))]
 pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
     // reset the SHA block, in case we're coming out of a warm reset
     let mut sha = CSR::new(utra::sha512::HW_SHA512_BASE as *mut u32);
@@ -303,6 +271,23 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
     };
     gfx.init(100_000_000);
 
+    #[cfg(feature = "renode-bypass")]
+    {
+        let (_top, bottom) = gfx.fb.split_at_mut(gfx.fb.len() / 2);
+        for (i, word) in bottom.iter_mut().enumerate() {
+            *word = 0xff00_ff00;
+        }
+        gfx.flush();
+        gfx.msg("RENODE BYPASS SELECTED\n\r", &mut cursor);
+        gfx.msg("THIS IS A SECURITY VIOLATION\n\r", &mut cursor);
+        gfx.msg("ALL SIGCHECKS SKIPPED\n\r", &mut cursor);
+        let mut keyrom = Keyrom::new();
+        keyrom.lock();
+        gfx.set_devboot();
+        gfx.flush();
+        return true;
+        // this will emit a warning -- we want that. this is not a natural or intended normal code exit!
+    }
     // insert a pattern of alternating 0101/1010 to create a "gray effect" on the bottom half of the fb
     // note that the gray has "stripes" every 32 bits but it's visually easier to look at than stripes every other bit
     let (_top, bottom) = gfx.fb.split_at_mut(gfx.fb.len() / 2);
