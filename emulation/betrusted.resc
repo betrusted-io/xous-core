@@ -1,6 +1,5 @@
 # Boot Renode Script (boot.resc)
 
-i @emulation/linux-server.resc
 
 # Add this script's path to the global path, so
 # we can include files relative to ourselves.
@@ -46,6 +45,9 @@ i @peripherals/wfi.cs
 EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
 i @peripherals/vexriscv-aes.cs
 
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.TickTimer"
+i @peripherals/susres.cs
+
 # Create the COM SPI bus
 emulation CreateComConnector "com"
 
@@ -90,10 +92,11 @@ connector Connect sysbus.com com
 macro reset
 """
     #sysbus LoadBinary @flash-formatted.bin 0x20000000
-    sysbus LoadELF @../target/riscv32imac-unknown-xous-elf/release/loader
+    sysbus LoadBinary @../target/riscv32imac-unknown-xous-elf/release/loader.bin 0x20500000
     sysbus LoadBinary @../target/riscv32imac-unknown-xous-elf/release/xous.img 0x20980000
     # Set $a0 to point at the args binary
     cpu SetRegisterUnsafe 10 0x20980000
+    cpu PC 0x20501000
 """
 
 # Connect the serial port to an Ethernet port
@@ -129,9 +132,6 @@ macro reset
     cpu SP 0x1001FFFC
 """
 runMacro $reset
-
-connector Connect wifi.wf200 switch
-
 
 mach clear
 
