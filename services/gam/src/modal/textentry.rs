@@ -6,6 +6,7 @@ use xous_ipc::{String, Buffer};
 use num_traits::*;
 
 use core::fmt::Write;
+use core::cell::Cell;
 
 // TODO: figure out this, do we really have to limit ourselves to 10?
 const MAX_FIELDS: i16 = 10;
@@ -53,6 +54,7 @@ pub struct TextEntry {
 
     max_field_amount: u32,
     selected_field: i16,
+    field_height: Cell::<i16>,
 }
 
 impl Default for TextEntry {
@@ -66,6 +68,7 @@ impl Default for TextEntry {
             selected_field: Default::default(),
             action_payloads: Default::default(),
             max_field_amount: 0,
+            field_height: Cell::new(0),
         }
     }
 }
@@ -94,7 +97,7 @@ impl TextEntry {
         }
     }
 
-    pub fn reset_action_payloads(&mut self, fields: u32, placeholders: Option<[Option<xous_ipc::String<256>>; 10]>) { 
+    pub fn reset_action_payloads(&mut self, fields: u32, placeholders: Option<[Option<xous_ipc::String<256>>; 10]>) {
         let mut payload = vec![TextEntryPayload::default(); fields as usize];
 
         if let Some(placeholders) = placeholders {
@@ -102,7 +105,7 @@ impl TextEntry {
                 element.placeholder = placeholders[index];
             }
         }
-        
+
         self.action_payloads = payload;
         self.max_field_amount = fields;
     }
@@ -127,17 +130,23 @@ impl ActionApi for TextEntry {
 
             auto-closes on enter
         */
+        // the glyph_height is an opaque value because the final value depends upon a lookup table
+        // stored in the graphics_server crate. To obtain this would require a handle to that server
+        // which is private to the GAM. Thus we receive a copy of this from our caller and stash it
+        // here for future reference. `glyph_height` can change depending upon the locale; in particular,
+        // CJK languages have taller glyphs.
+        self.field_height.set(glyph_height + 2*margin); // stash a copy for later
 
-        let glyph_height = match self.action_payloads.len() {
-            0 | 1 => 1,
-            _ => glyph_height * (self.action_payloads.len() as i16 + 2),
-        } as i16;
+        // compute the overall_height of the entry fields
+        let mut overall_height =
+            self.field_height.get() * self.action_payloads.len() as i16;
 
+        // if we're a password, we add an extra glyph_height to the bottom for the text visibility items
         if self.is_password {
-            glyph_height + 2*margin + glyph_height
-        } else {
-            glyph_height + 2*margin
+            overall_height += glyph_height;
         }
+
+        overall_height
     }
     fn redraw(&self, at_height: i16, modal: &Modal) {
         const MAX_CHARS: usize = 33;
@@ -150,12 +159,13 @@ impl ActionApi for TextEntry {
         let mut current_height = at_height;
         let payloads = self.action_payloads.clone();
 
-        for (index, payload) in payloads.iter().enumerate() {
-            current_height = match index {
-                0 => at_height,
-                _ => current_height + at_height,
-            };
+        let bullet_margin = if payloads.len() > 1 {
+            17 // this is the margin for drawing the selection bullet
+        } else {
+            0 // no selection bullet
+        };
 
+        for (index, payload) in payloads.iter().enumerate() {
             if index as i16 == self.selected_field && payloads.len() > 1 {
                 // draw the dot
                 let mut tv = TextView::new(
@@ -168,21 +178,19 @@ impl ActionApi for TextEntry {
                 tv.text.clear();
                 tv.bounds_computed = None;
                 tv.draw_border = false;
-                write!(tv, "•").unwrap();
+                write!(tv, "•").unwrap(); // emoji glyph will be summoned in this case
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
             }
 
-            let left_text_margin = match payloads.len() {
-                1 => modal.margin,
-                _ => modal.margin + 15,
-            };
+
+            let left_text_margin = modal.margin + bullet_margin; // space for the bullet point on the left, if it's there
 
             // draw the currently entered text
             let mut tv = TextView::new(
                 modal.canvas,
                 TextBounds::BoundingBox(Rectangle::new(
                     Point::new(left_text_margin, current_height),
-                    Point::new(modal.canvas_width - modal.margin, current_height + modal.line_height))
+                    Point::new(modal.canvas_width - (modal.margin + bullet_margin), current_height + modal.line_height))
             ));
             tv.ellipsis = true;
             tv.invert = self.is_password;
@@ -190,6 +198,7 @@ impl ActionApi for TextEntry {
                 GlyphStyle::Monospace
             } else {
                 if payload.placeholder.is_some() && payload.content.len().is_zero() {
+                    // note: this is just a "recommendation" - if there is an emoji or chinese character in this string, the height revers to modal.style's height
                     GlyphStyle::Small
                 } else {
                     modal.style
@@ -339,18 +348,20 @@ impl ActionApi for TextEntry {
 
             // draw a line for where text gets entered (don't use a box, fitting could be awkward)
             modal.gam.draw_line(modal.canvas, Line::new_with_style(
-                Point::new(left_text_margin, current_height + modal.line_height + 4),
-                Point::new(modal.canvas_width - modal.margin, current_height + modal.line_height + 4),
+                Point::new(left_text_margin, current_height + modal.line_height + 3),
+                Point::new(modal.canvas_width - (modal.margin + bullet_margin), current_height + modal.line_height + 3),
                 DrawStyle::new(color, color, 1))
                 ).expect("couldn't draw entry line");
 
+            current_height += self.field_height.get();
         }
     }
     fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
-        let mut payload = self.action_payloads[self.selected_field as usize];
+        // needs to be a reference, otherwise we're operating on a copy of the payload!
+        let payload = &mut self.action_payloads[self.selected_field as usize];
 
         let can_move_downwards = !(self.selected_field+1 == self.max_field_amount as i16);
-        let can_move_upwards =  !(self.selected_field-1 < 0); 
+        let can_move_upwards =  !(self.selected_field-1 < 0);
 
         log::trace!("key_action: {}", k);
         match k {
@@ -382,7 +393,7 @@ impl ActionApi for TextEntry {
             },
             '∴' | '\u{d}' => {
                 if let Some(validator) = self.validator {
-                    if let Some(err_msg) = validator(payload, self.action_opcode) {
+                    if let Some(err_msg) = validator(*payload, self.action_opcode) {
                         payload.content.clear(); // reset the input field
                         return (Some(err_msg), false);
                     }
@@ -392,7 +403,7 @@ impl ActionApi for TextEntry {
                 payloads.0[..self.max_field_amount as usize].copy_from_slice(&self.action_payloads[..self.max_field_amount as usize]);
                 let buf = Buffer::into_buf(payloads).expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
-                
+
                 for payload in self.action_payloads.iter_mut() {
                     payload.volatile_clear();
                 }
@@ -444,7 +455,6 @@ impl ActionApi for TextEntry {
                         payload.content.push(k).expect("ran out of space storing password");
                         log::trace!("****update payload: {}", payload.content);
                         payload.dirty = true;
-                        self.action_payloads[self.selected_field as usize] = payload;
                     }
                 }
 
