@@ -596,7 +596,7 @@ pub fn start_time_ux(sid: xous::SID) {
                             .field(Some(String::from(t!("rtc.seconds", xous::LANG))), Some(rtc_ux_validate_seconds))
                             .build()
                             .expect("cannot get date from user");
-                        
+
                         for (index, elem) in date.content().iter().enumerate() {
                             let elem = elem.as_str().parse::<u8>().expect("pre-validated input failed to re-parse!");
                             match index {
@@ -605,7 +605,7 @@ pub fn start_time_ux(sid: xous::SID) {
                                 2 => years = elem,
                                 3 => hours = elem,
                                 4 => mins = elem,
-                                5 => secs = elem, 
+                                5 => secs = elem,
                                 _ => {},
                             }
                         }
