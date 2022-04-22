@@ -594,6 +594,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             {
                 this.powerIsOn.Value = false;
             }
+            RegistersCollection.Reset();
         }
 
         private readonly Machine machine;

@@ -31,37 +31,39 @@ else
     LOCALE=""
 fi
 
-wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
-./usb_update.py -l /tmp/loader.bin
-rm /tmp/loader.bin
-
-echo "waiting for device to reboot"
+./usb_update.py --disable-boot
+echo "waiting for device to reconnect"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/xous$LOCALE.img -O /tmp/xous.img
 ./usb_update.py -k /tmp/xous.img
 rm /tmp/xous.img
 
-echo "waiting for device to reboot"
-sleep 5
-
-wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
-./usb_update.py -s /tmp/soc_csr.bin
-rm /tmp/soc_csr.bin
-
-echo "waiting for device to reboot"
+echo "waiting for device to reconnect"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/ec_fw.bin -O /tmp/ec_fw.bin
 ./usb_update.py -e /tmp/ec_fw.bin
 rm /tmp/ec_fw.bin
 
+echo "waiting for device to reconnect"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/wf200_fw.bin -O /tmp/wf200_fw.bin
 ./usb_update.py -w /tmp/wf200_fw.bin
 rm /tmp/wf200_fw.bin
 
+echo "waiting for device to reconnect"
+sleep 5
+
+wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
+wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
+./usb_update.py --enable-boot-update -s /tmp/soc_csr.bin -l /tmp/loader.bin
+rm /tmp/loader.bin
+rm /tmp/soc_csr.bin
+
+echo " "
+echo "Please insert a paperclip into the hole in the lower right hand corner to force a full reset."
 echo " "
 echo "NOTE: This script merely stages the SOC update object."
 echo "You must run 'Install gateware update' from the root menu on the device itself"

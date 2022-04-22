@@ -28,8 +28,14 @@ pub(crate) const KEY_NAME_LEN: usize = 127 - 8 - 8 - 8 - 4 - 4; // u64: vaddr/le
 pub(crate) const PASSWORD_LEN: usize = 72; // this is actually set by bcrypt
 #[allow(dead_code)]
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
+/// migrateable version pairs
+/// PDDB_MIGRATE_1:
+///   00.00.01.01 - xous 0.9.7 release (original base release)
+///   00.00.02.01 - xous 0.9.8 migration -> hkdf added on basis key derivation to make separate PT/data keys
 #[allow(dead_code)]
-pub(crate) const PDDB_VERSION: u32 = 0x00_00_01_01;
+pub(crate) const PDDB_MIGRATE_1: (u32, u32) = (0x00_00_01_01, 0x00_00_02_01);
+#[allow(dead_code)]
+pub(crate) const PDDB_VERSION: u32 = 0x00_00_02_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]

@@ -38,13 +38,13 @@ pub(crate) enum Opcode {
     //UdpSetTtl = 3,
     //UdpGetTtl = 4,
 
-    /// Calls for TCP implementation
-    TcpConnect = 5,
-    TcpTx = 6,
-    TcpClose = 7,
-    TcpManage = 8,
-    TcpListen = 9,
-    TcpManageListener = 10,
+    /// Calls for TCP implementation (now deprecated to libstd)
+    //TcpConnect = 5,
+    //TcpTx = 6,
+    //TcpClose = 7,
+    //TcpManage = 8,
+    //TcpListen = 9,
+    //TcpManageListener = 10,
 
     // The DNS server can hook the Net crate for notifications on config updates
     /// Adds an Ipv4 as a DNS server
@@ -146,6 +146,8 @@ pub(crate) enum Opcode {
     /// Receives data from the specified TCP Connection. The TCP connection number is
     /// passed in the upper 16 bits of the opcode, and the number of received bytes
     /// is returned as part of the `Valid` parameter. This is not blocking.
+    ///   Unfortunately, it is *valid* to receive zero bytes, but the xous::Message parameter does not allow it.
+    ///   Thus the value of u32::MAX is mapped to "zero" bytes received.
     StdTcpPeek = 32,
 
     /// Receives data from the specified TCP Connection.
@@ -154,6 +156,8 @@ pub(crate) enum Opcode {
     /// - The return buffer is the `buf` parameter
     /// - The read timeout is passed as the `offset` parameter.
     /// - The number of received bytes is returned as part of the `valid` parameter.
+    ///   Unfortunately, it is *valid* to receive zero bytes, but the xous::Message parameter does not allow it.
+    ///   Thus the value of u32::MAX is mapped to "zero" bytes received.
     StdTcpRx = 33,
 
     /// Close the TCP connection. The connection ID is specified in the upper 16 bits
@@ -211,13 +215,13 @@ pub(crate) enum Opcode {
 
     /// Close the UDP connection. The connection ID is specified in the upper 16 bits
     /// of the opcode. This may be any kind of message (scalar, blockingscalar, memory,
-    /// etc.)
+     /// etc.)
     StdUdpClose = 41,
 
     /// Receives data from the specified UDP Connection.
     ///
     /// - The UDP connection number (fd) is passed in the upper 16 bits of the opcode.
-    /// # Argumesnts
+    /// # Arguments
     ///  The arguments are passed as follows:
     ///  u8 array
     /// -------|---------
@@ -280,6 +284,75 @@ pub(crate) enum Opcode {
     ///      0 | 1 indicating error, 0 indicating success
     ///      1 | Error code (only valid on error)
     StdUdpTx = 43,
+
+    /// Create a listener on the designated socket
+    ///
+    /// # Arguments
+    ///
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | port number, low byte
+    ///      1 | port number, high byte
+    ///      2 | address type -- 4 = ipv4, 6 = ipv6
+    ///    ... | remaining bytes are the address
+    ///
+    /// # Returns
+    ///
+    /// u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 0 indicating success
+    ///      1 | Connection index
+    ///
+    /// # Errors
+    ///
+    /// u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 1 indicating error
+    ///      1 | Error code
+    StdTcpListen = 44,
+
+    /// Converts incoming TCP connection Listener to a TcpStream object.
+    ///
+    /// - The TCP connection number (fd) is passed in the upper 16 bits of the opcode.
+    ///
+    /// # Arguments
+    ///
+    ///  The arguments are passed as follows:
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 0 indicates nonblocking; 1 indicates blocking
+    ///
+    /// # Returns
+    ///
+    /// The return buffer is the `buf` parameter, which is split as follows:
+    ///  u8 array
+    /// -------|---------
+    /// offset | Contents
+    /// =======|=========
+    ///      0 | 0 indicates success; 1 indicates error
+    ///      1 | connection index (lsb)
+    ///      2 | connection index (msb)
+    ///      3 | address type -- 4 = ipv4, 6 = ipv6, 0 = invalid/err
+    ///      4 | LSB ip address
+    ///      ...
+    ///      7 | MSB ipv4 address
+    ///      ...
+    ///      19| MSW ipv6 address
+    ///      20| remote port:u16, low byte
+    ///      21| remote port:u16, high byte
+    ///
+    /// - The `valid` and `offset` parameters are not used.
+    StdTcpAccept = 45,
+
+    StdTcpStreamShutdown = 46,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]

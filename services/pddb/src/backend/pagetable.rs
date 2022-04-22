@@ -1,4 +1,4 @@
-use super::{PAGE_SIZE, TrngPool, VirtAddr, murmur3_32};
+use super::{PAGE_SIZE, TrngPool, VirtAddr, murmur3_32, VPAGE_SIZE};
 use core::mem::size_of;
 use aes_gcm_siv::{Nonce, Tag};
 use std::rc::Rc;
@@ -44,6 +44,8 @@ impl Default for PtFlags {
 #[derive(Default)]
 pub(crate) struct Pte {
     /// the virtual page number is 52 bits long (52 + 12 = 64). 4 bits are wasted in this representation.
+    /// The storage format is in *page numbers* but the API accepts *addresses*. Therefore a division and
+    /// multiplication by VPAGE_SIZE wraps the getters and setters for this field.
     pddb_addr: [u8; 7],
     /// this maps to a u8
     flags: PtFlags,
@@ -57,7 +59,7 @@ impl Pte {
     pub fn new(va: VirtAddr, flags: PtFlags, entropy: Rc<RefCell<TrngPool>>) -> Self {
         let nonce_u32 = entropy.borrow_mut().get_u32();
         let mut pte = Pte {
-            pddb_addr: va.get().to_le_bytes()[..7].try_into().unwrap(),
+            pddb_addr: (va.get() / VPAGE_SIZE as u64).to_le_bytes()[..7].try_into().unwrap(),
             flags,
             nonce: nonce_u32.to_le_bytes(),
             checksum: [0; 4],
@@ -74,8 +76,22 @@ impl Pte {
         for (&src, dst) in self.pddb_addr.iter().zip(full_addr.iter_mut()) {
             *dst = src;
         }
+        VirtAddr::new(u64::from_le_bytes(full_addr) * VPAGE_SIZE as u64).unwrap()
+    }
+    /// V1 databases stored the virtual address as a full address, instead of as a page number, which means
+    /// the overall size of our database was about 4000x smaller than we had thought. This was fixed in v2,
+    /// but this getter is required to migrate from v1.
+    /// This allows us to retrieve the old address format for the first phase of migration.
+    #[cfg(feature="migration1")]
+    pub fn vaddr_v1(&self) -> VirtAddr {
+        let mut full_addr = [0u8; 8];
+        // LSB encoded, so this loop deposits the partial pddb_addr in the LSBs, and the MSBs are correctly 0 from above initializer
+        for (&src, dst) in self.pddb_addr.iter().zip(full_addr.iter_mut()) {
+            *dst = src;
+        }
         VirtAddr::new(u64::from_le_bytes(full_addr)).unwrap()
     }
+
     #[allow(dead_code)]
     pub fn flags(&self) -> PtFlags {
         self.flags

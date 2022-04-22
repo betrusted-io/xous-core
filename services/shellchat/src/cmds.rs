@@ -47,7 +47,7 @@ pub struct CommonEnv {
     trng: Trng,
     netmgr: net::NetManager,
     xns: xous_names::XousNames,
-    modals: modals::Modals, // TODO: remove me
+    boot_instant: std::time::Instant,
 }
 impl CommonEnv {
     pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
@@ -164,7 +164,7 @@ impl CmdEnv {
             trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
             netmgr: net::NetManager::new(),
-            modals: modals::Modals::new(&xns).unwrap(), // TODO: remove me
+            boot_instant: std::time::Instant::now(),
         };
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]
