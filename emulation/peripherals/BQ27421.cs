@@ -46,7 +46,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
             firstByte = true;
             secondByte = false;
             Temperature = 298.1M;
-            Voltage = 3700;
+            Voltage = 4000;
             SoC = 90;
             AvgCur = 300;
             RemainingCapacity = 4000;
@@ -120,13 +120,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
             {
                 result[i] = RegistersCollection.Read(regAddress + i);
             }
+            regAddress += count;
             return result;
         }
         public decimal Temperature { get; set; }
-        private uint Voltage;
-        private uint SoC;
-        private uint AvgCur;
-        private uint RemainingCapacity;
+        public uint Voltage;
+        public uint SoC;
+        public int AvgCur;
+        public uint RemainingCapacity;
 
         public GPIO IRQ { get; }
         public ByteRegisterCollection RegistersCollection { get; }
@@ -134,25 +135,25 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private void DefineRegisters()
         {
             Registers.TempLow.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "TEMPERATURE_SENSOR_LOW", valueProviderCallback: _ => ((uint)(Temperature * 10)) >> 8);
-            Registers.TempHigh.Define(this)
                 .WithValueField(0, 8, FieldMode.Read, name: "TEMPERATURE_SENSOR_LOW", valueProviderCallback: _ => ((uint)(Temperature * 10)));
+            Registers.TempHigh.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, name: "TEMPERATURE_SENSOR_LOW", valueProviderCallback: _ => ((uint)(Temperature * 10)) >> 8);
             Registers.VoltLow.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "VOLTAGE_LOW", valueProviderCallback: _ => Voltage >> 8);
+                .WithValueField(0, 8, FieldMode.Read, name: "VOLTAGE_LOW", valueProviderCallback: _ => Voltage);
             Registers.VoltHigh.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "VOLTAGE_HIGH", valueProviderCallback: _ => Voltage);
+                .WithValueField(0, 8, FieldMode.Read, name: "VOLTAGE_HIGH", valueProviderCallback: _ => Voltage >> 8);
             Registers.AvgCurLow.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "AVGCUR_LOW", valueProviderCallback: _ => AvgCur >> 8);
+                .WithValueField(0, 8, FieldMode.Read, name: "AVGCUR_LOW", valueProviderCallback: _ => (uint)AvgCur);
             Registers.AvgCurHigh.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "AVGCUR_HIGH", valueProviderCallback: _ => AvgCur);
+                .WithValueField(0, 8, FieldMode.Read, name: "AVGCUR_HIGH", valueProviderCallback: _ => (uint)(AvgCur >> 8));
             Registers.RmLow.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "RM_LOW", valueProviderCallback: _ => RemainingCapacity >> 8);
+                .WithValueField(0, 8, FieldMode.Read, name: "RM_LOW", valueProviderCallback: _ => RemainingCapacity);
             Registers.RmHigh.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "RM_HIGH", valueProviderCallback: _ => RemainingCapacity);
+                .WithValueField(0, 8, FieldMode.Read, name: "RM_HIGH", valueProviderCallback: _ => RemainingCapacity >> 8);
             Registers.SocLow.Define(this)
                 .WithValueField(0, 8, FieldMode.Read, name: "SOC_LOW", valueProviderCallback: _ => SoC);
             Registers.SocHigh.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, name: "SOC_HIGH", valueProviderCallback: _ => SoC);
+                .WithValueField(0, 8, FieldMode.Read, name: "SOC_HIGH", valueProviderCallback: _ => SoC >> 8);
         }
 
         private void RegistersAutoIncrement()

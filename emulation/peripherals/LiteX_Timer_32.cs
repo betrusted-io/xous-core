@@ -45,6 +45,7 @@ namespace Antmicro.Renode.Peripherals.Timers
             latchedValue = 0;
             loadValue = 0;
             reloadValue = 0;
+            RegistersCollection.Reset();
 
             UpdateInterrupts();
         }

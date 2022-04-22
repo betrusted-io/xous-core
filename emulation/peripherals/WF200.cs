@@ -795,6 +795,11 @@ namespace Antmicro.Renode.Peripherals.Network
                 // this.Log(LogLevel.Info, "Sending response for configuration message: {0}", message);
                 pendingTxMessages.Enqueue(message);
             }
+            else if (req == WfxMessage.Requests.Disconnect)
+            {
+                var message = new WfxMessage(WfxMessage.Confirmations.Disconnect, okayResponse, configurationOffset);
+                pendingTxMessages.Enqueue(message);
+            }
             else
             {
                 this.Log(LogLevel.Error, "Unhandled request: {0}", request);

@@ -493,7 +493,7 @@ pub fn start_time_ux(sid: xous::SID) {
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(TimeUxOp::SetTime) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                         if !pddb_poller.is_mounted_nonblocking() {
-                            modals.show_notification(t!("stats.please_mount", xous::LANG)).expect("couldn't show notification");
+                            modals.show_notification(t!("stats.please_mount", xous::LANG), false).expect("couldn't show notification");
                             continue;
                         }
                         let mut tz_set_handle = pddb::Pddb::new();
@@ -575,7 +575,7 @@ pub fn start_time_ux(sid: xous::SID) {
                                 }
                                 Err(err) => {
                                     log::info!("Err: {:?}", err);
-                                    modals.show_notification(t!("rtc.ntp_fail", xous::LANG)).expect("couldn't show NTP error");
+                                    modals.show_notification(t!("rtc.ntp_fail", xous::LANG), false).expect("couldn't show NTP error");
                                 },
                             }
                         }
@@ -596,7 +596,7 @@ pub fn start_time_ux(sid: xous::SID) {
                             .field(Some(String::from(t!("rtc.seconds", xous::LANG))), Some(rtc_ux_validate_seconds))
                             .build()
                             .expect("cannot get date from user");
-                        
+
                         for (index, elem) in date.content().iter().enumerate() {
                             let elem = elem.as_str().parse::<u8>().expect("pre-validated input failed to re-parse!");
                             match index {
@@ -605,7 +605,7 @@ pub fn start_time_ux(sid: xous::SID) {
                                 2 => years = elem,
                                 3 => hours = elem,
                                 4 => mins = elem,
-                                5 => secs = elem, 
+                                5 => secs = elem,
                                 _ => {},
                             }
                         }
@@ -624,7 +624,7 @@ pub fn start_time_ux(sid: xous::SID) {
                     }),
                     Some(TimeUxOp::SetTimeZone) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                         if !pddb_poller.is_mounted_nonblocking() {
-                            modals.show_notification(t!("stats.please_mount", xous::LANG)).expect("couldn't show notification");
+                            modals.show_notification(t!("stats.please_mount", xous::LANG), false).expect("couldn't show notification");
                             continue;
                         }
 

@@ -547,7 +547,7 @@ fn xmain() -> ! {
                         // can't mount if we have no root keys
                         xous::return_scalar(msg.sender, 0).expect("could't return scalar");
                     } else {
-                        match ensure_password(&modals, &mut pddb_os) {
+                        match ensure_password(&modals, &mut pddb_os, pw_cid) {
                             PasswordState::Correct => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
@@ -1132,7 +1132,7 @@ fn xmain() -> ! {
                 for basis in bases.iter() {
                     note.push_str(basis);
                 }
-                modals.show_notification(&note).expect("couldn't show basis list");
+                modals.show_notification(&note, false).expect("couldn't show basis list");
             },
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Some(Opcode::DangerousDebug) => {
@@ -1178,7 +1178,7 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordState {
+fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {
     log::info!("Requesting login password");
     loop {
         match pddb_os.try_login() {
@@ -1204,6 +1204,18 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs) -> PasswordSta
                 }
             }
             PasswordState::Uninit => {
+                // check for a migration event
+                #[cfg(feature="migration1")]
+                {
+                    if pddb_os.migration_v1_to_v2(_pw_cid) == PasswordState::Correct {
+                        if pddb_os.try_login() == PasswordState::Correct {
+                            log::info!("Migration v1->v2 successful");
+                            return PasswordState::Correct
+                        } else {
+                            log::warn!("Migration v1->v2 succeeded, but somehow the v2 remount failed.");
+                        }
+                    }
+                }
                 return PasswordState::Uninit;
             }
         }
@@ -1281,7 +1293,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                     log::error!("Despite formatting, no PDDB was found!");
                     let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                     err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
-                    modals.show_notification(err.as_str()).expect("notification failed");
+                    modals.show_notification(err.as_str(), false).expect("notification failed");
                     false
                 }
             } else {
@@ -1306,7 +1318,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 log::error!("Despite formatting, no PDDB was found!");
                 let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                 err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
-                modals.show_notification(err.as_str()).expect("notification failed");
+                modals.show_notification(err.as_str(), false).expect("notification failed");
                 false
             }
         }

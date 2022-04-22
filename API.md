@@ -1,3 +1,6 @@
+The [Xous Book](https://betrusted.io/xous-book/ch07-02-caller-idioms.html) reviews the system architecture and breaks down the various API idioms chapter-by-chapter.
+
+This document conveys much of the similar information, but in a more monolithic form. This document also does not cover [deferred response](https://betrusted.io/xous-book/ch07-06-deferred.html) idioms.
 
 ## Xous Messaging API In Practice
 

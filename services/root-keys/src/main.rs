@@ -196,6 +196,7 @@ mod implementation {
             false
         }
         pub fn is_pcache_boot_password_valid(&self) -> bool {
+            // set this to `false` to test password boxes in hosted mode
             true
         }
         pub fn fpga_key_source(&self) -> FpgaKeySource {
@@ -370,6 +371,7 @@ fn xmain() -> ! {
             vec![TextEntryPayload::new()],
             None,
     );
+    password_action.reset_action_payloads(1, None);
     let mut dismiss_modal_action = Notification::new(main_cid, Opcode::UxGutter.to_u32().unwrap());
     dismiss_modal_action.set_is_password(true);
 
@@ -463,7 +465,7 @@ fn xmain() -> ! {
                     // - pepper
 
                     if keys.is_initialized() {
-                        modals.show_notification(t!("rootkeys.already_init", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.already_init", xous::LANG), false).expect("modals error");
                         #[cfg(feature="tts")]
                         tts.tts_blocking(t!("rootkeys.already_init", xous::LANG)).unwrap();
                         keys.set_ux_password_type(None);
@@ -506,10 +508,10 @@ fn xmain() -> ! {
                 //   - setup_key_init has also been called (exactly once, before anything happens)
                 //   - set_ux_password_type has been called already
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.as_str());
-                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
                 keys.set_ux_password_type(Some(PasswordType::Update));
@@ -526,10 +528,10 @@ fn xmain() -> ! {
             },
             Some(Opcode::UxInitUpdatePasswordReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.as_str());
-                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
                 keys.set_ux_password_type(None);
@@ -552,16 +554,16 @@ fn xmain() -> ! {
                         ).expect("couldn't initiate dialog box");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
                     }
                 }
             },
@@ -576,7 +578,7 @@ fn xmain() -> ! {
                 log::info!("Vbus is: {:.3}V", vbus);
                 if vbus > 1.5 {
                     // if power is plugged in, request that it be removed
-                    modals.show_notification(t!("rootkeys.init.unplug_power", xous::LANG)).expect("modals error");
+                    modals.show_notification(t!("rootkeys.init.unplug_power", xous::LANG), false).expect("modals error");
                     log::info!("vbus is high, holding off on reboot");
                     send_message(main_cid,
                         xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
@@ -629,7 +631,7 @@ fn xmain() -> ! {
                     SignatureResult::DevKeyOk => t!("rootkeys.gwup.viewinfo_dk", xous::LANG),
                     _ => {
                         modals.dynamic_notification_close().expect("modals error");
-                        modals.show_notification(t!("rootkeys.gwup.no_update_found", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.gwup.no_update_found", xous::LANG), false).expect("modals error");
                         continue;
                     }
                 };
@@ -659,18 +661,18 @@ fn xmain() -> ! {
                 match modals.get_radiobutton(prompt) {
                     Ok(response) => {
                         if response == t!("rootkeys.gwup.short", xous::LANG) {
-                            modals.show_notification(info.as_str()).expect("modals error");
+                            modals.show_notification(info.as_str(), false).expect("modals error");
                         } else if response == t!("rootkeys.gwup.details", xous::LANG) {
-                            modals.show_notification(info.as_str()).expect("modals error");
+                            modals.show_notification(info.as_str(), false).expect("modals error");
                             let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
                             // truncate the message to better fit in the rendering box
                             let info_len = if gw_info.log_len > 256 { 256 } else {gw_info.log_len};
                             let info = format!("{}", str::from_utf8(&gw_info.log_str[..info_len as usize]).unwrap());
-                            modals.show_notification(info.as_str()).expect("modals error");
+                            modals.show_notification(info.as_str(), false).expect("modals error");
                             // truncate the message to better fit in the rendering box
                             let status_len = if gw_info.status_len > 256 { 256 } else {gw_info.status_len};
                             let info = format!("{}", str::from_utf8(&gw_info.status_str[..status_len as usize]).unwrap());
-                            modals.show_notification(info.as_str()).expect("modals error");
+                            modals.show_notification(info.as_str(), false).expect("modals error");
                         } else {
                             skip_confirmation = true;
                         }
@@ -723,10 +725,10 @@ fn xmain() -> ! {
             }
             Some(Opcode::UxUpdateGwPasswordReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.as_str());
-                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
                 // indicate that there should be no change to the policy
                 let payload = gam::RadioButtonPayload::new(t!("rootkeys.policy_suspend", xous::LANG));
@@ -760,21 +762,21 @@ fn xmain() -> ! {
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.gwup.finished", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.gwup.finished", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
                     }
                 }
             }
@@ -800,10 +802,10 @@ fn xmain() -> ! {
             },
             Some(Opcode::UxSignXousPasswordReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.as_str());
-                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
                 let payload = gam::RadioButtonPayload::new(t!("rootkeys.policy_suspend", xous::LANG));
@@ -834,21 +836,21 @@ fn xmain() -> ! {
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.signxous.finished", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.signxous.finished", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
                     }
                 }
             }
@@ -885,17 +887,17 @@ fn xmain() -> ! {
                     // more keys with more passwords, this policy may need to become markedly more complicated!
 
                     // otherwise, an invalid password request
-                    modals.show_notification(t!("rootkeys.bad_password_request", xous::LANG)).expect("modals error");
+                    modals.show_notification(t!("rootkeys.bad_password_request", xous::LANG), false).expect("modals error");
 
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
             Some(Opcode::UxAesPasswordPolicy) => { // this is bypassed, it's not useful. You basically always only want to retain the password until sleep.
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.as_str());
-                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
                 let mut confirm_radiobox = gam::modal::RadioButtons::new(
@@ -933,10 +935,9 @@ fn xmain() -> ! {
                     }
                     {
                         let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
-
-                        keys.hash_and_save_password(plaintext_pw.as_str());
-                        plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                        let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+                        keys.hash_and_save_password(plaintext_pw.first().as_str());
+                        plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                         buf.volatile_clear();
 
                         // this is a reasonable default policy -- don't bother the user to answer this question all the time.
@@ -978,7 +979,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::BbramProvision) => {
-                modals.show_notification(t!("rootkeys.bbram.confirm", xous::LANG)).expect("modals error");
+                modals.show_notification(t!("rootkeys.bbram.confirm", xous::LANG), false).expect("modals error");
                 let console_input = gam::modal::ConsoleInput::new(
                     main_cid,
                     Opcode::UxBbramCheckReturn.to_u32().unwrap()
@@ -994,10 +995,10 @@ fn xmain() -> ! {
             }
             Some(Opcode::UxBbramCheckReturn) => {
                 let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let console_text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
-                log::info!("got console text:{}", console_text.as_str());
-                if console_text.as_str().starts_with("HELPER_OK") {
-                    log::info!("got '{}', moving on", console_text.as_str());
+                let console_text = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+                log::info!("got console text:{}", console_text.first().as_str());
+                if console_text.first().as_str().starts_with("HELPER_OK") {
+                    log::info!("got '{}', moving on", console_text.first().as_str());
                     // proceed
                     if keys.is_pcache_update_password_valid() || !keys.is_initialized() {
                         send_message(main_cid,
@@ -1016,16 +1017,16 @@ fn xmain() -> ! {
                         rootkeys_modal.activate();
                     }
                 } else {
-                    modals.show_notification(t!("rootkeys.bbram.no_helper", xous::LANG)).expect("modals error");
+                    modals.show_notification(t!("rootkeys.bbram.no_helper", xous::LANG), false).expect("modals error");
                     continue;
                 }
             }
             Some(Opcode::UxBbramPasswordReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.as_str());
-                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
                 send_message(main_cid,
                     xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0)
@@ -1039,21 +1040,21 @@ fn xmain() -> ! {
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.bbram.finished", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.bbram.finished", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG)).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
                     }
                 }
             }

@@ -9,6 +9,8 @@ mod std_glue;
 use std_glue::*;
 mod std_udp;
 use std_udp::*;
+mod std_tcplistener;
+use std_tcplistener::*;
 
 use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 use num_traits::*;
@@ -25,7 +27,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 use smoltcp::iface::{Interface, InterfaceBuilder, NeighborCache, Routes};
 use smoltcp::phy::{Device, Medium};
 use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 
 use core::num::NonZeroU64;
@@ -38,6 +40,7 @@ use std::sync::Arc;
 use std::thread;
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
+const MAX_DELAY_THREADS: u32 = 16; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
 
 fn set_ipv4_addr<DeviceT>(iface: &mut Interface<'_, DeviceT>, cidr: Ipv4Cidr)
 where
@@ -79,23 +82,16 @@ pub struct PingConnection {
     retop: usize,
 }
 
-#[derive(Hash, PartialEq, Eq)]
-pub struct TcpConnection {
-    remote: IpAddress,
-    remote_port: u16,
-    local_port: u16,
-}
-#[derive(Copy, Clone, Debug)]
-pub struct TcpState {
-    handle: SocketHandle,
-    cid: CID,
-    shutdown_rx: bool,
-}
-
 struct WaitingSocket {
     env: xous::MessageEnvelope,
     handle: SocketHandle,
     expiry: Option<NonZeroU64>,
+}
+
+struct AcceptingSocket {
+    env: xous::MessageEnvelope,
+    handle: SocketHandle,
+    fd: usize,
 }
 
 pub struct UdpStdState {
@@ -151,7 +147,6 @@ fn xmain() -> ! {
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list).ok();
     log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
-    const MAX_DELAY_THREADS: u32 = 10; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
     let delay_threads = Arc::new(AtomicU32::new(0));
     let mut net_config: Option<Ipv4Conf> = None;
 
@@ -182,6 +177,9 @@ fn xmain() -> ! {
             u16, /* remote_port */
         )>,
     > = Vec::new();
+
+    // When a client issues an Accept request, it gets placed here for later processing.
+    let mut tcp_accept_waiting: Vec<Option<AcceptingSocket>> = Vec::new();
 
     // When a UDP client opens a socket, an entry is automatically created here to accumulate
     // incoming UDP socket data.
@@ -218,10 +216,6 @@ fn xmain() -> ! {
     // this record stores the origin time + IP address of the outgoing ping sequence number
     let mut ping_destinations = HashMap::<PingConnection, HashMap<u16, u64>>::new();
     let mut ping_timeout_ms = PING_DEFAULT_TIMEOUT_MS;
-
-    // tcp storage
-    let mut tcp_handles = HashMap::<TcpConnection, TcpState>::new();
-    let mut tcp_listeners = HashMap::<u16, Vec<TcpState>>::new();
 
     // other link storage
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
@@ -492,6 +486,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdTcpTx) => {
+                log::debug!("StdTcpTx");
                 let pid = msg.sender.pid();
                 std_tcp_tx(
                     msg,
@@ -510,11 +505,20 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdTcpPeek) => {
+                log::debug!("StdTcpPeek");
                 let pid = msg.sender.pid();
                 std_tcp_peek(msg, &mut sockets, process_sockets.entry(pid).or_default());
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpRx) => {
+                log::debug!("StdTcpRx");
                 let pid = msg.sender.pid();
                 std_tcp_rx(
                     msg,
@@ -523,9 +527,17 @@ fn xmain() -> ! {
                     &mut tcp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdTcpClose) => {
+                log::debug!("StdTcpClose");
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
                 let handle = if let Some(connection) = process_sockets
@@ -550,6 +562,138 @@ fn xmain() -> ! {
                 } else if !msg.body.has_memory() && msg.body.is_blocking() {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
+            }
+
+            Some(Opcode::StdTcpStreamShutdown) => {
+                log::debug!("StdTcpStreamShutdown");
+                // Only work with blockingscalar messages
+                if !msg.body.is_blocking() || msg.body.has_memory() {
+                    respond_with_error(msg, NetError::LibraryError);
+                    continue;
+                }
+
+                let pid = msg.sender.pid();
+                let connection_idx = msg.body.id() >> 16;
+                let shutdown_code = msg.body.scalar_message().unwrap().arg1;
+                if let Some(Some(connection)) = process_sockets
+                    .entry(pid)
+                    .or_default()
+                    .get(connection_idx)
+                {
+                    if (shutdown_code & 1) != 0 { // read shutdown
+                        // search for the handle in the rxwaiting set
+                        for rx_waiter in tcp_rx_waiting.iter_mut() {
+                            let WaitingSocket {
+                                env: mut msg,
+                                handle,
+                                expiry: _,
+                            } = match rx_waiter {
+                                &mut None => continue,
+                                Some(s) => {
+                                    if s.handle == *connection {
+                                        rx_waiter.take().unwrap() // removes the message from the waiting queue
+                                    } else {
+                                        continue
+                                    }
+                                }
+                            };
+                            // if we got here, we found a message that needs to be aborted
+                            log::info!("TcpShutdown: aborting rx waiting handle: {:?}", handle);
+                            match msg.body.memory_message_mut() {
+                                Some(body) => {
+                                    // u32::MAX indicates a zero-length receive
+                                    body.valid = xous::MemorySize::new(u32::MAX as usize);
+                                },
+                                None => {
+                                    respond_with_error(msg, NetError::LibraryError);
+                                }
+                            }
+                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            break;
+                        }
+                    }
+                    if (shutdown_code & 2) != 0 { // write shutdown
+                        // search for the handle in the txwaiting set
+                        for tx_waiter in tcp_tx_waiting.iter_mut() {
+                            let WaitingSocket {
+                                env: mut msg,
+                                handle,
+                                expiry: _,
+                            } = match tx_waiter {
+                                &mut None => continue,
+                                Some(s) => {
+                                    if s.handle == *connection {
+                                        tx_waiter.take().unwrap() // removes the message from the waiting queue
+                                    } else {
+                                        continue
+                                    }
+                                }
+                            };
+                            // if we got here, we found a message that needs to be aborted
+                            log::info!("TcpShutdown: aborting tx waiting handle: {:?}", handle);
+                            match msg.body.memory_message_mut() {
+                                Some(body) => {
+                                    // u32::MAX indicates a zero-length receive
+                                    body.valid = xous::MemorySize::new(u32::MAX as usize);
+                                    let response_data = body.buf.as_slice_mut::<u32>();
+                                    response_data[0] = 0;
+                                    response_data[1] = 0;
+                                },
+                                None => {
+                                    respond_with_error(msg, NetError::LibraryError);
+                                }
+                            }
+                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            break;
+                        }
+                    }
+                }
+
+                // unblock the sender
+                xous::return_scalar(msg.sender, 1).ok();
+                // pump the rx to process any shutdowns
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
+            }
+
+            Some(Opcode::StdTcpListen) => {
+                let pid = msg.sender.pid();
+
+                std_tcp_listen(
+                    msg,
+                    &mut sockets,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
+            }
+
+            Some(Opcode::StdTcpAccept) => {
+                let pid = msg.sender.pid();
+
+                std_tcp_accept(
+                    msg,
+                    &mut sockets,
+                    &mut tcp_accept_waiting,
+                    process_sockets.entry(pid).or_default(),
+                );
+                xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0, 0, 0, 0
+                    ),
+                ).ok();
             }
 
             Some(Opcode::StdGetAddress) => {
@@ -697,321 +841,6 @@ fn xmain() -> ! {
                 };
             }
 
-            Some(Opcode::TcpConnect) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap(); // need to define this
-                let address = IpAddress::from(tcpspec.ip_addr);
-                let remote_port = tcpspec.remote_port;
-
-                // initiates a new connection to a remote server consisting of an (Address:Port) tuple.
-                // multiple connections can exist to a server, and they are further differentiated by the return port
-                let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-                if let Some(timeout) = tcpspec.timeout_ms {
-                    tcp_socket.set_timeout(Some(Duration::from_millis(timeout)));
-                }
-                if let Some(keepalive) = tcpspec.keepalive_ms {
-                    tcp_socket.set_keep_alive(Some(Duration::from_millis(keepalive)));
-                }
-                let local_port = (49152 + trng.get_u32().unwrap() % 16384) as u16;
-                match tcp_socket.connect((address, remote_port), local_port) {
-                    Ok(_) => {
-                        let connection = TcpConnection {
-                            remote: address,
-                            remote_port,
-                            local_port,
-                        };
-                        let handle = sockets.add(tcp_socket);
-                        let sid = tcpspec.cb_sid;
-                        let cid = xous::connect(SID::from_array(sid)).unwrap();
-                        let tcp_cb_state = TcpState {
-                            handle,
-                            cid,
-                            shutdown_rx: false,
-                        };
-                        tcp_handles.insert(connection, tcp_cb_state);
-                        tcpspec.local_port = Some(local_port);
-                        tcpspec.result = Some(NetMemResponse::Ok);
-                    }
-                    Err(e) => match e {
-                        smoltcp::Error::Illegal => {
-                            tcpspec.result = Some(NetMemResponse::SocketInUse);
-                        }
-                        smoltcp::Error::Unaddressable => {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                        _ => {
-                            tcpspec.result = Some(NetMemResponse::LibraryError);
-                        }
-                    },
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-            Some(Opcode::TcpManage) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap();
-                if let Some(local_port) = tcpspec.local_port {
-                    let connection = TcpConnection {
-                        remote: IpAddress::from(tcpspec.ip_addr),
-                        remote_port: tcpspec.remote_port,
-                        local_port,
-                    };
-                    if let Some(tcp_state) = tcp_handles.get_mut(&connection) {
-                        if let Some(code) = tcpspec.mgmt_code {
-                            match code {
-                                TcpMgmtCode::SetRxShutdown => {
-                                    tcp_state.shutdown_rx = true;
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::SetNoDelay(value) => {
-                                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    socket.set_nagle_enabled(value);
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::GetNoDelay(_) => {
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    let value = socket.nagle_enabled().is_some();
-                                    tcpspec.mgmt_code = Some(TcpMgmtCode::GetNoDelay(value));
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::SetTtl(mut ttl) => {
-                                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    if ttl > 255 {
-                                        ttl = 255;
-                                    }
-                                    if ttl > 0 {
-                                        socket.set_hop_limit(Some(ttl as u8));
-                                    } else {
-                                        socket.set_hop_limit(None);
-                                    }
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::GetTtl(_) => {
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    let value = socket.hop_limit().unwrap_or(64); // because that's what smoltcp does
-                                    tcpspec.mgmt_code = Some(TcpMgmtCode::GetTtl(value as u32));
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::ErrorCheck(_) => {
-                                    /* // I don't think there is actually any error check reporting available? `recv_error_check()` is a private function for smoltcp...
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    tcpspec.mgmt_code = Some(TcpMgmtCode::ErrorCheck(
-                                        match socket.recv_error_check() {
-                                            Ok(_) => NetMemResponse::Ok,
-                                            Err(smoltcp::Error::Finished) => NetMemResponse::Finished,
-                                            Err(smoltcp::Error::Illegal) => NetMemResponse::Invalid,
-                                            _ => Some(NetMemResponse::LibraryError),
-                                        }
-                                    ));*/
-                                    tcpspec.mgmt_code =
-                                        Some(TcpMgmtCode::ErrorCheck(NetMemResponse::Ok));
-                                    tcpspec.result = Some(NetMemResponse::Ok);
-                                }
-                                TcpMgmtCode::Flush(_) => {
-                                    let socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                                    if socket.send_queue() == 0 {
-                                        tcpspec.mgmt_code = Some(TcpMgmtCode::Flush(true));
-                                    } else {
-                                        tcpspec.mgmt_code = Some(TcpMgmtCode::Flush(false));
-                                    }
-                                }
-                                TcpMgmtCode::CloseListener => {
-                                    // this is used for listener management, should never be sent to this routine
-                                    tcpspec.result = Some(NetMemResponse::LibraryError);
-                                }
-                            }
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    } else {
-                        tcpspec.result = Some(NetMemResponse::Invalid);
-                    }
-                } else {
-                    tcpspec.result = Some(NetMemResponse::Invalid);
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-
-            Some(Opcode::TcpTx) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcp_tx = buf.to_original::<NetTcpTransmit, _>().unwrap();
-                let connection = TcpConnection {
-                    remote: IpAddress::from(tcp_tx.remote_addr),
-                    remote_port: tcp_tx.remote_port,
-                    local_port: tcp_tx.local_port,
-                };
-                if let Some(tcp_state) = tcp_handles.get(&connection) {
-                    let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                    if socket.can_send() {
-                        tcp_tx.result = match socket.send_slice(&tcp_tx.data[..tcp_tx.len as usize])
-                        {
-                            Ok(octets) => {
-                                log::trace!("sent {}", octets);
-                                tcp_tx.len = octets as u16;
-                                Some(NetMemResponse::Sent(octets as u16))
-                            }
-                            Err(_) => Some(NetMemResponse::LibraryError),
-                        }
-                    } else {
-                        log::trace!("tx can't send, please retry");
-                        // inform the sender it should retry
-                        tcp_tx.result = Some(NetMemResponse::SocketInUse);
-                    }
-                } else {
-                    log::trace!("tx spec invalid");
-                    tcp_tx.result = Some(NetMemResponse::Invalid);
-                }
-                buf.replace(tcp_tx).unwrap();
-            }
-            Some(Opcode::TcpClose) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap(); // need to define this
-                if let Some(local_port) = tcpspec.local_port {
-                    let connection = TcpConnection {
-                        remote: IpAddress::from(tcpspec.ip_addr),
-                        remote_port: tcpspec.remote_port,
-                        local_port,
-                    };
-                    if let Some(tcp_state) = tcp_handles.remove(&connection) {
-                        sockets.get::<TcpSocket>(tcp_state.handle).close();
-                        sockets.remove(tcp_state.handle);
-                        tcpspec.result = Some(NetMemResponse::Ok);
-                    } else {
-                        tcpspec.result = Some(NetMemResponse::Invalid);
-                    }
-                } else {
-                    tcpspec.result = Some(NetMemResponse::Invalid);
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-            Some(Opcode::TcpListen) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpListen, _>().unwrap();
-
-                let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-                let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-                log::debug!("adding listener to local port {}", tcpspec.local_port);
-                match tcp_socket.listen(tcpspec.local_port) {
-                    Ok(_) => {
-                        if let Some(list) = tcp_listeners.get(&tcpspec.local_port) {
-                            if list.len() > 0 {
-                                // empty check necessary because an empty vector is left if a socket went from listening->active, or was dropped
-                                // guarantee that all TTLs are same even if we're inserting a new socket
-                                let ttl = sockets.get::<TcpSocket>(list[0].handle).hop_limit();
-                                tcp_socket.set_hop_limit(ttl);
-                            }
-                        }
-                        let handle = sockets.add(tcp_socket);
-                        let sid = tcpspec.cb_sid;
-                        let cid = xous::connect(SID::from_array(sid)).unwrap();
-                        log::trace!("Listener with cid {}, sid {:x?} registered", cid, sid);
-                        let tcp_cb_state = TcpState {
-                            handle,
-                            cid,
-                            shutdown_rx: false,
-                        };
-                        if let Some(list) = tcp_listeners.get_mut(&tcpspec.local_port) {
-                            list.push(tcp_cb_state);
-                            log::trace!(
-                                "total listeners on port {}: {}",
-                                tcpspec.local_port,
-                                list.len()
-                            );
-                        } else {
-                            tcp_listeners.insert(tcpspec.local_port, vec![tcp_cb_state]);
-                            log::trace!("creating first listener on port {}", tcpspec.local_port);
-                        }
-                        tcpspec.result = Some(NetMemResponse::Ok);
-                    }
-                    Err(e) => match e {
-                        smoltcp::Error::Illegal => {
-                            tcpspec.result = Some(NetMemResponse::SocketInUse);
-                        }
-                        smoltcp::Error::Unaddressable => {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                        _ => {
-                            tcpspec.result = Some(NetMemResponse::LibraryError);
-                        }
-                    },
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-            Some(Opcode::TcpManageListener) => {
-                let mut buf = unsafe {
-                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
-                };
-                let mut tcpspec = buf.to_original::<NetTcpManage, _>().unwrap();
-                match tcpspec.mgmt_code {
-                    Some(TcpMgmtCode::CloseListener) => {
-                        if let Some(listener) = tcp_listeners.get_mut(&tcpspec.local_port.unwrap())
-                        {
-                            if let Some(tcp_state) = listener.pop() {
-                                sockets.get::<TcpSocket>(tcp_state.handle).close();
-                                log::debug!(
-                                    "closing one listener on port {:?}",
-                                    tcpspec.local_port
-                                );
-                                sockets.remove(tcp_state.handle);
-                                tcpspec.result = Some(NetMemResponse::Ok);
-                                // this may leave an empty vector in the tcp_listeners structure, but I think that's OK
-                            }
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    }
-                    Some(TcpMgmtCode::SetTtl(mut ttl)) => {
-                        if let Some(listener_vec) =
-                            tcp_listeners.get_mut(&tcpspec.local_port.unwrap())
-                        {
-                            for listener in listener_vec.iter_mut() {
-                                let mut socket = sockets.get::<TcpSocket>(listener.handle);
-                                if ttl > 255 {
-                                    ttl = 255;
-                                }
-                                if ttl > 0 {
-                                    socket.set_hop_limit(Some(ttl as u8));
-                                } else {
-                                    socket.set_hop_limit(None);
-                                }
-                            }
-                            tcpspec.result = Some(NetMemResponse::Ok);
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    }
-                    Some(TcpMgmtCode::GetTtl(_)) => {
-                        if let Some(listener) = tcp_listeners.get(&tcpspec.local_port.unwrap()) {
-                            if listener.len() > 0 {
-                                // all listeners "should" have an identical setting, so, just return the setting of the 0th one
-                                let socket = sockets.get::<TcpSocket>(listener[0].handle);
-                                let value = socket.hop_limit().unwrap_or(64); // because that's what smoltcp does
-                                tcpspec.mgmt_code = Some(TcpMgmtCode::GetTtl(value as u32));
-                                tcpspec.result = Some(NetMemResponse::Ok);
-                            } else {
-                                tcpspec.result = Some(NetMemResponse::Invalid);
-                            }
-                        } else {
-                            tcpspec.result = Some(NetMemResponse::Invalid);
-                        }
-                    }
-                    _ => tcpspec.result = Some(NetMemResponse::LibraryError),
-                }
-                buf.replace(tcpspec).unwrap();
-            }
-
             Some(Opcode::StdUdpBind) => {
                 let pid = msg.sender.pid();
                 std_udp_bind(
@@ -1060,11 +889,11 @@ fn xmain() -> ! {
                     if let Some(connection) = connection.take() {
                         connection
                     } else {
-                        udp_failure(msg, NetError::Invalid);
+                        std_failure(msg, NetError::Invalid);
                         continue;
                     }
                 } else {
-                    udp_failure(msg, NetError::Invalid);
+                    std_failure(msg, NetError::Invalid);
                     continue;
                 };
                 sockets.get::<UdpSocket>(handle).close();
@@ -1256,47 +1085,6 @@ fn xmain() -> ! {
                     }
                 }
 
-                // this block handles TCP rx
-                {
-                    for (_connection, tcp_state) in tcp_handles.iter() {
-                        if !tcp_state.shutdown_rx {
-                            let mut socket = sockets.get::<TcpSocket>(tcp_state.handle);
-                            if socket.can_recv() {
-                                match socket.recv(|data| {
-                                    let mut response = NetTcpResponse {
-                                        len: data.len() as u16,
-                                        data: [0; TCP_BUFFER_SIZE],
-                                    };
-                                    for (&src, dst) in data.iter().zip(response.data.iter_mut()) {
-                                        *dst = src;
-                                    }
-                                    let buf = Buffer::into_buf(response)
-                                        .expect("couldn't convert TCP response to memory message");
-                                    buf.send(
-                                        tcp_state.cid,
-                                        NetTcpCallback::RxData.to_u32().unwrap(),
-                                    )
-                                    .expect("couldn't send TCP response");
-                                    (data.len(), ())
-                                }) {
-                                    Ok(_) => (),
-                                    Err(e) => match e {
-                                        smoltcp::Error::Illegal => {
-                                            log::warn!("TCP fast open not supported");
-                                        }
-                                        smoltcp::Error::Finished => {
-                                            log::warn!("TCP packet received after close");
-                                        }
-                                        _ => {
-                                            log::warn!("Unknown TCP error");
-                                        }
-                                    },
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Connect calls take time to establish. This block checks to see if connections
                 // have been made and issues callbacks as necessary.
                 for connection in tcp_connect_waiting.iter_mut() {
@@ -1365,9 +1153,11 @@ fn xmain() -> ! {
                     match socket.recv_slice(body.buf.as_slice_mut()) {
                         Ok(count) => {
                             body.valid = xous::MemorySize::new(count);
+                            body.offset = xous::MemoryAddress::new(1);
                         }
                         Err(e) => {
                             log::trace!("unable to receive: {:?}", e);
+                            body.offset = None;
                             body.valid = None;
                         }
                     }
@@ -1433,77 +1223,33 @@ fn xmain() -> ! {
 
                     log::trace!("sent {}", sent_octets);
                     let response_data = body.buf.as_slice_mut::<u32>();
-                    body.valid = xous::MemorySize::new(sent_octets);
                     response_data[0] = 0;
                     response_data[1] = sent_octets as u32;
                 }
 
-                // this block handles TCP listeners
-                // There is no lock on sending Rx messages to the listener as it is being transformed
-                // because all messages come from *this thread* and by definition it is not re-entrant.
-                // If you end up splitting the Tcp Rx task and the Tcp Listener tasks into separate threads,
-                // Then you must worry about the possibility of a race condition between the transition of a
-                // TcpListener to a regular TcpStream client (that is, an Rx packet forwarded before the
-                // TcpStream is fully built).
-                if tcp_listeners.len() > 0 {
-                    // skip the whole chunk if we don't have any tcp listeners
-                    log::trace!("checking {} TCP listener sockets", tcp_listeners.len());
-                    for (&local_port, tcp_state_vec) in tcp_listeners.iter_mut() {
-                        let mut remove_indices = Vec::<usize>::new();
-                        for (index, tcp_state) in tcp_state_vec.iter().enumerate() {
-                            let socket = sockets.get::<TcpSocket>(tcp_state.handle);
+                // this handles TCP std listeners
+                for connection in tcp_accept_waiting.iter_mut() {
+                    let ep: IpEndpoint;
+                    let AcceptingSocket {
+                        mut env,
+                        handle: _,
+                        fd,
+                    } = match connection {
+                        &mut None => continue,
+                        Some(s) => {
+                            let socket = sockets.get::<TcpSocket>(s.handle);
                             if socket.is_active() {
-                                log::info!(
-                                    "Promoting a Listener on port {:?} from {:?} to a Stream",
-                                    socket.local_endpoint(),
-                                    socket.remote_endpoint()
-                                );
-                                // 1. promote this socket to a TCP rx socket (this creates a double-entry that is cleaned up in step 3)
-                                let connection = TcpConnection {
-                                    remote: socket.remote_endpoint().addr,
-                                    remote_port: socket.remote_endpoint().port,
-                                    local_port,
-                                };
-                                tcp_handles.insert(connection, *tcp_state);
-
-                                // 2. notify the listener
-                                let note = NetTcpListenCallback {
-                                    ip_addr: NetIpAddr::from(socket.remote_endpoint().addr),
-                                    remote_port: socket.remote_endpoint().port,
-                                    local_port,
-                                };
-                                log::debug!(
-                                    "Listener active, notification sent to {}: {:x?}",
-                                    tcp_state.cid,
-                                    note
-                                );
-                                let buf =
-                                    Buffer::into_buf(note).expect("can't transform memory message");
-                                buf.send(
-                                    tcp_state.cid,
-                                    NetTcpCallback::ListenerActive.to_u32().unwrap(),
-                                )
-                                .expect("can't inform callback of active status");
-                                log::trace!("listener index {} to remove", index);
-                                remove_indices.push(index);
-                                break;
+                                ep = socket.remote_endpoint();
+                                connection.take().unwrap()
                             } else {
-                                log::trace!("socket not active: {:?}", socket.remote_endpoint());
+                                continue;
                             }
                         }
-                        // 3. now cleanup and remove the ports from the listeners status
-                        remove_indices.sort(); // this should be in ascending order, but let's do this just to be sure.
-                        remove_indices.reverse();
-                        for index in remove_indices {
-                            tcp_state_vec.remove(index);
-                            log::trace!("removing listener index {}", index);
-                        }
-                        log::trace!("listeners remaining: {}", tcp_state_vec.len());
-                        // 4. At this point, the Listener is no more. However, the caller side will "renew" the
-                        // listener if the TcpListener is being used in an `incoming` loop.
+                    };
+                    let body = env.body.memory_message_mut().unwrap();
+                    let buf = body.buf.as_slice_mut::<u8>();
 
-                        // 5. Side note: an empty vector could be left in the tcp_listeners array. 🔥This is fine🔥.
-                    }
+                    tcp_accept_success(buf, fd as u16, ep);
                 }
 
                 // this block handles StdUdp
@@ -1537,7 +1283,7 @@ fn xmain() -> ! {
 
                     // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
-                        udp_failure(msg, NetError::TimedOut);
+                        std_failure(msg, NetError::TimedOut);
                         continue;
                     }
 
@@ -1555,7 +1301,7 @@ fn xmain() -> ! {
                             }
                             Err(e) => {
                                 log::error!("unable to receive: {:?}", e);
-                                udp_failure(msg, NetError::LibraryError);
+                                std_failure(msg, NetError::LibraryError);
                             }
                         }
                     } else {
@@ -1571,7 +1317,7 @@ fn xmain() -> ! {
                             }
                             Err(e) => {
                                 log::error!("unable to receive: {:?}", e);
-                                udp_failure(msg, NetError::LibraryError);
+                                std_failure(msg, NetError::LibraryError);
                             }
                         }
                     }

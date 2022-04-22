@@ -501,6 +501,8 @@ fn print_footer<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
 abracom_rtc: Sensors.ABRTCMC @ i2c 0x68
 
+audio_codec: Sensors.TLV320AIC3100 @ i2c 0x18
+
 flash: SPI.MXIC_MX66UM1G45G @ spinor
     underlyingMemory: spiflash
 
@@ -655,12 +657,14 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     cs_peripherals.insert("engine", "Miscellaneous.Engine");
     cs_peripherals.insert("com", "SPI.BetrustedSocCom");
     cs_peripherals.insert("i2c", "I2C.BetrustedSocI2C");
+    cs_peripherals.insert("jtag", "Miscellaneous.BetrustedJtag");
     cs_peripherals.insert("keyboard", "Input.BetrustedKbd");
     cs_peripherals.insert("keyrom", "Miscellaneous.Keyrom");
     cs_peripherals.insert("memlcd", "Video.BetrustedLCD");
     cs_peripherals.insert("sha512", "Miscellaneous.Sha512");
     cs_peripherals.insert("spinor_soft_int", "Miscellaneous.SpinorSoftInt");
     cs_peripherals.insert("spinor", "SPI.BetrustedSpinor");
+    cs_peripherals.insert("susres", "Timers.SusRes");
     cs_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
     cs_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
     cs_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");

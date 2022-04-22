@@ -39,13 +39,13 @@ impl<'a> AlertModalBuilder<'a> {
         match self.placeholders.len() {
             1.. =>  {
                 let mut pl:[Option<xous_ipc::String<256>>; 10] = Default::default();
-                
+
                 if fields_amt != self.placeholders.len() {
                     log::warn!("can't have more fields than placeholders");
                     self.modals.unlock();
                     return Err(xous::Error::UnknownError);
                 }
-        
+
                 for (index, placeholder) in self.placeholders.iter().enumerate() {
                     if let Some(string) = placeholder {
                         pl[index] = Some(xous_ipc::String::from_str(&string))
@@ -131,20 +131,21 @@ impl Modals {
     }
 
     pub fn alert_builder(&self, prompt: &str) -> AlertModalBuilder {
-        AlertModalBuilder { 
-            prompt: String::from(prompt), 
-            validators: vec![], 
-            placeholders: vec![], 
+        AlertModalBuilder {
+            prompt: String::from(prompt),
+            validators: vec![],
+            placeholders: vec![],
             modals: self
         }
     }
 
     /// this blocks until the notification has been acknowledged.
-    pub fn show_notification(&self, notification: &str) -> Result<(), xous::Error> {
+    pub fn show_notification(&self, notification: &str, as_qrcode: bool) -> Result<(), xous::Error> {
         self.lock();
         let spec = ManagedNotification {
             token: self.token,
             message: xous_ipc::String::from_str(notification),
+            as_qrcode,
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
@@ -170,9 +171,17 @@ impl Modals {
     /// but, progress updates are meant to be fast and frequent, and generally if a progress bar shows
     /// something whacky it's not going to affect a security outcome
     pub fn update_progress(&self, current: u32) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::UpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
-        ).expect("couldn't update progress");
+        match xous::try_send_message(self.conn,
+            Message::new_scalar(Opcode::DoUpdateProgress.to_usize().unwrap(), current as usize, 0, 0, 0)
+        ) {
+            Ok(_) => (),
+            Err(e) => {
+                log::warn!("update_progress failed with {:?}, skipping request", e);
+                // most likely issue is that the server queue is overfull because too many progress updates were sent
+                // sleep the sending thread to rate-limit requests, while discarding the current request.
+                xous::yield_slice()
+            }
+        }
         Ok(())
     }
 

@@ -414,7 +414,8 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         }
         let extra_export = KeyExport {
             basis_name: name,
-            key: extra_basis_key,
+            key: extra_basis_key.data,
+            pt_key: extra_basis_key.pt,
         };
         let mut export: Vec::<KeyExport> = Vec::new();
         export.push(extra_export);

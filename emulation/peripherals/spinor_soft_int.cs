@@ -75,6 +75,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             this.softintStatus = false;
             this.softintPending.Value = false;
             this.softintEnabled.Value = false;
+            RegistersCollection.Reset();
         }
 
         public GPIO IRQ { get; private set; }

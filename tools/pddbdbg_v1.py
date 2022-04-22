@@ -14,7 +14,6 @@ PAGE_SIZE = 4096
 VPAGE_SIZE = 4064
 MBBB_PAGES = 10
 DO_CI_TESTS = True
-VERSION = 0x02_01
 
 # build a table mapping all non-printable characters to None
 NOPRINT_TRANS_TABLE = {
@@ -138,13 +137,6 @@ def keycommit_decrypt(key, aad, pp_data):
         raise Exception(ValueError)
     return pt_data
 
-def basis_aad(name, version=VERSION, dna=0):
-    name_bytes = bytearray(name, 'utf-8')
-    # name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
-    name_bytes += version.to_bytes(4, 'little')
-    name_bytes += dna.to_bytes(8, 'little')
-
-    return name_bytes
 
 def main():
     global DO_CI_TESTS
@@ -180,7 +172,7 @@ def main():
         raw_key = key_f.read()
         num_keys = int.from_bytes(raw_key[:4], 'little')
         for i in range(num_keys):
-            name_all = raw_key[4 + i*128 : 4 + i*128 + 64]
+            name_all = raw_key[4 + i*96 : 4 + i*96 + 64]
             name_bytes = bytearray(b'')
             for b in name_all:
                 if b != 0:
@@ -188,11 +180,10 @@ def main():
                 else:
                     break
             name = name_bytes.decode('utf8', errors='ignore')
-            key_data = raw_key[4 + i*128 + 64 : 4 + i*128 + 96]
-            key_pt = raw_key[4 + i*128 + 96 : 4 + i*128 + 128]
-            keys[name] = [key_pt, key_data]
+            key = raw_key[4 + i*96 + 64 : 4 + i*96 + 96]
+            keys[name] = key
 
-    logging.info("Found basis keys (pt, data):")
+    logging.info("Found basis keys:")
     logging.info(str(keys))
 
     # tunable parameters for a filesystem
@@ -238,7 +229,7 @@ def main():
 
         for name, key in keys.items():
             if name in tables:
-                logging.info("Basis {}, key_pt: {}, key_data: {}".format(name, key[0].hex(), key[1].hex()))
+                logging.info("Basis {}, key: {}".format(name, key.hex()))
                 v2p_table = tables[name][0]
                 p2v_table = tables[name][1]
                 # v2p_table[0xfe0fe0] = 0x1200* 0x100
@@ -248,7 +239,7 @@ def main():
                 # print("pp_start: {:x}".format(pp_start))
                 pp_data = data[pp_start:pp_start + PAGE_SIZE]
                 try:
-                    pt_data = keycommit_decrypt(key[1], basis_aad(name), pp_data)
+                    pt_data = keycommit_decrypt(key, basis_aad(name), pp_data)
                     basis_data.extend(bytearray(pt_data))
                     logging.debug("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
                     # print([hex(x) for x in basis_data[:256]])
@@ -259,7 +250,7 @@ def main():
                     dicts_found = 0
                     dict_index = 0
                     while dict_index < MAX_DICTS and dicts_found < basis.num_dicts:
-                        bdict = BasisDicts(dict_index, v2p_table, data, key[1], name)
+                        bdict = BasisDicts(dict_index, v2p_table, data, key, name)
                         if bdict.valid:
                             basis_dicts[bdict.name] = bdict
                             dicts_found += 1
@@ -596,6 +587,15 @@ class Basis:
         #desc += ' DictPtr: {:x}\n'.format(self.dict_ptr)
         return desc
 
+def basis_aad(name, version=0x01_01, dna=0):
+    name_bytes = bytearray(name, 'utf-8')
+    # name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
+    name_bytes += version.to_bytes(4, 'little')
+    name_bytes += dna.to_bytes(8, 'little')
+
+    return name_bytes
+
+
 class Pte:
     PTE_LEN = 16
     def __init__(self, i_bytes):
@@ -608,7 +608,7 @@ class Pte:
         return self.bytes
 
     def addr(self):
-        return int.from_bytes(self.bytes[:7], 'little') * VPAGE_SIZE
+        return int.from_bytes(self.bytes[:7], 'little')
     def flags(self):
         if self.bytes[6] == 1:
             return 'CLN'
@@ -653,8 +653,8 @@ def decode_pagetable(img, entries, keys, mbbb):
     key_table = {}
     for name, key in keys.items():
         logging.debug("Pages for basis {}".format(name))
-        logging.debug("key: {}".format(key[0].hex()))
-        cipher = AES.new(key[0], AES.MODE_ECB)
+        logging.debug("key: {}".format(key.hex()))
+        cipher = AES.new(key, AES.MODE_ECB)
         pages = [img[i:i+PAGE_SIZE] for i in range(0, entries * Pte.PTE_LEN, PAGE_SIZE)]
         page_num = 0
         v2p_table = {}
@@ -672,7 +672,7 @@ def decode_pagetable(img, entries, keys, mbbb):
             for pte in encrypted_ptes:
                 maybe_pte = Pte(cipher.decrypt(pte))
                 if maybe_pte.is_valid():
-                    logging.debug(maybe_pte.as_str(page_num // Pte.PTE_LEN))
+                    logging.debug(maybe_pte.as_str(page_num))
                     p_addr = page_num * (4096 // Pte.PTE_LEN)
                     if maybe_pte.addr() in v2p_table:
                         logging.warning("duplicate V2P PTE entry, evicting {:x}:{:x}", maybe_pte.addr(), p_addr)
@@ -757,7 +757,7 @@ class Fscb:
                 logging.warning("Duplicate journal number found:\n   {} (in table)\n   {} (incoming)".format(cur_pp.as_str(), pp.as_str()))
 
     # this is the "AAD" used to encrypt the FastSpace
-    def aad(version=VERSION, dna=0):
+    def aad(version=0x01_01, dna=0):
         return bytearray([46, 70, 97, 115, 116, 83, 112, 97, 99, 101]) + version.to_bytes(4, 'little') + dna.to_bytes(8, 'little')
 
 class SpaceUpdate:
@@ -806,8 +806,8 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
             # print("data: {}".format(fscb_enc.hex()))
             try:
                 nonce = fscb_enc[:12]
-                logging.info("key: {}, nonce: {}".format(key[1].hex(), nonce.hex()))
-                cipher = AES_GCM_SIV(key[1], nonce)
+                logging.info("key: {}, nonce: {}".format(key.hex(), nonce.hex()))
+                cipher = AES_GCM_SIV(key, nonce)
                 logging.info("aad: {}".format(Fscb.aad().hex()))
                 logging.info("mac: {}".format(fscb_enc[-16:].hex()))
                 #print("data: {}".format(fscb_enc[12:-16].hex()))
@@ -818,8 +818,8 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2):
                 fscb = None
 
         if fscb != None:
-            logging.debug("key: {}".format(key[1].hex()))
-            cipher = AES.new(key[0], AES.MODE_ECB)
+            logging.debug("key: {}".format(key.hex()))
+            cipher = AES.new(key, AES.MODE_ECB)
             for update in space_update:
                 entries = [update[i:i+SpaceUpdate.SU_LEN] for i in range(0, len(update), SpaceUpdate.SU_LEN)]
                 for entry in entries:

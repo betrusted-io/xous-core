@@ -64,7 +64,10 @@ fn flashmem() -> &'static mut FlashSingleton {
 #[derive(Copy, Clone)]
 pub struct KeyExport {
     pub basis_name: [u8; 64],
+    /// data key
     pub key: [u8; 32],
+    /// page table key
+    pub pt_key: [u8; 32],
 }
 pub struct EmuStorage {
 }
@@ -105,6 +108,7 @@ impl EmuStorage {
         for key in known_keys {
             f.write_all(&key.basis_name).unwrap();
             f.write_all(&key.key).unwrap();
+            f.write_all(&key.pt_key).unwrap();
         }
         f.flush().unwrap();
     }
