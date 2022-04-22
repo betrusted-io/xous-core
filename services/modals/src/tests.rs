@@ -34,6 +34,16 @@ pub(crate) fn spawn_test() {
             let modals = modals::Modals::new(&xns).unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
+            // 0. multi-modal test
+            log::info!("modal data: {:#?}",
+            modals.alert_builder("Four items with maybe defaults. Press select to close.")
+                .field(Some("first".to_string()), None)
+                .field(Some("second".to_string()), None)
+                .field(None, None)
+                .field(Some("fourth".to_string()), None)
+                .build()
+            );
+
             // 1. test progress bar
             // The start and end items are deliberately structured to be not zero-indexed; the use of PDDB_LOC is just a
             // convenient global constant.
@@ -81,9 +91,12 @@ pub(crate) fn spawn_test() {
 
             // 2. test the modal dialog box function
             log::info!("test text input");
-            match modals.get_text("Test input", Some(test_validator), None) {
+            match modals
+                .alert_builder("Test input")
+                .field(None, Some(test_validator))
+                .build() {
                 Ok(text) => {
-                    log::info!("Input: {}", text.0);
+                    log::info!("Input: {}", text.content()[0].content);
                 }
                 _ => {
                     log::error!("get_text failed");
@@ -104,7 +117,7 @@ pub(crate) fn spawn_test() {
     });
 }
 
-fn test_validator(input: TextEntryPayload, _opcode: u32) -> Option<xous_ipc::String::<256>> {
+fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String::<256>> {
     let text_str = input.as_str();
     match text_str.parse::<u32>() {
         Ok(_input_int) => None,

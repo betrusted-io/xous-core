@@ -9,6 +9,108 @@ use num_traits::*;
 use xous_ipc::Buffer;
 use core::cell::Cell;
 
+pub type TextValidationFn = fn(TextEntryPayload) -> Option<ValidatorErr>;
+
+pub struct AlertModalBuilder<'a> {
+    prompt: String,
+    validators: Vec<Option<TextValidationFn>>,
+    placeholders: Vec<Option<String>>,
+    modals: &'a Modals,
+}
+
+impl<'a> AlertModalBuilder<'a> {
+    pub fn field(&'a mut self, placeholder: Option<String>, validator: Option<TextValidationFn>) -> &'a mut Self {
+        self.validators.push(validator);
+        self.placeholders.push(placeholder);
+        self
+    }
+
+    pub fn build(&self) -> Result<TextEntryPayloads, xous::Error> {
+        self.modals.lock();
+        let mut final_placeholders: Option<[Option<xous_ipc::String<256>>; 10]> = None;
+        let fields_amt = self.validators.len();
+
+        if fields_amt == 0 {
+            log::error!("must add at least one field to alert");
+            self.modals.unlock();
+            return Err(xous::Error::UnknownError);
+        }
+
+        match self.placeholders.len() {
+            1.. =>  {
+                let mut pl:[Option<xous_ipc::String<256>>; 10] = Default::default();
+
+                if fields_amt != self.placeholders.len() {
+                    log::warn!("can't have more fields than placeholders");
+                    self.modals.unlock();
+                    return Err(xous::Error::UnknownError);
+                }
+
+                for (index, placeholder) in self.placeholders.iter().enumerate() {
+                    if let Some(string) = placeholder {
+                        pl[index] = Some(xous_ipc::String::from_str(&string))
+                    } else {
+                        pl[index] = None
+                    }
+                }
+
+                final_placeholders = Some(pl)
+            }
+            0 => (),
+            _ => panic!("somehow len of placeholders was neither zero or >= 1...?")
+        }
+
+        let mut spec = ManagedPromptWithTextResponse {
+            token: self.modals.token,
+            prompt: xous_ipc::String::from_str(&self.prompt),
+            fields: fields_amt as u32,
+            placeholders: final_placeholders,
+        };
+
+        // question: do we want to add a retry limit?
+        loop {
+            let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+            buf.lend_mut(self.modals.conn, Opcode::PromptWithTextResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+            match buf.to_original::<TextEntryPayloads, _>() {
+                Ok(response) => {
+                    let mut form_validation_failed = false;
+                    for (index, validator) in self.validators.iter().enumerate() {
+                        if let Some(validator) = validator {
+                            if let Some(err_msg) = validator(response.content()[index]) {
+                                spec.prompt.clear();
+                                spec.prompt.append(err_msg.as_str().unwrap_or("UTF-8 error")).ok();
+                                form_validation_failed = true;
+                                break; // one of the validator failed
+                            }
+                        }
+                    }
+
+                    if form_validation_failed {
+                        continue; // leave the modal as it is
+                    }
+
+                    // If we're here all non-None validators returned okay, or no validators were specified in the first place at all.
+                    send_message(self.modals.conn,
+                        Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
+                        self.modals.token[0] as _, self.modals.token[1] as _, self.modals.token[2] as _, self.modals.token[3] as _,
+                    )).expect("couldn't acknowledge text entry");
+                    self.modals.unlock();
+                    return Ok(response)
+                },
+                _ => {
+                    // we send the valid response token even in this case because we want the modals server to move on and not get stuck on this error.
+                    send_message(self.modals.conn,
+                        Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
+                        self.modals.token[0] as _, self.modals.token[1] as _, self.modals.token[2] as _, self.modals.token[3] as _,
+                    )).expect("couldn't acknowledge text entry");
+                    self.modals.unlock();
+                    return Err(xous::Error::InternalError);
+                }
+            }
+        }
+    }
+}
+
 pub struct Modals {
     conn: CID,
     token: [u32; 4],
@@ -28,54 +130,12 @@ impl Modals {
         })
     }
 
-    pub fn get_text(&self,
-        prompt: &str,
-        maybe_validator: Option<fn(TextEntryPayload, u32) -> Option<ValidatorErr>>,
-        maybe_validator_op: Option<u32>,
-    ) -> Result<TextEntryPayload, xous::Error> {
-        self.lock();
-
-        let mut spec = ManagedPromptWithTextResponse {
-            token: self.token,
-            prompt: xous_ipc::String::from_str(prompt),
-        };
-        // question: do we want to add a retry limit?
-        loop {
-            let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
-            buf.lend_mut(self.conn, Opcode::PromptWithTextResponse.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-            match buf.to_original::<TextEntryPayload, _>() {
-                Ok(response) => {
-                    if let Some(validator) = maybe_validator {
-                        if let Some(err_msg) = validator(response, maybe_validator_op.unwrap_or(0)) {
-                            spec.prompt.clear();
-                            spec.prompt.append(err_msg.as_str().unwrap_or("UTF-8 error")).ok();
-                        } else {
-                            send_message(self.conn,
-                                Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
-                                self.token[0] as _, self.token[1] as _, self.token[2] as _, self.token[3] as _,
-                            )).expect("couldn't acknowledge text entry");
-                            self.unlock();
-                            return Ok(response)
-                        }
-                    } else {
-                        send_message(self.conn,
-                            Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
-                            self.token[0] as _, self.token[1] as _, self.token[2] as _, self.token[3] as _,
-                        )).expect("couldn't acknowledge text entry");
-                        self.unlock();
-                        return Ok(response)
-                    }
-                },
-                _ => {
-                    // we send the valid response token even in this case because we want the modals server to move on and not get stuck on this error.
-                    send_message(self.conn,
-                        Message::new_blocking_scalar(Opcode::TextResponseValid.to_usize().unwrap(),
-                        self.token[0] as _, self.token[1] as _, self.token[2] as _, self.token[3] as _,
-                    )).expect("couldn't acknowledge text entry");
-                    self.unlock();
-                    return Err(xous::Error::InternalError);
-                }
-            }
+    pub fn alert_builder(&self, prompt: &str) -> AlertModalBuilder {
+        AlertModalBuilder {
+            prompt: String::from(prompt),
+            validators: vec![],
+            placeholders: vec![],
+            modals: self
         }
     }
 

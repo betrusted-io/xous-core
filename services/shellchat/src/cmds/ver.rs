@@ -5,6 +5,7 @@ use xous_ipc::String;
 pub struct Ver {
 }
 
+
 impl<'a> ShellCmdApi<'a> for Ver {
     cmd_api!(ver); // inserts boilerplate for command API
 

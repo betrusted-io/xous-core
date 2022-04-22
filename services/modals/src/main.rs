@@ -82,14 +82,10 @@ fn xmain() -> ! {
     let mut dr: Option<xous::MessageEnvelope> = None;
 
     // build the core data structure here
-    let text_action = TextEntry {
-        is_password: false,
-        visibility: TextEntryVisibility::Visible,
-        action_conn: renderer_cid,
-        action_opcode: Opcode::TextEntryReturn.to_u32().unwrap(),
-        action_payload: TextEntryPayload::new(),
-        validator: None,
-    };
+    let mut text_action: TextEntry = Default::default();
+    text_action.action_conn = renderer_cid;
+    text_action.action_opcode = Opcode::TextEntryReturn.to_u32().unwrap();
+
     let mut fixed_items = Vec::<ItemName>::new();
     let mut progress_action = Slider::new(renderer_cid, Opcode::Gutter.to_u32().unwrap(),
         0, 100, 1, Some("%"), 0, true, true
@@ -100,7 +96,7 @@ fn xmain() -> ! {
     let mut renderer_modal =
         Modal::new(
             gam::SHARED_MODAL_NAME,
-            ActionType::TextEntry(text_action),
+            ActionType::TextEntry(text_action.clone()),
             Some("Placeholder"),
             None,
             GlyphStyle::Regular,
@@ -317,7 +313,12 @@ fn xmain() -> ! {
                         #[cfg(feature="tts")]
                         tts.tts_simple(config.prompt.as_str().unwrap()).unwrap();
                         renderer_modal.modify(
-                            Some(ActionType::TextEntry(text_action)),
+                            Some(ActionType::TextEntry({
+                                let mut ta = text_action.clone();
+                                ta.reset_action_payloads(config.fields, config.placeholders);
+
+                                ta
+                            })),
                             Some(config.prompt.as_str().unwrap()), false,
                             None, true, None
                         );
@@ -480,7 +481,7 @@ fn xmain() -> ! {
                     RendererState::RunText(_config) => {
                         log::trace!("validating text entry modal");
                         let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                        let text = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
                         if let Some(mut origin) = dr.take() {
                             let mut response = unsafe { Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap()) };
                             response.replace(text).unwrap();

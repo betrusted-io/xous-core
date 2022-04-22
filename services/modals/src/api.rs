@@ -23,11 +23,16 @@ pub struct ManagedListItem {
     pub token: [u32; 4],
     pub item: ItemName,
 }
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithTextResponse {
     pub token: [u32; 4],
     pub prompt: xous_ipc::String::<1024>,
+    pub fields: u32,
+    /// placeholders
+    pub placeholders: Option<[Option<xous_ipc::String::<256>>; 10]>,
 }
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedNotification {
     pub token: [u32; 4],

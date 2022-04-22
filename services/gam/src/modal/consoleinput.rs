@@ -36,8 +36,8 @@ impl ActionApi for ConsoleInput {
                 return (None, true)
             }
             _ => { // text entry
-                self.action_payload.0.push(k).expect("ran out of space storing password");
-                log::trace!("****update payload: {}", self.action_payload.0);
+                self.action_payload.content.push(k).expect("ran out of space storing password");
+                log::trace!("****update payload: {}", self.action_payload.content);
             }
         }
         (None, false)
