@@ -64,19 +64,20 @@ pub(crate) fn password_ux_manager(
     let ux_cid = xous::connect(ux_sid).unwrap();
     // create a thread that just handles the redrawing requests
     // build the core data structure here
-    let password_action = TextEntry {
-        is_password: true,
-        visibility: TextEntryVisibility::LastChars,
-        action_conn: ux_cid,
-        action_opcode: PwManagerOpcode::PwReturn.to_u32().unwrap(),
-        action_payload: TextEntryPayload::new(),
-        validator: None,
-    };
+    let mut password_action = TextEntry::new(
+        true,
+        TextEntryVisibility::LastChars,
+        ux_cid,
+        PwManagerOpcode::PwReturn.to_u32().unwrap(),
+        vec![TextEntryPayload::new()],
+        None,
+    );
+    password_action.reset_action_payloads(1, None);
 
     let mut pddb_modal =
         Modal::new(
             gam::PDDB_MODAL_NAME,
-            ActionType::TextEntry(password_action),
+            ActionType::TextEntry(password_action.clone()),
             Some(t!("pddb.password", xous::LANG)),
             None,
             GlyphStyle::Regular,
@@ -102,7 +103,7 @@ pub(crate) fn password_ux_manager(
                     request.db_name
                 };
                 pddb_modal.modify(
-                    Some(ActionType::TextEntry(password_action)),
+                    Some(ActionType::TextEntry(password_action.clone())),
                     Some(t!("pddb.password", xous::LANG)), false,
                     Some(format!("{}'{}'", t!("pddb.password_for", xous::LANG), db_name.as_str().unwrap()).as_str()), false, None
                 );
@@ -112,12 +113,12 @@ pub(crate) fn password_ux_manager(
             },
             Some(PwManagerOpcode::PwReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let mut pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                let pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
                 if let Some(mut response) = dr.take() {
                     let mut buffer = unsafe { Buffer::from_memory_message_mut(response.body.memory_message_mut().unwrap()) };
                     let mut request = buffer.to_original::<BasisRequestPassword, _>().unwrap();
-                    request.plaintext_pw = Some(xous_ipc::String::from_str(pw.as_str()));
+                    request.plaintext_pw = Some(xous_ipc::String::from_str(pw.first().as_str()));
                     // return the password to the caller
                     buffer.replace(request).unwrap();
                     // response goes out of scope here and calls Drop which returns the message
@@ -125,7 +126,7 @@ pub(crate) fn password_ux_manager(
                     log::error!("Password return received, but no deferred response on record");
                 }
 
-                pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
             },
             Some(PwManagerOpcode::ModalRedraw) => {

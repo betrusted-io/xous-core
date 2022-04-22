@@ -516,11 +516,13 @@ pub fn start_time_ux(sid: xous::SID) {
                         // note that we don't do an "else" here because we also want to catch the case of
                         // a key exists, but nothing was written to it (length of key was 0 or inappropriate)
                         if !tz_set {
-                            let tz = modals.get_text(
-                                t!("rtc.timezone", xous::LANG),
-                                Some(tz_ux_validator), None
-                            ).expect("couldn't get timezone").as_str()
-                            .parse::<f32>().expect("pre-validated input failed to re-parse!");
+                            let tz = modals.alert_builder(t!("rtc.timezone", xous::LANG))
+                                .field(None, Some(tz_ux_validator))
+                                .build()
+                                .expect("couldn't get timezone")
+                                .first()
+                                .as_str()
+                                .parse::<f32>().expect("pre-validated input failed to re-parse!");
                             log::info!("got tz offset {}", tz);
                             tz_offset_ms = (tz * 3600.0 * 1000.0) as i64;
                             xous::send_message(timeserver_cid,
@@ -578,54 +580,35 @@ pub fn start_time_ux(sid: xous::SID) {
                             }
                         }
 
-                        let secs: u8;
-                        let mins: u8;
-                        let hours: u8;
-                        let months: u8;
-                        let days: u8;
-                        let years: u8;
+                        let mut secs: u8 = 0;
+                        let mut mins: u8 = 0;
+                        let mut hours: u8 = 0;
+                        let mut months: u8 = 0;
+                        let mut days: u8 = 0;
+                        let mut years: u8 = 0;
 
-                        months = modals.get_text(
-                            t!("rtc.month", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxMonth.to_u32().unwrap())
-                        ).expect("couldn't get month").as_str()
-                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                        log::debug!("got months {}", months);
+                        let date = modals.alert_builder(t!("rtc.set_time_modal", xous::LANG))
+                            .field(Some(String::from(t!("rtc.month", xous::LANG))), Some(rtc_ux_validate_month))
+                            .field(Some(String::from(t!("rtc.day", xous::LANG))), Some(rtc_ux_validate_day))
+                            .field(Some(String::from(t!("rtc.year", xous::LANG))), Some(rtc_ux_validate_year))
+                            .field(Some(String::from(t!("rtc.hour", xous::LANG))), Some(rtc_ux_validate_hour))
+                            .field(Some(String::from(t!("rtc.minute", xous::LANG))), Some(rtc_ux_validate_minute))
+                            .field(Some(String::from(t!("rtc.seconds", xous::LANG))), Some(rtc_ux_validate_seconds))
+                            .build()
+                            .expect("cannot get date from user");
 
-                        days = modals.get_text(
-                            t!("rtc.day", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxDay.to_u32().unwrap())
-                        ).expect("couldn't get month").as_str()
-                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                        log::debug!("got days {}", days);
-
-                        years = modals.get_text(
-                            t!("rtc.year", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxYear.to_u32().unwrap())
-                        ).expect("couldn't get month").as_str()
-                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                        log::debug!("got years {}", years);
-
-                        hours = modals.get_text(
-                            t!("rtc.hour", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxHour.to_u32().unwrap())
-                        ).expect("couldn't get hour").as_str()
-                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                        log::debug!("got hours {}", hours);
-
-                        mins = modals.get_text(
-                            t!("rtc.minute", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxMinute.to_u32().unwrap())
-                        ).expect("couldn't get minutes").as_str()
-                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                        log::debug!("got minutes {}", mins);
-
-                        secs = modals.get_text(
-                            t!("rtc.seconds", xous::LANG),
-                            Some(rtc_ux_validator), Some(ValidatorOp::UxSeconds.to_u32().unwrap())
-                        ).expect("couldn't get seconds").as_str()
-                        .parse::<u8>().expect("pre-validated input failed to re-parse!");
-                        log::debug!("got seconds {}", secs);
+                        for (index, elem) in date.content().iter().enumerate() {
+                            let elem = elem.as_str().parse::<u8>().expect("pre-validated input failed to re-parse!");
+                            match index {
+                                0 => months = elem,
+                                1 => days = elem,
+                                2 => years = elem,
+                                3 => hours = elem,
+                                4 => mins = elem,
+                                5 => secs = elem,
+                                _ => {},
+                            }
+                        }
 
                         log::info!("Setting time: {}/{}/{} {}:{}:{}", months, days, years, hours, mins, secs);
                         let new_dt = chrono::FixedOffset::east((tz_offset_ms / 1000) as i32).ymd(years as i32 + 2000, months as u32, days as u32)
@@ -644,11 +627,14 @@ pub fn start_time_ux(sid: xous::SID) {
                             modals.show_notification(t!("stats.please_mount", xous::LANG), false).expect("couldn't show notification");
                             continue;
                         }
-                        let tz = modals.get_text(
-                            t!("rtc.timezone", xous::LANG),
-                            Some(tz_ux_validator), None
-                        ).expect("couldn't get timezone").as_str()
-                        .parse::<f32>().expect("pre-validated input failed to re-parse!");
+
+                        let tz = modals.alert_builder(t!("rtc.timezone", xous::LANG))
+                            .field(None, Some(tz_ux_validator))
+                            .build()
+                            .expect("couldn't get timezone")
+                            .first()
+                            .as_str()
+                            .parse::<f32>().expect("pre-validated input failed to re-parse!");
                         log::info!("got tz offset {}", tz);
                         let tzoff_ms = (tz * 3600.0 * 1000.0) as i64;
                         xous::send_message(timeserver_cid,
@@ -685,8 +671,9 @@ pub(crate) enum ValidatorOp {
     UxSeconds,
 }
 
-fn tz_ux_validator(input: TextEntryPayload, _opcode: u32) -> Option<ValidatorErr> {
+fn tz_ux_validator(input: TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
+
     match text_str.parse::<f32>() {
         Ok(input) => if input < -12.0 || input > 14.0 {
             return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)));
@@ -696,48 +683,93 @@ fn tz_ux_validator(input: TextEntryPayload, _opcode: u32) -> Option<ValidatorErr
     None
 }
 
-fn rtc_ux_validator(input: TextEntryPayload, opcode: u32) -> Option<ValidatorErr> {
+fn rtc_ux_validate_month(input: TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
-    let input_int = match text_str.parse::<u32>() {
+
+    let input = match text_str.parse::<u32>() {
         Ok(input_int) => input_int,
         _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
     };
-    log::trace!("validating input {}, parsed as {} for opcode {}", text_str, input_int, opcode);
-    match FromPrimitive::from_u32(opcode) {
-        Some(ValidatorOp::UxMonth) => {
-            if input_int < 1 || input_int > 12 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxDay) => {
-            if input_int < 1 || input_int > 31 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxYear) => {
-            if input_int > 99 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxHour) => {
-            if input_int > 23 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxMinute) => {
-            if input_int > 59 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        Some(ValidatorOp::UxSeconds) => {
-            if input_int > 59 {
-                return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
-            }
-        }
-        _ => {
-            log::error!("internal error: invalid opcode was sent to validator: {:?}", opcode);
-            panic!("internal error: invalid opcode was sent to validator");
-        }
+
+    if input < 1 || input > 12 {
+        return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
     }
+
     None
 }
+
+fn rtc_ux_validate_day(input: TextEntryPayload) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+
+    let input = match text_str.parse::<u32>() {
+        Ok(input_int) => input_int,
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
+    };
+
+    if input < 1 || input > 31 {
+        return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+    }
+
+    None
+}
+
+fn rtc_ux_validate_year(input: TextEntryPayload) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+
+    let input = match text_str.parse::<u32>() {
+        Ok(input_int) => input_int,
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
+    };
+
+    if input > 99 {
+        return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+    }
+
+    None
+}
+
+fn rtc_ux_validate_hour(input: TextEntryPayload) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+
+    let input = match text_str.parse::<u32>() {
+        Ok(input_int) => input_int,
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
+    };
+
+    if input > 23 {
+        return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+    }
+
+    None
+}
+
+fn rtc_ux_validate_minute(input: TextEntryPayload) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+
+    let input = match text_str.parse::<u32>() {
+        Ok(input_int) => input_int,
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
+    };
+
+    if input > 59 {
+        return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+    }
+
+    None
+}
+
+fn rtc_ux_validate_seconds(input: TextEntryPayload) -> Option<ValidatorErr> {
+    let text_str = input.as_str();
+
+    let input = match text_str.parse::<u32>() {
+        Ok(input_int) => input_int,
+        _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
+    };
+
+    if input > 59 {
+        return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)))
+    }
+
+    None
+}
+

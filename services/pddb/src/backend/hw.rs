@@ -2181,10 +2181,12 @@ impl PddbOs {
                     match modals.get_radiobutton(&prompt) {
                         Ok(response) => {
                             if response.as_str() == t!("pddb.yes", xous::LANG) {
-                                match modals.get_text("Enter the Basis name", None, None) {
+                                match modals.alert_builder("Enter the Basis name")
+                                .field(Some("My Secret Basis".to_string()), None)
+                                .build() {
                                     Ok(bname) => {
                                         let request = BasisRequestPassword {
-                                            db_name: xous_ipc::String::from_str(bname.as_str()),
+                                            db_name: xous_ipc::String::from_str(bname.first().as_str()),
                                             plaintext_pw: None,
                                         };
                                         let mut buf = Buffer::into_buf(request).unwrap();
@@ -2193,15 +2195,15 @@ impl PddbOs {
                                         if let Some(pw) = ret.plaintext_pw {
                                             // derive old and new keys
                                             let basis_key_v1 = self.basis_derive_key_v00_00_01_01(
-                                                bname.as_str(),
+                                                bname.first().as_str(),
                                                 pw.as_str().unwrap_or("UTF8-error"),
                                                 &scd
                                             );
-                                            let basis_aad_v1 = data_aad_v1(&self, bname.as_str());
-                                            let basis_aad_v2 = self.data_aad(bname.as_str());
+                                            let basis_aad_v1 = data_aad_v1(&self, bname.first().as_str());
+                                            let basis_aad_v2 = self.data_aad(bname.first().as_str());
                                             let basis_pt_cipher_v1 = Aes256::new(GenericArray::from_slice(&basis_key_v1));
                                             let basis_data_cipher_v1 = Aes256GcmSiv::new(Key::from_slice(&basis_key_v1));
-                                            let basis_keys = self.basis_derive_key(bname.as_str(), pw.as_str().unwrap_or("UTF8 error"));
+                                            let basis_keys = self.basis_derive_key(bname.first().as_str(), pw.as_str().unwrap_or("UTF8 error"));
                                             let basis_pt_cipher_2 = Aes256::new(GenericArray::from_slice(&basis_keys.pt));
                                             let basis_data_cipher_2 = Aes256GcmSiv::new(Key::from_slice(&basis_keys.data));
                                             // perform the migration
@@ -2218,7 +2220,7 @@ impl PddbOs {
                                                 #[cfg(not(any(target_os = "none", target_os = "xous")))]
                                                 {
                                                     let mut name = [0 as u8; 64];
-                                                    for (&src, dst) in bname.as_str().as_bytes().iter().zip(name.iter_mut()) {
+                                                    for (&src, dst) in bname.first().as_str().as_bytes().iter().zip(name.iter_mut()) {
                                                         *dst = src;
                                                     }
                                                     export.push(

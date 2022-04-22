@@ -180,38 +180,41 @@
         "zh": "NTP 查询失败，请手动输入时间。",
         "en-tts": "NTP query failed, please enter time manually."
     },
+    "rtc.set_time_modal": {
+        "en": "Enter time"
+    },
     "rtc.month": {
-        "en": "Enter month (1-12)",
+        "en": "Month (1-12)",
         "ja": "月（1-12）を入力してください。",
         "zh": "输入月份 (1-12)",
         "en-tts": "Enter month one through twelve"
     },
     "rtc.day": {
-        "en": "Enter day (1-31)",
+        "en": "Day (1-31)",
         "ja": "日数 (1-31) を入力してください。",
         "zh": "输入日期 (1-31)",
         "en-tts": "Enter day one through 31"
     },
     "rtc.year": {
-        "en": "Enter last two digits of year",
+        "en": "Last two digits of year",
         "ja": "西暦の下2桁を入力してください。",
         "zh": "输入年份 (最后两位数)",
         "en-tts": "Enter last two digits of year"
     },
     "rtc.hour": {
-        "en": "Enter hours in local timezone (0-23)",
+        "en": "Hours in local timezone (0-23)",
         "ja": "時間（0-23）を入力してください。",
         "zh": "输入小时 (0-23)",
         "en-tts": "Enter hours for local timezone as 24 hour format"
     },
     "rtc.minute": {
-        "en": "Enter minutes (0-59)",
+        "en": "Minutes (0-59)",
         "ja": "分（0-59）を入力してください。",
         "zh": "输入分钟 (0-59)",
         "en-tts": "Enter minutes"
     },
     "rtc.seconds": {
-        "en": "Enter seconds (0-59)",
+        "en": "Seconds (0-59)",
         "ja": "秒 (0-59) を入力してください。",
         "zh": "输入秒数 (0-59)",
         "en-tts": "Enter seconds"
