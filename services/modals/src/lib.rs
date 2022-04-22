@@ -39,13 +39,13 @@ impl<'a> AlertModalBuilder<'a> {
         match self.placeholders.len() {
             1.. =>  {
                 let mut pl:[Option<xous_ipc::String<256>>; 10] = Default::default();
-                
+
                 if fields_amt != self.placeholders.len() {
                     log::warn!("can't have more fields than placeholders");
                     self.modals.unlock();
                     return Err(xous::Error::UnknownError);
                 }
-        
+
                 for (index, placeholder) in self.placeholders.iter().enumerate() {
                     if let Some(string) = placeholder {
                         pl[index] = Some(xous_ipc::String::from_str(&string))
@@ -131,10 +131,10 @@ impl Modals {
     }
 
     pub fn alert_builder(&self, prompt: &str) -> AlertModalBuilder {
-        AlertModalBuilder { 
-            prompt: String::from(prompt), 
-            validators: vec![], 
-            placeholders: vec![], 
+        AlertModalBuilder {
+            prompt: String::from(prompt),
+            validators: vec![],
+            placeholders: vec![],
             modals: self
         }
     }
