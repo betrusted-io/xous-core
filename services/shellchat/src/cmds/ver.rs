@@ -5,25 +5,11 @@ use xous_ipc::String;
 pub struct Ver {
 }
 
-// TODO: remove me
-impl Ver {
-    fn modal(&self, env: &mut CommonEnv) {
-        log::info!("modal data: {:#?}", 
-            env.modals.alert_builder("Get Text")
-                .field(Some("first".to_string()), None)
-                .field(Some("second".to_string()), None)
-                .field(None, None)
-                .field(Some("fourth".to_string()), None)
-                .build()
-        );
-    }
-}
 
 impl<'a> ShellCmdApi<'a> for Ver {
     cmd_api!(ver); // inserts boilerplate for command API
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        self.modal(env);
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         let helpstring = "ver options: ec, wf200, soc, dna, xous";

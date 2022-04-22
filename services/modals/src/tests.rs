@@ -34,6 +34,16 @@ pub(crate) fn spawn_test() {
             let modals = modals::Modals::new(&xns).unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
+            // 0. multi-modal test
+            log::info!("modal data: {:#?}",
+            modals.alert_builder("Four items with maybe defaults. Press select to close.")
+                .field(Some("first".to_string()), None)
+                .field(Some("second".to_string()), None)
+                .field(None, None)
+                .field(Some("fourth".to_string()), None)
+                .build()
+            );
+
             // 1. test progress bar
             // The start and end items are deliberately structured to be not zero-indexed; the use of PDDB_LOC is just a
             // convenient global constant.
