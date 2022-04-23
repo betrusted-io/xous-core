@@ -322,10 +322,10 @@ fn handle_opcode(
                 } else {
                     "UNKNOWN"
                 };
-                if lr.file_length as usize >= lr.file.len() {
+                if lr.file_length as usize > lr.file.len() {
                     return;
                 }
-                if lr.args_length as usize >= lr.args.len() {
+                if lr.args_length as usize > lr.args.len() {
                     return;
                 }
                 if lr.module_length as usize > lr.module.len() {
