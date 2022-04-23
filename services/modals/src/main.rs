@@ -42,6 +42,8 @@ use locales::t;
 const TICK_INTERVAL: u64 = 2500;
 
 use num_traits::*;
+use bit_field::BitField;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 enum RendererState {
@@ -111,6 +113,9 @@ fn xmain() -> ! {
         Opcode::ModalKeypress.to_u32().unwrap(),
         Opcode::ModalDrop.to_u32().unwrap(),
     );
+    
+    let mut list_hash = HashMap::<String, usize>::new();
+    let mut list_selected = 0u32;
 
     if cfg!(feature = "ux_tests") {
         tt.sleep_ms(1000).unwrap();
@@ -243,6 +248,9 @@ fn xmain() -> ! {
                     continue;
                 }
                 fixed_items.push(manageditem.item);
+            }                      
+            Some(Opcode::GetModalIndex) => {
+                xous::return_scalar(msg.sender, list_selected as usize).expect("couldn't return list selected");
             }
             Some(Opcode::DynamicNotification) => {
                 let spec = {
@@ -363,8 +371,11 @@ fn xmain() -> ! {
                             renderer_cid,
                             Opcode::RadioReturn.to_u32().unwrap()
                         );
+                        list_hash.clear();
+                        list_selected = 0u32;
                         for item in fixed_items.iter() {
                             radiobuttons.add_item(*item);
+                            list_hash.insert(item.as_str().to_string(), list_hash.len());
                         }
                         fixed_items.clear();
                         #[cfg(feature="tts")]
@@ -384,8 +395,11 @@ fn xmain() -> ! {
                             renderer_cid,
                             Opcode::CheckBoxReturn.to_u32().unwrap()
                         );
+                        list_hash.clear();
+                        list_selected = 0u32;
                         for item in fixed_items.iter() {
                             checkbox.add_item(*item);
+                            list_hash.insert(item.as_str().to_string(), list_hash.len());
                         }
                         fixed_items.clear();
                         #[cfg(feature="tts")]
@@ -532,6 +546,15 @@ fn xmain() -> ! {
                             let mut response = unsafe { Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap()) };
                             response.replace(item).unwrap();
                             op = RendererState::None;
+                            match list_hash.get(item.as_str()){
+                                Some(index) => { 
+                                    match index {
+                                        0...31 => drop(list_selected.set_bit(*index, true)),
+                                        _ => log::warn!("invalid bitfield index"),
+                                    };
+                                },
+                                None => log::warn!("failed to set list_selected index"),
+                            }
                         } else {
                             log::error!("Ux routine returned but no origin was recorded");
                             panic!("Ux routine returned but no origin was recorded");
@@ -554,6 +577,22 @@ fn xmain() -> ! {
                             let mut response = unsafe { Buffer::from_memory_message_mut(origin.body.memory_message_mut().unwrap()) };
                             response.replace(item).unwrap();
                             op = RendererState::None;
+                            for (_, check_item) in item.payload().iter().enumerate() {
+                                match check_item {
+                                    Some(item) => {
+                                            match list_hash.get(item.as_str()){
+                                            Some(index) => {
+                                                match index {
+                                                    0...31 => drop(list_selected.set_bit(*index, true)),
+                                                    _ => log::warn!("invalid bitfield index"),
+                                                };
+                                            },
+                                            None => log::warn!("failed to set list_selected index"),
+                                        }
+                                    },
+                                    None => {},
+                                }
+                            }
                         } else {
                             log::error!("Ux routine returned but no origin was recorded");
                             panic!("Ux routine returned but no origin was recorded");

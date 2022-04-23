@@ -78,6 +78,8 @@ pub(crate) enum Opcode {
     /// add an item to the radio box or check box. Note that all added items
     /// are cleared after the relevant "action" call happens (PromptWith[Fixed,Multi]Response)
     AddModalItem,
+    /// get the index of the selected radio button / checkboxes
+    GetModalIndex,
     /// raise a progress bar
     StartProgress,
     /// update the progress bar
