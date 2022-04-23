@@ -25,7 +25,7 @@ i @peripherals/ComSoC.cs
 i @peripherals/ec_power.cs
 i @peripherals/EcWifi.cs
 i @peripherals/engine.cs
-i @peripherals/jtag.cs
+i @peripherals/Jtag.cs
 i @peripherals/keyboard.cs
 i @peripherals/keyrom.cs
 i @peripherals/LiteX_Timer_32.cs
