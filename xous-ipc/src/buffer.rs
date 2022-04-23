@@ -230,7 +230,7 @@ impl<'a> Buffer<'a> {
         let copied_slice =
             unsafe { core::slice::from_raw_parts_mut(self.slice.as_mut_ptr(), self.slice.len()) };
         let mut ser = rkyv::ser::serializers::BufferSerializer::new(copied_slice);
-        let pos = ser.serialize_value(&src).or(Err("couldn't serialize"))?;
+        let pos = ser.serialize_value(&src).map_err(|err| err).unwrap();
         self.offset = MemoryAddress::new(pos);
         if let Some(ref mut msg) = self.memory_message.as_mut() {
             msg.offset = MemoryAddress::new(pos);
