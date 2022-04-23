@@ -491,25 +491,37 @@ fn xmain() -> ! {
                 log::debug!("trying to switch to {:?} with token {:?}", switchapp.app_name.as_str().unwrap(), switchapp.token);
 
                 if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
-                    let authorized_switchers = vec![MAIN_MENU_NAME, ROOTKEY_MODAL_NAME, gam::STATUS_BAR_NAME];
-                    for switchers in authorized_switchers {
-                        if let Some(auth_token) = context_mgr.find_app_token_by_name(switchers) {
-                            if auth_token == switchapp.token {
-                                context_mgr.notify_app_switch(new_app_token)
-                                .unwrap_or_else(|_| {log::warn!("Application does not recognize focus changes")});
-                                match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
-                                    Ok(_) => (),
-                                    Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                    if new_app_token != context_mgr.focused_app().unwrap_or([0, 0, 0, 0]) {
+                        // two things:
+                        // 1. [0, 0, 0, 0] is simply a very unlikely GID because it's a 128 bit TRNG, and this allows us to handle
+                        // the power-on case where we have no focused app cleanly.
+                        // 2. the `activate()` method on `context_mgr` does not handle app-to-app switches when you're the same app.
+                        // this is because there is a rule which says if you're going to put an app on top of an app, take the old
+                        // app and hide it, while also taking the new app and showing it. This is a race condition, and it results
+                        // in the "same-app" switch ending up in a hidden state, because within the routine the entering state is
+                        // set before the leaving state due to interior-mutability issues (see the block under the debug statement
+                        // titled "resolving visibility rules"). The fix is to simply not issue a context switch if it's the same app.
+                        // It saves CPU thrashing and also works around this problem. (see issue #145)
+                        let authorized_switchers = vec![MAIN_MENU_NAME, ROOTKEY_MODAL_NAME, gam::STATUS_BAR_NAME];
+                        for switchers in authorized_switchers {
+                            if let Some(auth_token) = context_mgr.find_app_token_by_name(switchers) {
+                                if auth_token == switchapp.token {
+                                    context_mgr.notify_app_switch(new_app_token)
+                                    .unwrap_or_else(|_| {log::warn!("Application does not recognize focus changes")});
+                                    match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
+                                        Ok(_) => (),
+                                        Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                                    }
+                                    continue;
                                 }
-                                continue;
                             }
                         }
-                    }
-                    // this message came from ourselves
-                    if gam_token == switchapp.token {
-                        match context_mgr.activate(&gfx, &mut canvases, new_app_token, true) {
-                            Ok(_) => (),
-                            Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                        // this message came from ourselves
+                        if gam_token == switchapp.token {
+                            match context_mgr.activate(&gfx, &mut canvases, new_app_token, true) {
+                                Ok(_) => (),
+                                Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
+                            }
                         }
                     }
                 }
