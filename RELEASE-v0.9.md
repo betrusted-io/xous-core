@@ -145,6 +145,7 @@ for examples of idiomatic ways to write code for Xous.
 
 ## New in 0.9.9 (currently in development)
 - `modals` text entry has been refactored to allow multi-field text entries with defaults! Thanks to gsora for the PR.
+- fix issue #141: bug fix in `log-server` where max-length buffers were not being printed + refactor of method to use `send` vs scalars
 
 ## Roadmap to 1.0
 
