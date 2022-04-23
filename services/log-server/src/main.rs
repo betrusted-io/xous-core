@@ -174,8 +174,10 @@ mod implementation {
             // println!("rxe {}", uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY));
             while uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) == 0 {
                 // I really rather think this is more readable, than the "Rusty" version below.
-                inject_csr.wfo(utra::keyinject::UART_CHAR_CHAR,
-                    uart_csr.rf(utra::uart::RXTX_RXTX));
+                inject_csr.wfo(
+                    utra::keyinject::UART_CHAR_CHAR,
+                    uart_csr.rf(utra::uart::RXTX_RXTX),
+                );
                 uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
 
                 // I guess this is how you would do it if you were "really doing Rust"
@@ -307,8 +309,9 @@ fn handle_opcode(
     if let Some(mem) = message.memory_message() {
         match opcode {
             api::Opcode::LogRecord => {
-                let buffer = unsafe { xous_ipc::Buffer::from_memory_message(mem) };
-                let lr = unsafe { &*(buffer.as_ptr() as *const LogRecord) };
+                // This transmute is safe because even if the resulting buffer is garbage,
+                // there are no invalid values in the resulting struct.
+                let lr = unsafe { &*(mem.buf.as_ptr() as *const LogRecord) };
                 let level = if log::Level::Error as u32 == lr.level {
                     "ERR "
                 } else if log::Level::Warn as u32 == lr.level {
@@ -352,7 +355,7 @@ fn handle_opcode(
                     output.putc(*c);
                 }
                 if let Some(line) = lr.line {
-                    write!(output, ":{}", line).ok();
+                    write!(output, ":{}", line.get()).ok();
                 }
                 writeln!(output, ")").ok();
             }

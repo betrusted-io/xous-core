@@ -1,14 +1,19 @@
-// #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[repr(C)]
+#[repr(C, align(4096))]
 pub struct LogRecord {
     pub file_length: u32,
     pub file: [u8; 128],
-    pub line: Option<u32>,
+    pub line: Option<core::num::NonZeroU32>,
     pub module_length: u32,
     pub module: [u8; 128],
     pub level: u32,
     pub args_length: u32,
-    pub args: [u8; 3000],
+    pub args: [u8; 3820],
+}
+
+impl Default for LogRecord {
+    fn default() -> Self {
+        LogRecord { file_length: 0, file: [0u8; 128], line: None, module_length: 0, module: [0u8; 128], level: 0, args_length: 0, args: [0u8; 3820] }
+    }
 }
 
 #[derive(Debug, PartialEq, num_derive::FromPrimitive, num_derive::ToPrimitive)]
