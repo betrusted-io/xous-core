@@ -1,6 +1,6 @@
 use gam::modal::*;
 
-pub(crate) const SERVER_NAME_MODALS: &str     = "_Modal Dialog Server_";
+pub(crate) const SERVER_NAME_MODALS: &str = "_Modal Dialog Server_";
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct Validation {
@@ -16,7 +16,7 @@ pub(crate) enum ValidationOp {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithFixedResponse {
     pub token: [u32; 4],
-    pub prompt: xous_ipc::String::<1024>,
+    pub prompt: xous_ipc::String<1024>,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedListItem {
@@ -27,22 +27,22 @@ pub struct ManagedListItem {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedPromptWithTextResponse {
     pub token: [u32; 4],
-    pub prompt: xous_ipc::String::<1024>,
+    pub prompt: xous_ipc::String<1024>,
     pub fields: u32,
     /// placeholders
-    pub placeholders: Option<[Option<xous_ipc::String::<256>>; 10]>,
+    pub placeholders: Option<[Option<xous_ipc::String<256>>; 10]>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedNotification {
     pub token: [u32; 4],
-    pub message: xous_ipc::String::<1024>,
-    pub qrtext: Option<xous_ipc::String::<1024>>,
+    pub message: xous_ipc::String<1024>,
+    pub qrtext: Option<xous_ipc::String<1024>>,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
     pub token: [u32; 4],
-    pub title: xous_ipc::String::<1024>,
+    pub title: xous_ipc::String<1024>,
     // these are automatcally turned into percentages on a scale of 0->100%
     /// starting quanta to track (e.g. starting sector for erase).
     pub start_work: u32,
@@ -58,8 +58,8 @@ pub struct ManagedProgress {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct DynamicNotification {
     pub token: [u32; 4],
-    pub title: Option<xous_ipc::String::<1024>>,
-    pub text: Option<xous_ipc::String::<2048>>,
+    pub title: Option<xous_ipc::String<1024>>,
+    pub text: Option<xous_ipc::String<2048>>,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
