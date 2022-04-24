@@ -113,7 +113,7 @@ fn xmain() -> ! {
         Opcode::ModalKeypress.to_u32().unwrap(),
         Opcode::ModalDrop.to_u32().unwrap(),
     );
-    
+
     let mut list_hash = HashMap::<String, usize>::new();
     let mut list_selected = 0u32;
 
@@ -248,7 +248,7 @@ fn xmain() -> ! {
                     continue;
                 }
                 fixed_items.push(manageditem.item);
-            }                      
+            }
             Some(Opcode::GetModalIndex) => {
                 xous::return_scalar(msg.sender, list_selected as usize).expect("couldn't return list selected");
             }

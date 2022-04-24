@@ -31,7 +31,7 @@ pub(crate) fn spawn_test() {
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
-            let mut modals = modals::Modals::new(&xns).unwrap();
+            let modals = modals::Modals::new(&xns).unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
             // 1. test progress bar
