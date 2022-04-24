@@ -9,7 +9,7 @@ in addition to code. Please see the github guide on
 Contributions to this project are accepted on an
 ["inbound=outbound"](https://opensource.com/law/11/7/trouble-harmony-part-1) basis.
 That means that you agree that your contributions are made under the
-same license as the license for this project (found in this directory in the [LICENSE](LICENSE) file).
+same license as the license for this project (found in the in the [LICENSES](LICENSES) directory).
 
 To make this understanding explicit -- and for you to assert
 that you have the right to make the contribution -- commits must be
