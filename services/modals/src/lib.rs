@@ -8,6 +8,7 @@ use xous::{CID, send_message, Message};
 use num_traits::*;
 use xous_ipc::Buffer;
 use core::cell::Cell;
+use bit_field::BitField;
 
 pub type TextValidationFn = fn(TextEntryPayload) -> Option<ValidatorErr>;
 
@@ -200,6 +201,14 @@ impl Modals {
         Ok(())
     }
 
+    pub fn add_list(&self, items: Vec<&str>) -> Result<(), xous::Error> {
+        for (_, text) in items.iter().enumerate() {
+            self.add_list_item(text)
+                .or(Err(xous::Error::InternalError))?;
+        }
+        Ok(())
+    }
+
     pub fn add_list_item(&self, item: &str) -> Result<(), xous::Error> {
         self.lock();
         let itemname = ManagedListItem {
@@ -224,6 +233,24 @@ impl Modals {
         Ok(String::from(itemname.as_str()))
     }
 
+    pub fn get_radio_index(&self) -> Result<usize, xous::Error> {
+        let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
+        match send_message(self.conn, msg) {
+            Ok(xous::Result::Scalar1(bitfield)) => {
+                let mut i = 0;
+                while (i < u32::bit_length()) & !bitfield.get_bit(i) {
+                    i = i + 1;
+                }
+                if i < u32::bit_length() {
+                    Ok(i)
+                } else {
+                    Err(xous::Error::InternalError)
+                }
+            }
+            _ => Err(xous::Error::InternalError),
+        }
+    }
+
     pub fn get_checkbox(&self, prompt: &str) -> Result<Vec::<String>, xous::Error> {
         self.lock();
         let spec = ManagedPromptWithFixedResponse {
@@ -241,6 +268,24 @@ impl Modals {
         }
         self.unlock();
         Ok(ret)
+    }
+
+    pub fn get_check_index(&self) -> Result<Vec<usize>, xous::Error> {
+        let mut ret = Vec::<usize>::new();
+        let msg = Message::new_blocking_scalar(Opcode::GetModalIndex.to_usize().unwrap(), 0, 0, 0, 0);
+        match send_message(self.conn, msg) {
+            Ok(xous::Result::Scalar1(bitfield)) => {
+                let mut i = 0;
+                while i < u32::bit_length() {
+                    if bitfield.get_bit(i) {
+                        ret.push(i);
+                    }
+                    i = i + 1;
+                }
+                Ok(ret)
+            }
+            _ => Err(xous::Error::InternalError),
+        }
     }
 
     pub fn dynamic_notification(&self, title: Option<&str>, text: Option<&str>) -> Result<(), xous::Error> {

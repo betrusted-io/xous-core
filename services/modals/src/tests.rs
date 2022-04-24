@@ -55,9 +55,8 @@ pub(crate) fn spawn_test() {
             modals.finish_progress().expect("couldn't dismiss progress bar");
 
             // 2. test check box
-            for item in CHECKBOX_TEST {
-                modals.add_list_item(item).expect("couldn't build checkbox list");
-            }
+            let items: Vec<&str> = CHECKBOX_TEST.iter().map(|s| s.to_owned()).collect();
+            modals.add_list(items).expect("couldn't build checkbox list");
             match modals.get_checkbox("You can have it all:") {
                 Ok(things) => {
                     log::info!("The user picked {} things:", things.len());
@@ -67,6 +66,7 @@ pub(crate) fn spawn_test() {
                 },
                 _ => log::error!("get_checkbox failed"),
             }
+            log::info!("Checkbox indices selected = {:?}", modals.get_check_index());
 
             // 3. test notificatons
             log::info!("testing notification");
@@ -88,6 +88,7 @@ pub(crate) fn spawn_test() {
                 Ok(animal) => log::info!("{} was picked", animal),
                 _ => log::error!("get_radiobutton failed"),
             }
+            log::info!("Radio index selected = {:?}", modals.get_radio_index().unwrap());
 
             // 2. test the modal dialog box function
             log::info!("test text input");
