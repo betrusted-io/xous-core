@@ -161,7 +161,7 @@ impl Ball {
             keys[0],
             t!("ballapp.notification_b", xous::LANG),
         ).unwrap();
-        self.modals.show_notification(&note, false).unwrap();
+        self.modals.show_notification(&note, None).unwrap();
         self.modals.add_list_item(t!("ballapp.random", xous::LANG)).unwrap();
         self.modals.add_list_item(t!("ballapp.tilt", xous::LANG)).unwrap();
         let mode = self.modals.get_radiobutton(t!("ballapp.mode_prompt", xous::LANG)).unwrap();

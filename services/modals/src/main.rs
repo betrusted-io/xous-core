@@ -331,9 +331,15 @@ fn xmain() -> ! {
                             Opcode::NotificationReturn.to_u32().unwrap()
                         );
                         let text = config.message.as_str().unwrap();
-                        if config.as_qrcode {
-                            notification.set_as_qrcode(Some(text));
-                        }
+                        let tmp: String;
+                        let qrtext = match config.qrtext {
+                            Some(text) => {
+                                tmp = text.to_string();
+                                Some(tmp.as_str())
+                            },
+                            None => None,
+                        };
+                        notification.set_qrcode(qrtext);
                         #[cfg(feature="tts")]
                         tts.tts_simple(config.message.as_str().unwrap()).unwrap();
                         renderer_modal.modify(

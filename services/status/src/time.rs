@@ -493,7 +493,7 @@ pub fn start_time_ux(sid: xous::SID) {
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(TimeUxOp::SetTime) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                         if !pddb_poller.is_mounted_nonblocking() {
-                            modals.show_notification(t!("stats.please_mount", xous::LANG), false).expect("couldn't show notification");
+                            modals.show_notification(t!("stats.please_mount", xous::LANG), None).expect("couldn't show notification");
                             continue;
                         }
                         let mut tz_set_handle = pddb::Pddb::new();
@@ -575,7 +575,7 @@ pub fn start_time_ux(sid: xous::SID) {
                                 }
                                 Err(err) => {
                                     log::info!("Err: {:?}", err);
-                                    modals.show_notification(t!("rtc.ntp_fail", xous::LANG), false).expect("couldn't show NTP error");
+                                    modals.show_notification(t!("rtc.ntp_fail", xous::LANG), None).expect("couldn't show NTP error");
                                 },
                             }
                         }
@@ -624,7 +624,7 @@ pub fn start_time_ux(sid: xous::SID) {
                     }),
                     Some(TimeUxOp::SetTimeZone) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                         if !pddb_poller.is_mounted_nonblocking() {
-                            modals.show_notification(t!("stats.please_mount", xous::LANG), false).expect("couldn't show notification");
+                            modals.show_notification(t!("stats.please_mount", xous::LANG), None).expect("couldn't show notification");
                             continue;
                         }
 

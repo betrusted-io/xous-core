@@ -39,7 +39,7 @@ impl Notification {
     pub fn set_manual_dismiss(&mut self, setting: bool) {
         self.manual_dismiss = setting;
     }
-    pub fn set_as_qrcode(&mut self, setting: Option<&str>) {
+    pub fn set_qrcode(&mut self, setting: Option<&str>) {
         match setting {
             Some(setting) => {
                let qrcode = QrCode::new(setting).unwrap();
