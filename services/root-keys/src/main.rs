@@ -465,7 +465,7 @@ fn xmain() -> ! {
                     // - pepper
 
                     if keys.is_initialized() {
-                        modals.show_notification(t!("rootkeys.already_init", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.already_init", xous::LANG), None).expect("modals error");
                         #[cfg(feature="tts")]
                         tts.tts_blocking(t!("rootkeys.already_init", xous::LANG)).unwrap();
                         keys.set_ux_password_type(None);
@@ -554,16 +554,16 @@ fn xmain() -> ! {
                         ).expect("couldn't initiate dialog box");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
                     }
                 }
             },
@@ -578,7 +578,7 @@ fn xmain() -> ! {
                 log::info!("Vbus is: {:.3}V", vbus);
                 if vbus > 1.5 {
                     // if power is plugged in, request that it be removed
-                    modals.show_notification(t!("rootkeys.init.unplug_power", xous::LANG), false).expect("modals error");
+                    modals.show_notification(t!("rootkeys.init.unplug_power", xous::LANG), None).expect("modals error");
                     log::info!("vbus is high, holding off on reboot");
                     send_message(main_cid,
                         xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
@@ -631,7 +631,7 @@ fn xmain() -> ! {
                     SignatureResult::DevKeyOk => t!("rootkeys.gwup.viewinfo_dk", xous::LANG),
                     _ => {
                         modals.dynamic_notification_close().expect("modals error");
-                        modals.show_notification(t!("rootkeys.gwup.no_update_found", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.gwup.no_update_found", xous::LANG), None).expect("modals error");
                         continue;
                     }
                 };
@@ -661,18 +661,18 @@ fn xmain() -> ! {
                 match modals.get_radiobutton(prompt) {
                     Ok(response) => {
                         if response == t!("rootkeys.gwup.short", xous::LANG) {
-                            modals.show_notification(info.as_str(), false).expect("modals error");
+                            modals.show_notification(info.as_str(), None).expect("modals error");
                         } else if response == t!("rootkeys.gwup.details", xous::LANG) {
-                            modals.show_notification(info.as_str(), false).expect("modals error");
+                            modals.show_notification(info.as_str(), None).expect("modals error");
                             let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
                             // truncate the message to better fit in the rendering box
                             let info_len = if gw_info.log_len > 256 { 256 } else {gw_info.log_len};
                             let info = format!("{}", str::from_utf8(&gw_info.log_str[..info_len as usize]).unwrap());
-                            modals.show_notification(info.as_str(), false).expect("modals error");
+                            modals.show_notification(info.as_str(), None).expect("modals error");
                             // truncate the message to better fit in the rendering box
                             let status_len = if gw_info.status_len > 256 { 256 } else {gw_info.status_len};
                             let info = format!("{}", str::from_utf8(&gw_info.status_str[..status_len as usize]).unwrap());
-                            modals.show_notification(info.as_str(), false).expect("modals error");
+                            modals.show_notification(info.as_str(), None).expect("modals error");
                         } else {
                             skip_confirmation = true;
                         }
@@ -762,21 +762,21 @@ fn xmain() -> ! {
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.gwup.finished", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.gwup.finished", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
                     }
                 }
             }
@@ -836,21 +836,21 @@ fn xmain() -> ! {
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.signxous.finished", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.signxous.finished", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
                     }
                 }
             }
@@ -887,7 +887,7 @@ fn xmain() -> ! {
                     // more keys with more passwords, this policy may need to become markedly more complicated!
 
                     // otherwise, an invalid password request
-                    modals.show_notification(t!("rootkeys.bad_password_request", xous::LANG), false).expect("modals error");
+                    modals.show_notification(t!("rootkeys.bad_password_request", xous::LANG), None).expect("modals error");
 
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
@@ -979,7 +979,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::BbramProvision) => {
-                modals.show_notification(t!("rootkeys.bbram.confirm", xous::LANG), false).expect("modals error");
+                modals.show_notification(t!("rootkeys.bbram.confirm", xous::LANG), None).expect("modals error");
                 let console_input = gam::modal::ConsoleInput::new(
                     main_cid,
                     Opcode::UxBbramCheckReturn.to_u32().unwrap()
@@ -1017,7 +1017,7 @@ fn xmain() -> ! {
                         rootkeys_modal.activate();
                     }
                 } else {
-                    modals.show_notification(t!("rootkeys.bbram.no_helper", xous::LANG), false).expect("modals error");
+                    modals.show_notification(t!("rootkeys.bbram.no_helper", xous::LANG), None).expect("modals error");
                     continue;
                 }
             }
@@ -1040,21 +1040,21 @@ fn xmain() -> ! {
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.bbram.finished", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.bbram.finished", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::KeyError) => {
                         // probably a bad password, purge it, so the user can try again
                         keys.purge_password(PasswordType::Update);
-                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::IntegrityError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::FlashError) => {
-                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), false).expect("modals error");
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
                     }
                 }
             }

@@ -600,7 +600,7 @@ impl PddbOs {
             self.clear_password(); // clear the bad password entry
             let xns = xous_names::XousNames::new().unwrap();
             let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
-            modals.show_notification(t!("pddb.badpass_infallible", xous::LANG), false).expect("notification failed");
+            modals.show_notification(t!("pddb.badpass_infallible", xous::LANG), None).expect("notification failed");
         }
     }
 
@@ -1450,7 +1450,7 @@ impl PddbOs {
                 self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
 
                 #[cfg(any(target_os = "none", target_os = "xous"))] // skip this dialog in hosted mode
-                modals.show_notification(t!("pddb.checkpass", xous::LANG), false).expect("notification failed");
+                modals.show_notification(t!("pddb.checkpass", xous::LANG), None).expect("notification failed");
 
                 self.clear_password();
                 let mut checkblock_b = [0u8; BLOCK_SIZE];
@@ -1459,7 +1459,7 @@ impl PddbOs {
                 if checkblock_a == checkblock_b {
                     success = true;
                 } else {
-                    modals.show_notification(t!("pddb.checkpass_fail", xous::LANG), false).expect("notification failed");
+                    modals.show_notification(t!("pddb.checkpass_fail", xous::LANG), None).expect("notification failed");
                     self.clear_password();
                 }
             }
