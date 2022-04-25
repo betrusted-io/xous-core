@@ -9,7 +9,7 @@ pub use sender::Sender as MessageSender;
 pub mod id;
 pub use id::Id as MessageId;
 
-use super::{MemoryRange, MemoryAddress, MemorySize};
+use super::{MemoryAddress, MemoryRange, MemorySize};
 
 #[repr(C)]
 #[derive(Debug, PartialEq)]
@@ -246,10 +246,18 @@ impl Message {
     }
 
     /// Return the ID of this message
-    pub fn id(&self) -> usize {
-        match &self {
-            &Message::MutableBorrow(mem) | &Message::Borrow(mem) | &Message::Move(mem) => mem.id,
-            &Message::Scalar(s) | &Message::BlockingScalar(s) => s.id,
+    pub fn id(&self) -> MessageId {
+        match self {
+            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => mem.id,
+            Message::Scalar(s) | Message::BlockingScalar(s) => s.id,
+        }
+    }
+
+    /// Set the ID or opcode of this message
+    pub fn set_id(&mut self, id: MessageId) {
+        match self {
+            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => mem.id = id,
+            Message::Scalar(s) | Message::BlockingScalar(s) => s.id = id,
         }
     }
 }
