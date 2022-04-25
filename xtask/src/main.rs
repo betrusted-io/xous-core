@@ -35,8 +35,15 @@ impl std::fmt::Display for BuildError {
 
 impl std::error::Error for BuildError {}
 
+// Filter out all arguments, which start with "-"
+fn get_packages() -> Vec<String> {
+    let mut args = env::args();
+    args.nth(1);
+    args.filter(|x| !x.starts_with("-")).collect()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    generate_version(); // really brute force way to try and get a version into the build system.
+    generate_version(env::args().filter(|x| x == "--no-timestamp").count() == 0); // really brute force way to try and get a version into the build system.
 
     let hw_pkgs = [
         // core OS services
@@ -163,7 +170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lkey = args.nth(3);
     let kkey = args.nth(4);
     match task.as_deref() {
-        Some("install-toolkit") => {
+        Some("install-toolkit") | Some("install-toolchain") => {
             let arg = env::args().nth(2);
             ensure_compiler(
                 &Some(PROGRAM_TARGET),
@@ -175,7 +182,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut args = env::args();
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = args.collect();
+            let mut apps: Vec<String> = get_packages();
             if apps.len() == 0 {
                 // add the standard demo apps if none are specified
                 println!("No apps specified, adding default apps...");
@@ -192,7 +199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut args = env::args();
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = args.collect();
+            let mut apps: Vec<String> = get_packages();
             if apps.len() == 0 {
                 // add the standard demo apps if none are specified
                 println!("No apps specified, adding default apps...");
@@ -255,7 +262,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
             //let mut pkgs = gfx_dev_pkgs.to_vec();
-            let apps: Vec<String> = args.collect();
+            let apps: Vec<String> = get_packages();
             for app in &apps {
                 pkgs.push(app);
             }
@@ -286,7 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut args = env::args();
             args.nth(1);
             let pkgs = base_pkgs.to_vec();
-            let args: Vec<String> = args.collect();
+            let args: Vec<String> = get_packages();
             let mut extra_packages = vec![];
             for program in &args {
                 extra_packages.push(program.as_str());
@@ -305,7 +312,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //let mut pkgs = hw_pkgs.to_vec();
             let mut pkgs = gfx_dev_pkgs.to_vec();
             pkgs.push("ffi-test");
-            let args: Vec<String> = args.collect();
+            let args: Vec<String> = get_packages();
             let mut extra_packages = vec![];
             for program in &args {
                 extra_packages.push(program.as_str());
@@ -331,7 +338,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pkgs.push("com");
             pkgs.push("llio");
             pkgs.push("dns");
-            let args: Vec<String> = args.collect();
+            let args: Vec<String> = get_packages();
             let mut extra_packages = vec![];
             for program in &args {
                 extra_packages.push(program.as_str());
@@ -365,7 +372,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut args = env::args();
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = args.collect();
+            let mut apps: Vec<String> = get_packages();
             if apps.len() == 0 {
                 // add the standard demo apps if none are specified
                 println!("No apps specified, adding default apps...");
@@ -381,7 +388,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("hosted-ci") => {
             let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = args.collect();
+            let mut apps: Vec<String> = get_packages();
             apps.push("ball".to_string());
             apps.push("repl".to_string());
             for app in &apps {
@@ -394,7 +401,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut args = env::args();
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = args.collect();
+            let mut apps: Vec<String> = get_packages();
             if apps.len() == 0 {
                 // add the standard demo apps if none are specified
                 println!("No apps specified, adding default apps...");
@@ -411,7 +418,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut args = env::args();
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
-            let apps: Vec<String> = args.collect();
+            let apps = get_packages();
             for app in &apps {
                 pkgs.push(app);
             }
@@ -604,6 +611,8 @@ Various debug configurations:
  ffi-test                builds an image for testing C-FFI bindings and integration
  tts                     builds an image with text to speech support via externally linked C executable
  install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
+
+Note: By default, the `ticktimer` will get rebuilt every time. You can skip this by appending `--no-timestamp` to the command.
 "
     )
 }
@@ -990,6 +999,11 @@ fn run(
 
     if !dry_run {
         println!("Building and running kernel...");
+        print!("    Command: cargo");
+        for arg in &args {
+            print!(" {}", arg);
+        }
+        println!();
         let status = Command::new(cargo())
             .current_dir(dir)
             .args(&args)
@@ -1496,7 +1510,7 @@ fn whycheproof_import() -> Result<(), DynError> {
 }
 
 ////////////////////////// Versioning infrastructure
-fn generate_version() {
+fn generate_version(add_timestamp: bool) {
     let output = if cfg!(target_os = "windows") {
         Command::new("cmd")
             .args(["/C", "git describe --tags"])
@@ -1512,25 +1526,33 @@ fn generate_version() {
     let gitver = output.stdout;
     let semver = String::from_utf8_lossy(&gitver);
 
-    let mut vfile = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open("services/ticktimer-server/src/version.rs")
-        .expect("Can't open our version file for writing");
-    print_header(&mut vfile);
-    #[cfg(not(feature = "no-timestamp"))]
-    let now = Local::now();
-    #[cfg(not(feature = "no-timestamp"))]
+    let version_file = "services/ticktimer-server/src/version.rs";
+
+    // Read the existing file to see if it needs to be updated.
+    let mut existing_data = Vec::new();
+    if let Ok(mut f) = std::fs::File::open(version_file) {
+        f.read_to_end(&mut existing_data).ok();
+    }
+
+    let mut new_data = Vec::new();
+    print_header(&mut new_data);
+    if add_timestamp {
+        let now = Local::now();
+        write!(
+            new_data,
+            "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"{}\";\n",
+            now.to_rfc2822()
+        )
+        .expect("couldn't add our timestamp");
+    } else {
+        write!(
+            new_data,
+            "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"unavailable\";\n"
+        )
+        .expect("couldn't add our timestamp");
+    }
     write!(
-        vfile,
-        "#[allow(dead_code)]\npub const TIMESTAMP: &'static str = \"{}\";\n",
-        now.to_rfc2822()
-    )
-    .expect("couldn't add our timestamp");
-    write!(
-        vfile,
+        new_data,
         "pub const SEMVER: &'static str = \"{}\";\n",
         semver
             .strip_suffix("\r\n")
@@ -1538,6 +1560,19 @@ fn generate_version() {
             .unwrap_or(&semver)
     )
     .expect("couldn't add our semver");
+
+    if existing_data != new_data {
+        let mut vfile = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(version_file)
+            .expect("Can't open our version file for writing");
+        vfile
+            .write_all(&mut new_data)
+            .expect("couldn't write new timestamp to version.rs");
+    }
 }
 
 fn print_header<U: Write>(out: &mut U) {

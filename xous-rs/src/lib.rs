@@ -13,7 +13,6 @@ pub mod arch;
 
 pub mod carton;
 pub mod definitions;
-mod messages;
 
 pub mod process;
 pub mod string;
@@ -22,7 +21,6 @@ pub mod syscall;
 
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
 pub use definitions::*;
-pub use messages::*;
 pub use string::*;
 pub use stringbuffer::*;
 pub use syscall::*;
