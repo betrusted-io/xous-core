@@ -65,7 +65,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 "unsub" => {
                     // this is just for testing the unsub call itself. It should result in the connection manager itself breaking.
                     match env.netmgr.wifi_state_unsubscribe() {
-                        Ok(_) => write!(ret, "wifi state successful"),
+                        Ok(_) => write!(ret, "wifi unsub successful"),
                         Err(e) => write!(ret, "wifi unsub error: {:?}", e),
                     };
                 }
