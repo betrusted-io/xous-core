@@ -1639,40 +1639,17 @@ fn xmain() -> ! {
                 buffer.replace(ser).expect("couldn't return config");
             }
             Some(Opcode::SubscribeWifiStats) => {
-                let buffer =
-                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                // have to transform it through the local memory space because you can't re-lend pages
-                let sub = buffer.to_original::<WifiStateSubscription, _>().unwrap();
-                let buf = Buffer::into_buf(sub).expect("couldn't convert to memory message");
-                buf.send(
+                msg.forward(
                     cm_cid,
-                    connection_manager::ConnectionManagerOpcode::SubscribeWifiStats
-                        .to_u32()
-                        .unwrap(),
-                )
+                    connection_manager::ConnectionManagerOpcode::SubscribeWifiStats as _)
                 .expect("couldn't forward subscription request");
             }
-            Some(Opcode::UnsubWifiStats) => msg_blocking_scalar_unpack!(msg, s0, s1, s2, s3, {
-                // now do something with the unsubscription
-                let response = xous::send_message(
+            Some(Opcode::UnsubWifiStats) => {
+                msg.forward(
                     cm_cid,
-                    Message::new_blocking_scalar(
-                        connection_manager::ConnectionManagerOpcode::UnsubWifiStats
-                            .to_usize()
-                            .unwrap(),
-                        s0,
-                        s1,
-                        s2,
-                        s3,
-                    ),
-                )
-                .expect("couldn't send unsub message");
-                if let xous::Result::Scalar1(val) = response {
-                    xous::return_scalar(msg.sender, val).unwrap();
-                } else {
-                    xous::return_scalar(msg.sender, 0).unwrap();
-                }
-            }),
+                    connection_manager::ConnectionManagerOpcode::UnsubWifiStats as _)
+                .expect("couldn't forward unsub request");
+            },
             Some(Opcode::FetchSsidList) => {
                 let mut buffer = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
