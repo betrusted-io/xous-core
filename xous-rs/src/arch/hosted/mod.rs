@@ -361,18 +361,18 @@ fn read_next_syscall_result(
                 crate::Message::Move(ref mut memory_message)
                 | crate::Message::Borrow(ref mut memory_message)
                 | crate::Message::MutableBorrow(ref mut memory_message) => {
-                    let data = vec![0u8; memory_message.buf.len()];
-                    let mut data = std::mem::ManuallyDrop::new(data);
-                    if let Err(e) = stream.read_exact(&mut data) {
+                    memory_message.buf = mem::map_memory_post(
+                        None,
+                        None,
+                        memory_message.buf.len(),
+                        crate::MemoryFlags::R | crate::MemoryFlags::W,
+                        memory_message.buf,
+                    )
+                    .expect("couldn't allocate range");
+                    if let Err(e) = stream.read_exact(memory_message.buf.as_slice_mut()) {
                         eprintln!("Server shut down: {}", e);
                         std::process::exit(0);
                     }
-                    data.shrink_to_fit();
-                    assert_eq!(data.len(), data.capacity());
-                    let len = data.len();
-                    let addr = data.as_mut_ptr();
-                    memory_message.buf =
-                        unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
                 }
                 _ => (),
             }
@@ -425,12 +425,9 @@ fn read_next_syscall_result(
                 mem::unmap_memory_post(mem).unwrap();
             }
 
-            // If we're returning memory to the Server, then reconstitute the buffer we just passed,
-            // and Drop it so it can be freed.
+            // If we're returning memory to the Server, then free it here
             if kind == CallMemoryKind::ReturnMemory {
-                let rebuilt =
-                    unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
-                drop(rebuilt);
+                mem::unmap_memory_post(mem).unwrap();
             }
         }
         return (msg_thread_id, response);

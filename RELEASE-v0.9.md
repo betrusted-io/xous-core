@@ -143,6 +143,12 @@ for examples of idiomatic ways to write code for Xous.
   - There will be occassions where you will need to insert a paperclip into the reset port on the lower right hand corner to recover from the panic.
   - If you get a panic, please snap a photo of it and drop it in a new issue in the `xous-core` repo, along with a description of what you were doing at the time.
 
+## New in 0.9.9 (currently in development)
+- `modals` text entry has been refactored to allow multi-field text entries with defaults! Thanks to gsora for PR #140.
+- fix issue #141: bug fix in `log-server` where max-length buffers were not being printed + refactor of method to use `send` vs scalars
+- PR #149: index support for modals. Lists can be submitted as a `Vec` now, with an array index returned as the selection result. Thanks to nworbnhoj for the PR.
+- PR #150: QR codes can now display a separate QR code from the actual text in the box via a Some/None specifier. Thanks to nworbnhoj for the PR.
+
 ## Roadmap to 1.0
 
 The items that are still missing before we can hit a 1.0 release include:

@@ -62,6 +62,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "unsub" => {
+                    // this is just for testing the unsub call itself. It should result in the connection manager itself breaking.
+                    match env.netmgr.wifi_state_unsubscribe() {
+                        Ok(_) => write!(ret, "wifi unsub successful"),
+                        Err(e) => write!(ret, "wifi unsub error: {:?}", e),
+                    };
+                }
                 "tcpget" => {
                     // note: to keep shellchat lightweight, we do a very minimal parsing of the URL. We assume it always has
                     // a form such as:
