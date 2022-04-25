@@ -1,4 +1,5 @@
 use super::{Message, MessageSender};
+use crate::CID;
 
 #[repr(C)]
 #[derive(Debug, PartialEq)]
@@ -25,6 +26,42 @@ impl Envelope {
             ret.1[3],
             ret.1[4],
         ]
+    }
+
+    pub fn take_message(self) -> Message {
+        use core::mem::ManuallyDrop;
+        // Convert `Self` into something that won't have its "Drop" method called
+        let manual_self = ManuallyDrop::new(self);
+
+        // This function only works on memory messages
+        unsafe { core::ptr::read(&manual_self.body) }
+    }
+
+    pub fn send(self, connection: CID) -> Result<crate::Result, (Envelope, crate::Error)> {
+        use core::mem::ManuallyDrop;
+        // Convert `Self` into something that won't have its "Drop" method called
+        let manual_self = ManuallyDrop::new(self);
+
+        // This function only works on memory messages
+        let body = unsafe { core::ptr::read(&manual_self.body) };
+        match body {
+            Message::Move(_) => {
+                let result = crate::send_message(connection, body);
+                if let Ok(crate::Result::Ok) = result {
+                    return Ok(crate::Result::Ok);
+                }
+                return Err((
+                    ManuallyDrop::into_inner(manual_self),
+                    crate::Error::MemoryInUse,
+                ));
+            }
+            _ => {
+                return Err((
+                    ManuallyDrop::into_inner(manual_self),
+                    crate::Error::MemoryInUse,
+                ))
+            }
+        }
     }
 }
 
