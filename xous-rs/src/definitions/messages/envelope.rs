@@ -57,7 +57,11 @@ impl Envelope {
     ///
     /// If there is an error, then the original Envelope is returned along with the resulting
     /// error.
-    pub fn forward(mut self, connection: CID, id: MessageId) -> Result<(), (Envelope, crate::Error)> {
+    pub fn forward(
+        mut self,
+        connection: CID,
+        id: MessageId,
+    ) -> Result<(), (Envelope, crate::Error)> {
         use core::mem::ManuallyDrop;
 
         // Update our ID to match the newly-sent message. Reuse the same message struct.
@@ -69,6 +73,7 @@ impl Envelope {
         // Unsafe because there are now two things that are pointing at "self.body". However,
         // this is fine since these two pointers are never used at the same time.
         let body = unsafe { core::ptr::read(&manual_self.body) };
+        let sender = unsafe { core::ptr::read(&manual_self.sender) };
 
         // Different messages have different kinds of lifetimes, so they must all be
         // handled differently.
@@ -92,6 +97,29 @@ impl Envelope {
                     crate::Error::MemoryInUse,
                 ));
             }
+            Message::BlockingScalar(_) => {
+                let result = crate::send_message(connection, body);
+
+                // If there's an error, reconstitute ourselves and return.
+                if let Err(e) = result {
+                    return Err((ManuallyDrop::into_inner(manual_self), e));
+                } else if let Ok(crate::Result::Scalar1(v)) = result {
+                    if let Err(e) = crate::return_scalar(sender, v) {
+                        return Err((ManuallyDrop::into_inner(manual_self), e));
+                    }
+                    return Ok(());
+                } else if let Ok(crate::Result::Scalar2(v1, v2)) = result {
+                    if let Err(e) = crate::return_scalar2(sender, v1, v2) {
+                        return Err((ManuallyDrop::into_inner(manual_self), e));
+                    }
+                    return Ok(());
+                }
+                return Err((
+                    ManuallyDrop::into_inner(manual_self),
+                    crate::Error::MemoryInUse,
+                ));
+            }
+
             _ => {
                 let result = crate::send_message(connection, body);
                 let new_self = ManuallyDrop::into_inner(manual_self);
