@@ -425,12 +425,9 @@ fn read_next_syscall_result(
                 mem::unmap_memory_post(mem).unwrap();
             }
 
-            // If we're returning memory to the Server, then reconstitute the buffer we just passed,
-            // and Drop it so it can be freed.
+            // If we're returning memory to the Server, then free it here
             if kind == CallMemoryKind::ReturnMemory {
-                let rebuilt =
-                    unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
-                drop(rebuilt);
+                mem::unmap_memory_post(mem).unwrap();
             }
         }
         return (msg_thread_id, response);
