@@ -299,11 +299,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for program in &args {
                 extra_packages.push(program.as_str());
             }
-            build_hw_image(false, Some("./precursors/soc.svd".to_string()), &pkgs,
-            None,
-            None,
-            None,
-            extra_packages.as_slice(), Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]))?;
+            if true {
+                renode_image(
+                    false,
+                    &pkgs,
+                    extra_packages.as_slice(),
+                    None,
+                    Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]),
+                )?;
+            } else {
+                build_hw_image(false, Some("./precursors/soc.svd".to_string()), &pkgs,
+                None,
+                None,
+                None,
+                extra_packages.as_slice(), Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]))?;
+            }
         }
         Some("libstd-test") => {
             let mut args = env::args();
