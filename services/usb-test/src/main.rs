@@ -2,46 +2,28 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
 
-use num_traits::FromPrimitive;
+use api::*;
+mod kbd;
+use kbd::*;
+use num_traits::*;
+use xous::{CID, msg_scalar_unpack, Message, send_message};
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
-    // use crate::api::*;
-    use susres::{RegManager, RegOrField, SuspendResume};
+    use crate::*;
+
 
     pub struct UsbTest {
-        //csr: utralib::CSR<u32>,
-        //fifo: xous::MemoryRange,
-        // susres_manager: RegManager::<{utra::audio::AUDIO_NUMREGS}>,
+        pub(crate) conn: CID,
     }
 
     impl UsbTest {
-        pub fn new() -> UsbTest {
-            /*
-            let csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::audio::HW_AUDIO_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Audio CSR range");
-            let fifo = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utralib::HW_AUDIO_MEM),
-                None,
-                utralib::HW_AUDIO_MEM_LEN,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Audio CSR range");
-            */
+        pub fn new(sid: xous::SID) -> UsbTest {
             let mut usbtest = UsbTest {
-                // csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                // susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
-                // fifo,
+                conn: xous::connect(sid).unwrap(),
             };
-
             usbtest
         }
 
@@ -85,7 +67,8 @@ fn xmain() -> ! {
     let usbtest_sid = xns.register_name(api::SERVER_NAME_USBTEST, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbtest_sid);
 
-    let mut usbtest = UsbTest::new();
+    let mut usbtest = UsbTest::new(usbtest_sid);
+    let mut kbd = Keyboard::new(usbtest_sid);
 
     log::trace!("ready to accept requests");
 
@@ -102,17 +85,86 @@ fn xmain() -> ! {
     });
 
     // register a suspend/resume listener
-    let sr_cid = xous::connect(usbtest_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let cid = xous::connect(usbtest_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(
+        None,
+        &xns,
+        api::Opcode::SuspendResume as u32,
+        cid
+    ).expect("couldn't create suspend/resume object");
 
+    let mut cmdline = String::new();
     loop {
         let msg = xous::receive_message(usbtest_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                kbd.suspend();
                 usbtest.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                kbd.resume();
                 usbtest.resume();
             }),
+            Some(Opcode::DoCmd) => {
+                log::info!("got command line: {}", cmdline);
+                if let Some((cmd, args)) = cmdline.split_once(' ') {
+                    // command and args
+                    match cmd {
+                        "test" => {
+                            log::info!("got test command with arg {}", args);
+                        }
+                        _ => {
+                            log::info!("unrecognied command {}", cmd);
+                        }
+                    }
+                } else {
+                    // just the command
+                    match cmdline.as_str() {
+                        "help" => {
+                            log::info!("wouldn't that be nice...");
+                        }
+                        _ => {
+                            log::info!("unrecognized command");
+                        }
+                    }
+                }
+                cmdline.clear();
+            }
+            // this is via UART
+            Some(Opcode::KeyboardChar) => msg_scalar_unpack!(msg, k, _, _, _, {
+                let key = {
+                    let bs_del_fix = if k == 0x7f {
+                        0x08
+                    } else {
+                        k
+                    };
+                    core::char::from_u32(bs_del_fix as u32).unwrap_or('\u{0000}')
+                };
+                if key != '\u{0000}' {
+                    if key != '\u{000d}' {
+                        cmdline.push(key);
+                    } else {
+                        send_message(cid, Message::new_scalar(
+                            Opcode::DoCmd.to_usize().unwrap(), 0, 0, 0, 0
+                        )).unwrap();
+                    }
+                }
+            }),
+            // this is via physical keyboard
+            Some(Opcode::HandlerTrigger) => {
+                let rawstates = kbd.update();
+                // interpret scancodes
+                let kc: Vec<char> = kbd.track_keys(&rawstates);
+                // handle keys, if any
+                for &key in kc.iter() {
+                    if key != '\u{000d}' {
+                        cmdline.push(key);
+                    } else {
+                        send_message(cid, Message::new_scalar(
+                            Opcode::DoCmd.to_usize().unwrap(), 0, 0, 0, 0
+                        )).unwrap();
+                    }
+                }
+            },
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;

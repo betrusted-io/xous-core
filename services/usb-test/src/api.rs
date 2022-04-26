@@ -2,6 +2,12 @@ pub(crate) const SERVER_NAME_USBTEST: &'static str = "_USB test and development 
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
+    /// Parse a commandlne
+    DoCmd,
+    /// Keyboard input
+    KeyboardChar,
+    /// Keyboard handler input
+    HandlerTrigger,
     /// Suspend/resume callback
     SuspendResume,
     /// Exits the server
