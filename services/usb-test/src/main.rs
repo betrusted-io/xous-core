@@ -17,21 +17,49 @@ mod implementation {
 
     pub struct UsbTest {
         pub(crate) conn: CID,
+        gpio_csr: utralib::CSR<u32>,
+        usb: xous::MemoryRange,
     }
 
     impl UsbTest {
         pub fn new(sid: xous::SID) -> UsbTest {
+            let gpio_base = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map GPIO CSR range");
+            // this particular core does not use CSRs for control - it uses directly memory mapped registers
+            let usb = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
+                None,
+                utralib::HW_USBDEV_MEM_LEN,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map USB device memory range");
+
             let mut usbtest = UsbTest {
+                gpio_csr: CSR::new(gpio_base.as_mut_ptr() as *mut u32),
                 conn: xous::connect(sid).unwrap(),
+                usb,
             };
             usbtest
         }
 
+        pub fn connect_device_core(&mut self, state: bool) {
+            if state {
+                log::info!("connecting USB device core");
+                self.gpio_csr.wfo(utra::gpio::USBSELECT_USBSELECT, 1);
+            } else {
+                log::info!("connecting USB debug core");
+                self.gpio_csr.wfo(utra::gpio::USBSELECT_USBSELECT, 0);
+            }
+        }
+
         pub fn suspend(&mut self) {
-            // self.susres_manager.suspend();
         }
         pub fn resume(&mut self) {
-            // self.susres_manager.resume();
         }
     }
 }
@@ -112,6 +140,13 @@ fn xmain() -> ! {
                         "test" => {
                             log::info!("got test command with arg {}", args);
                         }
+                        "conn" => {
+                            match args {
+                                "1" => usbtest.connect_device_core(true),
+                                "0" => usbtest.connect_device_core(false),
+                                _ => log::info!("conn [1,0], got: {}", args),
+                            }
+                        }
                         _ => {
                             log::info!("unrecognied command {}", cmd);
                         }
@@ -121,6 +156,9 @@ fn xmain() -> ! {
                     match cmdline.as_str() {
                         "help" => {
                             log::info!("wouldn't that be nice...");
+                        }
+                        "conn" => {
+                            usbtest.connect_device_core(true);
                         }
                         _ => {
                             log::info!("unrecognized command");
