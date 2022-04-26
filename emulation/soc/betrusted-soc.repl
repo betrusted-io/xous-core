@@ -116,6 +116,9 @@ spiflash: Memory.MappedMemory @ sysbus 0x20000000
 audio: Memory.MappedMemory @ sysbus 0xe0000000
     size: 0x00001000
 
+usbdev: Memory.MappedMemory @ sysbus 0xe0040000
+    size: 0x00010000
+
 
 
 abracom_rtc: Sensors.ABRTCMC @ i2c 0x68
