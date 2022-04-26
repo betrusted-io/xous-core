@@ -3158,6 +3158,8 @@ dependencies = [
 name = "usb-test"
 version = "0.1.0"
 dependencies = [
+ "bitfield",
+ "keyboard",
  "log",
  "log-server",
  "num-derive",
