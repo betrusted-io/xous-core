@@ -10,82 +10,19 @@ use num_traits::*;
 use xous::{CID, msg_scalar_unpack, Message, send_message};
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
-mod implementation {
-    use utralib::generated::*;
-    use crate::*;
+mod hw;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use hw::*;
 
 
-    pub struct UsbTest {
-        pub(crate) conn: CID,
-        gpio_csr: utralib::CSR<u32>,
-        usb: xous::MemoryRange,
-    }
-
-    impl UsbTest {
-        pub fn new(sid: xous::SID) -> UsbTest {
-            let gpio_base = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map GPIO CSR range");
-            // this particular core does not use CSRs for control - it uses directly memory mapped registers
-            let usb = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
-                None,
-                utralib::HW_USBDEV_MEM_LEN,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map USB device memory range");
-
-            let mut usbtest = UsbTest {
-                gpio_csr: CSR::new(gpio_base.as_mut_ptr() as *mut u32),
-                conn: xous::connect(sid).unwrap(),
-                usb,
-            };
-            usbtest
-        }
-
-        pub fn connect_device_core(&mut self, state: bool) {
-            if state {
-                log::info!("connecting USB device core");
-                self.gpio_csr.wfo(utra::gpio::USBSELECT_USBSELECT, 1);
-            } else {
-                log::info!("connecting USB debug core");
-                self.gpio_csr.wfo(utra::gpio::USBSELECT_USBSELECT, 0);
-            }
-        }
-
-        pub fn suspend(&mut self) {
-        }
-        pub fn resume(&mut self) {
-        }
-    }
-}
-
-// a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
-mod implementation {
-    pub struct UsbTest {
-    }
-
-    impl UsbTest {
-        pub fn new() -> UsbTest {
-            UsbTest {
-            }
-        }
-        pub fn suspend(&self) {
-        }
-        pub fn resume(&self) {
-        }
-    }
-}
-
+mod hosted;
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+use hosted::*;
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    use crate::implementation::UsbTest;
+    use crate::UsbTest;
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -144,7 +81,7 @@ fn xmain() -> ! {
                             match args {
                                 "1" => usbtest.connect_device_core(true),
                                 "0" => usbtest.connect_device_core(false),
-                                _ => log::info!("conn [1,0], got: {}", args),
+                                _ => log::info!("usage: conn [1,0]; got: 'conn {}'", args),
                             }
                         }
                         _ => {
@@ -159,6 +96,11 @@ fn xmain() -> ! {
                         }
                         "conn" => {
                             usbtest.connect_device_core(true);
+                            log::info!("device core connected");
+                            usbtest.print_regs();
+                        }
+                        "regs" => {
+                            usbtest.print_regs();
                         }
                         _ => {
                             log::info!("unrecognized command");
