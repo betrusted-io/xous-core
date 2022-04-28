@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2022-04-22 01:27:38]]></description>
+    <description><![CDATA[Litex SoC 2022-04-28 22:21:07]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1253,10 +1253,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``09f47e22``, so this value is 167018018, which should be enough to check out
+``b5e6a2c5``, so this value is 3051791045, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x9f47e22</resetValue>
+                    <resetValue>0xb5e6a2c5</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1273,7 +1273,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x0e</resetValue>
+                    <resetValue>0x10</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3608,7 +3608,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x686fb736</resetValue>
+                    <resetValue>0x400f2dfd</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3623,7 +3623,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x18712489</resetValue>
+                    <resetValue>0x26272a0c</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -6882,7 +6882,7 @@ entered. Defaults to a range of 1.67-5.00 seconds]]></description>
         </peripheral>
         <peripheral>
             <name>D11CTIME</name>
-            <baseAddress>0xF0023000</baseAddress>
+            <baseAddress>0xF0024000</baseAddress>
             <groupName>D11CTIME</groupName>
             <registers>
                 <register>
@@ -6924,7 +6924,7 @@ entered. Defaults to a range of 1.67-5.00 seconds]]></description>
         </peripheral>
         <peripheral>
             <name>WFI</name>
-            <baseAddress>0xF0024000</baseAddress>
+            <baseAddress>0xF0025000</baseAddress>
             <groupName>WFI</groupName>
             <registers>
                 <register>
@@ -6967,7 +6967,7 @@ of the PLL]]></description>
         </peripheral>
         <peripheral>
             <name>IDENTIFIER_MEM</name>
-            <baseAddress>0xF0025000</baseAddress>
+            <baseAddress>0xF0026000</baseAddress>
             <groupName>IDENTIFIER_MEM</groupName>
             <registers>
                 <register>
@@ -7080,6 +7080,7 @@ of the PLL]]></description>
             <constant name="TRNG_KERNEL_INTERRUPT" value="15" />
             <constant name="TRNG_SERVER_INTERRUPT" value="16" />
             <constant name="UART_INTERRUPT" value="2" />
+            <constant name="USBDEV_INTERRUPT" value="19" />
         </constants>
     </vendorExtensions>
 </device>
