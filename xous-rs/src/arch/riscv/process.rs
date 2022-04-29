@@ -116,9 +116,9 @@ pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessIn
 pub fn create_process_post(
     _args: ProcessArgs,
     _init: ProcessInit,
-    pid: crate::PID,
+    startup: ProcessStartup,
 ) -> core::result::Result<ProcessHandle, crate::Error> {
-    Ok(ProcessHandle(pid))
+    Ok(ProcessHandle(startup.pid))
 }
 
 /// Wait for a process to terminate.
