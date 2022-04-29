@@ -69,12 +69,13 @@ where
 pub fn create_process_post_as_thread<F>(
     args: ProcessArgsAsThread<F>,
     init: ProcessInit,
-    pid: PID,
+    startup: ProcessStartup,
 ) -> core::result::Result<ProcessHandleAsThread, crate::Error>
 where
     F: FnOnce() + Send + 'static,
 {
     let server_address = xous_address();
+    let pid = startup.pid;
 
     let f = args.main;
     let thread_main = std::thread::Builder::new()
@@ -132,6 +133,22 @@ pub struct ProcessStartup {
     pid: crate::PID,
 }
 
+impl ProcessStartup {
+    pub fn new(pid: crate::PID) -> Self {
+        ProcessStartup { pid }
+    }
+
+    pub fn pid(&self) -> crate::PID {
+        self.pid
+    }
+}
+
+impl core::fmt::Display for ProcessStartup {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.pid)
+    }
+}
+
 impl From<&[usize; 7]> for ProcessStartup {
     fn from(src: &[usize; 7]) -> ProcessStartup {
         ProcessStartup {
@@ -152,7 +169,6 @@ impl Into<[usize; 7]> for &ProcessStartup {
         [self.pid.get() as _, 0, 0, 0, 0, 0, 0]
     }
 }
-
 
 impl Into<[usize; 7]> for &ProcessInit {
     fn into(self) -> [usize; 7] {
@@ -204,11 +220,11 @@ pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessIn
 pub fn create_process_post(
     args: ProcessArgs,
     init: ProcessInit,
-    pid: PID,
+    startup: ProcessStartup,
 ) -> core::result::Result<ProcessHandle, crate::Error> {
     use std::process::Command;
     let server_env = format!("{}", xous_address());
-    let pid_env = format!("{}", pid);
+    let pid_env = format!("{}", startup.pid);
     let process_name_env = args.name.to_string();
     let process_key_env = hex::encode(&init.key.0);
     let (shell, args) = if cfg!(windows) {

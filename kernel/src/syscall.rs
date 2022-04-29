@@ -803,7 +803,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {
             ss.create_process(process_init)
-                .map(xous_kernel::Result::ProcessID)
+                .map(xous_kernel::Result::NewProcess)
         }),
         SysCall::CreateServerWithAddress(name) => SystemServices::with_mut(|ss| {
             ss.create_server_with_address(pid, name)

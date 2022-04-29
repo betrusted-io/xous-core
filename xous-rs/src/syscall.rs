@@ -1659,8 +1659,8 @@ where
 {
     let process_init = crate::arch::create_process_pre_as_thread(&args)?;
     rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
-        if let Result::ProcessID(pid) = result {
-            crate::arch::create_process_post_as_thread(args, process_init, pid)
+        if let Result::NewProcess(startup) = result {
+            crate::arch::create_process_post_as_thread(args, process_init, startup)
         } else {
             Err(Error::InternalError)
         }
@@ -1678,8 +1678,8 @@ pub fn create_process(
 ) -> core::result::Result<crate::arch::ProcessHandle, Error> {
     let process_init = crate::arch::create_process_pre(&args)?;
     rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
-        if let Result::ProcessID(pid) = result {
-            crate::arch::create_process_post(args, process_init, pid)
+        if let Result::NewProcess(startup) = result {
+            crate::arch::create_process_post(args, process_init, startup)
         } else {
             Err(Error::InternalError)
         }

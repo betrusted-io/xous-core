@@ -6,6 +6,7 @@ use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
 use xous_kernel::MemoryRange;
+use xous_kernel::arch::ProcessStartup;
 
 use core::num::NonZeroU8;
 
@@ -389,19 +390,19 @@ impl SystemServices {
 
     /// Add a new entry to the process table. This results in a new address space
     /// and a new PID, though the process is in the state `Setup()`.
-    pub fn create_process(&mut self, init_process: ProcessInit) -> Result<PID, xous_kernel::Error> {
+    pub fn create_process(&mut self, init_process: ProcessInit) -> Result<ProcessStartup, xous_kernel::Error> {
         for (idx, mut entry) in self.processes.iter_mut().enumerate() {
             if entry.state != ProcessState::Free {
                 continue;
             }
             let new_pid = pid_from_usize(idx + 1)?;
-            arch::process::Process::create(new_pid, init_process);
+            let startup = arch::process::Process::create(new_pid, init_process);
             let ppid = crate::arch::process::current_pid();
             // println!("Creating new process for PID {} with PPID {}", new_pid, ppid);
             entry.state = ProcessState::Allocated;
             entry.ppid = ppid;
             entry.pid = new_pid;
-            return Ok(new_pid);
+            return Ok(startup);
         }
         Err(xous_kernel::Error::ProcessNotFound)
     }

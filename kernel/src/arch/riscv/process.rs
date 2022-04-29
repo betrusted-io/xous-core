@@ -9,7 +9,7 @@ pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous_kernel::{ProcessInit, ThreadInit, PID, TID};
+use xous_kernel::{ProcessInit, ThreadInit, PID, TID, ProcessStartup};
 
 // use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 131072;
@@ -497,7 +497,7 @@ impl Process {
         );
     }
 
-    pub fn create(_pid: PID, _init_data: ProcessInit) -> PID {
+    pub fn create(_pid: PID, _init_data: ProcessInit) -> ProcessStartup {
         todo!();
     }
 
