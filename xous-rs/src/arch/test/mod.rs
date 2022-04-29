@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
@@ -122,6 +122,64 @@ impl ProcessArgs {
             command,
             name: name.to_owned(),
         }
+    }
+}
+
+/// This is returned when a process is created
+#[derive(Debug, PartialEq)]
+pub struct ProcessStartup {
+    /// The process ID of the new process
+    pid: crate::PID,
+}
+
+impl From<&[usize; 7]> for ProcessStartup {
+    fn from(src: &[usize; 7]) -> ProcessStartup {
+        ProcessStartup {
+            pid: crate::PID::new(src[0] as _).unwrap(),
+        }
+    }
+}
+
+impl From<[usize; 8]> for ProcessStartup {
+    fn from(src: [usize; 8]) -> ProcessStartup {
+        let pid = crate::PID::new(src[1] as _).unwrap();
+        ProcessStartup { pid }
+    }
+}
+
+impl Into<[usize; 7]> for &ProcessStartup {
+    fn into(self) -> [usize; 7] {
+        [self.pid.get() as _, 0, 0, 0, 0, 0, 0]
+    }
+}
+
+
+impl Into<[usize; 7]> for &ProcessInit {
+    fn into(self) -> [usize; 7] {
+        [
+            u32::from_le_bytes(self.key.0[0..4].try_into().unwrap()) as _,
+            u32::from_le_bytes(self.key.0[4..8].try_into().unwrap()) as _,
+            u32::from_le_bytes(self.key.0[8..12].try_into().unwrap()) as _,
+            u32::from_le_bytes(self.key.0[12..16].try_into().unwrap()) as _,
+            0,
+            0,
+            0,
+        ]
+    }
+}
+
+impl TryFrom<[usize; 7]> for ProcessInit {
+    type Error = crate::Error;
+    fn try_from(src: [usize; 7]) -> core::result::Result<ProcessInit, crate::Error> {
+        let mut exploded = vec![];
+        for word in src[0..4].into_iter() {
+            exploded.extend_from_slice(&(*word as u32).to_le_bytes());
+        }
+        let mut key = [0u8; 16];
+        key.copy_from_slice(&exploded);
+        Ok(ProcessInit {
+            key: ProcessKey(key),
+        })
     }
 }
 
