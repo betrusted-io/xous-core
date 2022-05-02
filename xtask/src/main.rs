@@ -299,7 +299,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for program in &args {
                 extra_packages.push(program.as_str());
             }
-            if true {
+            if false {
                 renode_image(
                     false,
                     &pkgs,
