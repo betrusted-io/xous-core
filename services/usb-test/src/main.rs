@@ -163,16 +163,23 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-
-
-pub(crate) const START_OFFSET: u32 = 0x0048;
+pub(crate) const START_OFFSET: u32 = 0x0048 + 8; // align spinal free space to 16-byte boundary
 pub(crate) const END_OFFSET: u32 = 0xFF00;
+/// USB endpoint allocator. The SpinalHDL USB controller appears as a block of
+/// unstructured memory to the host. You can specify pointers into the memory with
+/// an offset and length to define where various USB descriptors should be placed.
+/// This allocator manages that space.
+///
+/// Note that all allocations must be aligned to 16-byte boundaries. This is a restriction
+/// of the USB core.
 pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Option<u32> {
     if requested == 0 {
         return None;
     }
     let mut alloc_offset = START_OFFSET;
     for (&offset, &length) in allocs.iter() {
+        // round length up to the nearest 16-byte increment
+        let length = if length & 0xF == 0 { length } else { (length + 16) & !0xF };
         // println!("aoff: {}, cur: {}+{}", alloc_offset, offset, length);
         assert!(offset >= alloc_offset, "allocated regions overlap");
         if offset > alloc_offset {
@@ -251,16 +258,16 @@ mod tests {
         for _ in 0..10240 {
             if rng.next_u32() % 2 == 0 {
                 if tracker.len() > 0 {
-                    println!("tracker: {:?}", tracker);
+                    //println!("tracker: {:?}", tracker);
                     let index = tracker.remove((rng.next_u32() % tracker.len() as u32) as usize);
-                    println!("removing: {} of {}", index, tracker.len());
+                    //println!("removing: {} of {}", index, tracker.len());
                     assert_eq!(dealloc_inner(&mut allocs, index), true);
                 }
             } else {
                 let req = rng.next_u32() % 256;
                 if let Some(offset) = alloc_inner(&mut allocs, req) {
-                    println!("tracker: {:?}", tracker);
-                    println!("alloc: {}+{}", offset, req);
+                    //println!("tracker: {:?}", tracker);
+                    //println!("alloc: {}+{}", offset, req);
                     tracker.push(offset);
                 }
             }
@@ -271,6 +278,7 @@ mod tests {
         println!("after random test:");
         for (&offset, &len) in allocs.iter() {
             assert!(offset >= last_alloc, "new offset is inside last allocation!");
+            assert!(offset & 0xF == 0, "misaligned allocation detected");
             println!("{}-{}({})", offset, offset+len, len);
             last_alloc = offset + len;
         }
