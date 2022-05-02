@@ -4,25 +4,26 @@
 mod api;
 
 use api::*;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod kbd;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use kbd::*;
-use num_traits::*;
-use xous::{CID, msg_scalar_unpack, Message, send_message};
-
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod hw;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use hw::*;
-
-
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod hosted;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 use hosted::*;
 
+use num_traits::*;
+use xous::{CID, msg_scalar_unpack, Message, send_message};
+use std::collections::BTreeMap;
+
 #[xous::xous_main]
 fn xmain() -> ! {
-    use crate::UsbTest;
+    use crate::SpinalUsbDevice;
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -32,7 +33,7 @@ fn xmain() -> ! {
     let usbtest_sid = xns.register_name(api::SERVER_NAME_USBTEST, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbtest_sid);
 
-    let mut usbtest = UsbTest::new(usbtest_sid);
+    let mut usbtest = SpinalUsbDevice::new(usbtest_sid);
     let mut kbd = Keyboard::new(usbtest_sid);
 
     log::trace!("ready to accept requests");
@@ -160,4 +161,118 @@ fn xmain() -> ! {
     xous::destroy_server(usbtest_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+
+
+pub(crate) const START_OFFSET: u32 = 0x0048;
+pub(crate) const END_OFFSET: u32 = 0xFF00;
+pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Option<u32> {
+    if requested == 0 {
+        return None;
+    }
+    let mut alloc_offset = START_OFFSET;
+    for (&offset, &length) in allocs.iter() {
+        // println!("aoff: {}, cur: {}+{}", alloc_offset, offset, length);
+        assert!(offset >= alloc_offset, "allocated regions overlap");
+        if offset > alloc_offset {
+            if offset - alloc_offset >= requested {
+                // there's a hole in the list, insert the element here
+                break;
+            }
+        }
+        alloc_offset = offset + length;
+    }
+    if alloc_offset + requested <= END_OFFSET {
+        allocs.insert(alloc_offset, requested);
+        Some(alloc_offset)
+    } else {
+        None
+    }
+}
+pub(crate) fn dealloc_inner(allocs: &mut BTreeMap<u32, u32>, offset: u32) -> bool {
+    allocs.remove(&offset).is_some()
+}
+
+// run with `cargo test -- --nocapture --test-threads=1`:
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_alloc() {
+        use rand_chacha::ChaCha8Rng;
+        use rand_chacha::rand_core::SeedableRng;
+        use rand_chacha::rand_core::RngCore;
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        let mut allocs = BTreeMap::<u32, u32>::new();
+        assert_eq!(alloc_inner(&mut allocs, 128), Some(START_OFFSET));
+        assert_eq!(alloc_inner(&mut allocs, 64), Some(START_OFFSET + 128));
+        assert_eq!(alloc_inner(&mut allocs, 256), Some(START_OFFSET + 128 + 64));
+        assert_eq!(alloc_inner(&mut allocs, 128), Some(START_OFFSET + 128 + 64 + 256));
+        assert_eq!(alloc_inner(&mut allocs, 128), Some(START_OFFSET + 128 + 64 + 256 + 128));
+        assert_eq!(alloc_inner(&mut allocs, 128), Some(START_OFFSET + 128 + 64 + 256 + 128 + 128));
+        assert_eq!(alloc_inner(&mut allocs, 0xFF00), None);
+
+        // create two holes and fill first hole, interleaved
+        assert_eq!(dealloc_inner(&mut allocs, START_OFFSET + 128 + 64), true);
+        let mut last_alloc = 0;
+        // consistency check and print out
+        for (&offset, &len) in allocs.iter() {
+            assert!(offset >= last_alloc, "new offset is inside last allocation!");
+            println!("{}-{}", offset, offset+len);
+            last_alloc = offset + len;
+        }
+
+        assert_eq!(alloc_inner(&mut allocs, 128), Some(START_OFFSET + 128 + 64));
+        assert_eq!(dealloc_inner(&mut allocs, START_OFFSET + 128 + 64 + 256 + 128), true);
+        assert_eq!(alloc_inner(&mut allocs, 128), Some(START_OFFSET + 128 + 64 + 128));
+
+        // alloc something that doesn't fit at all
+        assert_eq!(alloc_inner(&mut allocs, 256), Some(START_OFFSET + 128 + 64 + 256 + 128 + 128 + 128));
+
+        // fill second hole
+        assert_eq!(alloc_inner(&mut allocs, 128), Some(START_OFFSET + 128 + 64 + 256 + 128));
+
+        // final tail alloc
+        assert_eq!(alloc_inner(&mut allocs, 64), Some(START_OFFSET + 128 + 64 + 256 + 128 + 128 + 128 + 256));
+
+        println!("after structured test:");
+        let mut last_alloc = 0;
+        // consistency check and print out
+        for (&offset, &len) in allocs.iter() {
+            assert!(offset >= last_alloc, "new offset is inside last allocation!");
+            println!("{}-{}({})", offset, offset+len, len);
+            last_alloc = offset + len;
+        }
+
+        // random alloc/dealloc and check for overlapping regions
+        let mut tracker = Vec::<u32>::new();
+        for _ in 0..10240 {
+            if rng.next_u32() % 2 == 0 {
+                if tracker.len() > 0 {
+                    println!("tracker: {:?}", tracker);
+                    let index = tracker.remove((rng.next_u32() % tracker.len() as u32) as usize);
+                    println!("removing: {} of {}", index, tracker.len());
+                    assert_eq!(dealloc_inner(&mut allocs, index), true);
+                }
+            } else {
+                let req = rng.next_u32() % 256;
+                if let Some(offset) = alloc_inner(&mut allocs, req) {
+                    println!("tracker: {:?}", tracker);
+                    println!("alloc: {}+{}", offset, req);
+                    tracker.push(offset);
+                }
+            }
+        }
+
+        let mut last_alloc = 0;
+        // consistency check and print out
+        println!("after random test:");
+        for (&offset, &len) in allocs.iter() {
+            assert!(offset >= last_alloc, "new offset is inside last allocation!");
+            println!("{}-{}({})", offset, offset+len, len);
+            last_alloc = offset + len;
+        }
+    }
 }

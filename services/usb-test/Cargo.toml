@@ -18,6 +18,13 @@ susres = {path = "../susres"}
 keyboard = {path = "../keyboard"}
 bitfield = "0.13.2"
 
+usb-device = "0.2.8"
+usbd-hid-device = "0.1.1"
+
+[dev-dependencies]
+rand = "0.7.3"
+rand_chacha = "0.3.1"
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
