@@ -1,3 +1,5 @@
+use susres::{ManagedMem, SuspendResume};
+use usb_device::bus::PollResult;
 use utralib::generated::*;
 use crate::*;
 use bitfield::bitfield;
@@ -151,63 +153,26 @@ pub struct SpinalUdcEndpoint {
     _interval: u8,
 }
 
+fn handle_usb(_irq_no: usize, arg: *mut usize) {
+    let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
+    let pending = usb.csr.r(utra::usbdev::EV_PENDING);
+    xous::try_send_message(usb.conn,
+        xous::Message::new_scalar(Opcode::UsbIrqHandler.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+    usb.csr.wo(utra::usbdev::EV_PENDING, pending);
+}
 pub struct SpinalUsbDevice {
     pub(crate) conn: CID,
-    gpio_csr: utralib::CSR<u32>,
+    /// gpio_csr is just for testing, normally this would be a call to `llio` to enable the block
+    gpio_csr: AtomicCsr<u32>,
     usb: xous::MemoryRange,
+    csr: AtomicCsr<u32>,
+    srmem: ManagedMem<{ utralib::generated::HW_USBDEV_MEM_LEN / core::mem::size_of::<u32>() }>,
     regs: &'static mut SpinalUdcRegs,
     // 1:1 mapping of endpoint structures to offsets in the memory space for the actual ep storage
     eps: [Option<SpinalUdcEndpoint>; NUM_ENDPOINTS],
     // structure to track space allocations within the memory space
-    allocs: BTreeMap<usize, usize>, // key is offset, value is len
+    allocs: BTreeMap<u32, u32>, // key is offset, value is len
 }
-impl UsbBus for SpinalUsbDevice {
-    fn alloc_ep(
-        &mut self,
-        ep_dir: UsbDirection,
-        ep_addr: Option<EndpointAddress>,
-        ep_type: EndpointType,
-        max_packet_size: u16,
-        interval: u8,
-    ) -> Result<EndpointAddress> {
-        // if ep_addr is specified, create a 1-unit range else a range through the entire space
-        for index in ep_addr.map(|a| a.index()..a.index() + 1).unwrap_or(1..NUM_ENDPOINTS) {
-            if self.eps[index].is_some() {
-                continue
-            }
-            // only if there is memory that can accommodate the max_packet_size
-            if let Some(offset) = self.alloc_region(max_packet_size as _) {
-                let ep = SpinalUdcEndpoint {
-                    // Safety: the offset of the endpoint storage bank is defined as 0x0 + 4*index from the base of the
-                    // usb memory area. Mapping UdcEpStatus here is safe assuming the structure has been correctly defined.
-                    ep_status: unsafe {
-                        (self.usb.as_mut_ptr().add(index * size_of::<UdcEpStatus>()) as *mut UdcEpStatus).as_mut().unwrap()
-                    },
-                    _interval: interval,
-                };
-                match ep_type {
-                    EndpointType::Isochronous => ep.ep_status.set_isochronous(true),
-                    _ => ep.ep_status.set_isochronous(false),
-                }
-                log::info!("setting ep{}@{:x?} max_packet_size {}", index, ptr, max_packet_size);
-                ep.ep_status.set_head_offset(offset);
-                ep.ep_status.set_max_packet_size(max_packet_size as u16);
-                ep.ep_status.set_enable(true); // set the enable as the last op
-
-                self.eps[index] = Some(ep);
-                return Ok(EndpointAddress::from_parts(index as u8, ep_dir))
-            } else {
-                return Err(UsbError::EndpointMemoryOverflow);
-            }
-        }
-        // nothing matched, so there must be an error
-        Err(match ep_addr {
-            Some(_) => UsbError::InvalidEndpoint,
-            None => UsbError::EndpointOverflow,
-        })
-    }
-}
-
 impl SpinalUsbDevice {
     pub fn new(sid: xous::SID) -> SpinalUsbDevice {
         let gpio_base = xous::syscall::map_memory(
@@ -225,11 +190,20 @@ impl SpinalUsbDevice {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map USB device memory range");
+        let csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::usbdev::HW_USBDEV_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map USB CSR range");
 
         let mut usbdev = SpinalUsbDevice {
-            gpio_csr: CSR::new(gpio_base.as_mut_ptr() as *mut u32),
+            gpio_csr: AtomicCsr::new(gpio_base.as_mut_ptr() as *mut u32),
             conn: xous::connect(sid).unwrap(),
+            csr: AtomicCsr::new(csr.as_mut_ptr() as *mut u32),
             usb,
+            srmem: ManagedMem::new(usb),
             // Safety: the offset of the register bank is defined as 0xFF00 from the base of the
             // usb memory area. Mapping SpinalUdcRegs here is safe assuming the structure has
             // been correctly defined.
@@ -247,12 +221,26 @@ impl SpinalUsbDevice {
             ],
             allocs: BTreeMap::new(),
         };
+        xous::claim_interrupt(
+            utra::usbdev::USBDEV_IRQ,
+            handle_usb,
+            (&mut usbdev) as *mut SpinalUsbDevice as *mut usize,
+        )
+        .expect("couldn't claim irq");
+        let p = usbdev.csr.r(utra::usbdev::EV_PENDING);
+        usbdev.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
+        usbdev.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
+
         usbdev
     }
     pub fn print_regs(&self) {
         log::info!("control regs: {:x?}", self.regs);
     }
     /// simple but easy to understand allocator for buffers inside the descriptor memory space
+    /// See notes inside src/main.rs `alloc_inner` for the functional description. Returns
+    /// the full byte-addressed offset of the region, so it must be shifted to the right by
+    /// 4 before being put into a SpinalHDL descriptor (it uses 16-byte alignment and thus
+    /// discards the lower 4 bits).
     pub fn alloc_region(&mut self, requested: u32) -> Option<u32> {
         alloc_inner(&mut self.allocs, requested)
 }
@@ -271,8 +259,189 @@ impl SpinalUsbDevice {
         }
     }
 
-    pub fn suspend(&mut self) {
+    pub fn xous_suspend(&mut self) {
+        self.csr.wo(utra::usbdev::EV_PENDING, 0xFFFF_FFFF);
+        self.csr.wo(utra::usbdev::EV_ENABLE, 0x0);
+        self.srmem.suspend();
     }
-    pub fn resume(&mut self) {
+    pub fn xous_resume(&mut self) {
+        self.srmem.resume();
+        let p = self.csr.r(utra::usbdev::EV_PENDING); // this has to be expanded out because AtomicPtr is potentially mutable on read
+        self.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
+        self.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
     }
 }
+
+impl UsbBus for SpinalUsbDevice {
+    /// Allocates an endpoint and specified endpoint parameters. This method is called by the device
+    /// and class implementations to allocate endpoints, and can only be called before
+    /// [`enable`](UsbBus::enable) is called.
+    ///
+    /// # Arguments
+    ///
+    /// * `ep_dir` - The endpoint direction.
+    /// * `ep_addr` - A static endpoint address to allocate. If Some, the implementation should
+    ///   attempt to return an endpoint with the specified address. If None, the implementation
+    ///   should return the next available one.
+    /// * `max_packet_size` - Maximum packet size in bytes.
+    /// * `interval` - Polling interval parameter for interrupt endpoints.
+    ///
+    /// # Errors
+    ///
+    /// * [`EndpointOverflow`](crate::UsbError::EndpointOverflow) - Available total number of
+    ///   endpoints, endpoints of the specified type, or endpoind packet memory has been exhausted.
+    ///   This is generally caused when a user tries to add too many classes to a composite device.
+    /// * [`InvalidEndpoint`](crate::UsbError::InvalidEndpoint) - A specific `ep_addr` was specified
+    ///   but the endpoint in question has already been allocated.
+    fn alloc_ep(
+        &mut self,
+        ep_dir: UsbDirection,
+        ep_addr: Option<EndpointAddress>,
+        ep_type: EndpointType,
+        max_packet_size: u16,
+        interval: u8,
+    ) -> Result<EndpointAddress> {
+        // if ep_addr is specified, create a 1-unit range else a range through the entire space
+        // note that ep_addr is a packed representation of index and direction,
+        // so you must use `.index()` to get just the index part
+        for index in ep_addr.map(|a| a.index()..a.index() + 1).unwrap_or(1..NUM_ENDPOINTS) {
+            if self.eps[index].is_some() {
+                continue
+            }
+            // only if there is memory that can accommodate the max_packet_size
+            if let Some(offset) = self.alloc_region(max_packet_size as _) {
+                let ep = SpinalUdcEndpoint {
+                    // Safety: the offset of the endpoint storage bank is defined as 0x0 + 4*index from the base of the
+                    // usb memory area. Mapping UdcEpStatus here is safe assuming the structure has been correctly defined.
+                    ep_status: unsafe {
+                        (self.usb.as_mut_ptr().add(index * size_of::<UdcEpStatus>()) as *mut UdcEpStatus).as_mut().unwrap()
+                    },
+                    _interval: interval,
+                };
+                match ep_type {
+                    EndpointType::Isochronous => ep.ep_status.set_isochronous(true),
+                    _ => ep.ep_status.set_isochronous(false),
+                }
+                log::info!("setting ep{}@{:x?} max_packet_size {}", index, offset, max_packet_size);
+                ep.ep_status.set_head_offset(offset / 16);
+                ep.ep_status.set_max_packet_size(max_packet_size as u32);
+                ep.ep_status.set_enable(true); // set the enable as the last op
+
+                self.eps[index] = Some(ep);
+                return Ok(EndpointAddress::from_parts(index as usize, ep_dir))
+            } else {
+                return Err(UsbError::EndpointMemoryOverflow);
+            }
+        }
+        // nothing matched, so there must be an error
+        Err(match ep_addr {
+            Some(_) => UsbError::InvalidEndpoint,
+            None => UsbError::EndpointOverflow,
+        })
+    }
+
+    /// Enables and initializes the USB peripheral. Soon after enabling the device will be reset, so
+    /// there is no need to perform a USB reset in this method.
+    fn enable(&mut self) {
+    }
+
+    /// Called when the host resets the device. This will be soon called after
+    /// [`poll`](crate::device::UsbDevice::poll) returns [`PollResult::Reset`]. This method should
+    /// reset the state of all endpoints and peripheral flags back to a state suitable for
+    /// enumeration, as well as ensure that all endpoints previously allocated with alloc_ep are
+    /// initialized as specified.
+    fn reset(&self) {
+    }
+
+    /// Sets the device USB address to `addr`.
+    fn set_device_address(&self, addr: u8) {
+    }
+
+    /// Writes a single packet of data to the specified endpoint and returns number of bytes
+    /// actually written.
+    ///
+    /// The only reason for a short write is if the caller passes a slice larger than the amount of
+    /// memory allocated earlier, and this is generally an error in the class implementation.
+    ///
+    /// # Errors
+    ///
+    /// * [`InvalidEndpoint`](crate::UsbError::InvalidEndpoint) - The `ep_addr` does not point to a
+    ///   valid endpoint that was previously allocated with [`UsbBus::alloc_ep`].
+    /// * [`WouldBlock`](crate::UsbError::WouldBlock) - A previously written packet is still pending
+    ///   to be sent.
+    /// * [`BufferOverflow`](crate::UsbError::BufferOverflow) - The packet is too long to fit in the
+    ///   transmission buffer. This is generally an error in the class implementation, because the
+    ///   class shouldn't provide more data than the `max_packet_size` it specified when allocating
+    ///   the endpoint.
+    ///
+    /// Implementations may also return other errors if applicable.
+    fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
+        Err(UsbError::Unsupported)
+    }
+
+    /// Reads a single packet of data from the specified endpoint and returns the actual length of
+    /// the packet.
+    ///
+    /// This should also clear any NAK flags and prepare the endpoint to receive the next packet.
+    ///
+    /// # Errors
+    ///
+    /// * [`InvalidEndpoint`](crate::UsbError::InvalidEndpoint) - The `ep_addr` does not point to a
+    ///   valid endpoint that was previously allocated with [`UsbBus::alloc_ep`].
+    /// * [`WouldBlock`](crate::UsbError::WouldBlock) - There is no packet to be read. Note that
+    ///   this is different from a received zero-length packet, which is valid in USB. A zero-length
+    ///   packet will return `Ok(0)`.
+    /// * [`BufferOverflow`](crate::UsbError::BufferOverflow) - The received packet is too long to
+    ///   fit in `buf`. This is generally an error in the class implementation, because the class
+    ///   should use a buffer that is large enough for the `max_packet_size` it specified when
+    ///   allocating the endpoint.
+    ///
+    /// Implementations may also return other errors if applicable.
+    fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
+        Err(UsbError::Unsupported)
+    }
+
+    /// Sets or clears the STALL condition for an endpoint. If the endpoint is an OUT endpoint, it
+    /// should be prepared to receive data again.
+    fn set_stalled(&self, ep_addr: EndpointAddress, stalled: bool) {
+
+    }
+
+    /// Gets whether the STALL condition is set for an endpoint.
+    fn is_stalled(&self, ep_addr: EndpointAddress) -> bool {
+        false
+    }
+
+    /// Causes the USB peripheral to enter USB suspend mode, lowering power consumption and
+    /// preparing to detect a USB wakeup event. This will be called after
+    /// [`poll`](crate::device::UsbDevice::poll) returns [`PollResult::Suspend`]. The device will
+    /// continue be polled, and it shall return a value other than `Suspend` from `poll` when it no
+    /// longer detects the suspend condition.
+    fn suspend(&self) {
+    }
+
+    /// Resumes from suspend mode. This may only be called after the peripheral has been previously
+    /// suspended.
+    fn resume(&self) {
+    }
+
+    /// Gets information about events and incoming data. Usually called in a loop or from an
+    /// interrupt handler. See the [`PollResult`] struct for more information.
+    fn poll(&self) -> PollResult {
+        PollResult::None
+    }
+
+    /// Simulates a disconnect from the USB bus, causing the host to reset and re-enumerate the
+    /// device.
+    ///
+    /// The default implementation just returns `Unsupported`.
+    ///
+    /// # Errors
+    ///
+    /// * [`Unsupported`](crate::UsbError::Unsupported) - This UsbBus implementation doesn't support
+    ///   simulating a disconnect or it has not been enabled at creation time.
+    fn force_reset(&self) -> Result<()> {
+        Err(UsbError::Unsupported)
+    }
+}
+

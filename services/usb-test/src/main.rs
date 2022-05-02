@@ -65,11 +65,14 @@ fn xmain() -> ! {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 kbd.suspend();
-                usbtest.suspend();
+                usbtest.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 kbd.resume();
-                usbtest.resume();
+                usbtest.xous_resume();
             }),
+            Some(Opcode::UsbIrqHandler) => {
+                log::info!("got USB interrupt");
+            }
             Some(Opcode::DoCmd) => {
                 log::info!("got command line: {}", cmdline);
                 if let Some((cmd, args)) = cmdline.split_once(' ') {
@@ -172,6 +175,9 @@ pub(crate) const END_OFFSET: u32 = 0xFF00;
 ///
 /// Note that all allocations must be aligned to 16-byte boundaries. This is a restriction
 /// of the USB core.
+///
+/// Returns a full memory address as the pointer. Must be shifted left by 4 to get the
+/// aligned representation used by the SpinalHDL block.
 pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Option<u32> {
     if requested == 0 {
         return None;
