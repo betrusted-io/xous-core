@@ -67,7 +67,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     match env.netmgr.wifi_state_unsubscribe() {
                         Ok(_) => write!(ret, "wifi unsub successful"),
                         Err(e) => write!(ret, "wifi unsub error: {:?}", e),
-                    };
+                    }.ok();
                 }
                 "tcpget" => {
                     // note: to keep shellchat lightweight, we do a very minimal parsing of the URL. We assume it always has
