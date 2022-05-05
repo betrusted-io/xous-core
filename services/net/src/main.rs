@@ -1580,17 +1580,17 @@ fn xmain() -> ! {
                 }
 
                 // establish our next check-up interval
-                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
-                if let Some(delay) = iface.poll_delay(&sockets, timestamp) {
-                    let delay_ms = delay.total_millis();
-                    if delay_ms < 2 {
-                        xous::try_send_message(
-                            net_conn,
-                            Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
-                        )
-                        .ok();
-                    } else {
-                        if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
+                if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
+                    let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
+                    if let Some(delay) = iface.poll_delay(&sockets, timestamp) {
+                        let delay_ms = delay.total_millis();
+                        if delay_ms < 2 {
+                            xous::try_send_message(
+                                net_conn,
+                                Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                            )
+                            .ok();
+                        } else {
                             let prev_count = delay_threads.fetch_add(1, Ordering::SeqCst);
                             log::trace!(
                                 "spawning checkup thread for {}ms. New total threads: {}",
@@ -1621,10 +1621,17 @@ fn xmain() -> ! {
                                     );
                                 }
                             });
-                        } else {
-                            log::warn!("Could not queue delay of {}ms in net stack due to thread exhaustion.", delay_ms);
                         }
                     }
+                } else {
+                    log::warn!("Thread pool exhausted; deferring creation of new poll helpers");
+                    // fire off another pump message. This will cause the network server to effectively
+                    // busy-wait until the thread pool starts to clear out.
+                    xous::try_send_message(
+                        net_conn,
+                        Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
+                    )
+                    .ok();
                 }
             }
             Some(Opcode::GetIpv4Config) => {
