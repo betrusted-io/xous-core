@@ -8,6 +8,22 @@ use core::mem::size_of;
 use usb_device::{class_prelude::*, Result, UsbDirection};
 use std::collections::BTreeMap;
 
+pub fn log_init() -> *mut u32 {
+    let gpio_base = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map GPIO CSR range");
+    let mut gpio_csr = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+    // setup the initial logging output
+    // 0 = kernel, 1 = log, 2 = app, 3 = invalid
+    gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1);
+
+    gpio_base.as_mut_ptr() as *mut u32
+}
+
 const NUM_ENDPOINTS: usize = 16;
 
 bitfield! {
@@ -25,7 +41,7 @@ bitfield! {
     impl Debug;
     pub endpointid, set_endpointid: 3, 0;
     pub enable_req, set_enable_req: 4;
-    pub enable_ack, _: 5; // question: can we make this ... read-only?
+    pub enable_ack, _: 5;
 }
 bitfield! {
     pub struct UdcConfig(u32);
@@ -92,6 +108,8 @@ bitfield! {
     pub max_packet_size, set_max_packet_size: 31, 22;
 }
 /// This is located at 0x0000-0x0047 inside the UDC region
+/// This is mostly documentation, it's not actually instantiated
+#[allow(dead_code)]
 #[repr(C)]
 pub struct SpinalUdcMem {
     endpoints: [UdcEpStatus; 16],
@@ -162,10 +180,8 @@ fn handle_usb(_irq_no: usize, arg: *mut usize) {
 }
 pub struct SpinalUsbDevice {
     pub(crate) conn: CID,
-    /// gpio_csr is just for testing, normally this would be a call to `llio` to enable the block
-    gpio_csr: AtomicCsr<u32>,
     usb: xous::MemoryRange,
-    csr: AtomicCsr<u32>,
+    csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable
     srmem: ManagedMem<{ utralib::generated::HW_USBDEV_MEM_LEN / core::mem::size_of::<u32>() }>,
     regs: &'static mut SpinalUdcRegs,
     // 1:1 mapping of endpoint structures to offsets in the memory space for the actual ep storage
@@ -175,13 +191,6 @@ pub struct SpinalUsbDevice {
 }
 impl SpinalUsbDevice {
     pub fn new(sid: xous::SID) -> SpinalUsbDevice {
-        let gpio_base = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map GPIO CSR range");
         // this particular core does not use CSRs for control - it uses directly memory mapped registers
         let usb = xous::syscall::map_memory(
             xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
@@ -199,7 +208,6 @@ impl SpinalUsbDevice {
         .expect("couldn't map USB CSR range");
 
         let mut usbdev = SpinalUsbDevice {
-            gpio_csr: AtomicCsr::new(gpio_base.as_mut_ptr() as *mut u32),
             conn: xous::connect(sid).unwrap(),
             csr: AtomicCsr::new(csr.as_mut_ptr() as *mut u32),
             usb,
@@ -221,6 +229,7 @@ impl SpinalUsbDevice {
             ],
             allocs: BTreeMap::new(),
         };
+
         xous::claim_interrupt(
             utra::usbdev::USBDEV_IRQ,
             handle_usb,
@@ -230,6 +239,9 @@ impl SpinalUsbDevice {
         let p = usbdev.csr.r(utra::usbdev::EV_PENDING);
         usbdev.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
         usbdev.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
+
+        // also have to enable ints at the SpinalHDL layer
+        usbdev.regs.config.set_enable_ints(true);
 
         usbdev
     }
@@ -250,12 +262,13 @@ impl SpinalUsbDevice {
     }
 
     pub fn connect_device_core(&mut self, state: bool) {
+        log::info!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_USBSELECT));
         if state {
             log::info!("connecting USB device core");
-            self.gpio_csr.wfo(utra::gpio::USBSELECT_USBSELECT, 1);
+            self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 1);
         } else {
             log::info!("connecting USB debug core");
-            self.gpio_csr.wfo(utra::gpio::USBSELECT_USBSELECT, 0);
+            self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 0);
         }
     }
 
@@ -343,6 +356,35 @@ impl UsbBus for SpinalUsbDevice {
     /// Enables and initializes the USB peripheral. Soon after enabling the device will be reset, so
     /// there is no need to perform a USB reset in this method.
     fn enable(&mut self) {
+        self.regs.config.set_disable_ints(true);
+        // clear the endpoint RAM
+        self.eps = [
+            None, None, None, None,
+            None, None, None, None,
+            None, None, None, None,
+            None, None, None, None,
+        ];
+        self.allocs.clear();
+        // set the RAM from 0x0-0xFF00 to all 0's
+        let usbmem = self.usb.as_slice_mut::<u32>();
+        for m in usbmem.iter_mut() {
+            *m = 0;
+        }
+
+        // clear the interrupts
+        self.regs.interrupts.clear_endpoint(0xFFFF); // clear all the endpoints
+        self.regs.interrupts.clear_reset(true);
+        self.regs.interrupts.clear_ep0_setup(true);
+        self.regs.interrupts.clear_suspend(true);
+        self.regs.interrupts.clear_resume(true);
+        self.regs.interrupts.clear_disconnect(true);
+
+        // clear other registers
+        self.regs.address = 0;
+
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        // re-enable the interrupt
+        self.regs.config.set_enable_ints(true);
     }
 
     /// Called when the host resets the device. This will be soon called after
@@ -351,10 +393,14 @@ impl UsbBus for SpinalUsbDevice {
     /// enumeration, as well as ensure that all endpoints previously allocated with alloc_ep are
     /// initialized as specified.
     fn reset(&self) {
+        // TODO
     }
 
     /// Sets the device USB address to `addr`.
     fn set_device_address(&self, addr: u8) {
+        // apparently we need to implement interior mutablity for all the things to be compatible
+        // with this API...
+        // self.regs.address = addr as u32;
     }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
@@ -404,12 +450,32 @@ impl UsbBus for SpinalUsbDevice {
     /// Sets or clears the STALL condition for an endpoint. If the endpoint is an OUT endpoint, it
     /// should be prepared to receive data again.
     fn set_stalled(&self, ep_addr: EndpointAddress, stalled: bool) {
+        // it looks like a STALL condition could be forced even on unallocated endpoints, so
+        // we alias into the register block and force it to happen.
+        let ep_status = unsafe {
+            (self.usb.as_mut_ptr().add(ep_addr.index() * size_of::<UdcEpStatus>()) as *mut UdcEpStatus).as_mut().unwrap()
+        };
 
+        match (stalled, ep_addr.direction()) {
+            (true, UsbDirection::In) => {
+                ep_status.set_force_nack(false);
+                ep_status.set_force_stall(true);
+            },
+            (true, UsbDirection::Out) => ep_status.set_force_stall(true),
+            (false, UsbDirection::In) => {
+                ep_status.set_force_nack(true); // not sure if this is correct -- STM32 reference sets state to "nack" but the meaning might be different for this core
+                ep_status.set_force_stall(false);
+            },
+            (false, UsbDirection::Out) => ep_status.set_force_stall(false),
+        };
     }
 
     /// Gets whether the STALL condition is set for an endpoint.
     fn is_stalled(&self, ep_addr: EndpointAddress) -> bool {
-        false
+        let ep_status = unsafe {
+            (self.usb.as_mut_ptr().add(ep_addr.index() * size_of::<UdcEpStatus>()) as *mut UdcEpStatus).as_mut().unwrap()
+        };
+        ep_status.force_stall()
     }
 
     /// Causes the USB peripheral to enter USB suspend mode, lowering power consumption and
@@ -441,7 +507,12 @@ impl UsbBus for SpinalUsbDevice {
     /// * [`Unsupported`](crate::UsbError::Unsupported) - This UsbBus implementation doesn't support
     ///   simulating a disconnect or it has not been enabled at creation time.
     fn force_reset(&self) -> Result<()> {
-        Err(UsbError::Unsupported)
+        xous::send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ForceReset.to_usize().unwrap(),
+            0, 0, 0, 0
+            )
+        ).expect("couldn't send message");
+        Ok(())
     }
 }
 

@@ -25,16 +25,18 @@ use std::collections::BTreeMap;
 fn xmain() -> ! {
     use crate::SpinalUsbDevice;
 
+    let _gpio_base = crate::log_init();
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let usbtest_sid = xns.register_name(api::SERVER_NAME_USBTEST, None).expect("can't register server");
-    log::trace!("registered with NS -- {:?}", usbtest_sid);
+    let usbdev_sid = xns.register_name(api::SERVER_NAME_USBTEST, None).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", usbdev_sid);
 
-    let mut usbtest = SpinalUsbDevice::new(usbtest_sid);
-    let mut kbd = Keyboard::new(usbtest_sid);
+    let mut usbdev = SpinalUsbDevice::new(usbdev_sid);
+    let mut kbd = Keyboard::new(usbdev_sid);
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     log::trace!("ready to accept requests");
 
@@ -51,7 +53,7 @@ fn xmain() -> ! {
     });
 
     // register a suspend/resume listener
-    let cid = xous::connect(usbtest_sid).expect("couldn't create suspend callback connection");
+    let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(
         None,
         &xns,
@@ -61,17 +63,24 @@ fn xmain() -> ! {
 
     let mut cmdline = String::new();
     loop {
-        let msg = xous::receive_message(usbtest_sid).unwrap();
+        let msg = xous::receive_message(usbdev_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 kbd.suspend();
-                usbtest.xous_suspend();
+                usbdev.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 kbd.resume();
-                usbtest.xous_resume();
+                usbdev.xous_resume();
             }),
             Some(Opcode::UsbIrqHandler) => {
                 log::info!("got USB interrupt");
+                usbdev.print_regs();
+            }
+            Some(Opcode::ForceReset) => {
+                usbdev.connect_device_core(false);
+                tt.sleep_ms(5).unwrap(); // have to wait long enough for the auto-reset mechanism to kick in
+                usbdev.connect_device_core(true);
+                xous::return_scalar(msg.sender, 0).unwrap();
             }
             Some(Opcode::DoCmd) => {
                 log::info!("got command line: {}", cmdline);
@@ -83,13 +92,20 @@ fn xmain() -> ! {
                         }
                         "conn" => {
                             match args {
-                                "1" => usbtest.connect_device_core(true),
-                                "0" => usbtest.connect_device_core(false),
+                                "1" => {
+                                    usbdev.connect_device_core(true);
+                                    log::info!("device core connected");
+                                },
+                                "0" => {
+                                    usbdev.connect_device_core(false);
+                                    log::info!("debug core connected");
+                                },
                                 _ => log::info!("usage: conn [1,0]; got: 'conn {}'", args),
                             }
+                            usbdev.print_regs();
                         }
                         _ => {
-                            log::info!("unrecognied command {}", cmd);
+                            log::info!("unrecognized command {}", cmd);
                         }
                     }
                 } else {
@@ -99,12 +115,12 @@ fn xmain() -> ! {
                             log::info!("wouldn't that be nice...");
                         }
                         "conn" => {
-                            usbtest.connect_device_core(true);
+                            usbdev.connect_device_core(true);
                             log::info!("device core connected");
-                            usbtest.print_regs();
+                            usbdev.print_regs();
                         }
                         "regs" => {
-                            usbtest.print_regs();
+                            usbdev.print_regs();
                         }
                         _ => {
                             log::info!("unrecognized command");
@@ -160,8 +176,8 @@ fn xmain() -> ! {
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
-    xns.unregister_server(usbtest_sid).unwrap();
-    xous::destroy_server(usbtest_sid).unwrap();
+    xns.unregister_server(usbdev_sid).unwrap();
+    xous::destroy_server(usbdev_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
 }

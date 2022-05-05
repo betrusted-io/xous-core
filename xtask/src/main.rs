@@ -312,7 +312,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None,
                 None,
                 None,
-                extra_packages.as_slice(), Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]))?;
+                extra_packages.as_slice(), None)?;
             }
         }
         Some("libstd-test") => {

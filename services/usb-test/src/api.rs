@@ -4,6 +4,8 @@ pub(crate) const SERVER_NAME_USBTEST: &'static str = "_USB test and development 
 pub(crate) enum Opcode {
     /// Handle the USB interrupt
     UsbIrqHandler,
+    /// Simulate a disconnect/reconnect event
+    ForceReset,
     /// Parse a commandlne
     DoCmd,
     /// Keyboard input
