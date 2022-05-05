@@ -1628,8 +1628,6 @@ fn xmain() -> ! {
                                     );
                                 }
                             });
-                        } else {
-                            log::warn!("Could not queue delay of {}ms in net stack due to thread exhaustion.", delay_ms);
                         }
                     }
                 } else {
