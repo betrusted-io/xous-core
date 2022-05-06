@@ -103,7 +103,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         match stream.read(&mut buf) {
                                             Ok(len) => {
                                                 log::trace!("raw response ({}): {:?}", len, &buf[..len]);
-                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).ok(); // let it run off the end
+                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len.min(buf.len())])).ok(); // let it run off the end
                                             }
                                             Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
                                         }
@@ -123,7 +123,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         let boot_instant = env.boot_instant.clone();
                         move || {
                             let listener = TcpListener::bind("0.0.0.0:80").unwrap();
-                            // limit to 2 because we're a bit shy on space in shellchat right now; there is a 32-thread limit per process, and shellchat has the kitchen sink.
+                            // limit to 4 because we're a bit shy on space in shellchat right now; there is a 32-thread limit per process, and shellchat has the kitchen sink.
                             let pool = ThreadPool::new(4);
 
                             for stream in listener.incoming() {
