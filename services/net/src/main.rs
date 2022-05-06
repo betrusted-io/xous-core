@@ -18,7 +18,7 @@ use num_traits::*;
 mod connection_manager;
 mod device;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::convert::TryInto;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID, SID};
 use xous_ipc::Buffer;
@@ -36,7 +36,7 @@ use smoltcp::socket::{
     SocketHandle, TcpSocket, TcpSocketBuffer, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
 };
 use smoltcp::time::{Duration, Instant};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
@@ -244,6 +244,9 @@ fn xmain() -> ! {
     let mut dns_ipv4_hook = XousScalarEndpoint::new();
     let mut dns_ipv6_hook = XousScalarEndpoint::new();
     let mut dns_allclear_hook = XousScalarEndpoint::new();
+
+    // wakeup polling management
+    let wakeup_time: Arc::<Mutex::<BTreeSet<u64>>> = Arc::new(Mutex::new(BTreeSet::new()));
 
     log::trace!("ready to accept requests");
     // register a suspend/resume listener
@@ -1580,29 +1583,33 @@ fn xmain() -> ! {
                 }
 
                 // establish our next check-up interval
-                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
-                if let Some(delay) = iface.poll_delay(&sockets, timestamp) {
-                    let delay_ms = delay.total_millis();
-                    if delay_ms < 2 {
-                        xous::try_send_message(
-                            net_conn,
-                            Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
-                        )
-                        .ok();
-                    } else {
-                        if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
+                if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
+                    let now = timer.elapsed_ms();
+                    let timestamp = Instant::from_millis(now as i64);
+                    if let Some(delay) = iface.poll_delay(&sockets, timestamp) {
+                        const RANGE_MS: u64 = 5;
+                        let wakeup = now + delay.total_millis();
+                        let no_wakeup_scheduled = wakeup_time.lock().unwrap().range(wakeup - RANGE_MS..wakeup + RANGE_MS).count() == 0;
+                        if no_wakeup_scheduled {
+                            wakeup_time.lock().unwrap().insert(wakeup);
                             let prev_count = delay_threads.fetch_add(1, Ordering::SeqCst);
                             log::trace!(
-                                "spawning checkup thread for {}ms. New total threads: {}",
-                                delay_ms,
+                                "spawning wakeup at {}ms. New total threads: {}",
+                                wakeup,
                                 prev_count + 1
                             );
                             thread::spawn({
                                 let parent_conn = net_conn.clone();
                                 let delay_threads = delay_threads.clone();
+                                let wakeup = wakeup.clone();
+                                let now = now.clone();
+                                let wakeup_time = wakeup_time.clone();
                                 move || {
                                     let tt = ticktimer_server::Ticktimer::new().unwrap();
-                                    tt.sleep_ms(delay_ms as usize).unwrap();
+                                    tt.sleep_ms((wakeup - now) as usize).unwrap();
+                                    if !wakeup_time.lock().unwrap().remove(&wakeup) {
+                                        log::warn!("time {} was not in wakeup queue!", wakeup);
+                                    }
                                     xous::try_send_message(
                                         parent_conn,
                                         Message::new_scalar(
@@ -1625,6 +1632,8 @@ fn xmain() -> ! {
                             log::warn!("Could not queue delay of {}ms in net stack due to thread exhaustion.", delay_ms);
                         }
                     }
+                } else {
+                    log::info!("Thread pool exhausted; deferring creation of new poll helpers");
                 }
             }
             Some(Opcode::GetIpv4Config) => {
