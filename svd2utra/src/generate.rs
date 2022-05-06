@@ -656,29 +656,29 @@ where
         }
     }
     /// Read the contents of this register
-    pub fn r(&mut self, reg: Register) -> T {
+    pub fn r(&self, reg: Register) -> T {
         // prevent re-ordering
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.get_mut()) };
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
         unsafe { usize_base.add(reg.offset).read_volatile() }
             .try_into()
             .unwrap_or_default()
     }
     /// Read a field from this CSR
-    pub fn rf(&mut self, field: Field) -> T {
+    pub fn rf(&self, field: Field) -> T {
         // prevent re-ordering
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.get_mut()) };
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
         ((unsafe { usize_base.add(field.register.offset).read_volatile() } >> field.offset)
             & field.mask)
             .try_into()
             .unwrap_or_default()
     }
     /// Read-modify-write a given field in this CSR
-    pub fn rmwf(&mut self, field: Field, value: T) {
-        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.get_mut()) };
+    pub fn rmwf(&self, field: Field, value: T) {
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
         let value_as_usize: usize = value.try_into().unwrap_or_default() << field.offset;
         let previous =
             unsafe { usize_base.add(field.register.offset).read_volatile() } & !(field.mask << field.offset);
@@ -691,8 +691,8 @@ where
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     /// Write a given field without reading it first
-    pub fn wfo(&mut self, field: Field, value: T) {
-        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.get_mut()) };
+    pub fn wfo(&self, field: Field, value: T) {
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
         let value_as_usize: usize = (value.try_into().unwrap_or_default() & field.mask) << field.offset;
         unsafe {
             usize_base
@@ -705,8 +705,8 @@ where
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     /// Write the entire contents of a register without reading it first
-    pub fn wo(&mut self, reg: Register, value: T) {
-        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.get_mut()) };
+    pub fn wo(&self, reg: Register, value: T) {
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
         let value_as_usize: usize = value.try_into().unwrap_or_default();
         unsafe { usize_base.add(reg.offset).write_volatile(value_as_usize) };
         // Ensure the compiler doesn't re-order the write.
