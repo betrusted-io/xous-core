@@ -5,6 +5,7 @@ use crate::*;
 use bitfield::bitfield;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
+use core::sync::atomic::{AtomicPtr, Ordering, AtomicBool};
 use usb_device::{class_prelude::*, Result, UsbDirection};
 use std::collections::BTreeMap;
 
@@ -107,6 +108,9 @@ bitfield! {
     pub isochronous, set_isochronous: 16;
     pub max_packet_size, set_max_packet_size: 31, 22;
 }
+
+const DESC_OUT: bool = false;
+const DESC_IN: bool = true;
 /// This is located at 0x0000-0x0047 inside the UDC region
 /// This is mostly documentation, it's not actually instantiated
 #[allow(dead_code)]
@@ -117,7 +121,7 @@ pub struct SpinalUdcMem {
 }
 
 bitfield! {
-    pub struct UdcDescriptor0(u32);
+    pub struct UdcDesc0(u32);
     impl Debug;
     // current progress of the transfer, in bytes
     pub offset, set_offset: 15, 0;
@@ -125,7 +129,7 @@ bitfield! {
     pub code, set_code: 19, 16;
 }
 bitfield! {
-    pub struct UdcDescriptor1(u32);
+    pub struct UdcDesc1(u32);
     impl Debug;
     // offset of the next descriptor in RAM. 0 => none, otherwise multiply by 16 to get the address in bytes
     pub next_offset, set_next_offset: 15, 4;
@@ -133,9 +137,9 @@ bitfield! {
     pub length, set_length: 31, 16;
 }
 bitfield! {
-    pub struct UdcDescriptor2(u32);
+    pub struct UdcDesc2(u32);
     impl Debug;
-    // direction. 0 => OUT, 1 => IN
+    // direction. 0 => OUT, 1 => IN (see DESC_OUT, DESC_IN for interpretations)
     pub direction, set_direction: 16;
     // if set, fires an interrupt when descriptor is completed
     pub int_on_done, set_int_on_done: 17;
@@ -149,9 +153,9 @@ bitfield! {
 /// This structure maps onto a variable length region anywhere inside the UDC region. It is always aligned to a 16-byte offset
 #[repr(C)]
 pub struct SpinalUdcDescriptorHeader {
-    d0: UdcDescriptor0,
-    d1: UdcDescriptor1,
-    d2: UdcDescriptor2,
+    d0: UdcDesc0,
+    d1: UdcDesc1,
+    d2: UdcDesc2,
 }
 /// This structure is a set of references to a UDC descriptor in RAM. It's tricky to
 /// construct correctly, as it requires interpreting some bit fields returned by the
@@ -174,6 +178,66 @@ pub struct SpinalUdcEndpoint {
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
     let pending = usb.csr.r(utra::usbdev::EV_PENDING);
+    let regs = unsafe{usb.regs.load(Ordering::SeqCst).as_mut().unwrap()};
+    // report if we got a double-int condition or not
+    if usb.was_checked.load(Ordering::SeqCst) {
+        usb.int_err.store(false, Ordering::SeqCst)
+    } else {
+        usb.int_err.store(true, Ordering::SeqCst)
+    }
+    usb.was_checked.store(false, Ordering::SeqCst);
+    usb.poll_result =
+        if regs.interrupts.disconnect() {
+            regs.interrupts.clear_disconnect(true);
+            PollResult::Reset
+        } else if regs.interrupts.resume() {
+            regs.interrupts.clear_reset(true);
+            PollResult::Resume
+        } else if regs.interrupts.reset() {
+            regs.interrupts.clear_reset(true);
+            PollResult::Reset
+        } else if regs.interrupts.suspend() {
+            regs.interrupts.clear_suspend(true);
+            PollResult::Suspend
+        } else if regs.interrupts.endpoint() != 0 || regs.interrupts.ep0_setup() {
+            let ep_setup = if regs.interrupts.ep0_setup() {
+                regs.interrupts.clear_ep0_setup(true);
+                1
+            } else {0};
+            let mut ep_in_complete = ep_setup; // mirror the value here
+
+            let mut ep_out = 0;
+            // all of them will be handled here, so, clear the interrupts as needed
+            let ep_code = regs.interrupts.endpoint() as u16;
+            regs.interrupts.clear_endpoint(ep_code as u32); // clear the interrupt bitmask
+            let mut bit = 1;
+            for maybe_ep in usb.eps.iter() {
+                if bit & ep_code != 0 {
+                    if let Some(ep) = maybe_ep {
+                        // form a descriptor from the memory range assigned to the EP
+                        let base = usb.usb.as_ptr();
+                        let descriptor = unsafe {
+                            (base.add(ep.ep_status.head_offset() as usize * 16) as *const SpinalUdcDescriptorHeader).as_ref().unwrap()
+                        };
+                        if descriptor.d2.direction() == DESC_OUT {
+                            ep_out |= bit;
+                        } else {
+                            ep_in_complete |= bit;
+                        }
+
+                        // *** I *think* we want to halt the EP at this point so we can get the data wthout the memory being scribbled?
+
+                    } else {
+                        log::warn!("got packet on uninitialized endpoint: bitmask 0x{:x}", bit);
+                    }
+                }
+                bit <<= 1;
+            }
+            PollResult::Data { ep_out, ep_in_complete, ep_setup }
+        } else {
+            PollResult::None
+        };
+
     xous::try_send_message(usb.conn,
         xous::Message::new_scalar(Opcode::UsbIrqHandler.to_usize().unwrap(), 0, 0, 0, 0)).ok();
     usb.csr.wo(utra::usbdev::EV_PENDING, pending);
@@ -183,11 +247,15 @@ pub struct SpinalUsbDevice {
     usb: xous::MemoryRange,
     csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable
     srmem: ManagedMem<{ utralib::generated::HW_USBDEV_MEM_LEN / core::mem::size_of::<u32>() }>,
-    regs: &'static mut SpinalUdcRegs,
+    regs: AtomicPtr<SpinalUdcRegs>,
     // 1:1 mapping of endpoint structures to offsets in the memory space for the actual ep storage
     eps: [Option<SpinalUdcEndpoint>; NUM_ENDPOINTS],
     // structure to track space allocations within the memory space
     allocs: BTreeMap<u32, u32>, // key is offset, value is len
+    tt: ticktimer_server::Ticktimer,
+    poll_result: PollResult,
+    int_err: AtomicBool,
+    was_checked: AtomicBool,
 }
 impl SpinalUsbDevice {
     pub fn new(sid: xous::SID) -> SpinalUsbDevice {
@@ -215,9 +283,9 @@ impl SpinalUsbDevice {
             // Safety: the offset of the register bank is defined as 0xFF00 from the base of the
             // usb memory area. Mapping SpinalUdcRegs here is safe assuming the structure has
             // been correctly defined.
-            regs: unsafe {
+            regs: AtomicPtr::new(unsafe {
                 (usb.as_mut_ptr().add(0xFF00) as *mut SpinalUdcRegs).as_mut().unwrap()
-            },
+            }),
             eps: [
                 // can't derive Copy on this, and also can't make a Default.
                 // But # of eps is pretty damn static even though notionally we
@@ -228,6 +296,10 @@ impl SpinalUsbDevice {
                 None, None, None, None,
             ],
             allocs: BTreeMap::new(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
+            poll_result: PollResult::None,
+            int_err: AtomicBool::new(false),
+            was_checked: AtomicBool::new(false),
         };
 
         xous::claim_interrupt(
@@ -241,12 +313,27 @@ impl SpinalUsbDevice {
         usbdev.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
 
         // also have to enable ints at the SpinalHDL layer
-        usbdev.regs.config.set_enable_ints(true);
+        let regs = unsafe{usbdev.regs.load(Ordering::SeqCst).as_mut().unwrap()};
+        regs.config.set_enable_ints(true);
 
         usbdev
     }
     pub fn print_regs(&self) {
         log::info!("control regs: {:x?}", self.regs);
+        self.print_poll_result();
+    }
+    fn print_poll_result(&self) {
+        if self.int_err.load(Ordering::SeqCst) {
+            log::info!("error was detected in interrupt handler: previous poll result was not used");
+        }
+        match self.poll_result {
+            PollResult::None => log::info!("PollResult::None"),
+            PollResult::Reset => log::info!("PollResult::Reset"),
+            PollResult::Resume => log::info!("PollResult::Resume"),
+            PollResult::Suspend => log::info!("PollResult::Suspend"),
+            PollResult::Data {ep_out, ep_in_complete, ep_setup} =>
+                log::info!("PollResult::Data out{:x} in{:x} setup{:x}", ep_out, ep_in_complete, ep_setup),
+        }
     }
     /// simple but easy to understand allocator for buffers inside the descriptor memory space
     /// See notes inside src/main.rs `alloc_inner` for the functional description. Returns
@@ -259,6 +346,30 @@ impl SpinalUsbDevice {
     /// returns `true` if the region was available to be deallocated
     pub fn dealloc_region(&mut self, offset: u32) -> bool {
         dealloc_inner(&mut self.allocs, offset)
+    }
+
+    pub fn reset_eps(&mut self) {
+        let regs = unsafe{self.regs.load(Ordering::SeqCst).as_mut().unwrap()};
+        // clear the endpoint RAM
+        self.eps = [
+            None, None, None, None,
+            None, None, None, None,
+            None, None, None, None,
+            None, None, None, None,
+        ];
+        self.allocs.clear();
+        // set the RAM from 0x0-0xFF00 to all 0's
+        let usbmem = self.usb.as_slice_mut::<u32>();
+        for m in usbmem.iter_mut() {
+            *m = 0;
+        }
+        // clear all the interrupts in a single write
+        regs.interrupts.0 = 0xFFFF_FFFF;
+
+        // clear other registers
+        regs.address = 0;
+
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn connect_device_core(&mut self, state: bool) {
@@ -356,35 +467,17 @@ impl UsbBus for SpinalUsbDevice {
     /// Enables and initializes the USB peripheral. Soon after enabling the device will be reset, so
     /// there is no need to perform a USB reset in this method.
     fn enable(&mut self) {
-        self.regs.config.set_disable_ints(true);
-        // clear the endpoint RAM
-        self.eps = [
-            None, None, None, None,
-            None, None, None, None,
-            None, None, None, None,
-            None, None, None, None,
-        ];
-        self.allocs.clear();
-        // set the RAM from 0x0-0xFF00 to all 0's
-        let usbmem = self.usb.as_slice_mut::<u32>();
-        for m in usbmem.iter_mut() {
-            *m = 0;
-        }
-
-        // clear the interrupts
-        self.regs.interrupts.clear_endpoint(0xFFFF); // clear all the endpoints
-        self.regs.interrupts.clear_reset(true);
-        self.regs.interrupts.clear_ep0_setup(true);
-        self.regs.interrupts.clear_suspend(true);
-        self.regs.interrupts.clear_resume(true);
-        self.regs.interrupts.clear_disconnect(true);
+        let regs = unsafe{self.regs.load(Ordering::SeqCst).as_mut().unwrap()};
+        // clear all the interrupts in a single write
+        regs.interrupts.0 = 0xFFFF_FFFF;
 
         // clear other registers
-        self.regs.address = 0;
+        regs.address = 0;
 
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-        // re-enable the interrupt
-        self.regs.config.set_enable_ints(true);
+        // enable the interrupt
+        regs.config.set_enable_ints(true);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
     /// Called when the host resets the device. This will be soon called after
@@ -393,14 +486,17 @@ impl UsbBus for SpinalUsbDevice {
     /// enumeration, as well as ensure that all endpoints previously allocated with alloc_ep are
     /// initialized as specified.
     fn reset(&self) {
-        // TODO
+        // we use a "cheater message" here because our implementation requires mutating
+        // the state of Self, but the method signature on the trait does not permit it.
+        xous::send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::UsbReset.to_usize().unwrap(), 0, 0, 0, 0)
+        ).unwrap();
     }
 
     /// Sets the device USB address to `addr`.
     fn set_device_address(&self, addr: u8) {
-        // apparently we need to implement interior mutablity for all the things to be compatible
-        // with this API...
-        // self.regs.address = addr as u32;
+        let regs = unsafe{self.regs.load(Ordering::SeqCst).as_mut().unwrap()};
+        regs.address = addr as u32;
     }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
@@ -494,7 +590,19 @@ impl UsbBus for SpinalUsbDevice {
     /// Gets information about events and incoming data. Usually called in a loop or from an
     /// interrupt handler. See the [`PollResult`] struct for more information.
     fn poll(&self) -> PollResult {
-        PollResult::None
+        if self.int_err.load(Ordering::SeqCst) {
+            log::warn!("interrupt triggered twice before handler got to it; an event was lost");
+        }
+        self.was_checked.store(true, Ordering::SeqCst);
+        // because the library type does not implement Copy or Clone
+        match self.poll_result {
+            PollResult::None => PollResult::None,
+            PollResult::Reset => PollResult::Reset,
+            PollResult::Resume => PollResult::Resume,
+            PollResult::Suspend => PollResult::Suspend,
+            PollResult::Data {ep_out, ep_in_complete, ep_setup} =>
+                PollResult::Data{ep_out, ep_in_complete, ep_setup},
+        }
     }
 
     /// Simulates a disconnect from the USB bus, causing the host to reset and re-enumerate the
@@ -507,11 +615,9 @@ impl UsbBus for SpinalUsbDevice {
     /// * [`Unsupported`](crate::UsbError::Unsupported) - This UsbBus implementation doesn't support
     ///   simulating a disconnect or it has not been enabled at creation time.
     fn force_reset(&self) -> Result<()> {
-        xous::send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ForceReset.to_usize().unwrap(),
-            0, 0, 0, 0
-            )
-        ).expect("couldn't send message");
+        self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 0);
+        self.tt.sleep_ms(5).unwrap();
+        self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 1);
         Ok(())
     }
 }

@@ -36,7 +36,6 @@ fn xmain() -> ! {
 
     let mut usbdev = SpinalUsbDevice::new(usbdev_sid);
     let mut kbd = Keyboard::new(usbdev_sid);
-    let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     log::trace!("ready to accept requests");
 
@@ -76,10 +75,8 @@ fn xmain() -> ! {
                 log::info!("got USB interrupt");
                 usbdev.print_regs();
             }
-            Some(Opcode::ForceReset) => {
-                usbdev.connect_device_core(false);
-                tt.sleep_ms(5).unwrap(); // have to wait long enough for the auto-reset mechanism to kick in
-                usbdev.connect_device_core(true);
+            Some(Opcode::UsbReset) => {
+                usbdev.reset_eps();
                 xous::return_scalar(msg.sender, 0).unwrap();
             }
             Some(Opcode::DoCmd) => {
