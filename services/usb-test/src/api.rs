@@ -4,8 +4,6 @@ pub(crate) const SERVER_NAME_USBTEST: &'static str = "_USB test and development 
 pub(crate) enum Opcode {
     /// Handle the USB interrupt
     UsbIrqHandler,
-    /// Handle a USB reset - needed because the API doesn't allow mutability in the trait :-/
-    UsbReset,
     /// Parse a commandlne
     DoCmd,
     /// Keyboard input

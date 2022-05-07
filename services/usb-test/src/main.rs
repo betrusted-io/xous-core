@@ -21,6 +21,32 @@ use num_traits::*;
 use xous::{CID, msg_scalar_unpack, Message, send_message};
 use std::collections::BTreeMap;
 
+use usb_device::prelude::*;
+use usb_device::class_prelude::*;
+use usbd_human_interface_device::page::Keyboard;
+use usbd_human_interface_device::device::keyboard::{KeyboardLedsReport, NKROBootKeyboardInterface};
+use usbd_human_interface_device::prelude::*;
+use embedded_time::Clock;
+use std::convert::TryInto;
+
+pub struct EmbeddedClock {
+    start: std::time::Instant,
+}
+impl EmbeddedClock {
+    pub fn new() -> EmbeddedClock {
+        EmbeddedClock { start: std::time::Instant::now() }
+    }
+}
+
+impl Clock for EmbeddedClock {
+    type T = u64;
+    const SCALING_FACTOR: embedded_time::fraction::Fraction = <embedded_time::fraction::Fraction>::new(1, 1_000);
+
+    fn try_now(&self) -> Result<embedded_time::Instant<Self>, embedded_time::clock::Error> {
+        Ok(embedded_time::Instant::new(self.start.elapsed().as_millis().try_into().unwrap()))
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::SpinalUsbDevice;
@@ -34,8 +60,14 @@ fn xmain() -> ! {
     let usbdev_sid = xns.register_name(api::SERVER_NAME_USBTEST, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
 
-    let mut usbdev = SpinalUsbDevice::new(usbdev_sid);
-    let mut kbd = Keyboard::new(usbdev_sid);
+    let usbdev = SpinalUsbDevice::new(usbdev_sid);
+    let mut usbmgmt = usbdev.get_iface();
+    let mut kbd = crate::kbd::Keyboard::new(usbdev_sid);
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
+    log::info!("connecting device core");
+    usbmgmt.connect_device_core(true);
+    tt.sleep_ms(500).unwrap();
+    log::info!("devcore connected");
 
     log::trace!("ready to accept requests");
 
@@ -60,24 +92,44 @@ fn xmain() -> ! {
         cid
     ).expect("couldn't create suspend/resume object");
 
+    let usb_alloc = UsbBusAllocator::new(usbdev);
+
+    let clock = EmbeddedClock::new();
+    let mut keyboard = UsbHidClassBuilder::new()
+        .add_interface(
+            NKROBootKeyboardInterface::default_config(&clock),
+        )
+        .build(&usb_alloc);
+
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x0001))
+        .manufacturer("usbd-human-interface-device")
+        .product("NKRO Keyboard")
+        .serial_number("PRECURSOR")
+        .build();
+
+
     let mut cmdline = String::new();
     loop {
         let msg = xous::receive_message(usbdev_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 kbd.suspend();
-                usbdev.xous_suspend();
+                usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 kbd.resume();
-                usbdev.xous_resume();
+                usbmgmt.xous_resume();
             }),
             Some(Opcode::UsbIrqHandler) => {
                 log::info!("got USB interrupt");
-                usbdev.print_regs();
-            }
-            Some(Opcode::UsbReset) => {
-                usbdev.reset_eps();
-                xous::return_scalar(msg.sender, 0).unwrap();
+                usbmgmt.print_regs();
+                if usb_dev.poll(&mut [&mut keyboard]) {
+                    match keyboard.interface().read_report() {
+                        Ok(l) => {
+                            log::info!("got led state {:?}", l);
+                        }
+                        _ => {}
+                    }
+                }
             }
             Some(Opcode::DoCmd) => {
                 log::info!("got command line: {}", cmdline);
@@ -90,16 +142,16 @@ fn xmain() -> ! {
                         "conn" => {
                             match args {
                                 "1" => {
-                                    usbdev.connect_device_core(true);
+                                    usbmgmt.connect_device_core(true);
                                     log::info!("device core connected");
                                 },
                                 "0" => {
-                                    usbdev.connect_device_core(false);
+                                    usbmgmt.connect_device_core(false);
                                     log::info!("debug core connected");
                                 },
                                 _ => log::info!("usage: conn [1,0]; got: 'conn {}'", args),
                             }
-                            usbdev.print_regs();
+                            usbmgmt.print_regs();
                         }
                         _ => {
                             log::info!("unrecognized command {}", cmd);
@@ -112,12 +164,12 @@ fn xmain() -> ! {
                             log::info!("wouldn't that be nice...");
                         }
                         "conn" => {
-                            usbdev.connect_device_core(true);
+                            usbmgmt.connect_device_core(true);
                             log::info!("device core connected");
-                            usbdev.print_regs();
+                            usbmgmt.print_regs();
                         }
                         "regs" => {
-                            usbdev.print_regs();
+                            usbmgmt.print_regs();
                         }
                         _ => {
                             log::info!("unrecognized command");
@@ -148,6 +200,9 @@ fn xmain() -> ! {
             }),
             // this is via physical keyboard
             Some(Opcode::HandlerTrigger) => {
+                keyboard.interface().write_report(&[Keyboard::A]).ok(); // just for testing
+                keyboard.interface().tick().unwrap();
+
                 let rawstates = kbd.update();
                 // interpret scancodes
                 let kc: Vec<char> = kbd.track_keys(&rawstates);
