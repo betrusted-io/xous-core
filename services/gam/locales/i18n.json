@@ -52,5 +52,8 @@
         "ja": "[  何かのキーを押してください。]",
         "zh": "[ 按任意键 ]",
         "en-tts": "Press any key"
+    },
+    "notification.qrcode.error": {
+        "en": "Error: too much data for qrcode"
     }
 }

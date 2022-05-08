@@ -37,7 +37,8 @@ pub struct ManagedPromptWithTextResponse {
 pub struct ManagedNotification {
     pub token: [u32; 4],
     pub message: xous_ipc::String<1024>,
-    pub qrtext: Option<xous_ipc::String<1024>>,
+    // A Type 40 (177x177) qrcode with Medium data correction can encode max 3391 alphanumeric characters
+    pub qrtext: Option<xous_ipc::String<4096>>,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
