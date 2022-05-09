@@ -134,7 +134,7 @@ impl SpinalUdcRegs {
     }
     pub fn set_config(&self, cfg: UdcConfig) {
         unsafe {
-            self.regs.load(Ordering::SeqCst).add(CONFIG_OFFSET / size_of::<u32>()).write_volatile(cfg.0)
+            self.regs.load(Ordering::SeqCst).add(CONFIG_OFFSET / size_of::<u32>()).write_volatile(cfg.0 | 1) // 0x1 => enable pullup
         }
     }
     /// the ram starting at 0 has a size of 1 << ramsize. Only the lower 4 bits are valid, but the field takes up a u32
