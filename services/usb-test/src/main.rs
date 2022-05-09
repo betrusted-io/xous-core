@@ -7,8 +7,6 @@ use api::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod kbd;
 #[cfg(any(target_os = "none", target_os = "xous"))]
-use kbd::*;
-#[cfg(any(target_os = "none", target_os = "xous"))]
 mod hw;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use hw::*;
@@ -62,7 +60,7 @@ fn xmain() -> ! {
 
     let usbdev = SpinalUsbDevice::new(usbdev_sid);
     let mut usbmgmt = usbdev.get_iface();
-    let mut kbd = crate::kbd::Keyboard::new(usbdev_sid);
+    let mut kbd = kbd::Keyboard::new(usbdev_sid);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     log::info!("connecting device core");
     usbmgmt.connect_device_core(true);
@@ -92,25 +90,30 @@ fn xmain() -> ! {
         cid
     ).expect("couldn't create suspend/resume object");
 
+    log::info!("alloc");
     let usb_alloc = UsbBusAllocator::new(usbdev);
 
+    log::info!("clock");
     let clock = EmbeddedClock::new();
+    log::info!("hid");
     let mut keyboard = UsbHidClassBuilder::new()
         .add_interface(
             NKROBootKeyboardInterface::default_config(&clock),
         )
         .build(&usb_alloc);
 
+    log::info!("dev");
     let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x0001))
         .manufacturer("usbd-human-interface-device")
         .product("NKRO Keyboard")
         .serial_number("PRECURSOR")
         .build();
 
-
+    log::info!("main");
     let mut cmdline = String::new();
     loop {
         let msg = xous::receive_message(usbdev_sid).unwrap();
+        log::info!("msg: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 kbd.suspend();
@@ -271,6 +274,7 @@ pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Op
         None
     }
 }
+#[allow(dead_code)]
 pub(crate) fn dealloc_inner(allocs: &mut BTreeMap<u32, u32>, offset: u32) -> bool {
     allocs.remove(&offset).is_some()
 }
