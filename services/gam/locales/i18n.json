@@ -54,6 +54,9 @@
         "en-tts": "Press any key"
     },
     "notification.qrcode.error": {
-        "en": "Error: too much data for qrcode"
+        "en": "Error: data does not fit in QR code",
+        "ja": "QRコードエラー：データが多すぎます",
+        "zh": "错误：数据不适合QR码",
+        "en-tts": "Error: data does not fit in QR code"
     }
 }
