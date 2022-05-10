@@ -44,7 +44,7 @@ impl Notification {
             Some(setting) => {
                 let qrcode = match QrCode::new(setting) {
                     Ok(code) => code,
-                    Err(e) => QrCode::new(t!("notification.qrcode.error", xous::LANG)).unwrap(),
+                    Err(_e) => QrCode::new(t!("notification.qrcode.error", xous::LANG)).unwrap(),
                 };
                 self.qrwidth = qrcode.width();
                 log::info!(
