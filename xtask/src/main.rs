@@ -981,13 +981,19 @@ fn run(
 
     let mut paths = vec![];
     for i in init {
-        let tmp: PathBuf = Path::new(&format!(
-            "..{}target{}{}{}{}",
-            MAIN_SEPARATOR, MAIN_SEPARATOR, stream, MAIN_SEPARATOR, i
-        ))
-        .to_owned();
-        // .canonicalize()
-        // .or(Err(BuildError::PathConversionError))?;
+        let tmp: PathBuf = if cfg!(windows) {
+            Path::new(&format!(
+                "..{}target{}{}{}{}.exe",
+                MAIN_SEPARATOR, MAIN_SEPARATOR, stream, MAIN_SEPARATOR, i
+            ))
+            .to_owned()
+        } else {
+            Path::new(&format!(
+                "..{}target{}{}{}{}",
+                MAIN_SEPARATOR, MAIN_SEPARATOR, stream, MAIN_SEPARATOR, i
+            ))
+            .to_owned()
+        };
         paths.push(tmp);
     }
     for t in &paths {
