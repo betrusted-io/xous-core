@@ -27,6 +27,28 @@ pub fn log_init() -> *mut u32 {
 
 const NUM_ENDPOINTS: usize = 16;
 
+fn handle_usb(_irq_no: usize, arg: *mut usize) {
+    let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
+    let pending = usb.csr.r(utra::usbdev::EV_PENDING);
+
+    usb.ints.store(
+        usb.regs.interrupts().0,
+        Ordering::SeqCst
+    );
+    let mut cfg = UdcConfig(0);
+    cfg.set_disable_ints(true); // to be enabled only when all the interrupts are handled
+    cfg.set_pullup_on(true);
+    usb.regs.set_config(cfg);
+
+    usb.regs.clear_all_interrupts();
+    // also: do we halt the cores??
+
+    usb.csr.wo(utra::usbdev::EV_PENDING, pending);
+
+    xous::try_send_message(usb.conn,
+        xous::Message::new_scalar(Opcode::UsbIrqHandler.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+}
+
 bitfield! {
     pub struct UdcInterrupts(u32);
     impl Debug;
@@ -64,12 +86,13 @@ bitfield! {
 pub struct SpinalUdcRegs {
     regs: AtomicPtr<u32>,
 }
-const FRAME_OFFSET: usize = 0;
-const ADDRESS_OFFSET: usize = 4;
-const INT_OFFSET: usize = 8;
-const HALT_OFFSET: usize = 12;
-const CONFIG_OFFSET: usize = 16;
-const RAMSIZE_OFFSET: usize = 20;
+// constants in UsbDeviceCtrl.scala (L111-116) are in hex
+const FRAME_OFFSET: usize = 0x0;
+const ADDRESS_OFFSET: usize = 0x4;
+const INT_OFFSET: usize = 0x8;
+const HALT_OFFSET: usize = 0xC;
+const CONFIG_OFFSET: usize = 0x10;
+const RAMSIZE_OFFSET: usize = 0x20;
 #[allow(dead_code)]
 impl SpinalUdcRegs {
     pub fn new(ptr: *mut u32) -> SpinalUdcRegs {
@@ -134,20 +157,15 @@ impl SpinalUdcRegs {
     }
     pub fn set_config(&self, cfg: UdcConfig) {
         unsafe {
-            self.regs.load(Ordering::SeqCst).add(CONFIG_OFFSET / size_of::<u32>()).write_volatile(cfg.0 | 1) // 0x1 => enable pullup
+            self.regs.load(Ordering::SeqCst).add(CONFIG_OFFSET / size_of::<u32>()).write_volatile(cfg.0)
         }
     }
     /// the ram starting at 0 has a size of 1 << ramsize. Only the lower 4 bits are valid, but the field takes up a u32
     /// the returned value is the properly computed bytes as read out by the hardware field (no further maths needed)
     pub fn ramsize(&self) -> u32 {
-        unsafe {
-            self.regs.load(Ordering::SeqCst).add(RAMSIZE_OFFSET / size_of::<u32>()).read_volatile()
-        }
-        /*
         1 << (unsafe {
             self.regs.load(Ordering::SeqCst).add(RAMSIZE_OFFSET / size_of::<u32>()).read_volatile()
         } & 0xF)
-        */
     }
 }
 
@@ -273,27 +291,6 @@ impl SpinalUdcDescriptor {
     }
 }
 
-
-fn handle_usb(_irq_no: usize, arg: *mut usize) {
-    let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
-    let pending = usb.csr.r(utra::usbdev::EV_PENDING);
-
-    usb.ints.store(
-        usb.regs.interrupts().0,
-        Ordering::SeqCst
-    );
-    let mut cfg = UdcConfig(0);
-    cfg.set_disable_ints(true); // to be enabled only when all the interrupts are handled
-    usb.regs.set_config(cfg);
-
-    usb.regs.clear_all_interrupts();
-    // also: do we halt the cores??
-
-    xous::try_send_message(usb.conn,
-        xous::Message::new_scalar(Opcode::UsbIrqHandler.to_usize().unwrap(), 0, 0, 0, 0)).ok();
-    usb.csr.wo(utra::usbdev::EV_PENDING, pending);
-}
-
 pub struct SpinalUsbMgmt {
     csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable
     usb: AtomicPtr<u8>,
@@ -303,6 +300,7 @@ pub struct SpinalUsbMgmt {
 }
 impl SpinalUsbMgmt {
     pub fn print_regs(&self) {
+        /*
         for i in 0..8 {
             let offset = 0xff00 + i * 4;
             log::info!(
@@ -310,30 +308,32 @@ impl SpinalUsbMgmt {
                 offset,
                 unsafe{(self.usb.load(Ordering::SeqCst).add(offset) as *mut u32).read_volatile()},
             );
-        }
+        } */
         //unsafe{self.usb.load(Ordering::SeqCst).add(0xff10 / size_of::<u32>()).write_volatile(0x4)};
         for i in 0..16 {
             let ep_status = self.status_from_index(i);
-            log::info!("ep{}_status: {:?}", i, ep_status);
-            if ep_status.head_offset() != 0 {
-                let desc = self.descriptor_from_status(&ep_status);
-                log::info!("offset: {}, in_progress: {}, length: {}", desc.offset(), desc.in_progress(), desc.length());
-            }
-            if i == 0 {
-                let setup_data_base = unsafe{self.usb.load(Ordering::SeqCst).add(0x40) as *mut u32};
-                log::info!("setup area: {:x?}{:x?}",
-                    unsafe{setup_data_base.add(0).read_volatile()}.to_le_bytes(),
-                    unsafe{setup_data_base.add(1).read_volatile()}.to_le_bytes()
-                );
+            if ep_status.enable() {
+                log::info!("ep{}_status: {:x?}", i, ep_status);
+                if ep_status.head_offset() != 0 {
+                    let desc = self.descriptor_from_status(&ep_status);
+                    log::info!("offset: {}, in_progress: {}, length: {}", desc.offset(), desc.in_progress(), desc.length());
+                }
+                if i == 0 {
+                    let setup_data_base = unsafe{self.usb.load(Ordering::SeqCst).add(0x40) as *mut u32};
+                    log::info!("setup area: {:x?}{:x?}",
+                        unsafe{setup_data_base.add(0).read_volatile()}.to_le_bytes(),
+                        unsafe{setup_data_base.add(1).read_volatile()}.to_le_bytes()
+                    );
+                }
             }
         }
-
         log::info!("frame id: {}", self.regs.frame_id());
         log::info!("usb addr: {}", self.regs.address());
         log::info!("ints: {:x?}", self.regs.interrupts());
         log::info!("halt: 0x{:x?}", self.regs.halt());
         log::info!("config: 0x{:x?}", self.regs.config());
         log::info!("ramsize: {}", self.regs.ramsize());
+        assert!(4096 == self.regs.ramsize(), "hardware ramsize parameter does not match our expectations");
     }
     pub fn connect_device_core(&mut self, state: bool) {
         log::info!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_USBSELECT));
@@ -431,6 +431,7 @@ impl SpinalUsbDevice {
         // also have to enable ints at the SpinalHDL layer
         let mut cfg = UdcConfig(0);
         cfg.set_enable_ints(true);
+        cfg.set_pullup_on(true);
         usbdev.regs.set_config(cfg);
 
         usbdev
@@ -469,17 +470,36 @@ impl SpinalUsbDevice {
     pub fn dealloc_region(&mut self, offset: u32) -> bool {
         dealloc_inner(&mut self.allocs.lock().unwrap(), offset)
     }
-    pub fn descriptor_from_status(&self, ep_status: &UdcEpStatus) -> SpinalUdcDescriptor {
+    pub(crate) fn descriptor_from_status(&self, ep_status: &UdcEpStatus) -> SpinalUdcDescriptor {
         SpinalUdcDescriptor::new(
             unsafe{ self.usb.as_mut_ptr().add(
                 ep_status.head_offset() as usize * 16
             ) as *mut u32}
         )
     }
-    pub fn status_from_index(&self, index: usize) -> UdcEpStatus {
+    pub(crate) fn status_read_volatile(&self, index: usize) -> UdcEpStatus {
         unsafe {
             self.eps.load(Ordering::SeqCst).add(index).read_volatile()
         }
+    }
+    pub(crate) fn status_write_volatile(&self, index: usize, ep_status: UdcEpStatus) {
+        unsafe {
+            self.eps.load(Ordering::SeqCst).add(index).write_volatile(ep_status)
+        }
+    }
+    pub(crate) fn udc_hard_halt(&self, index: usize) {
+        self.regs.set_halt(UdcHalt(index as u32 | 0x10));
+        let mut iters = 0;
+        while !self.regs.halt().enable_ack() {
+            xous::yield_slice();
+            iters += 1;
+            if iters == 1000 {
+                log::info!("udc_hard_halt possibly timed out");
+            }
+        }
+    }
+    pub(crate) fn udc_hard_unhalt(&self, index: usize) {
+        self.regs.set_halt(UdcHalt(index as u32));
     }
 }
 
@@ -536,11 +556,7 @@ impl UsbBus for SpinalUsbDevice {
                 ep_status.set_enable(true);
                 log::info!("ep{}_status: {:?}", index, ep_status);
 
-                // unsafe volatile write to commit the computed ep_status state
-                // it's up to us to make sure we got the right type and index bounds :-/
-                // couldn't find an abstraction in Rust that met the simultaneous demands
-                // of the hardware along side the external USB crate.
-                unsafe{self.eps.load(Ordering::SeqCst).add(index).write_volatile(ep_status)};
+                self.status_write_volatile(index, ep_status);
 
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                 log::info!("returning endpoint {}", index);
@@ -608,7 +624,7 @@ impl UsbBus for SpinalUsbDevice {
     /// Implementations may also return other errors if applicable.
     fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
         log::info!("write ep{}", ep_addr.index());
-        let ep_status = self.status_from_index(ep_addr.index());
+        let ep_status = self.status_read_volatile(ep_addr.index());
         let descriptor = self.descriptor_from_status(&ep_status);
         if buf.len() > ep_status.max_packet_size() as usize {
             Err(UsbError::BufferOverflow)
@@ -631,6 +647,7 @@ impl UsbBus for SpinalUsbDevice {
                 descriptor.write_data(index, w);
             }
             core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+            log::info!("ep{} write: {:x?}", ep_addr.index(), &buf);
             Ok(buf.len())
         }
     }
@@ -654,14 +671,15 @@ impl UsbBus for SpinalUsbDevice {
     ///
     /// Implementations may also return other errors if applicable.
     fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
-        log::info!("read ep{}", ep_addr.index());
-        let ep_status = self.status_from_index(ep_addr.index());
+        log::info!("read ep{} into buf of len {}", ep_addr.index(), buf.len());
+        let ep_status = self.status_read_volatile(ep_addr.index());
         let descriptor = self.descriptor_from_status(&ep_status);
         if descriptor.in_progress() {
             log::info!("read called but descriptor was in progress")
         }
         let len = descriptor.length();
-        if buf.len() > len {
+        if buf.len() < len {
+            log::info!("would overflow: {} > {}", buf.len(), len);
             return Err(UsbError::BufferOverflow)
         }
         descriptor.set_desc1(0, buf.len());
@@ -675,6 +693,7 @@ impl UsbBus for SpinalUsbDevice {
         if ep_addr.index() == 0 {
             // hard coded to 8 bytes in hardware
             if buf.len() < 8 {
+                log::info!("ep0 read would overflow, aborting");
                 return Err(UsbError::BufferOverflow)
             }
             // setup data is in a special, fixed location
@@ -687,17 +706,21 @@ impl UsbBus for SpinalUsbDevice {
                 &unsafe{setup_data_base.add(1).read_volatile()}
                 .to_le_bytes()
             );
+            log::info!("ep0 read: {:x?}", &buf[..8]);
             Ok(8)
         } else {
             if len % 4 != 0 {
                 log::info!("non-word aligned length encountered, need code to handle this case");
             }
+            log::info!("reading data len {} into buf of {}", len, buf.len());
             for i in 0..len / 4 {
-                let word = descriptor.read_data(i);
-                for (&src, dst) in word.to_le_bytes().iter().zip(buf[i*4..(i+1)*4].iter_mut()) {
-                    *dst = src;
-                }
+                log::info!("data {}", i);
+                let word = descriptor.read_data(i).to_le_bytes();
+                log::info!("is {:x?}", word);
+                buf[i*4..(i+1)*4].copy_from_slice(&word);
+                log::info!("copied slice");
             }
+            log::info!("ep{} read: {:x?}", ep_addr.index(), &buf[..len]);
             Ok(len)
         }
     }
@@ -706,34 +729,30 @@ impl UsbBus for SpinalUsbDevice {
     /// should be prepared to receive data again.
     fn set_stalled(&self, ep_addr: EndpointAddress, stalled: bool) {
         log::info!("set_stalled{}->{}", ep_addr.index(), stalled);
-        // it looks like a STALL condition could be forced even on unallocated endpoints, so
-        // we alias into the register block and force it to happen.
-        let mut ep_status = unsafe {
-            self.eps.load(Ordering::SeqCst).add(ep_addr.index()).read_volatile()
-        };
+        if ep_addr.index() == 0 && (self.regs.interrupts().ep0_setup() | UdcInterrupts(self.ints.load(Ordering::SeqCst)).ep0_setup()) {
+            log::info!("not stalling ep0 during setup");
+            return;
+        }
+        self.udc_hard_halt(ep_addr.index());
+        let mut ep_status = self.status_read_volatile(ep_addr.index());
         match (stalled, ep_addr.direction()) {
             (true, UsbDirection::In) => {
-                ep_status.set_force_nack(false);
                 ep_status.set_force_stall(true);
             },
             (true, UsbDirection::Out) => ep_status.set_force_stall(true),
             (false, UsbDirection::In) => {
-                ep_status.set_force_nack(true); // not sure if this is correct -- STM32 reference sets state to "nack" but the meaning might be different for this core
                 ep_status.set_force_stall(false);
             },
             (false, UsbDirection::Out) => ep_status.set_force_stall(false),
         };
         // single volatile commit of the results
-        unsafe {
-            self.eps.load(Ordering::SeqCst).add(ep_addr.index()).write_volatile(ep_status)
-        }
+        self.status_write_volatile(ep_addr.index(), ep_status);
+        self.udc_hard_unhalt(ep_addr.index());
     }
 
     /// Gets whether the STALL condition is set for an endpoint.
     fn is_stalled(&self, ep_addr: EndpointAddress) -> bool {
-        let ep_status = unsafe {
-            self.eps.load(Ordering::SeqCst).add(ep_addr.index()).read_volatile()
-        };
+        let ep_status = self.status_read_volatile(ep_addr.index());
         log::info!("is_stalled{} -> {}", ep_addr.index(), ep_status.force_stall());
         ep_status.force_stall()
     }
@@ -756,26 +775,10 @@ impl UsbBus for SpinalUsbDevice {
     /// Gets information about events and incoming data. Usually called in a loop or from an
     /// interrupt handler. See the [`PollResult`] struct for more information.
     fn poll(&self) -> PollResult {
-        let mut interrupts = UdcInterrupts(self.ints. load(Ordering::SeqCst));
-        log::info!("poll {}, {:x?}", interrupts.0, interrupts);
+        let mut interrupts = UdcInterrupts(self.ints.load(Ordering::SeqCst));
+        log::info!("******> poll handler interrupts: {}, {:x?}", interrupts.0, interrupts);
         let poll_result =
-        if interrupts.disconnect() {
-            log::info!("disconnect");
-            interrupts.set_disconnect(false);
-            PollResult::Reset
-        } else if interrupts.resume() {
-            log::info!("resume");
-            interrupts.set_reset(false);
-            PollResult::Resume
-        } else if interrupts.reset() {
-            log::info!("reset");
-            interrupts.set_reset(false);
-            PollResult::Reset
-        } else if interrupts.suspend() {
-            log::info!("suspend");
-            interrupts.set_suspend(false);
-            PollResult::Suspend
-        } else if interrupts.endpoint() != 0 || interrupts.ep0_setup() {
+        if interrupts.endpoint() != 0 || interrupts.ep0_setup() {
             let ep_setup = if interrupts.ep0_setup() {
                 log::info!("ep0");
                 interrupts.set_ep0_setup(false);
@@ -792,7 +795,7 @@ impl UsbBus for SpinalUsbDevice {
                     if (interrupts.endpoint() & (1 << bit)) != 0 {
                         log::info!("ep{}", bit);
                         // form a descriptor from the memory range assigned to the EP
-                        let ep_status = self.status_from_index(bit);
+                        let ep_status = self.status_read_volatile(bit);
                         let descriptor = self.descriptor_from_status(&ep_status);
                         if descriptor.direction() == UsbDirection::Out {
                             ep_out |= 1 << bit;
@@ -806,17 +809,46 @@ impl UsbBus for SpinalUsbDevice {
                 }
             }
             PollResult::Data { ep_out, ep_in_complete, ep_setup }
+        } else if interrupts.reset() {
+            interrupts.set_reset(false);
+            log::info!("aft reset: {:x?}", interrupts.0);
+            PollResult::Reset
+        } else if interrupts.resume() {
+            interrupts.set_reset(false);
+            log::info!("aft resume: {:x?}", interrupts.0);
+            PollResult::Resume
+        } else if interrupts.suspend() {
+            interrupts.set_suspend(false);
+            log::info!("aft suspend: {:x?}", interrupts.0);
+            PollResult::Suspend
+        } else if interrupts.disconnect() {
+            interrupts.set_disconnect(false);
+            log::info!("aft disconnect: {:x?}", interrupts.0);
+            PollResult::Reset
         } else {
             PollResult::None
         };
+        self.ints.store(interrupts.0, Ordering::SeqCst);
         if interrupts.0 == 0 {
-            // all interrupts handled, re-enable nterrupts
+            // prep a cfg value prior to polling the self.regs.interrupts() register to minimize the profile of the race condition
             let mut cfg = UdcConfig(0);
             cfg.set_enable_ints(true); // to be enabled only when all the interrupts are handled
-            self.regs.set_config(cfg);
+            cfg.set_pullup_on(true);
+            // all previous interrupts handled, re-enable interrupts
+            let new_ints = self.regs.interrupts().0;
+            if new_ints != 0 {
+                self.regs.clear_all_interrupts();
+                self.ints.store(new_ints, Ordering::SeqCst);
+                log::info!("new interrupts happened while handling existing interrupts, re-entering");
+                xous::try_send_message(self.conn,
+                    xous::Message::new_scalar(Opcode::UsbIrqHandler.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+            } else {
+                self.regs.set_config(cfg);
+                // TODO: there is a race condition between when we check new_ints and we enable interrupts below. Fix this.
+                log::info!("all ints handled, re-enabling interrupts");
+            }
         } else {
             log::info!("more interrupts to handle: {:x}, {:x?}", interrupts.0, interrupts);
-            self.ints.store(interrupts.0, Ordering::SeqCst);
             // re-enter the interrupt handler to handle the next interrupt
             xous::try_send_message(self.conn,
                 xous::Message::new_scalar(Opcode::UsbIrqHandler.to_usize().unwrap(), 0, 0, 0, 0)).ok();
@@ -837,9 +869,19 @@ impl UsbBus for SpinalUsbDevice {
     ///   simulating a disconnect or it has not been enabled at creation time.
     fn force_reset(&self) -> Result<()> {
         log::info!("force_reset");
-        self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 0);
+
+        let mut cfg = UdcConfig(0);
+        cfg.set_disable_ints(true);
+        cfg.set_pullup_off(true);
+        self.regs.set_config(cfg);
+
         self.tt.sleep_ms(5).unwrap();
-        self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 1);
+
+        let mut cfg = UdcConfig(0);
+        cfg.set_enable_ints(true); // to be enabled only when all the interrupts are handled
+        cfg.set_pullup_on(true);
+        self.regs.set_config(cfg);
+
         Ok(())
     }
 }

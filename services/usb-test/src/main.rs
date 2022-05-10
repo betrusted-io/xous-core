@@ -72,11 +72,9 @@ fn xmain() -> ! {
     std::thread::spawn({
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            let mut keepalive = 0;
             loop {
+                // keeps the WDT from firing
                 tt.sleep_ms(2500).unwrap();
-                log::info!("keepalive {}", keepalive);
-                keepalive += 1;
             }
         }
     });
@@ -113,7 +111,6 @@ fn xmain() -> ! {
     let mut cmdline = String::new();
     loop {
         let msg = xous::receive_message(usbdev_sid).unwrap();
-        log::info!("msg: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 kbd.suspend();
@@ -238,7 +235,7 @@ fn xmain() -> ! {
 }
 
 pub(crate) const START_OFFSET: u32 = 0x0048 + 8; // align spinal free space to 16-byte boundary
-pub(crate) const END_OFFSET: u32 = 0xFF00;
+pub(crate) const END_OFFSET: u32 = 0x1000; // derived from RAMSIZE parameter: this could be a dynamically read out constant, but, in practice, it's part of the hardware
 /// USB endpoint allocator. The SpinalHDL USB controller appears as a block of
 /// unstructured memory to the host. You can specify pointers into the memory with
 /// an offset and length to define where various USB descriptors should be placed.
