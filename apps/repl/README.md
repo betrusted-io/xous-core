@@ -20,7 +20,7 @@ It implements the basic envisioned structure of a Xous application, namely:
  - Text input comes via the `ime-frontend`
  - Graphical output is rendered via the `gam`
 
-[Push Events and Listeners](../../wiki/Push-Events-and-Listeners) provides an overview of the flow of
+[Push Events and Listeners](https://github.com/betrusted-io/xous-core/wiki/Push-Events-and-Listeners) provides an overview of the flow of
 messages between an Xous application and the Xous Services.
 
 The one demo command provisioned in the `repl` app plays a tone via
