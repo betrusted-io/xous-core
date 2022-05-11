@@ -149,6 +149,46 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     });
                     write!(ret, "TCP listener started on port 80").unwrap();
                 }
+                "fountain" => {
+                    thread::spawn({
+                        move || {
+                            let tp = threadpool::ThreadPool::new(4);
+                            loop {
+                                let listener = std::net::TcpListener::bind("0.0.0.0:3333");
+                                let listener = match listener {
+                                    Ok(listener) => listener,
+                                    Err(_) => {
+                                        std::thread::sleep(std::time::Duration::from_millis(1000));
+                                        continue;
+                                    },
+                                };
+
+                                for i in listener.incoming() {
+                                    match i {
+                                        Err(error) => {
+                                            log::error!("error caught in listener.incoming(): {}", error);
+                                        },
+                                        Ok(mut stream) => {
+                                            tp.execute(move || {
+                                                let mut count = 0;
+                                                loop {
+                                                    match std::io::Write::write(&mut stream, format!("hello! {}\n", count).as_bytes()) {
+                                                        Err(e) => {
+                                                            log::info!("fountain write failed with error {:?}", e);
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                    count += 1;
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    write!(ret, "Fountain started on port 3333").unwrap();
+                }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
                 // to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received
