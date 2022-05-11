@@ -175,6 +175,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                     match std::io::Write::write(&mut stream, format!("hello! {}\n", count).as_bytes()) {
                                                         Err(e) => {
                                                             log::info!("fountain write failed with error {:?}", e);
+                                                            break;
                                                         }
                                                         _ => {}
                                                     }
