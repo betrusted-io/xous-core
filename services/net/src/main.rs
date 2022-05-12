@@ -223,6 +223,9 @@ fn xmain() -> ! {
     // is being accumulated.
     let mut tcp_tx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
+    // socket handles waiting for writes to flush on close
+    let mut tcp_tx_closing: Vec<(SocketHandle, xous::MessageSender)> = Vec::new();
+
     // When a client issues a Connect request, it will get placed here while the connection is
     // being established.
     let mut tcp_connect_waiting: Vec<
@@ -650,12 +653,24 @@ fn xmain() -> ! {
                     respond_with_error(msg, NetError::Invalid);
                     continue;
                 };
-                iface.get_socket::<TcpSocket>(handle).close();
-                iface.remove_socket(handle);
-                if let Some(response) = msg.body.memory_message_mut() {
-                    response.buf.as_slice_mut::<u8>()[0] = 0;
-                } else if !msg.body.has_memory() && msg.body.is_blocking() {
-                    xous::return_scalar(msg.sender, 0).ok();
+                if !std_tcp_can_close(&tcp_tx_waiting, handle) {
+                    log::info!("def");
+                    tcp_tx_closing.push((handle, msg.sender));
+                } else {
+                    let socket = iface.get_socket::<TcpSocket>(handle);
+                    if socket.may_send() {
+                        log::info!("imm");
+                        socket.close();
+                        iface.remove_socket(handle);
+                        if let Some(response) = msg.body.memory_message_mut() {
+                            response.buf.as_slice_mut::<u8>()[0] = 0;
+                        } else if !msg.body.has_memory() && msg.body.is_blocking() {
+                            xous::return_scalar(msg.sender, 0).ok();
+                        }
+                    } else {
+                        log::info!("def2");
+                        tcp_tx_closing.push((handle, msg.sender));
+                    }
                 }
             }
 
@@ -1422,6 +1437,26 @@ fn xmain() -> ! {
                                 std_failure(msg, NetError::LibraryError);
                             }
                         }
+                    }
+                }
+
+                log::debug!("pump: tcp close");
+                if tcp_tx_closing.len() > 0 {
+                    let mut closed = Vec::<usize>::new();
+                    for (index, &(handle, sender)) in tcp_tx_closing.iter().enumerate() {
+                        if std_tcp_can_close(&tcp_tx_waiting, handle) {
+                            let socket = iface.get_socket::<TcpSocket>(handle);
+                            if socket.may_send() {
+                                socket.close();
+                                iface.remove_socket(handle);
+                                log::info!("deferred close, socket is not active");
+                                xous::return_scalar(sender, 0).ok();
+                                closed.push(index);
+                            }
+                        }
+                    }
+                    for &index in closed.iter().rev() {
+                        tcp_tx_closing.remove(index);
                     }
                 }
 

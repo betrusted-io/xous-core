@@ -180,6 +180,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                         _ => {}
                                                     }
                                                     count += 1;
+                                                    if count == 10 {
+                                                        break;
+                                                    }
                                                 }
                                             });
                                         }
