@@ -149,6 +149,8 @@ for examples of idiomatic ways to write code for Xous.
 - PR #149: index support for modals. Lists can be submitted as a `Vec` now, with an array index returned as the selection result. Thanks to nworbnhoj for the PR.
 - PR #150 & #153: QR codes can now display a separate QR code from the actual text in the box via a Some/None specifier. Thanks to nworbnhoj for the PR & refinements.
 - PR #151: message forwarding standardized as part of the messaging API. See https://betrusted.io/xous-book/ch07-07-forwarding.html
+- fixed locking bug in dlmalloc (stdlib version 1.60.0.7)
+- update smoltcp to 0.8.0 + latest commits (lates commits necessary as 0.8.0 base includes a rand_core reference that doesn't compile)
 
 ## Roadmap to 1.0
 

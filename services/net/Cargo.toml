@@ -35,7 +35,8 @@ pddb = {path = "../pddb"}
 # with Xous in the commit after this -- we need to look into this and maybe send a PR so we can try to work with
 # the latest smoltcp. But later...let's just get things even working first with what we have.
 git = "https://github.com/smoltcp-rs/smoltcp.git"
-rev = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
+# rev = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
+rev = "007f8dd2e2d0a770609428aa4b0efb63f5dbb708"
 #path = "../../../smoltcp"
 #features = ["verbose"]
 #version = "0.7.5"

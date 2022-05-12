@@ -1,4 +1,5 @@
 use crate::*;
+use crate::device::NetPhy;
 use smoltcp::wire::{IpEndpoint, IpAddress};
 use ticktimer_server::Ticktimer;
 
@@ -11,7 +12,7 @@ const BUFLEN: usize = NET_MTU as usize;
 
 pub(crate) fn std_udp_bind(
     mut msg: xous::MessageEnvelope,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     our_sockets: &mut Vec<Option<SocketHandle>>,
     ) {
     // Ignore nonblocking and scalar messages
@@ -39,7 +40,9 @@ pub(crate) fn std_udp_bind(
     UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; BUFLEN]);
     let udp_tx_buffer =
         UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; BUFLEN]);
-    let mut udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
+    let udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
+    let handle = iface.add_socket(udp_socket);
+    let udp_socket = iface.get_socket::<UdpSocket>(handle);
 
     // Attempt to connect, returning the error if there is one
     if let Err(e) = udp_socket
@@ -55,8 +58,6 @@ pub(crate) fn std_udp_bind(
         return;
     }
 
-    let handle = sockets.add(udp_socket);
-
     // Add the socket into our process' list of sockets, and pass the index back as the `fd` parameter for future reference.
     let idx = insert_or_append(our_sockets, handle) as u8;
 
@@ -70,7 +71,7 @@ pub(crate) fn std_udp_bind(
 pub(crate) fn std_udp_rx(
     mut msg: xous::MessageEnvelope,
     timer: &Ticktimer,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     udp_rx_waiting: &mut Vec<Option<UdpStdState>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
@@ -108,7 +109,7 @@ pub(crate) fn std_udp_rx(
     };
     let do_peek = body.offset.is_some();
     log::trace!("udp rx from fd {}", connection_handle_index);
-    let mut socket = sockets.get::<UdpSocket>(*handle);
+    let socket = iface.get_socket::<UdpSocket>(*handle);
     if socket.can_recv() {
         log::trace!("receiving data right away");
         if do_peek {
@@ -158,7 +159,7 @@ pub(crate) fn std_udp_rx(
 
 pub(crate) fn std_udp_tx(
     mut msg: xous::MessageEnvelope,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     // unpack meta
@@ -192,7 +193,7 @@ pub(crate) fn std_udp_tx(
     let len = u16::from_le_bytes([bytes[19], bytes[20]]);
     // attempt the tx
     log::debug!("udp tx to fd {} -> {:?}:{} {:?}", connection_handle_index, address, remote_port, &bytes[21..21 + len as usize]);
-    let mut socket = sockets.get::<UdpSocket>(*handle);
+    let socket = iface.get_socket::<UdpSocket>(*handle);
     match socket.send_slice(&bytes[21..21 + len as usize], IpEndpoint::new(address, remote_port)) {
         Ok(_) => {
             body.buf.as_slice_mut()[0] = 0;
