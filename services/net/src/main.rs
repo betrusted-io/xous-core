@@ -222,6 +222,9 @@ fn xmain() -> ! {
     let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
     let routes = Routes::new(BTreeMap::new());
 
+    // build the device
+    let hw_config = com.wlan_get_config().expect("couldn't fetch initial wifi MAC");
+    log::debug!("My MAC address is: {:x?}", hw_config.mac);
     let device = device::NetPhy::new(&xns);
     // needed by ICMP to determine if we should compute checksums
     let device_caps = device.capabilities();
@@ -231,13 +234,13 @@ fn xmain() -> ! {
         .routes(routes);
     if medium == Medium::Ethernet {
         builder = builder
-            .hardware_addr(EthernetAddress::from_bytes(&[0; 6]).into())
+            .hardware_addr(EthernetAddress::from_bytes(&hw_config.mac).into())
             .neighbor_cache(neighbor_cache);
     }
     let mut iface = builder.finalize();
 
     // ------------- native variant -----------
-    let mut icmp_handle = setup_icmp(&mut iface);
+    let icmp_handle = setup_icmp(&mut iface);
     let mut seq: u16 = 0;
     // this record stores the origin time + IP address of the outgoing ping sequence number
     let mut ping_destinations = HashMap::<PingConnection, HashMap<u16, u64>>::new();
@@ -960,36 +963,8 @@ fn xmain() -> ! {
                                         .expect("couldn't retrieve updated ipv4 config");
                                     log::info!("Network config acquired: {:?}", config);
                                     net_config = Some(config);
-                                    let mac = EthernetAddress::from_bytes(&config.mac);
 
-                                    // we need to clear the ARP cache in case we've migrated base stations (e.g. in a wireless network
-                                    // that is coverd by multiple AP), as the host AP's MAC address would have changed, and we wouldn't
-                                    // be able to route responses back. I can't seem to find a function in smoltcp 0.7.5 that allows us
-                                    // to neatly clear the ARP cache as the BTreeMap that underlies it is moved into the container and
-                                    // no "clear" API is exposed, so let's just rebuild the whole interface if we get a DHCP renewal.
-                                    let neighbor_cache = NeighborCache::new(BTreeMap::new());
-                                    let ip_addrs =
-                                        [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-                                    let routes = Routes::new(BTreeMap::new());
-                                    let device = device::NetPhy::new(&xns);
-                                    let medium = device.capabilities().medium;
-                                    let mut builder = InterfaceBuilder::new(device, vec![])
-                                        .ip_addrs(ip_addrs)
-                                        .routes(routes);
-                                    if medium == Medium::Ethernet {
-                                        builder = builder
-                                            .hardware_addr(mac.into())
-                                            .neighbor_cache(neighbor_cache);
-                                    }
-                                    iface = builder.finalize();
-                                    // reset all the associated connection state. Maybe consider bunching these into a struct so we don't forget any of them.
-                                    icmp_handle = setup_icmp(&mut iface);
-                                    process_sockets.clear();
-                                    tcp_rx_waiting.clear();
-                                    tcp_tx_waiting.clear();
-                                    tcp_connect_waiting.clear();
-                                    tcp_accept_waiting.clear();
-                                    udp_rx_waiting.clear();
+                                    // note: ARP cache is stale. Maybe that's ok?
 
                                     let ip_addr = Ipv4Cidr::new(
                                         Ipv4Address::new(
@@ -1734,33 +1709,9 @@ fn xmain() -> ! {
                 }
             }),
             Some(Opcode::Reset) => {
-                net_config = None;
-                let neighbor_cache = NeighborCache::new(BTreeMap::new());
-                let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-                let routes = Routes::new(BTreeMap::new());
-                let device = device::NetPhy::new(&xns);
-                let medium = device.capabilities().medium;
-                let mut builder = InterfaceBuilder::new(device, vec![])
-                    .ip_addrs(ip_addrs)
-                    .routes(routes);
-                if medium == Medium::Ethernet {
-                    builder = builder
-                        .hardware_addr(EthernetAddress::from_bytes(&[0; 6]).into())
-                        .neighbor_cache(neighbor_cache);
-                }
-                iface = builder.finalize();
-                // reset all the associated connection state. Maybe consider bunching these into a struct so we don't forget any of them.
-                icmp_handle = setup_icmp(&mut iface);
-                process_sockets.clear();
-                tcp_rx_waiting.clear();
-                tcp_tx_waiting.clear();
-                tcp_connect_waiting.clear();
-                tcp_accept_waiting.clear();
-                udp_rx_waiting.clear();
-
+                // note: ARP cache isn't reset
                 iface.routes_mut().remove_default_ipv4_route();
                 dns_allclear_hook.notify();
-                // question: do we need to clear the UDP and ICMP states?
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
