@@ -40,6 +40,9 @@ pub const EC_REGION_LEN: u32 = 0x0008_0000;
 pub const PDDB_LOC: u32 = 0x01D8_0000; // PDDB start
 pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC; // must be 64k-aligned (bulk erase block size) for proper function.
 
+// quantum alloted to each process before a context switch is forced
+pub const BASE_QUANTA_MS: u32 = 10;
+
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 use core::sync::atomic::AtomicU64;
 
