@@ -38,11 +38,13 @@ use smoltcp::socket::{
 };
 use smoltcp::iface::SocketHandle;
 use smoltcp::time::{Duration, Instant};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
+use std::cmp::Ordering as CmpOrdering;
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
-const MAX_DELAY_THREADS: u32 = 16; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
+const MAX_DELAY_THREADS: u32 = 9;
 const PING_IDENT: u16 = 0x22b;
 
 fn set_ipv4_addr<DeviceT>(iface: &mut Interface<'_, DeviceT>, cidr: Ipv4Cidr)
@@ -101,6 +103,32 @@ pub struct UdpStdState {
     pub msg: xous::MessageEnvelope,
     pub handle: SocketHandle,
     pub expiry: Option<u64>,
+}
+
+pub struct Wakeup {
+    pub tx_index: usize,
+    pub time: u64,
+}
+impl Ord for Wakeup {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        self.time.cmp(&other.time)
+    }
+}
+impl PartialOrd for Wakeup {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for Wakeup {
+    fn eq(&self, other: &Self) -> bool {
+        self.time == other.time
+    }
+}
+impl Eq for Wakeup {}
+pub struct WorkerState {
+    pub tx: Sender::<u64>,
+    pub is_busy: bool,
+    pub time_replica: u64, // this is just to help with debugging, nothing else
 }
 
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
@@ -182,7 +210,6 @@ fn xmain() -> ! {
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list).ok();
     log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
-    let delay_threads = Arc::new(AtomicU32::new(0));
     let mut net_config: Option<Ipv4Conf> = None;
 
     // ------------- libstd variant -----------
@@ -255,8 +282,52 @@ fn xmain() -> ! {
     let mut dns_ipv6_hook = XousScalarEndpoint::new();
     let mut dns_allclear_hook = XousScalarEndpoint::new();
 
-    // wakeup polling management - this is not reset on connection reset, because the stale timers are still running and there is no way to reset them mid-run
-    let wakeup_time: Arc::<Mutex::<BTreeSet<u64>>> = Arc::new(Mutex::new(BTreeSet::new()));
+    // wakeup polling management - kick off worker threads to wake up a poll in the future for certain rx events required by smoltcp
+    // this is not reset on connection reset, because the stale timers are still
+    // running and there is no way to reset them mid-run.
+    let mut wakeup_time: BTreeSet<Wakeup> = BTreeSet::new();
+    let mut wakeup_workers = Vec::<WorkerState>::new();
+    for _ in 0..MAX_DELAY_THREADS {
+        let (tx, rx) = channel();
+        wakeup_workers.push(WorkerState {
+            tx,
+            is_busy: false,
+            time_replica: 0,
+        });
+        thread::spawn({
+            let parent_conn = net_conn.clone();
+            move || {
+                let tt = ticktimer_server::Ticktimer::new().unwrap();
+                loop {
+                    let target = rx.recv().unwrap();
+                    let now = tt.elapsed_ms();
+                    // arbitrary time can pass between the target issuance and receive
+                    let wakeup = if now >= target {
+                        0
+                    } else {
+                        target - now
+                    };
+                    if wakeup > 100_000 {
+                        log::warn!("long wakeup detected: {}", wakeup);
+                    }
+                    if wakeup != 0 { // only issue the sleep if the wakeup time is non-zero
+                        tt.sleep_ms(wakeup as usize).unwrap();
+                    }
+                    xous::try_send_message(
+                        parent_conn,
+                        Message::new_scalar(
+                            Opcode::NetPump.to_usize().unwrap(),
+                            (target >> 32) as usize,
+                            (target & 0xffff_ffff) as usize,
+                            0,
+                            0,
+                        ),
+                    )
+                    .ok();
+                }
+            }
+        });
+    }
 
     log::trace!("ready to accept requests");
     // register a suspend/resume listener
@@ -1068,7 +1139,25 @@ fn xmain() -> ! {
                     }
                 }
             }
-            Some(Opcode::NetPump) => {
+            Some(Opcode::NetPump) => msg_scalar_unpack!(msg, wup_hi, wup_lo, _, _, {
+                // assume: if wup_hi/wup_lo == 0, then the wakeup is from a non-timer thread
+                let wakeup: u64 = (wup_hi as u64) << 32 | (wup_lo as u64);
+                if wakeup != 0 {
+                    if let Some(wup) = wakeup_time.take(& Wakeup{tx_index: 0, time: wakeup}) {
+                        wakeup_workers[wup.tx_index].is_busy = false;
+                    } else {
+                        log::warn!("wakeup time {} was not in the wakeup queue!", wakeup);
+                    }
+                    if wakeup_time.len() == 0 {
+                        for (index, worker) in wakeup_workers.iter().enumerate() {
+                            if worker.is_busy {
+                                log::warn!("stranded worker at {}", index)
+                            }
+                        }
+                    }
+                    log::debug!("pending wakeups: {}", wakeup_time.len());
+                }
+
                 let now = timer.elapsed_ms();
                 let timestamp = Instant::from_millis(now as i64);
                 match iface.poll(timestamp) {
@@ -1334,7 +1423,6 @@ fn xmain() -> ! {
                             .recv()
                             .expect("couldn't receive on socket despite asserting availability");
                         log::trace!("icmp payload: {:x?}", payload);
-                        let now = timer.elapsed_ms();
 
                         for (connection, waiting_queue) in ping_destinations.iter_mut() {
                             let remote_addr = connection.remote;
@@ -1505,7 +1593,6 @@ fn xmain() -> ! {
                 // this block handles ICMP retirement; it runs everytime we pump the block
                 log::debug!("pump: icmp retirement");
                 {
-                    let now = timer.elapsed_ms();
                     // notify the callback to drop its connection, because the queue is now empty
                     // do this before we clear the queue, because we want the Drop message to come on the iteration
                     // *after* the queue is empty.
@@ -1581,57 +1668,61 @@ fn xmain() -> ! {
 
                 // establish our next check-up interval
                 log::debug!("pump: checkup");
-                if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
-                    let now = timer.elapsed_ms();
-                    let timestamp = Instant::from_millis(now as i64);
-                    if let Some(delay) = iface.poll_delay(timestamp) {
-                        const RANGE_MS: u64 = 5;
-                        let wakeup = now + delay.total_millis();
-                        let no_wakeup_scheduled = wakeup_time.lock().unwrap().range(wakeup - RANGE_MS..wakeup + RANGE_MS).count() == 0;
-                        if no_wakeup_scheduled {
-                            wakeup_time.lock().unwrap().insert(wakeup);
-                            let prev_count = delay_threads.fetch_add(1, Ordering::SeqCst);
-                            log::trace!(
-                                "spawning wakeup at {}ms. New total threads: {}",
-                                wakeup,
-                                prev_count + 1
-                            );
-                            thread::spawn({
-                                let parent_conn = net_conn.clone();
-                                let delay_threads = delay_threads.clone();
-                                let wakeup = wakeup.clone();
-                                let now = now.clone();
-                                let wakeup_time = wakeup_time.clone();
-                                move || {
-                                    let tt = ticktimer_server::Ticktimer::new().unwrap();
-                                    tt.sleep_ms((wakeup - now) as usize).unwrap();
-                                    if !wakeup_time.lock().unwrap().remove(&wakeup) {
-                                        log::warn!("time {} was not in wakeup queue!", wakeup);
-                                    }
-                                    xous::try_send_message(
-                                        parent_conn,
-                                        Message::new_scalar(
-                                            Opcode::NetPump.to_usize().unwrap(),
-                                            0,
-                                            0,
-                                            0,
-                                            0,
-                                        ),
-                                    )
-                                    .ok();
-                                    let prev_count = delay_threads.fetch_sub(1, Ordering::SeqCst);
-                                    log::trace!(
-                                        "terminating checkup thread. New total threads: {}",
-                                        prev_count - 1
-                                    );
-                                }
-                            });
+                let timestamp = Instant::from_millis(now as i64);
+                if let Some(delay) = iface.poll_delay(timestamp) {
+                    const RANGE_MS: u64 = 100; // this will define the responsivity to "future" events that maybe 100's of ms away
+                    let mut wakeup_needed = false;
+                    // round all short delays to within the next quantum
+                    if (delay.total_millis() as u32) < xous::BASE_QUANTA_MS {
+                        if wakeup_time.range(
+                            ..
+                            Wakeup { tx_index: 0, time: now + xous::BASE_QUANTA_MS as u64 }
+                        ).count() == 0 {
+                            wakeup_needed = true;
                         }
                     }
-                } else {
-                    log::info!("Thread pool exhausted; deferring creation of new poll helpers");
+                    let wakeup = now + delay.total_millis();
+                    // now check for longer delays over a longer window
+                    if wakeup_time.range(
+                        // "round up" to now if the window goes earlier than now
+                        Wakeup { tx_index: 0, time: (wakeup - RANGE_MS).max(now) }
+                        ..
+                        Wakeup { tx_index: 0, time: wakeup + RANGE_MS }
+                    ).count() == 0 {
+                        wakeup_needed = true;
+                    }
+                    if wakeup_needed {
+                        // find a free worker. this is an O(n) search right now, but generally (n) is small
+                        let mut found = false;
+                        for (index, worker) in wakeup_workers.iter_mut().enumerate() {
+                            if !worker.is_busy {
+                                worker.is_busy = true;
+                                worker.time_replica = wakeup;
+                                match worker.tx.send(wakeup) {
+                                    Err(e) => log::error!("{}: Couldn't send wakeup time to worker {}: {}", e, index, wakeup),
+                                    _ => {}
+                                };
+                                wakeup_time.insert(Wakeup {
+                                    tx_index: index,
+                                    time: wakeup,
+                                });
+                                found = true;
+                                break;
+                            }
+                        }
+                        if !found {
+                            log::warn!("All wakeup threads occupied, punting on wakeup at {}ms in the future", delay.total_millis());
+                            let mut dbg = String::from("Now pending: ");
+                            for (index, worker) in wakeup_workers.iter().enumerate() {
+                                if worker.is_busy {
+                                    dbg.push_str(&format!("{}[{}], ", index, worker.time_replica as i64 - now as i64));
+                                }
+                            }
+                            log::info!("{}", dbg);
+                        }
+                    }
                 }
-            }
+            }),
             Some(Opcode::GetIpv4Config) => {
                 let mut buffer = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
