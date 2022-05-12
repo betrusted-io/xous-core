@@ -176,7 +176,7 @@ fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -377,6 +377,7 @@ fn xmain() -> ! {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
                 let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
+                // this will eventually go away once https://github.com/smoltcp-rs/smoltcp/issues/613 is fixed
                 let local_addr = match iface.ipv4_addr() {
                     Some(addr) => addr,
                     None => { // can't send a packet if we don't ourselves have an IP address
@@ -444,6 +445,7 @@ fn xmain() -> ! {
                                 seq_no: seq,
                                 data: &echo_payload,
                             };
+                            // this will eventually go away once https://github.com/smoltcp-rs/smoltcp/issues/613 is fixed
                             socket.set_src_ipv4addr(local_addr);
                             let icmp_payload = socket.send(icmp_repr.buffer_len(), remote).unwrap();
                             let mut icmp_packet = Icmpv4Packet::new_unchecked(icmp_payload);
@@ -1182,7 +1184,7 @@ fn xmain() -> ! {
 
                 // Connect calls take time to establish. This block checks to see if connections
                 // have been made and issues callbacks as necessary.
-                log::debug!("pump: tcpconnect");
+                log::trace!("pump: tcpconnect");
                 for connection in tcp_connect_waiting.iter_mut() {
                     use smoltcp::socket::TcpState;
                     let socket;
@@ -1212,7 +1214,7 @@ fn xmain() -> ! {
                 }
 
                 // This block handles TCP Rx for libstd callers
-                log::debug!("pump: tcp rx");
+                log::trace!("pump: tcp rx");
                 for connection in tcp_rx_waiting.iter_mut() {
                     let socket;
                     let WaitingSocket {
@@ -1261,7 +1263,7 @@ fn xmain() -> ! {
                 }
 
                 // This block handles TCP Tx for libstd callers
-                log::debug!("pump: tcp tx");
+                log::trace!("pump: tcp tx");
                 for connection in tcp_tx_waiting.iter_mut() {
                     let socket;
                     let WaitingSocket {
@@ -1352,7 +1354,7 @@ fn xmain() -> ! {
                 }
 
                 // this block handles StdUdp
-                log::debug!("pump: udp");
+                log::trace!("pump: udp");
                 for connection in udp_rx_waiting.iter_mut() {
                     let socket;
                     let UdpStdState {
@@ -1424,7 +1426,7 @@ fn xmain() -> ! {
                 }
 
                 // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net crate.
-                log::debug!("pump: icmp");
+                log::trace!("pump: icmp");
                 {
                     let socket = iface.get_socket::<IcmpSocket>(icmp_handle);
                     if !socket.is_open() {
@@ -1604,7 +1606,7 @@ fn xmain() -> ! {
                     }
                 }
                 // this block handles ICMP retirement; it runs everytime we pump the block
-                log::debug!("pump: icmp retirement");
+                log::trace!("pump: icmp retirement");
                 {
                     // notify the callback to drop its connection, because the queue is now empty
                     // do this before we clear the queue, because we want the Drop message to come on the iteration
@@ -1680,7 +1682,7 @@ fn xmain() -> ! {
                 }
 
                 // establish our next check-up interval
-                log::debug!("pump: checkup");
+                log::trace!("pump: checkup");
                 let timestamp = Instant::from_millis(now as i64);
                 if let Some(delay) = iface.poll_delay(timestamp) {
                     const RANGE_MS: u64 = 100; // this will define the responsivity to "future" events that maybe 100's of ms away

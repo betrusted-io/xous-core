@@ -121,6 +121,7 @@ pub(crate) fn std_udp_rx(
     // force the local address to correspond to our (one and only) IP address
     // the underlying smoltcp library can't handle unspecified source addresses
     // because the library itself works with multiple interfaces and has no default resolution mechanism
+    // this may eventually get fixed see https://github.com/smoltcp-rs/smoltcp/issues/599
     if socket.endpoint().addr != IpAddress::Ipv4(local_addr) {
         if socket.is_open() {
             socket.close();
@@ -230,6 +231,7 @@ pub(crate) fn std_udp_tx(
     // force the local address to correspond to our (one and only) IP address
     // the underlying smoltcp library can't handle unspecified source addresses
     // because the library itself works with multiple interfaces and has no default resolution mechanism
+    // this may eventually get fixed see https://github.com/smoltcp-rs/smoltcp/issues/599
     if socket.endpoint().addr != IpAddress::Ipv4(local_addr) {
         if socket.is_open() {
             socket.close();
