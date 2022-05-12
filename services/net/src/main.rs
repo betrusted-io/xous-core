@@ -166,19 +166,17 @@ fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
     );
     let icmp_socket = IcmpSocket::new(icmp_rx_buffer, icmp_tx_buffer);
     let icmp_handle = iface.add_socket(icmp_socket);
-    {
-        let icmp_socket = iface.get_socket::<IcmpSocket>(icmp_handle);
-        icmp_socket
-            .bind(IcmpEndpoint::Ident(PING_IDENT))
-            .expect("couldn't bind to icmp socket");
-    }
+    let icmp_socket = iface.get_socket::<IcmpSocket>(icmp_handle);
+    icmp_socket
+        .bind(IcmpEndpoint::Ident(PING_IDENT))
+        .expect("couldn't bind to icmp socket");
     icmp_handle
 }
 
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -374,13 +372,23 @@ fn xmain() -> ! {
         }
         match FromPrimitive::from_usize(msg.body.id() & 0xffff) {
             Some(Opcode::Ping) => {
+                log::debug!("Ping");
                 let mut buf = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
                 let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
+                let local_addr = match iface.ipv4_addr() {
+                    Some(addr) => addr,
+                    None => { // can't send a packet if we don't ourselves have an IP address
+                        pkt.sent_ok = Some(false);
+                        buf.replace(pkt)
+                        .expect("Xous couldn't issue response to Ping request");
+                        continue;
+                    }
+                };
                 let socket = iface.get_socket::<IcmpSocket>(icmp_handle);
                 if socket.can_send() {
-                    log::trace!("sending ping to {:?}", pkt.endpoint);
+                    log::debug!("sending ping to {:?}", pkt.endpoint);
                     let remote = IpAddress::from(pkt.endpoint);
                     // we take advantage of the fact that the same CID is always returned for repeated connect requests to the same SID.
                     let cid = match pkt.server {
@@ -436,6 +444,7 @@ fn xmain() -> ! {
                                 seq_no: seq,
                                 data: &echo_payload,
                             };
+                            socket.set_src_ipv4addr(local_addr);
                             let icmp_payload = socket.send(icmp_repr.buffer_len(), remote).unwrap();
                             let mut icmp_packet = Icmpv4Packet::new_unchecked(icmp_payload);
                             icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
@@ -926,6 +935,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdUdpBind) => {
+                log::debug!("StdUdpBind");
                 let pid = msg.sender.pid();
                 std_udp_bind(
                     msg,
@@ -935,6 +945,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdUdpRx) => {
+                log::debug!("StdUdpRx");
                 let pid = msg.sender.pid();
                 std_udp_rx(
                     msg,
@@ -946,6 +957,7 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdUdpTx) => {
+                log::debug!("StdUdpTx");
                 let pid = msg.sender.pid();
                 std_udp_tx(
                     msg,
@@ -1140,6 +1152,7 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::NetPump) => msg_scalar_unpack!(msg, wup_hi, wup_lo, _, _, {
+                log::debug!("NetPump");
                 // assume: if wup_hi/wup_lo == 0, then the wakeup is from a non-timer thread
                 let wakeup: u64 = (wup_hi as u64) << 32 | (wup_lo as u64);
                 if wakeup != 0 {
@@ -1169,7 +1182,7 @@ fn xmain() -> ! {
 
                 // Connect calls take time to establish. This block checks to see if connections
                 // have been made and issues callbacks as necessary.
-                log::trace!("pump: tcpconnect");
+                log::debug!("pump: tcpconnect");
                 for connection in tcp_connect_waiting.iter_mut() {
                     use smoltcp::socket::TcpState;
                     let socket;
@@ -1199,7 +1212,7 @@ fn xmain() -> ! {
                 }
 
                 // This block handles TCP Rx for libstd callers
-                log::trace!("pump: tcp rx");
+                log::debug!("pump: tcp rx");
                 for connection in tcp_rx_waiting.iter_mut() {
                     let socket;
                     let WaitingSocket {
@@ -1248,7 +1261,7 @@ fn xmain() -> ! {
                 }
 
                 // This block handles TCP Tx for libstd callers
-                log::trace!("pump: tcp tx");
+                log::debug!("pump: tcp tx");
                 for connection in tcp_tx_waiting.iter_mut() {
                     let socket;
                     let WaitingSocket {
@@ -1313,7 +1326,7 @@ fn xmain() -> ! {
                 }
 
                 // this handles TCP std listeners
-                log::trace!("pump: tcp listen");
+                log::debug!("pump: tcp listen");
                 for connection in tcp_accept_waiting.iter_mut() {
                     let ep: IpEndpoint;
                     let AcceptingSocket {
@@ -1339,7 +1352,7 @@ fn xmain() -> ! {
                 }
 
                 // this block handles StdUdp
-                log::trace!("pump: udp");
+                log::debug!("pump: udp");
                 for connection in udp_rx_waiting.iter_mut() {
                     let socket;
                     let UdpStdState {

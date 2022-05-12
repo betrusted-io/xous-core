@@ -30,14 +30,20 @@ locales = {path = "../../locales"}
 pddb = {path = "../pddb"}
 
 [dependencies.smoltcp]
-# ugh. we startd pulling in smoltcp as they were just fixing a bunch of bugs and getting ready for a 0.8.0 release.
-# this is the last commit that doesn't break things for Xous. They pulled in some random crate that isn't compatible
-# with Xous in the commit after this -- we need to look into this and maybe send a PR so we can try to work with
-# the latest smoltcp. But later...let's just get things even working first with what we have.
-git = "https://github.com/smoltcp-rs/smoltcp.git"
-# rev = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
-rev = "007f8dd2e2d0a770609428aa4b0efb63f5dbb708"
-#path = "../../../smoltcp"
+# smoltcp 0.8.0 mainline has a bug in ICMPv4. This git rev patches over it until the maintainers can
+# confirm a proper patch for the issue.
+#git = "https://github.com/smoltcp-rs/smoltcp.git"
+git = "https://github.com/betrusted-io/smoltcp.git"
+rev = "35c8ec3d30c846442a1faae01fb0537641aef898"
+# path = "../../../smoltcp"
+default-features = false
+features = [
+  "std", "log", # needed for `cargo test --no-default-features --features default` :/
+  "medium-ethernet", "medium-ip",
+  "phy-raw_socket",
+  "proto-ipv4", "proto-ipv6",
+  "socket-raw", "socket-icmp", "socket-udp", "socket-tcp",
+]
 #features = ["verbose"]
 #version = "0.7.5"
 #features = ["proto-ipv4"]
