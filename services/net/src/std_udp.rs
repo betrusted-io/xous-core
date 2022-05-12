@@ -108,10 +108,35 @@ pub(crate) fn std_udp_rx(
         None
     };
     let do_peek = body.offset.is_some();
-    log::trace!("udp rx from fd {}", connection_handle_index);
+    log::debug!("udp rx from fd {}", connection_handle_index);
+    let local_addr = match iface.ipv4_addr() {
+        Some(addr) => addr,
+        None => {
+            std_failure(msg, NetError::Unaddressable);
+            return;
+        }
+    };
     let socket = iface.get_socket::<UdpSocket>(*handle);
+    let port = socket.endpoint().port;
+    // force the local address to correspond to our (one and only) IP address
+    // the underlying smoltcp library can't handle unspecified source addresses
+    // because the library itself works with multiple interfaces and has no default resolution mechanism
+    if socket.endpoint().addr != IpAddress::Ipv4(local_addr) {
+        if socket.is_open() {
+            socket.close();
+        }
+        if let Err(e) = socket.bind(IpEndpoint{addr: IpAddress::Ipv4(local_addr), port})
+        .map_err(|e| match e {
+            smoltcp::Error::Illegal => NetError::SocketInUse,
+            smoltcp::Error::Unaddressable => NetError::Unaddressable,
+            _ => NetError::LibraryError,
+        }) {
+            std_failure(msg, e);
+            return;
+        }
+    }
     if socket.can_recv() {
-        log::trace!("receiving data right away");
+        log::debug!("receiving data right away");
         if do_peek {
             // have to duplicate the code because Endpoint on peek is &, but on recv is not. This
             // difference in types means you can't do a pattern match assign to a common variable.
@@ -193,7 +218,32 @@ pub(crate) fn std_udp_tx(
     let len = u16::from_le_bytes([bytes[19], bytes[20]]);
     // attempt the tx
     log::debug!("udp tx to fd {} -> {:?}:{} {:?}", connection_handle_index, address, remote_port, &bytes[21..21 + len as usize]);
+    let local_addr = match iface.ipv4_addr() {
+        Some(addr) => addr,
+        None => {
+            std_failure(msg, NetError::Unaddressable);
+            return;
+        }
+    };
     let socket = iface.get_socket::<UdpSocket>(*handle);
+    let port = socket.endpoint().port;
+    // force the local address to correspond to our (one and only) IP address
+    // the underlying smoltcp library can't handle unspecified source addresses
+    // because the library itself works with multiple interfaces and has no default resolution mechanism
+    if socket.endpoint().addr != IpAddress::Ipv4(local_addr) {
+        if socket.is_open() {
+            socket.close();
+        }
+        if let Err(e) = socket.bind(IpEndpoint{addr: IpAddress::Ipv4(local_addr), port})
+        .map_err(|e| match e {
+            smoltcp::Error::Illegal => NetError::SocketInUse,
+            smoltcp::Error::Unaddressable => NetError::Unaddressable,
+            _ => NetError::LibraryError,
+        }) {
+            std_failure(msg, e);
+            return;
+        }
+    }
     match socket.send_slice(&bytes[21..21 + len as usize], IpEndpoint::new(address, remote_port)) {
         Ok(_) => {
             body.buf.as_slice_mut()[0] = 0;
