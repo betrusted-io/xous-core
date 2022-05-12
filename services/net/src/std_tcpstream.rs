@@ -263,7 +263,7 @@ pub(crate) fn std_tcp_peek(
 pub(crate) fn std_tcp_can_close(tx_waiting: &Vec<Option<WaitingSocket>>, handle: SocketHandle) -> bool {
     for maybe_socket in tx_waiting.iter() {
         if let Some(socket) = maybe_socket {
-            if socket.handle.0 == handle.0 {
+            if socket.handle == handle {
                 return false
             }
         }

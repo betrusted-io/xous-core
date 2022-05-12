@@ -181,6 +181,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                     }
                                                     count += 1;
                                                     if count == 10 {
+                                                        stream.flush().unwrap();
                                                         break;
                                                     }
                                                 }
