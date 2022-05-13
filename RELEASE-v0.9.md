@@ -151,6 +151,8 @@ for examples of idiomatic ways to write code for Xous.
 - PR #151: message forwarding standardized as part of the messaging API. See https://betrusted.io/xous-book/ch07-07-forwarding.html
 - fixed locking bug in dlmalloc (stdlib version 1.60.0.7)
 - update smoltcp to 0.8.0 + latest commits (lates commits necessary as 0.8.0 base includes a rand_core reference that doesn't compile)
+- refactor wait threads in net crate - use statically allocated pool of waiters + better filtering of requests for less churn
+- defer Drop on TcpStream until all written packets have been transmitted
 
 ## Roadmap to 1.0
 
