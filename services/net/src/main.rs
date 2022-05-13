@@ -380,16 +380,6 @@ fn xmain() -> ! {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
                 let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
-                // this will eventually go away once https://github.com/smoltcp-rs/smoltcp/issues/613 is fixed
-                let local_addr = match iface.ipv4_addr() {
-                    Some(addr) => addr,
-                    None => { // can't send a packet if we don't ourselves have an IP address
-                        pkt.sent_ok = Some(false);
-                        buf.replace(pkt)
-                        .expect("Xous couldn't issue response to Ping request");
-                        continue;
-                    }
-                };
                 let socket = iface.get_socket::<IcmpSocket>(icmp_handle);
                 if socket.can_send() {
                     log::debug!("sending ping to {:?}", pkt.endpoint);
@@ -448,8 +438,6 @@ fn xmain() -> ! {
                                 seq_no: seq,
                                 data: &echo_payload,
                             };
-                            // this will eventually go away once https://github.com/smoltcp-rs/smoltcp/issues/613 is fixed
-                            socket.set_src_ipv4addr(local_addr);
                             let icmp_payload = socket.send(icmp_repr.buffer_len(), remote).unwrap();
                             let mut icmp_packet = Icmpv4Packet::new_unchecked(icmp_payload);
                             icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
