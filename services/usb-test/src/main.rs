@@ -121,7 +121,7 @@ fn xmain() -> ! {
             }),
             Some(Opcode::UsbIrqHandler) => {
                 log::info!("got USB interrupt");
-                usbmgmt.print_regs();
+                // usbmgmt.print_regs();
                 if usb_dev.poll(&mut [&mut keyboard]) {
                     match keyboard.interface().read_report() {
                         Ok(l) => {
