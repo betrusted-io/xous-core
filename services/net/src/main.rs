@@ -654,12 +654,12 @@ fn xmain() -> ! {
                     continue;
                 };
                 if !std_tcp_can_close(&tcp_tx_waiting, handle) {
-                    log::info!("def");
+                    log::trace!("def"); // these are short because the extra delay of a long message affects the computation
                     tcp_tx_closing.push((handle, msg.sender));
                 } else {
                     let socket = iface.get_socket::<TcpSocket>(handle);
-                    if socket.may_send() {
-                        log::info!("imm");
+                    if socket.may_send() && socket.send_queue() == 0 {
+                        log::trace!("imm");
                         socket.close();
                         iface.remove_socket(handle);
                         if let Some(response) = msg.body.memory_message_mut() {
@@ -668,7 +668,7 @@ fn xmain() -> ! {
                             xous::return_scalar(msg.sender, 0).ok();
                         }
                     } else {
-                        log::info!("def2");
+                        log::trace!("def2");
                         tcp_tx_closing.push((handle, msg.sender));
                     }
                 }
@@ -1446,10 +1446,10 @@ fn xmain() -> ! {
                     for (index, &(handle, sender)) in tcp_tx_closing.iter().enumerate() {
                         if std_tcp_can_close(&tcp_tx_waiting, handle) {
                             let socket = iface.get_socket::<TcpSocket>(handle);
-                            if socket.may_send() {
+                            if socket.may_send() && socket.send_queue() == 0 {
                                 socket.close();
                                 iface.remove_socket(handle);
-                                log::info!("deferred close, socket is not active");
+                                log::debug!("deferred close, socket is not active");
                                 xous::return_scalar(sender, 0).ok();
                                 closed.push(index);
                             }
