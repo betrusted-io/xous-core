@@ -139,7 +139,6 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     let bi = boot_instant.clone();
                                     move || {
                                         handle_connection(stream, bi);
-                                        log::info!("connection closed");
                                     }
                                 });
                             }
@@ -150,7 +149,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     write!(ret, "TCP listener started on port 80").unwrap();
                 }
                 "fountain" => {
+                    // anything typed after fountain will cause this to be a short test
+                    let short_test = tokens.next().is_some();
                     thread::spawn({
+                        let short_test = short_test.clone();
                         move || {
                             let tp = threadpool::ThreadPool::new(4);
                             loop {
@@ -180,7 +182,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                         _ => {}
                                                     }
                                                     count += 1;
-                                                    if count == 10 {
+                                                    if count == 10 && short_test {
                                                         stream.flush().unwrap();
                                                         break;
                                                     }
@@ -538,7 +540,7 @@ impl Worker {
 
             match message {
                 Message::NewJob(job) => {
-                    log::info!("Worker {} got a job; executing.", id);
+                    log::debug!("Worker {} got a job; executing.", id);
 
                     job();
                 }
