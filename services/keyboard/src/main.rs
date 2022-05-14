@@ -735,8 +735,9 @@ fn xmain() -> ! {
     //  - graphics (if building for hosted mode)
     //  - oqc (for factory test)
     //  - status sub system (for setting the layout)
+    //  - keyboard-backlight (to start backlight when a key is pressed)
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(3)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
@@ -755,6 +756,8 @@ fn xmain() -> ! {
     let mut listener_op: Option<usize> = None;
     let mut raw_listener_conn: Option<CID> = None;
     let mut raw_listener_op: Option<u32> = None;
+    let mut observer_conn: Option<CID> = None;
+    let mut observer_op: Option<usize> = None;
 
     let mut vibe = false;
     let llio = llio::Llio::new(&xns);
@@ -806,6 +809,21 @@ fn xmain() -> ! {
                         log::error!("couldn't connect to listener: {:?}", e);
                         raw_listener_conn = None;
                         raw_listener_op = None;
+                    }
+                }
+            },
+            Some(Opcode::RegisterKeyObserver) => {
+                let buffer = unsafe{Buffer::from_memory_message(msg.body.memory_message().unwrap())};
+                let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
+                match xns.request_connection_blocking(kr.server_name.as_str()) {
+                    Ok(cid) => {
+                        observer_conn = Some(cid);
+                        observer_op = Some(kr.listener_op_id as usize);
+                    }
+                    Err(e) => {
+                        log::error!("couldn't connect to observer: {:?}", e);
+                        observer_conn = None;
+                        observer_op = None;
                     }
                 }
             },
@@ -946,6 +964,17 @@ fn xmain() -> ! {
                                 keys[3] as u32 as usize,
                             )
                         ).expect("couldn't send key codes to listener");
+
+                        log::trace!("sending observer key");
+                        xous::send_message(observer_conn.unwrap(),
+                        xous::Message::new_scalar(
+                            observer_op.unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        )
+                    ).expect("couldn't send key codes to listener");
                     }
                 }
                 // as long as we have a keydown, keep pinging the loop at a high rate. this consumes more power, but keydowns are relatively rare.

@@ -1492,6 +1492,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyboard-backlight"
+version = "0.1.0"
+dependencies = [
+ "com",
+ "keyboard",
+ "log",
+ "log-server",
+ "net",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc 0.9.7",
+ "xous-names",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

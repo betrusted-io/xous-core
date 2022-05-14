@@ -59,6 +59,9 @@ pub(crate) enum Opcode {
     /// request for raw keyups/downs
     RegisterRawListener,
 
+    /// request for updates for *when* keyboard is pressed
+    RegisterKeyObserver,
+
     /// set repeat delay, rate; both in ms
     SetRepeat, //(u32, u32),
 
