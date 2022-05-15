@@ -56,7 +56,11 @@ impl fmt::Debug for UdcInterrupts {
             f.write_str("NIL")
         } else {
             if self.endpoint() != 0 {
-                f.write_fmt(format_args!("ep{:x} ", &self.endpoint()))?;
+                for i in 0..NUM_ENDPOINTS {
+                    if self.endpoint() & (1 << i) != 0 {
+                        f.write_fmt(format_args!("ep{:x} ", i))?;
+                    }
+                }
             }
             if self.reset() {
                 f.write_str("reset ")?;
@@ -669,11 +673,12 @@ impl UsbBus for SpinalUsbDevice {
                         index == 0, // only trigger for ep0 (per spinal linux driver)
                     );
 
-                    // now commit the ep config
                     if index == 0 {
-                        // stash a copy of the ep0 IN head location, because the SETUP packet requires this to be 0
+                        // stash a copy of the ep0 IN head location, because the SETUP packet resets this to 0
                         self.ep0in_head = ep_status.head_offset();
                     }
+
+                    // now commit the ep config
                     self.status_write_volatile(index, ep_status);
                     self.ep_allocs[index] = true;
 
@@ -716,17 +721,12 @@ impl UsbBus for SpinalUsbDevice {
             if ep {
                 if index == 0 {
                     let mut ep0_status = self.status_read_volatile(0);
-                    // reset the descriptor offset to 0
-                    ep0_status.set_head_offset(self.ep0in_head);
                     let descriptor = self.descriptor_from_status(&ep0_status);
+                    ep0_status.set_head_offset(0); // reset the descriptor offset to 0, so the IN packet doesn't fire until prepared
+                    self.status_write_volatile(0, ep0_status);
                     if descriptor.offset() != 0 {
                         descriptor.set_offset(0); // reset the pointer to 0
                     }
-                    // now prepare the SETUP packet edge case -- it assumes *no* descriptor has been assigned
-                    ep0_status.set_head_offset(0);
-                    self.status_write_volatile(
-                        0,
-                        ep0_status);
                 } else {
                     let ep_status = self.status_read_volatile(index);
                     let descriptor = self.descriptor_from_status(&ep_status);
@@ -739,15 +739,7 @@ impl UsbBus for SpinalUsbDevice {
         // now confirm the config
         for (index, &ep) in self.ep_allocs.iter().enumerate() {
             if ep {
-                let ep_status = if index == 0 {
-                    let mut ep0_status = self.status_read_volatile(0);
-                    log::info!("ep0 for setup: {:?}", ep0_status);
-                    // then report the IN config below
-                    ep0_status.set_head_offset(self.ep0in_head);
-                    ep0_status
-                } else {
-                    self.status_read_volatile(index)
-                };
+                let ep_status = self.status_read_volatile(index);
                 log::info!("ep{}_status: {:?}", index, ep_status);
                 let descriptor = self.descriptor_from_status(&ep_status);
                 log::info!("desc{}: {:?}", index, descriptor);
@@ -784,34 +776,38 @@ impl UsbBus for SpinalUsbDevice {
     ///
     /// Implementations may also return other errors if applicable.
     fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
-        let mut ep_status = self.status_read_volatile(ep_addr.index());
-        if ep_addr.index() == 0 {
-            // restore the ep0 config because the SETUP transaction resets the settings here
-            if ep_status.head_offset() == 0 {
-                ep_status.set_head_offset(self.ep0in_head);
-                // ep_status.set_force_nack(false); // ------- experiment
+        if self.ep_allocs[ep_addr.index()] {
+            let mut ep_status = self.status_read_volatile(ep_addr.index());
+            if buf.len() > ep_status.max_packet_size() as usize {
+                Err(UsbError::BufferOverflow)
+            } else {
+                if ep_addr.index() == 0 {
+                    // this is reset to 0 after every transaction by the hardware for ep0, so we must reset it
+                    ep_status.set_head_offset(self.ep0in_head);
+                }
+                let descriptor = self.descriptor_from_status(&ep_status);
+                descriptor.set_offset(0); // reset the write pointer to 0
+                if buf.len() % 4 != 0 {
+                    // the linux driver doesn't handle anything other than word aligned, can we get away with it here?
+                    log::warn!("non word aligned buffer received, this needs to be handled");
+                }
+                for (index, src) in buf.chunks_exact(4).enumerate() {
+                    let w = u32::from_le_bytes(src.try_into().unwrap());
+                    descriptor.write_data(index, w);
+                }
+                if ep_addr.index() == 0 {
+                    // this is required to commit the ep_status record once all the setup is done
+                    self.status_write_volatile(0, ep_status);
+                }
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+                log::info!("ep{} write: {:x?}", ep_addr.index(), &buf);
+                if ep_addr.index() == 0 {
+                    log::info!("ep0 sanity check: {:?}", self.status_read_volatile(0));
+                }
+                Ok(buf.len())
             }
-        }
-        if buf.len() > ep_status.max_packet_size() as usize {
-            Err(UsbError::BufferOverflow)
         } else {
-            let descriptor = self.descriptor_from_status(&ep_status);
-            descriptor.set_offset(0); // reset the write pointer to 0
-            if buf.len() % 4 != 0 {
-                // the linux driver doesn't handle anything other than word aligned, can we get away with it here?
-                log::warn!("non word aligned buffer received, this needs to be handled");
-            }
-            for (index, src) in buf.chunks_exact(4).enumerate() {
-                let w = u32::from_le_bytes(src.try_into().unwrap());
-                descriptor.write_data(index, w);
-            }
-            if ep_addr.index() == 0 {
-                self.status_write_volatile(0, UdcEpStatus(ep_status.0));
-                log::info!("restored ep0: {:?}", self.status_read_volatile(0));
-            }
-            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-            log::info!("ep{} write: {:x?}", ep_addr.index(), &buf);
-            Ok(buf.len())
+            Err(UsbError::InvalidEndpoint)
         }
     }
 
@@ -834,56 +830,45 @@ impl UsbBus for SpinalUsbDevice {
     ///
     /// Implementations may also return other errors if applicable.
     fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
-        log::trace!("read ep{} into buf of len {}", ep_addr.index(), buf.len());
-        if ep_addr.index() == 0 {
-            // hard coded to 8 bytes in hardware
-            if buf.len() < 8 {
-                log::info!("ep0 read would overflow, aborting");
-                return Err(UsbError::BufferOverflow)
-            }
-            // setup data is in a special, fixed location
-            buf[..8].copy_from_slice(&self.get_setup());
-            log::info!("ep0 read: {:x?}", &buf[..8]);
-            /*
-            // now that the SETUP read is done, prep for an IN packet
-            let mut ep0_status = self.status_read_volatile(0);
-            ep0_status.set_head_offset(self.ep0in_head);
-            let desc0 = self.descriptor_from_status(&ep0_status);
-            desc0.set_offset(0);
-            // ep0_status.set_force_nack(true); // ------- experiment
-            self.status_write_volatile(0, ep0_status);
-            */
-            Ok(8)
-        } else {
-            let ep_status = self.status_read_volatile(ep_addr.index());
-            let descriptor = self.descriptor_from_status(&ep_status);
-            let mut iters = 0;
-            while descriptor.in_progress() {
-                xous::yield_slice();
-                iters += 1;
-                if iters > 10_000 {
-                    log::info!("ep{} in_progress timeout", ep_addr.index());
-                    break;
+        if self.ep_allocs[ep_addr.index()] {
+            log::trace!("read ep{} into buf of len {}", ep_addr.index(), buf.len());
+            if ep_addr.index() == 0 {
+                // hard coded to 8 bytes in hardware
+                if buf.len() < 8 {
+                    log::info!("ep0 read would overflow, aborting");
+                    return Err(UsbError::BufferOverflow)
                 }
+                // setup data is in a special, fixed location
+                buf[..8].copy_from_slice(&self.get_setup());
+                log::info!("ep0 read: {:x?}", &buf[..8]);
+                Ok(8)
+            } else {
+                let ep_status = self.status_read_volatile(ep_addr.index());
+                let descriptor = self.descriptor_from_status(&ep_status);
+                if descriptor.in_progress() {
+                    return Err(UsbError::WouldBlock)
+                }
+                let len = descriptor.offset();
+                if len % 4 != 0 {
+                    log::info!("non-word aligned length encountered, need code to handle this case");
+                }
+                if buf.len() < len {
+                    log::error!("read ep{} would overflow: {} < {}", ep_addr.index(), buf.len(), len);
+                    return Err(UsbError::BufferOverflow)
+                }
+                for i in 0..len / 4 {
+                    log::info!("data {}", i);
+                    let word = descriptor.read_data(i).to_le_bytes();
+                    log::info!("is {:x?}", word);
+                    buf[i*4..(i+1)*4].copy_from_slice(&word);
+                    log::info!("copied slice");
+                }
+                descriptor.set_offset(0); // reset the read pointer to 0
+                log::info!("ep{} read: {:x?} (len {} into buf of {})", ep_addr.index(), &buf[..len], len, buf.len());
+                Ok(len)
             }
-            let len = descriptor.offset();
-            if len % 4 != 0 {
-                log::info!("non-word aligned length encountered, need code to handle this case");
-            }
-            if buf.len() < len {
-                log::error!("read ep{} would overflow: {} < {}", ep_addr.index(), buf.len(), len);
-                return Err(UsbError::BufferOverflow)
-            }
-            for i in 0..len / 4 {
-                log::info!("data {}", i);
-                let word = descriptor.read_data(i).to_le_bytes();
-                log::info!("is {:x?}", word);
-                buf[i*4..(i+1)*4].copy_from_slice(&word);
-                log::info!("copied slice");
-            }
-            descriptor.set_offset(0); // reset the read pointer to 0
-            log::info!("ep{} read: {:x?} (len {} into buf of {})", ep_addr.index(), &buf[..len], len, buf.len());
-            Ok(len)
+        } else {
+            Err(UsbError::InvalidEndpoint)
         }
     }
 
@@ -942,16 +927,19 @@ impl UsbBus for SpinalUsbDevice {
         let mut ints_to_clear = UdcInterrupts(0);
         log::info!(">>>> frame {}: {:x?}", self.regs.frame_id(), interrupts);
         let poll_result =
-        if interrupts.endpoint() != 0 || interrupts.ep0_setup() {
+        if interrupts.reset() {
+            ints_to_clear.set_reset(true);
+            log::trace!("aft reset: {:x?}", interrupts.0);
+            PollResult::Reset
+        } else if interrupts.endpoint() != 0 || interrupts.ep0_setup() {
             let ep_setup = if interrupts.ep0_setup() {
                 ints_to_clear.set_ep0_setup(true);
                 1
             } else {0};
             let mut ep_in_complete = 0;
 
-            let mut ep_out = ep_setup;
+            let mut ep_out = 0;
             // all of them will be handled here, so, clear the interrupts as needed
-
             if interrupts.endpoint() != 0 {
                 let mut bit = 0;
                 loop {
@@ -959,7 +947,7 @@ impl UsbBus for SpinalUsbDevice {
                         log::info!("ep{} int", bit);
                         // form a descriptor from the memory range assigned to the EP
                         let mut ep_status = self.status_read_volatile(bit);
-                        if bit == 0 { // WHY IS THIS BEING RESET HERE??
+                        if bit == 0 { // EP0 SETUP overrides the descriptor offset, restore it (but don't write it back, it will get written back on the next `write`)
                             ep_status.set_head_offset(self.ep0in_head);
                         }
                         let descriptor = self.descriptor_from_status(&ep_status);
@@ -977,10 +965,6 @@ impl UsbBus for SpinalUsbDevice {
                 }
             }
             PollResult::Data { ep_out, ep_in_complete, ep_setup }
-        } else if interrupts.reset() {
-            ints_to_clear.set_reset(true);
-            log::trace!("aft reset: {:x?}", interrupts.0);
-            PollResult::Reset
         } else if interrupts.resume() {
             ints_to_clear.set_reset(true);
             log::trace!("aft resume: {:x?}", interrupts.0);
