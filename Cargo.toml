@@ -138,3 +138,8 @@ branch="main"
 
 [patch."https://github.com/betrusted-io/xous-engine-25519.git"]
 engine-25519 = {path = "services/engine-25519"}
+
+[patch.crates-io.usb-device]
+git="https://github.com/betrusted-io/usb-device.git"
+branch="main"
+# path = "../usb-device"
