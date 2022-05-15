@@ -120,8 +120,6 @@ fn xmain() -> ! {
                 usbmgmt.xous_resume();
             }),
             Some(Opcode::UsbIrqHandler) => {
-                log::info!("got USB interrupt");
-                // usbmgmt.print_regs();
                 if usb_dev.poll(&mut [&mut keyboard]) {
                     match keyboard.interface().read_report() {
                         Ok(l) => {
@@ -234,7 +232,7 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-pub(crate) const START_OFFSET: u32 = 0x0048 + 8; // align spinal free space to 16-byte boundary
+pub(crate) const START_OFFSET: u32 = 0x0048 + 8 + 16; // align spinal free space to 16-byte boundary + 16 bytes for EP0 read
 pub(crate) const END_OFFSET: u32 = 0x1000; // derived from RAMSIZE parameter: this could be a dynamically read out constant, but, in practice, it's part of the hardware
 /// USB endpoint allocator. The SpinalHDL USB controller appears as a block of
 /// unstructured memory to the host. You can specify pointers into the memory with
