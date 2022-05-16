@@ -118,9 +118,6 @@ pub(crate) enum Opcode {
     EventRtcHappened,
     EventUsbHappened,
 
-    /// debug USB status
-    DebugUsbOp,
-
     /// SuspendResume callback
     SuspendResume,
 

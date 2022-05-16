@@ -471,24 +471,5 @@ impl Llio {
         let value = if ena {1} else {0};
         self.power_csr.rmwf(utra::power::EV_PENDING_USB_ATTACH, value);
     }
-    pub fn get_usb_disable(&self) -> bool {
-        log::debug!("*********** get_usb_disable must migrate to usbdev server once it is stabilized!!! *********");
-        false
-        /*
-        if self.gpio_csr.rf(utra::gpio::USBDISABLE_USBDISABLE) != 0 {
-            true
-        } else {
-            false
-        }*/
-    }
-    pub fn set_usb_disable(&mut self, _state: bool) {
-        log::warn!("*********** set_usb_disable must migrate to usbdev server once it is stabilized!!! *********");
-        /*
-        if state {
-            self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 1);
-        } else {
-            self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 0);
-        }*/
-    }
 }
 
