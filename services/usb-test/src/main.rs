@@ -206,6 +206,7 @@ fn xmain() -> ! {
                     let code = hid_convert(key);
                     keyboard.interface().write_report(&code).ok();
                     keyboard.interface().tick().unwrap();
+                    tt.sleep_ms(20).unwrap();
                     keyboard.interface().write_report(&[]).ok(); // this is the key-up
                     keyboard.interface().tick().unwrap();
 

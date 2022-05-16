@@ -543,10 +543,6 @@ impl UsbBus for SpinalUsbDevice {
 
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                 log::debug!("ep{} write: {:x?}", ep_addr.index(), &buf);
-                if ep_addr.index() == 0 {
-                    // TODO: why is this delay necessary? there is a race condition, but I don't know where.
-                    //self.tt.sleep_ms(1).unwrap();
-                }
                 Ok(buf.len())
             }
         } else {
