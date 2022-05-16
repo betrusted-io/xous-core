@@ -530,7 +530,7 @@ impl SpinalUsbDevice {
             PollResult::Data {ep_out, ep_in_complete, ep_setup} =>
                 format!("PollResult::Data out:{:x} in:{:x} setup:{:x}", ep_out, ep_in_complete, ep_setup),
         };
-        log::info!("<<<< {}", info);
+        log::debug!("<<<< {}", info);
     }
     #[allow(dead_code)]
     pub fn print_ep_stats(&self) {
@@ -586,12 +586,6 @@ impl SpinalUsbDevice {
         ep0_out_desc.set_offset(0);
         ep0_out_desc.set_next_desc_and_len(0, 0);
         ep0_out_desc.set_desc_flags(UsbDirection::Out, true, true, true);
-    }
-    pub(crate) fn ep0_in_reset(&self) {
-        let ep0_out_desc = self.descriptor_ep0_out();
-        ep0_out_desc.set_offset(0);
-        ep0_out_desc.set_next_desc_and_len(0, 8);
-        ep0_out_desc.set_desc_flags(UsbDirection::In, true, true, true);
     }
     pub(crate) fn status_read_volatile(&self, index: usize) -> UdcEpStatus {
         unsafe {
@@ -757,14 +751,14 @@ impl UsbBus for SpinalUsbDevice {
     /// enumeration, as well as ensure that all endpoints previously allocated with alloc_ep are
     /// initialized as specified.
     fn reset(&self) {
-        log::info!("reset");
+        log::debug!("reset");
         self.regs.set_address(0x0); // this does *not* require the trigger
         self.address.store(0, Ordering::SeqCst);
         self.ep0_out_reset();
         for (index, &ep) in self.ep_allocs.iter().enumerate() {
             if let Some((head_offset, max_len)) = ep {
                 if index == 0 {
-                    log::info!("ep0 reset");
+                    log::trace!("ep0 reset");
                     // basically rewrite the whole EP0 setup from scratch.
                     let mut ep0_status = self.status_read_volatile(0);
                     ep0_status.set_head_offset(head_offset as u32);
@@ -779,7 +773,7 @@ impl UsbBus for SpinalUsbDevice {
                     descriptor.set_desc_flags(UsbDirection::In, true, true, true);
                 } else {
                     let mut ep_status = self.status_read_volatile(index);
-                    log::info!("ep{} reset from {:?}", index, ep_status);
+                    log::trace!("ep{} reset from {:?}", index, ep_status);
                     ep_status.set_max_packet_size(max_len as u32);
                     ep_status.set_head_offset(head_offset as u32);
                     let descriptor = self.descriptor_from_status(&ep_status);
@@ -863,13 +857,12 @@ impl UsbBus for SpinalUsbDevice {
                     },
                     buf.len()
                 );
-                if ep_addr.index() == 0 {
-                    // this is required to commit the ep_status record once all the setup is done
-                    self.status_write_volatile(0, ep_status);
-                    let epcheck = self.status_read_volatile(0);
-                    log::trace!("ep0 sanity check: {:?}", epcheck);
-                    log::trace!("desc0 sanity check: {:?}", self.descriptor_from_status(&epcheck));
-                }
+                // this is required to commit the ep_status record once all the setup is done
+                self.status_write_volatile(ep_addr.index(), ep_status);
+                let epcheck = self.status_read_volatile(ep_addr.index());
+                log::trace!("ep0 sanity check: {:?}", epcheck);
+                log::trace!("desc0 sanity check: {:?}", self.descriptor_from_status(&epcheck));
+
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                 log::info!("ep{} write: {:x?}", ep_addr.index(), &buf);
                 Ok(buf.len())
@@ -1034,7 +1027,7 @@ impl UsbBus for SpinalUsbDevice {
     fn poll(&self) -> PollResult {
         let interrupts = self.regs.interrupts();
         let mut ints_to_clear = UdcInterrupts(0);
-        log::info!(">>>> frame {}: {:x?}", self.regs.frame_id(), interrupts);
+        log::debug!(">>>> frame {}: {:x?}", self.regs.frame_id(), interrupts);
         let poll_result =
         if interrupts.reset() {
             ints_to_clear.set_reset(true);

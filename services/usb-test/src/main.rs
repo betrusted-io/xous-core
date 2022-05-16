@@ -198,14 +198,18 @@ fn xmain() -> ! {
             }),
             // this is via physical keyboard
             Some(Opcode::HandlerTrigger) => {
-                keyboard.interface().write_report(&[Keyboard::A]).ok(); // just for testing
-                keyboard.interface().tick().unwrap();
-
                 let rawstates = kbd.update();
                 // interpret scancodes
                 let kc: Vec<char> = kbd.track_keys(&rawstates);
                 // handle keys, if any
                 for &key in kc.iter() {
+                    // send it to the USB interface
+                    let code = hid_convert(key);
+                    keyboard.interface().write_report(&code).ok();
+                    keyboard.interface().tick().unwrap();
+                    keyboard.interface().write_report(&[]).ok(); // this is the key-up
+                    keyboard.interface().tick().unwrap();
+
                     if key != '\u{000d}' {
                         cmdline.push(key);
                     } else {
@@ -356,4 +360,80 @@ mod tests {
             last_alloc = offset + len;
         }
     }
+}
+
+fn hid_convert(key: char) -> Vec<Keyboard> {
+    let mut code = vec![];
+    match key {
+        'a' => code.push(Keyboard::A),
+        'b' => code.push(Keyboard::B),
+        'c' => code.push(Keyboard::C),
+        'd' => code.push(Keyboard::D),
+        'e' => code.push(Keyboard::E),
+        'f' => code.push(Keyboard::F),
+        'g' => code.push(Keyboard::G),
+        'h' => code.push(Keyboard::H),
+        'i' => code.push(Keyboard::I),
+        'j' => code.push(Keyboard::J),
+        'k' => code.push(Keyboard::K),
+        'l' => code.push(Keyboard::L),
+        'm' => code.push(Keyboard::M),
+        'n' => code.push(Keyboard::N),
+        'o' => code.push(Keyboard::O),
+        'p' => code.push(Keyboard::P),
+        'q' => code.push(Keyboard::Q),
+        'r' => code.push(Keyboard::R),
+        's' => code.push(Keyboard::S),
+        't' => code.push(Keyboard::T),
+        'u' => code.push(Keyboard::U),
+        'v' => code.push(Keyboard::V),
+        'w' => code.push(Keyboard::W),
+        'x' => code.push(Keyboard::X),
+        'y' => code.push(Keyboard::Y),
+        'z' => code.push(Keyboard::Z),
+
+        'A' => {code.push(Keyboard::A); code.push(Keyboard::LeftShift)},
+        'B' => {code.push(Keyboard::B); code.push(Keyboard::LeftShift)},
+        'C' => {code.push(Keyboard::C); code.push(Keyboard::LeftShift)},
+        'D' => {code.push(Keyboard::D); code.push(Keyboard::LeftShift)},
+        'E' => {code.push(Keyboard::E); code.push(Keyboard::LeftShift)},
+        'F' => {code.push(Keyboard::F); code.push(Keyboard::LeftShift)},
+        'G' => {code.push(Keyboard::G); code.push(Keyboard::LeftShift)},
+        'H' => {code.push(Keyboard::H); code.push(Keyboard::LeftShift)},
+        'I' => {code.push(Keyboard::I); code.push(Keyboard::LeftShift)},
+        'J' => {code.push(Keyboard::J); code.push(Keyboard::LeftShift)},
+        'K' => {code.push(Keyboard::K); code.push(Keyboard::LeftShift)},
+        'L' => {code.push(Keyboard::L); code.push(Keyboard::LeftShift)},
+        'M' => {code.push(Keyboard::M); code.push(Keyboard::LeftShift)},
+        'N' => {code.push(Keyboard::N); code.push(Keyboard::LeftShift)},
+        'O' => {code.push(Keyboard::O); code.push(Keyboard::LeftShift)},
+        'P' => {code.push(Keyboard::P); code.push(Keyboard::LeftShift)},
+        'Q' => {code.push(Keyboard::Q); code.push(Keyboard::LeftShift)},
+        'R' => {code.push(Keyboard::R); code.push(Keyboard::LeftShift)},
+        'S' => {code.push(Keyboard::S); code.push(Keyboard::LeftShift)},
+        'T' => {code.push(Keyboard::T); code.push(Keyboard::LeftShift)},
+        'U' => {code.push(Keyboard::U); code.push(Keyboard::LeftShift)},
+        'V' => {code.push(Keyboard::V); code.push(Keyboard::LeftShift)},
+        'W' => {code.push(Keyboard::W); code.push(Keyboard::LeftShift)},
+        'X' => {code.push(Keyboard::X); code.push(Keyboard::LeftShift)},
+        'Y' => {code.push(Keyboard::Y); code.push(Keyboard::LeftShift)},
+        'Z' => {code.push(Keyboard::Z); code.push(Keyboard::LeftShift)},
+
+        '0' => code.push(Keyboard::Keyboard0),
+        '1' => code.push(Keyboard::Keyboard1),
+        '2' => code.push(Keyboard::Keyboard2),
+        '3' => code.push(Keyboard::Keyboard3),
+        '4' => code.push(Keyboard::Keyboard4),
+        '5' => code.push(Keyboard::Keyboard5),
+        '6' => code.push(Keyboard::Keyboard6),
+        '7' => code.push(Keyboard::Keyboard7),
+        '8' => code.push(Keyboard::Keyboard8),
+        '9' => code.push(Keyboard::Keyboard9),
+
+        '\u{000d}' => code.push(Keyboard::ReturnEnter),
+        ' ' => code.push(Keyboard::Space),
+        '\u{0008}' => code.push(Keyboard::DeleteBackspace),
+        _ => log::info!("Unhandled character: {}", key),
+    };
+    code
 }
