@@ -10,10 +10,16 @@ mod kbd;
 mod hw;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use hw::*;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+mod spinal_udc;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use spinal_udc::*;
+
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod hosted;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 use hosted::*;
+
 
 use num_traits::*;
 use xous::{CID, msg_scalar_unpack, Message, send_message};
@@ -22,7 +28,7 @@ use std::collections::BTreeMap;
 use usb_device::prelude::*;
 use usb_device::class_prelude::*;
 use usbd_human_interface_device::page::Keyboard;
-use usbd_human_interface_device::device::keyboard::{KeyboardLedsReport, NKROBootKeyboardInterface};
+use usbd_human_interface_device::device::keyboard::NKROBootKeyboardInterface;
 use usbd_human_interface_device::prelude::*;
 use embedded_time::Clock;
 use std::convert::TryInto;
@@ -88,26 +94,19 @@ fn xmain() -> ! {
         cid
     ).expect("couldn't create suspend/resume object");
 
-    log::info!("alloc");
     let usb_alloc = UsbBusAllocator::new(usbdev);
-
-    log::info!("clock");
     let clock = EmbeddedClock::new();
-    log::info!("hid");
     let mut keyboard = UsbHidClassBuilder::new()
         .add_interface(
             NKROBootKeyboardInterface::default_config(&clock),
         )
         .build(&usb_alloc);
-
-    log::info!("dev");
     let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x0001))
         .manufacturer("usbd-human-interface-device")
         .product("NKRO Keyboard")
         .serial_number("PRECURSOR")
         .build();
 
-    log::info!("main");
     let mut cmdline = String::new();
     loop {
         let msg = xous::receive_message(usbdev_sid).unwrap();
@@ -125,7 +124,7 @@ fn xmain() -> ! {
                         Ok(l) => {
                             log::info!("got led state {:?}", l);
                         }
-                        _ => {}
+                        Err(e) => log::trace!("KEYB ERR: {:?}", e),
                     }
                 }
             }
@@ -429,6 +428,14 @@ fn hid_convert(key: char) -> Vec<Keyboard> {
         '7' => code.push(Keyboard::Keyboard7),
         '8' => code.push(Keyboard::Keyboard8),
         '9' => code.push(Keyboard::Keyboard9),
+
+        '←' => code.push(Keyboard::LeftArrow),
+        '→' => code.push(Keyboard::RightArrow),
+        '↑' => code.push(Keyboard::UpArrow),
+        '↓' => code.push(Keyboard::DownArrow),
+
+        ',' => code.push(Keyboard::Comma),
+        '.' => code.push(Keyboard::Dot),
 
         '\u{000d}' => code.push(Keyboard::ReturnEnter),
         ' ' => code.push(Keyboard::Space),
