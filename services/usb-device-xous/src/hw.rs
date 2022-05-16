@@ -64,6 +64,27 @@ impl SpinalUsbMgmt {
             self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 0);
         }
     }
+    pub fn is_device_connected(&self) -> bool {
+        if self.csr.rf(utra::usbdev::USBSELECT_USBSELECT) == 1 {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn disable_debug(&mut self, disable: bool) {
+        if disable {
+            self.csr.wfo(utra::usbdev::USBDISABLE_USBDISABLE, 1);
+        } else {
+            self.csr.wfo(utra::usbdev::USBDISABLE_USBDISABLE, 0);
+        }
+    }
+    pub fn get_disable_debug(&self) -> bool {
+        if self.csr.rf(utra::usbdev::USBDISABLE_USBDISABLE) == 0 {
+            false
+        } else {
+            true
+        }
+    }
     pub fn xous_suspend(&mut self) {
         self.csr.wo(utra::usbdev::EV_PENDING, 0xFFFF_FFFF);
         self.csr.wo(utra::usbdev::EV_ENABLE, 0x0);
@@ -91,7 +112,7 @@ impl SpinalUsbMgmt {
     }
 }
 pub struct SpinalUsbDevice {
-    pub(crate) conn: CID,
+    pub(crate) conn: xous::CID,
     usb: xous::MemoryRange,
     csr_addr: u32,
     csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable

@@ -8,6 +8,16 @@ pub(crate) enum Opcode {
     SendKeyCode,
     /// Get the current LED state
     GetLedState,
+    /// Switch to a specified device core
+    SwitchCores,
+    /// Check which core is connected
+    WhichCore,
+    /// Restrict the debug core
+    RestrictDebugAccess,
+    /// Retrieve restriction state
+    IsRestricted,
+    /// Set-and-check of USB debug restriction
+    DebugUsbOp,
 
     /// Handle the USB interrupt
     UsbIrqHandler,

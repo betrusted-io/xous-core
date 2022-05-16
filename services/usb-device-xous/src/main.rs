@@ -10,6 +10,7 @@ mod hw;
 use hw::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod spinal_udc;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use packed_struct::PackedStructSlice;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use spinal_udc::*;
@@ -21,18 +22,26 @@ use hosted::*;
 
 
 use num_traits::*;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device_xous::KeyboardLedsReport;
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use std::collections::BTreeMap;
 
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device::prelude::*;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device::class_prelude::*;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use usbd_human_interface_device::page::Keyboard;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use usbd_human_interface_device::device::keyboard::NKROBootKeyboardInterface;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use usbd_human_interface_device::prelude::*;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use num_enum::FromPrimitive as EnumFromPrimitive;
+
 use embedded_time::Clock;
 use std::convert::TryInto;
-use num_enum::FromPrimitive as EnumFromPrimitive;
 
 pub struct EmbeddedClock {
     start: std::time::Instant,
@@ -64,15 +73,49 @@ fn xmain() -> ! {
     let usbdev_sid = xns.register_name(api::SERVER_NAME_USB_DEVICE, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     let llio = llio::Llio::new(&xns);
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
+
+    let (maj, min, rev, extra, _gitrev) = llio.soc_gitrev().unwrap();
+    if maj == 0 && min <= 9 && rev <= 8 {
+        if extra < 20 {
+            if min != 0 { // don't show during hosted mode, which reports 0.0.0+0
+                let modals = modals::Modals::new(&xns).unwrap();
+                modals.show_notification(
+                    &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}.{}.{}+{}. Refusing to start USB driver.",
+                    maj, min, rev, extra
+                ),
+                    None
+                ).unwrap();
+            }
+            loop {
+                let msg = xous::receive_message(usbdev_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
+                        xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
+                    }),
+                    _ => {
+                        log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
+                        // make it so blocking scalars don't block
+                        if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                            id: _,
+                            arg1: _,
+                            arg2: _,
+                            arg3: _,
+                            arg4: _,
+                        }) = msg.body {
+                            log::warn!("Returning bogus result");
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     let usbdev = SpinalUsbDevice::new(usbdev_sid);
     let mut usbmgmt = usbdev.get_iface();
     let tt = ticktimer_server::Ticktimer::new().unwrap();
-    tt.sleep_ms(500).unwrap();
-    log::info!("Connecting USB device core; disconnecting debug USB core");
-    usbmgmt.connect_device_core(true);
-    tt.sleep_ms(500).unwrap();
 
     // register a suspend/resume listener
     let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
@@ -83,20 +126,26 @@ fn xmain() -> ! {
         cid
     ).expect("couldn't create suspend/resume object");
 
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let usb_alloc = UsbBusAllocator::new(usbdev);
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let clock = EmbeddedClock::new();
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut keyboard = UsbHidClassBuilder::new()
         .add_interface(
             NKROBootKeyboardInterface::default_config(&clock),
         )
         .build(&usb_alloc);
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x0001))
         .manufacturer("Kosagi")
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
 
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
+    let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     loop {
         let msg = xous::receive_message(usbdev_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -104,8 +153,10 @@ fn xmain() -> ! {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 usbmgmt.xous_resume();
+                lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
             }),
             Some(Opcode::UsbIrqHandler) => {
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 if usb_dev.poll(&mut [&mut keyboard]) {
                     match keyboard.interface().read_report() {
                         Ok(l) => {
@@ -114,10 +165,77 @@ fn xmain() -> ! {
                         Err(e) => log::trace!("KEYB ERR: {:?}", e),
                     }
                 }
-            }
-            Some(Opcode::LinkStatus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                xous::return_scalar(msg.sender, usb_dev.state() as usize).unwrap();
+            },
+            Some(Opcode::SwitchCores) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
+                if core == 1 {
+                    log::info!("Connecting USB device core; disconnecting debug USB core");
+                    usbmgmt.connect_device_core(true);
+                    tt.sleep_ms(500).unwrap();
+                } else {
+                    log::info!("Connecting debug core; disconnecting USB device core");
+                    usbmgmt.connect_device_core(false);
+                    tt.sleep_ms(500).unwrap();
+                }
+                xous::return_scalar(msg.sender, 0).unwrap();
             }),
+            Some(Opcode::WhichCore) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if usbmgmt.is_device_connected() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+            Some(Opcode::RestrictDebugAccess) => msg_scalar_unpack!(msg, restrict, _, _, _, {
+                if restrict == 0 {
+                    usbmgmt.disable_debug(false);
+                } else {
+                    usbmgmt.disable_debug(true);
+                }
+            }),
+            Some(Opcode::IsRestricted) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if usbmgmt.get_disable_debug() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+            Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, update_req, new_state, _, _, {
+                if update_req != 0 {
+                    // if new_state is true (not 0), then try to lock the USB port
+                    // if false, try to unlock the USB port
+                    if new_state != 0 {
+                        usbmgmt.disable_debug(true);
+                    } else {
+                        usbmgmt.disable_debug(false);
+                    }
+                }
+                // at this point, *read back* the new state -- don't assume it "took". The readback is always based on
+                // a real hardware value and not the requested value. for now, always false.
+                let is_locked = if usbmgmt.get_disable_debug() {
+                    1
+                } else {
+                    0
+                };
+
+                // this is a performance optimization. we could always redraw the status, but, instead we only redraw when
+                // the status has changed. However, there is an edge case: on a resume from suspend, the status needs a redraw,
+                // even if nothing has changed. Thus, we have this separate boolean we send back to force an update in the
+                // case that we have just come out of a suspend.
+                let force_update = if lockstatus_force_update {
+                    1
+                } else {
+                    0
+                };
+                xous::return_scalar2(msg.sender, is_locked, force_update).expect("couldn't return status");
+                lockstatus_force_update = false;
+            }),
+            Some(Opcode::LinkStatus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                #[cfg(any(target_os = "none", target_os = "xous"))]
+                xous::return_scalar(msg.sender, usb_dev.state() as usize).unwrap();
+                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }),
+            #[cfg(any(target_os = "none", target_os = "xous"))]
             Some(Opcode::SendKeyCode) => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
                 if usb_dev.state() == UsbDeviceState::Configured {
                     let mut codes = Vec::<Keyboard>::new();
@@ -143,11 +261,20 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 }
             }),
+            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            Some(Opcode::SendKeyCode) => {
+                xous::return_scalar(msg.sender, 1).unwrap();
+            }
+            #[cfg(any(target_os = "none", target_os = "xous"))]
             Some(Opcode::GetLedState) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let mut code = [0u8; 1];
                 led_state.pack_to_slice(&mut code).unwrap();
                 xous::return_scalar(msg.sender, code[0] as usize).unwrap();
             }),
+            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            Some(Opcode::GetLedState) => {
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;
@@ -165,7 +292,9 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub(crate) const START_OFFSET: u32 = 0x0048 + 8 + 16; // align spinal free space to 16-byte boundary + 16 bytes for EP0 read
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub(crate) const END_OFFSET: u32 = 0x1000; // derived from RAMSIZE parameter: this could be a dynamically read out constant, but, in practice, it's part of the hardware
 /// USB endpoint allocator. The SpinalHDL USB controller appears as a block of
 /// unstructured memory to the host. You can specify pointers into the memory with
@@ -177,6 +306,7 @@ pub(crate) const END_OFFSET: u32 = 0x1000; // derived from RAMSIZE parameter: th
 ///
 /// Returns a full memory address as the pointer. Must be shifted left by 4 to get the
 /// aligned representation used by the SpinalHDL block.
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Option<u32> {
     if requested == 0 {
         return None;
