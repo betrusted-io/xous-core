@@ -71,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "dns",
         "pddb",
         "modals",
+        "usb-device-xous",
     ];
     let app_pkgs = [
         // "standard" demo apps

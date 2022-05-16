@@ -99,6 +99,7 @@ mod wlan;     use wlan::*;
 mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
+mod usb; use usb::*;
 
 #[cfg(feature="tts")]
 mod tts;
@@ -140,6 +141,7 @@ pub struct CmdEnv {
     net_cmd: NetCmd,
     pddb_cmd: PddbCmd,
     wlan_cmd: Wlan,
+    usb_cmd: Usb,
 
     #[cfg(feature="tts")]
     tts_cmd: Tts,
@@ -209,6 +211,7 @@ impl CmdEnv {
             net_cmd: NetCmd::new(&xns),
             pddb_cmd: PddbCmd::new(&xns),
             wlan_cmd: Wlan::new(),
+            usb_cmd: Usb::new(),
 
             #[cfg(feature="tts")]
             tts_cmd: Tts::new(&xns),
@@ -254,6 +257,7 @@ impl CmdEnv {
             &mut self.jtag_cmd,
             &mut self.net_cmd,
             &mut self.pddb_cmd,
+            &mut self.usb_cmd,
 
             #[cfg(feature="tts")]
             &mut self.tts_cmd,

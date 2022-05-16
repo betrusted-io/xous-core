@@ -2943,6 +2943,7 @@ dependencies = [
  "ticktimer-server",
  "trng",
  "tts-frontend",
+ "usb-device-xous",
  "utralib",
  "x25519-dalek",
  "xous",
@@ -3481,6 +3482,32 @@ version = "0.2.8"
 source = "git+https://github.com/betrusted-io/usb-device.git?branch=main#31de6a25950194783e49244743c9dd69fac0dfad"
 dependencies = [
  "log",
+]
+
+[[package]]
+name = "usb-device-xous"
+version = "0.1.0"
+dependencies = [
+ "bitfield",
+ "embedded-time",
+ "llio",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "num_enum",
+ "packed_struct",
+ "rand 0.7.3",
+ "rand_chacha 0.3.1",
+ "rkyv",
+ "susres",
+ "ticktimer-server",
+ "usb-device",
+ "usbd-human-interface-device",
+ "utralib",
+ "vcell",
+ "xous",
+ "xous-names",
 ]
 
 [[package]]
