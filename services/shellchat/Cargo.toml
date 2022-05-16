@@ -37,6 +37,7 @@ net = {path="../net"}
 dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
+usb-device-xous = {path="../usb-device-xous"}
 
 tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}

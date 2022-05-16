@@ -93,11 +93,13 @@ jtag: Miscellaneous.BetrustedJtag @ sysbus 0xf0021000
 
 wdt: Timers.BetrustedWatchdog @ sysbus 0xf0022000
 
-// Unrecognized peripheral: d11ctime @ 0xf0023000
+// Unrecognized peripheral: usbdev @ 0xf0023000
 
-wfi: Miscellaneous.BetrustedWfi @ sysbus 0xf0024000
+// Unrecognized peripheral: d11ctime @ 0xf0024000
 
-// Unrecognized peripheral: identifier_mem @ 0xf0025000
+wfi: Miscellaneous.BetrustedWfi @ sysbus 0xf0025000
+
+// Unrecognized peripheral: identifier_mem @ 0xf0026000
 
 
 // Physical base addresses of memory regions
@@ -115,6 +117,9 @@ spiflash: Memory.MappedMemory @ sysbus 0x20000000
 
 audio: Memory.MappedMemory @ sysbus 0xe0000000
     size: 0x00001000
+
+usbdev: Memory.MappedMemory @ sysbus 0xe0040000
+    size: 0x00010000
 
 
 

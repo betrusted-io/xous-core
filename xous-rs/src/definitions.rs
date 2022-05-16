@@ -14,6 +14,8 @@ pub const FLASH_PHYS_BASE: u32 = 0x2000_0000;
 pub const SOC_REGION_LOC: u32 = 0x0000_0000;
 pub const SOC_REGION_LEN: u32 = 0x00D0_0000; // gw + staging + loader + kernel
 
+// note to self: if these locations change, be sure to update the "filters" addresses
+// in the gateware, so that we are consistent on what parts of the SPINOR are allowed access via USB debug
 pub const SOC_MAIN_GW_LOC: u32 = 0x0000_0000; // gateware - primary loading address
 pub const SOC_MAIN_GW_LEN: u32 = 0x0028_0000;
 pub const SOC_STAGING_GW_LOC: u32 = 0x0028_0000; // gateware - staging copy

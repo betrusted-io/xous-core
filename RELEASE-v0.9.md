@@ -144,6 +144,9 @@ for examples of idiomatic ways to write code for Xous.
   - If you get a panic, please snap a photo of it and drop it in a new issue in the `xous-core` repo, along with a description of what you were doing at the time.
 
 ## New in 0.9.9 (currently in development)
+This release requires a new SoC. It is highly recommended to first upload the SoC and install the update, and then
+perform the Xous firmware upgrade. This requires running manual update commands, instead of the all-in-one updater script.
+
 - `modals` text entry has been refactored to allow multi-field text entries with defaults! Thanks to gsora for PR #140.
 - fix issue #141: bug fix in `log-server` where max-length buffers were not being printed + refactor of method to use `send` vs scalars
 - PR #149: index support for modals. Lists can be submitted as a `Vec` now, with an array index returned as the selection result. Thanks to nworbnhoj for the PR.
@@ -154,6 +157,7 @@ for examples of idiomatic ways to write code for Xous.
 - refactor wait threads in net crate - use statically allocated pool of waiters + better filtering of requests for less churn
 - defer Drop on TcpStream until all written packets have been transmitted
 - scheduler quantum is now a tuning parameter in xous definitions.rs (`BASE_QUANTA_MS`). it is now set to 10ms, down from 20ms.
+- USB device core with keyboard HID emulation demo. API still needs refinement for U2F/FIDO applications.
 
 ## Roadmap to 1.0
 

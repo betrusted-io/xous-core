@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-08-29 18:32:03]]></description>
+    <description><![CDATA[Litex SoC 2022-05-06 03:38:23]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -434,26 +434,10 @@ configure as output for the value to appear on the pin]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>USBDISABLE</name>
-                    <description><![CDATA[When set to ``1``, USB debug is limited by remapping all wishbone request
-addresses to 0x8000_0000]]></description>
-                    <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>usbdisable</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[This register contains the current raw level of the event7 event trigger.
 Writes to this register have no effect.]]></description>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -519,7 +503,7 @@ Writes to this register have no effect.]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[When a  event7 event occurs, the corresponding bit will be set in this register.
 To clear the Event, set the corresponding bit in this register.]]></description>
-                    <addressOffset>0x0024</addressOffset>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -593,7 +577,7 @@ edge.]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[This register enables the corresponding event7 events.  Write a ``0`` to this
 register to disable individual events.]]></description>
-                    <addressOffset>0x0028</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -658,7 +642,7 @@ register to disable individual events.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x2c</size>
+                <size>0x28</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -1190,7 +1174,7 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_MAJOR</name>
                     <description><![CDATA[Major git tag version.  For example, this firmware was built from git tag
-``v0.9.0``, so this value is ``0``.]]></description>
+``v0.9.8``, so this value is ``0``.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1206,7 +1190,7 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_MINOR</name>
                     <description><![CDATA[Minor git tag version.  For example, this firmware was built from git tag
-``v0.9.0``, so this value is ``9``.]]></description>
+``v0.9.8``, so this value is ``9``.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x09</resetValue>
                     <size>32</size>
@@ -1222,9 +1206,9 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_REVISION</name>
                     <description><![CDATA[Revision git tag version.  For example, this firmware was built from git tag
-``v0.9.0``, so this value is ``0``.]]></description>
+``v0.9.8``, so this value is ``8``.]]></description>
                     <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x08</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1238,10 +1222,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``b481fff0``, so this value is 3028418544, which should be enough to check out
+``df6ac783``, so this value is 3748317059, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xb481fff0</resetValue>
+                    <resetValue>0xdf6ac783</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1258,7 +1242,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x0e</resetValue>
+                    <resetValue>0x12</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2038,7 +2022,8 @@ register.  To clear the Event, set the corresponding bit in this register.]]></d
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[`1` if a `com_int` event occurred. This Event is triggered on a **rising** edge.]]></description>
+                            <description><![CDATA[`1` if a `com_int` event occurred. This Event is triggered on a **falling**
+edge.]]></description>
                         </field>
                         <field>
                             <name>rtc_int</name>
@@ -2781,7 +2766,7 @@ sources (power, sha512, and engine25519)]]></description>
                             <msb>5</msb>
                             <bitRange>[5:5]</bitRange>
                             <lsb>5</lsb>
-                            <description><![CDATA[Use COM hold falling as wakeup source]]></description>
+                            <description><![CDATA[Use COM hold falling edge plus COM irq rising edge as wakeup source]]></description>
                         </field>
                         <field>
                             <name>rtc</name>
@@ -3320,7 +3305,7 @@ checked]]></description>
                             <msb>8</msb>
                             <bitRange>[8:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[current strobe value (for debugging)]]></description>
+                            <description><![CDATA[FIFO has readable characters]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3559,11 +3544,19 @@ checked]]></description>
 is no interlock or FIFO buffering on this, so you can lose characters if you
 inject too fast.]]></description>
                         </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>DISABLE</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
                         <field>
                             <name>disable</name>
-                            <msb>8</msb>
-                            <bitRange>[8:8]</bitRange>
-                            <lsb>8</lsb>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
                             <description><![CDATA[writing a 1 permanently disables the block, until the next cold boot]]></description>
                         </field>
                     </fields>
@@ -3571,7 +3564,7 @@ inject too fast.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x4</size>
+                <size>0x8</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -3584,7 +3577,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x4de9a155</resetValue>
+                    <resetValue>0x4616d7dd</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3599,7 +3592,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x35aac807</resetValue>
+                    <resetValue>0x3c6bc921</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -6857,8 +6850,107 @@ entered. Defaults to a range of 1.67-5.00 seconds]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>D11CTIME</name>
+            <name>USBDEV</name>
             <baseAddress>0xF0023000</baseAddress>
+            <groupName>USBDEV</groupName>
+            <registers>
+                <register>
+                    <name>USBDISABLE</name>
+                    <description><![CDATA[When set to ``1``, USB debug core is limited by remapping all wishbone request
+addresses to 0x8000_0000. This does not affect the USB device core.]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>usbdisable</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>USBSELECT</name>
+                    <description><![CDATA[When set to ``1``, the spinal USB device core is selected]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>usbselect</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <description><![CDATA[Interrupt from SpinalHDL core. Stays high until cleared; must read the INTERRUPT
+register for more detail on which interrupt caused the event.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>usb</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``usb`` event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <description><![CDATA[Interrupt from SpinalHDL core. Stays high until cleared; must read the INTERRUPT
+register for more detail on which interrupt caused the event.]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>usb</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Interrupt from SpinalHDL core. Stays high until cleared; must read the INTERRUPT
+register for more detail on which interrupt caused the event.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <description><![CDATA[Interrupt from SpinalHDL core. Stays high until cleared; must read the INTERRUPT
+register for more detail on which interrupt caused the event.]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>usb</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``usb`` Event]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x14</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>usbdev</name>
+                <value>19</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>D11CTIME</name>
+            <baseAddress>0xF0024000</baseAddress>
             <groupName>D11CTIME</groupName>
             <registers>
                 <register>
@@ -6900,7 +6992,7 @@ entered. Defaults to a range of 1.67-5.00 seconds]]></description>
         </peripheral>
         <peripheral>
             <name>WFI</name>
-            <baseAddress>0xF0024000</baseAddress>
+            <baseAddress>0xF0025000</baseAddress>
             <groupName>WFI</groupName>
             <registers>
                 <register>
@@ -6943,7 +7035,7 @@ of the PLL]]></description>
         </peripheral>
         <peripheral>
             <name>IDENTIFIER_MEM</name>
-            <baseAddress>0xF0025000</baseAddress>
+            <baseAddress>0xF0026000</baseAddress>
             <groupName>IDENTIFIER_MEM</groupName>
             <registers>
                 <register>
@@ -7012,6 +7104,11 @@ of the PLL]]></description>
                 <size>0x00020000</size>
             </memoryRegion>
             <memoryRegion>
+                <name>USBDEV</name>
+                <baseAddress>0xE0040000</baseAddress>
+                <size>0x00010000</size>
+            </memoryRegion>
+            <memoryRegion>
                 <name>CSR</name>
                 <baseAddress>0xF0000000</baseAddress>
                 <size>0x00040000</size>
@@ -7021,6 +7118,8 @@ of the PLL]]></description>
             <constant name="CONFIG_CLOCK_FREQUENCY" value="100000000" />
             <constant name="CONFIG_CPU_HAS_INTERRUPT" value="None" />
             <constant name="CONFIG_CPU_RESET_ADDR" value="2147483648" />
+            <constant name="CONFIG_CPU_HAS_DCACHE" value="None" />
+            <constant name="CONFIG_CPU_HAS_ICACHE" value="None" />
             <constant name="CONFIG_CPU_TYPE_VEXRISCV" value="None" />
             <constant name="CONFIG_CPU_VARIANT_STANDARD" value="None" />
             <constant name="CONFIG_CPU_HUMAN_NAME" value="VexRiscv" />
@@ -7030,6 +7129,7 @@ of the PLL]]></description>
             <constant name="CONFIG_BUS_STANDARD" value="WISHBONE" />
             <constant name="CONFIG_BUS_DATA_WIDTH" value="32" />
             <constant name="CONFIG_BUS_ADDRESS_WIDTH" value="32" />
+            <constant name="CONFIG_BUS_BURSTING" value="0" />
             <constant name="APP_UART_INTERRUPT" value="4" />
             <constant name="AUDIO_INTERRUPT" value="14" />
             <constant name="BTEVENTS_INTERRUPT" value="7" />
@@ -7049,6 +7149,7 @@ of the PLL]]></description>
             <constant name="TRNG_KERNEL_INTERRUPT" value="15" />
             <constant name="TRNG_SERVER_INTERRUPT" value="16" />
             <constant name="UART_INTERRUPT" value="2" />
+            <constant name="USBDEV_INTERRUPT" value="19" />
         </constants>
     </vendorExtensions>
 </device>

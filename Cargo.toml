@@ -35,6 +35,7 @@ default-members = [
   "services/net",
   "services/dns",
   "services/modals",
+  "services/usb-device-xous",
   "apps/ball",
   "apps/hello",
   "apps/repl",
@@ -94,6 +95,8 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
+  "services/usb-test",
+  "services/usb-device-xous",
   "kernel",
   "loader",
 ]
@@ -137,3 +140,11 @@ branch="main"
 
 [patch."https://github.com/betrusted-io/xous-engine-25519.git"]
 engine-25519 = {path = "services/engine-25519"}
+
+[patch.crates-io.usb-device]
+git="https://github.com/betrusted-io/usb-device.git"
+branch="main"
+#path = "../usb-device"
+
+#[patch.crates-io.usbd-human-interface-device]
+#path = "../usbd-human-interface-device"

@@ -479,6 +479,7 @@ fn print_header<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
 #![allow(dead_code)]
 use core::convert::TryInto;
+use core::sync::atomic::AtomicPtr;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Register {
@@ -618,6 +619,94 @@ where
     /// Write the entire contents of a register without reading it first
     pub fn wo(&mut self, reg: Register, value: T) {
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
+        let value_as_usize: usize = value.try_into().unwrap_or_default();
+        unsafe { usize_base.add(reg.offset).write_volatile(value_as_usize) };
+        // Ensure the compiler doesn't re-order the write.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    /// Zero a field from a provided value
+    pub fn zf(&self, field: Field, value: T) -> T {
+        let value_as_usize: usize = value.try_into().unwrap_or_default();
+        (value_as_usize & !(field.mask << field.offset))
+            .try_into()
+            .unwrap_or_default()
+    }
+    /// Shift & mask a value to its final field position
+    pub fn ms(&self, field: Field, value: T) -> T {
+        let value_as_usize: usize = value.try_into().unwrap_or_default();
+        ((value_as_usize & field.mask) << field.offset)
+            .try_into()
+            .unwrap_or_default()
+    }
+}
+
+#[derive(Debug)]
+pub struct AtomicCsr<T> {
+    pub base: AtomicPtr<T>,
+}
+impl<T> AtomicCsr<T>
+where
+    T: core::convert::TryFrom<usize> + core::convert::TryInto<usize> + core::default::Default,
+{
+    pub fn new(base: *mut T) -> Self {
+        AtomicCsr {
+            base: AtomicPtr::new(base)
+        }
+    }
+    /// Read the contents of this register
+    pub fn r(&self, reg: Register) -> T {
+        // prevent re-ordering
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
+        unsafe { usize_base.add(reg.offset).read_volatile() }
+            .try_into()
+            .unwrap_or_default()
+    }
+    /// Read a field from this CSR
+    pub fn rf(&self, field: Field) -> T {
+        // prevent re-ordering
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
+        ((unsafe { usize_base.add(field.register.offset).read_volatile() } >> field.offset)
+            & field.mask)
+            .try_into()
+            .unwrap_or_default()
+    }
+    /// Read-modify-write a given field in this CSR
+    pub fn rmwf(&self, field: Field, value: T) {
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
+        let value_as_usize: usize = value.try_into().unwrap_or_default() << field.offset;
+        let previous =
+            unsafe { usize_base.add(field.register.offset).read_volatile() } & !(field.mask << field.offset);
+        unsafe {
+            usize_base
+                .add(field.register.offset)
+                .write_volatile(previous | value_as_usize)
+        };
+        // prevent re-ordering
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    /// Write a given field without reading it first
+    pub fn wfo(&self, field: Field, value: T) {
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
+        let value_as_usize: usize = (value.try_into().unwrap_or_default() & field.mask) << field.offset;
+        unsafe {
+            usize_base
+                .add(field.register.offset)
+                .write_volatile(value_as_usize)
+        };
+        // Ensure the compiler doesn't re-order the write.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    /// Write the entire contents of a register without reading it first
+    pub fn wo(&self, reg: Register, value: T) {
+        let usize_base: *mut usize = unsafe { core::mem::transmute(self.base.load(core::sync::atomic::Ordering::SeqCst)) };
         let value_as_usize: usize = value.try_into().unwrap_or_default();
         unsafe { usize_base.add(reg.offset).write_volatile(value_as_usize) };
         // Ensure the compiler doesn't re-order the write.

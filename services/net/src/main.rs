@@ -1759,6 +1759,8 @@ fn xmain() -> ! {
                             log::info!("{}", dbg);
                         }
                     }
+                } else {
+                    log::info!("Thread pool exhausted; deferring creation of new poll helpers");
                 }
             }),
             Some(Opcode::GetIpv4Config) => {

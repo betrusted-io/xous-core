@@ -61,7 +61,7 @@ impl Keys {
 impl<'a> ShellCmdApi<'a> for Keys {
     cmd_api!(keys); // inserts boilerplate for command API
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         let helpstring = "keys [usblock] [usbunlock] [pddbrecycle]";
@@ -105,14 +105,6 @@ impl<'a> ShellCmdApi<'a> for Keys {
                     } else {
                         write!(ret, "aes test failed").unwrap();
                     }
-                }
-                "usblock" => {
-                    env.llio.debug_usb(Some(true)).unwrap();
-                    write!(ret, "USB debug port locked out; one word at 0x80000000 is disclosable via USB.").unwrap();
-                }
-                "usbunlock" => {
-                    env.llio.debug_usb(Some(false)).unwrap();
-                    write!(ret, "USB debug port unlocked: all secrets are readable via USB!").unwrap();
                 }
                 "pddbrecycle" => {
                     // erase the page table, which should effectively trigger a reformat on the next boot

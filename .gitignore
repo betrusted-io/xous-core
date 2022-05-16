@@ -24,3 +24,5 @@ tools/__pycache__
 .vscode/settings-hw.json
 .vscode/settings-xous.json
 
+# don't commit local modifications to the Renode filesystem template
+emulation/linux-server-rootfs.jffs2
