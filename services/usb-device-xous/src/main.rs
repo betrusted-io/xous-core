@@ -251,10 +251,11 @@ fn xmain() -> ! {
                     let auto_up = if autoup == 1 {true} else {false};
                     keyboard.interface().write_report(&codes).ok();
                     keyboard.interface().tick().unwrap();
+                    tt.sleep_ms(50).ok();
                     if auto_up {
-                        tt.sleep_ms(20).ok();
                         keyboard.interface().write_report(&[]).ok(); // this is the key-up
                         keyboard.interface().tick().unwrap();
+                        tt.sleep_ms(50).ok();
                     }
                     xous::return_scalar(msg.sender, 0).unwrap();
                 } else {
