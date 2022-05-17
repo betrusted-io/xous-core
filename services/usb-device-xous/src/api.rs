@@ -6,6 +6,8 @@ pub(crate) enum Opcode {
     LinkStatus,
     /// Send a keyboard code
     SendKeyCode,
+    /// Send a string
+    SendString,
     /// Get the current LED state
     GetLedState,
     /// Switch to a specified device core
@@ -25,4 +27,10 @@ pub(crate) enum Opcode {
     SuspendResume,
     /// Exits the server
     Quit,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct UsbString {
+    pub s: xous_ipc::String::<4000>,
+    pub sent: Option<u32>,
 }

@@ -1,13 +1,14 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use api::*;
+pub use api::*;
 use xous::{CID, send_message, Message};
 use num_traits::*;
 pub use usb_device::device::UsbDeviceState;
 pub use usbd_human_interface_device::device::keyboard::KeyboardLedsReport;
 pub use usbd_human_interface_device::page::Keyboard as UsbKeyCode;
 use packed_struct::PackedStruct;
+use xous_ipc::Buffer;
 
 pub enum UsbDeviceType {
     Debug = 0,
@@ -169,15 +170,18 @@ impl UsbHid {
         }
     }
     pub fn send_str(&self, s: &str) -> Result<usize, xous::Error> {
-        let mut sent = 0;
-        for ch in s.chars() {
-            self.send_keycode(
-                self.char_to_hid_code_us101(ch),
-                true
-            )?;
-            sent += 1;
+        let serializer = UsbString {
+            s: xous_ipc::String::<4000>::from_str(s),
+            sent: None
+        };
+        let mut buf = Buffer::into_buf(serializer).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::SendString.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let returned = buf.to_original::<UsbString, _>().or(Err(xous::Error::InternalError))?;
+        match returned.sent {
+            Some(sent) => Ok(sent as usize),
+            // indicate that probably the USB was not connected
+            None => Err(xous::Error::UseBeforeInit),
         }
-        Ok(sent)
     }
     pub fn get_led_state(&self) -> Result<KeyboardLedsReport, xous::Error> {
         match send_message(
@@ -195,120 +199,6 @@ impl UsbHid {
             }
             _ => panic!("Internal error: illegal return type"),
         }
-    }
-    pub fn char_to_hid_code_us101(&self, key: char) -> Vec<UsbKeyCode> {
-        let mut code = vec![];
-        match key {
-            'a' => code.push(UsbKeyCode::A),
-            'b' => code.push(UsbKeyCode::B),
-            'c' => code.push(UsbKeyCode::C),
-            'd' => code.push(UsbKeyCode::D),
-            'e' => code.push(UsbKeyCode::E),
-            'f' => code.push(UsbKeyCode::F),
-            'g' => code.push(UsbKeyCode::G),
-            'h' => code.push(UsbKeyCode::H),
-            'i' => code.push(UsbKeyCode::I),
-            'j' => code.push(UsbKeyCode::J),
-            'k' => code.push(UsbKeyCode::K),
-            'l' => code.push(UsbKeyCode::L),
-            'm' => code.push(UsbKeyCode::M),
-            'n' => code.push(UsbKeyCode::N),
-            'o' => code.push(UsbKeyCode::O),
-            'p' => code.push(UsbKeyCode::P),
-            'q' => code.push(UsbKeyCode::Q),
-            'r' => code.push(UsbKeyCode::R),
-            's' => code.push(UsbKeyCode::S),
-            't' => code.push(UsbKeyCode::T),
-            'u' => code.push(UsbKeyCode::U),
-            'v' => code.push(UsbKeyCode::V),
-            'w' => code.push(UsbKeyCode::W),
-            'x' => code.push(UsbKeyCode::X),
-            'y' => code.push(UsbKeyCode::Y),
-            'z' => code.push(UsbKeyCode::Z),
-
-            'A' => {code.push(UsbKeyCode::A); code.push(UsbKeyCode::LeftShift)},
-            'B' => {code.push(UsbKeyCode::B); code.push(UsbKeyCode::LeftShift)},
-            'C' => {code.push(UsbKeyCode::C); code.push(UsbKeyCode::LeftShift)},
-            'D' => {code.push(UsbKeyCode::D); code.push(UsbKeyCode::LeftShift)},
-            'E' => {code.push(UsbKeyCode::E); code.push(UsbKeyCode::LeftShift)},
-            'F' => {code.push(UsbKeyCode::F); code.push(UsbKeyCode::LeftShift)},
-            'G' => {code.push(UsbKeyCode::G); code.push(UsbKeyCode::LeftShift)},
-            'H' => {code.push(UsbKeyCode::H); code.push(UsbKeyCode::LeftShift)},
-            'I' => {code.push(UsbKeyCode::I); code.push(UsbKeyCode::LeftShift)},
-            'J' => {code.push(UsbKeyCode::J); code.push(UsbKeyCode::LeftShift)},
-            'K' => {code.push(UsbKeyCode::K); code.push(UsbKeyCode::LeftShift)},
-            'L' => {code.push(UsbKeyCode::L); code.push(UsbKeyCode::LeftShift)},
-            'M' => {code.push(UsbKeyCode::M); code.push(UsbKeyCode::LeftShift)},
-            'N' => {code.push(UsbKeyCode::N); code.push(UsbKeyCode::LeftShift)},
-            'O' => {code.push(UsbKeyCode::O); code.push(UsbKeyCode::LeftShift)},
-            'P' => {code.push(UsbKeyCode::P); code.push(UsbKeyCode::LeftShift)},
-            'Q' => {code.push(UsbKeyCode::Q); code.push(UsbKeyCode::LeftShift)},
-            'R' => {code.push(UsbKeyCode::R); code.push(UsbKeyCode::LeftShift)},
-            'S' => {code.push(UsbKeyCode::S); code.push(UsbKeyCode::LeftShift)},
-            'T' => {code.push(UsbKeyCode::T); code.push(UsbKeyCode::LeftShift)},
-            'U' => {code.push(UsbKeyCode::U); code.push(UsbKeyCode::LeftShift)},
-            'V' => {code.push(UsbKeyCode::V); code.push(UsbKeyCode::LeftShift)},
-            'W' => {code.push(UsbKeyCode::W); code.push(UsbKeyCode::LeftShift)},
-            'X' => {code.push(UsbKeyCode::X); code.push(UsbKeyCode::LeftShift)},
-            'Y' => {code.push(UsbKeyCode::Y); code.push(UsbKeyCode::LeftShift)},
-            'Z' => {code.push(UsbKeyCode::Z); code.push(UsbKeyCode::LeftShift)},
-
-            '0' => code.push(UsbKeyCode::Keyboard0),
-            '1' => code.push(UsbKeyCode::Keyboard1),
-            '2' => code.push(UsbKeyCode::Keyboard2),
-            '3' => code.push(UsbKeyCode::Keyboard3),
-            '4' => code.push(UsbKeyCode::Keyboard4),
-            '5' => code.push(UsbKeyCode::Keyboard5),
-            '6' => code.push(UsbKeyCode::Keyboard6),
-            '7' => code.push(UsbKeyCode::Keyboard7),
-            '8' => code.push(UsbKeyCode::Keyboard8),
-            '9' => code.push(UsbKeyCode::Keyboard9),
-            '!' => {code.push(UsbKeyCode::Keyboard1); code.push(UsbKeyCode::LeftShift)},
-            '@' => {code.push(UsbKeyCode::Keyboard2); code.push(UsbKeyCode::LeftShift)},
-            '#' => {code.push(UsbKeyCode::Keyboard3); code.push(UsbKeyCode::LeftShift)},
-            '$' => {code.push(UsbKeyCode::Keyboard4); code.push(UsbKeyCode::LeftShift)},
-            '%' => {code.push(UsbKeyCode::Keyboard5); code.push(UsbKeyCode::LeftShift)},
-            '^' => {code.push(UsbKeyCode::Keyboard6); code.push(UsbKeyCode::LeftShift)},
-            '&' => {code.push(UsbKeyCode::Keyboard7); code.push(UsbKeyCode::LeftShift)},
-            '*' => {code.push(UsbKeyCode::Keyboard8); code.push(UsbKeyCode::LeftShift)},
-            '(' => {code.push(UsbKeyCode::Keyboard9); code.push(UsbKeyCode::LeftShift)},
-            ')' => {code.push(UsbKeyCode::Keyboard0); code.push(UsbKeyCode::LeftShift)},
-
-            '-' => code.push(UsbKeyCode::Minus),
-            '_' => {code.push(UsbKeyCode::Minus); code.push(UsbKeyCode::LeftShift)},
-            '[' => code.push(UsbKeyCode::LeftBrace),
-            '{' => {code.push(UsbKeyCode::LeftBrace); code.push(UsbKeyCode::LeftShift)},
-            ']' => code.push(UsbKeyCode::RightBrace),
-            '}' => {code.push(UsbKeyCode::RightBrace); code.push(UsbKeyCode::LeftShift)},
-            '/' => code.push(UsbKeyCode::ForwardSlash),
-            '?' => {code.push(UsbKeyCode::ForwardSlash); code.push(UsbKeyCode::LeftShift)},
-            '\\' => code.push(UsbKeyCode::Backslash),
-            '|' => {code.push(UsbKeyCode::Backslash); code.push(UsbKeyCode::LeftShift)},
-            '=' => code.push(UsbKeyCode::Equal),
-            '+' => {code.push(UsbKeyCode::Equal); code.push(UsbKeyCode::LeftShift)},
-            '\'' => code.push(UsbKeyCode::Apostrophe),
-            '"' => {code.push(UsbKeyCode::Apostrophe); code.push(UsbKeyCode::LeftShift)},
-            ';' => {code.push(UsbKeyCode::Semicolon)},
-            ':' => {code.push(UsbKeyCode::Semicolon); code.push(UsbKeyCode::LeftShift)},
-            '`' => {code.push(UsbKeyCode::Grave)},
-            '~' => {code.push(UsbKeyCode::Grave); code.push(UsbKeyCode::LeftShift)},
-
-            '←' => code.push(UsbKeyCode::LeftArrow),
-            '→' => code.push(UsbKeyCode::RightArrow),
-            '↑' => code.push(UsbKeyCode::UpArrow),
-            '↓' => code.push(UsbKeyCode::DownArrow),
-
-            ',' => code.push(UsbKeyCode::Comma),
-            '<' => {code.push(UsbKeyCode::Comma); code.push(UsbKeyCode::LeftShift)},
-            '.' => code.push(UsbKeyCode::Dot),
-            '>' => {code.push(UsbKeyCode::Dot); code.push(UsbKeyCode::LeftShift)},
-
-            '\u{000d}' => code.push(UsbKeyCode::ReturnEnter),
-            ' ' => code.push(UsbKeyCode::Space),
-            '\u{0008}' => code.push(UsbKeyCode::DeleteBackspace),
-            _ => log::warn!("Ignoring unhandled character: {}", key),
-        };
-        code
     }
 }
 

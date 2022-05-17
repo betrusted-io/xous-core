@@ -3502,6 +3502,7 @@ version = "0.1.0"
 dependencies = [
  "bitfield",
  "embedded-time",
+ "keyboard",
  "llio",
  "log",
  "log-server",
@@ -3520,6 +3521,7 @@ dependencies = [
  "utralib",
  "vcell",
  "xous",
+ "xous-ipc 0.9.7",
  "xous-names",
 ]
 

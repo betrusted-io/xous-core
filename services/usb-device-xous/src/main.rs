@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+mod mappings;
 
 use api::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -42,6 +43,8 @@ use num_enum::FromPrimitive as EnumFromPrimitive;
 
 use embedded_time::Clock;
 use std::convert::TryInto;
+use keyboard::KeyMap;
+use xous_ipc::Buffer;
 
 pub struct EmbeddedClock {
     start: std::time::Instant,
@@ -73,13 +76,18 @@ fn xmain() -> ! {
     let usbdev_sid = xns.register_name(api::SERVER_NAME_USB_DEVICE, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     let llio = llio::Llio::new(&xns);
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
+    let native_kbd = keyboard::Keyboard::new(&xns).unwrap();
+    let native_map = native_kbd.get_keymap().unwrap();
+
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
-
     let (maj, min, rev, extra, _gitrev) = llio.soc_gitrev().unwrap();
     if maj == 0 && min <= 9 && rev <= 8 {
-        if extra < 20 {
+        if (min == 9 && rev == 8 && extra < 20) ||
+        (min < 9) || (min == 9 && rev < 8) {
             if min != 0 { // don't show during hosted mode, which reports 0.0.0+0
+                tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
                 let modals = modals::Modals::new(&xns).unwrap();
                 modals.show_notification(
                     &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}.{}.{}+{}. Refusing to start USB driver.",
@@ -115,7 +123,6 @@ fn xmain() -> ! {
 
     let usbdev = SpinalUsbDevice::new(usbdev_sid);
     let mut usbmgmt = usbdev.get_iface();
-    let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     // register a suspend/resume listener
     let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
@@ -147,7 +154,7 @@ fn xmain() -> ! {
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     loop {
-        let msg = xous::receive_message(usbdev_sid).unwrap();
+        let mut msg = xous::receive_message(usbdev_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
@@ -251,11 +258,11 @@ fn xmain() -> ! {
                     let auto_up = if autoup == 1 {true} else {false};
                     keyboard.interface().write_report(&codes).ok();
                     keyboard.interface().tick().unwrap();
-                    tt.sleep_ms(50).ok();
+                    tt.sleep_ms(30).ok();
                     if auto_up {
                         keyboard.interface().write_report(&[]).ok(); // this is the key-up
                         keyboard.interface().tick().unwrap();
-                        tt.sleep_ms(50).ok();
+                        tt.sleep_ms(30).ok();
                     }
                     xous::return_scalar(msg.sender, 0).unwrap();
                 } else {
@@ -265,6 +272,30 @@ fn xmain() -> ! {
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Some(Opcode::SendKeyCode) => {
                 xous::return_scalar(msg.sender, 1).unwrap();
+            }
+            Some(Opcode::SendString) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
+                #[cfg(any(target_os = "none", target_os = "xous"))]
+                {
+                    let mut sent = 0;
+                    for ch in usb_send.s.as_str().unwrap().chars() {
+                        // ASSUME: user's keyboard type matches the preference on their Precursor device.
+                        let codes = match native_map {
+                            KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
+                            _ => mappings::char_to_hid_code_us101(ch),
+                        };
+                        keyboard.interface().write_report(&codes).ok();
+                        keyboard.interface().tick().unwrap();
+                        tt.sleep_ms(30).ok();
+                        keyboard.interface().write_report(&[]).ok(); // this is the key-up
+                        keyboard.interface().tick().unwrap();
+                        tt.sleep_ms(30).ok();
+                        sent += 1;
+                    }
+                    usb_send.sent = Some(sent);
+                }
+                buffer.replace(usb_send).unwrap();
             }
             #[cfg(any(target_os = "none", target_os = "xous"))]
             Some(Opcode::GetLedState) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
