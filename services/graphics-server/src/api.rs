@@ -73,6 +73,9 @@ pub(crate) enum Opcode {
 
     /// Draw a rounded rectangle
     RoundedRectangle, //(RoundedRectangle),
+    
+    /// Paint a Bitmap Tile
+    Tile,
 
     /// Draw a circle with a specified radius
     Circle, //(Circle),
@@ -116,6 +119,7 @@ pub enum ClipObjectType {
     Rect(Rectangle),
     RoundRect(RoundedRectangle),
     XorLine(Line),
+    Tile(Tile),
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]

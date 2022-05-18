@@ -4,7 +4,7 @@
 pub mod api;
 pub use api::{
     Circle, ClipObject, ClipObjectType, DrawStyle, Gid, Line, PixelColor, Point, Rectangle,
-    RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle, ClipObjectList
+    RoundedRectangle, Tile, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle, ClipObjectList
 };
 pub mod op;
 
@@ -202,6 +202,20 @@ impl Gfx {
         let co = ClipObject {
             clip,
             obj: ClipObjectType::RoundRect(rr),
+        };
+        let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap())
+            .map(|_| ())
+    }
+
+    pub fn draw_tile_clipped(
+        &self,
+        tile: Tile,
+        clip: Rectangle,
+    ) -> Result<(), xous::Error> {
+        let co = ClipObject {
+            clip,
+            obj: ClipObjectType::Tile(tile),
         };
         let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap())

@@ -172,6 +172,9 @@ fn xmain() -> ! {
                         ClipObjectType::RoundRect(rr) => {
                             op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
                         }
+                        ClipObjectType::Tile(tile) => {
+                            op::tile(display.native_buffer(), tile, Some(obj.clip));
+                        }
                     }
                 }
                 Some(Opcode::DrawClipObjectList) => {
@@ -195,6 +198,9 @@ fn xmain() -> ! {
                                 }
                                 ClipObjectType::RoundRect(rr) => {
                                     op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
+                                }
+                                ClipObjectType::Tile(tile) => {
+                                    op::tile(display.native_buffer(), tile, Some(obj.clip));
                                 }
                             }
                         } else {
@@ -373,6 +379,12 @@ fn xmain() -> ! {
                     );
                     op::rounded_rectangle(display.native_buffer(), rr, screen_clip.into());
                 }),
+                Some(Opcode::Tile) => {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let bm = buffer.to_original::<Tile, _>().unwrap();
+                    op::tile(display.native_buffer(), bm, screen_clip.into());
+                },
                 Some(Opcode::Circle) => msg_scalar_unpack!(msg, center, radius, style, _, {
                     let c = Circle::new_with_style(
                         Point::from(center),
