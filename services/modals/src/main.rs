@@ -28,6 +28,7 @@
 mod api;
 use api::*;
 mod tests;
+use gam::Bitmap;
 
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
@@ -54,6 +55,7 @@ enum RendererState {
     RunText(ManagedPromptWithTextResponse),
     RunProgress(ManagedProgress),
     RunNotification(ManagedNotification),
+    RunImage(ManagedImage),
     RunDynamicNotification(DynamicNotification),
 }
 
@@ -241,6 +243,24 @@ fn xmain() -> ! {
                 )
                 .expect("couldn't initiate UX op");
             }
+            Some(Opcode::Image) => {
+                let spec = {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    buffer.to_original::<ManagedImage, _>().unwrap()
+                };
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                op = RendererState::RunImage(spec);
+                dr = Some(msg);
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't initiate UX op");
+            }
             Some(Opcode::StartProgress) => {
                 let spec = {
                     let buffer =
@@ -419,6 +439,22 @@ fn xmain() -> ! {
                         renderer_modal.modify(
                             Some(ActionType::Notification(notification)),
                             Some(text),
+                            false,
+                            None,
+                            true,
+                            None,
+                        );
+                        renderer_modal.activate();
+                    }
+                    RendererState::RunImage(config) => {
+                        let mut image = gam::modal::Image::new(
+                            renderer_cid,
+                            Opcode::ImageReturn.to_u32().unwrap(),
+                        );                        
+                        image.set_bitmap(Some(Bitmap::from(config.tiles)));
+                        renderer_modal.modify(
+                            Some(ActionType::Image(image)),
+                            None,
                             false,
                             None,
                             true,
@@ -626,6 +662,25 @@ fn xmain() -> ! {
             Some(Opcode::NotificationReturn) => {
                 match op {
                     RendererState::RunNotification(_) => {
+                        op = RendererState::None;
+                        dr.take(); // unblocks the caller, but without any response data
+                        token_lock = next_lock(&mut work_queue);
+                    }
+                    RendererState::None => {
+                        log::warn!("Notification detected a fat finger event, ignoring.")
+                    }
+                    _ => {
+                        log::error!(
+                            "UX return opcode does not match our current operation in flight: {:?}",
+                            op
+                        );
+                        panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    }
+                }
+            },
+            Some(Opcode::ImageReturn) => {
+                match op {
+                    RendererState::RunImage(_) => {
                         op = RendererState::None;
                         dr.take(); // unblocks the caller, but without any response data
                         token_lock = next_lock(&mut work_queue);

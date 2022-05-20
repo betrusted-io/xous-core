@@ -1,4 +1,6 @@
 use gam::modal::*;
+use gam::Tile;
+
 
 pub(crate) const SERVER_NAME_MODALS: &str = "_Modal Dialog Server_";
 
@@ -40,6 +42,13 @@ pub struct ManagedNotification {
     // A Type 40 (177x177) qrcode with Medium data correction can encode max 3391 alphanumeric characters
     pub qrtext: Option<xous_ipc::String<4096>>,
 }
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct ManagedImage {
+    pub token: [u32; 4], 
+    pub tiles: [Option<Tile>; 6],
+}
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
     pub token: [u32; 4],
@@ -72,6 +81,8 @@ pub(crate) enum Opcode {
     PromptWithMultiResponse,
     /// simple notification
     Notification,
+    /// display an image
+    Image,
     /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically updated
     DynamicNotification,
 
@@ -113,6 +124,7 @@ pub(crate) enum Opcode {
     RadioReturn,
     CheckBoxReturn,
     NotificationReturn,
+    ImageReturn,
 
     DoUpdateDynamicNotification,
     DoCloseDynamicNotification,

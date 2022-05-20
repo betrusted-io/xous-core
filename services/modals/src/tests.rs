@@ -3,6 +3,7 @@ use gam::*;
 use std::thread;
 
 use xous_names::XousNames;
+use dither::prelude::{Img, RGB};
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
 
@@ -79,6 +80,7 @@ pub(crate) fn spawn_test() {
                 .expect("notification failed");
             log::info!("notification test done");
         }
+       
     });
 
     thread::spawn({
@@ -133,6 +135,14 @@ pub(crate) fn spawn_test() {
                 )
                 .expect("qrcode failed");
             log::info!("qrcode test done");
+
+            // 5. test image
+            log::info!("testing image");
+            let mut input = std::env::current_dir().unwrap();
+            input.push("../services/modals/src/tests/bunny.png");
+            let img = Img::<RGB<u8>>::load(&input).unwrap();
+            modals.show_image(img).expect("image failed");
+            log::info!("image test done");
         }
     });
 }

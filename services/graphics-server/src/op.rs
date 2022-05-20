@@ -626,8 +626,7 @@ pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
         let mut fb_word = fb[fb_ln + fb_wd];
         let mut left_part = fb_word & mask;
         let mut right_part;
-        let mut tile_word: u32 = 0;
-        let mut word = fb_word;
+        let mut tile_word: u32;
         while (fb_wd <= last_word) & (tile_wd < tile_line.len()) {
             fb_word = fb[fb_ln + fb_wd];
             tile_word = tile_line[tile_wd];

@@ -9,6 +9,8 @@ use gam::*;
 use num_traits::*;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
+use dither::prelude::{Img, RGB};
+
 
 pub type TextValidationFn = fn(TextEntryPayload) -> Option<ValidatorErr>;
 
@@ -187,7 +189,39 @@ impl Modals {
             .or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
+    }    
+
+    /// this blocks until the image has been dismissed.
+    pub fn show_image(
+        &self,
+        img: Img<RGB<u8>>,
+    ) -> Result<(), xous::Error> {
+        self.lock();
+        
+        // resize image with fast_image_resize
+        // rotate Img with img?              
+        
+        let bm = Bitmap::from(img);        
+        let offset = Point::new(-bm.bound.tl.x, -bm.bound.tl.y);
+        let mut tiles: [Option<Tile>; 6] = [None; 6];
+        for (t, tile) in bm.iter().enumerate(){ 
+            if t >= tiles.len() { continue }
+            let mut copy = tile.clone();
+            copy.translate(offset);
+            tiles[t] = Some(copy);
+        }; 
+        
+        let spec = ManagedImage {
+            token: self.token,
+            tiles: tiles,
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Image.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        Ok(())
     }
+
 
     pub fn start_progress(
         &self,

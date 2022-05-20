@@ -388,6 +388,11 @@ impl Tile {
         self.bound
     }
 
+    pub fn area(&self) -> u32 {
+        let size = self.size();
+        (size.x * size.y) as u32
+    }
+
     pub fn size(&self) -> Point {
         let pos = self.bound;
         Point::new(pos.br.x - pos.tl.x, pos.br.y - pos.tl.y)

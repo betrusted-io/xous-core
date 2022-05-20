@@ -1,9 +1,8 @@
+use core::cmp::{max, min};
+use dither::prelude::{Dither, Img, RGB};
 use graphics_server::api::shapes;
 use graphics_server::api::{Point, Rectangle, Tile};
 use graphics_server::PixelColor;
-
-use core::cmp::min;
-use dither::prelude::{Dither, Img, RGB};
 use std::convert::TryInto;
 use std::ops::Deref;
 
@@ -78,6 +77,13 @@ impl Bitmap {
         (tile_size, tile_width_words as i16)
     }
 
+    #[allow(dead_code)]
+    fn area(&self) -> u32 {
+        let (x, y) = self.size();
+        (x * y) as u32
+    }
+
+    #[allow(dead_code)]
     fn size(&self) -> (usize, usize) {
         (self.bound.br.x as usize, self.bound.br.y as usize)
     }
@@ -96,6 +102,28 @@ impl Bitmap {
         }
     }
 
+    fn hull(mosaic: &Vec<Tile>) -> Rectangle {
+        let mut hull_tl = Point::new(i16::MAX, i16::MAX);
+        let mut hull_br = Point::new(i16::MIN, i16::MIN);
+        let mut tile_area = 0;
+        for (_i, tile) in mosaic.iter().enumerate() {
+            let tile_bound = tile.bound();
+            hull_tl.x = min(hull_tl.x, tile_bound.tl.x);
+            hull_tl.y = min(hull_tl.y, tile_bound.tl.y);
+            hull_br.x = max(hull_br.x, tile_bound.br.x);
+            hull_br.y = max(hull_br.y, tile_bound.br.y);
+            tile_area +=
+                (1 + tile_bound.br.x - tile_bound.tl.x) * (1 + tile_bound.br.y - tile_bound.tl.y);
+        }
+        let hull_area = (1 + hull_br.x - hull_tl.x) * (1 + hull_br.y - hull_tl.y);
+        if tile_area < hull_area {
+            log::warn!("Bitmap Tile gaps");
+        } else if tile_area > hull_area {
+            log::warn!("Bitmap Tile overlap");
+        }
+        Rectangle::new(hull_tl, hull_br)
+    }
+
     pub fn get_tile(&self, point: Point) -> Tile {
         let tile = self.get_tile_index(point);
         self.mosaic.as_slice()[tile]
@@ -110,6 +138,7 @@ impl Bitmap {
         self.get_tile(point).get_line(point)
     }
 
+    #[allow(dead_code)]
     fn get_word(&self, point: Point) -> shapes::Word {
         self.get_tile(point).get_word(point)
     }
@@ -134,6 +163,28 @@ impl Deref for Bitmap {
 
     fn deref(&self) -> &Self::Target {
         &self.mosaic
+    }
+}
+
+impl From<[Option<Tile>; 6]> for Bitmap {
+    fn from(tiles: [Option<Tile>; 6]) -> Self {
+        let mut mosaic: Vec<Tile> = Vec::new();
+        let mut tile_size = Point::new(0, 0);
+        for t in 0..tiles.len() {
+            if tiles[t].is_some() {
+                let tile = tiles[t].unwrap();
+                mosaic.push(tile);
+                if tile_size.x == 0 {
+                    tile_size = tile.size();
+                }
+            }
+        }
+
+        Self {
+            bound: Self::hull(&mosaic),
+            tile_size: tile_size,
+            mosaic: mosaic,
+        }
     }
 }
 

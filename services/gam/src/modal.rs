@@ -8,6 +8,8 @@ mod checkboxes;
 pub use checkboxes::*;
 mod notification;
 pub use notification::*;
+mod image;
+pub use image::*;
 mod slider;
 pub use slider::*;
 mod progressbar;
@@ -37,6 +39,7 @@ pub enum ActionType {
     CheckBoxes,
     Slider,
     Notification,
+    Image,
     ConsoleInput
 }
 
