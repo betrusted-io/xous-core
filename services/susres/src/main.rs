@@ -243,7 +243,7 @@ mod implementation {
             self.stored_time = Some(
                (self.csr.r(utra::susres::TIME0) as u64 |
                (self.csr.r(utra::susres::TIME1) as u64) << 32)
-               + 0 // a placeholder in case we need to advance time on save
+               + 1 // a placeholder in case we need to advance time on save
             );
             #[cfg(feature = "debugprint")]
             println!("Stored time: {}", self.stored_time.unwrap());
