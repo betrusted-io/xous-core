@@ -58,6 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "com",
         "xous-names",
         "keyboard",
+        "keyboard-backlight",
         "trng",
         "llio",
         "susres",
