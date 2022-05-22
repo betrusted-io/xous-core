@@ -1,6 +1,8 @@
 use crate::api::{ClipRect, DrawStyle, PixelColor, Point};
 use crate::op::{HEIGHT, WIDTH};
 use core::cmp::{max, min};
+use std::convert::TryInto;
+
 
 #[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Rectangle {
@@ -390,7 +392,7 @@ impl Tile {
 
     pub fn area(&self) -> u32 {
         let size = self.size();
-        (size.x * size.y) as u32
+        (size.x * size.y).try_into().unwrap()
     }
 
     pub fn size(&self) -> Point {
@@ -400,9 +402,9 @@ impl Tile {
 
     fn word_index(&self, point: Point) -> usize {
         if self.bound.intersects_point(point) {
-            let tile_line = (point.y - self.bound.tl.y) as usize;
-            let first_word_in_line = tile_line * self.width_words as usize;
-            let bit_index = (point.x - self.bound.tl.x) as usize;
+            let tile_line: u16 = (point.y - self.bound.tl.y).try_into().unwrap();
+            let first_word_in_line:usize = (tile_line * self.width_words).try_into().unwrap();
+            let bit_index: usize = (point.x - self.bound.tl.x).try_into().unwrap();
             first_word_in_line + (bit_index / BITS_PER_WORD)
         } else {
             log::warn!("point {:?} out of bounds {:?}", point, self.bound);
@@ -421,10 +423,11 @@ impl Tile {
     pub fn get_line(&self, point: Point) -> Vec<Word> {
         let first_pixel_in_line = Point::new(self.bound.tl.x, point.y);
         let first_word = self.word_index(first_pixel_in_line);
+        let width: usize = self.width_words.try_into().unwrap();
         match first_word == OUT_OF_BOUNDS {
             true => Vec::new(),
             false => {
-                let last_word = first_word + self.width_words as usize;
+                let last_word = first_word + width;
                 self.words[first_word..last_word].to_vec()
             }
         }
@@ -435,18 +438,20 @@ impl Tile {
     }
 
     pub fn get_pixel(&self, point: Point) -> PixelColor {
-        let word = self.get_word(point);
-        let bit = point.x as usize % BITS_PER_WORD;
-        PixelColor::from((word as usize >> bit) & 1)
+        let word: usize = self.get_word(point).try_into().unwrap();
+        let bpw: i16 =  BITS_PER_WORD.try_into().unwrap();
+        let bit = point.x % bpw;
+        PixelColor::from((word >> bit) & 1)
     }
 
     pub fn set_pixel(&mut self, point: Point, color: PixelColor) {
         let word_index = self.word_index(point);
+        let bpw: i16 =  BITS_PER_WORD.try_into().unwrap();
         match word_index == OUT_OF_BOUNDS {
             true => {}
             false => {
                 let word = self.words[word_index];
-                let bit = point.x as usize % BITS_PER_WORD;
+                let bit = point.x % bpw;
                 match color {
                     PixelColor::Dark => self.words[word_index] = word | 1 << bit,
                     PixelColor::Light => self.words[word_index] = word & !(1 << bit),
