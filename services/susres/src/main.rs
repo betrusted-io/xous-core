@@ -738,7 +738,19 @@ fn xmain() -> ! {
                         }
                         timeout_pending = false;
                         log::warn!("Suspend timed out, forcing an unclean suspend");
-                        // susres_hw.debug_delay(500); // let the messages print
+                        for sub in suspend_subscribers.iter() {
+                            if sub.order == current_op_order {
+                                if !sub.ready_to_suspend {
+                                    // note to debugger: you will get a token number, which is in itself not useful.
+                                    // There should be, at least once in the debug log, printed on the very first suspend cycle,
+                                    // a list of PID->tokens. Tokens are assigned in the order that the registration happens
+                                    // to the susres server. Empirically, this list is generally stable for every build,
+                                    // and is guaranteed to be stable across a single cold boot.
+                                    log::warn!("  -> NOT READY: {}", sub.token);
+                                }
+                            }
+                        }
+                        susres_hw.debug_delay(500); // let the messages print
                         // force a suspend
                         susres_hw.do_suspend(true);
 
