@@ -154,12 +154,17 @@ impl Drop for Susres {
 
 fn suspend_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    let mut print_once = false;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(SuspendEventCallback::Event) => msg_scalar_unpack!(msg, cid, id, token, _, {
                 // directly pass the scalar message onto the CID with the ID memorized in the original hook
-                log::debug!("PID {} has s/r token {}", xous::current_pid().unwrap().get(), token); // <-- use this to debug s/r
+                if !print_once {
+                    // dump this only once so we have a PID->token map in the debug logs, but don't dump it every time as it slows down the suspend
+                    log::info!("PID {} has s/r token {}", xous::current_pid().unwrap().get(), token); // <-- use this to debug s/r
+                    print_once = true;
+                }
                 send_message(cid as u32,
                     Message::new_scalar(id, token, 0, 0, 0)
                 ).unwrap();
