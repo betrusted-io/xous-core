@@ -104,6 +104,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                             Ok(len) => {
                                                 log::trace!("raw response ({}): {:?}", len, &buf[..len]);
                                                 write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len.min(buf.len())])).ok(); // let it run off the end
+                                                log::info!("{}NET.TCPGET,{},{}",
+                                                    xous::BOOKEND_START,
+                                                    std::string::String::from_utf8_lossy(&buf[..len.min(buf.len())]),
+                                                    xous::BOOKEND_END);
                                             }
                                             Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
                                         }
@@ -147,6 +151,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     });
                     write!(ret, "TCP listener started on port 80").unwrap();
+                    log::info!("{}NET.SERVER,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 }
                 "fountain" => {
                     // anything typed after fountain will cause this to be a short test
@@ -372,6 +377,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         addr,
                                         seq_or_addr,
                                         timestamp).unwrap();
+                                        log::info!("{}NET.PONG,{:?},{},{},{}",
+                                            xous::BOOKEND_START,
+                                            addr,
+                                            seq_or_addr,
+                                            timestamp,
+                                            xous::BOOKEND_END
+                                        );
                                     },
                                     IpAddr::V6(_) => {
                                         write!(ret, "Ipv6 pong received: {} ms", timestamp).unwrap();

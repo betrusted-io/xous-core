@@ -1050,6 +1050,10 @@ fn xmain() -> ! {
                                         .wlan_get_config()
                                         .expect("couldn't retrieve updated ipv4 config");
                                     log::info!("Network config acquired: {:?}", config);
+                                    log::info!("{}NET.OK,{:?},{}",
+                                        xous::BOOKEND_START,
+                                        std::net::IpAddr::from(config.addr),
+                                        xous::BOOKEND_END);
                                     net_config = Some(config);
 
                                     // note: ARP cache is stale. Maybe that's ok?

@@ -1449,6 +1449,7 @@ impl PddbOs {
                 let mut checkblock_a = [0u8; BLOCK_SIZE];
                 self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
 
+                log::info!("{}PDDB.CHECKPASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 #[cfg(any(target_os = "none", target_os = "xous"))] // skip this dialog in hosted mode
                 modals.show_notification(t!("pddb.checkpass", xous::LANG), None).expect("notification failed");
 
@@ -1459,6 +1460,7 @@ impl PddbOs {
                 if checkblock_a == checkblock_b {
                     success = true;
                 } else {
+                    log::info!("{}PDDB.PWFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     modals.show_notification(t!("pddb.checkpass_fail", xous::LANG), None).expect("notification failed");
                     self.clear_password();
                 }

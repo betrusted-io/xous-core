@@ -473,6 +473,7 @@ fn xmain() -> ! {
                     } else {
                         modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
                         modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
+                        log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         match modals.get_radiobutton(t!("rootkeys.confirm", xous::LANG)) {
                             Ok(response) => {
                                 if response == t!("rootkeys.confirm.no", xous::LANG) {
@@ -500,6 +501,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.bootpass", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }),
@@ -524,6 +526,7 @@ fn xmain() -> ! {
                 );
                 #[cfg(feature="tts")]
                 tts.tts_blocking(t!("rootkeys.updatepass", xous::LANG)).unwrap();
+                log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 rootkeys_modal.activate();
             },
             Some(Opcode::UxInitUpdatePasswordReturn) => {
@@ -658,6 +661,7 @@ fn xmain() -> ! {
                 };
 
                 let mut skip_confirmation = false;
+                log::info!("{}ROOTKEY.GWUP,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 match modals.get_radiobutton(prompt) {
                     Ok(response) => {
                         if response == t!("rootkeys.gwup.short", xous::LANG) {
@@ -720,6 +724,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.get_update_password", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }
@@ -797,6 +802,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.get_signing_password", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             },
@@ -877,6 +883,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.get_login_password", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                     // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
                 } else {
