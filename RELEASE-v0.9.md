@@ -158,6 +158,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - defer Drop on TcpStream until all written packets have been transmitted
 - scheduler quantum is now a tuning parameter in xous definitions.rs (`BASE_QUANTA_MS`). it is now set to 10ms, down from 20ms.
 - USB device core with keyboard HID emulation demo. API still needs refinement for U2F/FIDO applications.
+- Issue #162 and #159: fix bugs with condvar support. condvar IDs are now serial, so re-allocations are not a problem, and the routine to remove old ones from the notification table now looks at the correct sender ID.
+- Add `ceil`, `floor`, and `trunc` (f32 and f64) variants to the built-ins list (this is a `std` lib update, in 1.61.0.2)
 
 ## Roadmap to 1.0
 
