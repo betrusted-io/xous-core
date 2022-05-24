@@ -160,6 +160,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - USB device core with keyboard HID emulation demo. API still needs refinement for U2F/FIDO applications.
 - Issue #162 and #159: fix bugs with condvar support. condvar IDs are now serial, so re-allocations are not a problem, and the routine to remove old ones from the notification table now looks at the correct sender ID.
 - Add `ceil`, `floor`, and `trunc` (f32 and f64) variants to the built-ins list (this is a `std` lib update, in 1.61.0.2)
+- Add CI test automation facilities - CI infra now drives actual hardware through `expect` scripts, instead of just doing simulation checks
+
 
 ## Roadmap to 1.0
 
