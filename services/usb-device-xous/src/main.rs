@@ -43,6 +43,7 @@ use num_enum::FromPrimitive as EnumFromPrimitive;
 
 use embedded_time::Clock;
 use std::convert::TryInto;
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use keyboard::KeyMap;
 use xous_ipc::Buffer;
 
@@ -77,7 +78,9 @@ fn xmain() -> ! {
     log::trace!("registered with NS -- {:?}", usbdev_sid);
     let llio = llio::Llio::new(&xns);
     let tt = ticktimer_server::Ticktimer::new().unwrap();
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let native_kbd = keyboard::Keyboard::new(&xns).unwrap();
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let native_map = native_kbd.get_keymap().unwrap();
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -275,7 +278,10 @@ fn xmain() -> ! {
             }
             Some(Opcode::SendString) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
+                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                let usb_send = buffer.to_original::<api::UsbString, _>().unwrap(); // suppress mut warning on hosted mode
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 {
                     let mut sent = 0;
