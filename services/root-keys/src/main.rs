@@ -571,6 +571,7 @@ fn xmain() -> ! {
                 }
             },
             Some(Opcode::UxTryReboot) => {
+                log::info!("{}ROOTKEY.INITDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 log::info!("entering reboot handler");
                 // ensure the boost is off so that the reboot will not fail
                 com.set_boost(false).unwrap();
