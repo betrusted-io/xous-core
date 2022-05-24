@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 use gam::*;
 use std::thread;
-
 use xous_names::XousNames;
-use dither::prelude::{Img, RGB};
+use image::io::{Reader};
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
 
@@ -80,7 +79,6 @@ pub(crate) fn spawn_test() {
                 .expect("notification failed");
             log::info!("notification test done");
         }
-       
     });
 
     thread::spawn({
@@ -138,10 +136,21 @@ pub(crate) fn spawn_test() {
 
             // 5. test image
             log::info!("testing image");
-            let mut input = std::env::current_dir().unwrap();
-            input.push("../services/modals/src/tests/bunny.png");
-            let img = Img::<RGB<u8>>::load(&input).unwrap();
-            modals.show_image(img).expect("image failed");
+            let reader = match Reader::open("../services/modals/src/tests/bunny.png") {
+                Err(err) => {
+                    log::error!("cannot load image, {}", err);
+                    return
+                }
+                Ok(r) => r,
+            };
+            let img = match reader.decode() {
+                Err(e) => {
+                    log::error!("failed to decode image, {}", e);
+                    return
+                }
+                Ok(img) => img.into_rgb8(),
+            };
+            modals.show_image(&img).expect("image modal failed");
             log::info!("image test done");
         }
     });

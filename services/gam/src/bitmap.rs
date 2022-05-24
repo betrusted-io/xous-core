@@ -188,9 +188,12 @@ impl From<[Option<Tile>; 6]> for Bitmap {
     }
 }
 
-impl From<Img<RGB<u8>>> for Bitmap {
-    fn from(img: Img<RGB<u8>>) -> Self {
-        let img = img.convert_with(|rgb| rgb.convert_with(<f64 as From<u8>>::from));
+impl From<&image::RgbImage> for Bitmap {
+    fn from(image: &image::RgbImage) -> Self {
+        let pixels: Vec<RGB<u8>> = image.pixels().map(|p| RGB::from(p.0)).collect();
+        let img = Img::new(pixels, image.width()).expect("failed to create dither Img");
+
+        let img = img.convert_with(|rgb: RGB<u8>| rgb.convert_with(f64::from));
         let bit_depth = 1;
         let quantize = dither::create_quantize_n_bits_func(bit_depth).unwrap();
         let bw_img = img.convert_with(|rgb| rgb.to_chroma_corrected_black_and_white());

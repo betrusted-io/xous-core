@@ -9,7 +9,7 @@ pub use checkboxes::*;
 mod notification;
 pub use notification::*;
 mod image;
-pub use image::*;
+pub use self::image::*;
 mod slider;
 pub use slider::*;
 mod progressbar;
