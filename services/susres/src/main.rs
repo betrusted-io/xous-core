@@ -448,6 +448,7 @@ mod implementation {
         }
         pub fn ignore_wfi(&mut self) {}
         pub fn restore_wfi(&mut self) {}
+        pub fn debug_delay(&self, _duration: u32) {}
     }
 }
 
