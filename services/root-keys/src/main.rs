@@ -601,7 +601,7 @@ fn xmain() -> ! {
                 ticktimer.sleep_ms(1500).unwrap();
                 if !reboot_initiated {
                     // set a wakeup alarm a couple seconds from now -- this is the coldboot
-                    llio.set_wakeup_alarm(3).unwrap();
+                    llio.set_wakeup_alarm(5).unwrap();
 
                     // allow EC to snoop, so that it can wake up the system
                     llio.allow_ec_snoop(true).unwrap();
@@ -612,6 +612,7 @@ fn xmain() -> ! {
 
                     log::info!("rebooting now!");
                     reboot_initiated = true;
+                    ticktimer.sleep_ms(2000).unwrap();
                 }
 
                 // refresh the message if it goes away
