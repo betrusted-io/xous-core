@@ -3,6 +3,7 @@ use gam::*;
 use std::thread;
 use xous_names::XousNames;
 use image::io::{Reader};
+use super::*;
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
 
@@ -15,12 +16,12 @@ const CHECKBOX_TEST: [&'static str; 5] = ["happy", "😃", "安", "peaceful", ".
 ///
 /// Each thread will create a series of Modal primitives, including progess bars, notifications,
 /// check boxes and radio boxes.
-pub(crate) fn spawn_test() {
+pub fn spawn_test() {
     // spawn two threads that compete for modal resources, to test the interlocking mechanisms
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
-            let modals = modals::Modals::new(&xns).unwrap();
+            let modals = Modals::new(&xns).unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
             // 0. multi-modal test
@@ -84,7 +85,7 @@ pub(crate) fn spawn_test() {
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
-            let modals = modals::Modals::new(&xns).unwrap();
+            let modals = Modals::new(&xns).unwrap();
 
             // 1. test radio box
             for item in RADIO_TEST {

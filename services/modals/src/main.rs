@@ -27,7 +27,6 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
-mod tests;
 use gam::Bitmap;
 
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
@@ -125,11 +124,6 @@ fn xmain() -> ! {
 
     let mut list_hash = HashMap::<String, usize>::new();
     let mut list_selected = 0u32;
-
-    if cfg!(feature = "ux_tests") {
-        tt.sleep_ms(1000).unwrap();
-        tests::spawn_test();
-    }
 
     let mut token_lock: Option<[u32; 4]> = None;
     let trng = trng::Trng::new(&xns).unwrap();

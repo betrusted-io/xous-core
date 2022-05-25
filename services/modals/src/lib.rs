@@ -2,6 +2,7 @@
 
 pub mod api;
 use api::*;
+pub mod tests;
 
 use bit_field::BitField;
 use core::cell::Cell;

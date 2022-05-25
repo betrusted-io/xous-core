@@ -32,6 +32,5 @@ fast_image_resize = "0.9.2"
 utralib = { path = "../../utralib"}
 
 [features]
-ux_tests = []
 tts = []
-default = ["ux_tests"]
+default = []
