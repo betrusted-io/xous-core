@@ -90,6 +90,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28ae2b3dec75a406790005a200b1bd89785afc02517a00ca99ecfe093ee9e6cf"
 
 [[package]]
+name = "arrayref"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4c527152e37cf757a3f78aae5a06fbeefdb07ccc535c980a3208ee3060dd544"
+
+[[package]]
 name = "atomic-polyfill"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -377,6 +383,10 @@ dependencies = [
  "xous-ipc 0.9.7",
  "xous-names",
 ]
+
+[[package]]
+name = "cbor"
+version = "0.1.0"
 
 [[package]]
 name = "cc"
@@ -667,6 +677,15 @@ checksum = "cfcae03edb34f947e64acdb1c33ec169824e20657e9ecb61cef6c8c74dcb8120"
 dependencies = [
  "cfg-if 1.0.0",
  "lazy_static",
+]
+
+[[package]]
+name = "crypto"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "cbor",
+ "subtle",
 ]
 
 [[package]]
@@ -2201,6 +2220,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
+name = "persistent_store"
+version = "0.1.0"
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3407,11 +3430,17 @@ checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
 name = "u2f"
 version = "0.1.0"
 dependencies = [
+ "arrayref",
+ "byteorder",
+ "cbor",
+ "crypto",
  "log",
  "log-server",
  "num-derive",
  "num-traits",
+ "persistent_store",
  "rkyv",
+ "subtle",
  "susres",
  "ticktimer-server",
  "usb-device-xous",

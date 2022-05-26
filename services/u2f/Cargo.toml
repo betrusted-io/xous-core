@@ -20,6 +20,14 @@ susres = {path = "../susres"}
 usb-device-xous = {path="../usb-device-xous"}
 usbd-human-interface-device = {git="https://github.com/betrusted-io/usbd-human-interface-device.git", branch="main"}
 
+# OpenSK libraries
+crypto = {path = "libraries/crypto"}
+cbor = {path = "libraries/cbor"}
+persistent_store = {path = "libraries/persistent_store"}
+byteorder = { version = "1.4.3", default-features = false }
+arrayref = "0.3.6"
+subtle = { version = "2.2.3", default-features = false }
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 

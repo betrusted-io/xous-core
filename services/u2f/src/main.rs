@@ -4,6 +4,11 @@
 mod api;
 use api::*;
 
+mod ctap;
+use ctap::hid::{ChannelID, CtapHid, KeepaliveStatus, ProcessedPacket};
+use ctap::status_code::Ctap2StatusCode;
+use ctap::CtapState;
+
 use num_traits::*;
 use std::thread;
 use usbd_human_interface_device::device::fido::*;
@@ -34,6 +39,9 @@ fn xmain() -> ! {
             }
         }
     });
+
+    let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
+    let mut ctap_hid = CtapHid::new();
 
     loop {
         let msg = xous::receive_message(u2f_sid).unwrap();
