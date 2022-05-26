@@ -141,18 +141,13 @@ fn xmain() -> ! {
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let usb_alloc = UsbBusAllocator::new(usbdev);
-    /*
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let clock = EmbeddedClock::new();
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    let mut keyboard = UsbHidClassBuilder::new()
+    let mut composite = UsbHidClassBuilder::new()
         .add_interface(
             NKROBootKeyboardInterface::default_config(&clock),
         )
-        .build(&usb_alloc);
-        */
-    #[cfg(any(target_os = "none", target_os = "xous"))]
-    let mut u2f = UsbHidClassBuilder::new()
         .add_interface(
             FidoInterface::default_config()
         )
@@ -211,7 +206,8 @@ fn xmain() -> ! {
                     let mut u2f_msg = FidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
                     u2f_msg.deref_mut().copy_from_slice(&u2f_ipc.data);
-                    u2f.interface().write_report(&u2f_msg).ok();
+                    let u2f = composite.interface::<FidoInterface<'_, _>, _>();
+                    u2f.write_report(&u2f_msg).ok();
                     u2f_ipc.code = U2fCode::TxAck;
                 } else {
                     u2f_ipc.code = U2fCode::Denied;
@@ -220,16 +216,16 @@ fn xmain() -> ! {
             }
             Some(Opcode::UsbIrqHandler) => {
                 #[cfg(any(target_os = "none", target_os = "xous"))]
-//                if usb_dev.poll(&mut [&mut keyboard, &mut u2f]) {
-                if usb_dev.poll(&mut [&mut u2f]) {
-                    /*
-                    match keyboard.interface().read_report() {
+                if usb_dev.poll(&mut [&mut composite]) {
+                    let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                    match keyboard.read_report() {
                         Ok(l) => {
                             led_state = l;
                         }
                         Err(e) => log::trace!("KEYB ERR: {:?}", e),
-                    }*/
-                    match u2f.interface().read_report() {
+                    }
+                    let u2f = composite.interface::<FidoInterface<'_, _>, _>();
+                    match u2f.read_report() {
                         Ok(u2f_report) => {
                             log::info!("got U2F packet {:?}", u2f_report);
                             if let Some(mut listener) = fido_listener.take() {
@@ -332,12 +328,13 @@ fn xmain() -> ! {
                         codes.push(Keyboard::from_primitive(code2 as u8));
                     }
                     let auto_up = if autoup == 1 {true} else {false};
-                    //keyboard.interface().write_report(&codes).ok();
-                    //keyboard.interface().tick().unwrap();
+                    let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                    keyboard.write_report(&codes).ok();
+                    keyboard.tick().unwrap();
                     tt.sleep_ms(30).ok();
                     if auto_up {
-                        //keyboard.interface().write_report(&[]).ok(); // this is the key-up
-                        //keyboard.interface().tick().unwrap();
+                        keyboard.write_report(&[]).ok(); // this is the key-up
+                        keyboard.tick().unwrap();
                         tt.sleep_ms(30).ok();
                     }
                     xous::return_scalar(msg.sender, 0).unwrap();
@@ -364,11 +361,12 @@ fn xmain() -> ! {
                             KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
                             _ => mappings::char_to_hid_code_us101(ch),
                         };
-                        //keyboard.interface().write_report(&codes).ok();
-                        //keyboard.interface().tick().unwrap();
+                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                        keyboard.write_report(&codes).ok();
+                        keyboard.tick().unwrap();
                         tt.sleep_ms(30).ok();
-                        //keyboard.interface().write_report(&[]).ok(); // this is the key-up
-                        //keyboard.interface().tick().unwrap();
+                        keyboard.write_report(&[]).ok(); // this is the key-up
+                        keyboard.tick().unwrap();
                         tt.sleep_ms(30).ok();
                         sent += 1;
                     }
