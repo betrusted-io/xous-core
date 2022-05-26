@@ -25,7 +25,10 @@ use hosted::*;
 use num_traits::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device_xous::KeyboardLedsReport;
+use usbd_human_interface_device::device::fido::{FidoInterface, FidoMsg};
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
+use core::ops::{DerefMut, Deref};
+use core::num::NonZeroU8;
 use std::collections::BTreeMap;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -70,7 +73,7 @@ fn xmain() -> ! {
     use crate::SpinalUsbDevice;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -138,6 +141,7 @@ fn xmain() -> ! {
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let usb_alloc = UsbBusAllocator::new(usbdev);
+    /*
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let clock = EmbeddedClock::new();
     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -146,6 +150,14 @@ fn xmain() -> ! {
             NKROBootKeyboardInterface::default_config(&clock),
         )
         .build(&usb_alloc);
+        */
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    let mut u2f = UsbHidClassBuilder::new()
+        .add_interface(
+            FidoInterface::default_config()
+        )
+        .build(&usb_alloc);
+
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x0001))
         .manufacturer("Kosagi")
@@ -155,6 +167,11 @@ fn xmain() -> ! {
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
+    let mut fido_listener: Option<xous::MessageEnvelope> = None;
+    // under the theory that PIDs are unforgeable. TODO: check that PIDs are unforgeable.
+    // also if someone commandeers a process, all bets are off within that process (this is a general statement)
+    let mut fido_listener_pid: Option<NonZeroU8> = None;
+
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
@@ -165,14 +182,70 @@ fn xmain() -> ! {
                 usbmgmt.xous_resume();
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
             }),
+            Some(Opcode::U2fRxDeferred) => {
+                if fido_listener_pid.is_none() {
+                    fido_listener_pid = msg.sender.pid();
+                }
+                if fido_listener.is_some() {
+                    log::error!("Double-listener request detected. There should only ever by one registered listener at a time.");
+                    log::error!("This will cause an upstream server to misbehave, but not panicing so the problem can be debugged.");
+                    // the receiver will get a response with the `code` field still in the `RxWait` state to indicate the problem
+                }
+                if fido_listener_pid == msg.sender.pid() {
+                    fido_listener = Some(msg);
+                } else {
+                    log::warn!("U2F interface capability is locked on first use; additional servers are ignored: {:?}", msg.sender);
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                    u2f_ipc.code = U2fCode::Denied;
+                    buffer.replace(u2f_ipc).unwrap();
+                }
+            }
+            Some(Opcode::U2fTx) => {
+                if fido_listener_pid.is_none() {
+                    fido_listener_pid = msg.sender.pid();
+                }
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                if fido_listener_pid == msg.sender.pid() {
+                    let mut u2f_msg = FidoMsg::default();
+                    assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
+                    u2f_msg.deref_mut().copy_from_slice(&u2f_ipc.data);
+                    u2f.interface().write_report(&u2f_msg).ok();
+                    u2f_ipc.code = U2fCode::TxAck;
+                } else {
+                    u2f_ipc.code = U2fCode::Denied;
+                }
+                buffer.replace(u2f_ipc).unwrap();
+            }
             Some(Opcode::UsbIrqHandler) => {
                 #[cfg(any(target_os = "none", target_os = "xous"))]
-                if usb_dev.poll(&mut [&mut keyboard]) {
+//                if usb_dev.poll(&mut [&mut keyboard, &mut u2f]) {
+                if usb_dev.poll(&mut [&mut u2f]) {
+                    /*
                     match keyboard.interface().read_report() {
                         Ok(l) => {
                             led_state = l;
                         }
                         Err(e) => log::trace!("KEYB ERR: {:?}", e),
+                    }*/
+                    match u2f.interface().read_report() {
+                        Ok(u2f_report) => {
+                            log::info!("got U2F packet {:?}", u2f_report);
+                            if let Some(mut listener) = fido_listener.take() {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                                };
+                                let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
+                                assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
+                                buf.data.copy_from_slice(&u2f_report.deref());
+                                buf.code = U2fCode::RxAck;
+                                response.replace(buf).unwrap();
+                            } else {
+                                log::warn!("Got U2F packet, but no server to respond...ignoring.");
+                            }
+                        },
+                        Err(e) => log::trace!("U2F ERR: {:?}", e),
                     }
                 }
             },
@@ -259,12 +332,12 @@ fn xmain() -> ! {
                         codes.push(Keyboard::from_primitive(code2 as u8));
                     }
                     let auto_up = if autoup == 1 {true} else {false};
-                    keyboard.interface().write_report(&codes).ok();
-                    keyboard.interface().tick().unwrap();
+                    //keyboard.interface().write_report(&codes).ok();
+                    //keyboard.interface().tick().unwrap();
                     tt.sleep_ms(30).ok();
                     if auto_up {
-                        keyboard.interface().write_report(&[]).ok(); // this is the key-up
-                        keyboard.interface().tick().unwrap();
+                        //keyboard.interface().write_report(&[]).ok(); // this is the key-up
+                        //keyboard.interface().tick().unwrap();
                         tt.sleep_ms(30).ok();
                     }
                     xous::return_scalar(msg.sender, 0).unwrap();
@@ -291,11 +364,11 @@ fn xmain() -> ! {
                             KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
                             _ => mappings::char_to_hid_code_us101(ch),
                         };
-                        keyboard.interface().write_report(&codes).ok();
-                        keyboard.interface().tick().unwrap();
+                        //keyboard.interface().write_report(&codes).ok();
+                        //keyboard.interface().tick().unwrap();
                         tt.sleep_ms(30).ok();
-                        keyboard.interface().write_report(&[]).ok(); // this is the key-up
-                        keyboard.interface().tick().unwrap();
+                        //keyboard.interface().write_report(&[]).ok(); // this is the key-up
+                        //keyboard.interface().tick().unwrap();
                         tt.sleep_ms(30).ok();
                         sent += 1;
                     }

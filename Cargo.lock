@@ -3404,6 +3404,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
 
 [[package]]
+name = "u2f"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv",
+ "susres",
+ "ticktimer-server",
+ "usb-device-xous",
+ "usbd-human-interface-device 0.1.1 (git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main)",
+ "utralib",
+ "xous",
+ "xous-ipc 0.9.7",
+ "xous-names",
+]
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3517,7 +3536,7 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "usb-device",
- "usbd-human-interface-device",
+ "usbd-human-interface-device 0.1.1 (git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main)",
  "utralib",
  "vcell",
  "xous",
@@ -3541,7 +3560,7 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "usb-device",
- "usbd-human-interface-device",
+ "usbd-human-interface-device 0.1.1",
  "utralib",
  "vcell",
  "xous",
@@ -3551,8 +3570,23 @@ dependencies = [
 [[package]]
 name = "usbd-human-interface-device"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "262ce4294612a8fc830daeaded8b111e241dff8520965979d1754eb87fb33951"
+dependencies = [
+ "delegate",
+ "embedded-time",
+ "frunk",
+ "hash32",
+ "hash32-derive",
+ "heapless",
+ "log",
+ "num_enum",
+ "packed_struct",
+ "usb-device",
+]
+
+[[package]]
+name = "usbd-human-interface-device"
+version = "0.1.1"
+source = "git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main#744ab68464daf2f419b0149bc95ce41b01c7623d"
 dependencies = [
  "delegate",
  "embedded-time",
