@@ -34,6 +34,11 @@ tts-frontend = {path="../tts"}
 
 qrcode = { version = "0.12", default-features = false }
 
+#dither = "1.3.10" pending https://gitlab.com/efronlicht/dither/-/merge_requests/28
+dither = { git = "https://gitlab.com/nworbnhoj/dither", default-features = false }
+# note: image version is matched to version used by dither
+image = { version = "0.23", default-features = false, features = ["jpeg", "png"] }
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 

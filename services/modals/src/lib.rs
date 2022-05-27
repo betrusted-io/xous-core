@@ -2,11 +2,16 @@
 
 pub mod api;
 use api::*;
+pub mod tests;
 
 use bit_field::BitField;
 use core::cell::Cell;
+use fast_image_resize as fir;
 use gam::*;
+use image::{imageops, RgbImage};
 use num_traits::*;
+use std::convert::TryInto;
+use std::num::NonZeroU32;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -187,6 +192,96 @@ impl Modals {
             .or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
+    }
+
+    const MODAL_WIDTH: u32 = 300;
+    const MODAL_HEIGHT: u32 = 370;
+
+    /// this blocks until the image has been dismissed.
+    pub fn show_image(&self, img: &RgbImage) -> Result<(), xous::Error> {
+        self.lock();
+
+        // resize and/or rotate
+        let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
+        let (img_w, img_h) = img.dimensions();
+        let (img_width, img_height) = (img_w as f32, img_h as f32);
+        let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
+        let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
+        let mut modal_img: RgbImage = img.clone();
+        if portrait_scale >= 1.0 {
+            //noop
+        } else if landscape_scale >= 1.0 {
+            modal_img = imageops::rotate90(&modal_img);
+        } else if portrait_scale >= landscape_scale {
+            modal_img = Modals::resize_image(modal_img, portrait_scale);
+        } else {
+            modal_img = Modals::resize_image(modal_img, landscape_scale);
+            modal_img = imageops::rotate90(&modal_img);
+        }
+
+        // center image in modal
+        let center = Point::new(
+            ((Modals::MODAL_WIDTH - modal_img.width()) / 2)
+                .try_into()
+                .unwrap(),
+            ((Modals::MODAL_HEIGHT - modal_img.height()) / 2)
+                .try_into()
+                .unwrap(),
+        );
+
+        let bm = Bitmap::from(&modal_img);
+        let mut tiles: [Option<Tile>; 6] = [None; 6];
+        for (t, tile) in bm.iter().enumerate() {
+            if t >= tiles.len() {
+                continue;
+            }
+            let mut copy = tile.clone();
+            copy.translate(center);
+            tiles[t] = Some(copy);
+        }
+
+        let spec = ManagedImage {
+            token: self.token,
+            tiles: tiles,
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Image.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        Ok(())
+    }
+
+    fn resize_image(img: RgbImage, scale: f32) -> RgbImage {
+        let width: u32 = (img.width() as f32 * scale).floor() as u32;
+        let height: u32 = (img.height() as f32 * scale).floor() as u32;
+
+        let fir_img = fir::Image::from_vec_u8(
+            NonZeroU32::new(img.width()).unwrap(),
+            NonZeroU32::new(img.height()).unwrap(),
+            img.into_vec(),
+            fir::PixelType::U8x3,
+        )
+        .unwrap();
+
+        // Create container for data of destination image
+        let mut resized = fir::Image::new(
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+            fir_img.pixel_type(),
+        );
+        let mut rsz_view = resized.view_mut();
+
+        // resize image with fastest available algorithm
+        let mut resizer = fir::Resizer::new(fir::ResizeAlg::Nearest);
+        resizer.resize(&fir_img.view(), &mut rsz_view).unwrap();
+
+        // convert back into an RgbImage
+        RgbImage::from_vec(
+            resized.width().try_into().unwrap(),
+            resized.height().try_into().unwrap(),
+            resized.into_vec(),
+        )
+        .expect("failed to convert to RgbImage")
     }
 
     pub fn start_progress(

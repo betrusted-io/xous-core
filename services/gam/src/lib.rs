@@ -10,9 +10,12 @@ pub mod menu;
 pub use menu::*;
 pub mod apps;
 pub use apps::*;
+pub mod bitmap;
+pub use bitmap::*;
 
 use graphics_server::api::{TextOp, TextView};
-use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
+use graphics_server::api::{Gid, Line, Circle, RoundedRectangle, TokenClaim};
+pub use graphics_server::api::{Point, Tile, Rectangle};
 pub use graphics_server::api::GlyphStyle;
 pub use graphics_server::api::PixelColor;
 use api::Opcode; // if you prefer to map the api into your local namespace
@@ -187,6 +190,15 @@ impl Gam {
         };
         let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
+    }
+    pub fn draw_bitmap(&self, gid: Gid, bm: &Bitmap) -> Result<(), xous::Error> {
+        let mut list = GamObjectList::new(gid);    
+        for (_i, tile) in bm.iter().enumerate(){ 
+            list.push(GamObjectType::Tile(*tile)).unwrap();
+        };       
+        let buf = Buffer::into_buf(list).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::RenderObjectList.to_u32().unwrap())
+            .map(|_| ())
     }
     pub fn draw_circle(&self, gid: Gid, circ: Circle) -> Result<(), xous::Error> {
         let go = GamObject {
