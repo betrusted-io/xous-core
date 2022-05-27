@@ -25,9 +25,7 @@ use hosted::*;
 use num_traits::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device_xous::KeyboardLedsReport;
-use usbd_human_interface_device::device::fido::{FidoInterface, FidoMsg};
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
-use core::ops::{DerefMut, Deref};
 use core::num::NonZeroU8;
 use std::collections::BTreeMap;
 
@@ -43,6 +41,10 @@ use usbd_human_interface_device::device::keyboard::NKROBootKeyboardInterface;
 use usbd_human_interface_device::prelude::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use num_enum::FromPrimitive as EnumFromPrimitive;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use core::ops::{DerefMut, Deref};
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use usbd_human_interface_device::device::fido::{FidoInterface, FidoMsg};
 
 use embedded_time::Clock;
 use std::convert::TryInto;
@@ -102,12 +104,20 @@ fn xmain() -> ! {
                     None
                 ).unwrap();
             }
+            let mut fido_blocker: Option<xous::MessageEnvelope> = None;
             loop {
                 let msg = xous::receive_message(usbdev_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
                         xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
                     }),
+                    Some(Opcode::U2fRxDeferred) => {
+                        // this will prevent the FIDO stack from ever moving forward
+                        fido_blocker = Some(msg);
+                    }
+                    Some(Opcode::Quit) => {
+                        break;
+                    }
                     _ => {
                         log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
                         // make it so blocking scalars don't block
@@ -124,6 +134,7 @@ fn xmain() -> ! {
                     }
                 }
             }
+            log::info!("Statement to consume the blocked message, preventing it from being dropped: {:?}", fido_blocker);
         }
     }
 
@@ -202,6 +213,7 @@ fn xmain() -> ! {
                 }
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 if fido_listener_pid == msg.sender.pid() {
                     let mut u2f_msg = FidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
@@ -212,6 +224,8 @@ fn xmain() -> ! {
                 } else {
                     u2f_ipc.code = U2fCode::Denied;
                 }
+                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                {u2f_ipc.code = U2fCode::Denied;}
                 buffer.replace(u2f_ipc).unwrap();
             }
             Some(Opcode::UsbIrqHandler) => {

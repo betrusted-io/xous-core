@@ -608,7 +608,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Ship mode request denied").unwrap();
                     }
                 }
-                #[cfg(feature="ditherpunk")]
+                #[cfg(all(feature="ditherpunk", not(any(target_os = "none", target_os = "xous"))))]
                 "modals" => {
                     modals::tests::spawn_test();
                 }

@@ -136,8 +136,8 @@ pub fn spawn_test() {
                 .expect("qrcode failed");
             log::info!("qrcode test done");
 
-            // 5. test image
-            #[cfg(feature="ditherpunk")]
+            // 5. test image - because it reads a local file, only makes sense on hosted mode
+            #[cfg(all(feature="ditherpunk", not(any(target_os = "none", target_os = "xous"))))]
             {
                 log::info!("testing image");
                 let reader = match Reader::open("../services/modals/src/tests/bunny.png") {
