@@ -76,9 +76,8 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
-  "services/usb-test",
-  "services/usb-device-xous",
-  "services/u2f",
+  "test-spawn",
+  "spawn",
   "kernel",
   "loader",
 ]
