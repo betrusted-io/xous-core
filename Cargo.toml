@@ -36,10 +36,10 @@ default-members = [
   "services/dns",
   "services/modals",
   "services/usb-device-xous",
-  "services/u2f",
   "apps/ball",
   "apps/hello",
   "apps/repl",
+  "apps/vault",
 ]
 members = [
   "xous-ipc",
@@ -93,12 +93,12 @@ members = [
   "apps/ball",
   "apps/hello",
   "apps/repl",
+  "apps/vault",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
   "services/usb-test",
   "services/usb-device-xous",
-  "services/u2f",
   "kernel",
   "loader",
 ]
