@@ -1,0 +1,23 @@
+[package]
+name = "vault"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+xous = { path = "../../xous-rs" }
+xous-ipc = { path = "../../xous-ipc" }
+log-server = { path = "../../services/log-server" }
+xous-names = { path = "../../services/xous-names" }
+gam = {path = "../../services/gam" }
+graphics-server = {path = "../../services/graphics-server" }
+locales = {path = "../../locales"}
+tts-frontend = {path="../../services/tts"}
+usb-device-xous = {path="../../services/usb-device-xous"}
+usbd-human-interface-device = {git="https://github.com/betrusted-io/usbd-human-interface-device.git", branch="main"}
+
+[features]
+tts = []
+default = []
