@@ -1,0 +1,73 @@
+riscv64-unknown-elf-objdump.exe -S -d status > status.txt
+search for xous_main symbol
+
+with ditherpunk:
+
+status: 538_560
+   26cba:	81010113          	addi	sp,sp,-2032
+   26cf2:	00083537          	lui	a0,0x83
+   26cf6:	7c050513          	addi	a0,a0,1984 # 837c0 <_ZN3std3sys4xous5alloc8DLMALLOC17h3f0b9cd2b99c55e6E+0x3a84>
+   26cfa:	40a10133          	sub	sp,sp,a0
+
+modals: 129_584
+   1fee0:	81010113          	addi	sp,sp,-2032
+   1ff18:	00020537          	lui	a0,0x20
+   1ff1c:	a3050513          	addi	a0,a0,-1488 # 1fa30 <.Lswitch.table._ZN6qrcode6canvas6Canvas10apply_mask17h8f3bbc08e08a96daE.1550+0x542c>
+   1ff20:	40a10133          	sub	sp,sp,a0
+
+gam: 398_096
+   245e8:	81010113          	addi	sp,sp,-2032
+   24620:	00061537          	lui	a0,0x61
+   24624:	31050513          	addi	a0,a0,784 # 61310 <_ZN3std3sys4xous5alloc8DLMALLOC17h3f0b9cd2b99c55e6E+0xf3d0>
+   24628:	40a10133          	sub	sp,sp,a0
+
+graphics-server: 429_552
+   4840a:	81010113          	addi	sp,sp,-2032
+   48442:	00069537          	lui	a0,0x69
+   48446:	df050513          	addi	a0,a0,-528 # 68df0 <_ZN3std3sys4xous5alloc8DLMALLOC17h3f0b9cd2b99c55e6E+0x4dc>
+   4844a:	40a10133          	sub	sp,sp,a0
+
+ticktimer:
+   1cd54:	8b010113          	addi	sp,sp,-1872
+   [no further stack alloc]
+
+
+without ditherpunk:
+
+status: 11_584
+   4f33c:	81010113          	addi	sp,sp,-2032
+   4f374:	650d                	lui	a0,0x3
+   4f376:	d4050513          	addi	a0,a0,-704 # 2d40 <.Lline_table_start0+0x2d40>
+   4f37a:	40a10133          	sub	sp,sp,a0
+
+modals: 31_200
+   1fa9a:	81010113          	addi	sp,sp,-2032
+   1fad2:	6521                	lui	a0,0x8
+   1fad4:	9e050513          	addi	a0,a0,-1568 # 79e0 <.Lline_table_start0+0x79e0>
+   1fad8:	40a10133          	sub	sp,sp,a0
+
+gam: 11_680
+   202bc:	81010113          	addi	sp,sp,-2032
+   202f4:	650d                	lui	a0,0x3
+   202f6:	da050513          	addi	a0,a0,-608 # 2da0 <.Lline_table_start0+0x2da0>
+   202fa:	40a10133          	sub	sp,sp,a0
+
+graphics-server: 52_624
+   481cc:	81010113          	addi	sp,sp,-2032
+   48204:	6535                	lui	a0,0xd
+   48206:	56050513          	addi	a0,a0,1376 # d560 <.Lline_table_start0+0xd560>
+   4820a:	40a10133          	sub	sp,sp,a0
+
+
+ticktimer:
+   1ccae:	8b010113          	addi	sp,sp,-1872
+   [no further stack alloc]
+
+with ditherpunk, but no fast_image_resize:
+modals:
+   1febe:	81010113          	addi	sp,sp,-2032
+   1fef6:	00020537          	lui	a0,0x20
+   1fefa:	a3050513          	addi	a0,a0,-1488 # 1fa30 <.Lswitch.table._ZN6qrcode6canvas6Canvas10apply_mask17h8f3bbc08e08a96daE.1556+0x542c>
+   1fefe:	40a10133          	sub	sp,sp,a0
+
+conclusion: fast_image_resize is not the offending crate.
