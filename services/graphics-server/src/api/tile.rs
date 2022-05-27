@@ -65,7 +65,7 @@ impl Tile {
     pub fn get_word(&self, point: Point) -> Word {
         self.words[self.word_index(point)]
     }
-    
+
     pub fn set_word(&mut self, point: Point, word: Word) {
         self.words[self.word_index(point)] = word;
     }

@@ -449,7 +449,7 @@ fn xmain() -> ! {
                         let mut image = gam::modal::Image::new(
                             renderer_cid,
                             Opcode::ImageReturn.to_u32().unwrap(),
-                        );                        
+                        );
                         image.set_bitmap(Some(Bitmap::from(config.tiles)));
                         renderer_modal.modify(
                             Some(ActionType::Image(image)),

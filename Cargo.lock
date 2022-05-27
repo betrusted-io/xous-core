@@ -1949,7 +1949,6 @@ name = "modals"
 version = "0.1.0"
 dependencies = [
  "bit_field 0.9.0",
- "dither",
  "fast_image_resize",
  "gam",
  "image",
