@@ -172,6 +172,7 @@ fn xmain() -> ! {
                         ClipObjectType::RoundRect(rr) => {
                             op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
                         }
+                        #[cfg(feature="ditherpunk")]
                         ClipObjectType::Tile(tile) => {
                             op::tile(display.native_buffer(), tile, Some(obj.clip));
                         }
@@ -199,6 +200,7 @@ fn xmain() -> ! {
                                 ClipObjectType::RoundRect(rr) => {
                                     op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
                                 }
+                                #[cfg(feature="ditherpunk")]
                                 ClipObjectType::Tile(tile) => {
                                     op::tile(display.native_buffer(), tile, Some(obj.clip));
                                 }
@@ -379,6 +381,7 @@ fn xmain() -> ! {
                     );
                     op::rounded_rectangle(display.native_buffer(), rr, screen_clip.into());
                 }),
+                #[cfg(feature="ditherpunk")]
                 Some(Opcode::Tile) => {
                     let buffer =
                         unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

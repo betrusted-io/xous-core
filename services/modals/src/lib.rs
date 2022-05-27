@@ -6,14 +6,18 @@ pub mod tests;
 
 use bit_field::BitField;
 use core::cell::Cell;
-use fast_image_resize as fir;
 use gam::*;
-use image::{imageops, RgbImage};
 use num_traits::*;
-use std::convert::TryInto;
-use std::num::NonZeroU32;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
+#[cfg(feature="ditherpunk")]
+use fast_image_resize as fir;
+#[cfg(feature="ditherpunk")]
+use image::{imageops, RgbImage};
+#[cfg(feature="ditherpunk")]
+use std::convert::TryInto;
+#[cfg(feature="ditherpunk")]
+use std::num::NonZeroU32;
 
 pub type TextValidationFn = fn(TextEntryPayload) -> Option<ValidatorErr>;
 
@@ -194,12 +198,12 @@ impl Modals {
         Ok(())
     }
 
-    const MODAL_WIDTH: u32 = 300;
-    const MODAL_HEIGHT: u32 = 370;
-
     /// this blocks until the image has been dismissed.
+    #[cfg(feature="ditherpunk")]
     pub fn show_image(&self, img: &RgbImage) -> Result<(), xous::Error> {
         self.lock();
+        const MODAL_WIDTH: u32 = 300;
+        const MODAL_HEIGHT: u32 = 370;
 
         // resize and/or rotate
         let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
@@ -251,6 +255,7 @@ impl Modals {
         Ok(())
     }
 
+    #[cfg(feature="ditherpunk")]
     fn resize_image(img: RgbImage, scale: f32) -> RgbImage {
         let width: u32 = (img.width() as f32 * scale).floor() as u32;
         let height: u32 = (img.height() as f32 * scale).floor() as u32;

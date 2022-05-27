@@ -1,4 +1,5 @@
 use gam::modal::*;
+#[cfg(feature="ditherpunk")]
 use gam::Tile;
 
 
@@ -44,8 +45,9 @@ pub struct ManagedNotification {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[cfg(feature="ditherpunk")]
 pub struct ManagedImage {
-    pub token: [u32; 4], 
+    pub token: [u32; 4],
     pub tiles: [Option<Tile>; 6],
 }
 
@@ -82,6 +84,7 @@ pub(crate) enum Opcode {
     /// simple notification
     Notification,
     /// display an image
+    #[cfg(feature="ditherpunk")]
     Image,
     /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically updated
     DynamicNotification,
@@ -124,6 +127,7 @@ pub(crate) enum Opcode {
     RadioReturn,
     CheckBoxReturn,
     NotificationReturn,
+    #[cfg(feature="ditherpunk")]
     ImageReturn,
 
     DoUpdateDynamicNotification,

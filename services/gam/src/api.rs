@@ -1,4 +1,6 @@
-use graphics_server::api::{Rectangle, TextView, Line, RoundedRectangle, Tile, Circle, Point, Gid};
+use graphics_server::api::{Rectangle, TextView, Line, RoundedRectangle, Circle, Point, Gid};
+#[cfg(feature="ditherpunk")]
+use graphics_server::api::Tile;
 use xous_ipc::String;
 
 pub(crate) const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
@@ -9,6 +11,7 @@ pub enum GamObjectType {
     Circ(Circle),
     Rect(Rectangle),
     RoundRect(RoundedRectangle),
+    #[cfg(feature="ditherpunk")]
     Tile(Tile),
 }
 

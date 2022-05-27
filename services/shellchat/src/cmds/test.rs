@@ -10,7 +10,6 @@ use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering, AtomicU32};
 use std::sync::Arc;
 use num_traits::*;
-use modals;
 
 use std::time::Instant;
 
@@ -609,6 +608,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "Ship mode request denied").unwrap();
                     }
                 }
+                #[cfg(feature="ditherpunk")]
                 "modals" => {
                     modals::tests::spawn_test();
                 }

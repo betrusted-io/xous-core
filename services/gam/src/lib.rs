@@ -10,12 +10,16 @@ pub mod menu;
 pub use menu::*;
 pub mod apps;
 pub use apps::*;
+#[cfg(feature="ditherpunk")]
 pub mod bitmap;
+#[cfg(feature="ditherpunk")]
 pub use bitmap::*;
 
 use graphics_server::api::{TextOp, TextView};
 use graphics_server::api::{Gid, Line, Circle, RoundedRectangle, TokenClaim};
-pub use graphics_server::api::{Point, Tile, Rectangle};
+pub use graphics_server::api::{Point, Rectangle};
+#[cfg(feature="ditherpunk")]
+pub use graphics_server::api::Tile;
 pub use graphics_server::api::GlyphStyle;
 pub use graphics_server::api::PixelColor;
 use api::Opcode; // if you prefer to map the api into your local namespace
@@ -191,11 +195,12 @@ impl Gam {
         let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
     }
+    #[cfg(feature="ditherpunk")]
     pub fn draw_bitmap(&self, gid: Gid, bm: &Bitmap) -> Result<(), xous::Error> {
-        let mut list = GamObjectList::new(gid);    
-        for (_i, tile) in bm.iter().enumerate(){ 
+        let mut list = GamObjectList::new(gid);
+        for (_i, tile) in bm.iter().enumerate(){
             list.push(GamObjectType::Tile(*tile)).unwrap();
-        };       
+        };
         let buf = Buffer::into_buf(list).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::RenderObjectList.to_u32().unwrap())
             .map(|_| ())

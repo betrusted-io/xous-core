@@ -8,14 +8,16 @@ mod checkboxes;
 pub use checkboxes::*;
 mod notification;
 pub use notification::*;
-mod image;
-pub use self::image::*;
 mod slider;
 pub use slider::*;
 mod progressbar;
 pub use progressbar::*;
 mod consoleinput;
 pub use consoleinput::*;
+#[cfg(feature="ditherpunk")]
+mod image;
+#[cfg(feature="ditherpunk")]
+pub use self::image::*;
 
 use enum_dispatch::enum_dispatch;
 
@@ -39,6 +41,7 @@ pub enum ActionType {
     CheckBoxes,
     Slider,
     Notification,
+    #[cfg(feature="ditherpunk")]
     Image,
     ConsoleInput
 }

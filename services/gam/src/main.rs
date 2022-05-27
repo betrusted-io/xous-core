@@ -337,6 +337,7 @@ fn xmain() -> ! {
                                     canvas.clip_rect(),
                                 ).expect("couldn't draw rounded rectangle");
                             }
+                            #[cfg(feature="ditherpunk")]
                             GamObjectType::Tile(mut tile) => {
                                 tile.translate(canvas.clip_rect().tl);
                                 tile.translate(canvas.pan_offset());
@@ -385,6 +386,7 @@ fn xmain() -> ! {
                                         rr.translate(canvas.pan_offset());
                                         obj_list.push(ClipObjectType::RoundRect(rr), canvas.clip_rect()).unwrap();
                                     },
+                                    #[cfg(feature="ditherpunk")]
                                     GamObjectType::Tile(mut tile) => {
                                         tile.translate(canvas.clip_rect().tl);
                                         tile.translate(canvas.pan_offset());

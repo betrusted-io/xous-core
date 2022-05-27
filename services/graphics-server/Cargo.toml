@@ -31,4 +31,5 @@ minifb = "0.23.0"
 debugprint = []
 braille = []
 testing = []
+ditherpunk = []
 default = []

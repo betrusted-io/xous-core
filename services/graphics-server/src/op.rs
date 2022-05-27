@@ -1,7 +1,6 @@
 use crate::api::{
-    Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, RoundedRectangle, Tile,
+    Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, RoundedRectangle,
 };
-use std::cmp::min;
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -590,7 +589,10 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
  *
  * author: nworbnhoj
  */
+#[cfg(feature="ditherpunk")]
 pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
+    use std::cmp::min;
+    use crate::api::Tile;
     // prepare the clip boundries: min (LCD, clip, tile)
     let bound = tile.bound();
     let tl_x = bound.tl.x as usize;

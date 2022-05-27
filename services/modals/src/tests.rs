@@ -2,7 +2,8 @@
 use gam::*;
 use std::thread;
 use xous_names::XousNames;
-use image::io::{Reader};
+#[cfg(feature="ditherpunk")]
+use image::io::Reader;
 use super::*;
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
@@ -136,23 +137,26 @@ pub fn spawn_test() {
             log::info!("qrcode test done");
 
             // 5. test image
-            log::info!("testing image");
-            let reader = match Reader::open("../services/modals/src/tests/bunny.png") {
-                Err(err) => {
-                    log::error!("cannot load image, {}", err);
-                    return
-                }
-                Ok(r) => r,
-            };
-            let img = match reader.decode() {
-                Err(e) => {
-                    log::error!("failed to decode image, {}", e);
-                    return
-                }
-                Ok(img) => img.into_rgb8(),
-            };
-            modals.show_image(&img).expect("image modal failed");
-            log::info!("image test done");
+            #[cfg(feature="ditherpunk")]
+            {
+                log::info!("testing image");
+                let reader = match Reader::open("../services/modals/src/tests/bunny.png") {
+                    Err(err) => {
+                        log::error!("cannot load image, {}", err);
+                        return
+                    }
+                    Ok(r) => r,
+                };
+                let img = match reader.decode() {
+                    Err(e) => {
+                        log::error!("failed to decode image, {}", e);
+                        return
+                    }
+                    Ok(img) => img.into_rgb8(),
+                };
+                modals.show_image(&img).expect("image modal failed");
+                log::info!("image test done");
+            }
         }
     });
 }

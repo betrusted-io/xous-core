@@ -4,8 +4,10 @@
 pub mod api;
 pub use api::{
     Circle, ClipObject, ClipObjectType, DrawStyle, Gid, Line, PixelColor, Point, Rectangle,
-    RoundedRectangle, Tile, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle, ClipObjectList
+    RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle, ClipObjectList
 };
+#[cfg(feature="ditherpunk")]
+pub use api::Tile;
 pub mod op;
 
 pub mod fontmap;
@@ -208,6 +210,7 @@ impl Gfx {
             .map(|_| ())
     }
 
+    #[cfg(feature="ditherpunk")]
     pub fn draw_tile_clipped(
         &self,
         tile: Tile,

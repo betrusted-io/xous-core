@@ -27,6 +27,7 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
+#[cfg(feature="ditherpunk")]
 use gam::Bitmap;
 
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
@@ -54,8 +55,9 @@ enum RendererState {
     RunText(ManagedPromptWithTextResponse),
     RunProgress(ManagedProgress),
     RunNotification(ManagedNotification),
-    RunImage(ManagedImage),
     RunDynamicNotification(DynamicNotification),
+    #[cfg(feature="ditherpunk")]
+    RunImage(ManagedImage),
 }
 
 #[xous::xous_main]
@@ -70,6 +72,7 @@ fn xmain() -> ! {
         .expect("can't register server");
     log::trace!("registered with NS -- {:?}", modals_sid);
 
+    #[cfg(feature = "tts")]
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     // we are our own renderer now that we implement deferred responses
@@ -237,6 +240,7 @@ fn xmain() -> ! {
                 )
                 .expect("couldn't initiate UX op");
             }
+            #[cfg(feature="ditherpunk")]
             Some(Opcode::Image) => {
                 let spec = {
                     let buffer =
@@ -440,6 +444,7 @@ fn xmain() -> ! {
                         );
                         renderer_modal.activate();
                     }
+                    #[cfg(feature="ditherpunk")]
                     RendererState::RunImage(config) => {
                         let mut image = gam::modal::Image::new(
                             renderer_cid,
@@ -672,6 +677,7 @@ fn xmain() -> ! {
                     }
                 }
             },
+            #[cfg(feature="ditherpunk")]
             Some(Opcode::ImageReturn) => {
                 match op {
                     RendererState::RunImage(_) => {
