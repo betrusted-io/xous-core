@@ -1,7 +1,6 @@
 use core::cmp::{max, min};
 use dither::prelude::{Dither, Img, RGB};
-use graphics_server::api::shapes;
-use graphics_server::api::{Point, Rectangle, Tile};
+use graphics_server::api::*;
 use graphics_server::PixelColor;
 use std::convert::TryInto;
 use std::ops::Deref;
@@ -62,17 +61,17 @@ impl Bitmap {
     fn tile_spec(bm_size: Point) -> (Point, i16) {
         let bm_width_bits = 1 + bm_size.x as usize;
         let mut tile_width_bits = bm_width_bits;
-        let tile_width_words = if bm_width_bits > shapes::BITS_PER_TILE {
+        let tile_width_words = if bm_width_bits > BITS_PER_TILE {
             log::warn!("Bitmap max width exceeded");
-            tile_width_bits = shapes::WORDS_PER_TILE * shapes::BITS_PER_WORD;
-            shapes::WORDS_PER_TILE
+            tile_width_bits = WORDS_PER_TILE * BITS_PER_WORD;
+            WORDS_PER_TILE
         } else {
-            match bm_width_bits % shapes::BITS_PER_WORD {
-                0 => bm_width_bits / shapes::BITS_PER_WORD,
-                _ => bm_width_bits / shapes::BITS_PER_WORD + 1,
+            match bm_width_bits % BITS_PER_WORD {
+                0 => bm_width_bits / BITS_PER_WORD,
+                _ => bm_width_bits / BITS_PER_WORD + 1,
             }
         };
-        let tile_height_bits = shapes::WORDS_PER_TILE / tile_width_words;
+        let tile_height_bits = WORDS_PER_TILE / tile_width_words;
         let tile_size = Point::new(tile_width_bits as i16, tile_height_bits as i16);
         (tile_size, tile_width_words as i16)
     }
@@ -134,12 +133,12 @@ impl Bitmap {
         &mut self.mosaic.as_mut_slice()[tile]
     }
 
-    pub fn get_line(&self, point: Point) -> Vec<shapes::Word> {
+    pub fn get_line(&self, point: Point) -> Vec<Word> {
         self.get_tile(point).get_line(point)
     }
 
     #[allow(dead_code)]
-    fn get_word(&self, point: Point) -> shapes::Word {
+    fn get_word(&self, point: Point) -> Word {
         self.get_tile(point).get_word(point)
     }
 

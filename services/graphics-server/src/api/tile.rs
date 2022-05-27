@@ -1,3 +1,5 @@
+use crate::api::*;
+use std::convert::TryInto;
 //////////////////////// Tile -------- author: nworbnhoj
 
 /*

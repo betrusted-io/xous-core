@@ -198,12 +198,14 @@ impl Modals {
         Ok(())
     }
 
+    #[cfg(feature="ditherpunk")]
+    const MODAL_WIDTH: u32 = 300;
+    #[cfg(feature="ditherpunk")]
+    const MODAL_HEIGHT: u32 = 370;
     /// this blocks until the image has been dismissed.
     #[cfg(feature="ditherpunk")]
     pub fn show_image(&self, img: &RgbImage) -> Result<(), xous::Error> {
         self.lock();
-        const MODAL_WIDTH: u32 = 300;
-        const MODAL_HEIGHT: u32 = 370;
 
         // resize and/or rotate
         let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);

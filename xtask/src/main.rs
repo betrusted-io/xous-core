@@ -457,7 +457,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &pkgs,
                 lkey,
                 kkey,
-                None,
+                Some(&[
+                    "--features", "ditherpunk",
+                    ]),
                 &[],
                 None,
             )?

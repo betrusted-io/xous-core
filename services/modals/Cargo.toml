@@ -33,5 +33,5 @@ utralib = { path = "../../utralib"}
 
 [features]
 tts = []
-ditherpunk = []
+ditherpunk = ["image", "dither", "fast_image_resize"]
 default = []

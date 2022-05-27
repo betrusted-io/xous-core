@@ -45,6 +45,6 @@ utralib = {path = "../../utralib"}
 [features]
 debugprint = []
 tts = []
-ditherpunk = []
+ditherpunk = ["dither", "image"]
 # default = ["debugprint"] # "debugprint"
 default = []

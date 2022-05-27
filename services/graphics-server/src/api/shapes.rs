@@ -1,10 +1,6 @@
 use crate::api::{ClipRect, DrawStyle, Point};
 use crate::op::{HEIGHT, WIDTH};
 use core::cmp::{max, min};
-#[cfg(feature="ditherpunk")]
-use crate::api::PixelColor;
-#[cfg(feature="ditherpunk")]
-use std::convert::TryInto;
 
 #[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Rectangle {

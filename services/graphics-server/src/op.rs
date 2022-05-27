@@ -590,9 +590,10 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
  * author: nworbnhoj
  */
 #[cfg(feature="ditherpunk")]
+use crate::api::Tile;
+#[cfg(feature="ditherpunk")]
 pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
     use std::cmp::min;
-    use crate::api::Tile;
     // prepare the clip boundries: min (LCD, clip, tile)
     let bound = tile.bound();
     let tl_x = bound.tl.x as usize;
