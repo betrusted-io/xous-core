@@ -39,7 +39,7 @@ fn xmain() -> ! {
         "_Keyboard backlight_",
         KbbOps::Keypress.to_u32().unwrap() as usize,
     );
-
+    
     // TODO: wire this to a real activation routine
     let enabled = Arc::new(RwLock::new(true));
     let (tx, rx): (Sender<ThreadOps>, Receiver<ThreadOps>) = unbounded();
