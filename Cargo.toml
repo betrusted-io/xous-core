@@ -94,6 +94,8 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
+  "test-spawn",
+  "spawn",
   "kernel",
   "loader",
 ]

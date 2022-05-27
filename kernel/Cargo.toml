@@ -35,8 +35,8 @@ gdbserver = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
-# default = ["print-panics", "debug-print", "wrap-print"]
-default = ["print-panics", "gdbserver"]
+default = ["print-panics", "debug-print", "wrap-print"]
+# default = ["print-panics", "gdbserver"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
 crossbeam-channel = "0.5"

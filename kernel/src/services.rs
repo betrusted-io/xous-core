@@ -5,8 +5,8 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
-use xous_kernel::MemoryRange;
 use xous_kernel::arch::ProcessStartup;
+use xous_kernel::MemoryRange;
 
 use core::num::NonZeroU8;
 
@@ -390,21 +390,42 @@ impl SystemServices {
 
     /// Add a new entry to the process table. This results in a new address space
     /// and a new PID, though the process is in the state `Setup()`.
-    pub fn create_process(&mut self, init_process: ProcessInit) -> Result<ProcessStartup, xous_kernel::Error> {
-        for (idx, mut entry) in self.processes.iter_mut().enumerate() {
+    pub fn create_process(
+        &mut self,
+        init_process: ProcessInit,
+    ) -> Result<ProcessStartup, xous_kernel::Error> {
+        let mut entry_idx = None;
+        let mut new_pid = None;
+        let ppid = crate::arch::process::current_pid();
+
+        for (idx, entry) in self.processes.iter_mut().enumerate() {
             if entry.state != ProcessState::Free {
                 continue;
             }
-            let new_pid = pid_from_usize(idx + 1)?;
-            let startup = arch::process::Process::create(new_pid, init_process);
-            let ppid = crate::arch::process::current_pid();
-            // println!("Creating new process for PID {} with PPID {}", new_pid, ppid);
+            entry_idx = Some(idx);
+            new_pid = Some(pid_from_usize(idx + 1)?);
+            entry.pid = new_pid.unwrap();
+            entry.ppid = PID::new(1).unwrap();
             entry.state = ProcessState::Allocated;
-            entry.ppid = ppid;
-            entry.pid = new_pid;
-            return Ok(startup);
+            unsafe {
+                entry
+                    .mapping
+                    .allocate(new_pid.unwrap())
+                    .or(Err(xous_kernel::Error::InternalError))?
+            };
+            break;
         }
-        Err(xous_kernel::Error::ProcessNotFound)
+        if entry_idx.is_none() {
+            return Err(xous_kernel::Error::ProcessNotFound);
+        }
+        let new_pid = new_pid.unwrap();
+        let startup = arch::process::Process::create(new_pid, init_process, self)?;
+        let mut entry = self.processes[entry_idx.unwrap()];
+        println!(
+            "Creating new process for PID {} with PPID {}",
+            new_pid, ppid
+        );
+        return Ok(startup);
     }
 
     pub fn get_process(&self, pid: PID) -> Result<&Process, xous_kernel::Error> {
@@ -2212,7 +2233,7 @@ impl SystemServices {
         let process = self.get_process_mut(pid).ok()?;
         let handler = process.exception_handler?;
         process.state = match process.state {
-            ProcessState::Running(x) => ProcessState::Exception(x | 1<<process.current_thread),
+            ProcessState::Running(x) => ProcessState::Exception(x | 1 << process.current_thread),
             ProcessState::Ready(x) => ProcessState::Exception(x),
             _ => return None,
         };

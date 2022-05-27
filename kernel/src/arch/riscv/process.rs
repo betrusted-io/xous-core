@@ -7,9 +7,10 @@ pub const MAX_THREAD: TID = 31;
 pub const EXCEPTION_TID: TID = 1;
 pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
+
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous_kernel::{ProcessInit, ThreadInit, PID, TID, ProcessStartup};
+use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID};
 
 // use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 131072;
@@ -306,6 +307,7 @@ impl Process {
             INITIAL_TID
         );
 
+        klog!("Setting up new process {}", pid.get());
         unsafe {
             let pid_idx = (pid.get() as usize) - 1;
             assert!(
@@ -335,6 +337,8 @@ impl Process {
         thread.registers[10] = thread_init.arg2;
         thread.registers[11] = thread_init.arg3;
         thread.registers[12] = thread_init.arg4;
+
+        klog!("thread_init: {:x?}  thread: {:x?}", thread_init, thread);
 
         #[cfg(any(feature = "debug-print", feature = "print-panics"))]
         {
@@ -497,8 +501,40 @@ impl Process {
         );
     }
 
-    pub fn create(_pid: PID, _init_data: ProcessInit) -> ProcessStartup {
-        todo!();
+    /// Create a brand-new process. The memory space must already be set up.
+    pub fn create(
+        pid: PID,
+        init_data: ProcessInit,
+        services: &mut crate::SystemServices,
+    ) -> Result<ProcessStartup, xous_kernel::Error> {
+        let current_pid = current_pid();
+        let (server_id, cid) = services.create_server(pid)?;
+        services.disconnect_from_server(cid).ok();
+        let cid = services.connect_process_to_server(current_pid, server_id)?;
+        let server_id_array = server_id.to_array();
+
+        klog!("Previous process init was {:x?}", init_data);
+        let initial_thread = ThreadInit::new(
+            init_data.start.get(),
+            init_data.stack,
+            server_id_array[0] as _,
+            server_id_array[1] as _,
+            server_id_array[2] as _,
+            server_id_array[3] as _,
+        );
+        
+        services.get_process(pid)?.mapping.activate()?;
+        Self::setup_process(pid, initial_thread).unwrap();
+        klog!("Activating existing process {}", current_pid.get());
+        services.get_process(current_pid)?.mapping.activate()?;
+
+        services.send_memory(
+            init_data.text.as_ptr() as *mut usize,
+            pid,
+            init_data.text_destination.get() as *mut usize,
+            init_data.text.len(),
+        )?;
+        Ok(ProcessStartup::new(pid, cid))
     }
 
     pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {
