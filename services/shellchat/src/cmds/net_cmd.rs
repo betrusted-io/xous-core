@@ -284,7 +284,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 "tls" => {
-
+                    write!(ret, "Work in progress. Please check back later!").unwrap();
                 }
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {
