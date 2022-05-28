@@ -243,6 +243,9 @@ impl PddbOs {
         self.fspace_log_next_addr = None;
         self.pddb_mr.reset();
     }
+    pub(crate) fn is_efuse_secured(&self) -> bool {
+        self.rootkeys.is_efuse_secured().expect("couldn't query efuse security state") == Some(true)
+    }
 
     pub(crate) fn nonce_gen(&self) -> Nonce {
         let nonce_array = self.entropy.borrow_mut().get_nonce();

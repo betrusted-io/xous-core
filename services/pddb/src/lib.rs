@@ -599,6 +599,21 @@ impl Pddb {
         }
         Ok(dict_list)
     }
+    /// Public function to query efuse security state. Replicated here to avoid exposing RootKeys full API to the world.
+    pub fn is_efuse_secured(&self) -> bool {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsEfuseSecured.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't make call to query efuse security state");
+        if let xous::Result::Scalar1(result) = response {
+            if result == 1 {
+                true
+            } else {
+                false
+            }
+        } else {
+            panic!("Internal error: wrong return code for is_efuse_secured()");
+        }
+    }
     /// Triggers a dump of the PDDB to host disk
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {
