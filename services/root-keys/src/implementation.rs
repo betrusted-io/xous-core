@@ -24,7 +24,6 @@ use digest::Digest;
 use graphics_server::BulkRead;
 use core::mem::size_of;
 use core::cell::RefCell;
-use rand_core::RngCore;
 
 use aes::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
