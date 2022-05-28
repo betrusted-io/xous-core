@@ -90,6 +90,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08f9b8508dccb7687a1d6c4ce66b2b0ecef467c94667de27d8d7fe1f8d2a9cdc"
 
 [[package]]
+name = "arrayref"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4c527152e37cf757a3f78aae5a06fbeefdb07ccc535c980a3208ee3060dd544"
+
+[[package]]
 name = "atomic-polyfill"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -378,6 +384,10 @@ dependencies = [
  "xous-ipc 0.9.7",
  "xous-names",
 ]
+
+[[package]]
+name = "cbor"
+version = "0.1.0"
 
 [[package]]
 name = "cc"
@@ -710,6 +720,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b2466559f260f48ad25fe6317b3c8dac77b5bdb5763ac7d9d6103530663bc90"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "ctap-crypto"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "cbor",
+ "rand_core 0.5.1",
+ "subtle",
+ "trng",
+ "xous-names",
 ]
 
 [[package]]
@@ -3513,7 +3535,7 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "usb-device",
- "usbd-human-interface-device",
+ "usbd-human-interface-device 0.1.1 (git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main)",
  "utralib",
  "vcell",
  "xous",
@@ -3537,7 +3559,7 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "usb-device",
- "usbd-human-interface-device",
+ "usbd-human-interface-device 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "utralib",
  "vcell",
  "xous",
@@ -3563,10 +3585,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "usbd-human-interface-device"
+version = "0.1.1"
+source = "git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main#744ab68464daf2f419b0149bc95ce41b01c7623d"
+dependencies = [
+ "delegate",
+ "embedded-time",
+ "frunk",
+ "hash32",
+ "hash32-derive",
+ "heapless",
+ "log",
+ "num_enum",
+ "packed_struct",
+ "usb-device",
+]
+
+[[package]]
 name = "utralib"
 version = "0.1.0"
 dependencies = [
  "svd2utra",
+]
+
+[[package]]
+name = "vault"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "byteorder",
+ "cbor",
+ "content-plugin-api",
+ "ctap-crypto",
+ "gam",
+ "graphics-server",
+ "ime-plugin-api",
+ "ime-plugin-shell",
+ "locales",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "pddb",
+ "subtle",
+ "tts-frontend",
+ "usb-device-xous",
+ "usbd-human-interface-device 0.1.1 (git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main)",
+ "xous",
+ "xous-ipc 0.9.7",
+ "xous-names",
 ]
 
 [[package]]
