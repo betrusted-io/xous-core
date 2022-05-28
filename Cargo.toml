@@ -69,6 +69,7 @@ members = [
   "svd2utra",
   "xtask",
   "imports/com_rs-ref",
+  "imports/getrandom",
   "services/ime-plugin-api",
   "services/content-plugin-api",
   "services/llio",
@@ -149,5 +150,8 @@ branch="main"
 #path = "../usb-device"
 
 # for local dev
-[patch.crates-io.usbd-human-interface-device]
-path = "../usbd-human-interface-device"
+#[patch.crates-io.usbd-human-interface-device]
+#path = "../usbd-human-interface-device"
+
+[patch.crates-io.getrandom]
+path = "imports/getrandom"
