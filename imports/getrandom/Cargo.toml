@@ -1,0 +1,17 @@
+[package]
+name = "getrandom"
+version = "0.2.6" # Also update html_root_url in lib.rs when bumping this
+edition = "2018"
+authors = ["The Rand Project Developers"]
+license = "MIT OR Apache-2.0"
+description = "A small cross-platform library for retrieving random data from system source"
+documentation = "https://docs.rs/getrandom"
+repository = "https://github.com/rust-random/getrandom"
+categories = ["os", "no-std"]
+exclude = [".*"]
+
+[dependencies]
+xous-names = {path = "../../../services/xous-names"}
+xous-rs = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
