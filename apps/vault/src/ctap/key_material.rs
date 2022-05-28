@@ -15,5 +15,11 @@
 pub const ATTESTATION_PRIVATE_KEY_LENGTH: usize = 32;
 pub const AAGUID_LENGTH: usize = 16;
 
+// NOTE: we don't support AAGUID -- this would require authenticator
+// certification, and, we're not going to do that. This just returns
+// a bogus value.
 pub const AAGUID: &[u8; AAGUID_LENGTH] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/opensk_aaguid.bin"));
+    [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31
+    ];

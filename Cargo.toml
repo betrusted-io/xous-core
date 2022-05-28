@@ -69,6 +69,7 @@ members = [
   "svd2utra",
   "xtask",
   "imports/com_rs-ref",
+  "imports/getrandom",
   "services/ime-plugin-api",
   "services/content-plugin-api",
   "services/llio",

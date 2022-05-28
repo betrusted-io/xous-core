@@ -149,7 +149,7 @@ fn error_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     }
     xous::destroy_server(sid).unwrap();
 }
-
+/*
 use rand_core::{impls, CryptoRng, RngCore};
 impl CryptoRng for Trng {}
 impl RngCore for Trng {
@@ -222,3 +222,4 @@ impl RngCore for Trng {
         Ok(self.fill_bytes(dest))
     }
 }
+*/

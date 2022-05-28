@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_TRNG: &str = "_TRNG manager_";
+pub(crate) const SERVER_NAME_TRNG: &str = "_TRNG manager_"; // depended upon by getrandom, do not change
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
 pub struct ExcursionTest {
@@ -42,6 +42,7 @@ pub struct TrngErrors {
 /// zero-ing of pages, thrashing the cache and also pegging the CPU for useless work.
 /// Consider revising the data field down to 1023 words in length, but need to revisit the
 /// library implemnetations to make sure this doesn't break any existing code.
+/// Note that this structure had to be mirrored into the local "getrandom" implementation
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TrngBuf {
     pub data: [u32; 1024],

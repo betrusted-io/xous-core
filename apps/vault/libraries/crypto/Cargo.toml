@@ -16,3 +16,4 @@ subtle = { version = "2.2.3", default-features = false}
 trng = {path = "../../../../services/trng"}
 xous-names = {path = "../../../../services/xous-names"}
 rand_core = "0.5.1"
+p256 = {version = "0.11.0", default-features = false, features = ["ecdsa", "ecdh", "std"]}

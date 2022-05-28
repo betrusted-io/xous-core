@@ -25,7 +25,7 @@ rand_core = "0.5.1"
 root-keys = {path="../root-keys"}
 cipher = "0.3.0"
 bitfield = "0.13.2"
-aes-gcm-siv = "0.10.3"
+aes-gcm-siv = "0.11.0-pre" # necessary to break zeroize dependency deadlock on ecdsa crate
 llio = {path="../llio"}
 subtle = {version = "2.4.1", default-features = false}
 tts-frontend = {path="../tts"}
