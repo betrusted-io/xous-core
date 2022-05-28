@@ -532,6 +532,13 @@ fn xmain() -> ! {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
             }),
+            Some(Opcode::IsEfuseSecured) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if pddb_os.is_efuse_secured() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
             Some(Opcode::IsMounted) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
