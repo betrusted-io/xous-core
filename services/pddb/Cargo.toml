@@ -21,7 +21,6 @@ rkyv = {version = "0.4.3", features = ["const_generics"], default-features = fal
 trng = {path = "../trng"}
 spinor = {path = "../spinor"}
 aes = {path="../aes"}
-rand_core = "0.5.1"
 root-keys = {path="../root-keys"}
 cipher = "0.3.0"
 bitfield = "0.13.2"

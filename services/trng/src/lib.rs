@@ -117,52 +117,18 @@ impl Trng {
             .or(Err(xous::Error::InternalError))?;
         Ok(buf.to_original().unwrap())
     }
-}
 
-use core::sync::atomic::{AtomicU32, Ordering};
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-impl Drop for Trng {
-    fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
-            unsafe {
-                xous::disconnect(self.conn).unwrap();
-            }
-        }
-    }
-}
-
-fn error_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::EventCallback::Event) => xous::msg_scalar_unpack!(msg, cid, id, _, _, {
-                // directly pass the scalar message onto the CID with the ID memorized in the original hook
-                send_message(cid as u32, xous::Message::new_scalar(id, 0, 0, 0, 0)).unwrap();
-            }),
-            Some(api::EventCallback::Drop) => {
-                break; // this exits the loop and kills the thread
-            }
-            None => (),
-        }
-    }
-    xous::destroy_server(sid).unwrap();
-}
-/*
-use rand_core::{impls, CryptoRng, RngCore};
-impl CryptoRng for Trng {}
-impl RngCore for Trng {
-    fn next_u32(&mut self) -> u32 {
+    // legacy (0.5) trng apis
+    pub fn next_u32(&mut self) -> u32 {
         self.get_u32().expect("couldn't get random u32 from server")
     }
-    fn next_u64(&mut self) -> u64 {
+    pub fn next_u64(&mut self) -> u64 {
         self.get_u64().expect("couldn't get random u64 from server")
     }
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    pub fn fill_bytes(&mut self, dest: &mut [u8]) {
         // smaller than 64 bytes (512 bits), just use 8x next_u64 calls to fill.
         if dest.len() < 64 {
-            return impls::fill_bytes_via_next(self, dest);
+            return self.fill_bytes_via_next(dest);
         }
         // one page is the max size we can do with the fill_buf() API
         let chunks_page = dest.chunks_exact_mut(4096);
@@ -216,10 +182,62 @@ impl RngCore for Trng {
             .into_remainder()
             .chunks_exact_mut(64)
             .into_remainder();
-        impls::fill_bytes_via_next(self, leftovers);
+        self.fill_bytes_via_next(leftovers);
     }
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        Ok(self.fill_bytes(dest))
+    /// This is copied out of the 0.5 API for rand_core
+    fn fill_bytes_via_next(&mut self, dest: &mut [u8]) {
+        use core::mem::transmute;
+        let mut left = dest;
+        while left.len() >= 8 {
+            let (l, r) = {left}.split_at_mut(8);
+            left = r;
+            let chunk: [u8; 8] = unsafe {
+                transmute(self.next_u64().to_le())
+            };
+            l.copy_from_slice(&chunk);
+        }
+        let n = left.len();
+        if n > 4 {
+            let chunk: [u8; 8] = unsafe {
+                transmute(self.next_u64().to_le())
+            };
+            left.copy_from_slice(&chunk[..n]);
+        } else if n > 0 {
+            let chunk: [u8; 4] = unsafe {
+                transmute(self.next_u32().to_le())
+            };
+            left.copy_from_slice(&chunk[..n]);
+        }
     }
 }
-*/
+
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+impl Drop for Trng {
+    fn drop(&mut self) {
+        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
+            unsafe {
+                xous::disconnect(self.conn).unwrap();
+            }
+        }
+    }
+}
+
+fn error_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(api::EventCallback::Event) => xous::msg_scalar_unpack!(msg, cid, id, _, _, {
+                // directly pass the scalar message onto the CID with the ID memorized in the original hook
+                send_message(cid as u32, xous::Message::new_scalar(id, 0, 0, 0, 0)).unwrap();
+            }),
+            Some(api::EventCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
+        }
+    }
+    xous::destroy_server(sid).unwrap();
+}

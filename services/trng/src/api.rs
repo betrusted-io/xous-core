@@ -49,30 +49,33 @@ pub struct TrngBuf {
     pub len: u16,
 }
 
+/// These opcode numbers are partially baked into the `getrandom` library --
+/// which kind of acts as a `std`-lib-ish style interface for the trng, so,
+/// by design it can't have a dependency on this crate :-/
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Get one or two 32-bit words of TRNG data
-    GetTrng,
+    GetTrng = 0,
 
     /// Fill a buffer with random data
-    FillTrng,
+    FillTrng = 1,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 2,
 
     /// Notification of an error from the interrupt handler
-    ErrorNotification,
+    ErrorNotification = 3,
 
     /// Subscribe to error notifications
-    ErrorSubscribe,
+    ErrorSubscribe = 4,
 
     /// Get TRNG health stats
-    HealthStats,
+    HealthStats = 5,
 
     /// Get Error stats
-    ErrorStats,
+    ErrorStats = 6,
 
-    Quit,
+    Quit = 7,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

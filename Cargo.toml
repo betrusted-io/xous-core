@@ -152,3 +152,6 @@ branch="main"
 # for local dev
 [patch.crates-io.usbd-human-interface-device]
 path = "../usbd-human-interface-device"
+
+[patch.crates-io.getrandom]
+path = "imports/getrandom"
