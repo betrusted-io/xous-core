@@ -3,10 +3,48 @@
 
 mod repl;
 use repl::*;
-mod cmds;
-use cmds::*;
 use num_traits::*;
 use xous_ipc::Buffer;
+use usbd_human_interface_device::device::fido::*;
+use std::thread;
+
+/*
+UI concept:
+
+  |-----------------|
+  |                 |
+  | List view       |
+  | area            |
+  |                 |
+  |                 |
+  |                 |
+  |                 |
+  |                 |
+  |-----------------|
+  | List filter     |
+  |-----------------|
+  |F1 | F2 | F3 | F4|
+  |-----------------|
+
+  F1-F4: switch between functions using F-keys. Functions are:
+    - FIDO2   (U2F authenicators)
+    - TOTP    (time based authenticators)
+    - Vault   (passwords)
+    - Prefs   (preferences)
+  Tap once to switch to the sub-function.
+  Once on the sub-function, tap the corresponding F-key again to raise
+  the menu for that sub-function.
+
+  List filter:
+    - Any regular keys hit here appear in the search input. It automatically
+      filters the content in the list view area to the set of strings that match
+      the search input
+
+  Up/down arrow: picks a list view item
+  Left/right arrow: moves up or down the list view in pages
+  Enter: picks the selected list view
+  Select: *alaways* raises system 'main menu'
+ */
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum VaultOp {
@@ -21,7 +59,7 @@ pub(crate) enum VaultOp {
 }
 
 // This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
-pub(crate) const SERVER_NAME_VAULT: &str = "Authentication Vault";
+pub(crate) const SERVER_NAME_VAULT: &str = "Key Vault";
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -30,9 +68,24 @@ fn xmain() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    // unlimited connections allowed, this is a user app and it's up to the app to decide its policy
-    let sid = xns.register_name(SERVER_NAME_VAULT, None).expect("can't register server");
-    // log::trace!("registered with NS -- {:?}", sid);
+    // let's try keeping this completely private as a server. can we do that?
+    let sid = xous::create_server().unwrap();
+
+    let _ = thread::spawn({
+        move || {
+            let usb = usb_device_xous::UsbHid::new();
+            loop {
+                match usb.u2f_wait_incoming() {
+                    Ok(msg) => {
+                        log::info!("FIDO listener got message: {:?}", msg);
+                    }
+                    Err(e) => {
+                        log::warn!("FIDO listener got an error: {:?}", e);
+                    }
+                }
+            }
+        }
+    });
 
     let mut repl = Repl::new(&xns, sid);
     let mut update_repl = true;
@@ -78,7 +131,7 @@ fn xmain() -> ! {
             }
         }
         if update_repl {
-            repl.update(was_callback).expect("Vault had problems updating");
+            repl.update(was_callback);
             update_repl = false;
         }
         log::trace!("reached bottom of main loop");

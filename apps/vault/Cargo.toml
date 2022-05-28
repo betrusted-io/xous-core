@@ -18,6 +18,10 @@ tts-frontend = {path="../../services/tts"}
 usb-device-xous = {path="../../services/usb-device-xous"}
 usbd-human-interface-device = {git="https://github.com/betrusted-io/usbd-human-interface-device.git", branch="main"}
 
+ime-plugin-api = {path = "../../services/ime-plugin-api"}
+ime-plugin-shell = {path = "../../services/ime-plugin-shell"}
+content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
+
 [features]
 tts = []
 default = []

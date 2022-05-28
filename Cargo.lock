@@ -3592,8 +3592,11 @@ dependencies = [
 name = "vault"
 version = "0.1.0"
 dependencies = [
+ "content-plugin-api",
  "gam",
  "graphics-server",
+ "ime-plugin-api",
+ "ime-plugin-shell",
  "locales",
  "log",
  "log-server",
