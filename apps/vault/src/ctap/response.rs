@@ -18,9 +18,9 @@ use super::data_formats::{
     CoseKey, CredentialProtectionPolicy, PackedAttestationStatement, PublicKeyCredentialDescriptor,
     PublicKeyCredentialUserEntity,
 };
-use alloc::collections::BTreeMap;
-use alloc::string::String;
-use alloc::vec::Vec;
+use std::collections::BTreeMap;
+use std::string::String;
+use std::vec::Vec;
 use cbor::{cbor_array_vec, cbor_bool, cbor_map_btree, cbor_map_options, cbor_text};
 
 #[cfg_attr(test, derive(PartialEq))]

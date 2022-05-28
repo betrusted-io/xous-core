@@ -12,48 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-#![feature(wrapping_int_impl)]
-
-extern crate alloc;
-
-pub mod aes256;
-pub mod cbc;
-mod ec;
-pub mod ecdh;
-pub mod ecdsa;
-pub mod hmac;
 pub mod rng256;
-pub mod sha256;
-pub mod util;
-
-// Trait for hash functions that returns a 256-bit hash.
-// The type must be Sized (size known at compile time) so that we can instanciate one on the stack
-// in the hash() method.
-pub trait Hash256: Sized {
-    fn new() -> Self;
-    fn update(&mut self, contents: &[u8]);
-    fn finalize(self) -> [u8; 32];
-
-    fn hash(contents: &[u8]) -> [u8; 32] {
-        let mut h = Self::new();
-        h.update(contents);
-        h.finalize()
-    }
-}
-
-// Traits for block ciphers that operate on 16-byte blocks.
-pub trait Encrypt16BytesBlock {
-    fn encrypt_block(&self, block: &mut [u8; 16]);
-}
-
-pub trait Decrypt16BytesBlock {
-    fn decrypt_block(&self, block: &mut [u8; 16]);
-}
-
-// Trait for hash functions that operate on 64-byte input blocks.
-pub trait HashBlockSize64Bytes {
-    type State;
-
-    fn hash_block(state: &mut Self::State, block: &[u8; 64]);
-}

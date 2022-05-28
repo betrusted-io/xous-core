@@ -14,7 +14,7 @@
 
 /// A minimalist parser for ASN.1 encoded ECDSA signatures in DER form.
 use arrayref::mut_array_refs;
-use crypto::ecdsa;
+use ctap_crypto::ecdsa;
 use std::convert::TryFrom;
 use std::io::Read;
 

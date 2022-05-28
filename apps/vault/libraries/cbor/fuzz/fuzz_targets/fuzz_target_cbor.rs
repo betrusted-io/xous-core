@@ -1,7 +1,5 @@
 #![no_main]
-extern crate alloc;
-
-use alloc::vec::Vec;
+use std::vec::Vec;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

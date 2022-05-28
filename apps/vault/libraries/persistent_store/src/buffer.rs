@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::{Storage, StorageError, StorageIndex, StorageResult};
-use alloc::borrow::Borrow;
-use alloc::boxed::Box;
-use alloc::vec;
+use std::borrow::Borrow;
+use std::boxed::Box;
+use std::vec;
 
 /// Simulates a flash storage using a buffer in memory.
 ///

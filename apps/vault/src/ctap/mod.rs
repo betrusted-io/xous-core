@@ -51,24 +51,24 @@ use self::storage::PersistentStore;
 use self::timed_permission::TimedPermission;
 #[cfg(feature = "with_ctap1")]
 use self::timed_permission::U2fUserPresenceState;
-use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
-use alloc::vec;
-use alloc::vec::Vec;
+use std::collections::BTreeMap;
+use std::string::{String, ToString};
+use std::vec;
+use std::vec::Vec;
 use arrayref::array_ref;
 use byteorder::{BigEndian, ByteOrder};
 use cbor::{cbor_map, cbor_map_options};
 #[cfg(feature = "debug_ctap")]
 use core::fmt::Write;
-use crypto::cbc::{cbc_decrypt, cbc_encrypt};
-use crypto::hmac::{hmac_256, verify_hmac_256};
-use crypto::rng256::Rng256;
-use crypto::sha256::Sha256;
-use crypto::Hash256;
+use ctap_crypto::cbc::{cbc_decrypt, cbc_encrypt};
+use ctap_crypto::hmac::{hmac_256, verify_hmac_256};
+use ctap_crypto::rng256::Rng256;
+use ctap_crypto::sha256::Sha256;
+use ctap_crypto::Hash256;
 #[cfg(feature = "debug_ctap")]
 use libtock_drivers::console::Console;
 use libtock_drivers::crp;
-use libtock_drivers::timer::{ClockValue, Duration};
+use crate::shims::{ClockValue, Duration};
 
 // This flag enables or disables basic attestation for FIDO2. U2F is unaffected by
 // this setting. The basic attestation uses the signing key from key_material.rs
@@ -229,11 +229,11 @@ where
     // compatible with U2F.
     pub fn encrypt_key_handle(
         &mut self,
-        private_key: crypto::ecdsa::SecKey,
+        private_key: ctap_crypto::ecdsa::SecKey,
         application: &[u8; 32],
     ) -> Result<Vec<u8>, Ctap2StatusCode> {
         let master_keys = self.persistent_store.master_keys()?;
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(&master_keys.encryption);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&master_keys.encryption);
         let mut sk_bytes = [0; 32];
         private_key.to_bytes(&mut sk_bytes);
         let mut iv = [0; 16];
@@ -276,8 +276,8 @@ where
         ) {
             return Ok(None);
         }
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(&master_keys.encryption);
-        let aes_dec_key = crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&master_keys.encryption);
+        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
         let mut iv = [0; 16];
         iv.copy_from_slice(&credential_id[..16]);
         let mut blocks = [[0u8; 16]; 4];
@@ -296,7 +296,7 @@ where
             return Ok(None);
         }
 
-        let sk_option = crypto::ecdsa::SecKey::from_bytes(&decrypted_sk);
+        let sk_option = ctap_crypto::ecdsa::SecKey::from_bytes(&decrypted_sk);
         Ok(sk_option.map(|sk| PublicKeyCredentialSource {
             key_type: PublicKeyCredentialType::PublicKey,
             credential_id,
@@ -507,7 +507,7 @@ where
 
         (self.check_user_presence)(cid)?;
 
-        let sk = crypto::ecdsa::SecKey::gensk(self.rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(self.rng);
         let pk = sk.genpk();
 
         let credential_id = if options.rk {
@@ -571,18 +571,18 @@ where
                 .attestation_private_key()?
                 .ok_or(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)?;
             let attestation_key =
-                crypto::ecdsa::SecKey::from_bytes(&attestation_private_key).unwrap();
+                ctap_crypto::ecdsa::SecKey::from_bytes(&attestation_private_key).unwrap();
             let attestation_certificate = self
                 .persistent_store
                 .attestation_certificate()?
                 .ok_or(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)?;
             (
-                attestation_key.sign_rfc6979::<crypto::sha256::Sha256>(&signature_data),
+                attestation_key.sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data),
                 Some(vec![attestation_certificate]),
             )
         } else {
             (
-                sk.sign_rfc6979::<crypto::sha256::Sha256>(&signature_data),
+                sk.sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data),
                 None,
             )
         };
@@ -605,7 +605,7 @@ where
     // The computation is deterministic, and private_key expected to be unique.
     fn generate_cred_random(
         &mut self,
-        private_key: &crypto::ecdsa::SecKey,
+        private_key: &ctap_crypto::ecdsa::SecKey,
         has_uv: bool,
     ) -> Result<[u8; 32], Ctap2StatusCode> {
         let mut private_key_bytes = [0u8; 32];
@@ -647,7 +647,7 @@ where
         signature_data.extend(client_data_hash);
         let signature = credential
             .private_key
-            .sign_rfc6979::<crypto::sha256::Sha256>(&signature_data);
+            .sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data);
 
         let cred_desc = PublicKeyCredentialDescriptor {
             key_type: PublicKeyCredentialType::PublicKey,
@@ -983,8 +983,14 @@ where
             #[cfg(not(feature = "with_ctap1"))]
             let need_certificate = USE_BATCH_ATTESTATION;
 
+            let pddb = pddb::Pddb::new();
+            // Note that in the OpenSK implementation, this command both causes the
+            // token to enter a locked down state, and confirms it has entered that state.
+            // Here, we only query if the user has put the device into a locked down state.
+            // Perhaps in the future, this should pop up a modal dialog box requesting the
+            // user to approve a full device lockdown.
             if (need_certificate && !(response.pkey_programmed && response.cert_programmed))
-                || crp::set_protection(crp::ProtectionLevel::FullyLocked).is_err()
+                || pddb.is_efuse_secured()
             {
                 return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
             }
@@ -1021,7 +1027,7 @@ mod test {
     };
     use super::*;
     use cbor::cbor_array;
-    use crypto::rng256::ThreadRng256;
+    use ctap_crypto::rng256::ThreadRng256;
 
     const CLOCK_FREQUENCY_HZ: usize = 32768;
     const DUMMY_CLOCK_VALUE: ClockValue = ClockValue::new(0, CLOCK_FREQUENCY_HZ);
@@ -1236,7 +1242,7 @@ mod test {
     #[test]
     fn test_process_make_credential_credential_excluded() {
         let mut rng = ThreadRng256 {};
-        let excluded_private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let excluded_private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let user_immediately_present = |_| Ok(());
         let mut ctap_state = CtapState::new(&mut rng, user_immediately_present, DUMMY_CLOCK_VALUE);
 
@@ -1532,7 +1538,7 @@ mod test {
     #[test]
     fn test_process_get_assertion_hmac_secret() {
         let mut rng = ThreadRng256 {};
-        let sk = crypto::ecdh::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdh::SecKey::gensk(&mut rng);
         let user_immediately_present = |_| Ok(());
         let mut ctap_state = CtapState::new(&mut rng, user_immediately_present, DUMMY_CLOCK_VALUE);
 
@@ -1599,7 +1605,7 @@ mod test {
     #[test]
     fn test_residential_process_get_assertion_hmac_secret() {
         let mut rng = ThreadRng256 {};
-        let sk = crypto::ecdh::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdh::SecKey::gensk(&mut rng);
         let user_immediately_present = |_| Ok(());
         let mut ctap_state = CtapState::new(&mut rng, user_immediately_present, DUMMY_CLOCK_VALUE);
 
@@ -1650,7 +1656,7 @@ mod test {
     #[test]
     fn test_residential_process_get_assertion_with_cred_protect() {
         let mut rng = ThreadRng256 {};
-        let private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let credential_id = rng.gen_uniform_u8x32().to_vec();
         let user_immediately_present = |_| Ok(());
         let mut ctap_state = CtapState::new(&mut rng, user_immediately_present, DUMMY_CLOCK_VALUE);
@@ -1767,7 +1773,7 @@ mod test {
     #[test]
     fn test_process_get_next_assertion_two_credentials_with_uv() {
         let mut rng = ThreadRng256 {};
-        let key_agreement_key = crypto::ecdh::SecKey::gensk(&mut rng);
+        let key_agreement_key = ctap_crypto::ecdh::SecKey::gensk(&mut rng);
         let pin_uv_auth_token = [0x88; 32];
         let pin_protocol_v1 = PinProtocolV1::new_test(key_agreement_key, pin_uv_auth_token);
 
@@ -1992,7 +1998,7 @@ mod test {
     fn test_process_reset() {
         let mut rng = ThreadRng256 {};
         let user_immediately_present = |_| Ok(());
-        let private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, user_immediately_present, DUMMY_CLOCK_VALUE);
 
         let credential_id = vec![0x01, 0x23, 0x45, 0x67];
@@ -2066,7 +2072,7 @@ mod test {
     fn test_encrypt_decrypt_credential() {
         let mut rng = ThreadRng256 {};
         let user_immediately_present = |_| Ok(());
-        let private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, user_immediately_present, DUMMY_CLOCK_VALUE);
 
         // Usually, the relying party ID or its hash is provided by the client.
@@ -2087,7 +2093,7 @@ mod test {
     fn test_encrypt_decrypt_bad_hmac() {
         let mut rng = ThreadRng256 {};
         let user_immediately_present = |_| Ok(());
-        let private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, user_immediately_present, DUMMY_CLOCK_VALUE);
 
         // Same as above.

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use arrayref::array_ref;
-use libtock_drivers::rng;
+use rand_core::RngCore;
 
 // Lightweight RNG trait to generate uniformly distributed 256 bits.
 pub trait Rng256 {
@@ -37,30 +37,20 @@ fn bytes_to_u32(bytes: [u8; 32]) -> [u32; 8] {
     result
 }
 
-// RNG backed by the TockOS rng driver.
-pub struct TockRng256 {}
-
-impl Rng256 for TockRng256 {
-    fn gen_uniform_u8x32(&mut self) -> [u8; 32] {
-        let mut buf: [u8; 32] = [Default::default(); 32];
-        rng::fill_buffer(&mut buf);
-        buf
-    }
+pub struct XousRng256 {
+    trng: trng::Trng,
 }
 
-// For tests on the desktop, we use the cryptographically secure thread rng as entropy source.
-#[cfg(feature = "std")]
-pub struct ThreadRng256 {}
-
-#[cfg(feature = "std")]
-impl Rng256 for ThreadRng256 {
+impl XousRng256 {
+    pub fn new(xns: &xous_names::XousNames) -> Self {
+        XousRng256 { trng: trng::Trng::new(xns).unwrap() }
+    }
+}
+impl Rng256 for XousRng256 {
     fn gen_uniform_u8x32(&mut self) -> [u8; 32] {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-        let mut result = [Default::default(); 32];
-        rng.fill(&mut result);
-        result
+        let mut buf: [u8; 32] = [Default::default(); 32];
+        self.trng.fill_bytes(&mut buf);
+        buf
     }
 }
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::values::{KeyType, Value};
-use alloc::collections::btree_map;
+use std::collections::btree_map;
 use core::cmp::Ordering;
 use core::iter::Peekable;
 
@@ -41,7 +41,7 @@ use core::iter::Peekable;
 /// # use cbor::destructure_cbor_map;
 /// #
 /// # fn main() {
-/// #     let map = alloc::collections::BTreeMap::new();
+/// #     let map = std::collections::BTreeMap::new();
 /// destructure_cbor_map! {
 ///     let {
 ///         1 => x,
@@ -55,7 +55,7 @@ use core::iter::Peekable;
 /// # extern crate alloc;
 /// #
 /// # fn main() {
-/// #     let mut map = alloc::collections::BTreeMap::<cbor::KeyType, _>::new();
+/// #     let mut map = std::collections::BTreeMap::<cbor::KeyType, _>::new();
 /// use cbor::values::IntoCborKey;
 /// let x: Option<cbor::Value> = map.remove(&1.into_cbor_key());
 /// let y: Option<cbor::Value> = map.remove(&"key".into_cbor_key());
@@ -157,7 +157,7 @@ macro_rules! cbor_map {
             // The import is unused if the list is empty.
             #[allow(unused_imports)]
             use $crate::values::{IntoCborKey, IntoCborValue};
-            let mut _map = ::alloc::collections::BTreeMap::new();
+            let mut _map = ::std::collections::BTreeMap::new();
             $(
                 _map.insert($key.into_cbor_key(), $value.into_cbor_value());
             )*
@@ -178,7 +178,7 @@ macro_rules! cbor_map_options {
             // The import is unused if the list is empty.
             #[allow(unused_imports)]
             use $crate::values::{IntoCborKey, IntoCborValueOption};
-            let mut _map = ::alloc::collections::BTreeMap::<_, $crate::values::Value>::new();
+            let mut _map = ::std::collections::BTreeMap::<_, $crate::values::Value>::new();
             $(
             {
                 let opt: Option<$crate::values::Value> = $value.into_cbor_value_option();
@@ -329,7 +329,7 @@ macro_rules! cbor_key_bytes {
 #[cfg(test)]
 mod test {
     use super::super::values::{KeyType, SimpleValue, Value};
-    use alloc::collections::BTreeMap;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_cbor_simple_values() {

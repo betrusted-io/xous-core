@@ -23,7 +23,7 @@ use crate::{usize_to_nat, Nat, Storage, StorageError, StorageIndex};
 pub use crate::{
     BufferStorage, StoreDriver, StoreDriverOff, StoreDriverOn, StoreInterruption, StoreInvariant,
 };
-use alloc::vec::Vec;
+use std::vec::Vec;
 use core::cmp::{max, min, Ordering};
 #[cfg(feature = "std")]
 use std::collections::HashSet;

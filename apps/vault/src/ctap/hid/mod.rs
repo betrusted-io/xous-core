@@ -22,15 +22,15 @@ use super::ctap1;
 use super::status_code::Ctap2StatusCode;
 use super::timed_permission::TimedPermission;
 use super::CtapState;
-use alloc::vec;
-use alloc::vec::Vec;
+use std::vec;
+use std::vec::Vec;
 use arrayref::{array_ref, array_refs};
 #[cfg(feature = "debug_ctap")]
 use core::fmt::Write;
-use crypto::rng256::Rng256;
+use ctap_crypto::rng256::Rng256;
 #[cfg(feature = "debug_ctap")]
 use libtock_drivers::console::Console;
-use libtock_drivers::timer::{ClockValue, Duration, Timestamp};
+use crate::shims::{ClockValue, Duration, Timestamp};
 
 // CTAP specification (version 20190130) section 8.1
 // TODO: Channel allocation, section 8.1.3?
@@ -430,7 +430,7 @@ impl CtapHid {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::rng256::ThreadRng256;
+    use ctap_crypto::rng256::ThreadRng256;
 
     const CLOCK_FREQUENCY_HZ: usize = 32768;
     // Except for tests for timeouts (done in ctap1.rs), transactions are time independant.

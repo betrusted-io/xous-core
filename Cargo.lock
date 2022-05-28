@@ -90,6 +90,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28ae2b3dec75a406790005a200b1bd89785afc02517a00ca99ecfe093ee9e6cf"
 
 [[package]]
+name = "arrayref"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4c527152e37cf757a3f78aae5a06fbeefdb07ccc535c980a3208ee3060dd544"
+
+[[package]]
 name = "atomic-polyfill"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -377,6 +383,10 @@ dependencies = [
  "xous-ipc 0.9.7",
  "xous-names",
 ]
+
+[[package]]
+name = "cbor"
+version = "0.1.0"
 
 [[package]]
 name = "cc"
@@ -699,6 +709,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b2466559f260f48ad25fe6317b3c8dac77b5bdb5763ac7d9d6103530663bc90"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "ctap-crypto"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "cbor",
+ "rand_core 0.5.1",
+ "subtle",
+ "trng",
+ "xous-names",
 ]
 
 [[package]]
@@ -3592,7 +3614,11 @@ dependencies = [
 name = "vault"
 version = "0.1.0"
 dependencies = [
+ "arrayref",
+ "byteorder",
+ "cbor",
  "content-plugin-api",
+ "ctap-crypto",
  "gam",
  "graphics-server",
  "ime-plugin-api",
@@ -3602,6 +3628,8 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "pddb",
+ "subtle",
  "tts-frontend",
  "usb-device-xous",
  "usbd-human-interface-device 0.1.1 (git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main)",

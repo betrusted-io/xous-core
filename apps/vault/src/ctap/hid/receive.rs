@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::{ChannelID, CtapHid, HidPacket, Message, ProcessedPacket};
-use alloc::vec::Vec;
+use std::vec::Vec;
 use core::mem::swap;
-use libtock_drivers::timer::Timestamp;
+use crate::shims::Timestamp;
 
 // A structure to assemble CTAPHID commands from a series of incoming USB HID packets.
 pub struct MessageAssembler {

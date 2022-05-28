@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::values::{Constants, KeyType, Value};
-use alloc::vec::Vec;
+use std::vec::Vec;
 
 pub fn write(value: Value, encoded_cbor: &mut Vec<u8>) -> bool {
     let mut writer = Writer::new(encoded_cbor);

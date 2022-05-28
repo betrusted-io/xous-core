@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crypto::ecdsa;
+use ctap_crypto::ecdsa;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
@@ -193,7 +193,7 @@ impl TestCase {
                         pass
                     }
                     Ok(signature) => {
-                        let verified = k.verify_vartime::<crypto::sha256::Sha256>(&msg, &signature);
+                        let verified = k.verify_vartime::<ctap_crypto::sha256::Sha256>(&msg, &signature);
                         let pass = match self.result {
                             TestResult::acceptable => true,
                             TestResult::valid => verified,

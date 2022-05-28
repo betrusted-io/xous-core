@@ -19,8 +19,8 @@ use super::ec::point::PointP256;
 use super::hmac::hmac_256;
 use super::rng256::Rng256;
 use super::{Hash256, HashBlockSize64Bytes};
-use alloc::vec;
-use alloc::vec::Vec;
+use std::vec;
+use std::vec::Vec;
 #[cfg(feature = "std")]
 use arrayref::array_ref;
 use arrayref::{array_mut_ref, mut_array_refs};

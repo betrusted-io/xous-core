@@ -16,11 +16,11 @@ use super::apdu::{Apdu, ApduStatusCode};
 use super::hid::ChannelID;
 use super::status_code::Ctap2StatusCode;
 use super::CtapState;
-use alloc::vec::Vec;
+use std::vec::Vec;
 use arrayref::array_ref;
 use core::convert::Into;
 use core::convert::TryFrom;
-use crypto::rng256::Rng256;
+use ctap_crypto::rng256::Rng256;
 use libtock_drivers::timer::ClockValue;
 
 // For now, they're the same thing with apdu.rs containing the authoritative definition
@@ -251,7 +251,7 @@ impl Ctap1Command {
         R: Rng256,
         CheckUserPresence: Fn(ChannelID) -> Result<(), Ctap2StatusCode>,
     {
-        let sk = crypto::ecdsa::SecKey::gensk(ctap_state.rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(ctap_state.rng);
         let pk = sk.genpk();
         let key_handle = ctap_state
             .encrypt_key_handle(sk, &application)
@@ -288,8 +288,8 @@ impl Ctap1Command {
         signature_data.extend(key_handle);
         signature_data.extend_from_slice(&user_pk);
 
-        let attestation_key = crypto::ecdsa::SecKey::from_bytes(&private_key).unwrap();
-        let signature = attestation_key.sign_rfc6979::<crypto::sha256::Sha256>(&signature_data);
+        let attestation_key = ctap_crypto::ecdsa::SecKey::from_bytes(&private_key).unwrap();
+        let signature = attestation_key.sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data);
 
         response.extend(signature.to_asn1_der());
         Ok(response)
@@ -336,7 +336,7 @@ impl Ctap1Command {
             signature_data.extend(&challenge);
             let signature = credential_source
                 .private_key
-                .sign_rfc6979::<crypto::sha256::Sha256>(&signature_data);
+                .sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data);
 
             let mut response = signature_data[application.len()..application.len() + 5].to_vec();
             response.extend(signature.to_asn1_der());
@@ -351,8 +351,8 @@ impl Ctap1Command {
 mod test {
     use super::super::{key_material, CREDENTIAL_ID_SIZE, USE_SIGNATURE_COUNTER};
     use super::*;
-    use crypto::rng256::ThreadRng256;
-    use crypto::Hash256;
+    use ctap_crypto::rng256::ThreadRng256;
+    use ctap_crypto::Hash256;
 
     const CLOCK_FREQUENCY_HZ: usize = 32768;
     const START_CLOCK_VALUE: ClockValue = ClockValue::new(0, CLOCK_FREQUENCY_HZ);
@@ -483,11 +483,11 @@ mod test {
     fn test_process_authenticate_check_only() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let message = create_authenticate_message(&application, Ctap1Flags::CheckOnly, &key_handle);
 
@@ -499,11 +499,11 @@ mod test {
     fn test_process_authenticate_check_only_wrong_rp() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let application = [0x55; 32];
         let message = create_authenticate_message(&application, Ctap1Flags::CheckOnly, &key_handle);
@@ -516,11 +516,11 @@ mod test {
     fn test_process_authenticate_check_only_wrong_length() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let mut message = create_authenticate_message(
             &application,
@@ -549,11 +549,11 @@ mod test {
     fn test_process_authenticate_check_only_wrong_cla() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let mut message =
             create_authenticate_message(&application, Ctap1Flags::CheckOnly, &key_handle);
@@ -567,11 +567,11 @@ mod test {
     fn test_process_authenticate_check_only_wrong_ins() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let mut message =
             create_authenticate_message(&application, Ctap1Flags::CheckOnly, &key_handle);
@@ -585,11 +585,11 @@ mod test {
     fn test_process_authenticate_check_only_wrong_flags() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let mut message =
             create_authenticate_message(&application, Ctap1Flags::CheckOnly, &key_handle);
@@ -611,11 +611,11 @@ mod test {
     fn test_process_authenticate_enforce() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let message =
             create_authenticate_message(&application, Ctap1Flags::EnforceUpAndSign, &key_handle);
@@ -638,11 +638,11 @@ mod test {
     fn test_process_authenticate_dont_enforce() {
         let mut rng = ThreadRng256 {};
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
-        let sk = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
         let rp_id = "example.com";
-        let application = crypto::sha256::Sha256::hash(rp_id.as_bytes());
+        let application = ctap_crypto::sha256::Sha256::hash(rp_id.as_bytes());
         let key_handle = ctap_state.encrypt_key_handle(sk, &application).unwrap();
         let message = create_authenticate_message(
             &application,

@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use super::status_code::Ctap2StatusCode;
-use alloc::collections::BTreeMap;
-use alloc::string::String;
-use alloc::vec::Vec;
+use std::collections::BTreeMap;
+use std::string::String;
+use std::vec::Vec;
 use arrayref::array_ref;
 use cbor::{cbor_array_vec, cbor_bytes_lit, cbor_map_options, destructure_cbor_map};
 use core::convert::TryFrom;
-use crypto::{ecdh, ecdsa};
+use ctap_crypto::{ecdh, ecdsa};
 #[cfg(test)]
 use enum_iterator::IntoEnumIterator;
 
@@ -814,12 +814,12 @@ pub(super) fn ok_or_missing<T>(value_option: Option<T>) -> Result<T, Ctap2Status
 mod test {
     use self::Ctap2StatusCode::CTAP2_ERR_CBOR_UNEXPECTED_TYPE;
     use super::*;
-    use alloc::collections::BTreeMap;
+    use std::collections::BTreeMap;
     use cbor::{
         cbor_array, cbor_bool, cbor_bytes, cbor_false, cbor_int, cbor_map, cbor_null, cbor_text,
         cbor_unsigned,
     };
-    use crypto::rng256::{Rng256, ThreadRng256};
+    use ctap_crypto::rng256::{Rng256, ThreadRng256};
 
     #[test]
     fn test_extract_unsigned() {
@@ -1263,7 +1263,7 @@ mod test {
     #[test]
     fn test_from_get_assertion_extensions() {
         let mut rng = ThreadRng256 {};
-        let sk = crypto::ecdh::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdh::SecKey::gensk(&mut rng);
         let pk = sk.genpk();
         let cose_key = CoseKey::from(pk);
         let cbor_extensions = cbor_map! {
@@ -1335,7 +1335,7 @@ mod test {
     #[test]
     fn test_from_into_cose_key() {
         let mut rng = ThreadRng256 {};
-        let sk = crypto::ecdh::SecKey::gensk(&mut rng);
+        let sk = ctap_crypto::ecdh::SecKey::gensk(&mut rng);
         let pk = sk.genpk();
         let cose_key = CoseKey::from(pk.clone());
         let created_pk = ecdh::PubKey::try_from(cose_key);
@@ -1364,7 +1364,7 @@ mod test {
         let credential = PublicKeyCredentialSource {
             key_type: PublicKeyCredentialType::PublicKey,
             credential_id: rng.gen_uniform_u8x32().to_vec(),
-            private_key: crypto::ecdsa::SecKey::gensk(&mut rng),
+            private_key: ctap_crypto::ecdsa::SecKey::gensk(&mut rng),
             rp_id: "example.com".to_string(),
             user_handle: b"foo".to_vec(),
             user_display_name: None,

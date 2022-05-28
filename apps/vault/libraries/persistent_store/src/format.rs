@@ -19,7 +19,7 @@ mod bitfield;
 use self::bitfield::Length;
 use self::bitfield::{count_zeros, num_bits, Bit, Checksum, ConstField, Field};
 use crate::{usize_to_nat, Nat, Storage, StorageIndex, StoreError, StoreResult, StoreUpdate};
-use alloc::vec::Vec;
+use std::vec::Vec;
 use core::cmp::min;
 use core::convert::TryFrom;
 

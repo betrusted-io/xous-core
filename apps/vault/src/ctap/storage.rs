@@ -23,14 +23,14 @@ use crate::ctap::status_code::Ctap2StatusCode;
 use crate::ctap::INITIAL_SIGNATURE_COUNTER;
 use crate::embedded_flash::{new_storage, Storage};
 #[cfg(feature = "with_ctap2_1")]
-use alloc::string::String;
-use alloc::vec;
-use alloc::vec::Vec;
+use std::string::String;
+use std::vec;
+use std::vec::Vec;
 use arrayref::array_ref;
 #[cfg(feature = "with_ctap2_1")]
 use cbor::cbor_array_vec;
 use core::convert::TryInto;
-use crypto::rng256::Rng256;
+use ctap_crypto::rng256::Rng256;
 
 // Those constants may be modified before compilation to tune the behavior of the key.
 //
@@ -608,14 +608,14 @@ fn _serialize_min_pin_length_rp_ids(rp_ids: Vec<String>) -> Result<Vec<u8>, Ctap
 mod test {
     use super::*;
     use crate::ctap::data_formats::{PublicKeyCredentialSource, PublicKeyCredentialType};
-    use crypto::rng256::{Rng256, ThreadRng256};
+    use ctap_crypto::rng256::{Rng256, ThreadRng256};
 
     fn create_credential_source(
         rng: &mut ThreadRng256,
         rp_id: &str,
         user_handle: Vec<u8>,
     ) -> PublicKeyCredentialSource {
-        let private_key = crypto::ecdsa::SecKey::gensk(rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(rng);
         PublicKeyCredentialSource {
             key_type: PublicKeyCredentialType::PublicKey,
             credential_id: rng.gen_uniform_u8x32().to_vec(),
@@ -771,7 +771,7 @@ mod test {
         let mut rng = ThreadRng256 {};
         let mut persistent_store = PersistentStore::new(&mut rng);
         assert_eq!(persistent_store.count_credentials().unwrap(), 0);
-        let private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let credential = PublicKeyCredentialSource {
             key_type: PublicKeyCredentialType::PublicKey,
             credential_id: rng.gen_uniform_u8x32().to_vec(),
@@ -837,7 +837,7 @@ mod test {
         let mut rng = ThreadRng256 {};
         let mut persistent_store = PersistentStore::new(&mut rng);
         assert_eq!(persistent_store.count_credentials().unwrap(), 0);
-        let private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let credential = PublicKeyCredentialSource {
             key_type: PublicKeyCredentialType::PublicKey,
             credential_id: rng.gen_uniform_u8x32().to_vec(),
@@ -1062,7 +1062,7 @@ mod test {
     #[test]
     fn test_serialize_deserialize_credential() {
         let mut rng = ThreadRng256 {};
-        let private_key = crypto::ecdsa::SecKey::gensk(&mut rng);
+        let private_key = ctap_crypto::ecdsa::SecKey::gensk(&mut rng);
         let credential = PublicKeyCredentialSource {
             key_type: PublicKeyCredentialType::PublicKey,
             credential_id: rng.gen_uniform_u8x32().to_vec(),

@@ -21,8 +21,8 @@ use super::data_formats::{
 };
 use super::key_material;
 use super::status_code::Ctap2StatusCode;
-use alloc::string::String;
-use alloc::vec::Vec;
+use std::string::String;
+use std::vec::Vec;
 use arrayref::array_ref;
 use cbor::destructure_cbor_map;
 use core::convert::TryFrom;
@@ -449,7 +449,7 @@ mod test {
     };
     use super::super::ES256_CRED_PARAM;
     use super::*;
-    use alloc::collections::BTreeMap;
+    use std::collections::BTreeMap;
     use cbor::{cbor_array, cbor_map};
 
     #[test]

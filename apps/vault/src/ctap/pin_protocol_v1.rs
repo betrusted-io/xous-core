@@ -18,16 +18,16 @@ use super::response::{AuthenticatorClientPinResponse, ResponseData};
 use super::status_code::Ctap2StatusCode;
 use super::storage::PersistentStore;
 #[cfg(feature = "with_ctap2_1")]
-use alloc::string::String;
-use alloc::vec;
-use alloc::vec::Vec;
+use std::string::String;
+use std::vec;
+use std::vec::Vec;
 use arrayref::array_ref;
 use core::convert::TryInto;
-use crypto::cbc::{cbc_decrypt, cbc_encrypt};
-use crypto::hmac::{hmac_256, verify_hmac_256_first_128bits};
-use crypto::rng256::Rng256;
-use crypto::sha256::Sha256;
-use crypto::Hash256;
+use ctap_crypto::cbc::{cbc_decrypt, cbc_encrypt};
+use ctap_crypto::hmac::{hmac_256, verify_hmac_256_first_128bits};
+use ctap_crypto::rng256::Rng256;
+use ctap_crypto::sha256::Sha256;
+use ctap_crypto::Hash256;
 #[cfg(all(test, feature = "with_ctap2_1"))]
 use enum_iterator::IntoEnumIterator;
 use subtle::ConstantTimeEq;
@@ -61,8 +61,8 @@ fn encrypt_hmac_secret_output(
     if salt_enc.len() != 32 && salt_enc.len() != 64 {
         return Err(Ctap2StatusCode::CTAP2_ERR_UNSUPPORTED_EXTENSION);
     }
-    let aes_enc_key = crypto::aes256::EncryptionKey::new(shared_secret);
-    let aes_dec_key = crypto::aes256::DecryptionKey::new(&aes_enc_key);
+    let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(shared_secret);
+    let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
     // The specification specifically asks for a zero IV.
     let iv = [0u8; 16];
 
@@ -102,7 +102,7 @@ fn encrypt_hmac_secret_output(
 
 /// Decrypts the new_pin_enc and outputs the found PIN.
 fn decrypt_pin(
-    aes_dec_key: &crypto::aes256::DecryptionKey,
+    aes_dec_key: &ctap_crypto::aes256::DecryptionKey,
     new_pin_enc: Vec<u8>,
 ) -> Option<Vec<u8>> {
     if new_pin_enc.len() != PIN_PADDED_LENGTH {
@@ -135,7 +135,7 @@ fn decrypt_pin(
 /// is hashed, truncated to 16 bytes and persistently stored.
 fn check_and_store_new_pin(
     persistent_store: &mut PersistentStore,
-    aes_dec_key: &crypto::aes256::DecryptionKey,
+    aes_dec_key: &ctap_crypto::aes256::DecryptionKey,
     new_pin_enc: Vec<u8>,
 ) -> Result<(), Ctap2StatusCode> {
     let pin = decrypt_pin(aes_dec_key, new_pin_enc)
@@ -170,7 +170,7 @@ pub enum PinPermission {
 }
 
 pub struct PinProtocolV1 {
-    key_agreement_key: crypto::ecdh::SecKey,
+    key_agreement_key: ctap_crypto::ecdh::SecKey,
     pin_uv_auth_token: [u8; PIN_TOKEN_LENGTH],
     consecutive_pin_mismatches: u8,
     #[cfg(feature = "with_ctap2_1")]
@@ -181,7 +181,7 @@ pub struct PinProtocolV1 {
 
 impl PinProtocolV1 {
     pub fn new(rng: &mut impl Rng256) -> PinProtocolV1 {
-        let key_agreement_key = crypto::ecdh::SecKey::gensk(rng);
+        let key_agreement_key = ctap_crypto::ecdh::SecKey::gensk(rng);
         let pin_uv_auth_token = rng.gen_uniform_u8x32();
         PinProtocolV1 {
             key_agreement_key,
@@ -201,7 +201,7 @@ impl PinProtocolV1 {
         &mut self,
         rng: &mut impl Rng256,
         persistent_store: &mut PersistentStore,
-        aes_dec_key: &crypto::aes256::DecryptionKey,
+        aes_dec_key: &ctap_crypto::aes256::DecryptionKey,
         pin_hash_enc: Vec<u8>,
     ) -> Result<(), Ctap2StatusCode> {
         match persistent_store.pin_hash()? {
@@ -220,7 +220,7 @@ impl PinProtocolV1 {
                 cbc_decrypt(aes_dec_key, iv, &mut blocks);
 
                 if !bool::from(pin_hash.ct_eq(&blocks[0])) {
-                    self.key_agreement_key = crypto::ecdh::SecKey::gensk(rng);
+                    self.key_agreement_key = ctap_crypto::ecdh::SecKey::gensk(rng);
                     if persistent_store.pin_retries()? == 0 {
                         return Err(Ctap2StatusCode::CTAP2_ERR_PIN_BLOCKED);
                     }
@@ -246,16 +246,16 @@ impl PinProtocolV1 {
         key_agreement: CoseKey,
         pin_auth: &[u8],
         authenticated_message: &[u8],
-    ) -> Result<crypto::aes256::DecryptionKey, Ctap2StatusCode> {
-        let pk: crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
+    ) -> Result<ctap_crypto::aes256::DecryptionKey, Ctap2StatusCode> {
+        let pk: ctap_crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
         let shared_secret = self.key_agreement_key.exchange_x_sha256(&pk);
 
         if !verify_pin_auth(&shared_secret, authenticated_message, pin_auth) {
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID);
         }
 
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(&shared_secret);
-        let aes_dec_key = crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
+        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
         Ok(aes_dec_key)
     }
 
@@ -329,11 +329,11 @@ impl PinProtocolV1 {
         if persistent_store.pin_retries()? == 0 {
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_BLOCKED);
         }
-        let pk: crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
+        let pk: ctap_crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
         let shared_secret = self.key_agreement_key.exchange_x_sha256(&pk);
 
-        let token_encryption_key = crypto::aes256::EncryptionKey::new(&shared_secret);
-        let pin_decryption_key = crypto::aes256::DecryptionKey::new(&token_encryption_key);
+        let token_encryption_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
+        let pin_decryption_key = ctap_crypto::aes256::DecryptionKey::new(&token_encryption_key);
         self.verify_pin_hash_enc(rng, persistent_store, &pin_decryption_key, pin_hash_enc)?;
 
         // Assuming PIN_TOKEN_LENGTH % block_size == 0 here.
@@ -568,7 +568,7 @@ impl PinProtocolV1 {
     }
 
     pub fn reset(&mut self, rng: &mut impl Rng256) {
-        self.key_agreement_key = crypto::ecdh::SecKey::gensk(rng);
+        self.key_agreement_key = ctap_crypto::ecdh::SecKey::gensk(rng);
         self.pin_uv_auth_token = rng.gen_uniform_u8x32();
         self.consecutive_pin_mismatches = 0;
         #[cfg(feature = "with_ctap2_1")]
@@ -588,7 +588,7 @@ impl PinProtocolV1 {
             salt_enc,
             salt_auth,
         } = hmac_secret_input;
-        let pk: crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
+        let pk: ctap_crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
         let shared_secret = self.key_agreement_key.exchange_x_sha256(&pk);
         // HMAC-secret does the same 16 byte truncated check.
         if !verify_pin_auth(&shared_secret, &salt_enc, &salt_auth) {
@@ -622,7 +622,7 @@ impl PinProtocolV1 {
 
     #[cfg(test)]
     pub fn new_test(
-        key_agreement_key: crypto::ecdh::SecKey,
+        key_agreement_key: ctap_crypto::ecdh::SecKey,
         pin_uv_auth_token: [u8; 32],
     ) -> PinProtocolV1 {
         PinProtocolV1 {
@@ -640,7 +640,7 @@ impl PinProtocolV1 {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::rng256::ThreadRng256;
+    use ctap_crypto::rng256::ThreadRng256;
 
     // Stores a PIN hash corresponding to the dummy PIN "1234".
     fn set_standard_pin(persistent_store: &mut PersistentStore) {
@@ -659,7 +659,7 @@ mod test {
         for i in 0..block_len {
             blocks[i][..].copy_from_slice(&message[i * 16..(i + 1) * 16]);
         }
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(shared_secret);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(shared_secret);
         let iv = [0u8; 16];
         cbc_encrypt(&aes_enc_key, iv, &mut blocks);
         blocks.iter().flatten().cloned().collect::<Vec<u8>>()
@@ -673,8 +673,8 @@ mod test {
         for i in 0..block_len {
             blocks[i][..].copy_from_slice(&message[i * 16..(i + 1) * 16]);
         }
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(shared_secret);
-        let aes_dec_key = crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(shared_secret);
+        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
         let iv = [0u8; 16];
         cbc_decrypt(&aes_dec_key, iv, &mut blocks);
         blocks.iter().flatten().cloned().collect::<Vec<u8>>()
@@ -712,8 +712,8 @@ mod test {
         ];
         persistent_store.set_pin_hash(&pin_hash).unwrap();
         let shared_secret = [0x88; 32];
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(&shared_secret);
-        let aes_dec_key = crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
+        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
 
         let mut pin_protocol_v1 = PinProtocolV1::new(&mut rng);
         let pin_hash_enc = vec![
@@ -1073,8 +1073,8 @@ mod test {
     #[test]
     fn test_decrypt_pin() {
         let shared_secret = [0x88; 32];
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(&shared_secret);
-        let aes_dec_key = crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
+        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
 
         // "1234"
         let new_pin_enc = vec![
@@ -1116,8 +1116,8 @@ mod test {
         let mut rng = ThreadRng256 {};
         let mut persistent_store = PersistentStore::new(&mut rng);
         let shared_secret = [0x88; 32];
-        let aes_enc_key = crypto::aes256::EncryptionKey::new(&shared_secret);
-        let aes_dec_key = crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
+        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
 
         let test_cases = vec![
             // Accept PIN "1234".

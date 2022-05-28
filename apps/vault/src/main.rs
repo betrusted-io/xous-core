@@ -8,6 +8,13 @@ use xous_ipc::Buffer;
 use usbd_human_interface_device::device::fido::*;
 use std::thread;
 
+mod ctap;
+use ctap::hid::{ChannelID, CtapHid, KeepaliveStatus, ProcessedPacket};
+use ctap::status_code::Ctap2StatusCode;
+use ctap::CtapState;
+mod shims;
+use shims::*;
+
 /*
 UI concept:
 
@@ -86,6 +93,10 @@ fn xmain() -> ! {
             }
         }
     });
+
+    let rng = ctap_ctap_crypto::rng256::XousRng256::new(&xns);
+    let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
+    //let mut ctap_hid = CtapHid::new();
 
     let mut repl = Repl::new(&xns, sid);
     let mut update_repl = true;
