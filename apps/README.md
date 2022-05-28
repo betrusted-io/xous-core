@@ -6,7 +6,7 @@ You can add apps to Xous by creating crates in this directory and adding them to
 2. Register the crate in the Workspace by editing the root `../Cargo.toml` (one directory above this README), and adding the new app crate's path to the `default-members` and the `members` lists.
 3. Add an entry to `manifest.json` in this file so the build system can fold it into the system menus. Format documented below.
 4. Rebuild using `cargo xtask app-image [app1] [app2] [...]`, where the `appN` are the names of the app crates you want to have built into your burnable Xous image.
-5. Burn your new `xous.img` file onto your device using either the [JTAG method or the USB method](https://github.com/betrusted-io/betrusted-wiki/wiki/Updating-Your-Device).
+5. Burn your new `xous.img` file onto [your device](https://github.com/betrusted-io/betrusted-wiki/wiki/Updating-Your-Device#i-dont-rtfm-give-me-the-latest-xous).
 
 As of Xous 0.9.6, the OS takes up about half the available RAM (8 out of 16 MiB) for code + data. For smooth operation of the PDDB and other resources, we suggest leaving about 4MiB of free space, so apps should try to stay within the range of 4MiB in size.
 
