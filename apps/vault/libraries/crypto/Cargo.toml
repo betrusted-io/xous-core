@@ -17,3 +17,5 @@ trng = {path = "../../../../services/trng"}
 xous-names = {path = "../../../../services/xous-names"}
 rand_core = "0.5.1"
 p256 = {version = "0.10.1", default-features = false, features = ["ecdsa", "ecdh", "std"]}
+cbc = "0.1.2"
+aes = {path="../../../../services/aes"}

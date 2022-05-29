@@ -1,3 +1,18 @@
+// Xous maintainer's note:
+//
+// This library is vendored in from the Google OpenSK reference implementation.
+// The OpenSK library contains its own implementations of crypto functions.
+// The port to Xous attempts to undo that, but where possible leaves a thin
+// adapter between the OpenSK custom APIs and the more "standard" Rustcrypto APIs.
+// There is always a hazard in adapting crypto APIs and reviewers should take
+// note of this. However, by calling out the API differences, it hopefully highlights
+// any potential problems in the OpenSK library, rather than papering them over.
+//
+// Leaving the OpenSK APIs in place also makes it easier to apply upstream
+// patches from OpenSK to fix bugs in the code base.
+
+// Original copyright notice preserved below:
+
 // Copyright 2019 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,30 +27,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::util::{xor_block_16, Block16};
-use super::{Decrypt16BytesBlock, Encrypt16BytesBlock};
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 
-pub fn cbc_encrypt<K>(key: &K, mut iv: Block16, blocks: &mut [Block16])
-where
-    K: Encrypt16BytesBlock,
+type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
+
+use super::util::Block16;
+
+pub fn cbc_encrypt(key: &[u8; 32], mut iv: Block16, blocks: &mut [Block16])
 {
-    for block in blocks {
-        xor_block_16(block, &iv);
-        key.encrypt_block(block);
-        iv = *block;
-    }
+    Aes256CbcEnc::new(&key.into(), &iv.into())
+        .encrypt_blocks_mut(blocks);
 }
 
-pub fn cbc_decrypt<K>(key: &K, mut iv: Block16, blocks: &mut [Block16])
-where
-    K: Decrypt16BytesBlock,
+pub fn cbc_decrypt(key: &[u8; 32], mut iv: Block16, blocks: &mut [Block16])
 {
-    for block in blocks {
-        let tmp = *block;
-        key.decrypt_block(block);
-        xor_block_16(block, &iv);
-        iv = tmp;
-    }
+    Aes256CbcDec::new(&key.into(), &iv.into())
+        .decrypt_blocks_mut(blocks);
 }
 
 #[cfg(test)]

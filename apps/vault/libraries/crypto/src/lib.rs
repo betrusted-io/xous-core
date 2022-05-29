@@ -13,5 +13,7 @@
 // limitations under the License.
 
 pub mod rng256;
+pub mod cbc;
+mod util;
 //pub mod ecdh;
 //pub mod ecdsa;
