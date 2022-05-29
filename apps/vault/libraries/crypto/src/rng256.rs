@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use arrayref::array_ref;
-use rand_core::RngCore;
 
 // Lightweight RNG trait to generate uniformly distributed 256 bits.
 pub trait Rng256 {
