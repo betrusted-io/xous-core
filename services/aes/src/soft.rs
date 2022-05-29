@@ -8,127 +8,326 @@
 
 #![deny(unsafe_code)]
 
-pub(crate) mod fixslice32;
-use fixslice32 as fixslice;
+#[cfg_attr(not(target_pointer_width = "64"), path = "soft/fixslice32.rs")]
+#[cfg_attr(target_pointer_width = "64", path = "soft/fixslice32.rs")]
+pub(crate) mod fixslice;
 
-#[cfg(feature = "ctr")]
-mod ctr;
-
-#[cfg(feature = "ctr")]
-pub use self::ctr::{Aes128Ctr, Aes192Ctr, Aes256Ctr};
-
-use crate::{Block, ParBlocks};
+use crate::Block;
 use cipher::{
-    consts::{U16, U24, U32, U8},
-    generic_array::GenericArray,
-    BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher,
+    consts::{U16, U24, U32},
+    inout::InOut,
+    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt,
+    BlockSizeUser, Key, KeyInit, KeySizeUser, ParBlocksSizeUser,
 };
-use fixslice::{FixsliceKeys128, FixsliceKeys192, FixsliceKeys256, FIXSLICE_BLOCKS};
+use core::fmt;
+use fixslice::{BatchBlocks, FixsliceBlocks, FixsliceKeys128, FixsliceKeys192, FixsliceKeys256};
 
 macro_rules! define_aes_impl {
     (
-        $name:ident,
+        $name:tt,
+        $name_enc:ident,
+        $name_dec:ident,
+        $name_back_enc:ident,
+        $name_back_dec:ident,
         $key_size:ty,
         $key_bits:expr,
         $fixslice_keys:ty,
         $fixslice_key_schedule:path,
         $fixslice_decrypt:path,
         $fixslice_encrypt:path,
-        $doc:expr
+        $doc:expr $(,)?
     ) => {
         #[doc=$doc]
+        #[doc = "block cipher"]
         #[derive(Clone)]
         pub struct $name {
             keys: $fixslice_keys,
         }
+
         impl $name {
             pub fn key_size(&self) -> usize {
                 $key_bits as usize
             }
+
+            #[inline(always)]
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
+                $name_back_enc(self)
+            }
+
+            #[inline(always)]
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
+                $name_back_dec(self)
+            }
         }
 
-        impl NewBlockCipher for $name {
+        impl KeySizeUser for $name {
             type KeySize = $key_size;
+        }
 
+        impl KeyInit for $name {
             #[inline]
-            fn new(key: &GenericArray<u8, $key_size>) -> Self {
+            fn new(key: &Key<Self>) -> Self {
                 Self {
-                    keys: $fixslice_key_schedule(key),
+                    keys: $fixslice_key_schedule(key.as_ref()),
                 }
             }
         }
 
-        impl BlockCipher for $name {
+        impl BlockSizeUser for $name {
             type BlockSize = U16;
-            type ParBlocks = U8;
         }
+
+        impl BlockCipher for $name {}
 
         impl BlockEncrypt for $name {
-            #[inline]
-            fn encrypt_block(&self, block: &mut Block) {
-                let mut blocks = [Block::default(); FIXSLICE_BLOCKS];
-                blocks[0].copy_from_slice(block);
-                $fixslice_encrypt(&self.keys, &mut blocks);
-                block.copy_from_slice(&blocks[0]);
-            }
-
-            #[inline]
-            fn encrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-                for chunk in blocks.chunks_mut(FIXSLICE_BLOCKS) {
-                    $fixslice_encrypt(&self.keys, chunk);
-                }
+            fn encrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_enc_backend())
             }
         }
 
         impl BlockDecrypt for $name {
-            #[inline]
-            fn decrypt_block(&self, block: &mut Block) {
-                let mut blocks = [Block::default(); FIXSLICE_BLOCKS];
-                blocks[0].copy_from_slice(block);
-                $fixslice_decrypt(&self.keys, &mut blocks);
-                block.copy_from_slice(&blocks[0]);
+            fn decrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_dec_backend())
             }
+        }
 
+        impl From<$name_enc> for $name {
             #[inline]
-            fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-                for chunk in blocks.chunks_mut(FIXSLICE_BLOCKS) {
-                    $fixslice_decrypt(&self.keys, chunk);
+            fn from(enc: $name_enc) -> $name {
+                enc.inner
+            }
+        }
+
+        impl From<&$name_enc> for $name {
+            #[inline]
+            fn from(enc: &$name_enc) -> $name {
+                enc.inner.clone()
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+                f.write_str(concat!(stringify!($name), " { .. }"))
+            }
+        }
+
+        impl AlgorithmName for $name {
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(stringify!($name))
+            }
+        }
+
+        #[doc=$doc]
+        #[doc = "block cipher (encrypt-only)"]
+        #[derive(Clone)]
+        pub struct $name_enc {
+            inner: $name,
+        }
+
+        impl $name_enc {
+            #[inline(always)]
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
+                self.inner.get_enc_backend()
+            }
+        }
+
+        impl BlockCipher for $name_enc {}
+
+        impl KeySizeUser for $name_enc {
+            type KeySize = $key_size;
+        }
+
+        impl KeyInit for $name_enc {
+            #[inline(always)]
+            fn new(key: &Key<Self>) -> Self {
+                let inner = $name::new(key);
+                Self { inner }
+            }
+        }
+
+        impl BlockSizeUser for $name_enc {
+            type BlockSize = U16;
+        }
+
+        impl BlockEncrypt for $name_enc {
+            fn encrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_enc_backend())
+            }
+        }
+
+        impl fmt::Debug for $name_enc {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+                f.write_str(concat!(stringify!($name_enc), " { .. }"))
+            }
+        }
+
+        impl AlgorithmName for $name_enc {
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(stringify!($name_enc))
+            }
+        }
+
+        #[doc=$doc]
+        #[doc = "block cipher (decrypt-only)"]
+        #[derive(Clone)]
+        pub struct $name_dec {
+            inner: $name,
+        }
+
+        impl $name_dec {
+            #[inline(always)]
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
+                self.inner.get_dec_backend()
+            }
+        }
+
+        impl BlockCipher for $name_dec {}
+
+        impl KeySizeUser for $name_dec {
+            type KeySize = $key_size;
+        }
+
+        impl KeyInit for $name_dec {
+            #[inline(always)]
+            fn new(key: &Key<Self>) -> Self {
+                let inner = $name::new(key);
+                Self { inner }
+            }
+        }
+
+        impl From<$name_enc> for $name_dec {
+            #[inline]
+            fn from(enc: $name_enc) -> $name_dec {
+                Self { inner: enc.inner }
+            }
+        }
+
+        impl From<&$name_enc> for $name_dec {
+            #[inline]
+            fn from(enc: &$name_enc) -> $name_dec {
+                Self {
+                    inner: enc.inner.clone(),
                 }
             }
         }
 
-        opaque_debug::implement!($name);
+        impl BlockSizeUser for $name_dec {
+            type BlockSize = U16;
+        }
+
+        impl BlockDecrypt for $name_dec {
+            fn decrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_dec_backend());
+            }
+        }
+
+        impl fmt::Debug for $name_dec {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+                f.write_str(concat!(stringify!($name_dec), " { .. }"))
+            }
+        }
+
+        impl AlgorithmName for $name_dec {
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(stringify!($name_dec))
+            }
+        }
+
+        pub(crate) struct $name_back_enc<'a>(&'a $name);
+
+        impl<'a> BlockSizeUser for $name_back_enc<'a> {
+            type BlockSize = U16;
+        }
+
+        impl<'a> ParBlocksSizeUser for $name_back_enc<'a> {
+            type ParBlocksSize = FixsliceBlocks;
+        }
+
+        impl<'a> BlockBackend for $name_back_enc<'a> {
+            #[inline(always)]
+            fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
+                let mut blocks = BatchBlocks::default();
+                blocks[0] = block.clone_in().into();
+                let res = $fixslice_encrypt(&self.0.keys, &blocks);
+                *block.get_out() = res[0].into();
+            }
+
+            #[inline(always)]
+            fn proc_par_blocks(&mut self, mut blocks: InOut<'_, '_, BatchBlocks>) {
+                let res = $fixslice_encrypt(&self.0.keys, blocks.get_in());
+                *blocks.get_out() = res;
+            }
+        }
+
+        pub(crate) struct $name_back_dec<'a>(&'a $name);
+
+        impl<'a> BlockSizeUser for $name_back_dec<'a> {
+            type BlockSize = U16;
+        }
+
+        impl<'a> ParBlocksSizeUser for $name_back_dec<'a> {
+            type ParBlocksSize = FixsliceBlocks;
+        }
+
+        impl<'a> BlockBackend for $name_back_dec<'a> {
+            #[inline(always)]
+            fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
+                let mut blocks = BatchBlocks::default();
+                blocks[0] = block.clone_in();
+                let res = $fixslice_decrypt(&self.0.keys, &blocks);
+                *block.get_out() = res[0];
+            }
+
+            #[inline(always)]
+            fn proc_par_blocks(&mut self, mut blocks: InOut<'_, '_, BatchBlocks>) {
+                let res = $fixslice_decrypt(&self.0.keys, blocks.get_in());
+                *blocks.get_out() = res;
+            }
+        }
     };
 }
+
 define_aes_impl!(
     Aes128Soft,
+    Aes128Enc,
+    Aes128Dec,
+    Aes128BackEnc,
+    Aes128BackDec,
     U16,
     128,
     FixsliceKeys128,
     fixslice::aes128_key_schedule,
     fixslice::aes128_decrypt,
     fixslice::aes128_encrypt,
-    "AES-128 block cipher instance"
+    "AES-128",
 );
 
 define_aes_impl!(
     Aes192,
+    Aes192Enc,
+    Aes192Dec,
+    Aes192BackEnc,
+    Aes192BackDec,
     U24,
     192,
     FixsliceKeys192,
     fixslice::aes192_key_schedule,
     fixslice::aes192_decrypt,
     fixslice::aes192_encrypt,
-    "AES-192 block cipher instance"
+    "AES-192",
 );
 
 define_aes_impl!(
     Aes256Soft,
+    Aes256Enc,
+    Aes256Dec,
+    Aes256BackEnc,
+    Aes256BackDec,
     U32,
     256,
     FixsliceKeys256,
     fixslice::aes256_key_schedule,
     fixslice::aes256_decrypt,
     fixslice::aes256_encrypt,
-    "AES-256 block cipher instance"
+    "AES-256",
 );
