@@ -28,18 +28,6 @@ dependencies = [
 
 [[package]]
 name = "aes"
-version = "0.7.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e8b47f52ea9bae42228d07ec09eb676433d7c4ed1ebdf0f1d1c29ed446f1ab8"
-dependencies = [
- "cfg-if 1.0.0",
- "cipher 0.3.0",
- "cpufeatures",
- "opaque-debug",
-]
-
-[[package]]
-name = "aes"
 version = "0.8.1"
 dependencies = [
  "cipher 0.4.3",
@@ -50,14 +38,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aes"
+version = "0.8.1"
+source = "git+https://github.com/rozbb/block-ciphers.git?branch=parblocks-impls#f16732be15633abb059a1fbba20cabe5acee7d18"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cipher 0.4.3",
+ "cpufeatures",
+]
+
+[[package]]
 name = "aes-gcm-siv"
 version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "589c637f0e68c877bbd59a4599bbe849cac8e5f3e4b5a3ebae8f528cd218dcdc"
+source = "git+https://github.com/rozbb/AEADs.git?branch=update-cipher#2f9297f39e4e12beea9bf8e8f38ea4c5a35a8a9e"
 dependencies = [
  "aead",
- "aes 0.7.5",
- "cipher 0.3.0",
+ "aes 0.8.1 (git+https://github.com/rozbb/block-ciphers.git?branch=parblocks-impls)",
+ "cipher 0.4.3",
  "ctr",
  "polyval",
  "subtle",
@@ -242,6 +239,16 @@ dependencies = [
  "byteorder",
  "cipher 0.3.0",
  "opaque-debug",
+]
+
+[[package]]
+name = "blowfish"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e412e2cd0f2b2d93e02543ceae7917b3c70331573df19ee046bcbc35e45e87d7"
+dependencies = [
+ "byteorder",
+ "cipher 0.4.3",
 ]
 
 [[package]]
@@ -659,11 +666,11 @@ dependencies = [
 
 [[package]]
 name = "ctr"
-version = "0.8.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "049bb91fb4aaf0e3c7efa6cd5ef877dbbbd15b39dad06d9948de4ec8a75761ea"
+checksum = "0d14f329cfbaf5d0e06b5e87fff7e265d2673c5ea7d2c27691a2c107db1442a0"
 dependencies = [
- "cipher 0.3.0",
+ "cipher 0.4.3",
 ]
 
 [[package]]
@@ -2120,8 +2127,8 @@ dependencies = [
  "aes-gcm-siv",
  "bitfield",
  "bitflags",
- "blowfish",
- "cipher 0.3.0",
+ "blowfish 0.9.1",
+ "cipher 0.4.3",
  "digest",
  "gam",
  "hkdf",
@@ -2560,9 +2567,9 @@ name = "root-keys"
 version = "0.1.0"
 dependencies = [
  "aes 0.8.1",
- "blowfish",
+ "blowfish 0.8.0",
  "byteorder",
- "cipher 0.3.0",
+ "cipher 0.4.3",
  "com",
  "curve25519-dalek",
  "digest",
