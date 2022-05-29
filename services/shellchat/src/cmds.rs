@@ -114,9 +114,9 @@ use engine::*;
 mod sha;
 #[cfg(feature="benchmarks")]
 use sha::*;
-#[cfg(feature="benchmarks")]
+#[cfg(feature="aestests")]
 mod aes_cmd;
-#[cfg(feature="benchmarks")]
+#[cfg(feature="aestests")]
 use aes_cmd::*;
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -148,7 +148,7 @@ pub struct CmdEnv {
 
     #[cfg(feature="benchmarks")]
     sha_cmd: Sha,
-    #[cfg(feature="benchmarks")]
+    #[cfg(feature="aestests")]
     aes_cmd: Aes,
     #[cfg(feature="benchmarks")]
     engine_cmd: Engine,
@@ -171,7 +171,7 @@ impl CmdEnv {
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]
         let sha = Sha::new(&xns, &mut common);
-        #[cfg(feature="benchmarks")]
+        #[cfg(feature="aestests")]
         let aes = Aes::new(&xns, &mut common);
         #[cfg(feature="benchmarks")]
         let engine = Engine::new(&xns, &mut common);
@@ -218,7 +218,7 @@ impl CmdEnv {
 
             #[cfg(feature="benchmarks")]
             sha_cmd: sha,
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature="aestests")]
             aes_cmd: aes,
             #[cfg(feature="benchmarks")]
             engine_cmd: engine,
@@ -264,7 +264,7 @@ impl CmdEnv {
 
             #[cfg(feature="benchmarks")]
             &mut self.sha_cmd,
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature="aestests")]
             &mut self.aes_cmd,
             #[cfg(feature="benchmarks")]
             &mut self.engine_cmd,

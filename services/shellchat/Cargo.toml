@@ -89,6 +89,7 @@ utralib = {path = "../../utralib"}
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
+aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = []
 ditherpunk = []
