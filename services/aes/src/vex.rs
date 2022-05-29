@@ -1,16 +1,21 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code))]
 
-use crate::{Block, ParBlocks};
+use crate::Block;
 use cipher::{
-    consts::{U16, U32, U8},
-    generic_array::GenericArray,
-    BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher,
+    consts::{U1, U16, U32},
+    inout::InOut,
+    AlgorithmName, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt,
+    BlockSizeUser, Key, KeyInit, KeySizeUser, ParBlocksSizeUser,
+    generic_array::GenericArray
 };
+pub(crate) type BatchBlocks = GenericArray<Block, U1>;
+
+use core::fmt;
+
 mod aes128;
 use aes128::*;
 mod aes256;
 use aes256::*;
-pub(crate) const VEX_BLOCKS: usize = 1;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum AesByte {
@@ -385,7 +390,11 @@ pub(crate) fn set_u32(output: &mut [u8], offset: usize, value: u32) {
 
 macro_rules! define_aes_impl {
     (
-        $name:ident,
+        $name:tt,
+        $name_enc:ident,
+        $name_dec:ident,
+        $name_back_enc:ident,
+        $name_back_dec:ident,
         $key_size:ty,
         $key_bits:expr,
         $vex_keys:ty,
@@ -394,34 +403,50 @@ macro_rules! define_aes_impl {
         $vex_enc_key_schedule:path,
         $vex_decrypt:path,
         $vex_encrypt:path,
-        $doc:expr
+        $doc:expr $(,)?
     ) => {
         #[doc=$doc]
+        #[doc = "block cipher"]
         #[derive(Clone)]
         pub struct $name {
             enc_key: $vex_keys,
             dec_key: $vex_keys,
         }
+
         impl $name {
             pub fn key_size(&self) -> usize {
                 $key_bits as usize
             }
             pub fn clear(&mut self) {
-                for b in self.enc_key.iter_mut() {
-                    *b = 0;
+                let nuke = self.enc_key.as_mut_ptr();
+                for i in 0..self.enc_key.len() {
+                    unsafe{nuke.add(i).write_volatile(0)};
                 }
-                for b in self.dec_key.iter_mut() {
-                    *b = 0;
+                let nuke = self.dec_key.as_mut_ptr();
+                for i in 0..self.dec_key.len() {
+                    unsafe{nuke.add(i).write_volatile(0)};
                 }
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
             }
+
+            #[inline(always)]
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
+                $name_back_enc(self)
+            }
+
+            #[inline(always)]
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
+                $name_back_dec(self)
+            }
         }
 
-        impl NewBlockCipher for $name {
+        impl KeySizeUser for $name {
             type KeySize = $key_size;
+        }
 
+        impl KeyInit for $name {
             #[inline]
-            fn new(key: &GenericArray<u8, $key_size>) -> Self {
+            fn new(key: &Key<Self>) -> Self {
                 Self {
                     enc_key: $vex_enc_key_schedule(key),
                     dec_key: $vex_dec_key_schedule(key),
@@ -429,50 +454,217 @@ macro_rules! define_aes_impl {
             }
         }
 
-        impl BlockCipher for $name {
+        impl BlockSizeUser for $name {
             type BlockSize = U16;
-            type ParBlocks = U8;
         }
 
-        impl BlockEncrypt for $name {
-            #[inline]
-            fn encrypt_block(&self, block: &mut Block) {
-                let mut blocks = [Block::default(); VEX_BLOCKS];
-                blocks[0].copy_from_slice(block);
-                $vex_encrypt(&self.enc_key, &mut blocks[0], $rounds);
-                block.copy_from_slice(&blocks[0]);
-            }
+        impl BlockCipher for $name {}
 
-            #[inline]
-            fn encrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-                for chunk in blocks.chunks_mut(VEX_BLOCKS) {
-                    $vex_encrypt(&self.enc_key, &mut chunk[0], $rounds);
-                }
+        impl BlockEncrypt for $name {
+            fn encrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_enc_backend())
             }
         }
 
         impl BlockDecrypt for $name {
-            #[inline]
-            fn decrypt_block(&self, block: &mut Block) {
-                let mut blocks = [Block::default(); VEX_BLOCKS];
-                blocks[0].copy_from_slice(block);
-                $vex_decrypt(&self.dec_key, &mut blocks[0], $rounds);
-                block.copy_from_slice(&blocks[0]);
+            fn decrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_dec_backend())
             }
+        }
 
+        impl From<$name_enc> for $name {
             #[inline]
-            fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-                for chunk in blocks.chunks_mut(VEX_BLOCKS) {
-                    $vex_decrypt(&self.dec_key, &mut chunk[0], $rounds);
+            fn from(enc: $name_enc) -> $name {
+                enc.inner
+            }
+        }
+
+        impl From<&$name_enc> for $name {
+            #[inline]
+            fn from(enc: &$name_enc) -> $name {
+                enc.inner.clone()
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+                f.write_str(concat!(stringify!($name), " { .. }"))
+            }
+        }
+
+        impl AlgorithmName for $name {
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(stringify!($name))
+            }
+        }
+
+        #[doc=$doc]
+        #[doc = "block cipher (encrypt-only)"]
+        #[derive(Clone)]
+        pub struct $name_enc {
+            inner: $name,
+        }
+
+        impl $name_enc {
+            #[inline(always)]
+            pub(crate) fn get_enc_backend(&self) -> $name_back_enc<'_> {
+                self.inner.get_enc_backend()
+            }
+        }
+
+        impl BlockCipher for $name_enc {}
+
+        impl KeySizeUser for $name_enc {
+            type KeySize = $key_size;
+        }
+
+        impl KeyInit for $name_enc {
+            #[inline(always)]
+            fn new(key: &Key<Self>) -> Self {
+                let inner = $name::new(key);
+                Self { inner }
+            }
+        }
+
+        impl BlockSizeUser for $name_enc {
+            type BlockSize = U16;
+        }
+
+        impl BlockEncrypt for $name_enc {
+            fn encrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_enc_backend())
+            }
+        }
+
+        impl fmt::Debug for $name_enc {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+                f.write_str(concat!(stringify!($name_enc), " { .. }"))
+            }
+        }
+
+        impl AlgorithmName for $name_enc {
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(stringify!($name_enc))
+            }
+        }
+
+        #[doc=$doc]
+        #[doc = "block cipher (decrypt-only)"]
+        #[derive(Clone)]
+        pub struct $name_dec {
+            inner: $name,
+        }
+
+        impl $name_dec {
+            #[inline(always)]
+            pub(crate) fn get_dec_backend(&self) -> $name_back_dec<'_> {
+                self.inner.get_dec_backend()
+            }
+        }
+
+        impl BlockCipher for $name_dec {}
+
+        impl KeySizeUser for $name_dec {
+            type KeySize = $key_size;
+        }
+
+        impl KeyInit for $name_dec {
+            #[inline(always)]
+            fn new(key: &Key<Self>) -> Self {
+                let inner = $name::new(key);
+                Self { inner }
+            }
+        }
+
+        impl From<$name_enc> for $name_dec {
+            #[inline]
+            fn from(enc: $name_enc) -> $name_dec {
+                Self { inner: enc.inner }
+            }
+        }
+
+        impl From<&$name_enc> for $name_dec {
+            #[inline]
+            fn from(enc: &$name_enc) -> $name_dec {
+                Self {
+                    inner: enc.inner.clone(),
                 }
             }
         }
 
-        opaque_debug::implement!($name);
+        impl BlockSizeUser for $name_dec {
+            type BlockSize = U16;
+        }
+
+        impl BlockDecrypt for $name_dec {
+            fn decrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+                f.call(&mut self.get_dec_backend());
+            }
+        }
+
+        impl fmt::Debug for $name_dec {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+                f.write_str(concat!(stringify!($name_dec), " { .. }"))
+            }
+        }
+
+        impl AlgorithmName for $name_dec {
+            fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(stringify!($name_dec))
+            }
+        }
+
+        pub(crate) struct $name_back_enc<'a>(&'a $name);
+
+        impl<'a> BlockSizeUser for $name_back_enc<'a> {
+            type BlockSize = U16;
+        }
+
+        impl<'a> ParBlocksSizeUser for $name_back_enc<'a> {
+            type ParBlocksSize = U1;
+        }
+
+        impl<'a> BlockBackend for $name_back_enc<'a> {
+            #[inline(always)]
+            fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
+                let res =  $vex_encrypt(&self.0.enc_key, block.clone_in().as_slice(), $rounds);
+                *block.get_out() = *Block::from_slice(&res);
+            }
+
+            #[inline(always)]
+            fn proc_par_blocks(&mut self, mut blocks: InOut<'_, '_, BatchBlocks>) {
+                let res = $vex_encrypt(&self.0.enc_key, &blocks.get_in()[0], $rounds);
+                *blocks.get_out() = *BatchBlocks::from_slice(&[*Block::from_slice(&res)]);
+            }
+        }
+
+        pub(crate) struct $name_back_dec<'a>(&'a $name);
+
+        impl<'a> BlockSizeUser for $name_back_dec<'a> {
+            type BlockSize = U16;
+        }
+
+        impl<'a> ParBlocksSizeUser for $name_back_dec<'a> {
+            type ParBlocksSize = U1;
+        }
+
+        impl<'a> BlockBackend for $name_back_dec<'a> {
+            #[inline(always)]
+            fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
+                let res =  $vex_decrypt(&self.0.dec_key, block.clone_in().as_slice(), $rounds);
+                *block.get_out() = *Block::from_slice(&res);
+            }
+
+            #[inline(always)]
+            fn proc_par_blocks(&mut self, mut blocks: InOut<'_, '_, BatchBlocks>) {
+                let res = $vex_decrypt(&self.0.dec_key, &blocks.get_in()[0], $rounds);
+                *blocks.get_out() = *BatchBlocks::from_slice(&[*Block::from_slice(&res)]);
+            }
+        }
     };
 }
 
-pub fn aes_vexriscv_encrypt(key: &VexKeys256, block: &mut [u8], rounds: u32) {
+pub fn aes_vexriscv_encrypt(key: &VexKeys256, block: &[u8], rounds: u32) -> [u8; 16] {
     let rk = key;
     let mut input: [u8; 16] = [0; 16];
     for (&src, dst) in block.iter().zip(input.iter_mut()) {
@@ -581,13 +773,15 @@ pub fn aes_vexriscv_encrypt(key: &VexKeys256, block: &mut [u8], rounds: u32) {
     s2 = aes_enc_round_last(s2, t1, AesByte::Byte3);
     s3 = aes_enc_round_last(s3, t2, AesByte::Byte3);
 
-    set_u32(block, 0, s0);
-    set_u32(block, 4, s1);
-    set_u32(block, 8, s2);
-    set_u32(block, 12, s3);
+    let mut output: [u8; 16] = [0; 16];
+    set_u32(&mut output, 0, s0);
+    set_u32(&mut output, 4, s1);
+    set_u32(&mut output, 8, s2);
+    set_u32(&mut output, 12, s3);
+    output
 }
 
-pub fn aes_vexriscv_decrypt(key: &VexKeys256, block: &mut [u8], rounds: u32) {
+pub fn aes_vexriscv_decrypt(key: &VexKeys256, block: &[u8], rounds: u32) -> [u8; 16] {
     let rk = key;
     let mut input: [u8; 16] = [0; 16];
     for (&src, dst) in block.iter().zip(input.iter_mut()) {
@@ -696,14 +890,20 @@ pub fn aes_vexriscv_decrypt(key: &VexKeys256, block: &mut [u8], rounds: u32) {
     s2 = aes_dec_round_last(s2, t3, AesByte::Byte3);
     s3 = aes_dec_round_last(s3, t0, AesByte::Byte3);
 
-    set_u32(block, 0, s0);
-    set_u32(block, 4, s1);
-    set_u32(block, 8, s2);
-    set_u32(block, 12, s3);
+    let mut output: [u8; 16] = [0; 16];
+    set_u32(&mut output, 0, s0);
+    set_u32(&mut output, 4, s1);
+    set_u32(&mut output, 8, s2);
+    set_u32(&mut output, 12, s3);
+    output
 }
 
 define_aes_impl!(
     Aes128,
+    Aes128Enc,
+    Aes128Dec,
+    Aes128BackEnc,
+    Aes128BackDec,
     U16,
     128,
     VexKeys128,
@@ -717,6 +917,10 @@ define_aes_impl!(
 
 define_aes_impl!(
     Aes256,
+    Aes256Enc,
+    Aes256Dec,
+    Aes256BackEnc,
+    Aes256BackDec,
     U32,
     256,
     VexKeys256,
