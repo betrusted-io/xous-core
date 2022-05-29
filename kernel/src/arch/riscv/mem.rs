@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{arch::mem, mem::MemoryManager};
+use crate::mem::MemoryManager;
 use core::fmt;
-use core::num::NonZeroUsize;
 use riscv::register::satp;
 use xous_kernel::{MemoryFlags, PID};
 
@@ -14,7 +13,6 @@ pub const DEFAULT_BASE: usize = 0x6000_0000;
 
 pub const USER_AREA_END: usize = 0xff00_0000;
 pub const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
-pub const WORD_SIZE: usize = core::mem::size_of::<usize>();
 pub const PAGE_SIZE: usize = 4096;
 pub const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
 pub const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
@@ -23,17 +21,13 @@ pub const THREAD_CONTEXT_AREA: usize = 0xff80_1000;
 pub const FLG_VALID: usize = 0x1;
 pub const FLG_R: usize = 0x2;
 pub const FLG_W: usize = 0x4;
-pub const FLG_X: usize = 0x8;
+// pub const FLG_X: usize = 0x8;
 pub const FLG_U: usize = 0x10;
 pub const FLG_A: usize = 0x40;
 pub const FLG_D: usize = 0x80;
 
 extern "C" {
     fn flush_mmu();
-}
-
-struct PageTable {
-    entries: [usize; PAGE_SIZE / WORD_SIZE],
 }
 
 pub unsafe fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8 {
@@ -166,78 +160,71 @@ impl MemoryMapping {
             return Err(xous_kernel::Error::MemoryInUse);
         }
 
+        let current_pid = crate::arch::process::current_pid();
+
         crate::mem::MemoryManager::with_mut(|memory_manager| {
             // Address of the root pagetable
-            let root_temp_virt = memory_manager.map_zeroed_page(pid, false)?;
+            let root_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
             let root_phys = super::mem::virt_to_phys(root_temp_virt as usize).unwrap() as usize;
             let root_virt = PAGE_TABLE_ROOT_OFFSET;
             let root_vpn0 = (root_virt as usize >> 12) & ((1 << 10) - 1);
-            let root_ppn = ((root_phys >> 12) << 22) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+            let root_ppn = ((root_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
 
             // Superpage that points to all other pagetables
-            let pages_l0_temp_virt = memory_manager.map_zeroed_page(pid, false)?;
+            let pages_l0_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
             let pages_l0_virt = PAGE_TABLE_OFFSET + 4096 * 1021;
             let pages_l0_phys = super::mem::virt_to_phys(pages_l0_temp_virt as usize)? as usize;
             let pages_l0_vpn0 = (pages_l0_virt as usize >> 12) & ((1 << 10) - 1);
             let pages_l0_ppn =
-                ((pages_l0_phys >> 12) << 22) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+                ((pages_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
 
             // Superpage that points to process-specific pages
-            let process_l0_temp_virt = memory_manager.map_zeroed_page(pid, false)?;
+            let process_l0_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
             let process_l0_virt = PAGE_TABLE_OFFSET + 4096 * 1022;
             let process_l0_phys = super::mem::virt_to_phys(process_l0_temp_virt as usize)? as usize;
             let process_l0_vpn0 = (process_l0_virt as usize >> 12) & ((1 << 10) - 1);
             let process_l0_ppn =
-                ((process_l0_phys >> 12) << 22) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+                ((process_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
 
             // Context switch information containing all thread information.
-            let context_temp_virt = memory_manager.map_zeroed_page(pid, false)?;
+            let context_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
             let context_virt = THREAD_CONTEXT_AREA;
             let context_phys = super::mem::virt_to_phys(context_temp_virt as usize)? as usize;
             let context_vpn0 = (context_virt as usize >> 12) & ((1 << 10) - 1);
             let context_ppn =
-                ((context_phys >> 12) << 22) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+                ((context_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
 
             // Map the kernel into the new process mapping so we can continue
             // execution when it is activated. We can copy this value from our
             // current pagetable mapping.
-            let krn_pg1023_ptr =
-                unsafe { (PAGE_TABLE_ROOT_OFFSET as *const usize).add(1023).read() };
-            unsafe { root_temp_virt.add(1023).write_volatile(krn_pg1023_ptr) };
+            let krn_pg1023_ptr = (PAGE_TABLE_ROOT_OFFSET as *const usize)
+                .add(1023)
+                .read_volatile();
+            root_temp_virt.add(1023).write_volatile(krn_pg1023_ptr);
 
             // Map the process superpage into itself.
-            unsafe {
-                root_temp_virt
-                    .add(1022)
-                    .write((process_l0_phys >> 12) << 10 | FLG_VALID)
-            };
+            root_temp_virt
+                .add(PAGE_TABLE_ROOT_OFFSET >> 22)
+                .write_volatile((process_l0_phys >> 12) << 10 | FLG_VALID);
 
             // Map the pagetable superpage into itself.
-            unsafe {
-                root_temp_virt
-                    .add(1021)
-                    .write((pages_l0_phys >> 12) << 10 | FLG_VALID)
-            };
+            root_temp_virt
+                .add(PAGE_TABLE_OFFSET >> 22)
+                .write_volatile((pages_l0_phys >> 12) << 10 | FLG_VALID);
 
             // Map the root pagetable and the context page into the new process
-            unsafe { process_l0_temp_virt.add(root_vpn0).write_volatile(root_ppn) };
-            unsafe {
-                process_l0_temp_virt
-                    .add(context_vpn0)
-                    .write_volatile(context_ppn)
-            };
+            process_l0_temp_virt.add(root_vpn0).write_volatile(root_ppn);
+            process_l0_temp_virt
+                .add(context_vpn0)
+                .write_volatile(context_ppn);
 
             // Add the the pagetable superpage to the l0 pagetable.
-            unsafe {
-                pages_l0_temp_virt
-                    .add(process_l0_vpn0)
-                    .write_volatile(process_l0_ppn)
-            };
-            unsafe {
-                pages_l0_temp_virt
-                    .add(pages_l0_vpn0)
-                    .write_volatile(pages_l0_ppn)
-            };
+            pages_l0_temp_virt
+                .add(process_l0_vpn0)
+                .write_volatile(process_l0_ppn);
+            pages_l0_temp_virt
+                .add(pages_l0_vpn0)
+                .write_volatile(pages_l0_ppn);
 
             memory_manager.move_page_raw(root_phys as *mut usize, pid)?;
             memory_manager.move_page_raw(pages_l0_phys as *mut usize, pid)?;
@@ -909,7 +896,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         // Map the page to our process
         *entry = (ppn1 << 20)
             | (ppn0 << 10)
-            | (flags | (1 << 0) /* valid */ | (1 << 6) /* D */ | (1 << 7)/* A */);
+            | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
         flush_mmu();
 
         // Zero-out the page
@@ -918,7 +905,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         // Move the page into userspace
         *entry = (ppn1 << 20)
             | (ppn0 << 10)
-            | (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7)/* A */);
+            | (flags | FLG_VALID /* valid */ | FLG_U /* USER */ | FLG_D /* D */ | FLG_A/* A */);
         flush_mmu();
     };
 

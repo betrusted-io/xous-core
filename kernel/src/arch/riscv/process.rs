@@ -132,7 +132,7 @@ impl Process {
     pub fn current() -> Process {
         let pid = unsafe { PROCESS_TABLE.current };
         let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-        assert!((pid.get() as usize) == hardware_pid);
+        assert_eq!((pid.get() as usize), hardware_pid);
         Process { pid }
     }
 
@@ -286,6 +286,11 @@ impl Process {
         let mut process = unsafe { &mut *PROCESS };
         let tid = INITIAL_TID;
 
+        assert_eq!(
+            pid,
+            crate::arch::current_pid(),
+            "hardware pid does not match setup pid"
+        );
         assert!(tid != IRQ_TID, "tried to init using the irq thread");
         assert!(
             mem::size_of::<ProcessImpl>() == PAGE_SIZE,
@@ -328,7 +333,6 @@ impl Process {
             *thread = Default::default();
         }
 
-        let process = unsafe { &mut *PROCESS };
         let mut thread = &mut process.threads[tid];
 
         thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
@@ -361,7 +365,7 @@ impl Process {
                 memory_manager
                     .reserve_range(
                         init_sp as *mut u8,
-                        stack_size + 4096,
+                        stack_size,
                         xous_kernel::MemoryFlags::R | xous_kernel::MemoryFlags::W,
                     )
                     .expect("couldn't reserve stack")
@@ -508,12 +512,12 @@ impl Process {
         services: &mut crate::SystemServices,
     ) -> Result<ProcessStartup, xous_kernel::Error> {
         let current_pid = current_pid();
-        let (server_id, cid) = services.create_server(pid)?;
-        services.disconnect_from_server(cid).ok();
-        let cid = services.connect_process_to_server(current_pid, server_id)?;
+
+        services.get_process(pid)?.mapping.activate()?;
+        let server_id = services.create_server_id()?;
         let server_id_array = server_id.to_array();
 
-        klog!("Previous process init was {:x?}", init_data);
+        // klog!("previous process init was {:x?}", init_data);
         let initial_thread = ThreadInit::new(
             init_data.start.get(),
             init_data.stack,
@@ -522,11 +526,15 @@ impl Process {
             server_id_array[2] as _,
             server_id_array[3] as _,
         );
-        
-        services.get_process(pid)?.mapping.activate()?;
+
         Self::setup_process(pid, initial_thread).unwrap();
-        klog!("Activating existing process {}", current_pid.get());
+
+        services.create_server_with_address(pid, server_id, false)?;
+
+        // klog!("activating parent process {}", current_pid.get());
         services.get_process(current_pid)?.mapping.activate()?;
+        // klog!("connecting to server in parent process");
+        let cid = services.connect_process_to_server(current_pid, server_id)?;
 
         services.send_memory(
             init_data.text.as_ptr() as *mut usize,
