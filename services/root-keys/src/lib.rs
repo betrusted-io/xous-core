@@ -11,7 +11,10 @@ use xous_ipc::Buffer;
 use num_traits::*;
 use std::convert::TryInto;
 
-pub use cipher::{self, BlockCipher, BlockDecrypt, BlockEncrypt, consts::U16};
+pub use cipher::{BlockSizeUser, BlockClosure, ParBlocksSizeUser, BlockBackend,
+    BlockEncrypt, BlockDecrypt, consts::U16, inout::InOut, generic_array::GenericArray,
+};
+pub(crate) type BatchBlocks = GenericArray<Block, U16>;
 
 pub enum ImageType {
     All,
@@ -255,6 +258,14 @@ impl RootKeys {
             }
         }
     }
+    #[inline(always)]
+    pub(crate) fn get_enc_backend(&self) -> RootKeysEnc<'_> {
+        RootKeysEnc(self)
+    }
+    #[inline(always)]
+    pub(crate) fn get_dec_backend(&self) -> RootKeysDec<'_> {
+        RootKeysDec(self)
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -271,51 +282,73 @@ impl Drop for RootKeys {
     }
 }
 
-impl BlockCipher for RootKeys {
-    type BlockSize = U16;   // 128-bit cipher
-    // we have to manually match this to PAR_BLOCKS!!
-    type ParBlocks = U16;   // 256-byte "chunk" if doing more than one block at a time, for better efficiency
+
+impl BlockSizeUser for RootKeys {
+    type BlockSize = U16;
 }
 
+impl BlockCipher for RootKeys {}
+
 impl BlockEncrypt for RootKeys {
-    fn encrypt_block(&self, block: &mut Block) {
-        if !self.ensure_aes_password() {
+    fn encrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+        f.call(&mut self.get_enc_backend())
+    }
+}
+
+impl BlockDecrypt for RootKeys {
+    fn decrypt_with_backend(&self, f: impl BlockClosure<BlockSize = U16>) {
+        f.call(&mut self.get_dec_backend())
+    }
+}
+
+pub(crate) struct RootKeysEnc<'a>(&'a RootKeys);
+
+impl<'a> BlockSizeUser for RootKeysEnc<'a> {
+    type BlockSize = U16;
+}
+
+impl<'a> ParBlocksSizeUser for RootKeysEnc<'a> {
+    type ParBlocksSize = U16;
+}
+
+impl<'a> BlockBackend for RootKeysEnc<'a> {
+    fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
+        if !self.0.ensure_aes_password() {
             return;
         }
         let op = AesOp {
-            key_index: self.key_index.to_u8().unwrap(),
-            block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
+            key_index: self.0.key_index.to_u8().unwrap(),
+            block: AesBlockType::SingleBlock(block.clone_in().as_slice().try_into().unwrap()),
             aes_op: AesOpType::Encrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.0.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
-            for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
-                *dst = src;
-            }
+            *block.get_out() = *Block::from_slice(&b);
         }
     }
-    fn encrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-        if !self.ensure_aes_password() {
+
+    fn proc_par_blocks(&mut self, mut blocks: InOut<'_, '_, BatchBlocks>) {
+        if !self.0.ensure_aes_password() {
             return;
         }
         let mut pb_buf: [[u8; 16]; PAR_BLOCKS] = [[0; 16]; PAR_BLOCKS];
-        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
+        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.clone_in().as_slice().iter()) {
             for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
                 *dst = src;
             }
         }
         let op = AesOp {
-            key_index: self.key_index.to_u8().unwrap(),
+            key_index: self.0.key_index.to_u8().unwrap(),
             block: AesBlockType::ParBlock(pb_buf),
             aes_op: AesOpType::Encrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.0.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
-            for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {
+            for (b, pbs) in pb.iter().zip(blocks.get_out().iter_mut()) {
                 for (&src, dst) in b.iter().zip(pbs.as_mut_slice().iter_mut()) {
                     *dst = src;
                 }
@@ -324,45 +357,53 @@ impl BlockEncrypt for RootKeys {
     }
 }
 
-impl BlockDecrypt for RootKeys {
-    fn decrypt_block(&self, block: &mut Block) {
-        if !self.ensure_aes_password() {
+pub(crate) struct RootKeysDec<'a>(&'a RootKeys);
+
+impl<'a> BlockSizeUser for RootKeysDec<'a> {
+    type BlockSize = U16;
+}
+
+impl<'a> ParBlocksSizeUser for RootKeysDec<'a> {
+    type ParBlocksSize = U16;
+}
+impl<'a> BlockBackend for RootKeysDec<'a> {
+    fn proc_block(&mut self, mut block: InOut<'_, '_, Block>) {
+        if !self.0.ensure_aes_password() {
             return;
         }
         let op = AesOp {
-            key_index: self.key_index.to_u8().unwrap(),
-            block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
+            key_index: self.0.key_index.to_u8().unwrap(),
+            block: AesBlockType::SingleBlock(block.clone_in().as_slice().try_into().unwrap()),
             aes_op: AesOpType::Decrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.0.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
-            for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
-                *dst = src;
-            }
+            *block.get_out() = *Block::from_slice(&b);
         }
     }
-    fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-        if !self.ensure_aes_password() {
+
+    fn proc_par_blocks(&mut self, mut blocks: InOut<'_, '_, BatchBlocks>) {
+        if !self.0.ensure_aes_password() {
             return;
         }
         let mut pb_buf: [[u8; 16]; 16] = [[0; 16]; 16];
-        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
+        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.clone_in().as_slice().iter()) {
             for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
                 *dst = src;
             }
         }
         let op = AesOp {
-            key_index: self.key_index.to_u8().unwrap(),
+            key_index: self.0.key_index.to_u8().unwrap(),
             block: AesBlockType::ParBlock(pb_buf),
             aes_op: AesOpType::Decrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.0.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
-            for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {
+            for (b, pbs) in pb.iter().zip(blocks.get_out().iter_mut()) {
                 for (&src, dst) in b.iter().zip(pbs.as_mut_slice().iter_mut()) {
                     *dst = src;
                 }
