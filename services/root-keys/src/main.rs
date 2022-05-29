@@ -94,7 +94,7 @@ mod implementation {
     use num_traits::*;
     use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
     use aes::Aes256;
-    use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
+    use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
     use std::convert::TryInto;
 
     #[derive(Debug, Copy, Clone)]
