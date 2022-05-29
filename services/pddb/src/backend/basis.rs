@@ -139,7 +139,7 @@ use std::convert::TryInto;
 use aes_gcm_siv::{Aes256GcmSiv, Key};
 use aes_gcm_siv::aead::NewAead;
 use aes::Aes256;
-use aes::cipher::{NewBlockCipher, generic_array::GenericArray};
+use aes::cipher::{KeyInit, generic_array::GenericArray};
 use std::iter::IntoIterator;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::io::{Result, Error, ErrorKind};
