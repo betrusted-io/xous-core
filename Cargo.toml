@@ -76,8 +76,8 @@ members = [
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
-  "test-spawn",
-  "spawn",
+  "services/test-spawn",
+  "services/test-spawn/spawn",
   "kernel",
   "loader",
 ]
