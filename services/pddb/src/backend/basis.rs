@@ -136,7 +136,7 @@ use super::*;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use std::convert::TryInto;
-use aes_gcm_siv::{Aes256GcmSiv, Key};
+use aes_gcm_siv::{AesGcmSiv, Key};
 use aes_gcm_siv::aead::NewAead;
 use aes::Aes256;
 use aes::cipher::{KeyInit, generic_array::GenericArray};
@@ -983,7 +983,7 @@ pub(crate) struct BasisCacheEntry {
     /// expressed as a number that needs to be multiplied by DICT_VSIZE to arrive at a virtual address
     pub free_dict_offset: Option<u32>,
     /// the cipher for the basis
-    pub cipher: Aes256GcmSiv,
+    pub cipher: AesGcmSiv::<Aes256>,
     /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
     pub cipher_ecb: Aes256,
     /// raw AES key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
@@ -1010,7 +1010,7 @@ impl BasisCacheEntry {
     /// discover the location of the `large_alloc_ptr`.
     pub(crate) fn mount(hw: &mut PddbOs, name: &str,  key: &BasisKeys, lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         if let Some(basis_map) = hw.pt_scan_key(&key.pt, name) {
-            let cipher = Aes256GcmSiv::new(Key::from_slice(&key.data));
+            let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&key.data));
             let aad = hw.data_aad(name);
             // get the first page, where the basis root is guaranteed to be
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
