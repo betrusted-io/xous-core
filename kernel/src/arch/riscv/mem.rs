@@ -226,10 +226,17 @@ impl MemoryMapping {
                 .add(pages_l0_vpn0)
                 .write_volatile(pages_l0_ppn);
 
+            // Mark the four pages as being owned by the new process
             memory_manager.move_page_raw(root_phys as *mut usize, pid)?;
             memory_manager.move_page_raw(pages_l0_phys as *mut usize, pid)?;
             memory_manager.move_page_raw(process_l0_phys as *mut usize, pid)?;
             memory_manager.move_page_raw(context_phys as *mut usize, pid)?;
+
+            // Unmap our copies of the four pages
+            unmap_page_inner(memory_manager, root_temp_virt as usize)?;
+            unmap_page_inner(memory_manager, pages_l0_temp_virt as usize)?;
+            unmap_page_inner(memory_manager, process_l0_temp_virt as usize)?;
+            unmap_page_inner(memory_manager, context_temp_virt as usize)?;
 
             // Construct a dummy SATP that we will use to hand memory to the new process.
             self.satp = 0x8000_0000 | ((pid.get() as usize) << 22) | (root_phys as usize >> 12);
