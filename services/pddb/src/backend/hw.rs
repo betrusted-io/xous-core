@@ -4,7 +4,7 @@ use crate::*;
 use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
 use aes::{Aes256, Block, BLOCK_SIZE};
-use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 use root_keys::api::AesRootkeyType;
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
@@ -1438,6 +1438,7 @@ impl PddbOs {
     /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a reference
     /// to the Spinor object allocated to the PDDB implementation for this operation.
     pub(crate) fn pddb_format(&mut self, fast: bool, progress: Option<&modals::Modals>) -> Result<()> {
+        use cipher::BlockDecrypt;
         if !self.rootkeys.is_initialized().unwrap() {
             return Err(Error::new(ErrorKind::Unsupported, "Root keys are not initialized; cannot format a PDDB without root keys!"));
         }
