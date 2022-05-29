@@ -8,38 +8,36 @@ mod aes256tests;
 macro_rules! block_cipher_test {
     ($name:ident, $test_name:expr, $test_case_name:ident, $cipher:ty) => {
         fn $name() -> String::<1024> {
-            use cipher::generic_array::{typenum::Unsigned, GenericArray};
-            use cipher::{
-                BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher,
+            use aes::cipher::{
+                generic_array::GenericArray,
+                BlockDecryptMut, BlockEncryptMut, KeyInit,
+                consts::U16,
             };
 
-            fn run_test(key: &[u8], pt: &[u8], ct: &[u8]) -> bool {
-                let state = <$cipher as NewBlockCipher>::new_from_slice(key).unwrap();
+            fn run_test(key: &[u8], pt: &[u8], ct: &[u8]) -> (bool, GenericArray<u8, U16>) {
+                let mut state = <$cipher as KeyInit>::new_from_slice(key).unwrap();
 
                 let mut block = GenericArray::clone_from_slice(pt);
-                state.encrypt_block(&mut block);
+                state.encrypt_block_mut(&mut block);
                 if ct != block.as_slice() {
-                    return false;
+                    return (false, block);
                 }
 
-                state.decrypt_block(&mut block);
+                state.decrypt_block_mut(&mut block);
                 if pt != block.as_slice() {
-                    return false;
+                    return (false, block);
                 }
 
-                true
+                (true, block)
             }
 
             fn run_par_test(key: &[u8], pt: &[u8]) -> bool {
-                type ParBlocks = <$cipher as BlockCipher>::ParBlocks;
-                type BlockSize = <$cipher as BlockCipher>::BlockSize;
-                type Block = GenericArray<u8, BlockSize>;
-                type ParBlock = GenericArray<Block, ParBlocks>;
+                type Block = aes::cipher::Block<$cipher>;
 
-                let state = <$cipher as NewBlockCipher>::new_from_slice(key).unwrap();
+                let mut state = <$cipher as KeyInit>::new_from_slice(key).unwrap();
 
                 let block = Block::clone_from_slice(pt);
-                let mut blocks1 = ParBlock::default();
+                let mut blocks1 = vec![block; 101];
                 for (i, b) in blocks1.iter_mut().enumerate() {
                     *b = block;
                     b[0] = b[0].wrapping_add(i as u8);
@@ -48,9 +46,9 @@ macro_rules! block_cipher_test {
 
                 // check that `encrypt_blocks` and `encrypt_block`
                 // result in the same ciphertext
-                state.encrypt_blocks(&mut blocks1);
+                state.encrypt_blocks_mut(&mut blocks1);
                 for b in blocks2.iter_mut() {
-                    state.encrypt_block(b);
+                    state.encrypt_block_mut(b);
                 }
                 if blocks1 != blocks2 {
                     return false;
@@ -58,9 +56,9 @@ macro_rules! block_cipher_test {
 
                 // check that `encrypt_blocks` and `encrypt_block`
                 // result in the same plaintext
-                state.decrypt_blocks(&mut blocks1);
+                state.decrypt_blocks_mut(&mut blocks1);
                 for b in blocks2.iter_mut() {
-                    state.decrypt_block(b);
+                    state.decrypt_block_mut(b);
                 }
                 if blocks1 != blocks2 {
                     return false;
@@ -71,29 +69,39 @@ macro_rules! block_cipher_test {
 
             let mut ret = String::<1024>::new();
             write!(ret, "test {} passed", $test_name).unwrap();
-            let pb = <$cipher as BlockCipher>::ParBlocks::to_usize();
-            let mut i = 0;
-            for test in $test_case_name.iter() {
-                if !run_test(&test.key, &test.pt, &test.ct) {
+            for (i, test) in $test_case_name.iter().enumerate() {
+                let (pass, block) = run_test(&test.key, &test.pt, &test.ct);
+                if !pass {
                     ret.clear();
-                    write!(ret, "Failed test #{}\nkey: {:?}\nplaintext: {:?}\nciphertext: {:?}\n",
-                        i, test.key, test.pt, test.ct,).unwrap();
+                    write!(ret,
+                        "\n\
+                         Failed test №{}\n\
+                         key:\t{:x?}\n\
+                         plaintext:\t{:x?}\n\
+                         ciphertext:\t{:x?}\n\
+                         block:\t{:x?}\n",
+                        i, test.key, test.pt, test.ct, block
+                    ).unwrap();
                     return ret;
                 }
 
                 // test parallel blocks encryption/decryption
-                if pb != 1 {
-                    if !run_par_test(&test.key, &test.pt) {
-                        write!(ret, "Failed parallel test #{}\nkey: {:?}\nplaintext: {:?}\nciphertext: {:?}\n",
-                            i, test.key, test.pt, test.ct,).unwrap();
-                        return ret;
-                    }
+                if !run_par_test(&test.key, &test.pt) {
+                    ret.clear();
+                    write!(ret,
+                        "\n\
+                         Failed parallel test №{}\n\
+                         key:\t{:x?}\n\
+                         plaintext:\t{:x?}\n\
+                         ciphertext:\t{:x?}\n",
+                        i, test.key, test.pt, test.ct,
+                    ).unwrap();
+                    return ret;
                 }
-                i += 1;
             }
             // test if cipher can be cloned
             let key = Default::default();
-            let _ = <$cipher as NewBlockCipher>::new(&key).clone();
+            let _ = <$cipher>::new(&key).clone();
 
             ret
         }
@@ -103,8 +111,8 @@ macro_rules! block_cipher_test {
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 
-use aes::*;
-use cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher};
+use aes::{Aes256, Aes128, Aes256Soft, Aes128Soft};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 
 use num_traits::*;
 
@@ -126,7 +134,7 @@ pub(crate) enum BenchResult {
 
 const TEST_ITERS: usize = 500;
 const TEST_MAX_LEN: usize = 8192;
-use cipher::generic_array::GenericArray;
+use aes::cipher::generic_array::GenericArray;
 
 /*
 hardware: -148mA @ 100% CPU usage, 77.74us/block enc+dec AES128 (500 iters, 8192 len)
@@ -142,6 +150,10 @@ software 158.48us/block enc+dec aes256 (500 iters, 8192 len)
 with L2 cache on (64k):
 hardware 92.24us/block enc+dec aes256 (500 iters, 8192 len)
 software 154.05us/block enc+dec aes256 (500 iters, 8192 len)
+
+with L2 cache on (64k) and 0.8.2 fixedslice implementation:
+hardware 95.8us/block enc+dec aes256 (500 iters, 8192 len)
+software 131.66us/block enc+dec aes256 (500 iters, 8192 len)
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
