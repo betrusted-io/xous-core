@@ -806,11 +806,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 .map(xous_kernel::Result::NewProcess)
         }),
         SysCall::CreateServerWithAddress(name) => SystemServices::with_mut(|ss| {
-            ss.create_server_with_address(pid, name)
+            ss.create_server_with_address(pid, name, true)
                 .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
         }),
         SysCall::CreateServer => SystemServices::with_mut(|ss| {
-            ss.create_server(pid)
+            ss.create_server(pid, true)
                 .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
         }),
         SysCall::CreateServerId => {

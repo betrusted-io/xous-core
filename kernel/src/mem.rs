@@ -455,7 +455,7 @@ impl MemoryManager {
         if is_user {
             crate::arch::mem::hand_page_to_user(virt as _)?;
         }
-        // println!(
+        // klog!(
         //     "Mapped {:08x} -> {:08x} (user? {})",
         //     phys as usize, virt as usize, is_user
         // );
@@ -684,7 +684,7 @@ impl MemoryManager {
         ) -> Result<(), xous_kernel::Error> {
             if let Some(current_pid) = *owner_addr {
                 if current_pid != pid {
-                    // println!(
+                    // klog!(
                     //     "In claim_or_release({}, {}, {:?}) -- addr is owned by {} not {}",
                     //     owner_addr.map(|v| v.get()).unwrap_or_default(),
                     //     pid,

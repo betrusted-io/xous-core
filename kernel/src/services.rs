@@ -419,12 +419,16 @@ impl SystemServices {
             return Err(xous_kernel::Error::ProcessNotFound);
         }
         let new_pid = new_pid.unwrap();
-        let startup = arch::process::Process::create(new_pid, init_process, self)?;
-        let mut entry = self.processes[entry_idx.unwrap()];
-        println!(
-            "Creating new process for PID {} with PPID {}",
-            new_pid, ppid
-        );
+        let startup = arch::process::Process::create(new_pid, init_process, self).unwrap();
+
+        let mut entry = &mut self.processes[entry_idx.unwrap()];
+        // The `Process::create()` call above set up the process so that it will
+        // be ready to run right away, meaning we will not need to first set
+        // the state to `ProcessState::Allocated` and we can go straight to running
+        // this process.
+        entry.state = ProcessState::Ready(1 << INITIAL_TID);
+        // entry.ppid = ppid;
+        klog!("created new process for PID {} with PPID {}", new_pid, ppid);
         return Ok(startup);
     }
 
@@ -1663,10 +1667,11 @@ impl SystemServices {
         &mut self,
         pid: PID,
         sid: SID,
+        connect: bool,
     ) -> Result<(SID, CID), xous_kernel::Error> {
-        // println!(
-        //     "KERNEL({}): Looking through server list for free server",
-        //     self.pid.get()
+        // klog!(
+        //     "looking through server list for free server, connect? {}",
+        //     connect
         // );
 
         // TODO: Come up with a way to randomize the server ID
@@ -1679,7 +1684,7 @@ impl SystemServices {
         }
 
         for entry in self.servers.iter_mut() {
-            if entry == &None {
+            if *entry == None {
                 #[cfg(baremetal)]
                 // Allocate a single page for the server queue
                 let backing = crate::mem::MemoryManager::with_mut(|mm| unsafe {
@@ -1691,17 +1696,16 @@ impl SystemServices {
 
                 #[cfg(not(baremetal))]
                 let backing = unsafe { MemoryRange::new(4096, 4096).unwrap() };
-                // println!(
-                //     "KERNEL({}): Found a free slot for server {:?} @ {} -- allocating an entry",
-                //     pid.get(),
-                //     sid,
-                //     _idx,
-                // );
 
+                // klog!("initializing new server with backing at {:x?} -- entry is {:?} (connect? {:?})", backing, *entry, connect);
                 // Initialize the server with the given memory page.
-                Server::init(entry, pid, sid, backing).map_err(|x| x)?;
+                Server::init(entry, pid, sid, backing).unwrap();
 
-                let cid = self.connect_to_server(sid)?;
+                let cid = if connect {
+                    self.connect_to_server(sid)?
+                } else {
+                    0
+                };
                 return Ok((sid, cid));
             }
         }
@@ -1719,14 +1723,13 @@ impl SystemServices {
     ///   queue.
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
-    pub fn create_server(&mut self, pid: PID) -> Result<(SID, CID), xous_kernel::Error> {
-        let sid = SID::from_u32(
-            arch::rand::get_u32(),
-            arch::rand::get_u32(),
-            arch::rand::get_u32(),
-            arch::rand::get_u32(),
-        );
-        self.create_server_with_address(pid, sid)
+    pub fn create_server(
+        &mut self,
+        pid: PID,
+        connect: bool,
+    ) -> Result<(SID, CID), xous_kernel::Error> {
+        let sid = self.create_server_id()?;
+        self.create_server_with_address(pid, sid, connect)
     }
 
     /// Generate a random server ID and return it to the caller. Doesn't create
@@ -1980,7 +1983,7 @@ impl SystemServices {
         &mut self,
         sidx: usize,
         pid: PID,
-        context: TID,
+        thread: TID,
         message: Message,
         original_address: Option<MemoryAddress>,
     ) -> Result<usize, xous_kernel::Error> {
@@ -1997,7 +2000,7 @@ impl SystemServices {
             let server = self
                 .server_from_sidx_mut(sidx)
                 .expect("couldn't re-discover server index");
-            server.queue_message(pid, context, message, original_address)
+            server.queue_message(pid, thread, message, original_address)
         };
         let current_process = self
             .get_process(current_pid)
