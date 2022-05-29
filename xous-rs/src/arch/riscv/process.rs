@@ -6,11 +6,33 @@ use core::convert::TryFrom;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProcessArgs<'a> {
     stub: &'a [u8],
+    stack: crate::MemoryRange,
+    load_address: crate::MemoryAddress,
+    entrypoint: crate::MemoryAddress,
 }
 
 impl<'a> ProcessArgs<'a> {
-    pub fn new(stub: &[u8]) -> ProcessArgs {
-        ProcessArgs { stub }
+    pub fn new(
+        stub: &[u8],
+        load_address: crate::MemoryAddress,
+        entrypoint: crate::MemoryAddress,
+    ) -> ProcessArgs {
+        ProcessArgs {
+            load_address,
+            entrypoint,
+            stub,
+            stack: unsafe { crate::MemoryRange::new(0x8000_0000 - 131072, 131072).unwrap() },
+        }
+    }
+
+    pub fn stack_base(mut self, base: crate::MemoryAddress) -> ProcessArgs<'a> {
+        self.stack.addr = base;
+        self
+    }
+
+    pub fn stack_size(mut self, length: crate::MemorySize) -> ProcessArgs<'a> {
+        self.stack.size = length;
+        self
     }
 }
 
@@ -133,7 +155,7 @@ pub fn create_process_pre(args: &ProcessArgs) -> core::result::Result<ProcessIni
     }
     Ok(ProcessInit {
         // 0,1 -- Stack Base, Stack Size
-        stack: unsafe { crate::MemoryRange::new(0x7000_0000, 131072)? },
+        stack: args.stack,
         // 2,3 -- Text Start, Text Size
         text: spawn_memory,
         // 4 -- Text destination address
