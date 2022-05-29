@@ -29,9 +29,6 @@ default-members = [
   "services/dns",
   "services/modals",
   "services/usb-device-xous",
-  "apps/ball",
-  "apps/hello",
-  "apps/repl",
 ]
 members = [
   "xous-ipc",
