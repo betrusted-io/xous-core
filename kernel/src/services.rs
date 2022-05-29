@@ -396,7 +396,7 @@ impl SystemServices {
     ) -> Result<ProcessStartup, xous_kernel::Error> {
         let mut entry_idx = None;
         let mut new_pid = None;
-        let ppid = crate::arch::process::current_pid();
+        let _ppid = crate::arch::process::current_pid();
 
         for (idx, entry) in self.processes.iter_mut().enumerate() {
             if entry.state != ProcessState::Free {
@@ -427,7 +427,7 @@ impl SystemServices {
         // the state to `ProcessState::Allocated` and we can go straight to running
         // this process.
         entry.state = ProcessState::Ready(1 << INITIAL_TID);
-        // entry.ppid = ppid;
+        // entry.ppid = _ppid;
         klog!("created new process for PID {} with PPID {}", new_pid, ppid);
         return Ok(startup);
     }
