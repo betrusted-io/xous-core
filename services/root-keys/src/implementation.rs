@@ -25,7 +25,8 @@ use graphics_server::BulkRead;
 use core::mem::size_of;
 use core::cell::RefCell;
 
-use aes::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
+use aes::Aes256;
+use aes::cipher::{KeyInit, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 
 use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
