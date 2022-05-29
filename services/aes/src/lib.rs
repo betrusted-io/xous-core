@@ -2,7 +2,7 @@
 
 /*
   Soft AES implementations vendored in from https://github.com/RustCrypto/block-ciphers.git
-  Commit ref d5aac29e88c45f5fc8bec0ba2bbbbbcd590a0a82, aes v0.7.4
+  Commit ref 7de364ede310f1ea7080c99ddf1138aeb47f9a69 0.8.1
   License is MIT/Apache 2.0.
 
   Soft AES is mainly here for validation/benchmarking comparison against the Vex-accelerated primitives
@@ -11,29 +11,32 @@
   eliminates another foreign build.rs script that runs on the local build machine.
 */
 
-mod soft;
-mod vex;
 
+#[cfg(feature = "hazmat")]
+pub mod hazmat;
+
+mod soft;
 pub use soft::{Aes128Soft, Aes192, Aes256Soft};
 
+pub use cipher;
+use cipher::{
+    consts::{U16, U8},
+    generic_array::GenericArray,
+};
+
+/// 128-bit AES block
+pub type Block = GenericArray<u8, U16>;
+/// Eight 128-bit AES blocks
+pub type Block8 = GenericArray<Block, U8>;
+
+// vex patches
+mod vex;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 pub use vex::{Aes128, Aes256};
-
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use soft::Aes128Soft as Aes128;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use soft::Aes256Soft as Aes256;
-
-#[cfg(feature = "ctr")]
-pub use soft::{Aes128Ctr, Aes192Ctr, Aes256Ctr};
-
-pub use cipher::{self, BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher};
-
-/// 128-bit AES block
-pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
-
-/// 8 x 128-bit AES blocks to be processed in parallel
-pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U8>;
 
 /// Size of an AES block (128-bits; 16-bytes)
 pub const BLOCK_SIZE: usize = 16;

@@ -19,7 +19,7 @@
 
 use aes::cipher::generic_array::GenericArray;
 use aes::Aes256;
-use aes::{BlockDecrypt, BlockEncrypt, NewBlockCipher};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use byteorder::{BigEndian, ByteOrder};
 
 use crate::api::KeywrapError;
