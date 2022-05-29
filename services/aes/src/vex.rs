@@ -472,6 +472,10 @@ macro_rules! define_aes_impl {
             }
         }
 
+        impl ParBlocksSizeUser for $name {
+            type ParBlocksSize = U1;
+        }
+
         impl From<$name_enc> for $name {
             #[inline]
             fn from(enc: $name_enc) -> $name {
