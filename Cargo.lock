@@ -731,7 +731,7 @@ dependencies = [
  "cbc",
  "cbor",
  "p256",
- "rand_core 0.5.1",
+ "rand_core 0.6.3",
  "sha2",
  "subtle",
  "trng",
