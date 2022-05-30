@@ -159,9 +159,9 @@ pub fn create_process_pre(args: &ProcessArgs) -> core::result::Result<ProcessIni
         // 2,3 -- Text Start, Text Size
         text: spawn_memory,
         // 4 -- Text destination address
-        text_destination: crate::MemoryAddress::new(0x2050_1000).unwrap(),
+        text_destination: args.load_address,
         // 5 -- Entrypoint
-        start: crate::MemoryAddress::new(0x2050_1000).unwrap(),
+        start: args.entrypoint,
     })
 }
 
