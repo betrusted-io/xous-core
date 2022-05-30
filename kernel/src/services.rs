@@ -421,12 +421,15 @@ impl SystemServices {
         let new_pid = new_pid.unwrap();
         let startup = arch::process::Process::create(new_pid, init_process, self).unwrap();
 
-        let mut entry = &mut self.processes[entry_idx.unwrap()];
-        // The `Process::create()` call above set up the process so that it will
-        // be ready to run right away, meaning we will not need to first set
-        // the state to `ProcessState::Allocated` and we can go straight to running
-        // this process.
-        entry.state = ProcessState::Ready(1 << INITIAL_TID);
+        #[cfg(baremetal)]
+        {
+            let mut entry = &mut self.processes[entry_idx.unwrap()];
+            // The `Process::create()` call above set up the process so that it will
+            // be ready to run right away, meaning we will not need to first set
+            // the state to `ProcessState::Allocated` and we can go straight to running
+            // this process.
+            entry.state = ProcessState::Ready(1 << INITIAL_TID);
+        }
         // entry.ppid = _ppid;
         klog!("created new process for PID {} with PPID {}", new_pid, ppid);
         return Ok(startup);
@@ -1208,6 +1211,9 @@ impl SystemServices {
             return Err(xous_kernel::Error::BadAddress);
         }
         if dest_virt as usize & 0xfff != 0 {
+            return Err(xous_kernel::Error::BadAddress);
+        }
+        if (dest_virt as usize) + len > crate::arch::mem::USER_AREA_END {
             return Err(xous_kernel::Error::BadAddress);
         }
 
