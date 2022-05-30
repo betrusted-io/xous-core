@@ -27,7 +27,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit,
+    generic_array::GenericArray, Key, Iv};
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
@@ -36,7 +37,7 @@ use super::util::Block16;
 
 pub fn cbc_encrypt(key: &[u8; 32], mut iv: Block16, blocks: &mut [Block16])
 {
-    Aes256CbcEnc::new(&key.into(), &iv.into())
+    Aes256CbcEnc::new(Key::from_slice(key), Iv::from_slice(&iv))
         .encrypt_blocks_mut(blocks);
 }
 
