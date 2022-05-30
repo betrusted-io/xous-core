@@ -18,7 +18,7 @@ mod util;
 pub mod hmac;
 pub mod sha256;
 pub mod ecdh;
-//pub mod ecdsa;
+pub mod ecdsa;
 
 // Trait for hash functions that returns a 256-bit hash.
 // The type must be Sized (size known at compile time) so that we can instanciate one on the stack

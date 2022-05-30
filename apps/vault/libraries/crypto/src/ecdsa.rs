@@ -12,40 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(feature = "std")]
-use arrayref::array_ref;
-use arrayref::{array_mut_ref, mut_array_refs};
+use p256::{
+    ecdsa::{SigningKey, Signature as P256Signature, signature::{Signer, RandomizedSigner}},
+};
+use p256::ecdsa::VerifyingKey;
+use rand_core::OsRng;
+
 use cbor::{cbor_bytes, cbor_map_options};
-use core::marker::PhantomData;
+
+use super::rng256::Rng256;
+use super::Hash256;
+
+const INT256_NBYTES: usize = 32;
 
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "derive_debug", derive(Debug))]
 pub struct SecKey {
-    k: NonZeroExponentP256,
+    k: SigningKey,
+    // k: NonZeroExponentP256,
 }
 
 pub struct Signature {
-    r: NonZeroExponentP256,
-    s: NonZeroExponentP256,
+    sig: P256Signature,
+    // r: NonZeroExponentP256,
+    // s: NonZeroExponentP256,
 }
 
 pub struct PubKey {
-    p: PointP256,
+    p: VerifyingKey,
+    // p: PointP256,
 }
 
 impl SecKey {
-    pub fn gensk<R>(rng: &mut R) -> SecKey
+    // we bypass the OpenSK "rng" specifier, because we have a standard RNG API in our system and do
+    // not need to rely on its hack to pass an RNG around.
+    pub fn gensk<R>(_rng: &mut R) -> SecKey
     where
         R: Rng256,
     {
         SecKey {
-            k: NonZeroExponentP256::gen_uniform(rng),
+            k: SigningKey::random(&mut OsRng),
+            // k: NonZeroExponentP256::gen_uniform(rng),
         }
     }
 
     pub fn genpk(&self) -> PubKey {
         PubKey {
-            p: PointP256::base_point_mul(self.k.as_exponent()),
+            p: VerifyingKey::from(&self.k),
+            // p: PointP256::base_point_mul(self.k.as_exponent()),
         }
     }
 
@@ -53,18 +67,14 @@ impl SecKey {
     // Under the hood, rejection sampling is used to make sure that the randomization parameter is
     // uniformly distributed.
     // The provided RNG must be cryptographically secure; otherwise this method is insecure.
-    pub fn sign_rng<H, R>(&self, msg: &[u8], rng: &mut R) -> Signature
+    pub fn sign_rng<H, R>(&self, msg: &[u8], _rng: &mut R) -> Signature
     where
         H: Hash256,
         R: Rng256,
     {
-        let m = ExponentP256::modn(Int256::from_bin(&H::hash(msg)));
-
-        loop {
-            let k = NonZeroExponentP256::gen_uniform(rng);
-            if let Some(sign) = self.try_sign(&k, &m) {
-                return sign;
-            }
+        let p256sig = self.k.sign_with_rng(&mut OsRng, msg);
+        Signature {
+            sig: p256sig
         }
     }
 
@@ -72,91 +82,46 @@ impl SecKey {
     // parameter.
     pub fn sign_rfc6979<H>(&self, msg: &[u8]) -> Signature
     where
-        H: Hash256 + HashBlockSize64Bytes,
+        H: Hash256,
     {
-        let m = ExponentP256::modn(Int256::from_bin(&H::hash(msg)));
-
-        let mut rfc_6979 = Rfc6979::<H>::new(self, &msg);
-        loop {
-            let k = NonZeroExponentP256::from_int_checked(rfc_6979.next());
-            // The branching here is fine. By design the algorithm of RFC 6976 has a running time
-            // that depends on the sequence of generated k.
-            if bool::from(k.is_none()) {
-                continue;
-            }
-            let k = k.unwrap();
-
-            if let Some(sign) = self.try_sign(&k, &m) {
-                return sign;
-            }
-        }
-    }
-
-    // Try signing a curve element given a randomization parameter k. If no signature can be
-    // obtained from this k, None is returned and the caller should try again with another value.
-    fn try_sign(&self, k: &NonZeroExponentP256, msg: &ExponentP256) -> Option<Signature> {
-        let r = ExponentP256::modn(PointP256::base_point_mul(k.as_exponent()).getx().to_int());
-        // The branching here is fine because all this reveals is that k generated an unsuitable r.
-        let r = r.non_zero();
-        if bool::from(r.is_none()) {
-            return None;
-        }
-        let r = r.unwrap();
-
-        let (s, top) = &(&r * &self.k).to_int() + &msg.to_int();
-        let s = k.inv().as_exponent().mul_top(&s, top);
-
-        // The branching here is fine because all this reveals is that k generated an unsuitable s.
-        let s = s.non_zero();
-        if bool::from(s.is_none()) {
-            return None;
-        }
-        let s = s.unwrap();
-
-        Some(Signature { r, s })
-    }
-
-    #[cfg(test)]
-    pub fn get_k_rfc6979<H>(&self, msg: &[u8]) -> NonZeroExponentP256
-    where
-        H: Hash256 + HashBlockSize64Bytes,
-    {
-        let m = ExponentP256::modn(Int256::from_bin(&H::hash(msg)));
-
-        let mut rfc_6979 = Rfc6979::<H>::new(self, &msg);
-        loop {
-            let k = NonZeroExponentP256::from_int_checked(rfc_6979.next());
-            if bool::from(k.is_none()) {
-                continue;
-            }
-            let k = k.unwrap();
-            if self.try_sign(&k, &m).is_some() {
-                return k;
-            }
+        let p256sig = self.k.sign(msg);
+        Signature {
+            sig: p256sig
         }
     }
 
     pub fn from_bytes(bytes: &[u8; 32]) -> Option<SecKey> {
+        let sk = SigningKey::from_bytes(bytes);
+        match sk {
+            Ok(k) => Some(SecKey{k}),
+            _ => None
+        }
+        /*
         let k = NonZeroExponentP256::from_int_checked(Int256::from_bin(bytes));
         // The branching here is fine because all this reveals is whether the key was invalid.
         if bool::from(k.is_none()) {
             return None;
         }
         let k = k.unwrap();
-        Some(SecKey { k })
+        Some(SecKey { k })*/
     }
 
     pub fn to_bytes(&self, bytes: &mut [u8; 32]) {
-        self.k.to_int().to_bin(bytes);
+        bytes.copy_from_slice(
+            self.k.to_bytes()
+            .as_slice()
+        );
     }
 }
 
 impl Signature {
     pub fn to_asn1_der(&self) -> Vec<u8> {
+        // let's hope this shakes out in testing.
+        self.sig.to_der().as_bytes().to_vec()
+        /*
         const DER_INTEGER_TYPE: u8 = 0x02;
         const DER_DEF_LENGTH_SEQUENCE: u8 = 0x30;
-
-        let r_encoding = self.r.to_int().to_minimal_encoding();
+        let r_encoding = self.sig.r().to_int().to_minimal_encoding();
         let s_encoding = self.s.to_int().to_minimal_encoding();
         // We rely on the encoding to be short enough such that
         // sum of lengths + 4 still fits into 7 bits.
@@ -176,7 +141,12 @@ impl Signature {
         encoding.push(DER_INTEGER_TYPE);
         encoding.push(s_encoding.len() as u8);
         encoding.extend(s_encoding);
-        encoding
+        encoding */
+    }
+
+    #[cfg(feature = "std")]
+    fn to_p256(&self) -> P256Signature {
+        self.sig
     }
 
     #[cfg(feature = "std")]
@@ -184,6 +154,14 @@ impl Signature {
         if bytes.len() != 64 {
             None
         } else {
+            match P256Signature::from_scalars(
+                bytes[..32].try_into().unwrap(), // r
+                bytes[32..].try_into().unwrap(), // s
+            ) {
+                Ok(sig) => Some(Signature{sig}),
+                _ => None,
+            }
+            /*
             let r =
                 NonZeroExponentP256::from_int_checked(Int256::from_bin(array_ref![bytes, 0, 32]));
             let s =
@@ -193,30 +171,45 @@ impl Signature {
             }
             let r = r.unwrap();
             let s = s.unwrap();
-            Some(Signature { r, s })
+            Some(Signature { r, s })*/
         }
     }
 
     #[cfg(test)]
     fn to_bytes(&self, bytes: &mut [u8; 64]) {
-        self.r.to_int().to_bin(array_mut_ref![bytes, 0, 32]);
-        self.s.to_int().to_bin(array_mut_ref![bytes, 32, 32]);
+        use core::slice::SlicePattern;
+
+        bytes[..32].copy_from_slice(self.sig.r().to_bytes().as_slice());
+        bytes[32..].copy_from_slice(self.sig.s().to_bytes().as_slice());
+        //self.r.to_int().to_bin(array_mut_ref![bytes, 0, 32]);
+        //self.s.to_int().to_bin(array_mut_ref![bytes, 32, 32]);
     }
 }
 
 impl PubKey {
     pub const ES256_ALGORITHM: i64 = -7;
     #[cfg(feature = "with_ctap1")]
-    const UNCOMPRESSED_LENGTH: usize = 1 + 2 * int256::NBYTES;
+    const UNCOMPRESSED_LENGTH: usize = 1 + 2 * INT256_NBYTES;
 
     #[cfg(feature = "std")]
     pub fn from_bytes_uncompressed(bytes: &[u8]) -> Option<PubKey> {
-        PointP256::from_bytes_uncompressed_vartime(bytes).map(|p| PubKey { p })
+        match VerifyingKey::from_sec1_bytes(bytes) {
+            Ok(p) => Some(PubKey{p}),
+            _ => None
+        }
     }
 
     #[cfg(test)]
     fn to_bytes_uncompressed(&self, bytes: &mut [u8; 65]) {
-        self.p.to_bytes_uncompressed(bytes);
+        // not sure if this is correct -- we'll find out when we run the tests
+        // this generates a SEC1 EncodedPoint, but I'm not sure if that's the same thing as
+        // a SEC1-encoded public key.
+        bytes.copy_from_slice(
+            self.p.to_encoded_point(false)
+            .to_bytes()
+            .as_slice()
+        )
+        // self.p.to_bytes_uncompressed(bytes);
     }
 
     #[cfg(feature = "with_ctap1")]
@@ -228,8 +221,18 @@ impl PubKey {
         let (marker, x, y) =
             mut_array_refs![&mut representation, 1, int256::NBYTES, int256::NBYTES];
         marker[0] = B0_BYTE_MARKER;
-        self.p.getx().to_int().to_bin(x);
-        self.p.gety().to_int().to_bin(y);
+        x.copy_from_slice(
+            self.p
+            .to_encoded_point(false)
+            .x().unwrap()
+            .as_slice()
+        );
+        y.copy_from_slice(
+            self.p
+            .to_encoded_point(false)
+            .y().unwrap()
+            .as_slice()
+        );
         representation
     }
 
@@ -237,17 +240,21 @@ impl PubKey {
     pub fn to_cose_key(&self) -> Option<Vec<u8>> {
         const EC2_KEY_TYPE: i64 = 2;
         const P_256_CURVE: i64 = 1;
-        let mut x_bytes = vec![0; int256::NBYTES];
-        self.p
-            .getx()
-            .to_int()
-            .to_bin(array_mut_ref![x_bytes.as_mut_slice(), 0, int256::NBYTES]);
+        let mut x_bytes = vec![0; INT256_NBYTES];
+        x_bytes.copy_from_slice(
+            self.p
+            .to_encoded_point(false)
+            .x().unwrap()
+            .as_slice()
+        );
         let x_byte_cbor: cbor::Value = cbor_bytes!(x_bytes);
-        let mut y_bytes = vec![0; int256::NBYTES];
-        self.p
-            .gety()
-            .to_int()
-            .to_bin(array_mut_ref![y_bytes.as_mut_slice(), 0, int256::NBYTES]);
+        let mut y_bytes = vec![0; INT256_NBYTES];
+        y_bytes.copy_from_slice(
+            self.p
+            .to_encoded_point(false)
+            .y().unwrap()
+            .as_slice()
+        );
         let y_byte_cbor: cbor::Value = cbor_bytes!(y_bytes);
         let cbor_value = cbor_map_options! {
             1 => EC2_KEY_TYPE,
@@ -269,6 +276,8 @@ impl PubKey {
     where
         H: Hash256,
     {
+        self.p.verify(msg, &sign.to_p256()).is_ok()
+        /*
         let m = ExponentP256::modn(Int256::from_bin(&H::hash(msg)));
 
         let v = sign.s.inv();
@@ -278,65 +287,7 @@ impl PubKey {
         let u = self.p.points_mul(&u, v.as_exponent()).getx();
 
         ExponentP256::modn(u.to_int()) == *sign.r.as_exponent()
-    }
-}
-
-struct Rfc6979<H>
-where
-    H: Hash256 + HashBlockSize64Bytes,
-{
-    k: [u8; 32],
-    v: [u8; 32],
-    hash_marker: PhantomData<H>,
-}
-
-impl<H> Rfc6979<H>
-where
-    H: Hash256 + HashBlockSize64Bytes,
-{
-    pub fn new(sk: &SecKey, msg: &[u8]) -> Rfc6979<H> {
-        let h1 = H::hash(msg);
-        let v = [0x01; 32];
-        let k = [0x00; 32];
-
-        let mut contents = [0; 3 * 32 + 1];
-        let (contents_v, marker, contents_k, contents_h1) =
-            mut_array_refs![&mut contents, 32, 1, 32, 32];
-        contents_v.copy_from_slice(&v);
-        marker[0] = 0x00;
-        Int256::to_bin(&sk.k.to_int(), contents_k);
-        Int256::to_bin(&Int256::from_bin(&h1).modd(&Int256::N), contents_h1);
-
-        let k = hmac_256::<H>(&k, &contents);
-        let v = hmac_256::<H>(&k, &v);
-
-        let (contents_v, marker, _) = mut_array_refs![&mut contents, 32, 1, 64];
-        contents_v.copy_from_slice(&v);
-        marker[0] = 0x01;
-
-        let k = hmac_256::<H>(&k, &contents);
-        let v = hmac_256::<H>(&k, &v);
-
-        Rfc6979 {
-            k,
-            v,
-            hash_marker: PhantomData,
-        }
-    }
-
-    fn next(&mut self) -> Int256 {
-        // Note: at this step, the logic from RFC 6979 is simplified, because the HMAC produces 256
-        // bits and we need 256 bits.
-        let t = hmac_256::<H>(&self.k, &self.v);
-        let result = Int256::from_bin(&t);
-
-        let mut v1 = [0; 33];
-        v1[..32].copy_from_slice(&self.v);
-        v1[32] = 0x00;
-        self.k = hmac_256::<H>(&self.k, &v1);
-        self.v = hmac_256::<H>(&self.k, &self.v);
-
-        result
+        */
     }
 }
 
