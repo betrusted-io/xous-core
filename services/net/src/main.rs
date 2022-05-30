@@ -18,7 +18,7 @@ use num_traits::*;
 mod connection_manager;
 mod device;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::convert::TryInto;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID, SID};
 use xous_ipc::Buffer;
@@ -26,21 +26,26 @@ use xous_ipc::Buffer;
 use byteorder::{ByteOrder, NetworkEndian};
 use smoltcp::iface::{Interface, InterfaceBuilder, NeighborCache, Routes};
 use smoltcp::phy::{Device, Medium};
-use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
+use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer};
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint};
 use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
+use crate::device::NetPhy;
 
 use core::num::NonZeroU64;
 use core::sync::atomic::{AtomicU32, Ordering};
 use smoltcp::socket::{
-    SocketHandle, TcpSocket, TcpSocketBuffer, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
+    TcpSocket, TcpSocketBuffer, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
 };
+use smoltcp::iface::SocketHandle;
 use smoltcp::time::{Duration, Instant};
 use std::sync::Arc;
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
+use std::cmp::Ordering as CmpOrdering;
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
-const MAX_DELAY_THREADS: u32 = 16; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
+const MAX_DELAY_THREADS: u32 = 9;
+const PING_IDENT: u16 = 0x22b;
 
 fn set_ipv4_addr<DeviceT>(iface: &mut Interface<'_, DeviceT>, cidr: Ipv4Cidr)
 where
@@ -100,6 +105,32 @@ pub struct UdpStdState {
     pub expiry: Option<u64>,
 }
 
+pub struct Wakeup {
+    pub tx_index: usize,
+    pub time: u64,
+}
+impl Ord for Wakeup {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        self.time.cmp(&other.time)
+    }
+}
+impl PartialOrd for Wakeup {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for Wakeup {
+    fn eq(&self, other: &Self) -> bool {
+        self.time == other.time
+    }
+}
+impl Eq for Wakeup {}
+pub struct WorkerState {
+    pub tx: Sender::<u64>,
+    pub is_busy: bool,
+    pub time_replica: u64, // this is just to help with debugging, nothing else
+}
+
 fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
@@ -110,6 +141,36 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.push(ComIntSources::WlanSsidScanUpdate);
     com_int_list.push(ComIntSources::WlanSsidScanFinished);
     com_int_list.push(ComIntSources::WfxErr);
+}
+
+fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
+    // ping storage
+    // up to four concurrent pings in the queue
+    let icmp_rx_buffer = IcmpSocketBuffer::new(
+        vec![
+            IcmpPacketMetadata::EMPTY,
+            IcmpPacketMetadata::EMPTY,
+            IcmpPacketMetadata::EMPTY,
+            IcmpPacketMetadata::EMPTY,
+        ],
+        vec![0; 1024],
+    );
+    let icmp_tx_buffer = IcmpSocketBuffer::new(
+        vec![
+            IcmpPacketMetadata::EMPTY,
+            IcmpPacketMetadata::EMPTY,
+            IcmpPacketMetadata::EMPTY,
+            IcmpPacketMetadata::EMPTY,
+        ],
+        vec![0; 1024],
+    );
+    let icmp_socket = IcmpSocket::new(icmp_rx_buffer, icmp_tx_buffer);
+    let icmp_handle = iface.add_socket(icmp_socket);
+    let icmp_socket = iface.get_socket::<IcmpSocket>(icmp_handle);
+    icmp_socket
+        .bind(IcmpEndpoint::Ident(PING_IDENT))
+        .expect("couldn't bind to icmp socket");
+    icmp_handle
 }
 
 #[xous::xous_main]
@@ -147,11 +208,7 @@ fn xmain() -> ! {
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list).ok();
     log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
-    let delay_threads = Arc::new(AtomicU32::new(0));
     let mut net_config: Option<Ipv4Conf> = None;
-
-    // storage for all our sockets
-    let mut sockets = SocketSet::new(vec![]);
 
     // ------------- libstd variant -----------
     // Each process keeps track of its own sockets. These are kept in a Vec. When a handle
@@ -165,6 +222,9 @@ fn xmain() -> ! {
     // When a client issues a Send request, it will get placed here while the packet data
     // is being accumulated.
     let mut tcp_tx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
+
+    // socket handles waiting for writes to flush on close
+    let mut tcp_tx_closing: Vec<(SocketHandle, xous::MessageSender)> = Vec::new();
 
     // When a client issues a Connect request, it will get placed here while the connection is
     // being established.
@@ -185,56 +245,34 @@ fn xmain() -> ! {
     // incoming UDP socket data.
     let mut udp_rx_waiting: Vec<Option<UdpStdState>> = Vec::new();
 
-    // ------------- native variant -----------
-    // ping storage
-    // up to four concurrent pings in the queue
-    let icmp_rx_buffer = IcmpSocketBuffer::new(
-        vec![
-            IcmpPacketMetadata::EMPTY,
-            IcmpPacketMetadata::EMPTY,
-            IcmpPacketMetadata::EMPTY,
-            IcmpPacketMetadata::EMPTY,
-        ],
-        vec![0; 1024],
-    );
-    let icmp_tx_buffer = IcmpSocketBuffer::new(
-        vec![
-            IcmpPacketMetadata::EMPTY,
-            IcmpPacketMetadata::EMPTY,
-            IcmpPacketMetadata::EMPTY,
-            IcmpPacketMetadata::EMPTY,
-        ],
-        vec![0; 1024],
-    );
-    let mut icmp_socket = IcmpSocket::new(icmp_rx_buffer, icmp_tx_buffer);
-    let ident = 0x22b;
-    icmp_socket
-        .bind(IcmpEndpoint::Ident(ident))
-        .expect("couldn't bind to icmp socket");
-    let icmp_handle = sockets.add(icmp_socket);
-    let mut seq: u16 = 0;
-    // this record stores the origin time + IP address of the outgoing ping sequence number
-    let mut ping_destinations = HashMap::<PingConnection, HashMap<u16, u64>>::new();
-    let mut ping_timeout_ms = PING_DEFAULT_TIMEOUT_MS;
-
-    // other link storage
+    // --------------- other link storage -------------
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
     let routes = Routes::new(BTreeMap::new());
 
+    // build the device
+    let hw_config = com.wlan_get_config().expect("couldn't fetch initial wifi MAC");
+    log::debug!("My MAC address is: {:x?}", hw_config.mac);
     let device = device::NetPhy::new(&xns);
     // needed by ICMP to determine if we should compute checksums
     let device_caps = device.capabilities();
     let medium = device.capabilities().medium;
-    let mut builder = InterfaceBuilder::new(device)
+    let mut builder = InterfaceBuilder::new(device, vec![])
         .ip_addrs(ip_addrs)
         .routes(routes);
     if medium == Medium::Ethernet {
         builder = builder
-            .ethernet_addr(EthernetAddress::from_bytes(&[0; 6]))
+            .hardware_addr(EthernetAddress::from_bytes(&hw_config.mac).into())
             .neighbor_cache(neighbor_cache);
     }
     let mut iface = builder.finalize();
+
+    // ------------- native variant -----------
+    let icmp_handle = setup_icmp(&mut iface);
+    let mut seq: u16 = 0;
+    // this record stores the origin time + IP address of the outgoing ping sequence number
+    let mut ping_destinations = HashMap::<PingConnection, HashMap<u16, u64>>::new();
+    let mut ping_timeout_ms = PING_DEFAULT_TIMEOUT_MS;
 
     // DNS hooks - the DNS server can ask the Net crate to tickle it when IP configs change using these hooks
     // Currently, we assume there is only one DNS server in Xous. I suppose you could
@@ -244,6 +282,53 @@ fn xmain() -> ! {
     let mut dns_ipv4_hook = XousScalarEndpoint::new();
     let mut dns_ipv6_hook = XousScalarEndpoint::new();
     let mut dns_allclear_hook = XousScalarEndpoint::new();
+
+    // wakeup polling management - kick off worker threads to wake up a poll in the future for certain rx events required by smoltcp
+    // this is not reset on connection reset, because the stale timers are still
+    // running and there is no way to reset them mid-run.
+    let mut wakeup_time: BTreeSet<Wakeup> = BTreeSet::new();
+    let mut wakeup_workers = Vec::<WorkerState>::new();
+    for _ in 0..MAX_DELAY_THREADS {
+        let (tx, rx) = channel();
+        wakeup_workers.push(WorkerState {
+            tx,
+            is_busy: false,
+            time_replica: 0,
+        });
+        thread::spawn({
+            let parent_conn = net_conn.clone();
+            move || {
+                let tt = ticktimer_server::Ticktimer::new().unwrap();
+                loop {
+                    let target = rx.recv().unwrap();
+                    let now = tt.elapsed_ms();
+                    // arbitrary time can pass between the target issuance and receive
+                    let wakeup = if now >= target {
+                        0
+                    } else {
+                        target - now
+                    };
+                    if wakeup > 100_000 {
+                        log::warn!("long wakeup detected: {}", wakeup);
+                    }
+                    if wakeup != 0 { // only issue the sleep if the wakeup time is non-zero
+                        tt.sleep_ms(wakeup as usize).unwrap();
+                    }
+                    xous::try_send_message(
+                        parent_conn,
+                        Message::new_scalar(
+                            Opcode::NetPump.to_usize().unwrap(),
+                            (target >> 32) as usize,
+                            (target & 0xffff_ffff) as usize,
+                            0,
+                            0,
+                        ),
+                    )
+                    .ok();
+                }
+            }
+        });
+    }
 
     log::trace!("ready to accept requests");
     // register a suspend/resume listener
@@ -290,13 +375,14 @@ fn xmain() -> ! {
         }
         match FromPrimitive::from_usize(msg.body.id() & 0xffff) {
             Some(Opcode::Ping) => {
+                log::debug!("Ping");
                 let mut buf = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
                 let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
-                let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
+                let socket = iface.get_socket::<IcmpSocket>(icmp_handle);
                 if socket.can_send() {
-                    log::trace!("sending ping to {:?}", pkt.endpoint);
+                    log::debug!("sending ping to {:?}", pkt.endpoint);
                     let remote = IpAddress::from(pkt.endpoint);
                     // we take advantage of the fact that the same CID is always returned for repeated connect requests to the same SID.
                     let cid = match pkt.server {
@@ -348,7 +434,7 @@ fn xmain() -> ! {
                     match remote {
                         IpAddress::Ipv4(_) => {
                             let icmp_repr = Icmpv4Repr::EchoRequest {
-                                ident,
+                                ident: PING_IDENT,
                                 seq_no: seq,
                                 data: &echo_payload,
                             };
@@ -360,7 +446,7 @@ fn xmain() -> ! {
                             // not sure if this is a valid thing to do, to just assign the source some number like this??
                             let src_ipv6 = IpAddress::v6(0xfdaa, 0, 0, 0, 0, 0, 0, 1);
                             let icmp_repr = Icmpv6Repr::EchoRequest {
-                                ident,
+                                ident: PING_IDENT,
                                 seq_no: seq,
                                 data: &echo_payload,
                             };
@@ -391,11 +477,11 @@ fn xmain() -> ! {
             }
             Some(Opcode::PingSetTtl) => msg_scalar_unpack!(msg, ttl, _, _, _, {
                 let checked_ttl = if ttl > 255 { 255 as u8 } else { ttl as u8 };
-                let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
+                let socket = iface.get_socket::<IcmpSocket>(icmp_handle);
                 socket.set_hop_limit(Some(checked_ttl));
             }),
             Some(Opcode::PingGetTtl) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                let socket = sockets.get::<IcmpSocket>(icmp_handle);
+                let socket = iface.get_socket::<IcmpSocket>(icmp_handle);
                 let checked_ttl = if let Some(ttl) = socket.hop_limit() {
                     ttl
                 } else {
@@ -472,7 +558,7 @@ fn xmain() -> ! {
                 std_tcp_connect(
                     msg,
                     local_port,
-                    &mut sockets,
+                    &mut iface,
                     &mut tcp_connect_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
@@ -491,7 +577,7 @@ fn xmain() -> ! {
                 std_tcp_tx(
                     msg,
                     &timer,
-                    &mut sockets,
+                    &mut iface,
                     &mut tcp_tx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
@@ -507,7 +593,7 @@ fn xmain() -> ! {
             Some(Opcode::StdTcpPeek) => {
                 log::debug!("StdTcpPeek");
                 let pid = msg.sender.pid();
-                std_tcp_peek(msg, &mut sockets, process_sockets.entry(pid).or_default());
+                std_tcp_peek(msg, &mut iface, process_sockets.entry(pid).or_default());
                 xous::try_send_message(
                     net_conn,
                     Message::new_scalar(
@@ -523,7 +609,7 @@ fn xmain() -> ! {
                 std_tcp_rx(
                     msg,
                     &timer,
-                    &mut sockets,
+                    &mut iface,
                     &mut tcp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
@@ -555,12 +641,24 @@ fn xmain() -> ! {
                     respond_with_error(msg, NetError::Invalid);
                     continue;
                 };
-                sockets.get::<TcpSocket>(handle).close();
-                sockets.remove(handle);
-                if let Some(response) = msg.body.memory_message_mut() {
-                    response.buf.as_slice_mut::<u8>()[0] = 0;
-                } else if !msg.body.has_memory() && msg.body.is_blocking() {
-                    xous::return_scalar(msg.sender, 0).ok();
+                if !std_tcp_can_close(&tcp_tx_waiting, handle) {
+                    log::trace!("def"); // these are short because the extra delay of a long message affects the computation
+                    tcp_tx_closing.push((handle, msg.sender));
+                } else {
+                    let socket = iface.get_socket::<TcpSocket>(handle);
+                    if socket.may_send() && socket.send_queue() == 0 {
+                        log::trace!("imm");
+                        socket.close();
+                        iface.remove_socket(handle);
+                        if let Some(response) = msg.body.memory_message_mut() {
+                            response.buf.as_slice_mut::<u8>()[0] = 0;
+                        } else if !msg.body.has_memory() && msg.body.is_blocking() {
+                            xous::return_scalar(msg.sender, 0).ok();
+                        }
+                    } else {
+                        log::trace!("def2");
+                        tcp_tx_closing.push((handle, msg.sender));
+                    }
                 }
             }
 
@@ -666,7 +764,7 @@ fn xmain() -> ! {
 
                 std_tcp_listen(
                     msg,
-                    &mut sockets,
+                    &mut iface,
                     process_sockets.entry(pid).or_default(),
                 );
                 xous::try_send_message(
@@ -683,7 +781,7 @@ fn xmain() -> ! {
 
                 std_tcp_accept(
                     msg,
-                    &mut sockets,
+                    &mut iface,
                     &mut tcp_accept_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
@@ -712,7 +810,7 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let socket = sockets.get::<TcpSocket>(*connection);
+                    let socket = iface.get_socket::<TcpSocket>(*connection);
                     body.valid = xous::MemorySize::new(
                         write_address(socket.local_endpoint().addr, body.buf.as_slice_mut())
                             .unwrap_or_default(),
@@ -738,10 +836,10 @@ fn xmain() -> ! {
                 {
                     let args = msg.body.scalar_message().unwrap();
                     let limit = if args.arg4 == 1 {
-                        let socket = sockets.get::<UdpSocket>(*connection);
+                        let socket = iface.get_socket::<UdpSocket>(*connection);
                         socket.hop_limit().unwrap_or(64) as usize
                     } else {
-                        let socket = sockets.get::<TcpSocket>(*connection);
+                        let socket = iface.get_socket::<TcpSocket>(*connection);
                         socket.hop_limit().unwrap_or(64) as usize
                     };
                     xous::return_scalar(
@@ -776,10 +874,10 @@ fn xmain() -> ! {
                         Some(args.arg1 as u8)
                     };
                     if args.arg4 == 1 {
-                        let mut socket = sockets.get::<UdpSocket>(*connection);
+                        let socket = iface.get_socket::<UdpSocket>(*connection);
                         socket.set_hop_limit(hop_limit);
                     } else {
-                        let mut socket = sockets.get::<TcpSocket>(*connection);
+                        let socket = iface.get_socket::<TcpSocket>(*connection);
                         socket.set_hop_limit(hop_limit);
                     }
                     xous::return_scalar(msg.sender, 0).ok();
@@ -803,7 +901,7 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let socket = sockets.get::<TcpSocket>(*connection);
+                    let socket = iface.get_socket::<TcpSocket>(*connection);
                     xous::return_scalar(
                         msg.sender,
                         if socket.nagle_enabled().is_some() {
@@ -832,7 +930,7 @@ fn xmain() -> ! {
                     .or_default()
                     .get_mut(connection_idx)
                 {
-                    let mut socket = sockets.get::<TcpSocket>(*connection);
+                    let socket = iface.get_socket::<TcpSocket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
                     socket.set_nagle_enabled(args.arg1 != 0);
                     xous::return_scalar(msg.sender, 0).ok();
@@ -842,30 +940,33 @@ fn xmain() -> ! {
             }
 
             Some(Opcode::StdUdpBind) => {
+                log::debug!("StdUdpBind");
                 let pid = msg.sender.pid();
                 std_udp_bind(
                     msg,
-                    &mut sockets,
+                    &mut iface,
                     process_sockets.entry(pid).or_default(),
                 );
             }
 
             Some(Opcode::StdUdpRx) => {
+                log::debug!("StdUdpRx");
                 let pid = msg.sender.pid();
                 std_udp_rx(
                     msg,
                     &timer,
-                    &mut sockets,
+                    &mut iface,
                     &mut udp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
                 );
             }
 
             Some(Opcode::StdUdpTx) => {
+                log::debug!("StdUdpTx");
                 let pid = msg.sender.pid();
                 std_udp_tx(
                     msg,
-                    &mut sockets,
+                    &mut iface,
                     process_sockets.entry(pid).or_default(),
                 );
                 xous::try_send_message(
@@ -896,8 +997,8 @@ fn xmain() -> ! {
                     std_failure(msg, NetError::Invalid);
                     continue;
                 };
-                sockets.get::<UdpSocket>(handle).close();
-                sockets.remove(handle);
+                iface.get_socket::<UdpSocket>(handle).close();
+                iface.remove_socket(handle);
                 if let Some(response) = msg.body.memory_message_mut() {
                     response.buf.as_slice_mut::<u8>()[0] = 0;
                 } else if !msg.body.has_memory() && msg.body.is_blocking() {
@@ -949,29 +1050,13 @@ fn xmain() -> ! {
                                         .wlan_get_config()
                                         .expect("couldn't retrieve updated ipv4 config");
                                     log::info!("Network config acquired: {:?}", config);
+                                    log::info!("{}NET.OK,{:?},{}",
+                                        xous::BOOKEND_START,
+                                        std::net::IpAddr::from(config.addr),
+                                        xous::BOOKEND_END);
                                     net_config = Some(config);
-                                    let mac = EthernetAddress::from_bytes(&config.mac);
 
-                                    // we need to clear the ARP cache in case we've migrated base stations (e.g. in a wireless network
-                                    // that is coverd by multiple AP), as the host AP's MAC address would have changed, and we wouldn't
-                                    // be able to route responses back. I can't seem to find a function in smoltcp 0.7.5 that allows us
-                                    // to neatly clear the ARP cache as the BTreeMap that underlies it is moved into the container and
-                                    // no "clear" API is exposed, so let's just rebuild the whole interface if we get a DHCP renewal.
-                                    let neighbor_cache = NeighborCache::new(BTreeMap::new());
-                                    let ip_addrs =
-                                        [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-                                    let routes = Routes::new(BTreeMap::new());
-                                    let device = device::NetPhy::new(&xns);
-                                    let medium = device.capabilities().medium;
-                                    let mut builder = InterfaceBuilder::new(device)
-                                        .ip_addrs(ip_addrs)
-                                        .routes(routes);
-                                    if medium == Medium::Ethernet {
-                                        builder = builder
-                                            .ethernet_addr(mac)
-                                            .neighbor_cache(neighbor_cache);
-                                    }
-                                    iface = builder.finalize();
+                                    // note: ARP cache is stale. Maybe that's ok?
 
                                     let ip_addr = Ipv4Cidr::new(
                                         Ipv4Address::new(
@@ -1075,10 +1160,29 @@ fn xmain() -> ! {
                     }
                 }
             }
-            Some(Opcode::NetPump) => {
+            Some(Opcode::NetPump) => msg_scalar_unpack!(msg, wup_hi, wup_lo, _, _, {
+                log::debug!("NetPump");
+                // assume: if wup_hi/wup_lo == 0, then the wakeup is from a non-timer thread
+                let wakeup: u64 = (wup_hi as u64) << 32 | (wup_lo as u64);
+                if wakeup != 0 {
+                    if let Some(wup) = wakeup_time.take(& Wakeup{tx_index: 0, time: wakeup}) {
+                        wakeup_workers[wup.tx_index].is_busy = false;
+                    } else {
+                        log::warn!("wakeup time {} was not in the wakeup queue!", wakeup);
+                    }
+                    if wakeup_time.len() == 0 {
+                        for (index, worker) in wakeup_workers.iter().enumerate() {
+                            if worker.is_busy {
+                                log::warn!("stranded worker at {}", index)
+                            }
+                        }
+                    }
+                    log::debug!("pending wakeups: {}", wakeup_time.len());
+                }
+
                 let now = timer.elapsed_ms();
                 let timestamp = Instant::from_millis(now as i64);
-                match iface.poll(&mut sockets, timestamp) {
+                match iface.poll(timestamp) {
                     Ok(_) => {}
                     Err(e) => {
                         log::debug!("poll error: {}", e);
@@ -1087,6 +1191,7 @@ fn xmain() -> ! {
 
                 // Connect calls take time to establish. This block checks to see if connections
                 // have been made and issues callbacks as necessary.
+                log::trace!("pump: tcpconnect");
                 for connection in tcp_connect_waiting.iter_mut() {
                     use smoltcp::socket::TcpState;
                     let socket;
@@ -1096,7 +1201,7 @@ fn xmain() -> ! {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
-                                socket = sockets.get::<TcpSocket>(s.1);
+                                socket = iface.get_socket::<TcpSocket>(s.1);
                                 if socket.state() == TcpState::SynSent
                                     || socket.state() == TcpState::SynReceived
                                 {
@@ -1116,8 +1221,9 @@ fn xmain() -> ! {
                 }
 
                 // This block handles TCP Rx for libstd callers
+                log::trace!("pump: tcp rx");
                 for connection in tcp_rx_waiting.iter_mut() {
-                    let mut socket;
+                    let socket;
                     let WaitingSocket {
                         mut env,
                         handle: _,
@@ -1126,7 +1232,7 @@ fn xmain() -> ! {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
-                                socket = sockets.get::<TcpSocket>(s.handle);
+                                socket = iface.get_socket::<TcpSocket>(s.handle);
                                 if !socket.can_recv() {
                                     if let Some(trigger) = s.expiry {
                                         if trigger.get() < now {
@@ -1164,8 +1270,9 @@ fn xmain() -> ! {
                 }
 
                 // This block handles TCP Tx for libstd callers
+                log::trace!("pump: tcp tx");
                 for connection in tcp_tx_waiting.iter_mut() {
-                    let mut socket;
+                    let socket;
                     let WaitingSocket {
                         mut env,
                         handle: _,
@@ -1174,7 +1281,7 @@ fn xmain() -> ! {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
-                                socket = sockets.get::<TcpSocket>(s.handle);
+                                socket = iface.get_socket::<TcpSocket>(s.handle);
                                 if !socket.can_send() {
                                     if let Some(trigger) = s.expiry {
                                         if trigger.get() < now {
@@ -1228,6 +1335,7 @@ fn xmain() -> ! {
                 }
 
                 // this handles TCP std listeners
+                log::debug!("pump: tcp listen");
                 for connection in tcp_accept_waiting.iter_mut() {
                     let ep: IpEndpoint;
                     let AcceptingSocket {
@@ -1237,7 +1345,7 @@ fn xmain() -> ! {
                     } = match connection {
                         &mut None => continue,
                         Some(s) => {
-                            let socket = sockets.get::<TcpSocket>(s.handle);
+                            let socket = iface.get_socket::<TcpSocket>(s.handle);
                             if socket.is_active() {
                                 ep = socket.remote_endpoint();
                                 connection.take().unwrap()
@@ -1253,8 +1361,9 @@ fn xmain() -> ! {
                 }
 
                 // this block handles StdUdp
+                log::trace!("pump: udp");
                 for connection in udp_rx_waiting.iter_mut() {
-                    let mut socket;
+                    let socket;
                     let UdpStdState {
                         mut msg,
                         handle: _,
@@ -1263,7 +1372,7 @@ fn xmain() -> ! {
                         match connection {
                             &mut None => continue,
                             Some(s) => {
-                                socket = sockets.get::<UdpSocket>(s.handle);
+                                socket = iface.get_socket::<UdpSocket>(s.handle);
                                 if !socket.can_recv() {
                                     if let Some(trigger) = s.expiry {
                                         if trigger < now {
@@ -1323,9 +1432,30 @@ fn xmain() -> ! {
                     }
                 }
 
+                log::debug!("pump: tcp close");
+                if tcp_tx_closing.len() > 0 {
+                    let mut closed = Vec::<usize>::new();
+                    for (index, &(handle, sender)) in tcp_tx_closing.iter().enumerate() {
+                        if std_tcp_can_close(&tcp_tx_waiting, handle) {
+                            let socket = iface.get_socket::<TcpSocket>(handle);
+                            if socket.may_send() && socket.send_queue() == 0 {
+                                socket.close();
+                                iface.remove_socket(handle);
+                                log::debug!("deferred close, socket is not active");
+                                xous::return_scalar(sender, 0).ok();
+                                closed.push(index);
+                            }
+                        }
+                    }
+                    for &index in closed.iter().rev() {
+                        tcp_tx_closing.remove(index);
+                    }
+                }
+
                 // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net crate.
+                log::trace!("pump: icmp");
                 {
-                    let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
+                    let socket = iface.get_socket::<IcmpSocket>(icmp_handle);
                     if !socket.is_open() {
                         log::error!("ICMP socket isn't open, something went wrong...");
                     }
@@ -1335,7 +1465,6 @@ fn xmain() -> ! {
                             .recv()
                             .expect("couldn't receive on socket despite asserting availability");
                         log::trace!("icmp payload: {:x?}", payload);
-                        let now = timer.elapsed_ms();
 
                         for (connection, waiting_queue) in ping_destinations.iter_mut() {
                             let remote_addr = connection.remote;
@@ -1504,8 +1633,8 @@ fn xmain() -> ! {
                     }
                 }
                 // this block handles ICMP retirement; it runs everytime we pump the block
+                log::trace!("pump: icmp retirement");
                 {
-                    let now = timer.elapsed_ms();
                     // notify the callback to drop its connection, because the queue is now empty
                     // do this before we clear the queue, because we want the Drop message to come on the iteration
                     // *after* the queue is empty.
@@ -1580,53 +1709,62 @@ fn xmain() -> ! {
                 }
 
                 // establish our next check-up interval
-                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
-                if let Some(delay) = iface.poll_delay(&sockets, timestamp) {
-                    let delay_ms = delay.total_millis();
-                    if delay_ms < 2 {
-                        xous::try_send_message(
-                            net_conn,
-                            Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0),
-                        )
-                        .ok();
-                    } else {
-                        if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
-                            let prev_count = delay_threads.fetch_add(1, Ordering::SeqCst);
-                            log::trace!(
-                                "spawning checkup thread for {}ms. New total threads: {}",
-                                delay_ms,
-                                prev_count + 1
-                            );
-                            thread::spawn({
-                                let parent_conn = net_conn.clone();
-                                let delay_threads = delay_threads.clone();
-                                move || {
-                                    let tt = ticktimer_server::Ticktimer::new().unwrap();
-                                    tt.sleep_ms(delay_ms as usize).unwrap();
-                                    xous::try_send_message(
-                                        parent_conn,
-                                        Message::new_scalar(
-                                            Opcode::NetPump.to_usize().unwrap(),
-                                            0,
-                                            0,
-                                            0,
-                                            0,
-                                        ),
-                                    )
-                                    .ok();
-                                    let prev_count = delay_threads.fetch_sub(1, Ordering::SeqCst);
-                                    log::trace!(
-                                        "terminating checkup thread. New total threads: {}",
-                                        prev_count - 1
-                                    );
+                log::trace!("pump: checkup");
+                let timestamp = Instant::from_millis(now as i64);
+                if let Some(delay) = iface.poll_delay(timestamp) {
+                    const RANGE_MS: u64 = 100; // this will define the responsivity to "future" events that maybe 100's of ms away
+                    let mut wakeup_needed = false;
+                    // round all short delays to within the next quantum
+                    if (delay.total_millis() as u32) < xous::BASE_QUANTA_MS {
+                        if wakeup_time.range(
+                            ..
+                            Wakeup { tx_index: 0, time: now + xous::BASE_QUANTA_MS as u64 }
+                        ).count() == 0 {
+                            wakeup_needed = true;
+                        }
+                    }
+                    let wakeup = now + delay.total_millis();
+                    // now check for longer delays over a longer window
+                    if wakeup_time.range(
+                        // "round up" to now if the window goes earlier than now
+                        Wakeup { tx_index: 0, time: (wakeup - RANGE_MS).max(now) }
+                        ..
+                        Wakeup { tx_index: 0, time: wakeup + RANGE_MS }
+                    ).count() == 0 {
+                        wakeup_needed = true;
+                    }
+                    if wakeup_needed {
+                        // find a free worker. this is an O(n) search right now, but generally (n) is small
+                        let mut found = false;
+                        for (index, worker) in wakeup_workers.iter_mut().enumerate() {
+                            if !worker.is_busy {
+                                worker.is_busy = true;
+                                worker.time_replica = wakeup;
+                                match worker.tx.send(wakeup) {
+                                    Err(e) => log::error!("{}: Couldn't send wakeup time to worker {}: {}", e, index, wakeup),
+                                    _ => {}
+                                };
+                                wakeup_time.insert(Wakeup {
+                                    tx_index: index,
+                                    time: wakeup,
+                                });
+                                found = true;
+                                break;
+                            }
+                        }
+                        if !found {
+                            log::warn!("All wakeup threads occupied, punting on wakeup at {}ms in the future", delay.total_millis());
+                            let mut dbg = String::from("Now pending: ");
+                            for (index, worker) in wakeup_workers.iter().enumerate() {
+                                if worker.is_busy {
+                                    dbg.push_str(&format!("{}[{}], ", index, worker.time_replica as i64 - now as i64));
                                 }
-                            });
-                        } else {
-                            log::warn!("Could not queue delay of {}ms in net stack due to thread exhaustion.", delay_ms);
+                            }
+                            log::info!("{}", dbg);
                         }
                     }
                 }
-            }
+            }),
             Some(Opcode::GetIpv4Config) => {
                 let mut buffer = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
@@ -1704,24 +1842,9 @@ fn xmain() -> ! {
                 }
             }),
             Some(Opcode::Reset) => {
-                net_config = None;
-                let neighbor_cache = NeighborCache::new(BTreeMap::new());
-                let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-                let routes = Routes::new(BTreeMap::new());
-                let device = device::NetPhy::new(&xns);
-                let medium = device.capabilities().medium;
-                let mut builder = InterfaceBuilder::new(device)
-                    .ip_addrs(ip_addrs)
-                    .routes(routes);
-                if medium == Medium::Ethernet {
-                    builder = builder
-                        .ethernet_addr(EthernetAddress::from_bytes(&[0; 6]))
-                        .neighbor_cache(neighbor_cache);
-                }
-                iface = builder.finalize();
+                // note: ARP cache isn't reset
                 iface.routes_mut().remove_default_ipv4_route();
                 dns_allclear_hook.notify();
-                // question: do we need to clear the UDP and ICMP states?
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {

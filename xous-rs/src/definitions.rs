@@ -14,6 +14,8 @@ pub const FLASH_PHYS_BASE: u32 = 0x2000_0000;
 pub const SOC_REGION_LOC: u32 = 0x0000_0000;
 pub const SOC_REGION_LEN: u32 = 0x00D0_0000; // gw + staging + loader + kernel
 
+// note to self: if these locations change, be sure to update the "filters" addresses
+// in the gateware, so that we are consistent on what parts of the SPINOR are allowed access via USB debug
 pub const SOC_MAIN_GW_LOC: u32 = 0x0000_0000; // gateware - primary loading address
 pub const SOC_MAIN_GW_LEN: u32 = 0x0028_0000;
 pub const SOC_STAGING_GW_LOC: u32 = 0x0028_0000; // gateware - staging copy
@@ -39,6 +41,18 @@ pub const EC_REGION_LEN: u32 = 0x0008_0000;
 
 pub const PDDB_LOC: u32 = 0x01D8_0000; // PDDB start
 pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC; // must be 64k-aligned (bulk erase block size) for proper function.
+
+// quantum alloted to each process before a context switch is forced
+pub const BASE_QUANTA_MS: u32 = 10;
+
+// sentinel used by test infrastructure to assist with parsing
+// The format of any test infrastructure output to recover is as follows:
+// _|TT|_<ident>,<data separated by commas>,_|TE|_
+// where _|TT|_ and _|TE|_ are bookends around the data to be reported
+// <ident> is a single-word identifier that routes the data to a given parser
+// <data> is free-form data, which will be split at comma boundaries by the parser
+pub const BOOKEND_START: &'static str = "_|TT|_";
+pub const BOOKEND_END: &'static str = "_|TE|_";
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 use core::sync::atomic::AtomicU64;

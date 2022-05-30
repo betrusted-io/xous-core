@@ -2,18 +2,18 @@ use ticktimer_server::Ticktimer;
 
 use std::convert::TryInto;
 
-use smoltcp::socket::SocketSet;
-
 use core::num::NonZeroU64;
 use smoltcp::socket::{
-    SocketHandle, TcpSocket, TcpSocketBuffer,
+    TcpSocket, TcpSocketBuffer,
 };
+use smoltcp::iface::{Interface, SocketHandle};
 use crate::*;
+use crate::device::NetPhy;
 
 pub(crate) fn std_tcp_connect(
     mut msg: xous::MessageEnvelope,
     local_port: u16,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     tcp_connect_waiting: &mut Vec<Option<(xous::MessageEnvelope, SocketHandle, u16, u16, u16)>>,
     our_sockets: &mut Vec<Option<SocketHandle>>,
 ) {
@@ -41,14 +41,16 @@ pub(crate) fn std_tcp_connect(
 
     // initiates a new connection to a remote server consisting of an (Address:Port) tuple.
     // multiple connections can exist to a server, and they are further differentiated by the return port
-    let mut tcp_socket = TcpSocket::new(
+    let tcp_socket = TcpSocket::new(
         TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]),
         TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]),
     );
+    let handle = iface.add_socket(tcp_socket);
+    let (tcp_socket, cx) = iface.get_socket_and_context::<TcpSocket>(handle);
 
     // Attempt to connect, returning the error if there is one
     if let Err(e) = tcp_socket
-        .connect((address, remote_port), local_port)
+        .connect(cx, (address, remote_port), local_port)
         .map_err(|e| match e {
             smoltcp::Error::Illegal => NetError::SocketInUse,
             smoltcp::Error::Unaddressable => NetError::Unaddressable,
@@ -62,8 +64,6 @@ pub(crate) fn std_tcp_connect(
 
     tcp_socket.set_timeout(timeout_ms.map(|t| Duration::from_millis(t.get())));
 
-    let handle = sockets.add(tcp_socket);
-
     // Add the socket onto the list of sockets waiting to connect, since the connection will
     // take time.
     let idx = insert_or_append(our_sockets, handle) as u16;
@@ -76,7 +76,7 @@ pub(crate) fn std_tcp_connect(
 pub(crate) fn std_tcp_tx(
     mut msg: xous::MessageEnvelope,
     timer: &Ticktimer,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     tcp_tx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
@@ -97,7 +97,7 @@ pub(crate) fn std_tcp_tx(
         }
     };
 
-    let mut socket = sockets.get::<TcpSocket>(*handle);
+    let socket = iface.get_socket::<TcpSocket>(*handle);
     if !socket.can_send() {
         log::trace!("tx can't send, will retry");
         let expiry = body
@@ -148,7 +148,7 @@ pub(crate) fn std_tcp_tx(
 pub(crate) fn std_tcp_rx(
     mut msg: xous::MessageEnvelope,
     timer: &Ticktimer,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     tcp_rx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
@@ -172,7 +172,7 @@ pub(crate) fn std_tcp_rx(
         }
     };
 
-    let mut socket = sockets.get::<TcpSocket>(*handle);
+    let socket = iface.get_socket::<TcpSocket>(*handle);
     if socket.can_recv() {
         log::trace!("receiving data right away");
         match socket.recv_slice(body.buf.as_slice_mut()) {
@@ -211,7 +211,7 @@ pub(crate) fn std_tcp_rx(
 
 pub(crate) fn std_tcp_peek(
     mut msg: xous::MessageEnvelope,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
@@ -234,7 +234,7 @@ pub(crate) fn std_tcp_peek(
         }
     };
 
-    let mut socket = sockets.get::<TcpSocket>(*handle);
+    let socket = iface.get_socket::<TcpSocket>(*handle);
     if socket.can_recv() {
         log::trace!("receiving data right away");
         match socket.peek_slice(body.buf.as_slice_mut()) {
@@ -258,4 +258,15 @@ pub(crate) fn std_tcp_peek(
         body.offset = xous::MemoryAddress::new(1);
         body.buf.as_slice_mut::<u32>()[0] = 0;
     }
+}
+
+pub(crate) fn std_tcp_can_close(tx_waiting: &Vec<Option<WaitingSocket>>, handle: SocketHandle) -> bool {
+    for maybe_socket in tx_waiting.iter() {
+        if let Some(socket) = maybe_socket {
+            if socket.handle == handle {
+                return false
+            }
+        }
+    }
+    true
 }

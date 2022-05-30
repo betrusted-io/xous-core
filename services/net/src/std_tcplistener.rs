@@ -1,9 +1,10 @@
 use crate::*;
+use crate::device::NetPhy;
 use smoltcp::wire::{IpEndpoint, IpAddress};
 
 pub(crate) fn std_tcp_listen(
     mut msg: xous::MessageEnvelope,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     our_sockets: &mut Vec<Option<SocketHandle>>,
     ) {
     // Ignore nonblocking and scalar messages
@@ -29,7 +30,9 @@ pub(crate) fn std_tcp_listen(
 
     let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
     let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
-    let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
+    let tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
+    let handle = iface.add_socket(tcp_socket);
+    let tcp_socket = iface.get_socket::<TcpSocket>(handle);
 
     if let Err(e) = tcp_socket
         .listen(local_port)
@@ -44,8 +47,6 @@ pub(crate) fn std_tcp_listen(
         return;
     }
 
-    let handle = sockets.add(tcp_socket);
-
     // Add the socket into our process' list of sockets, and pass the index back as the `fd` parameter for future reference.
     let fd = insert_or_append(our_sockets, handle) as u8;
 
@@ -58,7 +59,7 @@ pub(crate) fn std_tcp_listen(
 
 pub(crate) fn std_tcp_accept(
     mut msg: xous::MessageEnvelope,
-    sockets: &mut SocketSet,
+    iface: &mut Interface::<NetPhy>,
     tcp_accept_waiting: &mut Vec<Option<AcceptingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
@@ -85,7 +86,7 @@ pub(crate) fn std_tcp_accept(
     let args = body.buf.as_slice::<u8>();
     let nonblocking = args[0] == 0;
 
-    let socket = sockets.get::<TcpSocket>(*handle);
+    let socket = iface.get_socket::<TcpSocket>(*handle);
 
     if socket.is_active() {
         log::trace!("accept did not block; immediately returning TcpSocket");

@@ -144,11 +144,25 @@ for examples of idiomatic ways to write code for Xous.
   - If you get a panic, please snap a photo of it and drop it in a new issue in the `xous-core` repo, along with a description of what you were doing at the time.
 
 ## New in 0.9.9 (currently in development)
+This release requires a new SoC. It is highly recommended to first upload the SoC and install the update, and then
+perform the Xous firmware upgrade. This requires running manual update commands, instead of the all-in-one updater script.
+
 - `modals` text entry has been refactored to allow multi-field text entries with defaults! Thanks to gsora for PR #140.
 - fix issue #141: bug fix in `log-server` where max-length buffers were not being printed + refactor of method to use `send` vs scalars
 - PR #149: index support for modals. Lists can be submitted as a `Vec` now, with an array index returned as the selection result. Thanks to nworbnhoj for the PR.
-- PR #150: QR codes can now display a separate QR code from the actual text in the box via a Some/None specifier. Thanks to nworbnhoj for the PR.
+- PR #150 & #153: QR codes can now display a separate QR code from the actual text in the box via a Some/None specifier. Thanks to nworbnhoj for the PR & refinements.
 - PR #151: message forwarding standardized as part of the messaging API. See https://betrusted.io/xous-book/ch07-07-forwarding.html
+- fixed locking bug in dlmalloc (stdlib version 1.60.0.7)
+- update smoltcp to 0.8.1
+- refactor wait threads in net crate - use statically allocated pool of waiters + better filtering of requests for less churn
+- defer Drop on TcpStream until all written packets have been transmitted
+- scheduler quantum is now a tuning parameter in xous definitions.rs (`BASE_QUANTA_MS`). it is now set to 10ms, down from 20ms.
+- USB device core with keyboard HID emulation demo. API still needs refinement for U2F/FIDO applications.
+- Issue #162 and #159: fix bugs with condvar support. condvar IDs are now serial, so re-allocations are not a problem, and the routine to remove old ones from the notification table now looks at the correct sender ID.
+- Add `ceil`, `floor`, and `trunc` (f32 and f64) variants to the built-ins list (this is a `std` lib update, in 1.61.0.2)
+- Add CI test automation facilities - CI infra now drives actual hardware through `expect` scripts, instead of just doing simulation checks
+- Vendor in `getrandom` so we can support a Xous API for the crate, allowing us access some of the more modern rustcrypto APIs. This is necssary for `randcore` 0.6 compatibility. `randcore` 0.5 APIs are retained by integrating them directly into the TRNG object.
+
 
 ## Roadmap to 1.0
 

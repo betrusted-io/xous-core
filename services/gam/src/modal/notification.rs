@@ -2,8 +2,8 @@ use crate::*;
 
 use graphics_server::api::*;
 
-use locales::t;
 use core::fmt::Write;
+use locales::t;
 
 use qrcode::{Color, QrCode};
 use std::convert::TryInto;
@@ -42,20 +42,29 @@ impl Notification {
     pub fn set_qrcode(&mut self, setting: Option<&str>) {
         match setting {
             Some(setting) => {
-               let qrcode = QrCode::new(setting).unwrap();
-               self.qrwidth = qrcode.width();
-               self.qrcode = Vec::new();
-               for color in qrcode.to_colors().iter() {
-                   match color {
-                      Color::Dark => self.qrcode.push(true),
-                      Color::Light => self.qrcode.push(false),
-                   }
-               }
-            },
+                let qrcode = match QrCode::new(setting) {
+                    Ok(code) => code,
+                    Err(_e) => QrCode::new(t!("notification.qrcode.error", xous::LANG)).unwrap(),
+                };
+                self.qrwidth = qrcode.width();
+                log::info!(
+                    "qrcode {}x{} : {} bytes ",
+                    self.qrwidth,
+                    self.qrwidth,
+                    setting.len()
+                );
+                self.qrcode = Vec::new();
+                for color in qrcode.to_colors().iter() {
+                    match color {
+                        Color::Dark => self.qrcode.push(true),
+                        Color::Light => self.qrcode.push(false),
+                    }
+                }
+            }
             None => {
                 self.qrcode = Vec::new();
                 self.qrwidth = 0;
-            },
+            }
         }
     }
     fn draw_text(&self, at_height: i16, modal: &Modal) {
@@ -97,7 +106,7 @@ impl Notification {
         ));
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
     }
-    fn draw_qrcode(&self, at_height: i16, modal: &Modal) {
+    fn draw_qrcode(&self, at_height: i16, modal: &Modal) {            
         // calculate pixel size of each module in the qrcode
         let qrcode_modules: i16 = self.qrwidth.try_into().unwrap();
         let modules: i16 = qrcode_modules + 2 * QUIET_MODULES;
@@ -106,30 +115,33 @@ impl Notification {
         let qrcode_width_px = qrcode_modules * mod_size_px;
         let quiet_px: i16 = (canvas_width - qrcode_width_px) / 2;
 
-        // Iterate thru qrcode and draw each module as a rectangle (square)
+        // Iterate thru qrcode and stamp each square module like a typewriter
         let black = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         let top = at_height + 4 * modal.margin + quiet_px;
+        
         let left = modal.margin + quiet_px;
-        let mut top_left;
-        let mut bot_right;
-        let mut x: i16;
-        let mut y: i16;
+        let right = left + qrcode_modules * mod_size_px;
+        let mut module = Rectangle::new_with_style(
+            Point::new(0, 0),
+            Point::new(mod_size_px-1, mod_size_px-1),
+            black,
+        );
+        let step = Point::new(mod_size_px, 0);
+        let cr_lf = Point::new(-qrcode_modules * mod_size_px, mod_size_px);
         let mut j: i16;
-        for (i, module) in self.qrcode.iter().enumerate() {
+        module.translate(Point::new(right, top));
+        for (i, stamp) in self.qrcode.iter().enumerate() {
             j = i.try_into().unwrap();
-            x = left + (j % qrcode_modules) * mod_size_px;
-            y = top + (j / qrcode_modules) * mod_size_px;
-            if *module {
-                top_left = Point::new(x, y);
-                bot_right = Point::new(x + mod_size_px, y + mod_size_px);
+            if j % qrcode_modules == 0 {
+                module.translate(cr_lf);
+            }
+            if *stamp {
                 modal
                     .gam
-                    .draw_rectangle(
-                        modal.canvas,
-                        Rectangle::new_with_style(top_left, bot_right, black),
-                    )
+                    .draw_rectangle(modal.canvas, module)
                     .expect("couldn't draw qrcode module");
-            }
+            }            
+            module.translate(step);
         }
     }
 }

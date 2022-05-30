@@ -99,6 +99,7 @@ mod wlan;     use wlan::*;
 mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
+mod usb; use usb::*;
 
 #[cfg(feature="tts")]
 mod tts;
@@ -113,9 +114,9 @@ use engine::*;
 mod sha;
 #[cfg(feature="benchmarks")]
 use sha::*;
-#[cfg(feature="benchmarks")]
+#[cfg(feature="aestests")]
 mod aes_cmd;
-#[cfg(feature="benchmarks")]
+#[cfg(feature="aestests")]
 use aes_cmd::*;
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -140,13 +141,14 @@ pub struct CmdEnv {
     net_cmd: NetCmd,
     pddb_cmd: PddbCmd,
     wlan_cmd: Wlan,
+    usb_cmd: Usb,
 
     #[cfg(feature="tts")]
     tts_cmd: Tts,
 
     #[cfg(feature="benchmarks")]
     sha_cmd: Sha,
-    #[cfg(feature="benchmarks")]
+    #[cfg(feature="aestests")]
     aes_cmd: Aes,
     #[cfg(feature="benchmarks")]
     engine_cmd: Engine,
@@ -169,7 +171,7 @@ impl CmdEnv {
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]
         let sha = Sha::new(&xns, &mut common);
-        #[cfg(feature="benchmarks")]
+        #[cfg(feature="aestests")]
         let aes = Aes::new(&xns, &mut common);
         #[cfg(feature="benchmarks")]
         let engine = Engine::new(&xns, &mut common);
@@ -209,13 +211,14 @@ impl CmdEnv {
             net_cmd: NetCmd::new(&xns),
             pddb_cmd: PddbCmd::new(&xns),
             wlan_cmd: Wlan::new(),
+            usb_cmd: Usb::new(),
 
             #[cfg(feature="tts")]
             tts_cmd: Tts::new(&xns),
 
             #[cfg(feature="benchmarks")]
             sha_cmd: sha,
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature="aestests")]
             aes_cmd: aes,
             #[cfg(feature="benchmarks")]
             engine_cmd: engine,
@@ -254,13 +257,14 @@ impl CmdEnv {
             &mut self.jtag_cmd,
             &mut self.net_cmd,
             &mut self.pddb_cmd,
+            &mut self.usb_cmd,
 
             #[cfg(feature="tts")]
             &mut self.tts_cmd,
 
             #[cfg(feature="benchmarks")]
             &mut self.sha_cmd,
-            #[cfg(feature="benchmarks")]
+            #[cfg(feature="aestests")]
             &mut self.aes_cmd,
             #[cfg(feature="benchmarks")]
             &mut self.engine_cmd,

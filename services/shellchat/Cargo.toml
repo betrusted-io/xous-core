@@ -37,6 +37,7 @@ net = {path="../net"}
 dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
+usb-device-xous = {path="../usb-device-xous"}
 
 tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}
@@ -54,9 +55,15 @@ spectrum-analyzer = "0.5.2"
 # used to parse net connectivity results
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 
+# for net testing
+threadpool = "1.8.1"
+
+# testing rand compatibility - this is chasing the devil, but unfortunately
+# a *lot* of useful packages are chasing this devil.
+rand = {version = "0.8.5", features = ["getrandom"]}
+
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
-rand_core = "0.5.1"
 hex = {version = "0.4.3", default-features = false, features = []}
 #sha2 = {version = "0.9.5", default-features = false, features = []}
 [dependencies.curve25519-dalek]
@@ -82,6 +89,7 @@ utralib = {path = "../../utralib"}
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
+aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = []
 default = [] # "debugprint"

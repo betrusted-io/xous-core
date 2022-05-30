@@ -155,8 +155,6 @@ fn xmain() -> ! {
     let mut rtc_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut gpio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
 
-    let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
-
     // create a self-connection to I2C to handle the public, non-security sensitive RTC API calls
     let mut i2c = llio::I2c::new(&xns);
     let mut rtc_alarm_enabled = false;
@@ -176,7 +174,6 @@ fn xmain() -> ! {
                 llio.resume();
                 #[cfg(feature="tts")]
                 llio.vibe(VibePattern::Double);
-                lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
             }),
             Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
                 todo!("CrgMode opcode not yet implemented.");
@@ -392,36 +389,6 @@ fn xmain() -> ! {
                     latest_activity += period / 20;
                     latest_activity %= period;
                 }
-            }),
-            Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, update_req, new_state, _, _, {
-                if update_req != 0 {
-                    // if new_state is true (not 0), then try to lock the USB port
-                    // if false, try to unlock the USB port
-                    if new_state != 0 {
-                        llio.set_usb_disable(true);
-                    } else {
-                        llio.set_usb_disable(false);
-                    }
-                }
-                // at this point, *read back* the new state -- don't assume it "took". The readback is always based on
-                // a real hardware value and not the requested value. for now, always false.
-                let is_locked = if llio.get_usb_disable() {
-                    1
-                } else {
-                    0
-                };
-
-                // this is a performance optimization. we could always redraw the status, but, instead we only redraw when
-                // the status has changed. However, there is an edge case: on a resume from suspend, the status needs a redraw,
-                // even if nothing has changed. Thus, we have this separate boolean we send back to force an update in the
-                // case that we have just come out of a suspend.
-                let force_update = if lockstatus_force_update {
-                    1
-                } else {
-                    0
-                };
-                xous::return_scalar2(msg.sender, is_locked, force_update).expect("couldn't return status");
-                lockstatus_force_update = false;
             }),
             Some(Opcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 if delay > u8::MAX as usize {

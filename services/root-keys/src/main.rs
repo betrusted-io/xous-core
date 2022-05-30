@@ -94,7 +94,7 @@ mod implementation {
     use num_traits::*;
     use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
     use aes::Aes256;
-    use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher, generic_array::GenericArray};
+    use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
     use std::convert::TryInto;
 
     #[derive(Debug, Copy, Clone)]
@@ -473,6 +473,7 @@ fn xmain() -> ! {
                     } else {
                         modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
                         modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
+                        log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         match modals.get_radiobutton(t!("rootkeys.confirm", xous::LANG)) {
                             Ok(response) => {
                                 if response == t!("rootkeys.confirm.no", xous::LANG) {
@@ -500,6 +501,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.bootpass", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }),
@@ -524,6 +526,7 @@ fn xmain() -> ! {
                 );
                 #[cfg(feature="tts")]
                 tts.tts_blocking(t!("rootkeys.updatepass", xous::LANG)).unwrap();
+                log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 rootkeys_modal.activate();
             },
             Some(Opcode::UxInitUpdatePasswordReturn) => {
@@ -568,6 +571,7 @@ fn xmain() -> ! {
                 }
             },
             Some(Opcode::UxTryReboot) => {
+                log::info!("{}ROOTKEY.INITDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 log::info!("entering reboot handler");
                 // ensure the boost is off so that the reboot will not fail
                 com.set_boost(false).unwrap();
@@ -597,7 +601,7 @@ fn xmain() -> ! {
                 ticktimer.sleep_ms(1500).unwrap();
                 if !reboot_initiated {
                     // set a wakeup alarm a couple seconds from now -- this is the coldboot
-                    llio.set_wakeup_alarm(3).unwrap();
+                    llio.set_wakeup_alarm(5).unwrap();
 
                     // allow EC to snoop, so that it can wake up the system
                     llio.allow_ec_snoop(true).unwrap();
@@ -608,6 +612,7 @@ fn xmain() -> ! {
 
                     log::info!("rebooting now!");
                     reboot_initiated = true;
+                    ticktimer.sleep_ms(2000).unwrap();
                 }
 
                 // refresh the message if it goes away
@@ -658,6 +663,7 @@ fn xmain() -> ! {
                 };
 
                 let mut skip_confirmation = false;
+                log::info!("{}ROOTKEY.GWUP,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 match modals.get_radiobutton(prompt) {
                     Ok(response) => {
                         if response == t!("rootkeys.gwup.short", xous::LANG) {
@@ -720,6 +726,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.get_update_password", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             }
@@ -797,6 +804,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.get_signing_password", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             },
@@ -877,6 +885,7 @@ fn xmain() -> ! {
                     );
                     #[cfg(feature="tts")]
                     tts.tts_blocking(t!("rootkeys.get_login_password", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                     // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
                 } else {

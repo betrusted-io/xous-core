@@ -625,16 +625,19 @@ fn xmain() -> ! {
                     let sender = args.arg1;
                     let request_kind = args.arg2;
                     let condvar = args.arg3;
-                    let sender_pid = msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32;
+                    let sender_pid = xous::MessageSender::from_usize(sender).pid();
 
                     // If we're being asked to recalculate due to a timeout expiring, drop the sent
                     // message from the `entries` list.
-                    if sender_pid == xous::process::id()
+                    // the first check confirms that the origin of the RecalculateSleep message is the Ticktimer,
+                    // to prevent third-party servers from issuing the command and thus distorting the sleep
+                    // calculations (since this is a public API, anything could happen).
+                    if (msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32) == xous::process::id()
                         && (request_kind == RequestKind::Timeout as usize)
                         && (sender > 0)
                     {
                         let entries = notify_hash
-                            .entry(msg.sender.pid())
+                            .entry(sender_pid)
                             .or_default()
                             .entry(condvar)
                             .or_default();
@@ -648,6 +651,7 @@ fn xmain() -> ! {
                         if let Some(idx) = idx {
                             entries.remove(idx);
                         }
+                        // log::trace!("new entries for PID {:?}/condvar {:08x}: {:?}", sender_pid, condvar, notify_hash.get(&sender_pid).unwrap().get(&condvar));
                     }
                 }
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
@@ -771,6 +775,7 @@ fn xmain() -> ! {
                         .or_default()
                         .push_back(msg.sender);
 
+                    // log::trace!("New waiting senders: {:?}", notify_hash.get(&pid).unwrap().get(&condvar));
                     continue;
                 } else {
                     info!(

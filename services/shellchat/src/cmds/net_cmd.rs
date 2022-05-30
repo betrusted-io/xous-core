@@ -67,7 +67,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     match env.netmgr.wifi_state_unsubscribe() {
                         Ok(_) => write!(ret, "wifi unsub successful"),
                         Err(e) => write!(ret, "wifi unsub error: {:?}", e),
-                    };
+                    }.ok();
                 }
                 "tcpget" => {
                     // note: to keep shellchat lightweight, we do a very minimal parsing of the URL. We assume it always has
@@ -103,7 +103,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         match stream.read(&mut buf) {
                                             Ok(len) => {
                                                 log::trace!("raw response ({}): {:?}", len, &buf[..len]);
-                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len])).ok(); // let it run off the end
+                                                write!(ret, "{}", std::string::String::from_utf8_lossy(&buf[..len.min(buf.len())])).ok(); // let it run off the end
+                                                log::info!("{}NET.TCPGET,{},{}",
+                                                    xous::BOOKEND_START,
+                                                    std::string::String::from_utf8_lossy(&buf[..len.min(buf.len())]),
+                                                    xous::BOOKEND_END);
                                             }
                                             Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
                                         }
@@ -123,7 +127,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         let boot_instant = env.boot_instant.clone();
                         move || {
                             let listener = TcpListener::bind("0.0.0.0:80").unwrap();
-                            // limit to 2 because we're a bit shy on space in shellchat right now; there is a 32-thread limit per process, and shellchat has the kitchen sink.
+                            // limit to 4 because we're a bit shy on space in shellchat right now; there is a 32-thread limit per process, and shellchat has the kitchen sink.
                             let pool = ThreadPool::new(4);
 
                             for stream in listener.incoming() {
@@ -139,7 +143,6 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                     let bi = boot_instant.clone();
                                     move || {
                                         handle_connection(stream, bi);
-                                        log::info!("connection closed");
                                     }
                                 });
                             }
@@ -148,6 +151,55 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     });
                     write!(ret, "TCP listener started on port 80").unwrap();
+                    log::info!("{}NET.SERVER,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                }
+                "fountain" => {
+                    // anything typed after fountain will cause this to be a short test
+                    let short_test = tokens.next().is_some();
+                    thread::spawn({
+                        let short_test = short_test.clone();
+                        move || {
+                            let tp = threadpool::ThreadPool::new(4);
+                            loop {
+                                let listener = std::net::TcpListener::bind("0.0.0.0:3333");
+                                let listener = match listener {
+                                    Ok(listener) => listener,
+                                    Err(_) => {
+                                        std::thread::sleep(std::time::Duration::from_millis(1000));
+                                        continue;
+                                    },
+                                };
+
+                                for i in listener.incoming() {
+                                    match i {
+                                        Err(error) => {
+                                            log::error!("error caught in listener.incoming(): {}", error);
+                                        },
+                                        Ok(mut stream) => {
+                                            tp.execute(move || {
+                                                let mut count = 0;
+                                                loop {
+                                                    match std::io::Write::write(&mut stream, format!("hello! {}\n", count).as_bytes()) {
+                                                        Err(e) => {
+                                                            log::info!("fountain write failed with error {:?}", e);
+                                                            break;
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                    count += 1;
+                                                    if count == 10 && short_test {
+                                                        stream.flush().unwrap();
+                                                        break;
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    write!(ret, "Fountain started on port 3333").unwrap();
                 }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
@@ -325,6 +377,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         addr,
                                         seq_or_addr,
                                         timestamp).unwrap();
+                                        log::info!("{}NET.PONG,{:?},{},{},{}",
+                                            xous::BOOKEND_START,
+                                            addr,
+                                            seq_or_addr,
+                                            timestamp,
+                                            xous::BOOKEND_END
+                                        );
                                     },
                                     IpAddr::V6(_) => {
                                         write!(ret, "Ipv6 pong received: {} ms", timestamp).unwrap();
@@ -493,7 +552,7 @@ impl Worker {
 
             match message {
                 Message::NewJob(job) => {
-                    log::info!("Worker {} got a job; executing.", id);
+                    log::debug!("Worker {} got a job; executing.", id);
 
                     job();
                 }

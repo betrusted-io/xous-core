@@ -343,34 +343,6 @@ impl Llio {
             Err(xous::Error::InternalError)
         }
     }
-    // if do_lock is Some(), set the debug USB lock status to locked if true, unlocked if false
-    // returns a tuple of (bool, bool) -> (is_locked, force_update)
-    // needs_update is so that the polling function knows to redraw the UX after a resume-from-suspend
-    pub fn debug_usb(&self, do_lock: Option<bool>) -> Result<(bool, bool), xous::Error> {
-        // arg1 indicates if an update to the state is requested
-        // arg2 is the new state update
-        let (arg1, arg2) = if let Some(lock) = do_lock {
-            if lock {
-                (1, 1)
-            } else {
-                (1, 0)
-            }
-         } else {
-            (0, 0)
-        };
-        let response = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::DebugUsbOp.to_usize().unwrap(), arg1, arg2, 0, 0))?;
-        if let xous::Result::Scalar2(is_locked, force_update) = response {
-            let il = if is_locked != 0 {true} else {false};
-            let fu = if force_update != 0 {true} else {false};
-            Ok(
-                (il, fu)
-            )
-        } else {
-            log::error!("LLIO: unexpected return value: {:#?}", response);
-            Err(xous::Error::InternalError)
-        }
-    }
     pub fn set_uart_mux(&self, setting: UartType) -> Result<(), xous::Error> {
         if setting == UartType::Application {
             log::warn!("Application UART has aggressive power settings, so you will have trouble using it for console input.");

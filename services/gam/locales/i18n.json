@@ -52,5 +52,11 @@
         "ja": "[  何かのキーを押してください。]",
         "zh": "[ 按任意键 ]",
         "en-tts": "Press any key"
+    },
+    "notification.qrcode.error": {
+        "en": "Error: data does not fit in QR code",
+        "ja": "QRコードエラー：データが多すぎます",
+        "zh": "错误：数据不适合QR码",
+        "en-tts": "Error: data does not fit in QR code"
     }
 }

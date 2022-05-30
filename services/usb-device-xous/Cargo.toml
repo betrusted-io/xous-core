@@ -1,0 +1,44 @@
+[package]
+name = "usb-device-xous"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Xous USB device drivers"
+
+# Dependency policy: fully specify dependencies to the minor version number
+[dependencies]
+xous = { path = "../../xous-rs" }
+xous-ipc = { path = "../../xous-ipc" }
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4.14"
+llio = {path="../llio"}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+susres = {path = "../susres"}
+modals = {path = "../modals"}
+keyboard = {path = "../keyboard"}
+bitfield = "0.13.2"
+vcell = "0.1.3"
+
+usbd-human-interface-device = "0.1.1"
+embedded-time = "0.12.1" # required by the keyboard interface
+packed_struct = { version = "0.10", default-features = false } # used by the usbd-human-interface-device crate
+num_enum = { version = "0.5", default-features = false } # used by the usbd-human-interface-device crate
+
+[dependencies.usb-device]
+# see top level Cargo.toml for patch.crates-io directive to help with dev work
+version = "0.2.8"
+features=["log"]
+
+[dev-dependencies]
+rand = "0.7.3"
+rand_chacha = "0.3.1"
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+default = []

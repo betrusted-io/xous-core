@@ -43,7 +43,9 @@ fn flashmem() -> &'static mut FlashSingleton {
             } else {
                 match disk.read_to_end(&mut memory) {
                     Ok(bytes_read) => {
-                        assert!(bytes_read == PDDB_A_LEN, "PDDB disk image is of an incorrect size, refusing to run!");
+                        if bytes_read != PDDB_A_LEN {
+                            log::warn!("PDDB disk image is of an incorrect size: got {}, expected {}", bytes_read, PDDB_A_LEN);
+                        }
                     }
                     _ => {
                         panic!("Can't read PDDB disk image, refusing to run!");

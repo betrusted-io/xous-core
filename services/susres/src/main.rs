@@ -39,7 +39,7 @@ mod implementation {
     use num_traits::ToPrimitive;
 
     const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000; // timer0 is now in the always-on domain
-    const SYSTEM_TICK_INTERVAL_MS: u32 = 20;
+    const SYSTEM_TICK_INTERVAL_MS: u32 = xous::BASE_QUANTA_MS;
 
     fn timer_tick(_irq_no: usize, arg: *mut usize) {
         let mut timer = CSR::new(arg as *mut u32);
@@ -243,7 +243,7 @@ mod implementation {
             self.stored_time = Some(
                (self.csr.r(utra::susres::TIME0) as u64 |
                (self.csr.r(utra::susres::TIME1) as u64) << 32)
-               + 0 // a placeholder in case we need to advance time on save
+               + 1 // a placeholder in case we need to advance time on save
             );
             #[cfg(feature = "debugprint")]
             println!("Stored time: {}", self.stored_time.unwrap());
@@ -448,6 +448,7 @@ mod implementation {
         }
         pub fn ignore_wfi(&mut self) {}
         pub fn restore_wfi(&mut self) {}
+        pub fn debug_delay(&self, _duration: u32) {}
     }
 }
 
@@ -738,7 +739,19 @@ fn xmain() -> ! {
                         }
                         timeout_pending = false;
                         log::warn!("Suspend timed out, forcing an unclean suspend");
-                        // susres_hw.debug_delay(500); // let the messages print
+                        for sub in suspend_subscribers.iter() {
+                            if sub.order == current_op_order {
+                                if !sub.ready_to_suspend {
+                                    // note to debugger: you will get a token number, which is in itself not useful.
+                                    // There should be, at least once in the debug log, printed on the very first suspend cycle,
+                                    // a list of PID->tokens. Tokens are assigned in the order that the registration happens
+                                    // to the susres server. Empirically, this list is generally stable for every build,
+                                    // and is guaranteed to be stable across a single cold boot.
+                                    log::warn!("  -> NOT READY: {}", sub.token);
+                                }
+                            }
+                        }
+                        susres_hw.debug_delay(500); // let the messages print
                         // force a suspend
                         susres_hw.do_suspend(true);
 

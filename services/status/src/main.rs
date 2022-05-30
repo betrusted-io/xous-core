@@ -217,9 +217,10 @@ fn xmain() -> ! {
     };
 
     let llio = llio::Llio::new(&xns);
+    let usb_hid = usb_device_xous::UsbHid::new();
 
     log::debug!("usb unlock notice...");
-    let (dl, _) = llio.debug_usb(None).unwrap();
+    let (dl, _) = usb_hid.debug_usb(None).unwrap();
     let mut debug_locked = dl;
     // build security status textview
     let mut security_tv = TextView::new(
@@ -444,7 +445,7 @@ fn xmain() -> ! {
                 }
 
                 // update the security status, if any
-                let (is_locked, force_update) = llio.debug_usb(None).unwrap();
+                let (is_locked, force_update) = usb_hid.debug_usb(None).unwrap();
                 if (debug_locked != is_locked)
                     || force_update || secnotes_force_redraw
                     || sec_notes.lock().unwrap().len() != last_sec_note_size
