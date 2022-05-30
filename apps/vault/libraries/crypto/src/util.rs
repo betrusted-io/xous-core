@@ -17,6 +17,7 @@ use subtle::CtOption;
 
 pub type Block16 = [u8; 16];
 
+#[allow(dead_code)]  // used by OpenSK but not our implementation
 #[inline(always)]
 pub fn xor_block_16(block: &mut Block16, mask: &Block16) {
     for i in 0..16 {

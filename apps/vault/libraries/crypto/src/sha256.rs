@@ -1,3 +1,18 @@
+// Xous maintainer's note:
+//
+// This library is vendored in from the Google OpenSK reference implementation.
+// The OpenSK library contains its own implementations of crypto functions.
+// The port to Xous attempts to undo that, but where possible leaves a thin
+// adapter between the OpenSK custom APIs and the more "standard" Rustcrypto APIs.
+// There is always a hazard in adapting crypto APIs and reviewers should take
+// note of this. However, by calling out the API differences, it hopefully highlights
+// any potential problems in the OpenSK library, rather than papering them over.
+//
+// Leaving the OpenSK APIs in place also makes it easier to apply upstream
+// patches from OpenSK to fix bugs in the code base.
+
+// Original copyright notice preserved below:
+
 // Copyright 2019 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,199 +27,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Hash256, HashBlockSize64Bytes};
-use arrayref::{array_mut_ref, array_ref};
-use byteorder::{BigEndian, ByteOrder};
-use core::num::Wrapping;
+use super::Hash256;
 
-const BLOCK_SIZE: usize = 64;
+use sha2::{Sha256 as NativeSha256, Digest};
+use std::convert::TryInto;
 
 pub struct Sha256 {
-    state: [Wrapping<u32>; 8],
-    block: [u8; BLOCK_SIZE],
-    total_len: usize,
+    engine: NativeSha256,
 }
 
 impl Hash256 for Sha256 {
     fn new() -> Self {
         Sha256 {
-            state: Sha256::H,
-            block: [0; BLOCK_SIZE],
-            total_len: 0,
+            engine: NativeSha256::default()
         }
     }
 
-    fn update(&mut self, mut contents: &[u8]) {
-        let cursor_in_block = self.total_len % BLOCK_SIZE;
-        let left_in_block = BLOCK_SIZE - cursor_in_block;
-
-        // Increment the total length before we mutate the contents slice.
-        self.total_len += contents.len();
-
-        if contents.len() < left_in_block {
-            // The contents don't fill the current block. Simply copy the bytes.
-            self.block[cursor_in_block..(cursor_in_block + contents.len())]
-                .copy_from_slice(contents);
-        } else {
-            // First, fill and process the current block.
-            let (this_block, rest) = contents.split_at(left_in_block);
-            self.block[cursor_in_block..].copy_from_slice(this_block);
-            Sha256::hash_block(&mut self.state, &self.block);
-            contents = rest;
-
-            // Process full blocks.
-            while contents.len() >= 64 {
-                let (block, rest) = contents.split_at(64);
-                Sha256::hash_block(&mut self.state, array_ref![block, 0, 64]);
-                contents = rest;
-            }
-
-            // Copy the last block for further processing.
-            self.block[..contents.len()].copy_from_slice(contents);
-        }
+    fn update(&mut self, contents: &[u8]) {
+        self.engine.update(contents);
     }
 
-    fn finalize(mut self) -> [u8; 32] {
-        // Last block and padding.
-        let cursor_in_block = self.total_len % BLOCK_SIZE;
-        self.block[cursor_in_block] = 0x80;
-        // Clear the rest of the block.
-        for byte in self.block[(cursor_in_block + 1)..].iter_mut() {
-            *byte = 0;
-        }
-
-        if cursor_in_block >= 56 {
-            // Padding doesn't fit in this block, so we first hash this block and then hash a
-            // padding block.
-            Sha256::hash_block(&mut self.state, &self.block);
-            // Clear buffer for the padding block.
-            for byte in self.block.iter_mut() {
-                *byte = 0;
-            }
-        }
-
-        // The last 8 bytes of the last block contain the length of the contents. It must be
-        // expressed in bits, whereas `total_len` is in bytes.
-        BigEndian::write_u64(array_mut_ref![self.block, 56, 8], self.total_len as u64 * 8);
-        Sha256::hash_block(&mut self.state, &self.block);
-
-        // Encode the state's 32-bit words into bytes, using big-endian.
-        let mut result: [u8; 32] = [0; 32];
-        for i in 0..8 {
-            BigEndian::write_u32(array_mut_ref![result, 4 * i, 4], self.state[i].0);
-        }
-        result
-    }
-}
-
-impl HashBlockSize64Bytes for Sha256 {
-    type State = [Wrapping<u32>; 8];
-
-    #[allow(clippy::many_single_char_names)]
-    fn hash_block(state: &mut Self::State, block: &[u8; 64]) {
-        let mut w: [Wrapping<u32>; 64] = [Wrapping(0); 64];
-
-        // Read the block as big-endian 32-bit words.
-        for (i, item) in w.iter_mut().take(16).enumerate() {
-            *item = Wrapping(BigEndian::read_u32(array_ref![block, 4 * i, 4]));
-        }
-
-        for i in 16..64 {
-            w[i] = w[i - 16] + Sha256::ssig0(w[i - 15]) + w[i - 7] + Sha256::ssig1(w[i - 2]);
-        }
-
-        let mut a = state[0];
-        let mut b = state[1];
-        let mut c = state[2];
-        let mut d = state[3];
-        let mut e = state[4];
-        let mut f = state[5];
-        let mut g = state[6];
-        let mut h = state[7];
-
-        for (i, item) in w.iter().enumerate() {
-            let tmp1 =
-                h + Sha256::bsig1(e) + Sha256::choice(e, f, g) + Wrapping(Sha256::K[i]) + *item;
-            let tmp2 = Sha256::bsig0(a) + Sha256::majority(a, b, c);
-
-            h = g;
-            g = f;
-            f = e;
-            e = d + tmp1;
-            d = c;
-            c = b;
-            b = a;
-            a = tmp1 + tmp2;
-        }
-
-        state[0] += a;
-        state[1] += b;
-        state[2] += c;
-        state[3] += d;
-        state[4] += e;
-        state[5] += f;
-        state[6] += g;
-        state[7] += h;
-    }
-}
-
-impl Sha256 {
-    // SHA-256 constants.
-    #[allow(clippy::unreadable_literal)]
-    const H: [Wrapping<u32>; 8] = [
-        Wrapping(0x6a09e667),
-        Wrapping(0xbb67ae85),
-        Wrapping(0x3c6ef372),
-        Wrapping(0xa54ff53a),
-        Wrapping(0x510e527f),
-        Wrapping(0x9b05688c),
-        Wrapping(0x1f83d9ab),
-        Wrapping(0x5be0cd19),
-    ];
-
-    #[allow(clippy::unreadable_literal)]
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-        0xc67178f2,
-    ];
-
-    // SHA-256 helper functions.
-    #[inline(always)]
-    fn choice(e: Wrapping<u32>, f: Wrapping<u32>, g: Wrapping<u32>) -> Wrapping<u32> {
-        (e & f) ^ (!e & g)
-    }
-
-    #[inline(always)]
-    fn majority(a: Wrapping<u32>, b: Wrapping<u32>, c: Wrapping<u32>) -> Wrapping<u32> {
-        (a & b) ^ (a & c) ^ (b & c)
-    }
-
-    #[inline(always)]
-    fn bsig0(x: Wrapping<u32>) -> Wrapping<u32> {
-        x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22)
-    }
-
-    #[inline(always)]
-    fn bsig1(x: Wrapping<u32>) -> Wrapping<u32> {
-        x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25)
-    }
-
-    #[inline(always)]
-    fn ssig0(x: Wrapping<u32>) -> Wrapping<u32> {
-        x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3)
-    }
-
-    #[inline(always)]
-    fn ssig1(x: Wrapping<u32>) -> Wrapping<u32> {
-        x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10)
+    fn finalize(self) -> [u8; 32] {
+        let digest = self.engine.finalize();
+        digest.as_slice().try_into().unwrap()
     }
 }
 
