@@ -732,6 +732,7 @@ dependencies = [
  "cbor",
  "p256",
  "rand_core 0.5.1",
+ "sha2",
  "subtle",
  "trng",
  "xous-names",
