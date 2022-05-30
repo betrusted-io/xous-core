@@ -15,6 +15,7 @@
 use std::vec::Vec;
 use byteorder::{BigEndian, ByteOrder};
 use core::convert::TryFrom;
+use crate::ctap::array_ref;
 
 const APDU_HEADER_LEN: usize = 4;
 
