@@ -161,8 +161,9 @@ fn xmain() -> ! {
         .build();
     #[cfg(any(target_os = "none", target_os = "xous"))]
     {
-        keyboard.interface().write_report(&Vec::<Keyboard>::new()).ok();
-        keyboard.interface().tick().unwrap();
+        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+        keyboard.write_report(&Vec::<Keyboard>::new()).ok();
+        keyboard.tick().unwrap();
     }
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
