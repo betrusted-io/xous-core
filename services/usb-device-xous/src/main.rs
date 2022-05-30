@@ -159,6 +159,11 @@ fn xmain() -> ! {
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    {
+        keyboard.interface().write_report(&Vec::<Keyboard>::new()).ok();
+        keyboard.interface().tick().unwrap();
+    }
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
