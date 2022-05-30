@@ -1,5 +1,16 @@
 // shims for Tock calls, to avoid having to recode some fairly pervasive patterns in OpenSK
+use std::ops::{Sub, Add, AddAssign};
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ClockFrequency {
+    hz: usize,
+}
+
+impl ClockFrequency {
+    pub fn hz(&self) -> usize {
+        self.hz
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct ClockValue {

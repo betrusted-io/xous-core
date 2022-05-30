@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use libtock_drivers::timer::{ClockValue, Duration};
+use crate::shims::{ClockValue, Duration};
 
 #[derive(Clone, Copy, Debug)]
 pub enum TimedPermission {

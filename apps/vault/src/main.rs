@@ -14,6 +14,7 @@ use ctap::status_code::Ctap2StatusCode;
 use ctap::CtapState;
 mod shims;
 use shims::*;
+use ctap_crypto::rng256::XousRng256;
 
 /*
 UI concept:
@@ -94,7 +95,7 @@ fn xmain() -> ! {
         }
     });
 
-    let rng = ctap_ctap_crypto::rng256::XousRng256::new(&xns);
+    let rng = ctap_crypto::rng256::XousRng256::new(&xns);
     let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
     //let mut ctap_hid = CtapHid::new();
 
@@ -156,67 +157,92 @@ fn xmain() -> ! {
 }
 
 /*
+const KEEPALIVE_DELAY_MS: isize = 100;
+const KEEPALIVE_DELAY: Duration<isize> = Duration::from_ms(KEEPALIVE_DELAY_MS);
+const SEND_TIMEOUT: Duration<isize> = Duration::from_ms(1000);
 
-mod api;
-use api::*;
 
-mod ctap;
-use ctap::hid::{ChannelID, CtapHid, KeepaliveStatus, ProcessedPacket};
-use ctap::status_code::Ctap2StatusCode;
-use ctap::CtapState;
-
-use num_traits::*;
-use std::thread;
-use usbd_human_interface_device::device::fido::*;
-
-#[xous::xous_main]
-fn xmain() -> ! {
-    log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
-    log::info!("my PID is {}", xous::process::id());
-
-    let xns = xous_names::XousNames::new().unwrap();
-    // TODO: figure out what, if any, should be the limit of connections to the U2F server?
-    let u2f_sid = xns.register_name(api::SERVER_NAME_U2F, None).expect("can't register server");
-    log::trace!("registered with NS -- {:?}", u2f_sid);
-
-    let _ = thread::spawn({
-        move || {
-            let usb = usb_device_xous::UsbHid::new();
-            loop {
-                match usb.u2f_wait_incoming() {
-                    Ok(msg) => {
-                        log::info!("FIDO listener got message: {:?}", msg);
+// Returns whether the keepalive was sent, or false if cancelled.
+fn send_keepalive_up_needed(
+    cid: ChannelID,
+    timeout: Duration<isize>,
+) -> Result<(), Ctap2StatusCode> {
+    let keepalive_msg = CtapHid::keepalive(cid, KeepaliveStatus::UpNeeded);
+    for mut pkt in keepalive_msg {
+        let status = usb_ctap_hid::send_or_recv_with_timeout(&mut pkt, timeout);
+        match status {
+            None => {
+                #[cfg(feature = "debug_ctap")]
+                writeln!(Console::new(), "Sending a KEEPALIVE packet timed out").unwrap();
+                // TODO: abort user presence test?
+            }
+            Some(usb_ctap_hid::SendOrRecvStatus::Error) => panic!("Error sending KEEPALIVE packet"),
+            Some(usb_ctap_hid::SendOrRecvStatus::Sent) => {
+                #[cfg(feature = "debug_ctap")]
+                writeln!(Console::new(), "Sent KEEPALIVE packet").unwrap();
+            }
+            Some(usb_ctap_hid::SendOrRecvStatus::Received) => {
+                // We only parse one packet, because we only care about CANCEL.
+                let (received_cid, processed_packet) = CtapHid::process_single_packet(&pkt);
+                if received_cid != &cid {
+                    #[cfg(feature = "debug_ctap")]
+                    writeln!(
+                        Console::new(),
+                        "Received a packet on channel ID {:?} while sending a KEEPALIVE packet",
+                        received_cid,
+                    )
+                    .unwrap();
+                    return Ok(());
+                }
+                match processed_packet {
+                    ProcessedPacket::InitPacket { cmd, .. } => {
+                        if cmd == CtapHid::COMMAND_CANCEL {
+                            // We ignore the payload, we can't answer with an error code anyway.
+                            #[cfg(feature = "debug_ctap")]
+                            writeln!(Console::new(), "User presence check cancelled").unwrap();
+                            return Err(Ctap2StatusCode::CTAP2_ERR_KEEPALIVE_CANCEL);
+                        } else {
+                            #[cfg(feature = "debug_ctap")]
+                            writeln!(
+                                Console::new(),
+                                "Discarded packet with command {} received while sending a KEEPALIVE packet",
+                                cmd,
+                            )
+                            .unwrap();
+                        }
                     }
-                    Err(e) => {
-                        log::warn!("FIDO listener got an error: {:?}", e);
+                    ProcessedPacket::ContinuationPacket { .. } => {
+                        #[cfg(feature = "debug_ctap")]
+                        writeln!(
+                            Console::new(),
+                            "Discarded continuation packet received while sending a KEEPALIVE packet",
+                        )
+                        .unwrap();
                     }
                 }
             }
         }
-    });
-
-    let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
-    let mut ctap_hid = CtapHid::new();
-
-    loop {
-        let msg = xous::receive_message(u2f_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::Quit) => {
-                log::warn!("Quit received, goodbye world!");
-                break;
-            },
-            None => {
-                log::error!("couldn't convert opcode: {:?}", msg);
-            }
-        }
     }
-    // clean up our program
-    log::trace!("main loop exit, destroying servers");
-    xns.unregister_server(u2f_sid).unwrap();
-    xous::destroy_server(u2f_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
+    Ok(())
 }
 
+fn check_user_presence(cid: ChannelID) -> Result<(), Ctap2StatusCode> {
+    // The timeout is N times the keepalive delay.
+    const TIMEOUT_ITERATIONS: usize = ctap::TOUCH_TIMEOUT_MS as usize / KEEPALIVE_DELAY_MS as usize;
+
+    /*
+      This should do the following:
+        - call send_keepalive_up_needed(cid, KEEPALIVE_DELAY) once every KEEPALIVE_DELAY interval
+        - pop up a dialog box for TOUCH_TIMEOUT_MS asking to approve "something"
+        - if TOUCH_TIMEOUT_MS has elapsed and no user approval is received:
+           - return Err(Ctap2StatusCode::CTAP2_ERR_USER_ACTION_TIMEOUT)
+        - else return Ok(())
+    */
+    send_keepalive_up_needed(cid, KEEPALIVE_DELAY)?;
+    if false {
+        Ok(())
+    } else {
+        Err(Ctap2StatusCode::CTAP2_ERR_USER_ACTION_TIMEOUT)
+    }
+}
 */

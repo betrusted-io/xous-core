@@ -31,6 +31,7 @@ use arrayref::array_ref;
 use cbor::cbor_array_vec;
 use core::convert::TryInto;
 use ctap_crypto::rng256::Rng256;
+use pddb::Pddb;
 
 // Those constants may be modified before compilation to tune the behavior of the key.
 //
@@ -75,7 +76,7 @@ pub struct MasterKeys {
 
 /// CTAP persistent storage.
 pub struct PersistentStore {
-    store: persistent_store::Store<Storage>,
+    pddb: Pddb,
 }
 
 impl PersistentStore {
@@ -84,17 +85,16 @@ impl PersistentStore {
     /// # Safety
     ///
     /// This should be at most one instance of persistent store per program lifetime.
-    pub fn new(rng: &mut impl Rng256) -> PersistentStore {
-        let storage = new_storage(NUM_PAGES);
+    pub fn new(_rng: &mut impl Rng256) -> PersistentStore {
         let mut store = PersistentStore {
-            store: persistent_store::Store::new(storage).ok().unwrap(),
+            pddb: Pddb::new()
         };
-        store.init(rng).unwrap();
+        store.init().unwrap();
         store
     }
 
     /// Initializes the store by creating missing objects.
-    fn init(&mut self, rng: &mut impl Rng256) -> Result<(), Ctap2StatusCode> {
+    fn init(&mut self) -> Result<(), Ctap2StatusCode> {
         // Generate and store the master keys if they are missing.
         if self.store.find_handle(key::MASTER_KEYS)?.is_none() {
             let master_encryption_key = rng.gen_uniform_u8x32();

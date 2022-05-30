@@ -12,54 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::stringify;
+
 /// Number of keys that persist the CTAP reset command.
 pub const NUM_PERSISTENT_KEYS: usize = 20;
 
-/// Defines a key given its name and value or range of values.
-macro_rules! make_key {
-    ($(#[$doc: meta])* $name: ident = $key: literal..$end: literal) => {
-        $(#[$doc])* pub const $name: core::ops::Range<usize> = $key..$end;
-    };
-    ($(#[$doc: meta])* $name: ident = $key: literal) => {
-        $(#[$doc])* pub const $name: usize = $key;
-    };
-}
-
-/// Returns the range of values of a key given its value description.
-#[cfg(test)]
-macro_rules! make_range {
-    ($key: literal..$end: literal) => {
-        $key..$end
-    };
-    ($key: literal) => {
-        $key..$key + 1
-    };
-}
-
 /// Helper to define keys as a partial partition of a range.
-macro_rules! make_partition {
-        ($range: expr,
-         $(
-             $(#[$doc: meta])*
-             $name: ident = $key: literal $(.. $end: literal)?;
-         )*) => {
-            $(
-                make_key!($(#[$doc])* $name = $key $(.. $end)?);
-            )*
-            #[cfg(test)]
-            const KEY_RANGE: core::ops::Range<usize> = $range;
-            #[cfg(test)]
-            const ALL_KEYS: &[core::ops::Range<usize>] = &[$(make_range!($key $(.. $end)?)),*];
-        };
-    }
+macro_rules! define_names {
+     ($(
+         $(#[$doc: meta])*
+         $name: ident = $key: literal $(.. $end: literal)?;
+     )*) => {
+        $(
+            pub const $name: &'static str = stringify!($name);
+        )*
+    };
+}
 
-make_partition! {
-    // We reserve 0 and 2048+ for possible migration purposes. We add persistent entries starting
-    // from 1 and going up. We add non-persistent entries starting from 2047 and going down. This
-    // way, we don't commit to a fixed number of persistent keys.
-    1..2048,
-
+define_names! {
     // WARNING: Keys should not be deleted but prefixed with `_` to avoid accidentally reusing them.
+    // the range information is not used by Xous' PDDB, but it is kept around for easy comparison against
+    // the original OpenSK reference code.
 
     /// The attestation private key.
     ATTESTATION_PRIVATE_KEY = 1;
@@ -120,27 +93,4 @@ make_partition! {
     ///
     /// If the entry is absent, the counter is 0.
     GLOBAL_SIGNATURE_COUNTER = 2047;
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn enough_credentials() {
-        use super::super::MAX_SUPPORTED_RESIDENTIAL_KEYS;
-        assert!(MAX_SUPPORTED_RESIDENTIAL_KEYS <= CREDENTIALS.end - CREDENTIALS.start);
-    }
-
-    #[test]
-    fn keys_are_disjoint() {
-        // Check that keys are in the range.
-        for keys in ALL_KEYS {
-            assert!(KEY_RANGE.start <= keys.start && keys.end <= KEY_RANGE.end);
-        }
-        // Check that keys are assigned at most once, essentially partitioning the range.
-        for key in KEY_RANGE {
-            assert!(ALL_KEYS.iter().filter(|keys| keys.contains(&key)).count() <= 1);
-        }
-    }
 }

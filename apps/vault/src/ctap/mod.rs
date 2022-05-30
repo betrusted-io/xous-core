@@ -67,7 +67,6 @@ use ctap_crypto::sha256::Sha256;
 use ctap_crypto::Hash256;
 #[cfg(feature = "debug_ctap")]
 use libtock_drivers::console::Console;
-use libtock_drivers::crp;
 use crate::shims::{ClockValue, Duration};
 
 // This flag enables or disables basic attestation for FIDO2. U2F is unaffected by
@@ -233,7 +232,7 @@ where
         application: &[u8; 32],
     ) -> Result<Vec<u8>, Ctap2StatusCode> {
         let master_keys = self.persistent_store.master_keys()?;
-        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&master_keys.encryption);
+        let aes_enc_key = &master_keys.encryption;
         let mut sk_bytes = [0; 32];
         private_key.to_bytes(&mut sk_bytes);
         let mut iv = [0; 16];
@@ -276,8 +275,8 @@ where
         ) {
             return Ok(None);
         }
-        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&master_keys.encryption);
-        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = &master_keys.encryption;
+        let aes_dec_key = aes_enc_key;
         let mut iv = [0; 16];
         iv.copy_from_slice(&credential_id[..16]);
         let mut blocks = [[0u8; 16]; 4];
