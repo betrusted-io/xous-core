@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
@@ -69,12 +69,13 @@ where
 pub fn create_process_post_as_thread<F>(
     args: ProcessArgsAsThread<F>,
     init: ProcessInit,
-    pid: PID,
+    startup: ProcessStartup,
 ) -> core::result::Result<ProcessHandleAsThread, crate::Error>
 where
     F: FnOnce() + Send + 'static,
 {
     let server_address = xous_address();
+    let pid = startup.pid;
 
     let f = args.main;
     let thread_main = std::thread::Builder::new()
@@ -125,6 +126,79 @@ impl ProcessArgs {
     }
 }
 
+/// This is returned when a process is created
+#[derive(Debug, PartialEq)]
+pub struct ProcessStartup {
+    /// The process ID of the new process
+    pid: crate::PID,
+}
+
+impl ProcessStartup {
+    pub fn new(pid: crate::PID) -> Self {
+        ProcessStartup { pid }
+    }
+
+    pub fn pid(&self) -> crate::PID {
+        self.pid
+    }
+}
+
+impl core::fmt::Display for ProcessStartup {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.pid)
+    }
+}
+
+impl From<&[usize; 7]> for ProcessStartup {
+    fn from(src: &[usize; 7]) -> ProcessStartup {
+        ProcessStartup {
+            pid: crate::PID::new(src[0] as _).unwrap(),
+        }
+    }
+}
+
+impl From<[usize; 8]> for ProcessStartup {
+    fn from(src: [usize; 8]) -> ProcessStartup {
+        let pid = crate::PID::new(src[1] as _).unwrap();
+        ProcessStartup { pid }
+    }
+}
+
+impl Into<[usize; 7]> for &ProcessStartup {
+    fn into(self) -> [usize; 7] {
+        [self.pid.get() as _, 0, 0, 0, 0, 0, 0]
+    }
+}
+
+impl Into<[usize; 7]> for &ProcessInit {
+    fn into(self) -> [usize; 7] {
+        [
+            u32::from_le_bytes(self.key.0[0..4].try_into().unwrap()) as _,
+            u32::from_le_bytes(self.key.0[4..8].try_into().unwrap()) as _,
+            u32::from_le_bytes(self.key.0[8..12].try_into().unwrap()) as _,
+            u32::from_le_bytes(self.key.0[12..16].try_into().unwrap()) as _,
+            0,
+            0,
+            0,
+        ]
+    }
+}
+
+impl TryFrom<[usize; 7]> for ProcessInit {
+    type Error = crate::Error;
+    fn try_from(src: [usize; 7]) -> core::result::Result<ProcessInit, crate::Error> {
+        let mut exploded = vec![];
+        for word in src[0..4].into_iter() {
+            exploded.extend_from_slice(&(*word as u32).to_le_bytes());
+        }
+        let mut key = [0u8; 16];
+        key.copy_from_slice(&exploded);
+        Ok(ProcessInit {
+            key: ProcessKey(key),
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct ProcessHandle(std::process::Child);
 
@@ -146,11 +220,11 @@ pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessIn
 pub fn create_process_post(
     args: ProcessArgs,
     init: ProcessInit,
-    pid: PID,
+    startup: ProcessStartup,
 ) -> core::result::Result<ProcessHandle, crate::Error> {
     use std::process::Command;
     let server_env = format!("{}", xous_address());
-    let pid_env = format!("{}", pid);
+    let pid_env = format!("{}", startup.pid);
     let process_name_env = args.name.to_string();
     let process_key_env = hex::encode(&init.key.0);
     let (shell, args) = if cfg!(windows) {

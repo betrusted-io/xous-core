@@ -14,8 +14,17 @@ pub const DEFAULT_BASE: usize = 0x6000_0000;
 pub const USER_AREA_END: usize = 0xff00_0000;
 pub const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
 pub const PAGE_SIZE: usize = 4096;
-const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
-const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
+pub const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
+pub const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
+pub const THREAD_CONTEXT_AREA: usize = 0xff80_1000;
+
+pub const FLG_VALID: usize = 0x1;
+pub const FLG_R: usize = 0x2;
+pub const FLG_W: usize = 0x4;
+// pub const FLG_X: usize = 0x8;
+pub const FLG_U: usize = 0x10;
+pub const FLG_A: usize = 0x40;
+pub const FLG_D: usize = 0x80;
 
 extern "C" {
     fn flush_mmu();
@@ -103,6 +112,138 @@ impl MemoryMapping {
     // }
     pub unsafe fn from_raw(&mut self, satp: usize) {
         self.satp = satp;
+    }
+
+    /// Allocate a brand-new memory mapping. When this memory mapping is created,
+    /// it will be ready to use in a new process, however it will have no actual
+    /// program code. It will, however, have the following pages mapped:
+    ///
+    ///     1. The kernel will be mapped to superpage 1023, meaning the kernel can
+    ///        switch to this process and do things.
+    ///     2. A page will be allocated for superpage 1022, to contain pages for
+    ///        process-specific code.
+    ///     3. A page will be allocated for superpage 1021, to contain pages for
+    ///        managing pages.
+    ///     4. The root pagetable will be allocated and mapped at 0xff800000,
+    ///        ensuring new superpages can be allocated.
+    ///     5. A context page will be allocated at 0xff801000, ensuring the
+    ///        process can actually be run.
+    ///     6. Individual pagetable mappings are mapped at 0xff400000
+    /// At the end of this operation, the following mapping will take place. Note that
+    /// names are repeated in the chart below to indicate they are the same page
+    /// represented multiple times. Items in brackets are offsets (in `usize`-words)
+    /// from the start of the page. For example, offset 1023 on the root pagetable
+    /// (address 4092) contains an entry that points to the kernel superpage.
+    ///                         +----------------+
+    ///                         | Root Pagetable |
+    ///                         |      root      |
+    ///                         +----------------+
+    ///                                  |
+    ///                  +---------------+-------------------+------------------+
+    ///                  |                                   |                  |           
+    ///               [1021]                              [1022]             [1023]      
+    ///                  v                                   v                  v          
+    ///          +--------------+                    +--------------+       +--------+
+    ///          | Level 0/1021 |                    | Level 0/1022 |       | Kernel |
+    ///          |   pages_l0   |                    |  process_l0  |       |        |
+    ///          +--------------+                    +--------------+       +--------+
+    ///                  |                                   |          
+    ///          +-------+---------+                     +---+-----------+
+    ///          |                 |                     |               |
+    ///       [1021]            [1022]                  [0]             [1]
+    ///          v                 v                     v               v
+    ///  +--------------+  +--------------+     +----------------+  +---------+
+    ///  | Level 0/1021 |  | Level 0/1022 |     | Root Pagetable |  | Context |
+    ///  +--------------+  +--------------+     +----------------+  +---------+
+    pub unsafe fn allocate(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
+        if self.satp != 0 {
+            return Err(xous_kernel::Error::MemoryInUse);
+        }
+
+        let current_pid = crate::arch::process::current_pid();
+
+        crate::mem::MemoryManager::with_mut(|memory_manager| {
+            // Address of the root pagetable
+            let root_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
+            let root_phys = super::mem::virt_to_phys(root_temp_virt as usize).unwrap() as usize;
+            let root_virt = PAGE_TABLE_ROOT_OFFSET;
+            let root_vpn0 = (root_virt as usize >> 12) & ((1 << 10) - 1);
+            let root_ppn = ((root_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+
+            // Superpage that points to all other pagetables
+            let pages_l0_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
+            let pages_l0_virt = PAGE_TABLE_OFFSET + 4096 * 1021;
+            let pages_l0_phys = super::mem::virt_to_phys(pages_l0_temp_virt as usize)? as usize;
+            let pages_l0_vpn0 = (pages_l0_virt as usize >> 12) & ((1 << 10) - 1);
+            let pages_l0_ppn =
+                ((pages_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+
+            // Superpage that points to process-specific pages
+            let process_l0_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
+            let process_l0_virt = PAGE_TABLE_OFFSET + 4096 * 1022;
+            let process_l0_phys = super::mem::virt_to_phys(process_l0_temp_virt as usize)? as usize;
+            let process_l0_vpn0 = (process_l0_virt as usize >> 12) & ((1 << 10) - 1);
+            let process_l0_ppn =
+                ((process_l0_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+
+            // Context switch information containing all thread information.
+            let context_temp_virt = memory_manager.map_zeroed_page(current_pid, false)?;
+            let context_virt = THREAD_CONTEXT_AREA;
+            let context_phys = super::mem::virt_to_phys(context_temp_virt as usize)? as usize;
+            let context_vpn0 = (context_virt as usize >> 12) & ((1 << 10) - 1);
+            let context_ppn =
+                ((context_phys >> 12) << 10) | FLG_VALID | FLG_R | FLG_W | FLG_D | FLG_A;
+
+            // Map the kernel into the new process mapping so we can continue
+            // execution when it is activated. We can copy this value from our
+            // current pagetable mapping.
+            let krn_pg1023_ptr = (PAGE_TABLE_ROOT_OFFSET as *const usize)
+                .add(1023)
+                .read_volatile();
+            root_temp_virt.add(1023).write_volatile(krn_pg1023_ptr);
+
+            // Map the process superpage into itself.
+            root_temp_virt
+                .add(PAGE_TABLE_ROOT_OFFSET >> 22)
+                .write_volatile((process_l0_phys >> 12) << 10 | FLG_VALID);
+
+            // Map the pagetable superpage into itself.
+            root_temp_virt
+                .add(PAGE_TABLE_OFFSET >> 22)
+                .write_volatile((pages_l0_phys >> 12) << 10 | FLG_VALID);
+
+            // Map the root pagetable and the context page into the new process
+            process_l0_temp_virt.add(root_vpn0).write_volatile(root_ppn);
+            process_l0_temp_virt
+                .add(context_vpn0)
+                .write_volatile(context_ppn);
+
+            // Add the the pagetable superpage to the l0 pagetable.
+            pages_l0_temp_virt
+                .add(process_l0_vpn0)
+                .write_volatile(process_l0_ppn);
+            pages_l0_temp_virt
+                .add(pages_l0_vpn0)
+                .write_volatile(pages_l0_ppn);
+
+            // Mark the four pages as being owned by the new process
+            memory_manager.move_page_raw(root_phys as *mut usize, pid)?;
+            memory_manager.move_page_raw(pages_l0_phys as *mut usize, pid)?;
+            memory_manager.move_page_raw(process_l0_phys as *mut usize, pid)?;
+            memory_manager.move_page_raw(context_phys as *mut usize, pid)?;
+
+            // Unmap our copies of the four pages
+            unmap_page_inner(memory_manager, root_temp_virt as usize)?;
+            unmap_page_inner(memory_manager, pages_l0_temp_virt as usize)?;
+            unmap_page_inner(memory_manager, process_l0_temp_virt as usize)?;
+            unmap_page_inner(memory_manager, context_temp_virt as usize)?;
+
+            // Construct a dummy SATP that we will use to hand memory to the new process.
+            self.satp = 0x8000_0000 | ((pid.get() as usize) << 22) | (root_phys as usize >> 12);
+            Ok(())
+        })?;
+
+        Ok(())
     }
 
     /// Get the currently active memory mapping.  Note that the actual root pages
@@ -762,7 +903,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         // Map the page to our process
         *entry = (ppn1 << 20)
             | (ppn0 << 10)
-            | (flags | (1 << 0) /* valid */ | (1 << 6) /* D */ | (1 << 7)/* A */);
+            | (flags | FLG_VALID /* valid */ | FLG_D /* D */ | FLG_A/* A */);
         flush_mmu();
 
         // Zero-out the page
@@ -771,7 +912,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         // Move the page into userspace
         *entry = (ppn1 << 20)
             | (ppn0 << 10)
-            | (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7)/* A */);
+            | (flags | FLG_VALID /* valid */ | FLG_U /* USER */ | FLG_D /* D */ | FLG_A/* A */);
         flush_mmu();
     };
 
