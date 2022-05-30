@@ -19,7 +19,7 @@ pub mod string;
 pub mod stringbuffer;
 pub mod syscall;
 
-pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
+pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ProcessStartup, ThreadInit};
 pub use definitions::*;
 pub use string::*;
 pub use stringbuffer::*;

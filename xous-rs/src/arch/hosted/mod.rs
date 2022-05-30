@@ -13,6 +13,9 @@ pub use mem::*;
 mod threading;
 pub use threading::*;
 
+mod process;
+pub use process::*;
+
 lazy_static::lazy_static! {
     static ref NETWORK_CONNECT_ADDRESS: SocketAddr = {
         std::env::var("XOUS_SERVER")
@@ -24,7 +27,7 @@ lazy_static::lazy_static! {
         })
         .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
     };
-    static ref PROCESS_KEY: ProcessKey = {
+    pub(crate) static ref PROCESS_KEY: ProcessKey = {
         // piggy back a seed initialization on top of the PROCESS_KEY initialization.
         let seed = match std::env::var("XOUS_SEED") {
             Ok(s) => {
@@ -104,7 +107,7 @@ lazy_static::lazy_static! {
     };
 
     /// The network address to connect to when making a kernel call
-    static ref CHILD_PROCESS_ADDRESS: Arc<Mutex<SocketAddr>> = Arc::new(Mutex::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
+    pub static ref CHILD_PROCESS_ADDRESS: Arc<Mutex<SocketAddr>> = Arc::new(Mutex::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
 }
 
 pub fn set_xous_address(new_address: SocketAddr) {
@@ -113,94 +116,6 @@ pub fn set_xous_address(new_address: SocketAddr) {
 
 pub fn set_thread_id(new_tid: TID) {
     THREAD_ID.with(|tid| *tid.borrow_mut() = Some(new_tid));
-}
-
-/// A 16-byte random nonce that identifies this process to the kernel. This
-/// is usually provided through the environment variable `XOUS_PROCESS_KEY`.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ProcessKey([u8; 16]);
-impl ProcessKey {
-    pub fn new(key: [u8; 16]) -> ProcessKey {
-        ProcessKey(key)
-    }
-}
-
-/// Describes all parameters that are required to start a new process
-/// on this platform.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ProcessInit {
-    pub key: ProcessKey,
-}
-
-pub struct ProcessArgs {
-    command: String,
-    name: String,
-}
-
-impl ProcessArgs {
-    pub fn new(name: &str, command: String) -> ProcessArgs {
-        ProcessArgs {
-            command,
-            name: name.to_owned(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ProcessHandle(std::process::Child);
-
-/// If no connection exists, create a new connection to the server. This means
-/// our parent PID will be PID1. Otherwise, reuse the same connection.
-pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessInit, crate::Error> {
-    unimplemented!()
-}
-
-/// Launch a new process with the current PID as the parent.
-pub fn create_process_post(
-    args: ProcessArgs,
-    init: ProcessInit,
-    pid: PID,
-) -> core::result::Result<ProcessHandle, crate::Error> {
-    use std::process::Command;
-    let server_env = format!("{}", CHILD_PROCESS_ADDRESS.lock().unwrap());
-    let pid_env = format!("{}", pid);
-    let process_name_env = args.name.to_string();
-    let process_key_env = hex::encode(&init.key.0);
-    let (shell, args) = if cfg!(windows) {
-        ("cmd", ["/C", &args.command])
-    } else if cfg!(unix) {
-        ("sh", ["-c", &args.command])
-    } else {
-        panic!("unrecognized platform -- don't know how to shell out");
-    };
-
-    // println!("Launching process...");
-    Command::new(shell)
-        .args(&args)
-        .env("XOUS_SERVER", server_env)
-        .env("XOUS_PID", pid_env)
-        .env("XOUS_PROCESS_NAME", process_name_env)
-        .env("XOUS_PROCESS_KEY", process_key_env)
-        .spawn()
-        .map(ProcessHandle)
-        .map_err(|_| {
-            // eprintln!("couldn't start command: {}", e);
-            crate::Error::InternalError
-        })
-}
-
-pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {
-    joiner
-        .0
-        .wait()
-        .or(Err(crate::Error::InternalError))
-        .and_then(|e| {
-            if e.success() {
-                Ok(crate::Result::Ok)
-            } else {
-                Err(crate::Error::UnknownError)
-            }
-        })
 }
 
 #[derive(PartialEq)]
@@ -218,40 +133,6 @@ struct ServerConnection {
     call_mem_tracker: Arc<Mutex<HashMap<TID, (crate::MemoryRange, CallMemoryKind)>>>,
     // call_tracker: Arc<Mutex<HashMap<TID, ()>>>,
     // response_tracker: Arc<Mutex<HashMap<TID, ()>>>,
-}
-
-pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
-    [
-        call,
-        u32::from_le_bytes(init.key.0[0..4].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key.0[4..8].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key.0[8..12].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key.0[12..16].try_into().unwrap()) as _,
-        0,
-        0,
-        0,
-    ]
-}
-
-pub fn args_to_process(
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
-    _a5: usize,
-    _a6: usize,
-    _a7: usize,
-) -> core::result::Result<ProcessInit, crate::Error> {
-    let mut v = vec![];
-    v.extend_from_slice(&(a1 as u32).to_le_bytes());
-    v.extend_from_slice(&(a2 as u32).to_le_bytes());
-    v.extend_from_slice(&(a3 as u32).to_le_bytes());
-    v.extend_from_slice(&(a4 as u32).to_le_bytes());
-    let mut key = [0u8; 16];
-    key.copy_from_slice(&v);
-    Ok(ProcessInit {
-        key: ProcessKey(key),
-    })
 }
 
 /// Perform a synchronous syscall to the kernel.
