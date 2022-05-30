@@ -1,3 +1,18 @@
+// Xous maintainer's note:
+//
+// This library is vendored in from the Google OpenSK reference implementation.
+// The OpenSK library contains its own implementations of crypto functions.
+// The port to Xous attempts to undo that, but where possible leaves a thin
+// adapter between the OpenSK custom APIs and the more "standard" Rustcrypto APIs.
+// There is always a hazard in adapting crypto APIs and reviewers should take
+// note of this. However, by calling out the API differences, it hopefully highlights
+// any potential problems in the OpenSK library, rather than papering them over.
+//
+// Leaving the OpenSK APIs in place also makes it easier to apply upstream
+// patches from OpenSK to fix bugs in the code base.
+
+// Original copyright notice preserved below:
+
 // Copyright 2019 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,85 +27,78 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::ec::exponent256::NonZeroExponentP256;
-use super::ec::int256;
-use super::ec::int256::Int256;
-use super::ec::point::PointP256;
-use super::rng256::Rng256;
-use super::sha256::Sha256;
-use super::Hash256;
+// Additional note: currently this is a very low-confidence API port. Much testing needed.
 
-pub const NBYTES: usize = int256::NBYTES;
+use p256::{EncodedPoint, PublicKey};
+use p256::ecdh::EphemeralSecret;
+use rand_core::OsRng;
+use p256::elliptic_curve::consts::U32;
+use p256::elliptic_curve::generic_array::GenericArray;
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use std::convert::TryInto;
+
+use super::rng256::Rng256;
+pub const NBYTES: usize = 32;
 
 pub struct SecKey {
-    a: NonZeroExponentP256,
+    a: EphemeralSecret,
 }
 
 #[cfg_attr(feature = "derive_debug", derive(Clone, PartialEq, Debug))]
 pub struct PubKey {
-    p: PointP256,
+    // pub p: EncodedPoint,
+    pub p: PublicKey,
 }
 
 impl SecKey {
-    pub fn gensk<R>(rng: &mut R) -> SecKey
+    // we bypass the OpenSK "rng" specifier, because we have a standard RNG API in our system and do
+    // not need to rely on its hack to pass an RNG around.
+    pub fn gensk<R>(_rng: &mut R) -> SecKey
     where
         R: Rng256,
     {
         SecKey {
-            a: NonZeroExponentP256::gen_uniform(rng),
+            a: EphemeralSecret::random(&mut OsRng)
         }
     }
 
     pub fn genpk(&self) -> PubKey {
         PubKey {
-            p: PointP256::base_point_mul(self.a.as_exponent()),
+            p: PublicKey::from_sec1_bytes(EncodedPoint::from(self.a.public_key()).as_bytes()).expect("invalid self-generated PK"),
         }
     }
-
-    fn exchange_raw(&self, other: &PubKey) -> PointP256 {
-        // At this point, the PubKey type guarantees that other.p is a valid point on the curve.
-        // It's the responsibility of the caller to handle errors when converting serialized bytes
-        // to a PubKey.
-        other.p.mul(self.a.as_exponent())
-        // TODO: Do we need to check that the exchanged point is not infinite, and if yes handle
-        // the error? The following argument should be reviewed:
-        //
-        // In principle this isn't needed on the P-256 curve, which has a prime order and a
-        // cofactor of 1.
-        //
-        // Some pointers on this:
-        // - https://www.secg.org/sec1-v2.pdf
-    }
-
     // DH key agreement method defined in the FIDO2 specification, Section 5.5.4. "Getting
     // sharedSecret from Authenticator"
     pub fn exchange_x_sha256(&self, other: &PubKey) -> [u8; 32] {
-        let p = self.exchange_raw(other);
-        let mut x: [u8; 32] = [Default::default(); 32];
-        p.getx().to_int().to_bin(&mut x);
-        Sha256::hash(&x)
+        let shared = self.a.diffie_hellman(&other.p);
+        shared.as_bytes().as_slice().try_into().unwrap()
     }
 }
 
 impl PubKey {
-    #[cfg(test)]
-    fn from_bytes_uncompressed(bytes: &[u8]) -> Option<PubKey> {
-        PointP256::from_bytes_uncompressed_vartime(bytes).map(|p| PubKey { p })
-    }
-
-    #[cfg(test)]
-    fn to_bytes_uncompressed(&self, bytes: &mut [u8; 65]) {
-        self.p.to_bytes_uncompressed(bytes);
-    }
-
     pub fn from_coordinates(x: &[u8; NBYTES], y: &[u8; NBYTES]) -> Option<PubKey> {
-        PointP256::new_checked_vartime(Int256::from_bin(x), Int256::from_bin(y))
-            .map(|p| PubKey { p })
+        match PublicKey::from_sec1_bytes(
+            EncodedPoint::from_affine_coordinates(
+                GenericArray::<u8, U32>::from_slice(x),
+                GenericArray::<u8, U32>::from_slice(y),
+                false
+            ).as_bytes()
+        ) {
+            Ok(p) => {
+                Some(PubKey{p})
+            }
+            _ => None,
+        }
     }
 
     pub fn to_coordinates(&self, x: &mut [u8; NBYTES], y: &mut [u8; NBYTES]) {
-        self.p.getx().to_int().to_bin(x);
-        self.p.gety().to_int().to_bin(y);
+        let enc_point = self.p.to_encoded_point(false);
+        x.copy_from_slice(
+            enc_point.x().unwrap().as_slice()
+        );
+        y.copy_from_slice(
+            enc_point.y().unwrap().as_slice()
+        );
     }
 }
 

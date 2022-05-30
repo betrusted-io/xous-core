@@ -17,7 +17,7 @@ pub mod cbc;
 mod util;
 pub mod hmac;
 pub mod sha256;
-//pub mod ecdh;
+pub mod ecdh;
 //pub mod ecdsa;
 
 // Trait for hash functions that returns a 256-bit hash.
