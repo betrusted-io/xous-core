@@ -337,7 +337,11 @@ impl Process {
     /// Initialize this process with the given memory space. THIS DOES NOT
     /// INITIALIZE A MAIN THREAD. You must call `setup_thread()` in order to
     /// select a main thread.
-    pub fn create(pid: PID, init_data: ProcessInit) -> ProcessStartup {
+    pub fn create(
+        pid: PID,
+        init_data: ProcessInit,
+        _services: &mut crate::SystemServices,
+    ) -> Result<ProcessStartup, xous_kernel::Error> {
         PROCESS_TABLE.with(|process_table| {
             let mut process_table = process_table.borrow_mut();
             let pid_idx = (pid.get() - 1) as usize;
@@ -359,7 +363,7 @@ impl Process {
             } else {
                 panic!("pid already allocated!");
             }
-            ProcessStartup::new(pid)
+            Ok(ProcessStartup::new(pid))
         })
     }
 
