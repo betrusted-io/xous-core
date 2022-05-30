@@ -28,23 +28,43 @@
 // limitations under the License.
 
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit,
-    generic_array::GenericArray, Key, Iv};
+    generic_array::GenericArray, Key, Iv, consts::U16};
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 use super::util::Block16;
 
-pub fn cbc_encrypt(key: &[u8; 32], mut iv: Block16, blocks: &mut [Block16])
+pub fn cbc_encrypt(key: &[u8; 32], iv: Block16, blocks: &mut [Block16])
 {
-    Aes256CbcEnc::new(Key::from_slice(key), Iv::from_slice(&iv))
-        .encrypt_blocks_mut(blocks);
+    // we get a mut slice of Block16 which is a [u8; 16], and we want a mut slice
+    // of GenericArray::<u8, U16>. Unfortunately, I don't think there is any way
+    // to do this transformation except either something awful and unsafe, or,
+    // making a heap allocated copy into and out of the structures. Since the
+    // data handled by the authenticator is small, and we value correctness,
+    // we are going to go the inefficient-but-safe route.
+    let mut ga = vec![];
+    for block in blocks.iter() {
+        ga.push(GenericArray::<u8, U16>::clone_from_slice(block));
+    }
+    Aes256CbcEnc::new(Key::<Aes256CbcEnc>::from_slice(key), Iv::<Aes256CbcEnc>::from_slice(&iv))
+        .encrypt_blocks_mut(&mut ga);
+    for (src, dst) in ga.iter().zip(blocks.iter_mut()) {
+        dst.copy_from_slice(src.as_slice());
+    }
 }
 
-pub fn cbc_decrypt(key: &[u8; 32], mut iv: Block16, blocks: &mut [Block16])
+pub fn cbc_decrypt(key: &[u8; 32], iv: Block16, blocks: &mut [Block16])
 {
-    Aes256CbcDec::new(&key.into(), &iv.into())
-        .decrypt_blocks_mut(blocks);
+    let mut ga = vec![];
+    for block in blocks.iter() {
+        ga.push(GenericArray::<u8, U16>::clone_from_slice(block));
+    }
+    Aes256CbcDec::new(Key::<Aes256CbcDec>::from_slice(key), Iv::<Aes256CbcDec>::from_slice(&iv))
+        .decrypt_blocks_mut(&mut ga);
+    for (src, dst) in ga.iter().zip(blocks.iter_mut()) {
+        dst.copy_from_slice(src.as_slice());
+    }
 }
 
 #[cfg(test)]
