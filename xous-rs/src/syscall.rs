@@ -367,7 +367,7 @@ pub enum SysCall {
     CreateThread(ThreadInit),
 
     /// Create a new process, setting the current process as the parent ID.
-    /// Does not start the process immediately.
+    /// Starts the process immediately and returns a `ProcessStartup` value.
     CreateProcess(ProcessInit),
 
     /// Terminate the current process, closing all server connections.
@@ -517,6 +517,19 @@ impl SysCallNumber {
 }
 
 impl SysCall {
+    fn add_opcode(opcode: SysCallNumber, args: [usize; 7]) -> [usize; 8] {
+        [
+            opcode as usize,
+            args[0],
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+            args[5],
+            args[6],
+        ]
+    }
+
     /// Convert the SysCall into an array of eight `usize` elements,
     /// suitable for passing to the kernel.
     pub fn as_args(&self) -> [usize; 8] {
@@ -739,7 +752,7 @@ impl SysCall {
                 crate::arch::thread_to_args(SysCallNumber::CreateThread as usize, init)
             }
             SysCall::CreateProcess(init) => {
-                crate::arch::process_to_args(SysCallNumber::CreateProcess as usize, init)
+                Self::add_opcode(SysCallNumber::CreateProcess, init.into())
             }
             SysCall::TerminateProcess(exit_code) => [
                 SysCallNumber::TerminateProcess as usize,
@@ -939,7 +952,7 @@ impl SysCall {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
             SysCallNumber::CreateProcess => {
-                SysCall::CreateProcess(crate::arch::args_to_process(a1, a2, a3, a4, a5, a6, a7)?)
+                SysCall::CreateProcess([a1, a2, a3, a4, a5, a6, a7].try_into()?)
             }
             SysCallNumber::TerminateProcess => SysCall::TerminateProcess(a1 as u32),
             SysCallNumber::Shutdown => SysCall::Shutdown,
@@ -1646,8 +1659,8 @@ where
 {
     let process_init = crate::arch::create_process_pre_as_thread(&args)?;
     rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
-        if let Result::ProcessID(pid) = result {
-            crate::arch::create_process_post_as_thread(args, process_init, pid)
+        if let Result::NewProcess(startup) = result {
+            crate::arch::create_process_post_as_thread(args, process_init, startup)
         } else {
             Err(Error::InternalError)
         }
@@ -1665,8 +1678,8 @@ pub fn create_process(
 ) -> core::result::Result<crate::arch::ProcessHandle, Error> {
     let process_init = crate::arch::create_process_pre(&args)?;
     rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
-        if let Result::ProcessID(pid) = result {
-            crate::arch::create_process_post(args, process_init, pid)
+        if let Result::NewProcess(startup) = result {
+            crate::arch::create_process_post(args, process_init, startup)
         } else {
             Err(Error::InternalError)
         }

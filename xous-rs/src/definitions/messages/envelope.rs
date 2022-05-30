@@ -45,6 +45,10 @@ impl Envelope {
         unsafe { core::ptr::read(&manual_self.body) }
     }
 
+    pub fn id(&self) -> MessageId {
+        self.body.id()
+    }
+
     /// Take this message and forward it to another server.
     ///
     /// **Note**: For blocking messages, this will block until the other server responds to
