@@ -53,6 +53,7 @@ impl ConnectRequest {
     }
 }
 
+/// Request a connection to the nameserver-managed `name`.
 pub fn connect(name: &str) -> Option<crate::CID> {
     let mut request = ConnectRequest::new(name)?;
     let ns_cid = nameserver();
@@ -96,6 +97,7 @@ pub fn connect(name: &str) -> Option<crate::CID> {
     }
 }
 
+/// Return the connection ID of the nameserver
 pub(crate) fn nameserver() -> crate::CID {
     static NAMESERVER_CID: AtomicU32 = AtomicU32::new(0);
 
