@@ -1,5 +1,4 @@
-#[xous::xous_main]
-fn test_main() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());

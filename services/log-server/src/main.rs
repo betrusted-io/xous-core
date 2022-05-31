@@ -430,8 +430,7 @@ fn reader_thread(arg: usize) {
     */
 }
 
-#[xous::xous_main]
-fn some_main() -> ! {
+fn main() -> ! {
     /*
     #[cfg(baremetal)]
     {

@@ -95,8 +95,7 @@ struct ScalarCallback {
     cb_to_client_id: u32,
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     // very early on map in the GPIO base so we can have the right logging enabled
     let gpio_base = crate::log_init();
 

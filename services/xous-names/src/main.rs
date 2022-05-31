@@ -352,8 +352,7 @@ fn respond_connect_success(mut msg: MessageEnvelope, cid: xous::CID, disc: Optio
     mem.offset = None;
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use implementation::*;
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);

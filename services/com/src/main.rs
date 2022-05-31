@@ -332,8 +332,7 @@ mod implementation {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::implementation::XousCom;
 
     log_server::init_wait().unwrap();

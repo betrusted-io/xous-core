@@ -4,8 +4,7 @@
 use xous::StringBuffer;
 use core::fmt::Write;
 
-#[xous::xous_main]
-fn test_main() -> ! {
+fn main() -> ! {
     let connection = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
 
     let mut log_string= StringBuffer::new();
