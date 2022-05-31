@@ -65,6 +65,8 @@ const _DEFAULT_MIN_PIN_LENGTH_RP_IDS: Vec<String> = Vec::new();
 #[cfg(feature = "with_ctap2_1")]
 const _MAX_RP_IDS_LENGTH: usize = 8;
 
+const FIDO_DICT: &'static str = "fido";
+
 /// Wrapper for master keys.
 pub struct MasterKeys {
     /// Master encryption key.
@@ -89,13 +91,30 @@ impl PersistentStore {
         let mut store = PersistentStore {
             pddb: Pddb::new()
         };
+        // block until the PDDB is mounted
+        store.pddb.is_mounted_blocking();
         store.init().unwrap();
         store
     }
 
     /// Initializes the store by creating missing objects.
     fn init(&mut self) -> Result<(), Ctap2StatusCode> {
+
         // Generate and store the master keys if they are missing.
+        let master_keys = self.pddb.get(
+            FIDO_DICT,
+            key::MASTER_KEYS,
+            None, true, true,
+            Some(32), None
+        ).or(Ctap2StatusCode::CTAP1_ERR_OTHER)?;
+        let mk_attr = master_keys.attributes().or(Ctap2StatusCode::CTAP1_ERR_OTHER)?;
+        if mk_attr.len != 32 {
+            if mk_attr.len != 0 {
+                log::error!("Master key has an illegal length. Suspect PDDB corruption?");
+                return Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL);
+            }
+        }
+
         if self.store.find_handle(key::MASTER_KEYS)?.is_none() {
             let master_encryption_key = rng.gen_uniform_u8x32();
             let master_hmac_key = rng.gen_uniform_u8x32();

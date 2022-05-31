@@ -96,6 +96,7 @@ fn xmain() -> ! {
     });
 
     let rng = ctap_crypto::rng256::XousRng256::new(&xns);
+    // this call will block until the PDDB is mounted.
     let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
     //let mut ctap_hid = CtapHid::new();
 
