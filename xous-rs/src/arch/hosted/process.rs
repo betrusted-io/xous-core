@@ -12,6 +12,26 @@ impl ProcessKey {
     }
 }
 
+impl Into<String> for ProcessKey {
+    fn into(self) -> String {
+        let mut out = String::new();
+        for i in self.0 {
+            out.push_str(&format!("{:02x}", i));
+        }
+        out
+    }
+}
+
+impl From<&str> for ProcessKey {
+    fn from(v: &str) -> ProcessKey {
+        let mut key = [0u8; 16];
+        for (src, dest) in v.as_bytes().chunks(2).zip(key.iter_mut()) {
+            *dest = u8::from_str_radix(core::str::from_utf8(src).unwrap(), 16).unwrap();
+        }
+        ProcessKey::new(key)
+    }
+}
+
 /// Describes all parameters that are required to start a new process
 /// on this platform.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -125,7 +145,7 @@ pub fn create_process_post(
     let server_env = format!("{}", CHILD_PROCESS_ADDRESS.lock().unwrap());
     let pid_env = format!("{}", startup.pid);
     let process_name_env = args.name.to_string();
-    let process_key_env = hex::encode(&init.key.0);
+    let process_key_env: String = init.key.into();
     let (shell, args) = if cfg!(windows) {
         ("cmd", ["/C", &args.command])
     } else if cfg!(unix) {

@@ -297,8 +297,8 @@ mod implementation {
 }
 
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();

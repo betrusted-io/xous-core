@@ -23,8 +23,7 @@ pub(crate) enum ReplOp {
 // This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
 pub(crate) const SERVER_NAME_REPL: &str = "_REPL demo application_";
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());

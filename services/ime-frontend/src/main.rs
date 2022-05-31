@@ -621,8 +621,7 @@ impl InputTracker {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     let debug1 = false;
     let dbglistener = false;
     let dbgcanvas = false;

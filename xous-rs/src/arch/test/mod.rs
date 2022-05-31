@@ -20,6 +20,26 @@ impl ProcessKey {
     }
 }
 
+impl Into<String> for ProcessKey {
+    fn into(self) -> String {
+        let mut out = String::new();
+        for i in self.0 {
+            out.push_str(&format!("{:02x}", i));
+        }
+        out
+    }
+}
+
+impl From<&str> for ProcessKey {
+    fn from(v: &str) -> ProcessKey {
+        let mut key = [0u8; 16];
+        for (src, dest) in v.as_bytes().chunks(2).zip(key.iter_mut()) {
+            *dest = u8::from_str_radix(core::str::from_utf8(src).unwrap(), 16).unwrap();
+        }
+        ProcessKey::new(key)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {}
 
@@ -226,7 +246,7 @@ pub fn create_process_post(
     let server_env = format!("{}", xous_address());
     let pid_env = format!("{}", startup.pid);
     let process_name_env = args.name.to_string();
-    let process_key_env = hex::encode(&init.key.0);
+    let process_key_env: String = init.key.into();
     let (shell, args) = if cfg!(windows) {
         ("cmd", ["/C", &args.command])
     } else if cfg!(unix) {
@@ -343,11 +363,7 @@ fn default_xous_address() -> SocketAddr {
 
 fn default_process_key() -> ProcessKey {
     std::env::var("XOUS_PROCESS_KEY")
-        .map(|s| {
-            let mut base = ProcessKey([0u8; 16]);
-            hex::decode_to_slice(s, &mut base.0).unwrap();
-            base
-        })
+        .map(|s| s.as_str().into())
         .unwrap_or(ProcessKey([0u8; 16]))
 }
 

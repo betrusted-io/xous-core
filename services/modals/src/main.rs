@@ -57,8 +57,7 @@ enum RendererState {
     RunDynamicNotification(DynamicNotification),
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -661,7 +660,7 @@ fn xmain() -> ! {
                         match list_hash.get(item.as_str()) {
                             Some(index) => {
                                 match index {
-                                    0...31 => drop(list_selected.set_bit(*index, true)),
+                                    0..=31 => drop(list_selected.set_bit(*index, true)),
                                     _ => log::warn!("invalid bitfield index"),
                                 };
                             }
@@ -699,7 +698,7 @@ fn xmain() -> ! {
                                 Some(item) => match list_hash.get(item.as_str()) {
                                     Some(index) => {
                                         match index {
-                                            0...31 => drop(list_selected.set_bit(*index, true)),
+                                            0..=31 => drop(list_selected.set_bit(*index, true)),
                                             _ => log::warn!("invalid bitfield index"),
                                         };
                                     }

@@ -44,10 +44,7 @@ impl<'a> StringBuffer<'a> {
             0x1000 - (capacity & 0xFFF)
         };
 
-        #[cfg(feature = "bit-flags")]
         let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
-        #[cfg(not(feature = "bit-flags"))]
-        let flags = 0b0000_0010 | 0b0000_0100;
 
         // Allocate enough memory to hold the requested data
         let new_mem = map_memory(
@@ -87,10 +84,7 @@ impl<'a> StringBuffer<'a> {
             return;
         }
 
-        #[cfg(feature = "bit-flags")]
         let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
-        #[cfg(not(feature = "bit-flags"))]
-        let flags = 0b0000_0010 | 0b0000_0100;
 
         // Allocate enough memory to hold the new requested data
         let new_slice = if rounded_new_capacity > 0 {

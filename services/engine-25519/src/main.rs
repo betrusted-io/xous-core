@@ -790,8 +790,7 @@ fn susres_thread(engine_arg: usize) {
     xous::destroy_server(susres_sid).unwrap();
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::implementation::Engine25519Hw;
 
     log_server::init_wait().unwrap();
