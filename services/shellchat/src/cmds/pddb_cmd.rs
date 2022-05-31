@@ -219,7 +219,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 "test" => {
                     let bname = tokens.next();
                     // zero-length key test
-                    let mut test_handle = pddb::Pddb::new();
+                    let test_handle = pddb::Pddb::new();
                     // build a key, but don't write to it.
                     let _ = test_handle.get(
                         "test",
@@ -254,7 +254,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     log::info!("finished dict delete with zero-length key");
 
                     // seek test - a bunch of terrible, handcrafted test cases to exercise Start, Current, End cases of seeking.
-                    let mut test_handle = pddb::Pddb::new();
+                    let test_handle = pddb::Pddb::new();
                     // build a key, but don't write to it.
                     let mut seekwrite = test_handle.get(
                         "test",
