@@ -39,11 +39,7 @@ lazy_static::lazy_static! {
 
         // resume with PROCESS_KEY initialization
         std::env::var("XOUS_PROCESS_KEY")
-        .map(|s| {
-            let mut base = ProcessKey([0u8; 16]);
-            hex::decode_to_slice(s, &mut base.0).unwrap();
-            base
-        })
+        .map(|s| s.as_str().into())
         .unwrap_or(ProcessKey([0u8; 16]))
     };
 
@@ -286,8 +282,7 @@ fn read_next_syscall_result(
                     if data != previous_data.as_slice() {
                         println!("Data: {:x?}", data);
                         println!("Previous data: {:x?}", previous_data);
-                        ::debug_here::debug_here!();
-                        panic!("Data was not equal!");
+                        panic!("Data changed during borrow!");
                     }
                     // assert_eq!(
                     //     data,

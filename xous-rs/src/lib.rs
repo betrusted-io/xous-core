@@ -31,28 +31,7 @@ pub use locale::LANG;
 #[cfg(feature = "processes-as-threads")]
 pub use crate::arch::ProcessArgsAsThread;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
 pub fn init() {}
-
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-pub fn init() {
-    use std::panic;
-    panic::set_hook(Box::new(|arg| {
-        println!("PANIC!");
-        println!("Details: {:?}", arg);
-        debug_here::debug_here!();
-    }));
-}
-
-/// Convert a four-letter string into a 32-bit int.
-#[macro_export]
-macro_rules! make_name {
-    ($fcc:expr) => {{
-        let mut c: [u8; 4] = Default::default();
-        c.copy_from_slice($fcc.as_bytes());
-        u32::from_le_bytes(c) as usize
-    }};
-}
 
 #[cfg(not(target_os = "none"))]
 #[macro_export]
