@@ -84,7 +84,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     };
                 }
                 "save" => {
-                    let mut pddb = pddb::Pddb::new();
+                    let pddb = pddb::Pddb::new();
                     if let Some(ssid) = &self.current_ssid {
                         if let Some(pass) = &self.current_pass {
                             match pddb.get(
