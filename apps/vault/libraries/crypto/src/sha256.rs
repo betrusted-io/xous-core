@@ -56,7 +56,9 @@ impl Hash256 for Sha256 {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::num::Wrapping;
 
+    /* // these are not used/implemented in Xous
     #[test]
     fn test_choice() {
         assert_eq!(
@@ -79,7 +81,7 @@ mod test {
             ),
             Wrapping(0b00010111)
         );
-    }
+    }*/
 
     #[test]
     fn test_hash_empty() {

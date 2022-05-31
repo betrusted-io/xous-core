@@ -195,11 +195,11 @@ impl MessageAssembler {
 #[cfg(test)]
 mod test {
     use super::*;
-    use libtock_drivers::timer::Duration;
+    use crate::shims::Duration;
 
     // Except for tests that exercise timeouts, all packets are synchronized at the same dummy
     // timestamp.
-    const DUMMY_TIMESTAMP: Timestamp<isize> = Timestamp::from_ms(0);
+    const DUMMY_TIMESTAMP: Timestamp<i64> = Timestamp::from_ms(0);
 
     fn byte_extend(bytes: &[u8], padding: u8) -> HidPacket {
         let len = bytes.len();

@@ -21,7 +21,7 @@ use arrayref::array_ref;
 use core::convert::Into;
 use core::convert::TryFrom;
 use ctap_crypto::rng256::Rng256;
-use libtock_drivers::timer::ClockValue;
+use crate::shims::ClockValue;
 
 // For now, they're the same thing with apdu.rs containing the authoritative definition
 pub type Ctap1StatusCode = ApduStatusCode;

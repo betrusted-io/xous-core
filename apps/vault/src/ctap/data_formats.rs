@@ -489,7 +489,7 @@ impl TryFrom<cbor::Value> for CredentialProtectionPolicy {
 // by FIDO. In particular we may choose how we serialize and deserialize it.
 #[derive(Clone)]
 #[cfg_attr(test, derive(PartialEq))]
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+// #[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
 pub struct PublicKeyCredentialSource {
     // TODO function to convert to / from Vec<u8>
     pub key_type: PublicKeyCredentialType,
@@ -502,6 +502,23 @@ pub struct PublicKeyCredentialSource {
     pub creation_order: u64,
     pub user_name: Option<String>,
     pub user_icon: Option<String>,
+}
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+impl std::fmt::Debug for PublicKeyCredentialSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PublicKeyCredentialSource")
+        .field("key_type", &self.key_type)
+        .field("credential_id", &self.credential_id)
+        // private key field is missing because it's not allowed to be debugged
+        .field("rp_id", &self.rp_id)
+        .field("user_handle", &self.user_handle)
+        .field("user_display_name", &self.user_display_name)
+        .field("cred_protect_policy", &self.cred_protect_policy)
+        .field("creation_order", &self.creation_order)
+        .field("user_name", &self.user_name)
+        .field("user_icon", &self.user_icon)
+        .finish()
+    }
 }
 
 // We serialize credentials for the persistent storage using CBOR maps. Each field of a credential

@@ -69,18 +69,20 @@ pub fn cbc_decrypt(key: &[u8; 32], iv: Block16, blocks: &mut [Block16])
 
 #[cfg(test)]
 mod test {
-    use super::super::aes256;
     use super::*;
+    use crate::util::xor_block_16;
+    use aes::Aes256Soft as Aes256;
+    use aes::cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray, BlockDecrypt};
 
     #[test]
     fn test_cbc_encrypt_decrypt() {
         // Test that cbc_decrypt is the inverse of cbc_encrypt for a bunch of block values.
-        let enc_key = aes256::EncryptionKey::new(&[
+        let enc_key = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
-        ]);
-        let dec_key = aes256::DecryptionKey::new(&enc_key);
+        ];
+        let dec_key = enc_key;
 
         for len in 0..16 {
             let mut blocks: Vec<Block16> = vec![Default::default(); len];
@@ -103,11 +105,11 @@ mod test {
 
     #[test]
     fn test_cbc_encrypt_1block_zero_iv() {
-        let key = aes256::EncryptionKey::new(&[
+        let key = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
-        ]);
+        ];
 
         let mut blocks = [[
             0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
@@ -120,18 +122,20 @@ mod test {
             0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
             0x2e, 0x2f,
         ];
-        key.encrypt_block(&mut expected);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.encrypt_block(GenericArray::from_mut_slice(&mut expected));
+        // key.encrypt_block(&mut expected);
 
         assert_eq!(blocks, [expected]);
     }
 
     #[test]
     fn test_cbc_decrypt_1block_zero_iv() {
-        let key = aes256::DecryptionKey::new(&aes256::EncryptionKey::new(&[
+        let key = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
-        ]));
+        ];
 
         let mut blocks = [[
             0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
@@ -144,18 +148,20 @@ mod test {
             0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
             0x2e, 0x2f,
         ];
-        key.decrypt_block(&mut expected);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.decrypt_block(GenericArray::from_mut_slice(&mut expected));
+        // key.decrypt_block(&mut expected);
 
         assert_eq!(blocks, [expected]);
     }
 
     #[test]
     fn test_cbc_encrypt_1block() {
-        let key = aes256::EncryptionKey::new(&[
+        let key = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
-        ]);
+        ];
 
         let mut blocks = [[
             0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
@@ -172,18 +178,20 @@ mod test {
             0x2e, 0x2f,
         ];
         xor_block_16(&mut expected, &iv);
-        key.encrypt_block(&mut expected);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.encrypt_block(GenericArray::from_mut_slice(&mut expected));
+        // key.encrypt_block(&mut expected);
 
         assert_eq!(blocks, [expected]);
     }
 
     #[test]
     fn test_cbc_decrypt_1block() {
-        let key = aes256::DecryptionKey::new(&aes256::EncryptionKey::new(&[
+        let key = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
-        ]));
+        ];
 
         let mut blocks = [[
             0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
@@ -199,7 +207,9 @@ mod test {
             0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
             0x2e, 0x2f,
         ];
-        key.decrypt_block(&mut expected);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.decrypt_block(GenericArray::from_mut_slice(&mut expected));
+        // key.decrypt_block(&mut expected);
         xor_block_16(&mut expected, &iv);
 
         assert_eq!(blocks, [expected]);
@@ -207,11 +217,11 @@ mod test {
 
     #[test]
     fn test_cbc_encrypt_2blocks() {
-        let key = aes256::EncryptionKey::new(&[
+        let key = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
-        ]);
+        ];
 
         let mut blocks = [
             [
@@ -238,20 +248,24 @@ mod test {
             0x4e, 0x4f,
         ];
         xor_block_16(&mut expected0, &iv);
-        key.encrypt_block(&mut expected0);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.encrypt_block(GenericArray::from_mut_slice(&mut expected0));
+        // key.encrypt_block(&mut expected0);
         xor_block_16(&mut expected1, &expected0);
-        key.encrypt_block(&mut expected1);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.encrypt_block(GenericArray::from_mut_slice(&mut expected1));
+        // key.encrypt_block(&mut expected1);
 
         assert_eq!(blocks, [expected0, expected1]);
     }
 
     #[test]
     fn test_cbc_decrypt_2blocks() {
-        let key = aes256::DecryptionKey::new(&aes256::EncryptionKey::new(&[
+        let key = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
-        ]));
+        ];
 
         let mut blocks = [
             [
@@ -277,9 +291,13 @@ mod test {
             0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d,
             0x4e, 0x4f,
         ];
-        key.decrypt_block(&mut expected1);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.decrypt_block(GenericArray::from_mut_slice(&mut expected1));
+        // key.decrypt_block(&mut expected1);
         xor_block_16(&mut expected1, &expected0);
-        key.decrypt_block(&mut expected0);
+        let cipher = Aes256::new(GenericArray::from_slice(key));
+        cipher.decrypt_block(GenericArray::from_mut_slice(&mut expected0));
+        // key.decrypt_block(&mut expected0);
         xor_block_16(&mut expected0, &iv);
 
         assert_eq!(blocks, [expected0, expected1]);

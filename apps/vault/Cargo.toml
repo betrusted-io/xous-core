@@ -30,6 +30,9 @@ subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
 rand_core = "0.6.3"
 ticktimer-server = {path = "../../services/ticktimer-server"}
 
+[dev-dependencies]
+enum-iterator = "0.6.0"
+
 [features]
 tts = []
 default = []

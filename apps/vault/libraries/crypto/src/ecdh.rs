@@ -44,7 +44,7 @@ pub struct SecKey {
     a: EphemeralSecret,
 }
 
-#[cfg_attr(feature = "derive_debug", derive(Clone, PartialEq, Debug))]
+#[cfg_attr(not(target_os = "xous"), derive(Clone, PartialEq, Debug))]
 pub struct PubKey {
     // pub p: EncodedPoint,
     pub p: PublicKey,
@@ -101,7 +101,7 @@ impl PubKey {
         );
     }
 }
-
+/*
 #[cfg(test)]
 mod test {
     use super::super::rng256::ThreadRng256;
@@ -160,3 +160,4 @@ mod test {
 
     // TODO: tests with invalid public shares.
 }
+*/

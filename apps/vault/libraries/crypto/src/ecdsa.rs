@@ -144,19 +144,23 @@ impl Signature {
         encoding */
     }
 
-    #[cfg(feature = "std")]
+    // #[cfg(feature = "std")]
     fn to_p256(&self) -> P256Signature {
         self.sig
     }
 
-    #[cfg(feature = "std")]
+    // this is only used by tests
     pub fn from_bytes(bytes: &[u8]) -> Option<Signature> {
+        use p256::{NonZeroScalar, FieldBytes};
+        use std::convert::TryFrom;
         if bytes.len() != 64 {
             None
         } else {
+            let r_nzs = NonZeroScalar::try_from(&bytes[..32]).unwrap();
+            let s_nzs = NonZeroScalar::try_from(&bytes[32..]).unwrap();
             match P256Signature::from_scalars(
-                bytes[..32].try_into().unwrap(), // r
-                bytes[32..].try_into().unwrap(), // s
+                FieldBytes::from(r_nzs), // r
+                FieldBytes::from(s_nzs), // s
             ) {
                 Ok(sig) => Some(Signature{sig}),
                 _ => None,
@@ -177,8 +181,6 @@ impl Signature {
 
     #[cfg(test)]
     fn to_bytes(&self, bytes: &mut [u8; 64]) {
-        use core::slice::SlicePattern;
-
         bytes[..32].copy_from_slice(self.sig.r().to_bytes().as_slice());
         bytes[32..].copy_from_slice(self.sig.s().to_bytes().as_slice());
         //self.r.to_int().to_bin(array_mut_ref![bytes, 0, 32]);
@@ -191,14 +193,14 @@ impl PubKey {
     #[cfg(feature = "with_ctap1")]
     const UNCOMPRESSED_LENGTH: usize = 1 + 2 * INT256_NBYTES;
 
-    #[cfg(feature = "std")]
+    // #[cfg(feature = "std")]
     pub fn from_bytes_uncompressed(bytes: &[u8]) -> Option<PubKey> {
         match VerifyingKey::from_sec1_bytes(bytes) {
             Ok(p) => Some(PubKey{p}),
             _ => None
         }
     }
-
+    /*
     #[cfg(test)]
     fn to_bytes_uncompressed(&self, bytes: &mut [u8; 65]) {
         // not sure if this is correct -- we'll find out when we run the tests
@@ -210,7 +212,7 @@ impl PubKey {
             .as_slice()
         )
         // self.p.to_bytes_uncompressed(bytes);
-    }
+    }*/
 
     #[cfg(feature = "with_ctap1")]
     pub fn to_uncompressed(&self) -> [u8; PubKey::UNCOMPRESSED_LENGTH] {
@@ -271,11 +273,12 @@ impl PubKey {
         }
     }
 
-    #[cfg(feature = "std")]
+    // #[cfg(feature = "std")]
     pub fn verify_vartime<H>(&self, msg: &[u8], sign: &Signature) -> bool
     where
         H: Hash256,
     {
+        use p256::ecdsa::signature::Verifier;
         self.p.verify(msg, &sign.to_p256()).is_ok()
         /*
         let m = ExponentP256::modn(Int256::from_bin(&H::hash(msg)));
@@ -290,12 +293,43 @@ impl PubKey {
         */
     }
 }
-
+/*
 #[cfg(test)]
 mod test {
     use super::super::rng256::ThreadRng256;
     use super::super::sha256::Sha256;
     use super::*;
+    use arrayref::array_ref;
+    use byteorder::{BigEndian, ByteOrder};
+    use p256::SecretKey;
+
+    const BITS_PER_DIGIT: usize = 32;
+    const BYTES_PER_DIGIT: usize = BITS_PER_DIGIT >> 3;
+    const NDIGITS: usize = 8;
+    pub const NBYTES: usize = NDIGITS * BYTES_PER_DIGIT;
+    #[derive(Default)]
+    pub struct Int256 {
+        digits: [Digit; NDIGITS],
+    }
+
+    #[allow(clippy::unreadable_literal)]
+    impl Int256 {
+        // Curve order (prime)
+        pub const N: Int256 = Int256 {
+            digits: [
+                0xfc632551, 0xf3b9cac2, 0xa7179e84, 0xbce6faad, 0xffffffff, 0xffffffff, 0x00000000,
+                0xffffffff,
+            ],
+        };
+        pub fn from_bin(src: &[u8; NBYTES]) -> Int256 {
+            let mut digits = [0; NDIGITS];
+            for i in 0..NDIGITS {
+                digits[NDIGITS - 1 - i] = BigEndian::read_u32(array_ref![src, 4 * i, 4]);
+            }
+            Int256 { digits }
+        }
+    }
+
 
     // Run more test iterations in release mode, as the code should be faster.
     #[cfg(not(debug_assertions))]
@@ -367,7 +401,8 @@ mod test {
     #[test]
     fn test_rfc6979_keypair() {
         let sk = SecKey {
-            k: NonZeroExponentP256::from_int_checked(int256_from_hex(RFC6979_X)).unwrap(),
+            k: SecretKey::from_be_bytes(&hex::decode(RFC6979_X).unwrap()),
+            // k: NonZeroExponentP256::from_int_checked(int256_from_hex(RFC6979_X)).unwrap(),
         };
         let pk = sk.genpk();
         assert_eq!(pk.p.getx().to_int(), int256_from_hex(RFC6979_UX));
@@ -376,7 +411,8 @@ mod test {
 
     fn test_rfc6979(msg: &str, k: &str, r: &str, s: &str) {
         let sk = SecKey {
-            k: NonZeroExponentP256::from_int_checked(int256_from_hex(RFC6979_X)).unwrap(),
+            k: SecretKey::from_be_bytes(&hex::decode(RFC6979_X).unwrap()),
+            // k: NonZeroExponentP256::from_int_checked(int256_from_hex(RFC6979_X)).unwrap(),
         };
         assert_eq!(
             sk.get_k_rfc6979::<Sha256>(msg.as_bytes()).to_int(),
@@ -584,3 +620,4 @@ mod test {
     // - Invalid public key (at infinity, values not less than the prime p), but ring doesn't
     // directly exposes key validation in its API.
 }
+*/

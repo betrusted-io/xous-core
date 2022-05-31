@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// These tests are skipped because we rely on the Xous AES native implementation (eg there simply is no AES within this crate)
+/*
+
 /// Test vectors for AES-ECB from NIST's validation suite.
 ///
 /// See also https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/aes/AESAVS.pdf
@@ -97,3 +100,4 @@ fn test_aesavs_file<P: AsRef<Path>>(path: P) {
         }
     }
 }
+*/

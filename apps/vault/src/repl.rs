@@ -29,8 +29,12 @@ impl Repl{
     pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
+        #[cfg(not(test))]
+        let app_name_ref = gam::APP_NAME_VAULT;
+        #[cfg(test)]
+        let app_name_ref = "test name";
         let token = gam.register_ux(UxRegistration {
-            app_name: xous_ipc::String::<128>::from_str(gam::APP_NAME_VAULT),
+            app_name: xous_ipc::String::<128>::from_str(app_name_ref),
             ux_type: gam::UxType::Chat,
             predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
             listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!

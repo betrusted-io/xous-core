@@ -20,3 +20,15 @@ p256 = {version = "0.10.1", default-features = false, features = ["ecdsa", "ecdh
 cbc = "0.1.2"
 aes = {path="../../../../services/aes"}
 sha2 = {path="../../../../services/engine-sha512"}
+
+[target.'cfg(any(windows,unix))'.dependencies]
+rand = "0.8.5"
+rand_chacha = "0.3.1"
+cbor = { path = "../cbor" }
+regex = { version = "1" }
+untrusted = { version = "0.7.0" }
+hex = { version = "0.3.2", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+ring = { version = "0.16.11" }
+byteorder = { version = "1", default-features = false }

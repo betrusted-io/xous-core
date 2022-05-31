@@ -659,7 +659,7 @@ mod test {
         for i in 0..block_len {
             blocks[i][..].copy_from_slice(&message[i * 16..(i + 1) * 16]);
         }
-        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(shared_secret);
+        let aes_enc_key = shared_secret;
         let iv = [0u8; 16];
         cbc_encrypt(&aes_enc_key, iv, &mut blocks);
         blocks.iter().flatten().cloned().collect::<Vec<u8>>()
@@ -673,8 +673,8 @@ mod test {
         for i in 0..block_len {
             blocks[i][..].copy_from_slice(&message[i * 16..(i + 1) * 16]);
         }
-        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(shared_secret);
-        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = shared_secret;
+        let aes_dec_key = aes_enc_key;
         let iv = [0u8; 16];
         cbc_decrypt(&aes_dec_key, iv, &mut blocks);
         blocks.iter().flatten().cloned().collect::<Vec<u8>>()
@@ -712,8 +712,8 @@ mod test {
         ];
         persistent_store.set_pin_hash(&pin_hash).unwrap();
         let shared_secret = [0x88; 32];
-        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
-        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = &shared_secret;
+        let aes_dec_key = aes_enc_key;
 
         let mut pin_protocol_v1 = PinProtocolV1::new(&mut rng);
         let pin_hash_enc = vec![
@@ -1073,8 +1073,8 @@ mod test {
     #[test]
     fn test_decrypt_pin() {
         let shared_secret = [0x88; 32];
-        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
-        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = &shared_secret;
+        let aes_dec_key = aes_enc_key;
 
         // "1234"
         let new_pin_enc = vec![
@@ -1116,8 +1116,8 @@ mod test {
         let mut rng = ThreadRng256 {};
         let mut persistent_store = PersistentStore::new(&mut rng);
         let shared_secret = [0x88; 32];
-        let aes_enc_key = ctap_crypto::aes256::EncryptionKey::new(&shared_secret);
-        let aes_dec_key = ctap_crypto::aes256::DecryptionKey::new(&aes_enc_key);
+        let aes_enc_key = &shared_secret;
+        let aes_dec_key = aes_enc_key;
 
         let test_cases = vec![
             // Accept PIN "1234".

@@ -435,7 +435,7 @@ mod test {
     const CLOCK_FREQUENCY_HZ: usize = 32768;
     // Except for tests for timeouts (done in ctap1.rs), transactions are time independant.
     const DUMMY_CLOCK_VALUE: ClockValue = ClockValue::new(0, CLOCK_FREQUENCY_HZ);
-    const DUMMY_TIMESTAMP: Timestamp<isize> = Timestamp::from_ms(0);
+    const DUMMY_TIMESTAMP: Timestamp<i64> = Timestamp::from_ms(0);
 
     fn process_messages<CheckUserPresence>(
         ctap_hid: &mut CtapHid,
