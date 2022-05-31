@@ -76,6 +76,29 @@ impl SecKey {
 }
 
 impl PubKey {
+    #[cfg(test)]
+    fn from_bytes_uncompressed(bytes: &[u8]) -> Option<PubKey> {
+        use p256::elliptic_curve::sec1::FromEncodedPoint;
+
+        if let Ok(ep) = EncodedPoint::from_bytes(bytes) {
+            let maybe_p = PublicKey::from_encoded_point(&ep);
+            if bool::from(maybe_p.is_some()) {
+                Some(PubKey {p: maybe_p.unwrap()})
+            } else {
+                None
+            }
+            // PointP256::from_bytes_uncompressed_vartime(bytes).map(|p| PubKey { p })
+        } else {
+            None
+        }
+    }
+
+    #[cfg(test)]
+    fn to_bytes_uncompressed(&self, bytes: &mut [u8; 65]) {
+        bytes.copy_from_slice(self.p.to_encoded_point(false).as_bytes());
+        //self.p.to_bytes_uncompressed(bytes);
+    }
+
     pub fn from_coordinates(x: &[u8; NBYTES], y: &[u8; NBYTES]) -> Option<PubKey> {
         match PublicKey::from_sec1_bytes(
             EncodedPoint::from_affine_coordinates(
@@ -101,9 +124,12 @@ impl PubKey {
         );
     }
 }
-/*
+
 #[cfg(test)]
 mod test {
+    use p256::AffinePoint;
+    use p256::elliptic_curve::sec1::FromEncodedPoint;
+
     use super::super::rng256::ThreadRng256;
     use super::*;
 
@@ -121,7 +147,10 @@ mod test {
         for _ in 0..ITERATIONS {
             let sk = SecKey::gensk(&mut rng);
             let pk = sk.genpk();
-            assert!(pk.p.is_valid_vartime());
+            // this is a recoding of the is_valid_point_vartime() call
+            let encoded = pk.p.to_encoded_point(false);
+            let maybe_affine = AffinePoint::from_encoded_point(&encoded);
+            assert!(bool::from(maybe_affine.is_some()));
         }
     }
 
@@ -160,4 +189,3 @@ mod test {
 
     // TODO: tests with invalid public shares.
 }
-*/

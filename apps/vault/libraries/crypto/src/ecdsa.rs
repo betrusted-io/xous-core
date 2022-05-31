@@ -156,14 +156,22 @@ impl Signature {
         if bytes.len() != 64 {
             None
         } else {
-            let r_nzs = NonZeroScalar::try_from(&bytes[..32]).unwrap();
-            let s_nzs = NonZeroScalar::try_from(&bytes[32..]).unwrap();
-            match P256Signature::from_scalars(
-                FieldBytes::from(r_nzs), // r
-                FieldBytes::from(s_nzs), // s
-            ) {
-                Ok(sig) => Some(Signature{sig}),
-                _ => None,
+            let maybe_r_nzs = NonZeroScalar::try_from(&bytes[..32]);
+            let maybe_s_nzs = NonZeroScalar::try_from(&bytes[32..]);
+            if let Ok(r_nzs) = maybe_r_nzs {
+                if let Ok(s_nzs) = maybe_s_nzs {
+                    match P256Signature::from_scalars(
+                        FieldBytes::from(r_nzs), // r
+                        FieldBytes::from(s_nzs), // s
+                    ) {
+                        Ok(sig) => Some(Signature{sig}),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
             }
             /*
             let r =
