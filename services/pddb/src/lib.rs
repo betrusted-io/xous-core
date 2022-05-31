@@ -495,7 +495,7 @@ impl Pddb {
         }
     }
 
-    pub fn list_keys(&mut self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
+    pub fn list_keys(&self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
         if dict_name.len() > (DICT_NAME_LEN - 1) {
             return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
         }
@@ -557,7 +557,7 @@ impl Pddb {
     }
 
 
-    pub fn list_dict(&mut self, basis_name: Option<&str>) -> Result<Vec::<String>> {
+    pub fn list_dict(&self, basis_name: Option<&str>) -> Result<Vec::<String>> {
         let bname = if let Some(bname) = basis_name {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
