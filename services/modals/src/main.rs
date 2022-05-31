@@ -660,7 +660,7 @@ fn main() -> ! {
                         match list_hash.get(item.as_str()) {
                             Some(index) => {
                                 match index {
-                                    0...31 => drop(list_selected.set_bit(*index, true)),
+                                    0..=31 => drop(list_selected.set_bit(*index, true)),
                                     _ => log::warn!("invalid bitfield index"),
                                 };
                             }
@@ -698,7 +698,7 @@ fn main() -> ! {
                                 Some(item) => match list_hash.get(item.as_str()) {
                                     Some(index) => {
                                         match index {
-                                            0...31 => drop(list_selected.set_bit(*index, true)),
+                                            0..=31 => drop(list_selected.set_bit(*index, true)),
                                             _ => log::warn!("invalid bitfield index"),
                                         };
                                     }

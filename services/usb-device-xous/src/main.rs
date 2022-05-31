@@ -66,8 +66,6 @@ impl Clock for EmbeddedClock {
 }
 
 fn main() -> ! {
-    use crate::SpinalUsbDevice;
-
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
