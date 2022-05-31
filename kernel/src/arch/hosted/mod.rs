@@ -192,7 +192,7 @@ fn handle_connection(
     std::thread::Builder::new()
         .name(format!("PID {}: client should_exit thread", pid))
         .spawn(move || loop {
-            if should_exit.load(core::sync::atomic::Ordering::Relaxed) {
+            if should_exit.load(Ordering::Relaxed) {
                 eprintln!("KERNEL: should_exit == 1");
                 // sender.send(ServerMessage::Exit).ok();
                 // WARNING: This functionality is unimplemented right now
@@ -385,7 +385,7 @@ fn listen_thread(
         should_exit: std::sync::Arc<core::sync::atomic::AtomicBool>,
         clients: Vec<(std::thread::JoinHandle<()>, TcpStream)>,
     ) {
-        should_exit.store(true, core::sync::atomic::Ordering::Relaxed);
+        should_exit.store(true, Ordering::Relaxed);
         for (jh, conn) in clients {
             use std::net::Shutdown;
             conn.shutdown(Shutdown::Both).ok();
