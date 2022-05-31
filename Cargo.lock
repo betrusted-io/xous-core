@@ -3843,10 +3843,7 @@ version = "0.9.7"
 dependencies = [
  "bitflags",
  "compiler_builtins",
- "debug-here",
- "hex",
  "lazy_static",
- "log",
  "rustc-std-workspace-core",
  "xous-macros",
 ]
