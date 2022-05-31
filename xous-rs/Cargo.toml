@@ -1,8 +1,8 @@
 [package]
 name = "xous"
-version = "0.9.7"
+version = "0.9.8"
 authors = ["Sean Cross <sean@xobs.io>"]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "System call interface for Xous"
 repository = "https://github.com/betrusted-io/xous-core/"
