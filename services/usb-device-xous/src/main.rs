@@ -65,8 +65,7 @@ impl Clock for EmbeddedClock {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::SpinalUsbDevice;
 
     log_server::init_wait().unwrap();

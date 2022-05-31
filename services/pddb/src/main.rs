@@ -414,8 +414,7 @@ struct TokenRecord {
     pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());

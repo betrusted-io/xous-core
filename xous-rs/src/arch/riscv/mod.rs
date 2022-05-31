@@ -293,10 +293,7 @@ pub fn create_thread_n_pre(
     arg3: &usize,
     arg4: &usize,
 ) -> core::result::Result<ThreadInit, crate::Error> {
-    #[cfg(feature = "bit-flags")]
     let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
-    #[cfg(not(feature = "bit-flags"))]
-    let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
 
     let stack = crate::map_memory(None, None, 131_072, flags)?;
     Ok(ThreadInit::new(start, stack, *arg1, *arg2, *arg3, *arg4))

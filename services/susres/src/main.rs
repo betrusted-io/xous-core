@@ -532,8 +532,7 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
 static SHOULD_RESUME: AtomicBool = AtomicBool::new(false);
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     // Start the OS timer which is responsible for setting up preemption.
     // os_timer::init();
     let mut susres_hw = implementation::SusResHw::new();

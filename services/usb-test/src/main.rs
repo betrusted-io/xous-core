@@ -51,8 +51,7 @@ impl Clock for EmbeddedClock {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::SpinalUsbDevice;
 
     let _gpio_base = crate::log_init();

@@ -73,8 +73,7 @@ fn stopwatch_thread() {
     }
 }
 
-#[xous::xous_main]
-fn shell_main() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     info!("BENCHMARK: my PID is {}", xous::process::id());
 

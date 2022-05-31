@@ -722,8 +722,7 @@ mod implementation {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::implementation::Keyboard;
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);

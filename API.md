@@ -275,8 +275,7 @@ use xous_ipc::{String, Buffer};
 use api::Opcode;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     info!("my PID is {}", xous::process::id()); // this is so we can figure out what PID goes to what server
 

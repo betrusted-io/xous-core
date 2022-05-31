@@ -69,6 +69,9 @@ pub static TESTING_RNG_SEED: AtomicU64 = AtomicU64::new(0);
 pub mod exceptions;
 pub use exceptions::*;
 
+pub mod memoryflags;
+pub use memoryflags::*;
+
 pub mod messages;
 pub use messages::*;
 
@@ -152,50 +155,6 @@ pub type CpuID = usize;
 pub struct MemoryRange {
     pub(crate) addr: MemoryAddress,
     pub(crate) size: MemorySize,
-}
-
-#[cfg(feature = "bitflags")]
-bitflags! {
-    /// Flags to be passed to the MapMemory struct.
-    /// Note that it is an error to have memory be
-    /// writable and not readable.
-    pub struct MemoryFlags: usize {
-        /// Free this memory
-        const FREE      = 0b0000_0000;
-
-        /// Immediately allocate this memory.  Otherwise it will
-        /// be demand-paged.  This is implicitly set when `phys`
-        /// is not 0.
-        const RESERVE   = 0b0000_0001;
-
-        /// Allow the CPU to read from this page.
-        const R         = 0b0000_0010;
-
-        /// Allow the CPU to write to this page.
-        const W         = 0b0000_0100;
-
-        /// Allow the CPU to execute from this page.
-        const X         = 0b0000_1000;
-    }
-}
-#[cfg(feature = "bitflags")]
-pub(crate) fn get_bits(bf: &MemoryFlags) -> usize {
-    bf.bits()
-}
-#[cfg(feature = "bitflags")]
-pub(crate) fn from_bits(raw: usize) -> Option<MemoryFlags> {
-    MemoryFlags::from_bits(raw)
-}
-
-#[cfg(not(feature = "bitflags"))]
-pub type MemoryFlags = usize;
-#[cfg(not(feature = "bitflags"))]
-pub(crate) fn get_bits(bf: &MemoryFlags) -> usize {
-    *bf
-}
-#[cfg(not(feature = "bitflags"))]
-pub(crate) fn from_bits(raw: usize) -> Option<MemoryFlags> {
-    Some(raw)
 }
 
 pub fn pid_from_usize(src: usize) -> core::result::Result<PID, Error> {
@@ -483,14 +442,7 @@ pub enum Result {
 impl Result {
     fn add_opcode(opcode: usize, args: [usize; 7]) -> [usize; 8] {
         [
-            opcode,
-            args[0],
-            args[1],
-            args[2],
-            args[3],
-            args[4],
-            args[5],
-            args[6],
+            opcode, args[0], args[1], args[2], args[3], args[4], args[5], args[6],
         ]
     }
 

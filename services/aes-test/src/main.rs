@@ -64,8 +64,7 @@ impl<'a, 'b, 'c> AesTest<'a, 'b, 'c> {
     }
 }
 
-#[xous::xous_main]
-fn aes_test_main() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::info!(
         "Hello, world! This is the AES client, PID {}",

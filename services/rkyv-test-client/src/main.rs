@@ -27,8 +27,7 @@ fn handle_keyevents(keys: [char; 4]) {
     }
 }
 
-#[xous::xous_main]
-fn rkyv_test_client() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::info!(
         "Hello, world! This is the client, PID {}",
