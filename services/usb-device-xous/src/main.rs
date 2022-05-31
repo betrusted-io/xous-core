@@ -25,9 +25,13 @@ use hosted::*;
 use num_traits::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device_xous::KeyboardLedsReport;
-use usbd_human_interface_device::device::fido::{FidoInterface, FidoMsg};
+use usbd_human_interface_device::device::fido::FidoMsg;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use usbd_human_interface_device::device::fido::FidoInterface;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
-use core::ops::{DerefMut, Deref};
+use core::ops::DerefMut;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use core::ops::Deref;
 use core::num::NonZeroU8;
 use std::collections::BTreeMap;
 
@@ -209,7 +213,9 @@ fn main() -> ! {
                     let mut u2f_msg = FidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
                     u2f_msg.deref_mut().copy_from_slice(&u2f_ipc.data);
+                    #[cfg(any(target_os = "none", target_os = "xous"))]
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
+                    #[cfg(any(target_os = "none", target_os = "xous"))]
                     u2f.write_report(&u2f_msg).ok();
                     u2f_ipc.code = U2fCode::TxAck;
                 } else {
