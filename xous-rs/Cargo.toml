@@ -8,10 +8,7 @@ description = "System call interface for Xous"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
-# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
-bitflags = {version = "1.2.1", optional = true }
-xous-macros = { path = "../macros", version = "0.1.0", optional = true }
 core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
 compiler_builtins = { version = '0.1.0', optional = true }
 
@@ -21,16 +18,12 @@ compiler_builtins = { version = '0.1.0', optional = true }
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
 
-# Enable using `bitflags`
-
 # This is being built as part of libstd
 rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
 
 # Processes and threads will all be subthreads. This is useful for kernel
 # testing.
 processes-as-threads = []
-
-default = ["xous-macros"]
 
 [target.'cfg(any(windows,unix))'.dependencies]
 lazy_static = "1.4.0"
