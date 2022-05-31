@@ -151,6 +151,7 @@ mod test {
             let encoded = pk.p.to_encoded_point(false);
             let maybe_affine = AffinePoint::from_encoded_point(&encoded);
             assert!(bool::from(maybe_affine.is_some()));
+            // assert!(pk.p.is_valid_vartime());
         }
     }
 

@@ -208,19 +208,17 @@ impl PubKey {
             _ => None
         }
     }
-    /*
-    #[cfg(test)]
+    //#[cfg(test)]
     fn to_bytes_uncompressed(&self, bytes: &mut [u8; 65]) {
         // not sure if this is correct -- we'll find out when we run the tests
         // this generates a SEC1 EncodedPoint, but I'm not sure if that's the same thing as
         // a SEC1-encoded public key.
         bytes.copy_from_slice(
             self.p.to_encoded_point(false)
-            .to_bytes()
-            .as_slice()
+            .as_bytes()
         )
         // self.p.to_bytes_uncompressed(bytes);
-    }*/
+    }
 
     #[cfg(feature = "with_ctap1")]
     pub fn to_uncompressed(&self) -> [u8; PubKey::UNCOMPRESSED_LENGTH] {
@@ -301,13 +299,13 @@ impl PubKey {
         */
     }
 }
-/*
+
 #[cfg(test)]
 mod test {
     use super::super::rng256::ThreadRng256;
     use super::super::sha256::Sha256;
     use super::*;
-    use arrayref::array_ref;
+    use arrayref::{array_ref, array_mut_ref};
     use byteorder::{BigEndian, ByteOrder};
     use p256::SecretKey;
 
@@ -315,6 +313,7 @@ mod test {
     const BYTES_PER_DIGIT: usize = BITS_PER_DIGIT >> 3;
     const NDIGITS: usize = 8;
     pub const NBYTES: usize = NDIGITS * BYTES_PER_DIGIT;
+    pub type Digit = u32;
     #[derive(Default)]
     pub struct Int256 {
         digits: [Digit; NDIGITS],
@@ -336,6 +335,11 @@ mod test {
             }
             Int256 { digits }
         }
+        pub fn to_bin(&self, dst: &mut [u8; NBYTES]) {
+            for i in 0..NDIGITS {
+                BigEndian::write_u32(array_mut_ref![dst, 4 * i, 4], self.digits[NDIGITS - 1 - i]);
+            }
+        }
     }
 
 
@@ -348,12 +352,17 @@ mod test {
     /** Test that key generation creates valid keys **/
     #[test]
     fn test_genpk_is_valid_random() {
+        use p256::AffinePoint;
+        use p256::elliptic_curve::sec1::FromEncodedPoint;
         let mut rng = ThreadRng256 {};
 
         for _ in 0..ITERATIONS {
             let sk = SecKey::gensk(&mut rng);
             let pk = sk.genpk();
-            assert!(pk.p.is_valid_vartime());
+            let encoded = pk.p.to_encoded_point(false);
+            let maybe_affine = AffinePoint::from_encoded_point(&encoded);
+            assert!(bool::from(maybe_affine.is_some()));
+            // assert!(pk.p.is_valid_vartime());
         }
     }
 
@@ -366,8 +375,10 @@ mod test {
             let sk = SecKey::gensk(&mut rng);
             let mut bytes = [0; 32];
             sk.to_bytes(&mut bytes);
-            let decoded_sk = SecKey::from_bytes(&bytes);
-            assert_eq!(decoded_sk, Some(sk));
+            let decoded_sk = SecKey::from_bytes(&bytes).unwrap();
+            let mut checkbytes = [0; 32];
+            decoded_sk.to_bytes(&mut checkbytes);
+            assert_eq!(checkbytes, bytes);
         }
     }
 
@@ -409,26 +420,31 @@ mod test {
     #[test]
     fn test_rfc6979_keypair() {
         let sk = SecKey {
-            k: SecretKey::from_be_bytes(&hex::decode(RFC6979_X).unwrap()),
+            k: SigningKey::from_bytes(&hex::decode(RFC6979_X).unwrap()).unwrap(),
             // k: NonZeroExponentP256::from_int_checked(int256_from_hex(RFC6979_X)).unwrap(),
         };
         let pk = sk.genpk();
-        assert_eq!(pk.p.getx().to_int(), int256_from_hex(RFC6979_UX));
-        assert_eq!(pk.p.gety().to_int(), int256_from_hex(RFC6979_UY));
+        let encoded = pk.p.to_encoded_point(false);
+        assert_eq!(encoded.x().unwrap().as_slice(), &hex::decode(RFC6979_UX).unwrap());
+        assert_eq!(encoded.y().unwrap().as_slice(), &hex::decode(RFC6979_UY).unwrap());
     }
 
     fn test_rfc6979(msg: &str, k: &str, r: &str, s: &str) {
+        let key = SigningKey::from_bytes(&hex::decode(RFC6979_X).unwrap()).unwrap();
         let sk = SecKey {
-            k: SecretKey::from_be_bytes(&hex::decode(RFC6979_X).unwrap()),
+            k: key,
             // k: NonZeroExponentP256::from_int_checked(int256_from_hex(RFC6979_X)).unwrap(),
         };
+        /* // unfortunately we don't have a routine to extract `k` in the RustCrypto libraries
         assert_eq!(
             sk.get_k_rfc6979::<Sha256>(msg.as_bytes()).to_int(),
             int256_from_hex(k)
-        );
+        ); */
         let sign = sk.sign_rfc6979::<Sha256>(msg.as_bytes());
-        assert_eq!(sign.r.to_int(), int256_from_hex(r));
-        assert_eq!(sign.s.to_int(), int256_from_hex(s));
+        let mut rs = [0u8; 64];
+        sign.to_bytes(&mut rs);
+        assert_eq!(&rs[..32], &hex::decode(r).unwrap());
+        assert_eq!(&rs[32..], &hex::decode(s).unwrap());
     }
 
     #[test]
@@ -584,14 +600,17 @@ mod test {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x01,
         ];
-        let r = NonZeroExponentP256::from_int_checked(Int256::from_bin(&r_bytes)).unwrap();
+        //let r = NonZeroExponentP256::from_int_checked(Int256::from_bin(&r_bytes)).unwrap();
         let s_bytes = [
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0xFF,
         ];
-        let s = NonZeroExponentP256::from_int_checked(Int256::from_bin(&s_bytes)).unwrap();
-        let signature = Signature { r, s };
+        //let s = NonZeroExponentP256::from_int_checked(Int256::from_bin(&s_bytes)).unwrap();
+        //let signature = Signature { r, s };
+        let signature = Signature::from_bytes(
+            &[r_bytes, s_bytes].concat()
+        ).unwrap();
         let expected_encoding = vec![0x30, 0x07, 0x02, 0x01, 0x01, 0x02, 0x02, 0x00, 0xFF];
 
         assert_eq!(signature.to_asn1_der(), expected_encoding);
@@ -604,14 +623,17 @@ mod test {
             0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
             0xAA, 0xAA, 0xAA, 0xAA,
         ];
-        let r = NonZeroExponentP256::from_int_checked(Int256::from_bin(&r_bytes)).unwrap();
+        //let r = NonZeroExponentP256::from_int_checked(Int256::from_bin(&r_bytes)).unwrap();
         let s_bytes = [
             0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB,
             0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB,
             0xBB, 0xBB, 0xBB, 0xBB,
         ];
-        let s = NonZeroExponentP256::from_int_checked(Int256::from_bin(&s_bytes)).unwrap();
-        let signature = Signature { r, s };
+        //let s = NonZeroExponentP256::from_int_checked(Int256::from_bin(&s_bytes)).unwrap();
+        //let signature = Signature { r, s };
+        let signature = Signature::from_bytes(
+            &[r_bytes, s_bytes].concat()
+        ).unwrap();
         let expected_encoding = vec![
             0x30, 0x46, 0x02, 0x21, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
             0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
@@ -628,4 +650,3 @@ mod test {
     // - Invalid public key (at infinity, values not less than the prime p), but ring doesn't
     // directly exposes key validation in its API.
 }
-*/
