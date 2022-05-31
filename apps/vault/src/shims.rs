@@ -1,70 +1,39 @@
 // shims for Tock calls, to avoid having to recode some fairly pervasive patterns in OpenSK
 use std::ops::{Sub, Add, AddAssign};
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ClockFrequency {
-    hz: usize,
-}
-
-impl ClockFrequency {
-    pub fn hz(&self) -> usize {
-        self.hz
-    }
-}
 
 #[derive(Copy, Clone, Debug)]
 pub struct ClockValue {
-    num_ticks: isize,
-    clock_frequency: ClockFrequency,
+    num_ticks: i64,
 }
 
 impl ClockValue {
-    pub const fn new(num_ticks: isize, clock_hz: usize) -> ClockValue {
+    pub const fn new(num_ticks: i64, _clock_hz: usize) -> ClockValue {
         ClockValue {
             num_ticks,
-            clock_frequency: ClockFrequency { hz: clock_hz },
         }
     }
 
-    pub fn num_ticks(&self) -> isize {
+    pub fn num_ticks(&self) -> i64 {
         self.num_ticks
     }
 
-    // Computes (value * factor) / divisor, even when value * factor >= isize::MAX.
-    fn scale_int(value: isize, factor: isize, divisor: isize) -> isize {
-        // As long as isize is not i64, this should be fine. If not, this is an alternative:
-        // factor * (value / divisor) + ((value % divisor) * factor) / divisor
-        ((value as i64 * factor as i64) / divisor as i64) as isize
-    }
-
-    pub fn ms(&self) -> isize {
-        ClockValue::scale_int(self.num_ticks, 1000, self.clock_frequency.hz() as isize)
+    pub fn ms(&self) -> i64 {
+        self.num_ticks
     }
 
     pub fn ms_f64(&self) -> f64 {
-        1000.0 * (self.num_ticks as f64) / (self.clock_frequency.hz() as f64)
+        self.num_ticks as f64
     }
 
-    pub fn wrapping_add(self, duration: Duration<isize>) -> ClockValue {
-        // This is a precision preserving formula for scaling an isize.
-        let duration_ticks =
-            ClockValue::scale_int(duration.ms, self.clock_frequency.hz() as isize, 1000);
+    pub fn wrapping_add(self, duration: Duration<i64>) -> ClockValue {
         ClockValue {
-            num_ticks: self.num_ticks.wrapping_add(duration_ticks),
-            clock_frequency: self.clock_frequency,
+            num_ticks: self.num_ticks.wrapping_add(duration.ms),
         }
     }
 
-    pub fn wrapping_sub(self, other: ClockValue) -> Option<Duration<isize>> {
-        if self.clock_frequency == other.clock_frequency {
-            let clock_duration = ClockValue {
-                num_ticks: self.num_ticks - other.num_ticks,
-                clock_frequency: self.clock_frequency,
-            };
-            Some(Duration::from_ms(clock_duration.ms()))
-        } else {
-            None
-        }
+    pub fn wrapping_sub(self, other: ClockValue) -> Option<Duration<i64>> {
+        Some(Duration::from_ms(self.num_ticks - other.num_ticks))
     }
 }
 
@@ -122,8 +91,8 @@ where
     }
 }
 
-impl Timestamp<isize> {
-    pub fn from_clock_value(value: ClockValue) -> Timestamp<isize> {
+impl Timestamp<i64> {
+    pub fn from_clock_value(value: ClockValue) -> Timestamp<i64> {
         Timestamp { ms: value.ms() }
     }
 }

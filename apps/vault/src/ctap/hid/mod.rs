@@ -133,8 +133,8 @@ impl CtapHid {
         CtapHid::CAPABILITY_WINK | CtapHid::CAPABILITY_CBOR | CtapHid::CAPABILITY_NMSG;
 
     // TODO: Is this timeout duration specified?
-    const TIMEOUT_DURATION: Duration<isize> = Duration::from_ms(100);
-    const WINK_TIMEOUT_DURATION: Duration<isize> = Duration::from_ms(5000);
+    const TIMEOUT_DURATION: Duration<i64> = Duration::from_ms(100);
+    const WINK_TIMEOUT_DURATION: Duration<i64> = Duration::from_ms(5000);
 
     pub fn new() -> CtapHid {
         CtapHid {
@@ -159,7 +159,7 @@ impl CtapHid {
         // TODO: Send COMMAND_KEEPALIVE every 100ms?
         match self
             .assembler
-            .parse_packet(packet, Timestamp::<isize>::from_clock_value(clock_value))
+            .parse_packet(packet, Timestamp::<i64>::from_clock_value(clock_value))
         {
             Ok(Some(message)) => {
                 #[cfg(feature = "debug_ctap")]

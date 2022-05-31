@@ -21,7 +21,7 @@ use crate::ctap::key_material;
 use crate::ctap::pin_protocol_v1::PIN_AUTH_LENGTH;
 use crate::ctap::status_code::Ctap2StatusCode;
 use crate::ctap::INITIAL_SIGNATURE_COUNTER;
-use crate::embedded_flash::{new_storage, Storage};
+use std::io::{Write, Read, SeekFrom, Seek};
 #[cfg(feature = "with_ctap2_1")]
 use std::string::String;
 use std::vec;
@@ -31,7 +31,19 @@ use arrayref::array_ref;
 use cbor::cbor_array_vec;
 use core::convert::TryInto;
 use ctap_crypto::rng256::Rng256;
-use pddb::Pddb;
+use pddb::{Pddb, PddbRequestCode};
+use rand_core::{OsRng, RngCore};
+use std::cell::RefCell;
+
+use self::key::PIN_RETRIES;
+
+use super::CREDENTIAL_ID_SIZE;
+/// Size hint for storing a credential record. It can grow larger than this
+/// because things like icons and free-form strings are supported for storing
+/// credentials, but what happens in this case is just a re-allocation in the PDDB.
+/// Whereas if this number is "too big" you end up with wasted space. I think a
+/// typical record will be around 300-400 bytes, so, this is a good compromise.
+const CRED_INITAL_SIZE: usize = 512;
 
 // Those constants may be modified before compilation to tune the behavior of the key.
 //
@@ -65,7 +77,9 @@ const _DEFAULT_MIN_PIN_LENGTH_RP_IDS: Vec<String> = Vec::new();
 #[cfg(feature = "with_ctap2_1")]
 const _MAX_RP_IDS_LENGTH: usize = 8;
 
-const FIDO_DICT: &'static str = "fido";
+const FIDO_DICT: &'static str = "fido.cfg";
+const FIDO_CRED_DICT: &'static str = "fido.cred";
+const FIDO_PERSISTENT_DICT: &'static str = "fido.persistent";
 
 /// Wrapper for master keys.
 pub struct MasterKeys {
@@ -78,7 +92,7 @@ pub struct MasterKeys {
 
 /// CTAP persistent storage.
 pub struct PersistentStore {
-    pddb: Pddb,
+    pddb: RefCell::<Pddb>,
 }
 
 impl PersistentStore {
@@ -89,10 +103,10 @@ impl PersistentStore {
     /// This should be at most one instance of persistent store per program lifetime.
     pub fn new(_rng: &mut impl Rng256) -> PersistentStore {
         let mut store = PersistentStore {
-            pddb: Pddb::new()
+            pddb: RefCell::new(Pddb::new()),
         };
         // block until the PDDB is mounted
-        store.pddb.is_mounted_blocking();
+        store.pddb.borrow().is_mounted_blocking();
         store.init().unwrap();
         store
     }
@@ -101,43 +115,87 @@ impl PersistentStore {
     fn init(&mut self) -> Result<(), Ctap2StatusCode> {
 
         // Generate and store the master keys if they are missing.
-        let master_keys = self.pddb.get(
+        match self.pddb.borrow().get(
             FIDO_DICT,
             key::MASTER_KEYS,
             None, true, true,
-            Some(32), None
-        ).or(Ctap2StatusCode::CTAP1_ERR_OTHER)?;
-        let mk_attr = master_keys.attributes().or(Ctap2StatusCode::CTAP1_ERR_OTHER)?;
-        if mk_attr.len != 32 {
-            if mk_attr.len != 0 {
-                log::error!("Master key has an illegal length. Suspect PDDB corruption?");
-                return Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL);
+            Some(64), None::<fn()>
+        ) {
+            Ok(mut master_keys) => {
+                let mk_attr = master_keys.attributes().unwrap(); // attribute fetches should not fail, so we don't kick it up. We want to see the panic at this line if it does fail.
+                if mk_attr.len != 64 {
+                    if mk_attr.len != 0 {
+                        log::error!("Master key has an illegal length. Suspect PDDB corruption?");
+                        return Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL);
+                    }
+                    let mut keys = [0u8; 64];
+                    OsRng.fill_bytes(&mut keys);
+                    master_keys.write(&keys)
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                }
             }
-        }
-
-        if self.store.find_handle(key::MASTER_KEYS)?.is_none() {
-            let master_encryption_key = rng.gen_uniform_u8x32();
-            let master_hmac_key = rng.gen_uniform_u8x32();
-            let mut master_keys = Vec::with_capacity(64);
-            master_keys.extend_from_slice(&master_encryption_key);
-            master_keys.extend_from_slice(&master_hmac_key);
-            self.store.insert(key::MASTER_KEYS, &master_keys)?;
+            _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
 
         // Generate and store the CredRandom secrets if they are missing.
-        if self.store.find_handle(key::CRED_RANDOM_SECRET)?.is_none() {
-            let cred_random_with_uv = rng.gen_uniform_u8x32();
-            let cred_random_without_uv = rng.gen_uniform_u8x32();
-            let mut cred_random = Vec::with_capacity(64);
-            cred_random.extend_from_slice(&cred_random_without_uv);
-            cred_random.extend_from_slice(&cred_random_with_uv);
-            self.store.insert(key::CRED_RANDOM_SECRET, &cred_random)?;
+        // note this goes into the FIDO_CRED_DICT, in order to force its creation.
+        // It does mean we have a special case key in the dictionary.
+        match self.pddb.borrow().get(
+            FIDO_CRED_DICT,
+            key::CRED_RANDOM_SECRET,
+            None, true, true,
+            Some(64), None::<fn()>
+        ) {
+            Ok(mut cred_random) => {
+                let cred_attr = cred_random.attributes().unwrap();
+                if cred_attr.len != 64 {
+                    if cred_attr.len != 0 {
+                        log::error!("Random credentials has an illegal length. Suspect PDDB corruption?");
+                        return Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL);
+                    }
+                    let mut creds = [0u8; 64];
+                    OsRng.fill_bytes(&mut creds);
+                    cred_random.write(&creds)
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                }
+            }
+            _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
 
-        if self.store.find_handle(key::AAGUID)?.is_none() {
-            self.set_aaguid(key_material::AAGUID)?;
+        match self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::AAGUID,
+            None, true, true,
+            Some(16), None::<fn()>
+        ) {
+            Ok(mut aaguid) => {
+                let aaguid_attr = aaguid.attributes().unwrap();
+                if aaguid_attr.len != 16 {
+                    if aaguid_attr.len != 0 {
+                        log::error!("AAGUID has an illegal length. Suspect PDDB corruption?");
+                        return Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL);
+                    }
+                    aaguid.write(key_material::AAGUID)
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                }
+            }
+            _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
         Ok(())
+    }
+
+    /// The credential ID, as stored in OpenSK, is a 112-entry Vec<u8> that starts with
+    /// a random 128-bit AES IV. This effectively takes the 128-bit AES IV and turns it into
+    /// a hex string that is suitable for indexing into the PDDB. Collisions
+    /// are very rare in a 128-bit space, but the "full" credential is still checked
+    /// after the lookup.
+    fn cid_to_str(&self, credential_id: &[u8]) -> String {
+        let mut hex = String::new();
+        // yes, I do know the "hex" crate exists but have you looked at its dependency tree??
+        for &b in credential_id[..16].iter() {
+            hex.push_str(&format!("{:x}", b));
+        }
+        hex
     }
 
     /// Returns the first matching credential.
@@ -150,22 +208,41 @@ impl PersistentStore {
         credential_id: &[u8],
         check_cred_protect: bool,
     ) -> Result<Option<PublicKeyCredentialSource>, Ctap2StatusCode> {
-        let mut iter_result = Ok(());
-        let iter = self.iter_credentials(&mut iter_result)?;
-        // We don't check whether there is more than one matching credential to be able to exit
-        // early.
-        let result = iter.map(|(_, credential)| credential).find(|credential| {
-            credential.rp_id == rp_id && credential.credential_id == credential_id
-        });
-        iter_result?;
-        if let Some(cred) = &result {
-            let user_verification_required = cred.cred_protect_policy
-                == Some(CredentialProtectionPolicy::UserVerificationRequired);
-            if check_cred_protect && user_verification_required {
-                return Ok(None);
+        let shortid = self.cid_to_str(credential_id);
+        match self.pddb.borrow().get(
+            FIDO_CRED_DICT,
+            &shortid,
+            None, false, false,
+            Some(CREDENTIAL_ID_SIZE), None::<fn()>
+        ) {
+            Ok(mut cred) => {
+                let mut data = Vec::<u8>::new();
+                cred.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                match deserialize_credential(&data) {
+                    Some(result) => {
+                        if result.credential_id == credential_id && result.rp_id == rp_id {
+                            let user_verification_required =
+                                result.cred_protect_policy == Some(CredentialProtectionPolicy::UserVerificationRequired);
+                            if check_cred_protect && user_verification_required {
+                                Ok(None)
+                            } else {
+                                Ok(Some(result))
+                            }
+                        } else {
+                            Ok(None)
+                        }
+                    }
+                    None => {
+                        log::warn!("Credential entry {} did not deserialize", shortid);
+                        Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL)
+                    }
+                }
+            }
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(None),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
             }
         }
-        Ok(result)
     }
 
     /// Stores or updates a credential.
@@ -175,49 +252,21 @@ impl PersistentStore {
         &mut self,
         new_credential: PublicKeyCredentialSource,
     ) -> Result<(), Ctap2StatusCode> {
-        // Holds the key of the existing credential if this is an update.
-        let mut old_key = None;
-        let min_key = key::CREDENTIALS.start;
-        // Holds whether a key is used (indices are shifted by min_key).
-        let mut keys = vec![false; MAX_SUPPORTED_RESIDENTIAL_KEYS];
-        let mut iter_result = Ok(());
-        let iter = self.iter_credentials(&mut iter_result)?;
-        for (key, credential) in iter {
-            if key < min_key
-                || key - min_key >= MAX_SUPPORTED_RESIDENTIAL_KEYS
-                || keys[key - min_key]
-            {
-                return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
+        let shortid = self.cid_to_str(&new_credential.credential_id);
+        match self.pddb.borrow().get(
+            FIDO_CRED_DICT,
+            &shortid,
+            None, false, true,
+            Some(CRED_INITAL_SIZE), None::<fn()>
+        ) {
+            Ok(mut cred) => {
+                let value = serialize_credential(new_credential)?;
+                cred.write(&value)
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                Ok(())
             }
-            keys[key - min_key] = true;
-            if credential.rp_id == new_credential.rp_id
-                && credential.user_handle == new_credential.user_handle
-            {
-                if old_key.is_some() {
-                    return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
-                }
-                old_key = Some(key);
-            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
         }
-        iter_result?;
-        if old_key.is_none()
-            && keys.iter().filter(|&&x| x).count() >= MAX_SUPPORTED_RESIDENTIAL_KEYS
-        {
-            return Err(Ctap2StatusCode::CTAP2_ERR_KEY_STORE_FULL);
-        }
-        let key = match old_key {
-            // This is a new credential being added, we need to allocate a free key. We choose the
-            // first available key.
-            None => key::CREDENTIALS
-                .take(MAX_SUPPORTED_RESIDENTIAL_KEYS)
-                .find(|key| !keys[key - min_key])
-                .ok_or(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)?,
-            // This is an existing credential being updated, we reuse its key.
-            Some(x) => x,
-        };
-        let value = serialize_credential(new_credential)?;
-        self.store.insert(key, &value)?;
-        Ok(())
     }
 
     /// Returns the list of matching credentials.
@@ -228,57 +277,87 @@ impl PersistentStore {
         rp_id: &str,
         check_cred_protect: bool,
     ) -> Result<Vec<PublicKeyCredentialSource>, Ctap2StatusCode> {
-        let mut iter_result = Ok(());
-        let iter = self.iter_credentials(&mut iter_result)?;
-        let result = iter
-            .filter_map(|(_, credential)| {
-                if credential.rp_id == rp_id {
-                    Some(credential)
-                } else {
-                    None
+        let mut result = Vec::<PublicKeyCredentialSource>::new();
+        let mut cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't try to investigate this one key
+        for cred_name in cred_list.iter() {
+            if let Some(mut cred_entry) = self.pddb.borrow().get(
+                FIDO_CRED_DICT,
+                cred_name,
+                None, false, false,
+                Some(CREDENTIAL_ID_SIZE), None::<fn()>
+            ).ok() {
+                let mut data = Vec::<u8>::new();
+                cred_entry.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                if let Some(cred) = deserialize_credential(&data) {
+                    if cred.rp_id == rp_id
+                    && (cred.is_discoverable() || !check_cred_protect) {
+                        result.push(cred);
+                    }
                 }
-            })
-            .filter(|cred| !check_cred_protect || cred.is_discoverable())
-            .collect();
-        iter_result?;
+            }
+        }
         Ok(result)
     }
 
     /// Returns the number of credentials.
     #[cfg(test)]
     pub fn count_credentials(&self) -> Result<usize, Ctap2StatusCode> {
-        let mut iter_result = Ok(());
-        let iter = self.iter_credentials(&mut iter_result)?;
-        let result = iter.count();
-        iter_result?;
-        Ok(result)
-    }
-
-    /// Iterates through the credentials.
-    ///
-    /// If an error is encountered during iteration, it is written to `result`.
-    fn iter_credentials<'a>(
-        &'a self,
-        result: &'a mut Result<(), Ctap2StatusCode>,
-    ) -> Result<IterCredentials<'a>, Ctap2StatusCode> {
-        IterCredentials::new(&self.store, result)
+        let mut cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't count this special case key
+        Ok(cred_list.len())
     }
 
     /// Returns the next creation order.
     pub fn new_creation_order(&self) -> Result<u64, Ctap2StatusCode> {
-        let mut iter_result = Ok(());
-        let iter = self.iter_credentials(&mut iter_result)?;
-        let max = iter.map(|(_, credential)| credential.creation_order).max();
-        iter_result?;
-        Ok(max.unwrap_or(0).wrapping_add(1))
+        let mut max = 0;
+        let mut cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't try to investigate this one key
+        if cred_list.len() == 0 {
+            return Ok(0)
+        }
+        for cred_name in cred_list.iter() {
+            if let Some(mut cred_entry) = self.pddb.borrow().get(
+                FIDO_CRED_DICT,
+                cred_name,
+                None, false, false,
+                Some(CREDENTIAL_ID_SIZE), None::<fn()>
+            ).ok() {
+                let mut data = Vec::<u8>::new();
+                cred_entry.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                if let Some(cred) = deserialize_credential(&data) {
+                    max = max.max(cred.creation_order)
+                }
+            }
+        }
+        Ok(max.wrapping_add(1))
     }
 
     /// Returns the global signature counter.
     pub fn global_signature_counter(&self) -> Result<u32, Ctap2StatusCode> {
-        match self.store.find(key::GLOBAL_SIGNATURE_COUNTER)? {
-            None => Ok(INITIAL_SIGNATURE_COUNTER),
-            Some(value) if value.len() == 4 => Ok(u32::from_ne_bytes(*array_ref!(&value, 0, 4))),
-            Some(_) => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::GLOBAL_SIGNATURE_COUNTER,
+            None, false, true,
+            Some(4), None::<fn()>
+        ) {
+            Ok(mut gsc) => {
+                let mut value = [0u8; 4];
+                match gsc.read(&mut value) {
+                    Ok(4) => Ok(u32::from_ne_bytes(value)),
+                    Ok(_) => {
+                        gsc.seek(SeekFrom::Start(0)).ok(); // make sure we're writing to the beginning position
+                        gsc.write(&INITIAL_SIGNATURE_COUNTER.to_ne_bytes())
+                        .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                        Ok(INITIAL_SIGNATURE_COUNTER)
+                    },
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+                }
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
     }
 
@@ -287,49 +366,84 @@ impl PersistentStore {
         let old_value = self.global_signature_counter()?;
         // In hopes that servers handle the wrapping gracefully.
         let new_value = old_value.wrapping_add(increment);
-        self.store
-            .insert(key::GLOBAL_SIGNATURE_COUNTER, &new_value.to_ne_bytes())?;
-        Ok(())
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::GLOBAL_SIGNATURE_COUNTER,
+            None, false, true,
+            Some(4), None::<fn()>
+        ) {
+            Ok(mut gsc) => {
+                gsc.write(&new_value.to_ne_bytes())
+                .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        }
     }
 
     /// Returns the master keys.
     pub fn master_keys(&self) -> Result<MasterKeys, Ctap2StatusCode> {
-        let master_keys = self
-            .store
-            .find(key::MASTER_KEYS)?
-            .ok_or(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)?;
-        if master_keys.len() != 64 {
-            return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::MASTER_KEYS,
+            None, false, false, None, None::<fn()>
+        ) {
+            Ok(mut mk) => {
+                let mut master_keys = [0u8; 64];
+                match mk.read(&mut master_keys) {
+                    Ok(64) => {
+                        Ok(MasterKeys {
+                            encryption: *array_ref![master_keys, 0, 32],
+                            hmac: *array_ref![master_keys, 32, 32],
+                        })
+                    }
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
         }
-        Ok(MasterKeys {
-            encryption: *array_ref![master_keys, 0, 32],
-            hmac: *array_ref![master_keys, 32, 32],
-        })
     }
 
     /// Returns the CredRandom secret.
     pub fn cred_random_secret(&self, has_uv: bool) -> Result<[u8; 32], Ctap2StatusCode> {
-        let cred_random_secret = self
-            .store
-            .find(key::CRED_RANDOM_SECRET)?
-            .ok_or(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)?;
-        if cred_random_secret.len() != 64 {
-            return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
+        match self.pddb.borrow().get(
+            FIDO_CRED_DICT,
+            key::CRED_RANDOM_SECRET,
+            None, false, false, None, None::<fn()>
+        ) {
+            Ok(mut crs) => {
+                let mut cred_random_secret = [0u8; 64];
+                match crs.read(&mut cred_random_secret) {
+                    Ok(64) => {
+                        let offset = if has_uv { 32 } else { 0 };
+                        Ok(*array_ref![cred_random_secret, offset, 32])
+                    }
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
         }
-        let offset = if has_uv { 32 } else { 0 };
-        Ok(*array_ref![cred_random_secret, offset, 32])
     }
 
     /// Returns the PIN hash if defined.
     pub fn pin_hash(&self) -> Result<Option<[u8; PIN_AUTH_LENGTH]>, Ctap2StatusCode> {
-        let pin_hash = match self.store.find(key::PIN_HASH)? {
-            None => return Ok(None),
-            Some(pin_hash) => pin_hash,
-        };
-        if pin_hash.len() != PIN_AUTH_LENGTH {
-            return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::PIN_HASH,
+            None, false, false, None, None::<fn()>
+        ) {
+            Ok(mut ph) => {
+                let mut pin_hash = [0u8; PIN_AUTH_LENGTH];
+                match ph.read(&mut pin_hash) {
+                    Ok(PIN_AUTH_LENGTH) => Ok(Some(pin_hash)),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+                }
+            }
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(None),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+            }
         }
-        Ok(Some(*array_ref![pin_hash, 0, PIN_AUTH_LENGTH]))
     }
 
     /// Sets the PIN hash.
@@ -339,15 +453,41 @@ impl PersistentStore {
         &mut self,
         pin_hash: &[u8; PIN_AUTH_LENGTH],
     ) -> Result<(), Ctap2StatusCode> {
-        Ok(self.store.insert(key::PIN_HASH, pin_hash)?)
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::PIN_HASH,
+            None, false, true,
+            Some(PIN_AUTH_LENGTH), None::<fn()>
+        ) {
+            Ok(mut ph) => {
+                match ph.write(pin_hash) {
+                    Ok(PIN_AUTH_LENGTH) => Ok(()),
+                    // note that this also throws errors on all write return results that are the wrong length!
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+        }
     }
 
     /// Returns the number of remaining PIN retries.
     pub fn pin_retries(&self) -> Result<u8, Ctap2StatusCode> {
-        match self.store.find(key::PIN_RETRIES)? {
-            None => Ok(MAX_PIN_RETRIES),
-            Some(value) if value.len() == 1 => Ok(value[0]),
-            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::PIN_RETRIES,
+            None, false, false, None, None::<fn()>
+        ) {
+            Ok(mut pr) => {
+                let mut value = [0u8; 1];
+                match pr.read(&mut value) {
+                    Ok(1) => Ok(value[0]),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }
+            }
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(MAX_PIN_RETRIES),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+            }
         }
     }
 
@@ -356,44 +496,99 @@ impl PersistentStore {
         let old_value = self.pin_retries()?;
         let new_value = old_value.saturating_sub(1);
         if new_value != old_value {
-            self.store.insert(key::PIN_RETRIES, &[new_value])?;
+            match self.pddb.borrow().get(
+                FIDO_DICT,
+                key::PIN_RETRIES,
+                None, false, true,
+                Some(1), None::<fn()>
+            ) {
+                Ok(mut pr) => {
+                    pr.write(&[new_value])
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                }
+                _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+            }
         }
         Ok(())
     }
 
     /// Resets the number of remaining PIN retries.
     pub fn reset_pin_retries(&mut self) -> Result<(), Ctap2StatusCode> {
-        Ok(self.store.remove(key::PIN_RETRIES)?)
+        match self.pddb.borrow().delete_key(
+            FIDO_DICT,
+            PIN_RETRIES,
+            None
+        ) {
+            Ok(_) => Ok(()),
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+            }
+        }
     }
 
     /// Returns the minimum PIN length.
     #[cfg(feature = "with_ctap2_1")]
     pub fn min_pin_length(&self) -> Result<u8, Ctap2StatusCode> {
-        match self.store.find(key::MIN_PIN_LENGTH)? {
-            None => Ok(DEFAULT_MIN_PIN_LENGTH),
-            Some(value) if value.len() == 1 => Ok(value[0]),
-            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::MIN_PIN_LENGTH,
+            None, false, false, None, None::<fn()>
+        ) {
+            Ok(mut pr) => {
+                let mut value = [0u8; 1];
+                match pr.read(&mut value) {
+                    Ok(1) => Ok(value[0]),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }
+            }
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(DEFAULT_MIN_PIN_LENGTH),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+            }
         }
     }
 
     /// Sets the minimum PIN length.
     #[cfg(feature = "with_ctap2_1")]
     pub fn set_min_pin_length(&mut self, min_pin_length: u8) -> Result<(), Ctap2StatusCode> {
-        Ok(self.store.insert(key::MIN_PIN_LENGTH, &[min_pin_length])?)
+        match self.pddb.borrow().get(
+            FIDO_DICT,
+            key::MIN_PIN_LENGTH,
+            None, false, true,
+            Some(1), None::<fn()>
+        ) {
+            Ok(mut pl) => {
+                if pl.write(min_pin_length) == Ok(1) {
+                    Ok(())
+                } else {
+                    Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        }
     }
 
     /// Returns the list of RP IDs that are used to check if reading the minimum PIN length is
     /// allowed.
     #[cfg(feature = "with_ctap2_1")]
     pub fn _min_pin_length_rp_ids(&self) -> Result<Vec<String>, Ctap2StatusCode> {
-        let rp_ids = self
-            .store
-            .find(key::_MIN_PIN_LENGTH_RP_IDS)?
-            .map_or(Some(_DEFAULT_MIN_PIN_LENGTH_RP_IDS), |value| {
-                _deserialize_min_pin_length_rp_ids(&value)
-            });
-        debug_assert!(rp_ids.is_some());
-        Ok(rp_ids.unwrap_or(vec![]))
+        if let Some(mut mplri) = self.pddb.borrow().get(
+            FIDO_DICT,
+            key::_MIN_PIN_LENGTH_RP_IDS,
+            None, false, false,
+            None, None::<fn()>
+        ).ok() {
+            let mut data = Vec::<u8>::new();
+            mplri.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+            if let Some(list) = _deserialize_min_pin_length_rp_ids(&data) {
+                Ok(list)
+            } else {
+                Ok(vec![])
+            }
+        } else {
+            Ok(vec![])
+        }
     }
 
     /// Sets the list of RP IDs that are used to check if reading the minimum PIN length is allowed.
@@ -411,26 +606,47 @@ impl PersistentStore {
         if min_pin_length_rp_ids.len() > _MAX_RP_IDS_LENGTH {
             return Err(Ctap2StatusCode::CTAP2_ERR_KEY_STORE_FULL);
         }
-        Ok(self.store.insert(
+        match self.pddb.borrow().get(
+            FIDO_DICT,
             key::_MIN_PIN_LENGTH_RP_IDS,
-            &_serialize_min_pin_length_rp_ids(min_pin_length_rp_ids)?,
-        )?)
+            None, false, true,
+            Some(_MAX_RP_IDS_LENGTH), None::<fn()>
+        ) {
+            Ok(mut mrpli) => {
+                mprli.write(&_serialize_min_pin_length_rp_ids(min_pin_length_rp_ids)?)
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+        }
     }
 
+    // ---------------- persistent records ----------------------
     /// Returns the attestation private key if defined.
     pub fn attestation_private_key(
         &self,
     ) -> Result<Option<[u8; key_material::ATTESTATION_PRIVATE_KEY_LENGTH]>, Ctap2StatusCode> {
-        match self.store.find(key::ATTESTATION_PRIVATE_KEY)? {
-            None => Ok(None),
-            Some(key) if key.len() == key_material::ATTESTATION_PRIVATE_KEY_LENGTH => {
-                Ok(Some(*array_ref![
-                    key,
-                    0,
-                    key_material::ATTESTATION_PRIVATE_KEY_LENGTH
-                ]))
+        match self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::ATTESTATION_PRIVATE_KEY,
+            None, false, false, None, None::<fn()>
+        ) {
+            Ok(mut apk) => {
+                let mut key = [0u8; key_material::ATTESTATION_PRIVATE_KEY_LENGTH];
+                match apk.read(&mut key) {
+                    Ok(key_material::ATTESTATION_PRIVATE_KEY_LENGTH) => {
+                        Ok(Some(*array_ref![
+                            key,
+                            0,
+                            key_material::ATTESTATION_PRIVATE_KEY_LENGTH
+                        ]))
+                    }
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }
             }
-            Some(_) => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(None),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+            }
         }
     }
 
@@ -441,17 +657,35 @@ impl PersistentStore {
         &mut self,
         attestation_private_key: &[u8; key_material::ATTESTATION_PRIVATE_KEY_LENGTH],
     ) -> Result<(), Ctap2StatusCode> {
-        match self.store.find(key::ATTESTATION_PRIVATE_KEY)? {
-            None => Ok(self
-                .store
-                .insert(key::ATTESTATION_PRIVATE_KEY, attestation_private_key)?),
-            Some(_) => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        match self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::ATTESTATION_PRIVATE_KEY,
+            None, false, true,
+            Some(key_material::ATTESTATION_PRIVATE_KEY_LENGTH), None::<fn()>
+        ) {
+            Ok(mut apk) => {
+                apk.write(attestation_private_key)
+                .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
         }
     }
 
     /// Returns the attestation certificate if defined.
     pub fn attestation_certificate(&self) -> Result<Option<Vec<u8>>, Ctap2StatusCode> {
-        Ok(self.store.find(key::ATTESTATION_CERTIFICATE)?)
+        if let Some(mut acert) = self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::ATTESTATION_CERTIFICATE,
+            None, false, false,
+            None, None::<fn()>
+        ).ok() {
+            let mut data = Vec::<u8>::new();
+            acert.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+            Ok(Some(data))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Sets the attestation certificate.
@@ -461,24 +695,39 @@ impl PersistentStore {
         &mut self,
         attestation_certificate: &[u8],
     ) -> Result<(), Ctap2StatusCode> {
-        match self.store.find(key::ATTESTATION_CERTIFICATE)? {
-            None => Ok(self
-                .store
-                .insert(key::ATTESTATION_CERTIFICATE, attestation_certificate)?),
-            Some(_) => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        match self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::ATTESTATION_CERTIFICATE,
+            None, false, true,
+            Some(1024), None::<fn()>
+        ) {
+            Ok(mut acert) => {
+                acert.write(attestation_certificate)
+                .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
         }
     }
 
     /// Returns the AAGUID.
     pub fn aaguid(&self) -> Result<[u8; key_material::AAGUID_LENGTH], Ctap2StatusCode> {
-        let aaguid = self
-            .store
-            .find(key::AAGUID)?
-            .ok_or(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)?;
-        if aaguid.len() != key_material::AAGUID_LENGTH {
-            return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
+        if let Some(mut guid) = self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::AAGUID,
+            None, false, false,
+            None, None::<fn()>
+        ).ok() {
+            let mut data = [0u8; key_material::AAGUID_LENGTH];
+            match guid.read(&mut data) {
+                Ok(key_material::AAGUID_LENGTH) => {
+                    Ok(data)
+                }
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+            }
+        } else {
+            Ok([0u8; key_material::AAGUID_LENGTH])
         }
-        Ok(*array_ref![aaguid, 0, key_material::AAGUID_LENGTH])
     }
 
     /// Sets the AAGUID.
@@ -488,99 +737,42 @@ impl PersistentStore {
         &mut self,
         aaguid: &[u8; key_material::AAGUID_LENGTH],
     ) -> Result<(), Ctap2StatusCode> {
-        Ok(self.store.insert(key::AAGUID, aaguid)?)
+        match self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::AAGUID,
+            None, false, true,
+            Some(key_material::AAGUID_LENGTH), None::<fn()>
+        ) {
+            Ok(mut guid) => {
+                guid.write(aaguid)
+                .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
+            }
+            _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        }
     }
 
     /// Resets the store as for a CTAP reset.
     ///
     /// In particular persistent entries are not reset.
-    pub fn reset(&mut self, rng: &mut impl Rng256) -> Result<(), Ctap2StatusCode> {
-        self.store.clear(key::NUM_PERSISTENT_KEYS)?;
-        self.init(rng)?;
-        Ok(())
-    }
-}
-
-impl From<persistent_store::StoreError> for Ctap2StatusCode {
-    fn from(error: persistent_store::StoreError) -> Ctap2StatusCode {
-        use persistent_store::StoreError;
-        match error {
-            // This error is expected. The store is full.
-            StoreError::NoCapacity => Ctap2StatusCode::CTAP2_ERR_KEY_STORE_FULL,
-            // This error is expected. The flash is out of life.
-            StoreError::NoLifetime => Ctap2StatusCode::CTAP2_ERR_KEY_STORE_FULL,
-            // This error is expected if we don't satisfy the store preconditions. For example we
-            // try to store a credential which is too long.
-            StoreError::InvalidArgument => Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR,
-            // This error is not expected. The storage has been tempered with. We could erase the
-            // storage.
-            StoreError::InvalidStorage => Ctap2StatusCode::CTAP2_ERR_VENDOR_HARDWARE_FAILURE,
-            // This error is not expected. The kernel is failing our syscalls.
-            StoreError::StorageError => Ctap2StatusCode::CTAP1_ERR_OTHER,
-        }
-    }
-}
-
-/// Iterator for credentials.
-struct IterCredentials<'a> {
-    /// The store being iterated.
-    store: &'a persistent_store::Store<Storage>,
-
-    /// The store iterator.
-    iter: persistent_store::StoreIter<'a, Storage>,
-
-    /// The iteration result.
-    ///
-    /// It starts as success and gets written at most once with an error if something fails. The
-    /// iteration stops as soon as an error is encountered.
-    result: &'a mut Result<(), Ctap2StatusCode>,
-}
-
-impl<'a> IterCredentials<'a> {
-    /// Creates a credential iterator.
-    fn new(
-        store: &'a persistent_store::Store<Storage>,
-        result: &'a mut Result<(), Ctap2StatusCode>,
-    ) -> Result<IterCredentials<'a>, Ctap2StatusCode> {
-        let iter = store.iter()?;
-        Ok(IterCredentials {
-            store,
-            iter,
-            result,
-        })
-    }
-
-    /// Marks the iteration as failed if the content is absent.
-    ///
-    /// For convenience, the function takes and returns ownership instead of taking a shared
-    /// reference and returning nothing. This permits to use it in both expressions and statements
-    /// instead of statements only.
-    fn unwrap<T>(&mut self, x: Option<T>) -> Option<T> {
-        if x.is_none() {
-            *self.result = Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR);
-        }
-        x
-    }
-}
-
-impl<'a> Iterator for IterCredentials<'a> {
-    type Item = (usize, PublicKeyCredentialSource);
-
-    fn next(&mut self) -> Option<(usize, PublicKeyCredentialSource)> {
-        if self.result.is_err() {
-            return None;
-        }
-        while let Some(next) = self.iter.next() {
-            let handle = self.unwrap(next.ok())?;
-            let key = handle.get_key();
-            if !key::CREDENTIALS.contains(&key) {
-                continue;
+    pub fn reset(&mut self, _rng: &mut impl Rng256) -> Result<(), Ctap2StatusCode> {
+        match self.pddb.borrow().delete_dict(FIDO_DICT, None) {
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
             }
-            let value = self.unwrap(handle.get_value(&self.store).ok())?;
-            let credential = self.unwrap(deserialize_credential(&value))?;
-            return Some((key, credential));
-        }
-        None
+            Ok(_) => Ok(()),
+        }?;
+        match self.pddb.borrow().delete_dict(FIDO_CRED_DICT, None) {
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+            }
+            Ok(_) => Ok(()),
+        }?;
+        // don't delete the persistent dictionary...
+        self.init()?;
+        Ok(())
     }
 }
 

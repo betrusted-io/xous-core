@@ -24,7 +24,7 @@ pub struct MessageAssembler {
     // Current channel ID.
     cid: ChannelID,
     // Timestamp of the last packet received on the current channel.
-    last_timestamp: Timestamp<isize>,
+    last_timestamp: Timestamp<i64>,
     // Current command.
     cmd: u8,
     // Sequence number expected for the next packet.
@@ -84,7 +84,7 @@ impl MessageAssembler {
     pub fn parse_packet(
         &mut self,
         packet: &HidPacket,
-        timestamp: Timestamp<isize>,
+        timestamp: Timestamp<i64>,
     ) -> Result<Option<Message>, (ChannelID, Error)> {
         // TODO: Support non-full-speed devices (i.e. packet len != 64)? This isn't recommended by
         // section 8.8.1
@@ -157,7 +157,7 @@ impl MessageAssembler {
         cmd: u8,
         len: usize,
         data: &[u8],
-        timestamp: Timestamp<isize>,
+        timestamp: Timestamp<i64>,
     ) -> Option<Message> {
         // TODO: Should invalid commands/payload lengths be rejected early, i.e. as soon as the
         // initialization packet is received, or should we build a message and then catch the

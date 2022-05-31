@@ -27,6 +27,8 @@ cbor = {path = "libraries/cbor"}
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
+rand_core = "0.6.3"
+ticktimer-server = {path = "../../services/ticktimer-server"}
 
 [features]
 tts = []

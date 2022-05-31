@@ -77,7 +77,7 @@ impl Repl{
     }
     // dummy function for now - but this is where the action happens when input events come
     pub (crate) fn update(&mut self, _was_callback: bool) {
-        self.redraw();
+        self.redraw().unwrap();
     }
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         self.clear_area();

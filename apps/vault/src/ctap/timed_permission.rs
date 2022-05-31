@@ -25,7 +25,7 @@ impl TimedPermission {
         TimedPermission::Waiting
     }
 
-    pub fn granted(now: ClockValue, grant_duration: Duration<isize>) -> TimedPermission {
+    pub fn granted(now: ClockValue, grant_duration: Duration<i64>) -> TimedPermission {
         TimedPermission::Granted(now.wrapping_add(grant_duration))
     }
 
@@ -61,16 +61,16 @@ pub struct U2fUserPresenceState {
     // Button touch timeouts, while user presence is requested, are saved here.
     has_up: TimedPermission,
     // This is the timeout duration of user presence requests.
-    request_duration: Duration<isize>,
+    request_duration: Duration<i64>,
     // This is the timeout duration of button touches.
-    presence_duration: Duration<isize>,
+    presence_duration: Duration<i64>,
 }
 
 #[cfg(feature = "with_ctap1")]
 impl U2fUserPresenceState {
     pub fn new(
-        request_duration: Duration<isize>,
-        presence_duration: Duration<isize>,
+        request_duration: Duration<i64>,
+        presence_duration: Duration<i64>,
     ) -> U2fUserPresenceState {
         U2fUserPresenceState {
             needs_up: TimedPermission::Waiting,
@@ -125,8 +125,8 @@ mod test {
     const BIG_POSITIVE: ClockValue = ClockValue::new(isize::MAX / 1000 - 1, CLOCK_FREQUENCY_HZ);
     const NEGATIVE: ClockValue = ClockValue::new(-1, CLOCK_FREQUENCY_HZ);
     const SMALL_NEGATIVE: ClockValue = ClockValue::new(isize::MIN / 1000 + 1, CLOCK_FREQUENCY_HZ);
-    const REQUEST_DURATION: Duration<isize> = Duration::from_ms(1000);
-    const PRESENCE_DURATION: Duration<isize> = Duration::from_ms(1000);
+    const REQUEST_DURATION: Duration<i64> = Duration::from_ms(1000);
+    const PRESENCE_DURATION: Duration<i64> = Duration::from_ms(1000);
 
     fn grant_up_when_needed(start_time: ClockValue) {
         let mut u2f_state = U2fUserPresenceState::new(REQUEST_DURATION, PRESENCE_DURATION);

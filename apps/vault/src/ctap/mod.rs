@@ -99,9 +99,9 @@ const ED_FLAG: u8 = 0x80;
 
 pub const TOUCH_TIMEOUT_MS: isize = 30000;
 #[cfg(feature = "with_ctap1")]
-const U2F_UP_PROMPT_TIMEOUT: Duration<isize> = Duration::from_ms(10000);
-const RESET_TIMEOUT_DURATION: Duration<isize> = Duration::from_ms(10000);
-const STATEFUL_COMMAND_TIMEOUT_DURATION: Duration<isize> = Duration::from_ms(30000);
+const U2F_UP_PROMPT_TIMEOUT: Duration<i64> = Duration::from_ms(10000);
+const RESET_TIMEOUT_DURATION: Duration<i64> = Duration::from_ms(10000);
+const STATEFUL_COMMAND_TIMEOUT_DURATION: Duration<i64> = Duration::from_ms(30000);
 
 pub const FIDO2_VERSION_STRING: &str = "FIDO_2_0";
 #[cfg(feature = "with_ctap1")]

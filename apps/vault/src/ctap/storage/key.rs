@@ -43,6 +43,9 @@ define_names! {
     /// The aaguid.
     AAGUID = 3;
 
+    // In Xous, you can have as many persistent keys as you want, but, you just have to put them
+    // in the FIDO_PERSISTENT_DICT. This is controlled in the implementation in the storage.rs file.
+
     // This is the persistent key limit:
     // - When adding a (persistent) key above this message, make sure its value is smaller than
     //   NUM_PERSISTENT_KEYS.

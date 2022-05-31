@@ -69,8 +69,7 @@ pub(crate) enum VaultOp {
 // This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
 pub(crate) const SERVER_NAME_VAULT: &str = "Key Vault";
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -95,8 +94,10 @@ fn xmain() -> ! {
         }
     });
 
-    let rng = ctap_crypto::rng256::XousRng256::new(&xns);
+    let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
     // this call will block until the PDDB is mounted.
+    let boot_time = ClockValue::new(tt.elapsed_ms() as i64, 1000);
     let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
     //let mut ctap_hid = CtapHid::new();
 
@@ -157,16 +158,19 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
+fn check_user_presence(cid: ChannelID) -> Result<(), Ctap2StatusCode> {
+    Ok(())
+}
 /*
 const KEEPALIVE_DELAY_MS: isize = 100;
-const KEEPALIVE_DELAY: Duration<isize> = Duration::from_ms(KEEPALIVE_DELAY_MS);
-const SEND_TIMEOUT: Duration<isize> = Duration::from_ms(1000);
+const KEEPALIVE_DELAY: Duration<i64> = Duration::from_ms(KEEPALIVE_DELAY_MS);
+const SEND_TIMEOUT: Duration<i64> = Duration::from_ms(1000);
 
 
 // Returns whether the keepalive was sent, or false if cancelled.
 fn send_keepalive_up_needed(
     cid: ChannelID,
-    timeout: Duration<isize>,
+    timeout: Duration<i64>,
 ) -> Result<(), Ctap2StatusCode> {
     let keepalive_msg = CtapHid::keepalive(cid, KeepaliveStatus::UpNeeded);
     for mut pkt in keepalive_msg {
