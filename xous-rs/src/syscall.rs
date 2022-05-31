@@ -546,7 +546,7 @@ impl SysCall {
                 a1.map(|x| x.get()).unwrap_or_default(),
                 a2.map(|x| x.get()).unwrap_or_default(),
                 a3.get(),
-                crate::get_bits(a4),
+                a4.bits(),
                 0,
                 0,
                 0,
@@ -651,7 +651,7 @@ impl SysCall {
             SysCall::IncreaseHeap(a1, a2) => [
                 SysCallNumber::IncreaseHeap as usize,
                 *a1 as usize,
-                crate::get_bits(a2),
+                a2.bits(),
                 0,
                 0,
                 0,
@@ -672,7 +672,7 @@ impl SysCall {
                 SysCallNumber::UpdateMemoryFlags as usize,
                 a1.as_mut_ptr() as usize,
                 a1.len(),
-                crate::get_bits(a2),
+                a2.bits(),
                 a3.map(|m| m.get() as usize).unwrap_or(0),
                 0,
                 0,
@@ -894,7 +894,7 @@ impl SysCall {
                 MemoryAddress::new(a1),
                 MemoryAddress::new(a2),
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
-                crate::from_bits(a4).ok_or(Error::InvalidSyscall)?,
+                crate::MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::UnmapMemory => SysCall::UnmapMemory(unsafe {
                 MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))
@@ -918,12 +918,12 @@ impl SysCall {
             SysCallNumber::ReadyThreads => SysCall::ReadyThreads(pid_from_usize(a1)?),
             SysCallNumber::IncreaseHeap => SysCall::IncreaseHeap(
                 a1 as usize,
-                crate::from_bits(a2).ok_or(Error::InvalidSyscall)?,
+                crate::MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::DecreaseHeap => SysCall::DecreaseHeap(a1 as usize),
             SysCallNumber::UpdateMemoryFlags => SysCall::UpdateMemoryFlags(
                 unsafe { MemoryRange::new(a1, a2) }?,
-                crate::from_bits(a3).ok_or(Error::InvalidSyscall)?,
+                crate::MemoryFlags::from_bits(a3).ok_or(Error::InvalidSyscall)?,
                 PID::new(a4 as _),
             ),
             SysCallNumber::SetMemRegion => SysCall::SetMemRegion(
@@ -1774,10 +1774,7 @@ fn handle_exception(exception_type: usize, arg1: usize, arg2: usize) -> isize {
 pub fn set_exception_handler(
     handler: fn(crate::Exception) -> isize,
 ) -> core::result::Result<(), Error> {
-    #[cfg(feature = "bit-flags")]
     let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
-    #[cfg(not(feature = "bit-flags"))]
-    let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
 
     let stack = crate::map_memory(None, None, 131_072, flags)?;
     EXCEPTION_HANDLER.store(handler as usize, core::sync::atomic::Ordering::SeqCst);

@@ -15,6 +15,7 @@ pub mod carton;
 pub mod definitions;
 
 pub mod process;
+pub mod services;
 pub mod string;
 pub mod stringbuffer;
 pub mod syscall;

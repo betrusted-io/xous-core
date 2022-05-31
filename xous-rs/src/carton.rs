@@ -19,10 +19,7 @@ impl<'a> Carton<'a> {
         let remainder = bytes.len() & 4095;
         let size = bytes.len() + (4096 - remainder);
 
-        #[cfg(feature = "bit-flags")]
         let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
-        #[cfg(not(feature = "bit-flags"))]
-        let flags = 0b0000_0010 | 0b0000_0100;
 
         let new_mem = crate::map_memory(None, None, size, flags).unwrap();
 
