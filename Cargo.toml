@@ -34,7 +34,6 @@ members = [
   "xous-ipc",
   "xous-rs",
   "tools",
-  "macros",
   "services/aes-test",
   "services/graphics-server",
   "services/log-server",
@@ -102,7 +101,6 @@ incremental = true
 
 [patch.crates-io]
 xous = {path = "xous-rs"}
-xous-macros = {path = "macros"}
 
 # prefer hardware-accelerated versions of services
 [patch.crates-io.sha2]

@@ -2402,7 +2402,6 @@ dependencies = [
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc",
- "rand_pcg",
 ]
 
 [[package]]
@@ -2459,15 +2458,6 @@ name = "rand_hc"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
-dependencies = [
- "rand_core 0.5.1",
-]
-
-[[package]]
-name = "rand_pcg"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
 dependencies = [
  "rand_core 0.5.1",
 ]
@@ -3998,11 +3988,9 @@ checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
 name = "xous"
 version = "0.9.7"
 dependencies = [
- "bitflags",
  "compiler_builtins",
  "lazy_static",
  "rustc-std-workspace-core",
- "xous-macros",
 ]
 
 [[package]]
@@ -4023,16 +4011,6 @@ dependencies = [
  "bitflags",
  "rkyv",
  "xous",
-]
-
-[[package]]
-name = "xous-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "rand 0.7.3",
- "syn",
 ]
 
 [[package]]
