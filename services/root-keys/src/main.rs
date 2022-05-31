@@ -297,8 +297,7 @@ mod implementation {
 }
 
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();

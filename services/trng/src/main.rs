@@ -749,8 +749,7 @@ fn tester_thread(csr: usize) {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::implementation::Trng;
 
     log_server::init_wait().unwrap();

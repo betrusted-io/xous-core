@@ -10,8 +10,7 @@ use log::{error, info};
 use num_traits::FromPrimitive;
 use xous_ipc::Buffer;
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     info!("BENCHTARGET: my PID is {}", xous::process::id());
 

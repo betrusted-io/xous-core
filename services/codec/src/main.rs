@@ -20,8 +20,7 @@ struct ScalarCallback {
     cb_to_client_id: u32,
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());

@@ -173,8 +173,7 @@ fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
     icmp_handle
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());

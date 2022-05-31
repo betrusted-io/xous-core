@@ -592,8 +592,7 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 }
 
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::implementation::Spinor;
 
     log_server::init_wait().unwrap();
