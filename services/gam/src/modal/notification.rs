@@ -106,7 +106,7 @@ impl Notification {
         ));
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
     }
-    fn draw_qrcode(&self, at_height: i16, modal: &Modal) {            
+    fn draw_qrcode(&self, at_height: i16, modal: &Modal) {
         // calculate pixel size of each module in the qrcode
         let qrcode_modules: i16 = self.qrwidth.try_into().unwrap();
         let modules: i16 = qrcode_modules + 2 * QUIET_MODULES;
@@ -118,7 +118,7 @@ impl Notification {
         // Iterate thru qrcode and stamp each square module like a typewriter
         let black = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         let top = at_height + 4 * modal.margin + quiet_px;
-        
+
         let left = modal.margin + quiet_px;
         let right = left + qrcode_modules * mod_size_px;
         let mut module = Rectangle::new_with_style(
@@ -140,7 +140,7 @@ impl Notification {
                     .gam
                     .draw_rectangle(modal.canvas, module)
                     .expect("couldn't draw qrcode module");
-            }            
+            }
             module.translate(step);
         }
     }
