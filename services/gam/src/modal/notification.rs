@@ -195,7 +195,7 @@ impl ActionApi for Notification {
                 if self.manual_dismiss {
                     send_message(
                         self.action_conn,
-                        xous::Message::new_scalar(self.action_opcode as usize, 0, 0, 0, 0),
+                        xous::Message::new_scalar(self.action_opcode as usize, k as u32 as usize, 0, 0, 0),
                     )
                     .expect("couldn't pass on dismissal");
                     return (None, true);
