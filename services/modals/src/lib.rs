@@ -410,6 +410,36 @@ impl Modals {
         self.unlock();
         Ok(())
     }
+    /// If a dynamic notification is active, this will block and return only if one of two
+    /// conditions are met:
+    /// 1. a key is pressed, in which case, the `Some(char)` is the key pressed. If there is a
+    ///    "fat finger" event, only the first character is reported.
+    /// 2. the dynamic notification is closed, in which case a `None` is reported.
+    pub fn dynamic_notification_blocking_listener(&self) -> Result<Option<char>, xous::Error> {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                Opcode::ListenToDynamicNotification.to_usize().unwrap(),
+                self.token[0] as usize,
+                self.token[1] as usize,
+                self.token[2] as usize,
+                self.token[3] as usize,
+            ),
+        ).expect("couldn't listen") {
+            xous::Result::Scalar2(is_some, code) => {
+                if is_some == 1 {
+                    let c = char::from_u32(code as u32).unwrap_or('\u{0000}');
+                    Ok(Some(c))
+                } else if is_some == 2 {
+                    log::warn!("Attempt to listen, but did not have the mutex. Aborted.");
+                    Ok(None)
+                } else {
+                    Ok(None)
+                }
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
 
     /// Blocks until we have a lock on the modals server
     fn lock(&self) {

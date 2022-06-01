@@ -139,6 +139,8 @@ fn main() -> ! {
     ];
     let mut work_queue = Vec::<(xous::MessageSender, [u32; 4])>::new();
 
+    let mut dynamic_notification_listener: Option<xous::MessageSender> = None;
+
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
         log::debug!("message: {:?}", msg);
@@ -327,6 +329,10 @@ fn main() -> ! {
                     log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
                     continue;
                 }
+                if let Some(sender) = dynamic_notification_listener.take() {
+                    // unblock the listener with no key hit response
+                    xous::return_scalar2(sender, 0, 0,).unwrap();
+                }
                 send_message(
                     renderer_cid,
                     Message::new_scalar(
@@ -372,6 +378,14 @@ fn main() -> ! {
                     renderer_modal.redraw();
                     xous::yield_slice(); // give time for the GAM to redraw
                 }
+            }),
+            Some(Opcode::ListenToDynamicNotification) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
+                let incoming_token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
+                if incoming_token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    xous::return_scalar2(msg.sender, 2, 0).unwrap();
+                }
+                dynamic_notification_listener = Some(msg.sender); // this defers the response, blocking the caller, while we can proceed onwards.
             }),
 
             // ------------------ INTERNAL APIS --------------------
@@ -520,7 +534,7 @@ fn main() -> ! {
                         }
                         let mut gutter = gam::modal::Notification::new(
                             renderer_cid,
-                            Opcode::Gutter.to_u32().unwrap(),
+                            Opcode::HandleDynamicNotificationKeyhit.to_u32().unwrap(),
                         );
                         gutter.set_manual_dismiss(false);
                         renderer_modal.modify(
@@ -583,7 +597,12 @@ fn main() -> ! {
                 renderer_modal.gam.relinquish_focus().unwrap();
                 op = RendererState::None;
                 token_lock = next_lock(&mut work_queue);
-            }
+            },
+            Some(Opcode::HandleDynamicNotificationKeyhit) => msg_scalar_unpack!(msg, k, _, _, _, {
+                if let Some(sender) = dynamic_notification_listener.take() {
+                    xous::return_scalar2(sender, 1, k).unwrap();
+                }
+            }),
             Some(Opcode::TextEntryReturn) => match op {
                 RendererState::RunText(_config) => {
                     log::trace!("validating text entry modal");
