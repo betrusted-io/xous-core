@@ -10,7 +10,6 @@ pub use usbd_human_interface_device::page::Keyboard as UsbKeyCode;
 use packed_struct::PackedStruct;
 use xous_ipc::Buffer;
 pub use usbd_human_interface_device::device::fido::FidoMsg;
-use core::ops::{Deref, DerefMut};
 
 pub enum UsbDeviceType {
     Debug = 0,
@@ -212,7 +211,7 @@ impl UsbHid {
         let ack = buf.to_original::<U2fMsgIpc, _>().unwrap();
         assert_eq!(ack.code, U2fCode::RxAck, "Expected U2fCode::RxAck");
         let mut u2fmsg = FidoMsg::default();
-        u2fmsg.deref_mut().copy_from_slice(&ack.data);
+        u2fmsg.packet.copy_from_slice(&ack.data);
         Ok(u2fmsg)
     }
     pub fn u2f_send(&self, msg: FidoMsg) -> Result<(), xous::Error> {
@@ -220,9 +219,9 @@ impl UsbHid {
             data: [0; 64],
             code: U2fCode::Tx
         };
-        req.data.copy_from_slice(&msg.deref());
+        req.data.copy_from_slice(&msg.packet);
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::U2fRxDeferred.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::U2fTx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let ack = buf.to_original::<U2fMsgIpc, _>().unwrap();
         match ack.code {
             U2fCode::TxAck => Ok(()),

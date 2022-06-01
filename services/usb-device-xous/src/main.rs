@@ -29,9 +29,6 @@ use usbd_human_interface_device::device::fido::FidoMsg;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usbd_human_interface_device::device::fido::FidoInterface;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
-use core::ops::DerefMut;
-#[cfg(any(target_os = "none", target_os = "xous"))]
-use core::ops::Deref;
 use core::num::NonZeroU8;
 use std::collections::BTreeMap;
 
@@ -74,7 +71,7 @@ impl Clock for EmbeddedClock {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -194,6 +191,11 @@ fn main() -> ! {
                     // the receiver will get a response with the `code` field still in the `RxWait` state to indicate the problem
                 }
                 if fido_listener_pid == msg.sender.pid() {
+                    {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                        log::info!("registering listener: {:?}", u2f_ipc);
+                    }
                     fido_listener = Some(msg);
                 } else {
                     log::warn!("U2F interface capability is locked on first use; additional servers are ignored: {:?}", msg.sender);
@@ -212,7 +214,8 @@ fn main() -> ! {
                 if fido_listener_pid == msg.sender.pid() {
                     let mut u2f_msg = FidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
-                    u2f_msg.deref_mut().copy_from_slice(&u2f_ipc.data);
+                    u2f_msg.packet.copy_from_slice(&u2f_ipc.data);
+                    log::info!("send U2F packet {:?}", u2f_ipc.data);
                     #[cfg(any(target_os = "none", target_os = "xous"))]
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
                     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -243,7 +246,7 @@ fn main() -> ! {
                                 };
                                 let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
                                 assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
-                                buf.data.copy_from_slice(&u2f_report.deref());
+                                buf.data.copy_from_slice(&u2f_report.packet);
                                 buf.code = U2fCode::RxAck;
                                 response.replace(buf).unwrap();
                             } else {
