@@ -64,6 +64,7 @@ const CRED_INITAL_SIZE: usize = 512;
 //
 // With P=20 and K=150, we have I=2M which is enough for 500 increments per day for 10 years.
 const NUM_PAGES: usize = 20;
+#[allow(dead_code)] // OpenSK legacy
 const MAX_SUPPORTED_RESIDENTIAL_KEYS: usize = 150;
 
 const MAX_PIN_RETRIES: u8 = 8;
@@ -559,10 +560,9 @@ impl PersistentStore {
             Some(1), None::<fn()>
         ) {
             Ok(mut pl) => {
-                if pl.write(min_pin_length) == Ok(1) {
-                    Ok(())
-                } else {
-                    Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                match pl.write(&[min_pin_length]) {
+                    Ok(1) => Ok(()),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
                 }
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
@@ -613,8 +613,8 @@ impl PersistentStore {
             Some(_MAX_RP_IDS_LENGTH), None::<fn()>
         ) {
             Ok(mut mrpli) => {
-                mprli.write(&_serialize_min_pin_length_rp_ids(min_pin_length_rp_ids)?)
-                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
+                mrpli.write(&_serialize_min_pin_length_rp_ids(min_pin_length_rp_ids)?)
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)).map(|_|())
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
         }
@@ -733,6 +733,7 @@ impl PersistentStore {
     /// Sets the AAGUID.
     ///
     /// If it is already defined, it is overwritten.
+    #[allow(dead_code)]
     pub fn set_aaguid(
         &mut self,
         aaguid: &[u8; key_material::AAGUID_LENGTH],

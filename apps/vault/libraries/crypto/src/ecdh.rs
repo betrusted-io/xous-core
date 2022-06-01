@@ -44,7 +44,8 @@ pub struct SecKey {
     a: EphemeralSecret,
 }
 
-#[cfg_attr(not(target_os = "xous"), derive(Clone, PartialEq, Debug))]
+//#[cfg_attr(test, derive(Clone, PartialEq, Debug))]
+#[derive(Clone, PartialEq, Debug)]
 pub struct PubKey {
     // pub p: EncodedPoint,
     pub p: PublicKey,

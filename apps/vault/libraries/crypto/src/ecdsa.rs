@@ -208,7 +208,8 @@ impl PubKey {
             _ => None
         }
     }
-    //#[cfg(test)]
+    //#[cfg(test)] - commented out because for some reason we can't get the test configs to work right
+    #[allow(dead_code)]
     fn to_bytes_uncompressed(&self, bytes: &mut [u8; 65]) {
         // not sure if this is correct -- we'll find out when we run the tests
         // this generates a SEC1 EncodedPoint, but I'm not sure if that's the same thing as
@@ -222,12 +223,13 @@ impl PubKey {
 
     #[cfg(feature = "with_ctap1")]
     pub fn to_uncompressed(&self) -> [u8; PubKey::UNCOMPRESSED_LENGTH] {
+        use arrayref::mut_array_refs;
         // Formatting according to:
         // https://tools.ietf.org/id/draft-jivsov-ecc-compact-05.html#overview
         const B0_BYTE_MARKER: u8 = 0x04;
         let mut representation = [0; PubKey::UNCOMPRESSED_LENGTH];
         let (marker, x, y) =
-            mut_array_refs![&mut representation, 1, int256::NBYTES, int256::NBYTES];
+            mut_array_refs![&mut representation, 1, INT256_NBYTES, INT256_NBYTES];
         marker[0] = B0_BYTE_MARKER;
         x.copy_from_slice(
             self.p

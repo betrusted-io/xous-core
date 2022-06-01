@@ -97,7 +97,7 @@ const AT_FLAG: u8 = 0x40;
 // Set this bit when an extension is used.
 const ED_FLAG: u8 = 0x80;
 
-pub const TOUCH_TIMEOUT_MS: isize = 30000;
+pub const TOUCH_TIMEOUT_MS: i64 = 30000;
 #[cfg(feature = "with_ctap1")]
 const U2F_UP_PROMPT_TIMEOUT: Duration<i64> = Duration::from_ms(10000);
 const RESET_TIMEOUT_DURATION: Duration<i64> = Duration::from_ms(10000);
@@ -1273,7 +1273,7 @@ mod test {
         );
     }
 
-    #[test]
+    #[test] // this exhibits compilation errors in some configs
     fn test_process_make_credential_credential_with_cred_protect() {
         let mut rng = ThreadRng256 {};
         let user_immediately_present = |_| Ok(());
@@ -1929,7 +1929,7 @@ mod test {
         );
     }
 
-    #[test]
+    #[test] // this exhibits compilation errors in some configs
     fn test_process_get_next_assertion_not_allowed() {
         let mut rng = ThreadRng256 {};
         let user_immediately_present = |_| Ok(());

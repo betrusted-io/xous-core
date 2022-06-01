@@ -15,6 +15,7 @@
 use std::stringify;
 
 /// Number of keys that persist the CTAP reset command.
+#[allow(dead_code)] // OpenSK legacy
 pub const NUM_PERSISTENT_KEYS: usize = 20;
 
 /// Helper to define keys as a partial partition of a range.
@@ -62,7 +63,7 @@ define_names! {
     ///
     /// Depending on `MAX_SUPPORTED_RESIDENTIAL_KEYS`, only a prefix of those keys is used. Each
     /// board may configure `MAX_SUPPORTED_RESIDENTIAL_KEYS` depending on the storage size.
-    CREDENTIALS = 1700..2000;
+    // CREDENTIALS = 1700..2000;
 
     /// The secret of the CredRandom feature.
     CRED_RANDOM_SECRET = 2041;

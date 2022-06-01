@@ -35,4 +35,6 @@ enum-iterator = "0.6.0"
 
 [features]
 tts = []
-default = []
+with_ctap1 = ["ctap-crypto/with_ctap1"]
+with_ctap2_1 = []
+default = ["with_ctap1", "with_ctap2_1"]

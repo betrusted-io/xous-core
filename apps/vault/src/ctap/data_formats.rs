@@ -104,7 +104,8 @@ impl From<PublicKeyCredentialUserEntity> for cbor::Value {
 
 // https://www.w3.org/TR/webauthn/#enumdef-publickeycredentialtype
 #[derive(Clone, PartialEq)]
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+//#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+#[derive(Debug)]
 pub enum PublicKeyCredentialType {
     PublicKey,
     // This is the default for all strings not covered above.
@@ -456,7 +457,8 @@ impl TryFrom<cbor::Value> for SignatureAlgorithm {
 }
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+//#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+#[derive(Debug)]
 #[cfg_attr(test, derive(IntoEnumIterator))]
 pub enum CredentialProtectionPolicy {
     UserVerificationOptional = 0x01,
@@ -503,7 +505,7 @@ pub struct PublicKeyCredentialSource {
     pub user_name: Option<String>,
     pub user_icon: Option<String>,
 }
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+
 impl std::fmt::Debug for PublicKeyCredentialSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PublicKeyCredentialSource")
