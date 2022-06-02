@@ -177,6 +177,7 @@ impl CtapHid {
                 match message.cmd {
                     // CTAP specification (version 20190130) section 8.1.9.1.1
                     CtapHid::COMMAND_MSG => {
+                        log::debug!("COMMAND_MSG");
                         // If we don't have CTAP1 backward compatibilty, this command in invalid.
                         #[cfg(not(feature = "with_ctap1"))]
                         return CtapHid::error_message(cid, CtapHid::ERR_INVALID_CMD);
@@ -195,6 +196,7 @@ impl CtapHid {
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.2
                     CtapHid::COMMAND_CBOR => {
+                        log::debug!("COMMAND_CBOR");
                         // CTAP specification (version 20190130) section 8.1.5.1
                         // Each transaction is atomic, so we process the command directly here and
                         // don't handle any other packet in the meantime.
@@ -227,6 +229,7 @@ impl CtapHid {
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.3
                     CtapHid::COMMAND_INIT => {
+                        log::debug!("COMMAND_INIT");
                         if message.payload.len() != 8 {
                             return CtapHid::error_message(cid, CtapHid::ERR_INVALID_LEN);
                         }
@@ -259,6 +262,7 @@ impl CtapHid {
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.4
                     CtapHid::COMMAND_PING => {
+                        log::debug!("COMMAND_PING");
                         // Pong the same message.
                         // This unwrap is safe because if we could parse the incoming message, it's
                         // payload length must be <= 7609 bytes.
@@ -266,6 +270,7 @@ impl CtapHid {
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.5
                     CtapHid::COMMAND_CANCEL => {
+                        log::debug!("COMMAND_CANCEL");
                         // Authenticators MUST NOT reply to this message.
                         // CANCEL is handled during user presence checks in main.
                         HidPacketIterator::none()
@@ -273,6 +278,7 @@ impl CtapHid {
                     // Optional commands
                     // CTAP specification (version 20190130) section 8.1.9.2.1
                     CtapHid::COMMAND_WINK => {
+                        log::debug!("COMMAND_WINK");
                         if !message.payload.is_empty() {
                             return CtapHid::error_message(cid, CtapHid::ERR_INVALID_LEN);
                         }
@@ -288,6 +294,7 @@ impl CtapHid {
                     // CTAP specification (version 20190130) section 8.1.9.2.2
                     // TODO: implement LOCK
                     _ => {
+                        log::debug!("ERR_INVALID_CMD");
                         // Unknown or unsupported command.
                         CtapHid::error_message(cid, CtapHid::ERR_INVALID_CMD)
                     }

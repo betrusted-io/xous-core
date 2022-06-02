@@ -89,8 +89,10 @@ impl MessageAssembler {
         // TODO: Support non-full-speed devices (i.e. packet len != 64)? This isn't recommended by
         // section 8.8.1
         let (cid, processed_packet) = CtapHid::process_single_packet(&packet);
+        log::debug!("parsed cid: {:x?}", cid);
 
         if !self.idle && timestamp - self.last_timestamp >= CtapHid::TIMEOUT_DURATION {
+            log::debug!("parse timeout");
             // The current channel timed out.
             // Save the channel ID and reset the state.
             let current_cid = self.cid;
@@ -107,9 +109,11 @@ impl MessageAssembler {
             // Expecting an initialization packet.
             match processed_packet {
                 ProcessedPacket::InitPacket { cmd, len, data } => {
+                    log::debug!("init packet cmd: {:x}", cmd);
                     Ok(self.accept_init_packet(*cid, cmd, len, data, timestamp))
                 }
                 ProcessedPacket::ContinuationPacket { .. } => {
+                    log::debug!("spurious continuation");
                     // CTAP specification (version 20190130) section 8.1.5.4
                     // Spurious continuation packets will be ignored.
                     Err((*cid, Error::UnexpectedContinuation))
@@ -121,12 +125,14 @@ impl MessageAssembler {
             // CTAP specification (version 20190130) section 8.1.5.1
             // Reject packets from other channels.
             if *cid != self.cid {
+                log::debug!("unexpected channel");
                 return Err((*cid, Error::UnexpectedChannel));
             }
 
             match processed_packet {
                 // Unexpected initialization packet.
                 ProcessedPacket::InitPacket { cmd, len, data } => {
+                    log::debug!("unexpected init");
                     self.reset();
                     if cmd == CtapHid::COMMAND_INIT {
                         Ok(self.accept_init_packet(*cid, cmd, len, data, timestamp))
@@ -135,6 +141,7 @@ impl MessageAssembler {
                     }
                 }
                 ProcessedPacket::ContinuationPacket { seq, data } => {
+                    log::debug!("continuation");
                     if seq != self.seq {
                         // Reject packets with the wrong sequence number.
                         self.reset();

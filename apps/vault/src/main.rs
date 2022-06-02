@@ -71,20 +71,43 @@ pub(crate) const SERVER_NAME_VAULT: &str = "Key Vault";
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
-    let xns = xous_names::XousNames::new().unwrap();
     // let's try keeping this completely private as a server. can we do that?
     let sid = xous::create_server().unwrap();
 
     let _ = thread::spawn({
         move || {
+            let xns = xous_names::XousNames::new().unwrap();
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            let boot_time = ClockValue::new(tt.elapsed_ms() as i64, 1000);
+
+            let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
+            // this call will block until the PDDB is mounted.
             let usb = usb_device_xous::UsbHid::new();
+            let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
+            let mut ctap_hid = CtapHid::new();
             loop {
                 match usb.u2f_wait_incoming() {
                     Ok(msg) => {
                         log::info!("FIDO listener got message: {:?}", msg);
+                        let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
+                        let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
+                        // This block handles sending packets.
+                        for mut pkt_reply in reply {
+                            let mut reply = FidoMsg::default();
+                            reply.packet.copy_from_slice(&pkt_reply);
+                            let status = usb.u2f_send(reply);
+                            match status {
+                                Ok(()) => {
+                                    log::debug!("Sent U2F packet");
+                                }
+                                Err(e) => {
+                                    log::error!("Error sending U2F packet: {:?}", e);
+                                }
+                            }
+                        }
                     }
                     Err(e) => {
                         log::warn!("FIDO listener got an error: {:?}", e);
@@ -94,13 +117,7 @@ fn main() -> ! {
         }
     });
 
-    let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
-    let tt = ticktimer_server::Ticktimer::new().unwrap();
-    // this call will block until the PDDB is mounted.
-    let boot_time = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-    let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
-    let mut ctap_hid = CtapHid::new();
-
+    let xns = xous_names::XousNames::new().unwrap();
     let mut repl = Repl::new(&xns, sid);
     let mut update_repl = true;
     let mut was_callback = false;
@@ -159,14 +176,14 @@ fn main() -> ! {
 }
 
 fn check_user_presence(cid: ChannelID) -> Result<(), Ctap2StatusCode> {
+    log::warn!("check user presence called, but not implemented!");
     Ok(())
 }
-/*
-const KEEPALIVE_DELAY_MS: isize = 100;
+const KEEPALIVE_DELAY_MS: i64 = 100;
 const KEEPALIVE_DELAY: Duration<i64> = Duration::from_ms(KEEPALIVE_DELAY_MS);
 const SEND_TIMEOUT: Duration<i64> = Duration::from_ms(1000);
 
-
+/*
 // Returns whether the keepalive was sent, or false if cancelled.
 fn send_keepalive_up_needed(
     cid: ChannelID,
