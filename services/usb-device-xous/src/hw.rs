@@ -11,19 +11,6 @@ fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
     let pending = usb.csr.r(utra::usbdev::EV_PENDING);
 
-    let interrupts = usb.regs.interrupts();
-    // set the NACK on any EP with an interrupt pending, until it can be handled
-    if interrupts.endpoint() != 0 {
-        let mut bit: u16 = 1; // start with ep1, as ep0 gets special handling for NACK
-        while bit < 16 {
-            if ((1 << bit) & interrupts.endpoint()) != 0 {
-                let mut ep_status = usb.status_read_volatile(bit as usize);
-                ep_status.set_force_nack(true);
-                usb.status_write_volatile(bit as usize, ep_status);
-            }
-            bit += 1;
-        }
-    }
     // actual interrupt handling is done in userspace, this just triggers the routine
 
     usb.csr.wo(utra::usbdev::EV_PENDING, pending);
@@ -591,7 +578,7 @@ impl UsbBus for SpinalUsbDevice {
                     descriptor.set_next_desc_and_len(0, buf.len());
                 }
                 // this is required to commit the ep_status record once all the setup is done
-                ep_status.set_force_nack(false);
+
                 self.status_write_volatile(ep_addr.index(), ep_status);
                 //let epcheck = self.status_read_volatile(ep_addr.index());
                 //log::trace!("ep0 sanity check: {:?}", epcheck);
@@ -674,9 +661,13 @@ impl UsbBus for SpinalUsbDevice {
                 // it essentially inserts the delay in every path). Anyways, the notes are here, and maybe someday we'll
                 // get to the bottom of it. But for now it seems to work well enough and the performance is "fine" for
                 // a USB HID style interface.
-                self.tt.sleep_ms(1).ok();
+                //
+                // N.B.: I *think* this got solved when we also solved the spurious read interrupt issue.
+                //self.tt.sleep_ms(1).ok();
 
                 if (self.read_allowed.load(Ordering::Relaxed) & (1 << ep_addr.index() as u16)) == 0 {
+                    // we do get spurious reads on EP0 transactions, so this code prevents these from proceeding
+                    // this is because the EP0 interrupt will fire off a poll event that also causes a read of all the endpoints.
                     // the interrupt hasn't triggered, don't allow the read
                     return Err(UsbError::WouldBlock);
                 } else {
@@ -697,9 +688,6 @@ impl UsbBus for SpinalUsbDevice {
                     return Err(UsbError::WouldBlock);
                 }
                 let mut len = descriptor.offset();
-                if !ep_status.force_nack() {
-                    log::error!("read ep{} nack was not set", ep_addr.index());
-                }
                 if buf.len() < len {
                     log::error!("read ep{} overflows: {} < {}", ep_addr.index(), buf.len(), len);
                     // just return a truncated set of data
@@ -726,7 +714,6 @@ impl UsbBus for SpinalUsbDevice {
                 descriptor.set_desc_flags(UsbDirection::Out,
                     true, true, false);
 
-                ep_status.set_force_nack(false); // turn off the forced nack
                 // this auto-toggles ep_status.set_data_phase(!ep_status.data_phase()); // toggle the data phase
                 self.status_write_volatile(ep_addr.index(), ep_status);
 
@@ -843,10 +830,6 @@ impl UsbBus for SpinalUsbDevice {
                             ep_out |= 1 << bit;
                         } else {
                             ep_in_complete |= 1 << bit;
-                            // we do a fresh read so we aren't also accidentally setting up the descriptors pointer
-                            let mut ep_in_nack_clr = self.status_read_volatile(bit);
-                            ep_in_nack_clr.set_force_nack(false); // this is set by the interrupt handler, clear it for INs (we only want it for OUTs)
-                            self.status_write_volatile(bit, ep_in_nack_clr);
                         }
                         ints_to_clear.set_endpoint(1 << bit);
 
