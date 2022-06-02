@@ -390,10 +390,29 @@ impl UsbBus for SpinalUsbDevice {
                     descriptor.set_next_desc_and_len(0, max_packet_size as _);
                     descriptor.set_desc_flags(
                         ep_dir,
-                        true,
-                        true, // this should be equal to "packet_end", but this driver doesn't have that...?
+                        ep_dir == UsbDirection::Out,
+                        ep_dir == UsbDirection::Out, // this should be equal to "packet_end", but this driver doesn't have that...?
                         index == 0, // only trigger for ep0 (per spinal linux driver)
                     );
+                    // clear the descriptor to 0
+                    let init_vec = vec![0u8; max_packet_size as _];
+                    for (index, src) in init_vec.chunks_exact(4).enumerate() {
+                        let w = u32::from_le_bytes(src.try_into().unwrap());
+                        descriptor.write_data(index, w);
+                    }
+                    if init_vec.len() % 4 != 0 { // handle the odd remainder case
+                        let mut remainder = [0u8; 4];
+                        for (index, &src) in init_vec.chunks_exact(4).remainder().iter().enumerate() {
+                            remainder[index] = src;
+                        }
+                        descriptor.write_data(init_vec.len() / 4, u32::from_le_bytes(remainder));
+                    }
+
+                    if index != 0 { // disable tranmission on the In descriptor as there's nothing to send
+                        if ep_dir == UsbDirection::In {
+                            ep_status.set_head_offset(0);
+                        }
+                    }
 
                     if index == 0 {
                         // stash a copy of the ep0 IN head location, because the SETUP packet resets this to 0
@@ -467,6 +486,9 @@ impl UsbBus for SpinalUsbDevice {
                     ep_status.set_head_offset(head_offset as u32);
                     ep_status.set_data_phase(false); // reset to data0
                     let descriptor = self.descriptor_from_status(&ep_status);
+                    if descriptor.direction() == UsbDirection::In {
+                        ep_status.set_head_offset(0);
+                    }
                     self.status_write_volatile(index, ep_status);
                     descriptor.set_offset(0); // reset the pointer to 0, and sets phase
                 }
@@ -528,7 +550,13 @@ impl UsbBus for SpinalUsbDevice {
 
                 let descriptor = self.descriptor_from_status(&ep_status);
                 descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
-                descriptor.set_desc_flags(UsbDirection::In, true, true, false);
+                if ep_addr.index() != 0 {
+                    descriptor.set_desc_flags(UsbDirection::In,
+                        false, false, false);
+                } else {
+                    descriptor.set_desc_flags(UsbDirection::In,
+                        true, true, false);
+                }
                 for (index, src) in buf.chunks_exact(4).enumerate() {
                     let w = u32::from_le_bytes(src.try_into().unwrap());
                     descriptor.write_data(index, w);
@@ -565,13 +593,13 @@ impl UsbBus for SpinalUsbDevice {
                 // this is required to commit the ep_status record once all the setup is done
                 ep_status.set_force_nack(false);
                 self.status_write_volatile(ep_addr.index(), ep_status);
-                let epcheck = self.status_read_volatile(ep_addr.index());
-                log::trace!("ep0 sanity check: {:?}", epcheck);
-                log::trace!("desc0 sanity check: {:?}", self.descriptor_from_status(&epcheck));
+                //let epcheck = self.status_read_volatile(ep_addr.index());
+                //log::trace!("ep0 sanity check: {:?}", epcheck);
+                //log::trace!("desc0 sanity check: {:?}", self.descriptor_from_status(&epcheck));
 
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                 if ep_addr.index() != 0 {
-                    log::debug!("ep{} write: {:x?}", ep_addr.index(), &buf);
+                    log::info!("ep{} write: {:x?}", ep_addr.index(), &buf);
                 }
                 Ok(buf.len())
             }
@@ -665,6 +693,7 @@ impl UsbBus for SpinalUsbDevice {
                     // "early polls" happen because the main loop can be sloppy and request a read report at any time,
                     // not just when there's an interrupt.
                     // return before side-effecting any structures
+                    log::warn!("WouldBlock {:?}", ep_addr);
                     return Err(UsbError::WouldBlock);
                 }
                 let mut len = descriptor.offset();
@@ -694,7 +723,8 @@ impl UsbBus for SpinalUsbDevice {
                 // setup for the next transaction
                 descriptor.set_next_desc_and_len(0, buf.len());
                 descriptor.set_offset(0); // reset the read pointer to 0, also sets in_progress
-                descriptor.set_desc_flags(UsbDirection::Out, true, true, false);
+                descriptor.set_desc_flags(UsbDirection::Out,
+                    true, true, false);
 
                 ep_status.set_force_nack(false); // turn off the forced nack
                 // this auto-toggles ep_status.set_data_phase(!ep_status.data_phase()); // toggle the data phase
@@ -820,7 +850,7 @@ impl UsbBus for SpinalUsbDevice {
                         }
                         ints_to_clear.set_endpoint(1 << bit);
 
-                        if true { // full low-level readback
+                        if false { // full low-level readback
                             if bit != 0 {
                                 log::info!("status{}: {:?}", bit, self.status_read_volatile(bit));
                                 log::info!("desc{}: {:?}", bit, self.descriptor_from_status(&self.status_read_volatile(bit)));
