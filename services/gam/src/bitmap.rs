@@ -82,8 +82,7 @@ impl Bitmap {
         (x * y) as u32
     }
 
-    #[allow(dead_code)]
-    fn size(&self) -> (usize, usize) {
+    pub fn size(&self) -> (usize, usize) {
         (self.bound.br.x as usize, self.bound.br.y as usize)
     }
 
@@ -137,9 +136,12 @@ impl Bitmap {
         self.get_tile(point).get_line(point)
     }
 
-    #[allow(dead_code)]
     fn get_word(&self, point: Point) -> Word {
         self.get_tile(point).get_word(point)
+    }
+
+    fn set_word(&mut self, point: Point, word: Word) {
+        self.get_mut_tile(point).set_word(point, word);
     }
 
     pub fn get_pixel(&self, point: Point) -> PixelColor {
@@ -154,6 +156,53 @@ impl Bitmap {
         for tile in self.mosaic.as_mut_slice() {
             tile.translate(offset);
         }
+    }
+
+    pub fn rotate90(&mut self) -> Self {
+        let bits_per_word: i16 = BITS_PER_WORD.try_into().unwrap();
+        let (size_x, size_y) = self.size();
+        let size_x: i16 = size_x.try_into().unwrap();
+        let size_y: i16 = size_y.try_into().unwrap();
+        let mut r90 = Bitmap::new(Point::new(size_y, size_x));
+        let (_, r90_size_y) = r90.size();
+
+        let mut x: i16 = 0;
+        let mut r90_y = 0;
+        let mut block: [Word; BITS_PER_WORD] = [0; BITS_PER_WORD];
+        while x < size_x {
+            let mut y = size_y - 1;
+            let mut r90_x = 0;
+            // extract a square block of bits - ie 32 x u32 words
+            // beginning from bottom-left, and progressing up in strips, from left to right
+            while y >= 0 {
+                let mut b = 0;
+                while b < block.len() {
+                    block[b] = if y >= 0 {
+                        self.get_word(Point::new(x, y))
+                    } else {
+                        0
+                    };
+                    y -= 1;
+                    b += 1;
+                }
+                // rotate the block and write to r90
+                // beginning from top-left, and progressing right in strips, from top to bottom
+                for w in 0..bits_per_word {
+                    if r90_y + w >= r90_size_y.try_into().unwrap() {
+                        continue;
+                    }
+                    let mut word: Word = 0;
+                    for b in 0..block.len() {
+                        word = word | (((block[b] >> w) & 1) << b);
+                    }
+                    r90.set_word(Point::new(r90_x, r90_y + w), word);
+                }
+                r90_x = r90_x + bits_per_word;
+            }
+            x = x + bits_per_word;
+            r90_y = r90_y + bits_per_word;
+        }
+        r90
     }
 }
 
