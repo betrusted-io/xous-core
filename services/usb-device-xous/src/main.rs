@@ -50,6 +50,7 @@ use std::convert::TryInto;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use keyboard::KeyMap;
 use xous_ipc::Buffer;
+use std::collections::VecDeque;
 
 pub struct EmbeddedClock {
     start: std::time::Instant,
@@ -170,6 +171,7 @@ fn main() -> ! {
     // under the theory that PIDs are unforgeable. TODO: check that PIDs are unforgeable.
     // also if someone commandeers a process, all bets are off within that process (this is a general statement)
     let mut fido_listener_pid: Option<NonZeroU8> = None;
+    let mut fido_rx_queue = VecDeque::<[u8; 64]>::new();
 
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     loop {
@@ -191,12 +193,24 @@ fn main() -> ! {
                     // the receiver will get a response with the `code` field still in the `RxWait` state to indicate the problem
                 }
                 if fido_listener_pid == msg.sender.pid() {
-                    {
-                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                        let u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
-                        log::info!("registering listener: {:?}", u2f_ipc);
+                    // preferentially pull from the rx queue if it has elements
+                    if let Some(data) = fido_rx_queue.pop_front() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                        };
+                        let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
+                        assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
+                        buf.data.copy_from_slice(&data);
+                        buf.code = U2fCode::RxAck;
+                        response.replace(buf).unwrap();
+                    } else {
+                        {
+                            let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                            let u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                            log::trace!("registering listener: {:?}", u2f_ipc);
+                        }
+                        fido_listener = Some(msg);
                     }
-                    fido_listener = Some(msg);
                 } else {
                     log::warn!("U2F interface capability is locked on first use; additional servers are ignored: {:?}", msg.sender);
                     let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -215,7 +229,7 @@ fn main() -> ! {
                     let mut u2f_msg = FidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
                     u2f_msg.packet.copy_from_slice(&u2f_ipc.data);
-                    log::info!("send U2F packet {:?}", u2f_ipc.data);
+                    log::info!("send U2F packet {:x?}", u2f_ipc.data);
                     #[cfg(any(target_os = "none", target_os = "xous"))]
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
                     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -239,7 +253,7 @@ fn main() -> ! {
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
                     match u2f.read_report() {
                         Ok(u2f_report) => {
-                            log::info!("got U2F packet {:?}", u2f_report);
+                            log::info!("got U2F packet {:x?}", u2f_report);
                             if let Some(mut listener) = fido_listener.take() {
                                 let mut response = unsafe {
                                     Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
@@ -250,7 +264,8 @@ fn main() -> ! {
                                 buf.code = U2fCode::RxAck;
                                 response.replace(buf).unwrap();
                             } else {
-                                log::warn!("Got U2F packet, but no server to respond...ignoring.");
+                                log::warn!("Got U2F packet, but no server to respond...queuing.");
+                                fido_rx_queue.push_back(u2f_report.packet);
                             }
                         },
                         Err(e) => log::trace!("U2F ERR: {:?}", e),
