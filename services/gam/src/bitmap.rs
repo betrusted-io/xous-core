@@ -240,15 +240,12 @@ impl From<&image::RgbImage> for Bitmap {
     fn from(image: &image::RgbImage) -> Self {
         let pixels: Vec<RGB<u8>> = image.pixels().map(|p| RGB::from(p.0)).collect();
         let img = Img::new(pixels, image.width()).expect("failed to create dither Img");
-
         let img = img.convert_with(|rgb: RGB<u8>| rgb.convert_with(f64::from));
         let bit_depth = 1;
         let quantize = dither::create_quantize_n_bits_func(bit_depth).unwrap();
         let bw_img = img.convert_with(|rgb| rgb.to_chroma_corrected_black_and_white());
         let ditherer = dither::ditherer::FLOYD_STEINBERG;
-        let output_img = ditherer
-            .dither(bw_img, quantize)
-            .convert_with(RGB::from_chroma_corrected_black_and_white);
+        let output_img = ditherer.dither(bw_img, quantize);
 
         let bm_width: usize = output_img.width().try_into().unwrap();
         let img_vec = output_img.into_vec();
@@ -292,9 +289,10 @@ impl From<&image::RgbImage> for Bitmap {
                 // TODO performance gain here by utilizing Tile.set_line()
                 for x in t_left..=t_right {
                     let pixel = img_vec[img_vec_index];
-                    let color = match pixel.to_hex() {
-                        0 => PixelColor::Light,
-                        _ => PixelColor::Dark,
+                    let color = if pixel > 125.0 {
+                        PixelColor::Dark
+                    } else {
+                        PixelColor::Light
                     };
                     tile.set_pixel(Point::new(x, y), color);
                     img_vec_index += 1;
