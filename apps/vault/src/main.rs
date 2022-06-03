@@ -91,7 +91,7 @@ fn main() -> ! {
             loop {
                 match usb.u2f_wait_incoming() {
                     Ok(msg) => {
-                        log::info!("FIDO listener got message: {:?}", msg);
+                        log::trace!("FIDO listener got message: {:?}", msg);
                         let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
                         let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
                         // This block handles sending packets.
