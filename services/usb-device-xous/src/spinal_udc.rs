@@ -279,6 +279,12 @@ impl SpinalUdcDescriptor {
         d0.set_code(0xF); // automatically set in_progress
         self.write(0, d0.0);
     }
+    pub fn set_offset_only(&self, offset: usize) {
+        let mut d0 = UdcDesc0(0);
+        d0.set_offset(offset as _);
+        d0.set_code(0x0); // clears in_progress
+        self.write(0, d0.0);
+    }
     pub fn set_next_desc_and_len(&self, next_addr: usize, length: usize) {
         let mut d1 = UdcDesc1(0);
         d1.set_length(length as _);
