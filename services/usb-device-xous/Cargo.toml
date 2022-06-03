@@ -42,4 +42,5 @@ utralib = { path = "../../utralib"}
 
 [features]
 keyboard = [] # handy for debugging composite device issues
+mjolnir = [] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
 default = ["keyboard"]

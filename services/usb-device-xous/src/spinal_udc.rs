@@ -235,7 +235,7 @@ impl SpinalUdcDescriptor {
     pub fn new(base: *mut u32) -> SpinalUdcDescriptor {
         SpinalUdcDescriptor { base: AtomicPtr::new(base) }
     }
-    fn read(&self, offset: usize) -> u32 {
+    pub(crate) fn read(&self, offset: usize) -> u32 {
         // we don't do asserts on reads because for debugging sometimes we reveal invalid descriptors and that's OK
         unsafe{self.base.load(Ordering::SeqCst).add(offset).read_volatile()}
     }

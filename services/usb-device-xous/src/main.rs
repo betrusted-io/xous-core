@@ -463,6 +463,7 @@ pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Op
     if requested == 0 {
         return None;
     }
+    let with_descriptor = requested + 16; // the descriptor takes 3 words; add 4 because of the alignment requirement
     let mut alloc_offset = START_OFFSET;
     for (&offset, &length) in allocs.iter() {
         // round length up to the nearest 16-byte increment
@@ -470,15 +471,15 @@ pub(crate) fn alloc_inner(allocs: &mut BTreeMap<u32, u32>, requested: u32) -> Op
         // println!("aoff: {}, cur: {}+{}", alloc_offset, offset, length);
         assert!(offset >= alloc_offset, "allocated regions overlap");
         if offset > alloc_offset {
-            if offset - alloc_offset >= requested {
+            if offset - alloc_offset >= with_descriptor {
                 // there's a hole in the list, insert the element here
                 break;
             }
         }
         alloc_offset = offset + length;
     }
-    if alloc_offset + requested <= END_OFFSET {
-        allocs.insert(alloc_offset, requested);
+    if alloc_offset + with_descriptor <= END_OFFSET {
+        allocs.insert(alloc_offset, with_descriptor);
         Some(alloc_offset)
     } else {
         None

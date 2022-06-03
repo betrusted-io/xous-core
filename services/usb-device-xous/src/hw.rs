@@ -228,6 +228,29 @@ impl SpinalUsbDevice {
             }
         }
     }
+    #[cfg(feature="mjolnir")]
+    pub fn ll_debug(&self) {
+        let mut regblock = String::new();
+        let regs = unsafe{self.usb.as_mut_ptr().add(0xFF00) as *const u32};
+        regblock.push_str("\r\nRegs:\r\n");
+        for i in 0..16 {
+            regblock.push_str(
+                &format!("{:08x}, {:08x},\r\n",
+                unsafe{regs.add(i*2).read_volatile()},
+                unsafe{regs.add(i*2 +1).read_volatile()}));
+        }
+        log::info!("{}", regblock);
+        let mut eps = String::from("\r\nEps/descs:");
+        let d = unsafe{self.usb.as_mut_ptr().add(0) as *const u32};
+        for i in 0..72 {
+            if i % 4 == 0 {
+                eps.push_str("\r\n");
+            }
+            eps.push_str(&format!("{:08x}, ", unsafe{d.add(i).read_volatile()}));
+        }
+        eps.push_str("\r\n");
+        log::info!("{}", eps);
+    }
     /// simple but easy to understand allocator for buffers inside the descriptor memory space
     /// See notes inside src/main.rs `alloc_inner` for the functional description. Returns
     /// the full byte-addressed offset of the region, so it must be shifted to the right by
@@ -378,7 +401,7 @@ impl UsbBus for SpinalUsbDevice {
                     descriptor.set_desc_flags(
                         ep_dir,
                         ep_dir == UsbDirection::Out,
-                        ep_dir == UsbDirection::Out, // this should be equal to "packet_end", but this driver doesn't have that...?
+                        true, // this should be equal to "packet_end", but this driver doesn't have that...?
                         index == 0, // only trigger for ep0 (per spinal linux driver)
                     );
                     // clear the descriptor to 0
@@ -493,7 +516,8 @@ impl UsbBus for SpinalUsbDevice {
                 }
             }
         }
-        log::debug!("{:?}", self.regs);
+        #[cfg(feature="mjolnir")]
+        self.ll_debug(); // this is the "memory dump" of the USB descriptor area.
         // clear other registers
         // self.regs.set_address(0); // i think this is automatic in the USB core...
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
@@ -530,6 +554,8 @@ impl UsbBus for SpinalUsbDevice {
             if buf.len() > max_len {
                 Err(UsbError::BufferOverflow)
             } else {
+                #[cfg(feature="mjolnir")] // mjolnir is so powerful, one must halt the USB core entirely for it to be weilded
+                if ep_addr.index() == 1 { self.udc_hard_halt(ep_addr.index()); }
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
                 if ep_addr.index() != 0 {
                     if ep_status.head_offset() != 0 {
@@ -573,21 +599,34 @@ impl UsbBus for SpinalUsbDevice {
                 descriptor.set_next_desc_and_len(0, buf.len());
                 if ep_addr.index() != 0 {
                     descriptor.set_desc_flags(UsbDirection::In,
-                        false, false, false);
+                        false, true, false);
                 }
                 descriptor.set_offset(0); // reset the write pointer to 0, also sets in_progress
-                if ep_addr.index() != 0 {
-                    log::info!("WR PREdesc{}: {:?}", ep_addr.index(), descriptor);
-                }
+                //if ep_addr.index() != 0 {
+                //    log::info!("WR PREdesc{}: {:?}", ep_addr.index(), descriptor);
+                //}
                 // this is required to commit the ep_status record once all the setup is done
                 self.status_write_volatile(ep_addr.index(), ep_status);
-                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-                let epcheck = self.status_read_volatile(ep_addr.index());
-                let epcheckdesc = self.descriptor_from_status(&epcheck);
-                if ep_addr.index() != 0 {
-                    log::info!("WR status{}: {:?}", ep_addr.index(), epcheck);
-                    log::info!("WR desc{}: {:?}", ep_addr.index(), epcheckdesc);
+
+                #[cfg(feature="mjolnir")]
+                { // mjolnir is so powerful, one must halt the USB core entirely for it to be weilded
+                    if ep_addr.index() == 1 {
+                        self.ll_debug();
+                    }
+                    if ep_addr.index() == 1 { self.udc_hard_unhalt(ep_addr.index()); }
                 }
+
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
+                // I think the debug statements actually mess up the timing of the core (as it causes contention for the same
+                // memory resources used by the core itself), so they are commented out.
+                //let epcheck = self.status_read_volatile(ep_addr.index());
+                //let epcheckdesc = self.descriptor_from_status(&epcheck);
+                //if ep_addr.index() != 0 {
+                //    log::info!("WR status{}: {:?}", ep_addr.index(), epcheck);
+                //    log::info!("WR desc{}: {:?}", ep_addr.index(), epcheckdesc);
+                //    log::info!("WR POSTstatus{}: {:?}", ep_addr.index(), self.status_read_volatile(ep_addr.index()));
+                //}
                 Ok(buf.len())
             }
         } else {
@@ -662,7 +701,8 @@ impl UsbBus for SpinalUsbDevice {
                 // get to the bottom of it. But for now it seems to work well enough and the performance is "fine" for
                 // a USB HID style interface.
                 //
-                // N.B.: I *think* this got solved when we also solved the spurious read interrupt issue.
+                // I thought this was fixed by removing spurious interrupts, but instead, it seems to come back "sometimes",
+                // as opposed to "always" being a problem. So the delay is re-instated.
                 self.tt.sleep_ms(1).ok();
 
                 if (self.read_allowed.load(Ordering::Relaxed) & (1 << ep_addr.index() as u16)) == 0 {
@@ -676,7 +716,7 @@ impl UsbBus for SpinalUsbDevice {
                     self.read_allowed.store(masked, Ordering::SeqCst);
                 }
 
-                // self.udc_hard_halt(ep_addr.index());
+                self.udc_hard_halt(ep_addr.index());
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
                 // log::info!("head_offset{}: {:x}", ep_addr.index(), head_offset * 16);
                 ep_status.set_head_offset(head_offset as u32);
@@ -709,30 +749,38 @@ impl UsbBus for SpinalUsbDevice {
                         buf[(len / 4) + i] = word[i]
                     }
                 }
+
                 // setup for the next transaction
                 ep_status.set_max_packet_size(max_len as _);
                 descriptor.set_next_desc_and_len(0, buf.len());
                 descriptor.set_desc_flags(UsbDirection::Out,
                     true, true, false);
+                descriptor.set_offset_only(0); // reset the read pointer to 0, also sets in_progress
+
+                // sanity check on interrupts: it should be cleared by this point!
+                let interrupts = self.regs.interrupts();
+                if interrupts.0 != 0 {
+                    log::warn!("Pending interrupts, clearing: {:?}", interrupts);
+                    self.regs.clear_all_interrupts();
+                }
 
                 // this auto-toggles ep_status.set_data_phase(!ep_status.data_phase()); // toggle the data phase
                 self.status_write_volatile(ep_addr.index(), ep_status);
-                descriptor.set_offset(0); // reset the read pointer to 0, also sets in_progress
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-                // if we happen to pick this read up before the interrupt handler can fire, clear the interrupt
-                let interrupts = self.regs.interrupts();
-                if interrupts.endpoint() & (1 << ep_addr.index()) != 0 {
-                    log::warn!("read happened before interrupt handler could process");
-                    /* let mut ints_to_clear = UdcInterrupts(0);
-                    ints_to_clear.set_endpoint(1 << ep_addr.index());
-                    self.regs.clear_some_interrupts(ints_to_clear); */
+                // just reading the registers after setting them seems to upset the USB device block
+                //log::debug!("read buf: {:x?}", &buf[..len]);
+                //log::info!("ep{} read: {:x?} (len {} into buf of {})", ep_addr.index(), &buf[..len], len, buf.len());
+                let epcheck = self.status_read_volatile(ep_addr.index());
+                let descheck = self.descriptor_from_status(&epcheck);
+                log::info!("RD status{} [{:x}]: {:?}", ep_addr.index(), epcheck.0, epcheck);
+                log::info!("RD desc{} [{:x},{:x},{:x}]: {:?}", ep_addr.index(), descheck.read(0), descheck.read(1), descheck.read(2), descheck);
+                #[cfg(feature="mjolnir")]
+                if ep_addr.index() == 2 { // mjolnir should be use selectively on EPs that require debugging, lest the weilder be overwhelmed by its spew.
+                    self.ll_debug();
                 }
-                // self.udc_hard_unhalt(ep_addr.index());
-
-                log::debug!("read buf: {:x?}", &buf[..len]);
-                log::info!("ep{} read: {:x?} (len {} into buf of {})", ep_addr.index(), &buf[..len], len, buf.len());
-                log::info!("RD status{}: {:?}", ep_addr.index(), self.status_read_volatile(ep_addr.index()));
-                log::info!("RD desc{}: {:?}", ep_addr.index(), self.descriptor_from_status(&self.status_read_volatile(ep_addr.index())));
+                self.udc_hard_unhalt(ep_addr.index());
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                 Ok(len)
             }
         } else {
@@ -752,23 +800,28 @@ impl UsbBus for SpinalUsbDevice {
         //if ep_addr.index() == 0 && ep_addr.direction() == UsbDirection::Out && stalled == false {
         //    return;
         //}
-        log::debug!("set_stalled ep{}->{} dir {:?}", ep_addr.index(), stalled, ep_addr.direction());
-        self.udc_hard_halt(ep_addr.index());
-        let mut ep_status = self.status_read_volatile(ep_addr.index());
-        match (stalled, ep_addr.direction()) {
-            (true, UsbDirection::In) => {
-                ep_status.set_force_stall(true);
-            },
-            (true, UsbDirection::Out) => ep_status.set_force_stall(true),
-            (false, UsbDirection::In) => {
-                ep_status.set_force_stall(false);
-                ep_status.set_force_nack(true);
-            },
-            (false, UsbDirection::Out) => ep_status.set_force_stall(false),
-        };
-        // single volatile commit of the results
-        self.status_write_volatile(ep_addr.index(), ep_status);
-        self.udc_hard_unhalt(ep_addr.index());
+        let statcheck = self.status_read_volatile(ep_addr.index());
+        if statcheck.force_stall() != stalled {
+            if ep_addr.index() != 0 {
+                log::info!("set_stalled ep{}->{} dir {:?}", ep_addr.index(), stalled, ep_addr.direction());
+            }
+            self.udc_hard_halt(ep_addr.index());
+            let mut ep_status = self.status_read_volatile(ep_addr.index());
+            match (stalled, ep_addr.direction()) {
+                (true, UsbDirection::In) => {
+                    ep_status.set_force_stall(true);
+                },
+                (true, UsbDirection::Out) => ep_status.set_force_stall(true),
+                (false, UsbDirection::In) => {
+                    ep_status.set_force_stall(false);
+                    ep_status.set_force_nack(true);
+                },
+                (false, UsbDirection::Out) => ep_status.set_force_stall(false),
+            };
+            // single volatile commit of the results
+            self.status_write_volatile(ep_addr.index(), ep_status);
+            self.udc_hard_unhalt(ep_addr.index());
+        }
     }
 
     /// Gets whether the STALL condition is set for an endpoint.
@@ -806,6 +859,7 @@ impl UsbBus for SpinalUsbDevice {
             PollResult::Reset
         } else if interrupts.ep0_setup() {
             ints_to_clear.set_ep0_setup(true);
+            ints_to_clear.set_endpoint(1); // this is a bitmask, so this corresponds to ep0
             PollResult::Data { ep_out: 0, ep_in_complete: 0, ep_setup: 1 }
         } else if interrupts.endpoint() != 0 {
             let mut ep_in_complete = 0;
@@ -823,6 +877,9 @@ impl UsbBus for SpinalUsbDevice {
                             // it will get written back on the next `write`)
                             ep_status.set_head_offset(self.ep0in_head);
                         } else if let Some((head_offset, _max_len)) = self.ep_allocs[bit] {
+                            if ep_status.head_offset() != 0 {
+                                log::warn!("got INT on ep{} but head is not 0", bit);
+                            }
                             ep_status.set_head_offset(head_offset as u32);
                         }
                         let descriptor = self.descriptor_from_status(&ep_status);
