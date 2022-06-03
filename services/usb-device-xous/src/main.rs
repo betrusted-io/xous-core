@@ -142,11 +142,17 @@ fn main() -> ! {
     let usb_alloc = UsbBusAllocator::new(usbdev);
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let clock = EmbeddedClock::new();
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(all(any(target_os = "none", target_os = "xous"), feature="keyboard"))]
     let mut composite = UsbHidClassBuilder::new()
         .add_interface(
             NKROBootKeyboardInterface::default_config(&clock),
         )
+        .add_interface(
+            FidoInterface::default_config()
+        )
+        .build(&usb_alloc);
+    #[cfg(all(any(target_os = "none", target_os = "xous"), not(feature="keyboard")))]
+    let mut composite = UsbHidClassBuilder::new()
         .add_interface(
             FidoInterface::default_config()
         )
@@ -158,7 +164,7 @@ fn main() -> ! {
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(all(any(target_os = "none", target_os = "xous"), feature="keyboard"))]
     {
         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
         keyboard.write_report(&Vec::<Keyboard>::new()).ok();
@@ -195,6 +201,7 @@ fn main() -> ! {
                 if fido_listener_pid == msg.sender.pid() {
                     // preferentially pull from the rx queue if it has elements
                     if let Some(data) = fido_rx_queue.pop_front() {
+                        log::info!("returning queued data: {:?}", &data);
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                         };
@@ -207,7 +214,7 @@ fn main() -> ! {
                         {
                             let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                             let u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
-                            log::trace!("registering listener: {:?}", u2f_ipc);
+                            log::info!("registering listener: {:?}", u2f_ipc);
                         }
                         fido_listener = Some(msg);
                     }
@@ -229,11 +236,11 @@ fn main() -> ! {
                     let mut u2f_msg = FidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
                     u2f_msg.packet.copy_from_slice(&u2f_ipc.data);
-                    log::info!("send U2F packet {:x?}", u2f_ipc.data);
                     #[cfg(any(target_os = "none", target_os = "xous"))]
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
                     #[cfg(any(target_os = "none", target_os = "xous"))]
                     u2f.write_report(&u2f_msg).ok();
+                    log::info!("sent U2F packet {:x?}", u2f_ipc.data);
                     u2f_ipc.code = U2fCode::TxAck;
                 } else {
                     u2f_ipc.code = U2fCode::Denied;
@@ -243,12 +250,15 @@ fn main() -> ! {
             Some(Opcode::UsbIrqHandler) => {
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 if usb_dev.poll(&mut [&mut composite]) {
-                    let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-                    match keyboard.read_report() {
-                        Ok(l) => {
-                            led_state = l;
+                    #[cfg(feature="keyboard")]
+                    {
+                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                        match keyboard.read_report() {
+                            Ok(l) => {
+                                led_state = l;
+                            }
+                            Err(e) => log::trace!("KEYB ERR: {:?}", e),
                         }
-                        Err(e) => log::trace!("KEYB ERR: {:?}", e),
                     }
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
                     match u2f.read_report() {
@@ -355,14 +365,17 @@ fn main() -> ! {
                         codes.push(Keyboard::from_primitive(code2 as u8));
                     }
                     let auto_up = if autoup == 1 {true} else {false};
-                    let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-                    keyboard.write_report(&codes).ok();
-                    keyboard.tick().unwrap();
-                    tt.sleep_ms(30).ok();
-                    if auto_up {
-                        keyboard.write_report(&[]).ok(); // this is the key-up
+                    #[cfg(feature="keyboard")]
+                    {
+                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                        keyboard.write_report(&codes).ok();
                         keyboard.tick().unwrap();
                         tt.sleep_ms(30).ok();
+                        if auto_up {
+                            keyboard.write_report(&[]).ok(); // this is the key-up
+                            keyboard.tick().unwrap();
+                            tt.sleep_ms(30).ok();
+                        }
                     }
                     xous::return_scalar(msg.sender, 0).unwrap();
                 } else {
@@ -388,13 +401,16 @@ fn main() -> ! {
                             KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
                             _ => mappings::char_to_hid_code_us101(ch),
                         };
-                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-                        keyboard.write_report(&codes).ok();
-                        keyboard.tick().unwrap();
-                        tt.sleep_ms(30).ok();
-                        keyboard.write_report(&[]).ok(); // this is the key-up
-                        keyboard.tick().unwrap();
-                        tt.sleep_ms(30).ok();
+                        #[cfg(feature="keyboard")]
+                        {
+                            let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                            keyboard.write_report(&codes).ok();
+                            keyboard.tick().unwrap();
+                            tt.sleep_ms(30).ok();
+                            keyboard.write_report(&[]).ok(); // this is the key-up
+                            keyboard.tick().unwrap();
+                            tt.sleep_ms(30).ok();
+                        }
                         sent += 1;
                     }
                     usb_send.sent = Some(sent);
