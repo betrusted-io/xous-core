@@ -31,7 +31,7 @@ use arrayref::array_ref;
 use cbor::cbor_array_vec;
 use core::convert::TryInto;
 use ctap_crypto::rng256::Rng256;
-use pddb::{Pddb, PddbRequestCode};
+use pddb::Pddb;
 use rand_core::{OsRng, RngCore};
 use std::cell::RefCell;
 

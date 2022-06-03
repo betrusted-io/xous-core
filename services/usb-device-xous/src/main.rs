@@ -211,11 +211,7 @@ fn main() -> ! {
                         buf.code = U2fCode::RxAck;
                         response.replace(buf).unwrap();
                     } else {
-                        {
-                            let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                            let u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
-                            log::trace!("registering deferred listener");
-                        }
+                        log::trace!("registering deferred listener");
                         fido_listener = Some(msg);
                     }
                 } else {
@@ -274,7 +270,7 @@ fn main() -> ! {
                                 buf.code = U2fCode::RxAck;
                                 response.replace(buf).unwrap();
                             } else {
-                                log::warn!("Got U2F packet, but no server to respond...queuing.");
+                                log::debug!("Got U2F packet, but no server to respond...queuing.");
                                 fido_rx_queue.push_back(u2f_report.packet);
                             }
                         },

@@ -196,7 +196,9 @@ impl Ctap1Command {
                 challenge,
                 application,
             } => {
+                log::debug!("REGISTER");
                 if !ctap_state.u2f_up_state.consume_up(clock_value) {
+                    log::debug!("consume_up did not work");
                     return Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED);
                 }
                 Ctap1Command::process_register(challenge, application, ctap_state)
@@ -208,6 +210,7 @@ impl Ctap1Command {
                 key_handle,
                 flags,
             } => {
+                log::debug!("AUTHENTICATE");
                 // The order is important due to side effects of checking user presence.
                 if flags == Ctap1Flags::EnforceUpAndSign
                     && !ctap_state.u2f_up_state.consume_up(clock_value)
@@ -224,10 +227,16 @@ impl Ctap1Command {
             }
 
             // U2F raw message format specification (version 20170411) section 6.3
-            U2fCommand::Version => Ok(Vec::<u8>::from(super::U2F_VERSION_STRING)),
+            U2fCommand::Version => {
+                log::debug!("VERSION");
+                Ok(Vec::<u8>::from(super::U2F_VERSION_STRING))
+            },
 
             // TODO: should we return an error instead such as SW_INS_NOT_SUPPORTED?
-            U2fCommand::VendorSpecific { .. } => Err(Ctap1StatusCode::SW_SUCCESS),
+            U2fCommand::VendorSpecific { .. } => {
+                log::debug!("VENDOR");
+                Err(Ctap1StatusCode::SW_SUCCESS)
+            },
         }
     }
 

@@ -95,13 +95,13 @@ fn main() -> ! {
                         let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
                         let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
                         // This block handles sending packets.
-                        for mut pkt_reply in reply {
+                        for pkt_reply in reply {
                             let mut reply = FidoMsg::default();
                             reply.packet.copy_from_slice(&pkt_reply);
                             let status = usb.u2f_send(reply);
                             match status {
                                 Ok(()) => {
-                                    log::debug!("Sent U2F packet");
+                                    log::trace!("Sent U2F packet");
                                 }
                                 Err(e) => {
                                     log::error!("Error sending U2F packet: {:?}", e);
