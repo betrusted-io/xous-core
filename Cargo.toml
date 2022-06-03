@@ -100,7 +100,7 @@ debug = true # symbols are nice and they don't increase the size on Flash
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
-#opt-level = 'z'  # Optimize for size instead of performance
+#opt-level = 's'  # z,s: Optimize for size instead of performance
 
 [patch.crates-io]
 xous = {path = "xous-rs"}
