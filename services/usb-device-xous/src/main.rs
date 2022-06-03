@@ -201,7 +201,7 @@ fn main() -> ! {
                 if fido_listener_pid == msg.sender.pid() {
                     // preferentially pull from the rx queue if it has elements
                     if let Some(data) = fido_rx_queue.pop_front() {
-                        log::info!("returning queued data: {:?}", &data);
+                        log::debug!("no deferral: ret queued data: {:?} queue len: {}", &data[..8], fido_rx_queue.len() + 1);
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                         };
@@ -214,7 +214,7 @@ fn main() -> ! {
                         {
                             let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                             let u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
-                            log::info!("registering listener: {:?}", u2f_ipc);
+                            log::trace!("registering deferred listener");
                         }
                         fido_listener = Some(msg);
                     }
@@ -240,7 +240,7 @@ fn main() -> ! {
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
                     #[cfg(any(target_os = "none", target_os = "xous"))]
                     u2f.write_report(&u2f_msg).ok();
-                    log::info!("sent U2F packet {:x?}", u2f_ipc.data);
+                    log::debug!("sent U2F packet {:x?}", u2f_ipc.data);
                     u2f_ipc.code = U2fCode::TxAck;
                 } else {
                     u2f_ipc.code = U2fCode::Denied;
@@ -263,7 +263,6 @@ fn main() -> ! {
                     let u2f = composite.interface::<FidoInterface<'_, _>, _>();
                     match u2f.read_report() {
                         Ok(u2f_report) => {
-                            log::info!("got U2F packet {:x?}", u2f_report);
                             if let Some(mut listener) = fido_listener.take() {
                                 let mut response = unsafe {
                                     Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
@@ -271,6 +270,7 @@ fn main() -> ! {
                                 let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
                                 assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
                                 buf.data.copy_from_slice(&u2f_report.packet);
+                                log::trace!("ret deferred data {:x?}", &u2f_report.packet[..8]);
                                 buf.code = U2fCode::RxAck;
                                 response.replace(buf).unwrap();
                             } else {

@@ -55,12 +55,12 @@ impl SpinalUsbMgmt {
         assert!(4096 == self.regs.ramsize(), "hardware ramsize parameter does not match our expectations");
     }
     pub fn connect_device_core(&mut self, state: bool) {
-        log::info!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_USBSELECT));
+        log::trace!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_USBSELECT));
         if state {
-            log::info!("connecting USB device core");
+            log::trace!("connecting USB device core");
             self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 1);
         } else {
-            log::info!("connecting USB debug core");
+            log::trace!("connecting USB debug core");
             self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 0);
         }
     }
@@ -773,8 +773,8 @@ impl UsbBus for SpinalUsbDevice {
                 //log::info!("ep{} read: {:x?} (len {} into buf of {})", ep_addr.index(), &buf[..len], len, buf.len());
                 let epcheck = self.status_read_volatile(ep_addr.index());
                 let descheck = self.descriptor_from_status(&epcheck);
-                log::info!("RD status{} [{:x}]: {:?}", ep_addr.index(), epcheck.0, epcheck);
-                log::info!("RD desc{} [{:x},{:x},{:x}]: {:?}", ep_addr.index(), descheck.read(0), descheck.read(1), descheck.read(2), descheck);
+                log::debug!("RD status{} [{:x}]: {:?}", ep_addr.index(), epcheck.0, epcheck);
+                log::debug!("RD desc{} [{:x},{:x},{:x}]: {:?}", ep_addr.index(), descheck.read(0), descheck.read(1), descheck.read(2), descheck);
                 #[cfg(feature="mjolnir")]
                 if ep_addr.index() == 2 { // mjolnir should be use selectively on EPs that require debugging, lest the weilder be overwhelmed by its spew.
                     self.ll_debug();
@@ -895,13 +895,13 @@ impl UsbBus for SpinalUsbDevice {
 
                         if false { // full low-level readback
                             if bit != 0 {
-                                log::info!("status{}: {:?}", bit, self.status_read_volatile(bit));
-                                log::info!("desc{}: {:?}", bit, self.descriptor_from_status(&self.status_read_volatile(bit)));
+                                log::debug!("status{}: {:?}", bit, self.status_read_volatile(bit));
+                                log::debug!("desc{}: {:?}", bit, self.descriptor_from_status(&self.status_read_volatile(bit)));
                             }
                         } else { // as processed
                             if bit != 0 {
-                                log::info!("PL status{}: {:?}", bit, ep_status);
-                                log::info!("PL desc{}: {:?}", bit, descriptor);
+                                log::debug!("PL status{}: {:?}", bit, ep_status);
+                                log::debug!("PL desc{}: {:?}", bit, descriptor);
                             }
                         }
                     }
