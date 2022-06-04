@@ -242,7 +242,7 @@ impl From<Img<RGB<u8>>> for Bitmap {
         let bit_depth = 1;
         let quantize = dither::create_quantize_n_bits_func(bit_depth).unwrap();
         let bw_img = img.convert_with(|rgb| rgb.to_chroma_corrected_black_and_white());
-        let ditherer = dither::ditherer::FLOYD_STEINBERG;
+        let ditherer = dither::ditherer::BURKES;
         let output_img = ditherer.dither(bw_img, quantize);
 
         let bm_width: usize = output_img.width().try_into().unwrap();
