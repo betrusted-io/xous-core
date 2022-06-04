@@ -248,17 +248,6 @@ impl From<Img<RGB<u8>>> for Bitmap {
         let bm_width: usize = output_img.width().try_into().unwrap();
         let img_vec = output_img.into_vec();
 
-        /*
-        let bw_vec = Vec::<PixelColor>::new();
-        for pixel in img_vec {
-            let color = match pixel.to_hex() {
-                0 => PixelColor::Light,
-                _ => PixelColor::Dark,
-            };
-            bw_vec.push(color);
-        }
-        */
-
         let bm_height = img_vec.len() / bm_width;
         let bm_bottom = (bm_height - 1) as i16;
         let bm_right = (bm_width - 1) as i16;
@@ -274,6 +263,9 @@ impl From<Img<RGB<u8>>> for Bitmap {
         let mut mosaic: Vec<Tile> = Vec::new();
 
         let mut img_vec_index = 0;
+        let bits_per_word: i16 = BITS_PER_WORD.try_into().unwrap();
+        let dark: usize = PixelColor::Dark.try_into().unwrap();
+        let light: usize = PixelColor::Light.try_into().unwrap();
         for t in 0..tile_count {
             let t_top = (t * tile_height) as i16;
             let t_left = 0;
@@ -284,16 +276,20 @@ impl From<Img<RGB<u8>>> for Bitmap {
             let t_bound = Rectangle::new(t_tl, t_br);
             let mut tile = Tile::new(t_bound, tile_width_words as u16);
             for y in t_top..=t_bottom {
-                // TODO performance gain here by utilizing Tile.set_line()
-                for x in t_left..=t_right {
-                    let pixel = img_vec[img_vec_index];
-                    let color = if pixel > 125.0 {
-                        PixelColor::Dark
-                    } else {
-                        PixelColor::Light
-                    };
-                    tile.set_pixel(Point::new(x, y), color);
-                    img_vec_index += 1;
+                let mut x = t_left;
+                while x <= t_right {
+                    let mut word: usize = 0;
+                    for w in 0..bits_per_word {
+                        if (x + w) > t_right {
+                            continue;
+                        }
+                        let pixel = img_vec[img_vec_index];
+                        let color = if pixel > 125.0 { dark } else { light };
+                        word = word | (color << w);
+                        img_vec_index += 1;
+                    }
+                    tile.set_word(Point::new(x, y), word.try_into().unwrap());
+                    x += bits_per_word;
                 }
             }
             mosaic.push(tile);
