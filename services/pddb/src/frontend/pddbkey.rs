@@ -113,7 +113,11 @@ impl<'a> Read for PddbKey<'a> {
                     }
                     PddbRetcode::BasisLost => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
                     PddbRetcode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Access denied")),
-                    _ => Err(Error::new(ErrorKind::Other, "Unhandled error code in PddbKey Read")),
+                    PddbRetcode::UnexpectedEof => Ok(0), // I believe this is the "expected" behavior for reads that want to read beyond the current end of file
+                    _ => {
+                        log::error!("Unhandled error code: {:?}", pbuf.retcode);
+                        Err(Error::new(ErrorKind::Other, "Unhandled error code in PddbKey Read"))
+                    },
                 }
             }
         }
@@ -158,7 +162,7 @@ impl<'a> Write for PddbKey<'a> {
                     }
                     PddbRetcode::BasisLost => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
                     PddbRetcode::AccessDenied => Err(Error::new(ErrorKind::PermissionDenied, "Access denied")),
-                    _ => Err(Error::new(ErrorKind::Other, "Unhandled error code in PddbKey Read")),
+                    _ => Err(Error::new(ErrorKind::Other, "Unhandled error code in PddbKey Write")),
                 }
             }
         }

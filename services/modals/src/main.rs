@@ -536,7 +536,7 @@ fn main() -> ! {
                             renderer_cid,
                             Opcode::HandleDynamicNotificationKeyhit.to_u32().unwrap(),
                         );
-                        gutter.set_manual_dismiss(false);
+                        gutter.set_manual_dismiss(true);
                         renderer_modal.modify(
                             Some(ActionType::Notification(gutter)),
                             Some(&top_text),
@@ -599,6 +599,7 @@ fn main() -> ! {
                 token_lock = next_lock(&mut work_queue);
             },
             Some(Opcode::HandleDynamicNotificationKeyhit) => msg_scalar_unpack!(msg, k, _, _, _, {
+                log::info!("Dynamic kbd hit: {}({})", k, char::from_u32(k as u32).unwrap_or(' '));
                 if let Some(sender) = dynamic_notification_listener.take() {
                     xous::return_scalar2(sender, 1, k).unwrap();
                 }

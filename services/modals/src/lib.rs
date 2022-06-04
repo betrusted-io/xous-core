@@ -410,36 +410,6 @@ impl Modals {
         self.unlock();
         Ok(())
     }
-    /// If a dynamic notification is active, this will block and return only if one of two
-    /// conditions are met:
-    /// 1. a key is pressed, in which case, the `Some(char)` is the key pressed. If there is a
-    ///    "fat finger" event, only the first character is reported.
-    /// 2. the dynamic notification is closed, in which case a `None` is reported.
-    pub fn dynamic_notification_blocking_listener(&self) -> Result<Option<char>, xous::Error> {
-        match send_message(
-            self.conn,
-            Message::new_blocking_scalar(
-                Opcode::ListenToDynamicNotification.to_usize().unwrap(),
-                self.token[0] as usize,
-                self.token[1] as usize,
-                self.token[2] as usize,
-                self.token[3] as usize,
-            ),
-        ).expect("couldn't listen") {
-            xous::Result::Scalar2(is_some, code) => {
-                if is_some == 1 {
-                    let c = char::from_u32(code as u32).unwrap_or('\u{0000}');
-                    Ok(Some(c))
-                } else if is_some == 2 {
-                    log::warn!("Attempt to listen, but did not have the mutex. Aborted.");
-                    Ok(None)
-                } else {
-                    Ok(None)
-                }
-            }
-            _ => Err(xous::Error::InternalError)
-        }
-    }
 
     /// Blocks until we have a lock on the modals server
     fn lock(&self) {
@@ -471,6 +441,10 @@ impl Modals {
     fn unlock(&self) {
         self.have_lock.set(false);
     }
+    pub fn conn(&self) -> CID {self.conn}
+    /// Don't leak this token outside of your server, otherwise, another server can pretend to be you and
+    /// steal your modal information!
+    pub fn token(&self) -> [u32; 4] {self.token}
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -487,5 +461,39 @@ impl Drop for Modals {
         }
         // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
         // de-allocate those items here. They don't need a reference count because they are object-specific
+    }
+}
+
+/// If a dynamic notification is active, this will block and return only if one of two
+/// conditions are met:
+/// 1. a key is pressed, in which case, the `Some(char)` is the key pressed. If there is a
+///    "fat finger" event, only the first character is reported.
+/// 2. the dynamic notification is closed, in which case a `None` is reported.
+///
+/// This function is "broken out" so that it can be called from a thread without having
+/// to wrap a mutex around the primary Modals structure.
+pub fn dynamic_notification_blocking_listener(token: [u32; 4], conn: CID) -> Result<Option<char>, xous::Error> {
+    match send_message(
+        conn,
+        Message::new_blocking_scalar(
+            Opcode::ListenToDynamicNotification.to_usize().unwrap(),
+            token[0] as usize,
+            token[1] as usize,
+            token[2] as usize,
+            token[3] as usize,
+        ),
+    ).expect("couldn't listen") {
+        xous::Result::Scalar2(is_some, code) => {
+            if is_some == 1 {
+                let c = char::from_u32(code as u32).unwrap_or('\u{0000}');
+                Ok(Some(c))
+            } else if is_some == 2 {
+                log::warn!("Attempt to listen, but did not have the mutex. Aborted.");
+                Ok(None)
+            } else {
+                Ok(None)
+            }
+        }
+        _ => Err(xous::Error::InternalError)
     }
 }

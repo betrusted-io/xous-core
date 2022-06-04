@@ -9,6 +9,7 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 xous = { path = "../../xous-rs" }
 xous-ipc = { path = "../../xous-ipc" }
+rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 log-server = { path = "../../services/log-server" }
 xous-names = { path = "../../services/xous-names" }
 gam = {path = "../../services/gam" }
@@ -18,6 +19,7 @@ tts-frontend = {path="../../services/tts"}
 usb-device-xous = {path="../../services/usb-device-xous"}
 usbd-human-interface-device = {git="https://github.com/betrusted-io/usbd-human-interface-device.git", branch="main"}
 pddb = {path = "../../services/pddb" }
+modals = {path = "../../services/modals" }
 
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 ime-plugin-shell = {path = "../../services/ime-plugin-shell"}

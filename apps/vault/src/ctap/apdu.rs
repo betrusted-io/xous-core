@@ -21,7 +21,7 @@ const APDU_HEADER_LEN: usize = 4;
 
 #[cfg_attr(test, derive(Clone, Debug))]
 #[allow(non_camel_case_types, dead_code)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum ApduStatusCode {
     SW_SUCCESS = 0x90_00,
     /// Command successfully executed; 'XX' bytes of data are

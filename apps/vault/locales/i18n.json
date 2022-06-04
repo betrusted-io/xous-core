@@ -1,8 +1,26 @@
 {
-    "helloworld.hello": {
-        "en": "Hello World!",
-        "ja": "Hello World!",
-        "zh": "大家好!",
-        "en-tts": "Hello World!"
+    "vault.u2f.authenticate": {
+        "en": "U2F Authentication Request",
+        "ja": "U2F 認証リクエスト",
+        "zh": "U2F 认证请求",
+        "en-tts": "U2F Authentication Request"
+    },
+    "vault.u2f.apphash": {
+        "en": "Application hash: ",
+        "ja": "アプリハッシュ: ",
+        "zh": "应用哈希: ",
+        "en-tts": "Application hash: "
+    },
+    "vault.u2f.register": {
+        "en": "U2F Registration Request",
+        "ja": "U2F登録リクエスト",
+        "zh": "U2F 注册请求",
+        "en-tts": "U2F Registration Request"
+    },
+    "vault.u2freq": {
+        "en": "FIDO Request",
+        "ja": "FIDOリクエスト",
+        "zh": "FIDO 请求",
+        "en-tts": "FIDO Request"
     }
 }

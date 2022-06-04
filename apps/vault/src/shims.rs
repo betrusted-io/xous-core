@@ -1,3 +1,4 @@
+#![allow(dead_code)] // a fair bit of dead code here because we have adapters from Tock functions we don't use
 // shims for Tock calls, to avoid having to recode some fairly pervasive patterns in OpenSK
 use std::ops::{Sub, Add, AddAssign};
 
