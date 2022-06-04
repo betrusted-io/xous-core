@@ -32,6 +32,7 @@ impl TimedPermission {
     // Checks if the timeout is not reached, false for differing ClockValue frequencies.
     pub fn is_granted(&self, now: ClockValue) -> bool {
         if let TimedPermission::Granted(timeout) = self {
+            log::info!("is_granted timeout: {}, now {}", timeout.ms(), now.ms());
             if let Some(remaining_duration) = timeout.wrapping_sub(now) {
                 return remaining_duration > Duration::from_ms(0);
             }
@@ -43,6 +44,7 @@ impl TimedPermission {
     // Returns a new state for differing ClockValue frequencies.
     pub fn check_expiration(self, now: ClockValue) -> TimedPermission {
         if let TimedPermission::Granted(timeout) = self {
+            log::info!("check_expiration timeout: {}, now {}", timeout.ms(), now.ms());
             if let Some(remaining_duration) = timeout.wrapping_sub(now) {
                 if remaining_duration > Duration::from_ms(0) {
                     return TimedPermission::Granted(timeout);
@@ -56,14 +58,6 @@ impl TimedPermission {
 #[cfg(feature = "with_ctap1")]
 #[derive(Debug)]
 pub struct U2fUserPresenceState {
-    // If user presence was recently requested, its timeout is saved here.
-    needs_up: TimedPermission,
-    // Button touch timeouts, while user presence is requested, are saved here.
-    has_up: TimedPermission,
-    // This is the timeout duration of user presence requests.
-    request_duration: Duration<i64>,
-    // This is the timeout duration of button touches.
-    presence_duration: Duration<i64>,
 }
 
 #[cfg(feature = "with_ctap1")]
@@ -72,45 +66,31 @@ impl U2fUserPresenceState {
         request_duration: Duration<i64>,
         presence_duration: Duration<i64>,
     ) -> U2fUserPresenceState {
+        crate::ux::set_durations(request_duration.ms(), presence_duration.ms());
         U2fUserPresenceState {
-            needs_up: TimedPermission::Waiting,
-            has_up: TimedPermission::Waiting,
-            request_duration,
-            presence_duration,
         }
     }
 
     // Granting user presence is ignored if it needs activation, but waits. Also cleans up.
-    pub fn grant_up(&mut self, now: ClockValue) {
-        self.check_expiration(now);
-        if self.needs_up.is_granted(now) {
-            self.needs_up = TimedPermission::Waiting;
-            self.has_up = TimedPermission::granted(now, self.presence_duration);
-        }
+    pub fn grant_up(&mut self, _now: ClockValue) {
+        // this is a NOP because it's handled by another thread
     }
 
     // This marks user presence as needed or uses it up if already granted. Also cleans up.
-    pub fn consume_up(&mut self, now: ClockValue) -> bool {
-        self.check_expiration(now);
-        if self.has_up.is_granted(now) {
-            self.has_up = TimedPermission::Waiting;
-            true
-        } else {
-            self.needs_up = TimedPermission::granted(now, self.request_duration);
-            false
-        }
+    pub fn consume_up(&mut self, _now: ClockValue, reason: String) -> bool {
+        crate::ux::request_permission_polling(String::from(reason))
     }
 
     // Returns if user presence was requested. Also cleans up.
-    pub fn is_up_needed(&mut self, now: ClockValue) -> bool {
-        self.check_expiration(now);
-        self.needs_up.is_granted(now)
+    pub fn is_up_needed(&mut self, _now: ClockValue) -> bool {
+        // this is not used by Xous
+        false
     }
 
     // If you don't regularly call any other function, not cleaning up leads to overflow problems.
-    pub fn check_expiration(&mut self, now: ClockValue) {
-        self.needs_up = self.needs_up.check_expiration(now);
-        self.has_up = self.has_up.check_expiration(now);
+    #[allow(dead_code)]
+    pub fn check_expiration(&mut self, _now: ClockValue) {
+        // not needed by Xous because we use an i64 for time
     }
 }
 
@@ -120,7 +100,7 @@ mod test {
     use super::*;
     use core::isize;
 
-    const CLOCK_FREQUENCY_HZ: usize = 32768;
+    const CLOCK_FREQUENCY_HZ: usize = 1000;
     const ZERO: ClockValue = ClockValue::new(0, CLOCK_FREQUENCY_HZ);
     const BIG_POSITIVE: ClockValue = ClockValue::new(isize::MAX / 1000 - 1, CLOCK_FREQUENCY_HZ);
     const NEGATIVE: ClockValue = ClockValue::new(-1, CLOCK_FREQUENCY_HZ);

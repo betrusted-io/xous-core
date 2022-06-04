@@ -4,7 +4,6 @@ use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, Pi
 use graphics_server::api::GlyphStyle;
 use xous::MessageEnvelope;
 use core::fmt::Write;
-use locales::t;
 
 #[allow(dead_code)]
 pub(crate) struct Repl {

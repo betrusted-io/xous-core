@@ -63,6 +63,7 @@ const CRED_INITAL_SIZE: usize = 512;
 // We have: I = (P * 4084 - 5107 - K * S) / 8 * C
 //
 // With P=20 and K=150, we have I=2M which is enough for 500 increments per day for 10 years.
+#[allow(dead_code)] // openSK legacy
 const NUM_PAGES: usize = 20;
 #[allow(dead_code)] // OpenSK legacy
 const MAX_SUPPORTED_RESIDENTIAL_KEYS: usize = 150;
@@ -94,6 +95,15 @@ pub struct MasterKeys {
 /// CTAP persistent storage.
 pub struct PersistentStore {
     pddb: RefCell::<Pddb>,
+}
+
+use std::num::ParseIntError;
+
+pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect()
 }
 
 impl PersistentStore {
@@ -182,8 +192,110 @@ impl PersistentStore {
             }
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
+/*
+        match self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::ATTESTATION_PRIVATE_KEY,
+            None, true, true,
+            Some(32), None::<fn()>
+        ) {
+            Ok(mut aapriv) => {
+                let aapriv_attr = aapriv.attributes().unwrap();
+                if aapriv_attr.len != 32 {
+                    if aapriv_attr.len != 0 {
+                        log::error!("AAPRIV has an illegal length. Suspect PDDB corruption?");
+                        return Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL);
+                    }
+                    let pk = decode_hex("497b200642e71e4ed929359a19aa701b42f3a304bd7e79c4a25b5af2635b2db1").unwrap();
+                    log::info!("writing PK of length {}", pk.len());
+                    log::info!("pk: {:x?}", pk);
+                    assert!(pk.len() == 32, "PK len is wrong");
+                    aapriv.write(&pk)
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                }
+            }
+            _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        }
+
+        match self.pddb.borrow().get(
+            FIDO_PERSISTENT_DICT,
+            key::ATTESTATION_CERTIFICATE,
+            None, true, true,
+            Some(512), None::<fn()>
+        ) {
+            Ok(mut cert) => {
+                let cert_attr = cert.attributes().unwrap();
+                if cert_attr.len == 0 {
+                    let der = decode_hex("308201283081cf021427bf2c7cc29ae91ffb3d4bb99f25fcda6fb407be300a06082a8648ce3d04030230173115301306035504030c0c507265637572736f72204341301e170d3232303630343136313231335a170d3432303630343136313231335a30173115301306035504030c0c507265637572736f722043413059301306072a8648ce3d020106082a8648ce3d03010703420004a4439a22be033f90e8a160ddd5b3552635f3d951d26724a3e453c8438fb2f9cc32c78e413323c438d276a2e3b081be118f516c4e7cb64455c46b5a4bbca85d04300a06082a8648ce3d0403020348003045022008e4e46b48d462a380be08841a9d9da946aef3948e7e7bd8da51dafeea4d563f022100bd3ef23d840dc653fa821f2e0ae940b91f495b692fb7e94588e6fd3ed7d0a3ae").unwrap();
+                    log::info!("writing cert of length {}", der.len());
+                    log::info!("der: {:x?}", der);
+                    cert.write(&der)
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                }
+            }
+            _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+        }
+*/
         Ok(())
     }
+    /*
+    openssl x509 -in cert.der -inform der -noout -text
+Certificate:
+    Data:
+        Version: 1 (0x0)
+        Serial Number:
+            27:bf:2c:7c:c2:9a:e9:1f:fb:3d:4b:b9:9f:25:fc:da:6f:b4:07:be
+        Signature Algorithm: ecdsa-with-SHA256
+        Issuer: CN = Precursor CA
+        Validity
+            Not Before: Jun  4 16:12:13 2022 GMT
+            Not After : Jun  4 16:12:13 2042 GMT
+        Subject: CN = Precursor CA
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit)
+                pub:
+                    04:a4:43:9a:22:be:03:3f:90:e8:a1:60:dd:d5:b3:
+                    55:26:35:f3:d9:51:d2:67:24:a3:e4:53:c8:43:8f:
+                    b2:f9:cc:32:c7:8e:41:33:23:c4:38:d2:76:a2:e3:
+                    b0:81:be:11:8f:51:6c:4e:7c:b6:44:55:c4:6b:5a:
+                    4b:bc:a8:5d:04
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+    Signature Algorithm: ecdsa-with-SHA256
+         30:45:02:20:08:e4:e4:6b:48:d4:62:a3:80:be:08:84:1a:9d:
+         9d:a9:46:ae:f3:94:8e:7e:7b:d8:da:51:da:fe:ea:4d:56:3f:
+         02:21:00:bd:3e:f2:3d:84:0d:c6:53:fa:82:1f:2e:0a:e9:40:
+         b9:1f:49:5b:69:2f:b7:e9:45:88:e6:fd:3e:d7:d0:a3:ae
+
+openssl asn1parse -in cert.der -inform der
+    0:d=0  hl=4 l= 296 cons: SEQUENCE
+    4:d=1  hl=3 l= 207 cons: SEQUENCE
+    7:d=2  hl=2 l=  20 prim: INTEGER           :27BF2C7CC29AE91FFB3D4BB99F25FCDA6FB407BE
+   29:d=2  hl=2 l=  10 cons: SEQUENCE
+   31:d=3  hl=2 l=   8 prim: OBJECT            :ecdsa-with-SHA256
+   41:d=2  hl=2 l=  23 cons: SEQUENCE
+   43:d=3  hl=2 l=  21 cons: SET
+   45:d=4  hl=2 l=  19 cons: SEQUENCE
+   47:d=5  hl=2 l=   3 prim: OBJECT            :commonName
+   52:d=5  hl=2 l=  12 prim: UTF8STRING        :Precursor CA
+   66:d=2  hl=2 l=  30 cons: SEQUENCE
+   68:d=3  hl=2 l=  13 prim: UTCTIME           :220604161213Z
+   83:d=3  hl=2 l=  13 prim: UTCTIME           :420604161213Z
+   98:d=2  hl=2 l=  23 cons: SEQUENCE
+  100:d=3  hl=2 l=  21 cons: SET
+  102:d=4  hl=2 l=  19 cons: SEQUENCE
+  104:d=5  hl=2 l=   3 prim: OBJECT            :commonName
+  109:d=5  hl=2 l=  12 prim: UTF8STRING        :Precursor CA
+  123:d=2  hl=2 l=  89 cons: SEQUENCE
+  125:d=3  hl=2 l=  19 cons: SEQUENCE
+  127:d=4  hl=2 l=   7 prim: OBJECT            :id-ecPublicKey
+  136:d=4  hl=2 l=   8 prim: OBJECT            :prime256v1
+  146:d=3  hl=2 l=  66 prim: BIT STRING
+  214:d=1  hl=2 l=  10 cons: SEQUENCE
+  216:d=2  hl=2 l=   8 prim: OBJECT            :ecdsa-with-SHA256
+  226:d=1  hl=2 l=  72 prim: BIT STRING
+    */
 
     /// The credential ID, as stored in OpenSK, is a 112-entry Vec<u8> that starts with
     /// a random 128-bit AES IV. This effectively takes the 128-bit AES IV and turns it into
@@ -681,7 +793,11 @@ impl PersistentStore {
             None, None::<fn()>
         ).ok() {
             let mut data = Vec::<u8>::new();
-            acert.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+            match acert.read_to_end(&mut data) {
+                Ok(l) => log::info!("read {} bytes", l),
+                Err(e) => log::error!("error reading certificate: {:?}", e),
+            }
+            log::info!("read back cert: {:x?}", data);
             Ok(Some(data))
         } else {
             Ok(None)

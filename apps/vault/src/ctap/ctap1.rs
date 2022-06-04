@@ -22,6 +22,7 @@ use core::convert::Into;
 use core::convert::TryFrom;
 use ctap_crypto::rng256::Rng256;
 use crate::shims::ClockValue;
+use locales::t;
 
 // For now, they're the same thing with apdu.rs containing the authoritative definition
 pub type Ctap1StatusCode = ApduStatusCode;
@@ -197,10 +198,13 @@ impl Ctap1Command {
                 application,
             } => {
                 log::debug!("REGISTER");
-                if !ctap_state.u2f_up_state.consume_up(clock_value) {
-                    log::debug!("consume_up did not work");
+                let mut regstr = String::from(t!("vault.u2f.register", xous::LANG));
+                regstr.push_str(&format!("\n{}\n{:x?}", t!("vault.u2f.apphash", xous::LANG), application));
+                if !ctap_state.u2f_up_state.consume_up(clock_value, regstr) {
+                    log::debug!("still waiting...");
                     return Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED);
                 }
+                log::debug!("GOT IT!...");
                 Ctap1Command::process_register(challenge, application, ctap_state)
             }
 
@@ -211,9 +215,11 @@ impl Ctap1Command {
                 flags,
             } => {
                 log::debug!("AUTHENTICATE");
+                let mut authstr = String::from(t!("vault.u2f.authenticate", xous::LANG));
+                authstr.push_str(&format!("\n{}\n{:x?}", t!("vault.u2f.apphash", xous::LANG), application));
                 // The order is important due to side effects of checking user presence.
                 if flags == Ctap1Flags::EnforceUpAndSign
-                    && !ctap_state.u2f_up_state.consume_up(clock_value)
+                    && !ctap_state.u2f_up_state.consume_up(clock_value, authstr)
                 {
                     return Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED);
                 }
@@ -266,6 +272,7 @@ impl Ctap1Command {
             .encrypt_key_handle(sk, &application)
             .map_err(|_| Ctap1StatusCode::SW_INTERNAL_EXCEPTION)?;
         if key_handle.len() > 0xFF {
+            log::info!("key_handle.len() invalid");
             // This is just being defensive with unreachable code.
             return Err(Ctap1StatusCode::SW_INTERNAL_EXCEPTION);
         }
@@ -301,6 +308,7 @@ impl Ctap1Command {
         let signature = attestation_key.sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data);
 
         response.extend(signature.to_asn1_der());
+        log::info!("process_register response: {:x?}", &response[..32]);
         Ok(response)
     }
 
