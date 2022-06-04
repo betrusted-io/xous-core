@@ -7,10 +7,10 @@ pub mod tests;
 use bit_field::BitField;
 use core::cell::Cell;
 #[cfg(feature = "ditherpunk")]
+use dither::prelude::{Img, RGB};
+#[cfg(feature = "ditherpunk")]
 use fast_image_resize as fir;
 use gam::*;
-#[cfg(feature = "ditherpunk")]
-use image::RgbImage;
 use num_traits::*;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
@@ -204,29 +204,28 @@ impl Modals {
     const MODAL_HEIGHT: u32 = 370;
     /// this blocks until the image has been dismissed.
     #[cfg(feature = "ditherpunk")]
-    pub fn show_image(&self, img: &RgbImage) -> Result<(), xous::Error> {
+    pub fn show_image(&self, img: &Img<RGB<u8>>) -> Result<(), xous::Error> {
         self.lock();
 
         // resize and/or rotate
         let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
-        let (img_w, img_h) = img.dimensions();
-        let (img_width, img_height) = (img_w as f32, img_h as f32);
+        let (img_width, img_height) = (img.width() as f32, img.height() as f32);
         let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
         let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
-        let mut modal_img: RgbImage = img.clone();
         let mut rotate = false;
+        let mut modal_img = img.clone();
         if portrait_scale >= 1.0 {
-            //noop
+            // noop
         } else if landscape_scale >= 1.0 {
             rotate = true;
         } else if portrait_scale >= landscape_scale {
-            modal_img = Modals::resize_image(modal_img, portrait_scale);
+            modal_img = Modals::resize_image(modal_img, portrait_scale)
         } else {
-            modal_img = Modals::resize_image(modal_img, landscape_scale);
             rotate = true;
-        }
+            modal_img = Modals::resize_image(modal_img, landscape_scale)
+        };
 
-        let mut bm = Bitmap::from(&modal_img);
+        let mut bm = Bitmap::from(modal_img);
         bm = if rotate { bm.rotate90() } else { bm };
         let (bm_width, bm_height) = bm.size();
         let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
@@ -259,14 +258,24 @@ impl Modals {
     }
 
     #[cfg(feature = "ditherpunk")]
-    fn resize_image(img: RgbImage, scale: f32) -> RgbImage {
-        let width: u32 = (img.width() as f32 * scale).floor() as u32;
-        let height: u32 = (img.height() as f32 * scale).floor() as u32;
+    fn resize_image(img: Img<RGB<u8>>, scale: f32) -> Img<RGB<u8>> {
+        let (img_width, img_height) = (img.width() as f32, img.height() as f32);
+        let height: u32 = (img_height * scale).floor() as u32;
+        let width: u32 = (img_width * scale).floor() as u32;
+        let b = 3 * width * height;
+
+        let mut bytes: Vec<u8> = Vec::with_capacity(b.try_into().unwrap());
+        let pixels = img.into_vec();
+        for px in pixels {
+            bytes.push(px.0);
+            bytes.push(px.1);
+            bytes.push(px.2);
+        }
 
         let fir_img = fir::Image::from_vec_u8(
-            NonZeroU32::new(img.width()).unwrap(),
-            NonZeroU32::new(img.height()).unwrap(),
-            img.into_vec(),
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+            bytes,
             fir::PixelType::U8x3,
         )
         .unwrap();
@@ -283,13 +292,16 @@ impl Modals {
         let mut resizer = fir::Resizer::new(fir::ResizeAlg::Nearest);
         resizer.resize(&fir_img.view(), &mut rsz_view).unwrap();
 
-        // convert back into an RgbImage
-        RgbImage::from_vec(
-            resized.width().try_into().unwrap(),
-            resized.height().try_into().unwrap(),
-            resized.into_vec(),
-        )
-        .expect("failed to convert to RgbImage")
+        // convert back into an Img<RGB<u8>>
+        let px = resized.width().get() * resized.height().get();
+        let mut pixels: Vec<RGB<u8>> = Vec::with_capacity(px.try_into().unwrap());
+        let bytes = resized.into_vec();
+        let mut i = 0;
+        while i < bytes.len() {
+            pixels.push(RGB::from([bytes[i], bytes[i + 1], bytes[i + 2]]));
+            i += 3;
+        }
+        Img::new(pixels, width).expect("failed to create Img")
     }
 
     pub fn start_progress(

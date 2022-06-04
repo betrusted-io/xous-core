@@ -1,10 +1,12 @@
 #![allow(dead_code)]
+use super::*;
+#[cfg(feature = "ditherpunk")]
+use dither::prelude::{Img, RGB};
 use gam::*;
+#[cfg(feature = "ditherpunk")]
+use std::fs::File;
 use std::thread;
 use xous_names::XousNames;
-#[cfg(feature="ditherpunk")]
-use image::io::Reader;
-use super::*;
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
 
@@ -82,7 +84,6 @@ pub fn spawn_test() {
             log::info!("notification test done");
         }
     });
-
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
@@ -137,28 +138,45 @@ pub fn spawn_test() {
             log::info!("qrcode test done");
 
             // 5. test image - because it reads a local file, only makes sense on hosted mode
-            #[cfg(all(feature="ditherpunk", not(any(target_os = "none", target_os = "xous"))))]
+            #[cfg(all(
+                feature = "ditherpunk",
+                not(any(target_os = "none", target_os = "xous"))
+            ))]
             {
                 log::info!("testing image");
-                let reader = match Reader::open("../services/modals/src/tests/bunny.png") {
-                    Err(err) => {
-                        log::error!("cannot load image, {}", err);
-                        return
-                    }
-                    Ok(r) => r,
-                };
-                let img = match reader.decode() {
-                    Err(e) => {
-                        log::error!("failed to decode image, {}", e);
-                        return
-                    }
-                    Ok(img) => img.into_rgb8(),
-                };
-                modals.show_image(&img).expect("image modal failed");
-                log::info!("image test done");
+                match get_test_png("../services/modals/src/tests/bunny.png") {
+                    Some(img) => modals.show_image(&img).expect("show image modal failed"),
+                    None => log::warn!("failed to load test image"),
+                }
+                log::info!("image modal test done");
             }
         }
     });
+}
+
+fn get_test_png(path: &str) -> Option<Img<RGB<u8>>> {
+    let file = match File::open(path) {
+        Err(err) => {
+            log::error!("cannot load image, {}", err);
+            return None;
+        }
+        Ok(r) => r,
+    };
+    let decoder = png::Decoder::new(file);
+    let mut reader = decoder.read_info().expect("failed to read png info");
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).expect("failed to decode png");
+
+    let (width, height) = (info.width, info.height);
+    let px = width * height;
+    let mut pixels: Vec<RGB<u8>> = Vec::with_capacity(px.try_into().unwrap());
+    let mut i = 0;
+    while i < buf.len() {
+        pixels.push(RGB::from([buf[i], buf[i + 1], buf[i + 2]]));
+        i += 3;
+    }
+    let img = Img::new(pixels, width).expect("failed to create Image");
+    Some(img)
 }
 
 fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
