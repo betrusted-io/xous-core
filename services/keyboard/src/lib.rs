@@ -92,6 +92,8 @@ impl Keyboard {
             Ok(_) | Err(_) => panic!("internal error: Incorrect return type")
         }
     }
+    /// Reveal the connection ID for use with unsafe FFI calls
+    pub fn conn(&self) -> xous::CID { self.conn }
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn hostmode_inject_key(&self, c: char) {

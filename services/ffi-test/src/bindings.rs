@@ -16,6 +16,60 @@ pub type c_float = f32;
 pub type c_double = f64;
 pub type c_void = core::ffi::c_void;
 
+use xous::{send_message, Message};
+static mut KBD: Option<keyboard::Keyboard> = None;
+fn get_keys_blocking() -> Vec<char> {
+    if unsafe{KBD.is_none()} {
+        let xns = xous_names::XousNames::new().unwrap();
+        let kbd = keyboard::Keyboard::new(&xns).unwrap();
+        unsafe{KBD = Some(kbd)};
+    }
+    match send_message(unsafe{KBD.as_ref().unwrap().conn()},
+        Message::new_blocking_scalar(
+            9, // BlockingKeyboardListener
+            0, 0, 0, 0
+        )
+    ) {
+        Ok(xous::Result::Scalar2(k1, k2)) => {
+            let mut ret = Vec::<char>::new();
+            if let Some(c) = core::char::from_u32(k1 as u32) {
+                ret.push(c)
+            }
+            if let Some(c) = core::char::from_u32(k2 as u32) {
+                ret.push(c)
+            }
+            ret
+        }
+        Ok(_) | Err(_) => panic!("internal error: Incorrect return type")
+    }
+}
+
+
+#[export_name = "rust_getchar"]
+pub unsafe extern "C" fn rust_getchar() -> c_char {
+    log::info!("rust_getchar called");
+    let mut chr = 0 as c_char;
+    let kbhit = get_keys_blocking();
+    for k in kbhit {
+        log::info!("got key character: {}", k);
+        chr = k as i8;
+        return chr;
+        //break;
+    }
+    log::info!("libc_getchar cleanup FIXME");
+    //kbd.drop(); ?????
+    return chr;
+}
+
+/*
+/// Call this from your Rust init routine, before using get_keys_blocking()
+pub fn init_kbd() {
+    let xns = xous_names::XousNames::new().unwrap();
+    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+    KBD_CONN.store(kbd.conn(), Ordering::SeqCst);
+    unsafe{KBD = Some(kbd)};
+}*/
+
 extern "C" {
     pub fn add_one(a: i32) -> i32;
 }
