@@ -47,38 +47,39 @@ impl Into<usize> for KeyMap {
     }
 }
 
+// Opcodes are pinned down to allow for unsafe FFI extraction of key hits
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     /// set which keyboard mapping is present
-    SelectKeyMap, //(KeyMap),
-    GetKeyMap,
+    SelectKeyMap = 0, //(KeyMap),
+    GetKeyMap = 1,
 
     /// request for ScanCodes
-    RegisterListener,
+    RegisterListener = 2,
 
     /// request for raw keyups/downs
-    RegisterRawListener,
+    RegisterRawListener = 3,
 
     /// set repeat delay, rate; both in ms
-    SetRepeat, //(u32, u32),
+    SetRepeat = 4, //(u32, u32),
 
     /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord), in ms (for braille keyboards)
-    SetChordInterval, //(u32),
+    SetChordInterval = 5, //(u32),
 
     /// used by host mode emulation and debug UART to inject keys
-    InjectKey, //(char),
+    InjectKey = 6, //(char),
 
     /// used by the interrupt handler to transfer results to the main loop
-    HandlerTrigger,
+    HandlerTrigger = 7,
 
     /// used to turn keyboard vibrate on and off
-    Vibe,
+    Vibe = 8,
 
     /// a blocking key listener - blocks until a key is hit
-    BlockingKeyListener,
+    BlockingKeyListener = 9,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 10,
 }
 
 // this structure is used to register a keyboard listener. Currently, we only accept
