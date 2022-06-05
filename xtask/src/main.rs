@@ -1829,6 +1829,9 @@ fn overwrite_if_changed(new_string: &String, old_file: &str) {
         _ => String::new(),
     };
     if &original != new_string {
+        // println!("file change in i18n.json detected:");
+        // println!("Old: {}", original);
+        // println!("New: {}", new_string);
         let mut new_file = OpenOptions::new()
             .read(true)
             .write(true)

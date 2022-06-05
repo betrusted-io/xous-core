@@ -24,7 +24,7 @@
     "vault": {
         "context_name": "Key Vault",
         "menu_name": {
-            "appmenu.repl": {
+            "appmenu.vault": {
                 "en": "Key Vault",
                 "ja": "キーボールト",
                 "zh": "密钥库",
