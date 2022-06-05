@@ -164,26 +164,25 @@ impl ActionApi for Notification {
             if self.qrwidth > 0 {
                 self.draw_qrcode(at_height, modal);
             }
-
-            // divider lines
-            let color = if self.is_password {
-                PixelColor::Light
-            } else {
-                PixelColor::Dark
-            };
-
-            modal
-                .gam
-                .draw_line(
-                    modal.canvas,
-                    Line::new_with_style(
-                        Point::new(modal.margin, at_height + modal.margin),
-                        Point::new(modal.canvas_width - modal.margin, at_height + modal.margin),
-                        DrawStyle::new(color, color, 1),
-                    ),
-                )
-                .expect("couldn't draw entry line");
         }
+        // divider lines
+        let color = if self.is_password {
+            PixelColor::Light
+        } else {
+            PixelColor::Dark
+        };
+
+        modal
+            .gam
+            .draw_line(
+                modal.canvas,
+                Line::new_with_style(
+                    Point::new(modal.margin, at_height + modal.margin),
+                    Point::new(modal.canvas_width - modal.margin, at_height + modal.margin),
+                    DrawStyle::new(color, color, 1),
+                ),
+            )
+            .expect("couldn't draw entry line");
     }
     fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
@@ -192,12 +191,12 @@ impl ActionApi for Notification {
                 // ignore null messages
             }
             _ => {
+                send_message(
+                    self.action_conn,
+                    xous::Message::new_scalar(self.action_opcode as usize, k as u32 as usize, 0, 0, 0),
+                )
+                .expect("couldn't pass on dismissal");
                 if self.manual_dismiss {
-                    send_message(
-                        self.action_conn,
-                        xous::Message::new_scalar(self.action_opcode as usize, k as u32 as usize, 0, 0, 0),
-                    )
-                    .expect("couldn't pass on dismissal");
                     return (None, true);
                 }
             }
