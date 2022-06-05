@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use usb_device::{class_prelude::*, Result, UsbDirection};
 use std::collections::BTreeMap;
 
+const WRITE_TIMEOUT_MS: u64 = 1000;
+
 fn handle_usb(_irq_no: usize, arg: *mut usize) {
     let usb = unsafe { &mut *(arg as *mut SpinalUsbDevice) };
     let pending = usb.csr.r(utra::usbdev::EV_PENDING);
@@ -557,11 +559,20 @@ impl UsbBus for SpinalUsbDevice {
                 #[cfg(feature="mjolnir")] // mjolnir is so powerful, one must halt the USB core entirely for it to be weilded
                 if ep_addr.index() == 1 { self.udc_hard_halt(ep_addr.index()); }
                 let mut ep_status = self.status_read_volatile(ep_addr.index());
+
                 if ep_addr.index() != 0 {
+                    let now = self.tt.elapsed_ms();
+                    while (self.tt.elapsed_ms() - now < WRITE_TIMEOUT_MS)
+                    && ep_status.head_offset() != 0 {
+                        xous::yield_slice();
+                        ep_status = self.status_read_volatile(ep_addr.index());
+                    }
                     if ep_status.head_offset() != 0 {
-                        log::warn!("head offset is not 0");
+                        log::warn!("head offset is not 0 even after waiting");
+                        return Err(UsbError::WouldBlock);
                     }
                 }
+
                 // this is reset to 0 after every transaction by the hardware, so we must reset it
                 ep_status.set_head_offset(head_offset as u32);
 
@@ -571,7 +582,10 @@ impl UsbBus for SpinalUsbDevice {
                     return Err(UsbError::WouldBlock);
                 }*/
                 if descriptor.in_progress() && ep_addr.index() != 0 {
-                    self.tt.sleep_ms(5).unwrap();
+                    // refresh the ep_status after waiting
+                    ep_status = self.status_read_volatile(ep_addr.index());
+                    ep_status.set_head_offset(head_offset as u32);
+                    // note that the *descriptor* doesn't need to be updated because it refers directly to a memory location
                     if descriptor.in_progress() {
                         log::warn!("in progress despite waiting on write");
                     }
@@ -760,7 +774,9 @@ impl UsbBus for SpinalUsbDevice {
                 // sanity check on interrupts: it should be cleared by this point!
                 let interrupts = self.regs.interrupts();
                 if interrupts.0 != 0 {
-                    log::warn!("Pending interrupts, clearing: {:?}", interrupts);
+                    if interrupts.0 != 1 { // ep0 interrupt can sometimes be leftover from ep0setup handling
+                        log::warn!("Pending interrupts, clearing: {:?}", interrupts);
+                    }
                     self.regs.clear_all_interrupts();
                 }
 
