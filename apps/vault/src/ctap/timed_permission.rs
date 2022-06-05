@@ -72,6 +72,7 @@ impl U2fUserPresenceState {
     }
 
     // Granting user presence is ignored if it needs activation, but waits. Also cleans up.
+    #[allow(dead_code)]
     pub fn grant_up(&mut self, _now: ClockValue) {
         // this is a NOP because it's handled by another thread
     }
@@ -82,6 +83,7 @@ impl U2fUserPresenceState {
     }
 
     // Returns if user presence was requested. Also cleans up.
+    #[allow(dead_code)]
     pub fn is_up_needed(&mut self, _now: ClockValue) -> bool {
         // this is not used by Xous
         false

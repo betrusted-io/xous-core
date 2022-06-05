@@ -894,7 +894,7 @@ where
     fn process_reset(
         &mut self,
         cid: ChannelID,
-        now: ClockValue,
+        _now: ClockValue,
     ) -> Result<ResponseData, Ctap2StatusCode> {
         // Resets are only possible in the first 10 seconds after booting.
         // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?

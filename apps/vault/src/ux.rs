@@ -1,7 +1,7 @@
 use std::thread;
 use std::sync::{Arc, atomic::AtomicU32, atomic::Ordering};
 use num_traits::*;
-use xous::{msg_scalar_unpack, send_message, Message, msg_blocking_scalar_unpack};
+use xous::{msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
 use locales::t;
 use crate::ctap::hid::{CtapHid, KeepaliveStatus};
@@ -39,26 +39,7 @@ enum UxState {
 }
 
 static SELF_CID: AtomicU32 = AtomicU32::new(0);
-/*
-/// This must be proceeded by a call to request permission, to set up the scenario
-pub(crate) fn poll_consume_permission() -> bool {
-    if SELF_CID.load(Ordering::SeqCst) == 0 {
-        log::error!("internal error: ux thread not started");
-        return false;
-    }
-    match send_message(SELF_CID.load(Ordering::SeqCst),
-        Message::new_blocking_scalar(UxOp::ConsumePermission.to_usize.unwrap(), 0, 0, 0, 0)
-    ).expect("couldn't query ux thread") {
-        xous::Result::Scalar1(r) => {
-            if r == 1 {
-                true
-            } else {
-                false
-            }
-        }
-        _ => log::error!("Internal error: wrong return type"),
-    }
-}*/
+
 pub(crate) fn set_durations(prompt: i64, presence: i64) {
     if SELF_CID.load(Ordering::SeqCst) == 0 {
         log::error!("internal error: ux thread not started");
@@ -151,23 +132,6 @@ pub(crate) fn start_ux_thread() {
                             buffer.replace(fido_request).unwrap();
                         }
                     }),
-                    /*
-                    // this is a polled request, used by legacy u2f transactions
-                    Some(UxOp::ConsumePermission) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                        match ux_state {
-                            UxState::Idle | UxState::Prompt(_) => {
-                                // 0 = not present
-                                xous::return_scalar(msg.sender, 0).unwrap();
-                            },
-                            UxState::Present(_) => {
-                                // 1 = present
-                                xous::return_scalar(msg.sender, 1).unwrap();
-                                ux_state = UxState::Idle;
-                                // these two paths shouldn't be mixed-and-matched, but let's just enforce that.
-                                assert!(deferred_req.is_none(), "polled request succeeded when a blocking request was also in progress");
-                            }
-                        }
-                    }), */
                     // this can set up either a blocking request (deferred = true), or a polled request (deferred = false)
                     // u2f polls; fido2 seems to require blocking requests. This difference causes a lot of complications.
                     Some(UxOp::RequestPermission) => {
