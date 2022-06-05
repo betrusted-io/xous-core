@@ -1157,6 +1157,7 @@ name = "ffi-test"
 version = "0.1.0"
 dependencies = [
  "ffi-sys",
+ "keyboard",
  "log",
  "log-server",
  "num-derive",

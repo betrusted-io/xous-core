@@ -16,6 +16,7 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 susres = {path = "../susres"}
 ffi-sys = {path = "sys"}
+keyboard = {path = "../keyboard"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
