@@ -157,7 +157,7 @@ impl CtapHid {
         CheckUserPresence: Fn(ChannelID) -> Result<(), Ctap2StatusCode>,
     {
         // TODO: Send COMMAND_KEEPALIVE every 100ms?
-        log::info!("now: {}", clock_value.ms());
+        log::trace!("now: {}", clock_value.ms());
         match self
             .assembler
             .parse_packet(packet, Timestamp::<i64>::from_clock_value(clock_value))
@@ -190,11 +190,11 @@ impl CtapHid {
                             clock_value,
                         ) {
                             Ok(payload) => {
-                                log::info!("command success: {:x?}", payload);
+                                log::trace!("command success: {:x?}", payload);
                                 CtapHid::ctap1_success_message(cid, &payload)
                             },
                             Err(ctap1_status_code) => {
-                                log::info!("command failure: {:?}", ctap1_status_code);
+                                log::warn!("command failure: {:?}", ctap1_status_code);
                                 CtapHid::ctap1_error_message(cid, ctap1_status_code)
                             }
                         }

@@ -12,14 +12,16 @@ pub(crate) struct FidoRequest {
     pub channel_id: [u8; 4],
     pub desc: xous_ipc::String::<1024>,
     pub deferred: bool,
-    pub granted: bool,
+    pub granted: Option<char>,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum UxOp {
-    // sets the timeouts, and also resets and pending expirations or granted state
+    /// sets the timeouts, and also resets and pending expirations or granted state
     SetTimers,
+    /// the "generic" user interaction flow
     RequestPermission,
+    /// self-referential pumping opcode to monitor timeouts, etc.
     Pump,
     Quit
 }
@@ -40,7 +42,7 @@ static SELF_CID: AtomicU32 = AtomicU32::new(0);
 /*
 /// This must be proceeded by a call to request permission, to set up the scenario
 pub(crate) fn poll_consume_permission() -> bool {
-    if SELF_CID.load(Ordering::SeqCstg) == 0 {
+    if SELF_CID.load(Ordering::SeqCst) == 0 {
         log::error!("internal error: ux thread not started");
         return false;
     }
@@ -74,24 +76,26 @@ pub(crate) fn set_durations(prompt: i64, presence: i64) {
         )
     ).expect("couldn't set timers");
 }
-pub(crate) fn request_permission_blocking(reason: String, channel_id: [u8; 4]) -> bool {
+/// Some(char) => user is present, and they hit the key indicated
+/// None => user was not present
+pub(crate) fn request_permission_blocking(reason: String, channel_id: [u8; 4]) -> Option<char> {
     log::info!("requesting permission (blocking");
     request_permission_inner(reason, channel_id, true)
 }
 pub(crate) fn request_permission_polling(reason: String) -> bool {
     log::info!("requesting permission (polling)");
-    request_permission_inner(reason, [0xff, 0xff, 0xff, 0xff], false)
+    request_permission_inner(reason, [0xff, 0xff, 0xff, 0xff], false).is_some()
 }
-fn request_permission_inner(reason: String, channel_id: [u8; 4], blocking: bool) -> bool {
+fn request_permission_inner(reason: String, channel_id: [u8; 4], blocking: bool) -> Option<char> {
     if SELF_CID.load(Ordering::SeqCst) == 0 {
         log::error!("internal error: ux thread not started");
-        return false;
+        return None;
     }
     let fido_req = FidoRequest {
         channel_id,
         desc: xous_ipc::String::from_str(&reason),
         deferred: blocking,
-        granted: false
+        granted: None
     };
     let mut buf = Buffer::into_buf(fido_req).expect("couldn't do IPC transformation");
     buf.lend_mut(
@@ -138,11 +142,12 @@ pub(crate) fn start_ux_thread() {
                             prompt_timeout_ms: prompt as i64,
                         };
                         ux_state = UxState::Idle;
+                        kbhit.store(0, Ordering::SeqCst);
                         // in case this is called while a deferred response is pending...deny the request
                         if let Some(mut msg) = deferred_req.take() {
                             let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                             let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                            fido_request.granted = false;
+                            fido_request.granted = None;
                             buffer.replace(fido_request).unwrap();
                         }
                     }),
@@ -186,7 +191,11 @@ pub(crate) fn start_ux_thread() {
                                     // short circuit all the logic, and grant the presence
                                     let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                                     let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                                    fido_request.granted = true;
+                                    fido_request.granted = if kbhit.load(Ordering::SeqCst) == 0 {
+                                        None
+                                    } else {
+                                        char::from_u32(kbhit.load(Ordering::SeqCst))
+                                    };
                                     buffer.replace(fido_request).unwrap();
                                     continue;
                                 }
@@ -201,7 +210,11 @@ pub(crate) fn start_ux_thread() {
                                     log::info!("-->U2F USER PRESENT<--");
                                     let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                                     let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                                    fido_request.granted = true;
+                                    fido_request.granted = if kbhit.load(Ordering::SeqCst) == 0 {
+                                        None
+                                    } else {
+                                        char::from_u32(kbhit.load(Ordering::SeqCst))
+                                    };
                                     buffer.replace(fido_request).unwrap();
                                     ux_state = UxState::Idle; // in the case of U2F, there is no persistence to the presence, it goes away immediately
                                     continue;
@@ -212,7 +225,7 @@ pub(crate) fn start_ux_thread() {
                                     ux_state = UxState::Prompt(prompt_expiration_ms); // extend the prompt time out
                                     let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                                     let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                                    fido_request.granted = false;
+                                    fido_request.granted = None;
                                     buffer.replace(fido_request).unwrap();
                                     // in case of U2F, just inform that no permission is granted yet and abort
                                     continue;
@@ -230,7 +243,7 @@ pub(crate) fn start_ux_thread() {
                         if deferred {
                             last_timer = 1 + (prompt_expiration_ms - tt.elapsed_ms() as i64) / 1000;
                             request_str.push_str(
-                                &format!("{}\n{}s remaining",
+                                &format!("{}\n\n{}s remaining",
                                 &request_str_base,
                                 last_timer)
                             );
@@ -267,7 +280,7 @@ pub(crate) fn start_ux_thread() {
                         } else { // in the case of a polled implementation, just return false for granted and move on
                             let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                             let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                            fido_request.granted = false;
+                            fido_request.granted = None;
                             buffer.replace(fido_request).unwrap();
                         }
                     }
@@ -277,12 +290,6 @@ pub(crate) fn start_ux_thread() {
                                 // don't issue another pump message, causing the loop to end
                             },
                             UxState::Present(present_expiration_ms) => {
-                                if let Some(mut msg) = deferred_req.take() {
-                                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                                    let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                                    fido_request.granted = true;
-                                    buffer.replace(fido_request).unwrap();
-                                }
                                 // check if we timed out
                                 if tt.elapsed_ms() as i64 >= present_expiration_ms {
                                     ux_state = UxState::Idle;
@@ -306,14 +313,15 @@ pub(crate) fn start_ux_thread() {
                                     }
                                     let new_timer = 1 + (prompt_expiration_ms - tt.elapsed_ms() as i64) / 1000;
                                     if last_timer != new_timer {
+                                        log::info!("new_timer: {}", new_timer);
                                         let mut request_str = String::from(&request_str_base);
                                         request_str.push_str(
-                                            &format!("{}\n{}s remaining",
+                                            &format!("{}\n\n{}s remaining",
                                             &request_str_base,
                                             new_timer)
                                         );
                                         modals.dynamic_notification_update(
-                                            None,
+                                            Some(t!("vault.u2freq", xous::LANG)),
                                             Some(&request_str),
                                         ).unwrap();
                                         last_timer = new_timer;
@@ -321,7 +329,16 @@ pub(crate) fn start_ux_thread() {
                                 }
                                 // check if we got a hit
                                 if kbhit.load(Ordering::SeqCst) != 0 {
+                                    log::info!("got kbhit!");
+                                    if let Some(mut msg) = deferred_req.take() {
+                                        let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                                        let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
+                                        fido_request.granted = char::from_u32(kbhit.load(Ordering::SeqCst));
+                                        log::info!("returning {:?}", fido_request.granted);
+                                        buffer.replace(fido_request).unwrap();
+                                    }
                                     ux_state = UxState::Present(tt.elapsed_ms() as i64 + timeouts.presence_timeout_ms);
+                                    modals.dynamic_notification_close().unwrap();
                                     send_message(self_cid,
                                         Message::new_scalar(UxOp::Pump.to_usize().unwrap(), KEEPALIVE_MS, 0, 0, 0)
                                     ).unwrap();
@@ -329,6 +346,7 @@ pub(crate) fn start_ux_thread() {
                                     tt.sleep_ms(interval).unwrap();
                                     // check if we timed out
                                     if tt.elapsed_ms() as i64 >= prompt_expiration_ms {
+                                        log::info!("timed out");
                                         ux_state = UxState::Idle;
                                         modals.dynamic_notification_close().unwrap();
                                     } else { // else pump the loop again

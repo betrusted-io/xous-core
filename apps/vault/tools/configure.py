@@ -124,6 +124,8 @@ def main(args):
             priv_key.private_numbers().private_value.to_bytes(
                 length=32, byteorder='big', signed=False)
     }
+    print(cbor_data[2][1].hex())
+    print(cbor_data[2][2].hex())
 
   for authenticator in tqdm(get_opensk_devices(args.batch)):
     # If the device supports it, wink to show which device

@@ -52,7 +52,7 @@ generate_crypto_materials () {
       -new \
       -key "${ca_priv_key}" \
       -out "${ca_cert_name}.csr" \
-      -subj "/CN=OpenSK CA"
+      -subj "/CN=Precursor U2F DIY CA"
     "${openssl}" x509 \
       -trustout \
       -req \
@@ -75,7 +75,7 @@ generate_crypto_materials () {
       -new \
       -key "${opensk_key}" \
       -out "${opensk_cert_name}.csr" \
-      -subj "/CN=OpenSK Hacker Edition"
+      -subj "/CN=Precursor Self-Verified Device"
     "${openssl}" x509 \
       -req \
       -days 3652 \

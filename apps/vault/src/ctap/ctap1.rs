@@ -308,7 +308,7 @@ impl Ctap1Command {
         let signature = attestation_key.sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data);
 
         response.extend(signature.to_asn1_der());
-        log::info!("process_register response: {:x?}", &response[..32]);
+        log::trace!("process_register response: {:x?}", &response[..32]);
         Ok(response)
     }
 

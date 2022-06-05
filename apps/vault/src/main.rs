@@ -15,7 +15,6 @@ use ctap::status_code::Ctap2StatusCode;
 use ctap::CtapState;
 mod shims;
 use shims::*;
-use ctap_crypto::rng256::XousRng256;
 
 /*
 UI concept:
@@ -91,15 +90,6 @@ fn main() -> ! {
             let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
             let mut ctap_hid = CtapHid::new();
             loop {
-                let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                if /*button_touched.get()*/ false {
-                    ctap_state.u2f_up_state.grant_up(now);
-                }
-                // These calls are making sure that even for long inactivity, wrapping clock values
-                // never randomly wink or grant user presence for U2F.
-                ctap_state.update_command_permission(now);
-                ctap_hid.wink_permission = ctap_hid.wink_permission.check_expiration(now);
-
                 match usb.u2f_wait_incoming() {
                     Ok(msg) => {
                         log::trace!("FIDO listener got message: {:?}", msg);
@@ -122,21 +112,6 @@ fn main() -> ! {
                     }
                     Err(e) => {
                         log::warn!("FIDO listener got an error: {:?}", e);
-                    }
-                }
-                let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                if ctap_hid.wink_permission.is_granted(now) {
-                    log::info!("wink");
-                    // wink_leds(led_counter);
-                } else {
-                    if ctap_state.u2f_up_state.is_up_needed(now) {
-                        // Flash the LEDs with an almost regular pattern. The inaccuracy comes from
-                        // delay caused by processing and sending of packets.
-                        log::info!("leds blink");
-                        //blink_leds(led_counter);
-                    } else {
-                        log::info!("leds off");
-                        //switch_off_leds();
                     }
                 }
             }

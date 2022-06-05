@@ -1,4 +1,10 @@
 {
+    "vault.u2f.factoryreset": {
+        "en": "Host has requested a factory reset of FIDO/U2F credentials.\n\nThis will permanently erase all registrations!!\n\nPress 'y' to allow, any other key to abort.",
+        "ja": "ホストがFIDO/U2Fクレデンシャルの工場出荷時のリセットを要求しました。 これにより、すべての登録が完全に消去されます。\n「y」を押して許可します。他のキーを中止しますか？",
+        "zh": "主机已请求将 FIDO/U2F 凭据恢复出厂设置。 这将永久删除所有注册。\n按「y」允许，任何其他键中止？",
+        "en-tts": "Host has requested a factory reset of FIDO/U2F credentials. This will permanently erase all registrations.\nPress 'y' to allow, any other key to abort."
+    },
     "vault.u2f.authenticate": {
         "en": "U2F Authentication Request",
         "ja": "U2F 認証リクエスト",
