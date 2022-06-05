@@ -142,7 +142,7 @@ fn main() -> ! {
     let usb_alloc = UsbBusAllocator::new(usbdev);
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let clock = EmbeddedClock::new();
-    #[cfg(all(any(target_os = "none", target_os = "xous"), feature="keyboard"))]
+    #[cfg(all(any(target_os = "none", target_os = "xous"), feature="emukbd"))]
     let mut composite = UsbHidClassBuilder::new()
         .add_interface(
             NKROBootKeyboardInterface::default_config(&clock),
@@ -151,7 +151,7 @@ fn main() -> ! {
             FidoInterface::default_config()
         )
         .build(&usb_alloc);
-    #[cfg(all(any(target_os = "none", target_os = "xous"), not(feature="keyboard")))]
+    #[cfg(all(any(target_os = "none", target_os = "xous"), not(feature="emukbd")))]
     let mut composite = UsbHidClassBuilder::new()
         .add_interface(
             FidoInterface::default_config()
@@ -164,7 +164,7 @@ fn main() -> ! {
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
-    #[cfg(all(any(target_os = "none", target_os = "xous"), feature="keyboard"))]
+    #[cfg(all(any(target_os = "none", target_os = "xous"), feature="emukbd"))]
     {
         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
         keyboard.write_report(&Vec::<Keyboard>::new()).ok();
@@ -246,7 +246,7 @@ fn main() -> ! {
             Some(Opcode::UsbIrqHandler) => {
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 if usb_dev.poll(&mut [&mut composite]) {
-                    #[cfg(feature="keyboard")]
+                    #[cfg(feature="emukbd")]
                     {
                         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                         match keyboard.read_report() {
@@ -361,7 +361,7 @@ fn main() -> ! {
                         codes.push(Keyboard::from_primitive(code2 as u8));
                     }
                     let auto_up = if autoup == 1 {true} else {false};
-                    #[cfg(feature="keyboard")]
+                    #[cfg(feature="emukbd")]
                     {
                         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                         keyboard.write_report(&codes).ok();
@@ -397,7 +397,7 @@ fn main() -> ! {
                             KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
                             _ => mappings::char_to_hid_code_us101(ch),
                         };
-                        #[cfg(feature="keyboard")]
+                        #[cfg(feature="emukbd")]
                         {
                             let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                             keyboard.write_report(&codes).ok();

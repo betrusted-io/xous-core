@@ -9,7 +9,7 @@ use log::info;
 
 use num_traits::*;
 use xous_ipc::Buffer;
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, MessageSender};
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
@@ -764,6 +764,8 @@ fn main() -> ! {
     }*/
     let mut esc_index: Option<usize> = None;
     let mut esc_chars = [0u8; 16];
+    // storage for any blocking listeners
+    let mut blocking_listener = Vec::<MessageSender>::new();
 
     log::trace!("starting main loop");
     loop {
@@ -779,6 +781,11 @@ fn main() -> ! {
                 if ena != 0 { vibe = true }
                 else { vibe = false }
             }),
+            Some(Opcode::BlockingKeyListener) => {
+                // by simply storing the sender address and not returning a value,
+                // the sender will remain blocked until the return value is generated
+                blocking_listener.push(msg.sender);
+            },
             Some(Opcode::RegisterListener) => {
                 let buffer = unsafe{Buffer::from_memory_message(msg.body.memory_message().unwrap())};
                 let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
@@ -893,6 +900,11 @@ fn main() -> ! {
                         ).unwrap();
                     }
                 }
+                for listener in blocking_listener.drain(..) {
+                    // we must unblock anyways once the key is hit; even if the key is invalid,
+                    // send the invalid key. The receiving library function will clean this up into a nil-response vector.
+                    xous::return_scalar2(listener, key as u32 as usize, 0).unwrap();
+                }
             }),
             Some(Opcode::HandlerTrigger) => {
                 let rawstates = kbd.update();
@@ -927,6 +939,32 @@ fn main() -> ! {
                 };
 
                 // send keys, if any
+                // handle the blocking listeners
+                if kc.len() > 0 {
+                    for listener in blocking_listener.drain(..) {
+                        xous::return_scalar2(
+                            listener,
+                            if kc.len() >= 1 {
+                                kc[0] as u32 as usize
+                            } else {
+                                0
+                            },
+                            if kc.len() >= 2 {
+                                kc[1] as u32 as usize
+                            } else {
+                                0
+                            },
+                        ).unwrap();
+                        if kc.len() > 2 {
+                            log::warn!(
+                                "Extra keys in multi-hit event went unreported: only 2 of {} total keys reported out of {:?}",
+                                kc.len(),
+                                &kc,
+                            );
+                        }
+                    }
+                }
+                // handle the true async listeners
                 if kc.len() > 0 && listener_conn.is_some() && listener_op.is_some() {
                     if vibe {
                         llio.vibe(llio::VibePattern::Short).unwrap();

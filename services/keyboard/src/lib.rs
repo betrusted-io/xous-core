@@ -69,6 +69,29 @@ impl Keyboard {
             _ => Err(xous::Error::InternalError)
         }
     }
+    /// Blocks until a key is hit. Does not block the keyboard server, just the caller.
+    /// Returns a `Vec::<char>`, as the user can press more than one key at a time.
+    /// The specific order of a simultaneous key hit event is not defined.
+    pub fn get_keys_blocking(&self) -> Vec<char> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(
+                Opcode::BlockingKeyListener.to_usize().unwrap(),
+                0, 0, 0, 0
+            )
+        ) {
+            Ok(xous::Result::Scalar2(k1, k2)) => {
+                let mut ret = Vec::<char>::new();
+                if let Some(c) = core::char::from_u32(k1 as u32) {
+                    ret.push(c)
+                }
+                if let Some(c) = core::char::from_u32(k2 as u32) {
+                    ret.push(c)
+                }
+                ret
+            }
+            Ok(_) | Err(_) => panic!("internal error: Incorrect return type")
+        }
+    }
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn hostmode_inject_key(&self, c: char) {

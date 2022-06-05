@@ -74,6 +74,9 @@ pub(crate) enum Opcode {
     /// used to turn keyboard vibrate on and off
     Vibe,
 
+    /// a blocking key listener - blocks until a key is hit
+    BlockingKeyListener,
+
     /// Suspend/resume callback
     SuspendResume,
 }

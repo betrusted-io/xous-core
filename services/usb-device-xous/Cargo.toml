@@ -41,6 +41,6 @@ rand_chacha = "0.3.1"
 utralib = { path = "../../utralib"}
 
 [features]
-keyboard = [] # handy for debugging composite device issues
+emukbd = [] # handy for debugging composite device issues
 mjolnir = [] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
-default = ["keyboard"]
+default = ["emukbd"]
