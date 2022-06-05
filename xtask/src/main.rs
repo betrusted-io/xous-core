@@ -194,7 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &hw_pkgs, &[], None, None)?
+            renode_image(false, &pkgs, &[], None, None)?
         }
         Some("renode-test") => {
             let mut args = env::args();
