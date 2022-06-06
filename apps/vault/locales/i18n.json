@@ -1,4 +1,40 @@
 {
+    "vault.fido.countdown": {
+        "en": "s until abort",
+        "ja": "秒 中止するまで",
+        "zh": "秒 直到中止",
+        "en-tts": "s until abort"
+    },
+    "vault.fido.make_credential": {
+        "en": "FIDO Make Credential Request.\nPress any key to approve.",
+        "ja": "FIDOは資格情報を要求します\n承認するには任意のキーを押してください",
+        "zh": "FIDO 提出凭证请求\n按任意键批准",
+        "en-tts": "FIDO Make Credential Request. Press any key to approve."
+    },
+    "vault.fido.exclude_list": {
+        "en": "FIDO server is excluding existing credentials.\nPress any key to acknowledge.",
+        "ja": "FIDOサーバーは既存のクレデンシャルを除外しています。\n任意のキーを押して確認します。",
+        "zh": "FIDO 服务器正在排除现有凭据。\n按任意键确认。",
+        "en-tts": "FIDO server is excluding existing credentials.\nPress any key to acknowledge."
+    },
+    "vault.u2f.reset_check": {
+        "en": "Please re-confirm the reset by pressing any key.",
+        "ja": "いずれかのキーを押して、リセットを再確認してください。",
+        "zh": "请按任意键重新确认复位。",
+        "en-tts": "Please re-confirm the reset by pressing any key."
+    },
+    "vault.u2f.vendor_configure": {
+        "en": "Press any key to allow vendor configuration.",
+        "ja": "ベンダー設定を許可するには、任意のキーを押します。",
+        "zh": "按任意键允许供应商配置。",
+        "en-tts": "Press any key to allow vendor configuration."
+    },
+    "vault.u2f.authenticator_selection": {
+        "en": "Press any key to make this the primary authenticator.",
+        "ja": "いずれかのキーを押して、これをプライマリオーセンティケーターにします。",
+        "zh": "按任意键使其成为主要身份验证器。",
+        "en-tts": "Press any key to make this the primary authenticator."
+    },
     "vault.u2f.factoryreset": {
         "en": "Host has requested a factory reset of FIDO/U2F credentials.\n\nThis will permanently erase all registrations!!\n\nPress 'y' to allow, any other key to abort.",
         "ja": "ホストがFIDO/U2Fクレデンシャルの工場出荷時のリセットを要求しました。 これにより、すべての登録が完全に消去されます。\n「y」を押して許可します。他のキーを中止しますか？",

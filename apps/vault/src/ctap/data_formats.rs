@@ -24,7 +24,8 @@ use ctap_crypto::{ecdh, ecdsa};
 use enum_iterator::IntoEnumIterator;
 
 // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialrpentity
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct PublicKeyCredentialRpEntity {
     pub rp_id: String,
     pub rp_name: Option<String>,
@@ -56,7 +57,8 @@ impl TryFrom<cbor::Value> for PublicKeyCredentialRpEntity {
 }
 
 // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialuserentity
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, PartialEq))]
+#[derive(Debug)]
 pub struct PublicKeyCredentialUserEntity {
     pub user_id: Vec<u8>,
     pub user_name: Option<String>,
@@ -139,6 +141,7 @@ impl TryFrom<cbor::Value> for PublicKeyCredentialType {
 // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialparameters
 #[derive(PartialEq)]
 #[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+#[derive(Debug)]
 pub struct PublicKeyCredentialParameter {
     pub cred_type: PublicKeyCredentialType,
     pub alg: SignatureAlgorithm,
@@ -171,8 +174,9 @@ impl From<PublicKeyCredentialParameter> for cbor::Value {
 }
 
 // https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, PartialEq))]
 #[cfg_attr(test, derive(IntoEnumIterator))]
+#[derive(Debug)]
 pub enum AuthenticatorTransport {
     Usb,
     Nfc,
@@ -208,7 +212,8 @@ impl TryFrom<cbor::Value> for AuthenticatorTransport {
 }
 
 // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, PartialEq))]
+#[derive(Debug)]
 pub struct PublicKeyCredentialDescriptor {
     pub key_type: PublicKeyCredentialType,
     pub key_id: Vec<u8>,
@@ -259,7 +264,8 @@ impl From<PublicKeyCredentialDescriptor> for cbor::Value {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, PartialEq))]
+#[derive(Debug)]
 pub struct MakeCredentialExtensions {
     pub hmac_secret: bool,
     pub cred_protect: Option<CredentialProtectionPolicy>,
@@ -287,7 +293,8 @@ impl TryFrom<cbor::Value> for MakeCredentialExtensions {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, PartialEq))]
+#[derive(Debug)]
 pub struct GetAssertionExtensions {
     pub hmac_secret: Option<GetAssertionHmacSecretInput>,
 }
@@ -310,7 +317,8 @@ impl TryFrom<cbor::Value> for GetAssertionExtensions {
 }
 
 #[derive(Clone)]
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct GetAssertionHmacSecretInput {
     pub key_agreement: CoseKey,
     pub salt_enc: Vec<u8>,
@@ -341,7 +349,8 @@ impl TryFrom<cbor::Value> for GetAssertionHmacSecretInput {
 }
 
 // Even though options are optional, we can use the default if not present.
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct MakeCredentialOptions {
     pub rk: bool,
     pub uv: bool,
@@ -374,7 +383,8 @@ impl TryFrom<cbor::Value> for MakeCredentialOptions {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct GetAssertionOptions {
     pub up: bool,
     pub uv: bool,
@@ -430,8 +440,7 @@ impl From<PackedAttestationStatement> for cbor::Value {
     }
 }
 
-#[derive(PartialEq)]
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+#[derive(PartialEq, Debug)]
 pub enum SignatureAlgorithm {
     ES256 = ecdsa::PubKey::ES256_ALGORITHM as isize,
     // This is the default for all numbers not covered above.
@@ -637,7 +646,8 @@ impl PublicKeyCredentialSource {
 // It depends on the algorithm though, I think.
 // So before creating a mess, this is my workaround.
 #[derive(Clone)]
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct CoseKey(pub BTreeMap<cbor::KeyType, cbor::Value>);
 
 // This is the algorithm specifier that is supposed to be used in a COSE key
@@ -715,8 +725,9 @@ impl TryFrom<CoseKey> for ecdh::PubKey {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(Clone, PartialEq))]
 #[cfg_attr(test, derive(IntoEnumIterator))]
+#[derive(Debug)]
 pub enum ClientPinSubCommand {
     GetPinRetries = 0x01,
     GetKeyAgreement = 0x02,

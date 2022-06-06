@@ -30,6 +30,7 @@ impl TimedPermission {
     }
 
     // Checks if the timeout is not reached, false for differing ClockValue frequencies.
+    #[allow(dead_code)] // Tock legacy
     pub fn is_granted(&self, now: ClockValue) -> bool {
         if let TimedPermission::Granted(timeout) = self {
             log::info!("is_granted timeout: {}, now {}", timeout.ms(), now.ms());
@@ -42,6 +43,7 @@ impl TimedPermission {
 
     // Consumes the state and returns the current new permission state at time "now".
     // Returns a new state for differing ClockValue frequencies.
+    #[allow(dead_code)] // Tock legacy
     pub fn check_expiration(self, now: ClockValue) -> TimedPermission {
         if let TimedPermission::Granted(timeout) = self {
             log::info!("check_expiration timeout: {}, now {}", timeout.ms(), now.ms());

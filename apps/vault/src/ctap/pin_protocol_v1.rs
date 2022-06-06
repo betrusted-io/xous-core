@@ -496,7 +496,7 @@ impl PinProtocolV1 {
             #[cfg(feature = "with_ctap2_1")]
             return Err(Ctap2StatusCode::CTAP1_ERR_INVALID_PARAMETER);
         }
-
+        log::info!("{:?}", sub_command);
         let response = match sub_command {
             ClientPinSubCommand::GetPinRetries => {
                 Some(self.process_get_pin_retries(persistent_store)?)

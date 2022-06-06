@@ -201,7 +201,7 @@ impl CtapHid {
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.2
                     CtapHid::COMMAND_CBOR => {
-                        log::debug!("COMMAND_CBOR");
+                        log::trace!("COMMAND_CBOR");
                         // CTAP specification (version 20190130) section 8.1.5.1
                         // Each transaction is atomic, so we process the command directly here and
                         // don't handle any other packet in the meantime.
