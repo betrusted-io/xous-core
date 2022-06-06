@@ -27,5 +27,6 @@ utralib = {path = "../../utralib"}
 [features]
 debugprint = []
 debuginject = [] # used only if you want key injection via the UART
+rawserial = []
 braille = []
-default = ["debuginject"] # "debugprint"
+default = ["debuginject", "rawserial"] # "debugprint"

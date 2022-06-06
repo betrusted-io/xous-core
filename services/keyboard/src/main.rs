@@ -840,6 +840,16 @@ fn main() -> ! {
                 log::trace!("{:x} {}", k, kbd.debug);
                 kbd.debug = 0;
 
+                #[cfg(feature="rawserial")]
+                {
+                    for listener in blocking_listener.drain(..) {
+                        // we must unblock anyways once the key is hit; even if the key is invalid,
+                        // send the invalid key. The receiving library function will clean this up into a nil-response vector.
+                        xous::return_scalar2(listener, k, 0).unwrap();
+                    }
+                    continue; // do not execute the remaining code in this branch
+                }
+
                 let key = match esc_index {
                     Some(i) => {
                         esc_chars[i] = (k & 0xff) as u8;
@@ -886,7 +896,7 @@ fn main() -> ! {
                         }
                     }
                 };
-                #cfg[feature="debuginject"]
+                #[cfg(feature="debuginject")]
                 if let Some(conn) = listener_conn {
                     if key != '\u{0000}' {
                         log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
@@ -900,6 +910,7 @@ fn main() -> ! {
                         ).unwrap();
                     }
                 }
+                #[cfg(feature="debuginject")]
                 for listener in blocking_listener.drain(..) {
                     // we must unblock anyways once the key is hit; even if the key is invalid,
                     // send the invalid key. The receiving library function will clean this up into a nil-response vector.
