@@ -78,8 +78,8 @@ impl U2fUserPresenceState {
     }
 
     // This marks user presence as needed or uses it up if already granted. Also cleans up.
-    pub fn consume_up(&mut self, _now: ClockValue, reason: String) -> bool {
-        crate::ux::request_permission_polling(String::from(reason))
+    pub fn consume_up(&mut self, _now: ClockValue, reason: String, application: [u8; 32]) -> bool {
+        crate::ux::request_permission_polling(String::from(reason), application)
     }
 
     // Returns if user presence was requested. Also cleans up.

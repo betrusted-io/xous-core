@@ -6,11 +6,17 @@ use xous_ipc::Buffer;
 use locales::t;
 use crate::ctap::hid::{CtapHid, KeepaliveStatus};
 use usbd_human_interface_device::device::fido::FidoMsg;
+use std::io::{Write, Read};
+use chrono::{Utc, DateTime, NaiveDateTime};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const U2F_APP_DICT: &'static str = "fido.u2fapps";
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct FidoRequest {
     pub channel_id: [u8; 4],
     pub desc: xous_ipc::String::<1024>,
+    pub app_id: Option<[u8; 32]>,
     pub deferred: bool,
     pub granted: Option<char>,
 }
@@ -23,6 +29,8 @@ pub(crate) enum UxOp {
     RequestPermission,
     /// self-referential pumping opcode to monitor timeouts, etc.
     Pump,
+    /// Update or register app for U2F flow,
+    U2fAppUx,
     Quit
 }
 struct Timeouts {
@@ -46,8 +54,8 @@ pub(crate) fn set_durations(prompt: i64, presence: i64) {
         return;
     }
     // i mean, these really should never be bigger than this but...
-    assert!(presence <= usize::MAX as i64);
-    assert!(prompt <= usize::MAX as i64);
+    assert!(presence <= isize::MAX as i64);
+    assert!(prompt <= isize::MAX as i64);
     send_message(SELF_CID.load(Ordering::SeqCst),
         Message::new_scalar(UxOp::SetTimers.to_usize().unwrap(),
             presence as usize,
@@ -61,13 +69,14 @@ pub(crate) fn set_durations(prompt: i64, presence: i64) {
 /// None => user was not present
 pub(crate) fn request_permission_blocking(reason: String, channel_id: [u8; 4]) -> Option<char> {
     log::info!("requesting permission (blocking");
-    request_permission_inner(reason, channel_id, true)
+    request_permission_inner(reason, channel_id, true, None)
 }
-pub(crate) fn request_permission_polling(reason: String) -> bool {
-    log::info!("requesting permission (polling)");
-    request_permission_inner(reason, [0xff, 0xff, 0xff, 0xff], false).is_some()
+pub(crate) fn request_permission_polling(reason: String, application: [u8; 32]) -> bool {
+    log::trace!("requesting permission (polling)");
+    // reason.push_str(&format!("\nApp ID: {:x?}", application));
+    request_permission_inner(reason, [0xff, 0xff, 0xff, 0xff], false, Some(application)).is_some()
 }
-fn request_permission_inner(reason: String, channel_id: [u8; 4], blocking: bool) -> Option<char> {
+fn request_permission_inner(reason: String, channel_id: [u8; 4], blocking: bool, app_id: Option<[u8; 32]>) -> Option<char> {
     if SELF_CID.load(Ordering::SeqCst) == 0 {
         log::error!("internal error: ux thread not started");
         return None;
@@ -76,6 +85,7 @@ fn request_permission_inner(reason: String, channel_id: [u8; 4], blocking: bool)
         channel_id,
         desc: xous_ipc::String::from_str(&reason),
         deferred: blocking,
+        app_id,
         granted: None
     };
     let mut buf = Buffer::into_buf(fido_req).expect("couldn't do IPC transformation");
@@ -114,6 +124,9 @@ pub(crate) fn start_ux_thread() {
             let usb = usb_device_xous::UsbHid::new();
             let mut deferred_req: Option::<xous::MessageEnvelope> = None;
             let mut last_timer = 0;
+            let mut last_app_id: Option<[u8; 32]> = None;
+            let mut app_info: Option<AppInfo> = None;
+            let pddb = pddb::Pddb::new();
             loop {
                 let mut msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -141,6 +154,43 @@ pub(crate) fn start_ux_thread() {
                             channel_id = fido_request.channel_id;
                             request_str_base.clear();
                             request_str_base.push_str(fido_request.desc.as_str().unwrap_or("UTF8 Error"));
+                            // fill in the app info record if an app_id is provided, and it's different
+                            // (we don't do the PDDB access every cycle as it's expensive computationally)
+                            if last_app_id != fido_request.app_id {
+                                app_info = if let Some(id) = fido_request.app_id {
+                                    let app_id_str = hex::encode(id);
+                                    log::info!("querying U2F record {}", app_id_str);
+                                    // add code to query the PDDB here to look for the k/v mapping of this app ID
+                                    match pddb.get(
+                                        U2F_APP_DICT,
+                                        &app_id_str,
+                                        None, true, false,
+                                        Some(256), None::<fn()>
+                                    ) {
+                                        Ok(mut app_data) => {
+                                            let app_attr = app_data.attributes().unwrap();
+                                            if app_attr.len != 0 {
+                                                let mut descriptor = Vec::<u8>::new();
+                                                match app_data.read_to_end(&mut descriptor) {
+                                                    Ok(_) => {
+                                                        deserialize_app_info(descriptor)
+                                                    }
+                                                    Err(e) => {log::error!("Couldn't read app info: {:?}", e); None}
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        _ => {
+                                            log::info!("couldn't find key {}", app_id_str);
+                                            None
+                                        }
+                                    }
+                                } else {
+                                    None
+                                };
+                            }
+                            last_app_id = fido_request.app_id;
                             fido_request.deferred
                         };
                         if deferred {
@@ -181,10 +231,13 @@ pub(crate) fn start_ux_thread() {
                                     };
                                     buffer.replace(fido_request).unwrap();
                                     ux_state = UxState::Idle; // in the case of U2F, there is no persistence to the presence, it goes away immediately
+                                    send_message(self_cid,
+                                        Message::new_scalar(UxOp::U2fAppUx.to_usize().unwrap(), 0, 0, 0, 0)
+                                    ).unwrap();
                                     continue;
                                 }
                                 UxState::Prompt(_) => {
-                                    log::info!("-->U2F WAITING<--");
+                                    log::trace!("-->U2F WAITING<--");
                                     let prompt_expiration_ms = (tt.elapsed_ms() as i64) + POLLED_PROMPT_TIMEOUT_MS;
                                     ux_state = UxState::Prompt(prompt_expiration_ms); // extend the prompt time out
                                     let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -204,6 +257,55 @@ pub(crate) fn start_ux_thread() {
                             };
                         ux_state = UxState::Prompt(prompt_expiration_ms);
                         let mut request_str = String::from(&request_str_base);
+                        if let Some(info) = &app_info {
+                            // we have some prior record of the app, human-format it
+                            request_str.push_str(&format!("\n{}{}",
+                                t!("vault.u2f.appinfo.name", xous::LANG), info.name
+                            ));
+                            if info.atime == 0 {
+                                request_str.push_str(&format!("\n{}{}",
+                                    t!("vault.u2f.appinfo.last_authtime", xous::LANG),
+                                    t!("vault.u2f.appinfo.never", xous::LANG)
+                                ));
+                            } else {
+                                let now = utc_now();
+                                let atime = DateTime::<Utc>::from_utc(
+                                    NaiveDateTime::from_timestamp(info.atime as i64, 0),
+                                    Utc
+                                );
+                                if now.signed_duration_since(atime).num_days() > 1 {
+                                    request_str.push_str(&format!("\n{}{}{}",
+                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
+                                        now.signed_duration_since(atime).num_days(),
+                                        t!("vault.u2f.appinfo.days_ago", xous::LANG),
+                                    ));
+                                } else if now.signed_duration_since(atime).num_hours() > 1 {
+                                    request_str.push_str(&format!("\n{}{}{}",
+                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
+                                        now.signed_duration_since(atime).num_hours(),
+                                        t!("vault.u2f.appinfo.hours_ago", xous::LANG),
+                                    ));
+                                } else if now.signed_duration_since(atime).num_minutes() > 1 {
+                                    request_str.push_str(&format!("\n{}{}{}",
+                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
+                                        now.signed_duration_since(atime).num_minutes(),
+                                        t!("vault.u2f.appinfo.minutes_ago", xous::LANG),
+                                    ));
+                                } else {
+                                    request_str.push_str(&format!("\n{}{}{}",
+                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
+                                        now.signed_duration_since(atime).num_seconds(),
+                                        t!("vault.u2f.appinfo.seconds_ago", xous::LANG),
+                                    ));
+                                }
+                            }
+                        } else {
+                            // no record of the app. Just give the hash.
+                            request_str.push_str(&format!("\n{}{}",
+                                t!("vault.u2f.newapphash", xous::LANG),
+                                hex::encode(last_app_id.unwrap_or([0; 32]))
+                            ))
+                        }
                         if deferred {
                             last_timer = 1 + (prompt_expiration_ms - tt.elapsed_ms() as i64) / 1000;
                             request_str.push_str(
@@ -293,7 +395,7 @@ pub(crate) fn start_ux_thread() {
                                 }
                                 // check if we got a hit
                                 if kbhit.load(Ordering::SeqCst) != 0 {
-                                    log::info!("got kbhit!");
+                                    log::info!("got user presence!");
                                     if let Some(mut msg) = deferred_req.take() {
                                         let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                                         let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
@@ -322,6 +424,55 @@ pub(crate) fn start_ux_thread() {
                             }
                         }
                     }),
+                    Some(UxOp::U2fAppUx) => {
+                        // this flow only triggers on U2F queries, which present an app id hash
+                        if let Some(id) = last_app_id {
+                            let app_id_str = hex::encode(id);
+                            let ser = if let Some(info) = &mut app_info {
+                                // if an appinfo was found, just update it
+                                info.atime = utc_now().timestamp() as u64;
+                                serialize_app_info(info)
+                            } else {
+                                // otherwise, create it
+                                match modals
+                                    .alert_builder(t!("vault.u2f.give_app_name", xous::LANG))
+                                    .field(None, None)
+                                    .build()
+                                {
+                                    Ok(name) => {
+                                        let info = AppInfo {
+                                            name: name.content()[0].content.to_string(),
+                                            id,
+                                            ctime: utc_now().timestamp() as u64,
+                                            atime: 0,
+                                        };
+                                        serialize_app_info(&info)
+                                    }
+                                        _ => {
+                                            log::error!("couldn't get name for app");
+                                            continue;
+                                        }
+                                }
+                            };
+                            pddb.delete_key(U2F_APP_DICT, &app_id_str, None).ok();
+                            match pddb.get(
+                                U2F_APP_DICT,
+                                &app_id_str,
+                                None, true, true,
+                                Some(256), None::<fn()>
+                            ) {
+                                Ok(mut app_data) => {
+                                    app_data.write(&ser).expect("couldn't update atime");
+                                }
+                                _ => log::error!("Error updating app atime"),
+                            }
+                            pddb.sync().ok();
+                        } else {
+                            log::error!("Illegal state for U2F registration!");
+                        }
+                        last_app_id = None;
+                        app_info = None;
+                    }
                     Some(UxOp::Quit) => {
                         break;
                     }
@@ -332,4 +483,89 @@ pub(crate) fn start_ux_thread() {
             }
         }
     });
+}
+
+/// app info format:
+///
+/// name: free form text string until newline
+/// hash: app hash in hex string, lowercase
+/// created: decimal number representing epoch of the creation date
+/// last auth: decimal number representing epoch of the last auth time
+struct AppInfo {
+    name: String,
+    id: [u8; 32],
+    ctime: u64,
+    atime: u64,
+}
+
+fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
+    if let Ok(desc_str) = String::from_utf8(descriptor) {
+        let mut appinfo = AppInfo {
+            name: String::new(),
+            id: [0u8; 32],
+            ctime: 0,
+            atime: 0,
+        };
+        let lines = desc_str.split('\n');
+        for line in lines {
+            if let Some((tag, data)) = line.split_once(':') {
+                match tag {
+                    "name" => {
+                        appinfo.name.push_str(data);
+                    }
+                    "id" => {
+                        if let Ok(id) = hex::decode(data) {
+                            appinfo.id.copy_from_slice(&id);
+                        } else {
+                            return None;
+                        }
+                    }
+                    "ctime" => {
+                        if let Ok(ctime) = u64::from_str_radix(data, 10) {
+                            appinfo.ctime = ctime;
+                        } else {
+                            return None;
+                        }
+                    }
+                    "atime" => {
+                        if let Ok(atime) = u64::from_str_radix(data, 10) {
+                            appinfo.atime = atime;
+                        } else {
+                            return None;
+                        }
+                    }
+                    _ => {
+                        log::warn!("unexpected tag {} encountered parsing app info, aborting", tag);
+                        return None;
+                    }
+                }
+            }
+        }
+        if appinfo.name.len() > 0
+        && appinfo.id != [0u8; 32]
+        && appinfo.ctime != 0 { // atime can be 0 - indicates never used
+            Some(appinfo)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
+    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}",
+        "name", appinfo.name,
+        "id", hex::encode(appinfo.id),
+        "ctime", appinfo.ctime,
+        "atime", appinfo.atime,
+    ).into_bytes()
+}
+
+/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid target
+fn utc_now() -> DateTime::<Utc> {
+    let now =
+    SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
+    let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
+    DateTime::from_utc(naive, Utc)
 }

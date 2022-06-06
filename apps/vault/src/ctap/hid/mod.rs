@@ -178,7 +178,7 @@ impl CtapHid {
                 match message.cmd {
                     // CTAP specification (version 20190130) section 8.1.9.1.1
                     CtapHid::COMMAND_MSG => {
-                        log::debug!("COMMAND_MSG");
+                        log::trace!("COMMAND_MSG");
                         // If we don't have CTAP1 backward compatibilty, this command in invalid.
                         #[cfg(not(feature = "with_ctap1"))]
                         return CtapHid::error_message(cid, CtapHid::ERR_INVALID_CMD);
@@ -194,7 +194,7 @@ impl CtapHid {
                                 CtapHid::ctap1_success_message(cid, &payload)
                             },
                             Err(ctap1_status_code) => {
-                                log::warn!("command failure: {:?}", ctap1_status_code);
+                                log::trace!("command failure: {:?}", ctap1_status_code);
                                 CtapHid::ctap1_error_message(cid, ctap1_status_code)
                             }
                         }
