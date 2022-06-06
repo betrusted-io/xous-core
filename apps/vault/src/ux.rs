@@ -299,6 +299,10 @@ pub(crate) fn start_ux_thread() {
                                     ));
                                 }
                             }
+                            request_str.push_str(&format!("\n{}{}",
+                                t!("vault.u2f.appinfo.authcount", xous::LANG),
+                                info.count,
+                            ));
                         } else {
                             // no record of the app. Just give the hash.
                             request_str.push_str(&format!("\n{}{}",
@@ -431,6 +435,7 @@ pub(crate) fn start_ux_thread() {
                             let ser = if let Some(info) = &mut app_info {
                                 // if an appinfo was found, just update it
                                 info.atime = utc_now().timestamp() as u64;
+                                info.count = info.count.saturating_add(1);
                                 serialize_app_info(info)
                             } else {
                                 // otherwise, create it
@@ -445,6 +450,7 @@ pub(crate) fn start_ux_thread() {
                                             id,
                                             ctime: utc_now().timestamp() as u64,
                                             atime: 0,
+                                            count: 0,
                                         };
                                         serialize_app_info(&info)
                                     }
@@ -496,6 +502,7 @@ struct AppInfo {
     id: [u8; 32],
     ctime: u64,
     atime: u64,
+    count: u64,
 }
 
 fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
@@ -505,6 +512,7 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
             id: [0u8; 32],
             ctime: 0,
             atime: 0,
+            count: 0,
         };
         let lines = desc_str.split('\n');
         for line in lines {
@@ -534,6 +542,12 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
                             return None;
                         }
                     }
+                    "count" => {
+                        if let Ok(count) = u64::from_str_radix(data, 10) {
+                            appinfo.count = count;
+                        }
+                        // count was added later, so, we don't fail if we don't see the record.
+                    }
                     _ => {
                         log::warn!("unexpected tag {} encountered parsing app info, aborting", tag);
                         return None;
@@ -554,11 +568,12 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
 }
 
 fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}",
+    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
         "name", appinfo.name,
         "id", hex::encode(appinfo.id),
         "ctime", appinfo.ctime,
         "atime", appinfo.atime,
+        "count", appinfo.count,
     ).into_bytes()
 }
 

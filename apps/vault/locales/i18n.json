@@ -65,6 +65,12 @@
         "zh": "没用过",
         "en-tts": "never"
     },
+    "vault.u2f.appinfo.authcount": {
+        "en": "Usage count: ",
+        "ja": "使用回数: ",
+        "zh": "使用次数: ",
+        "en-tts": "Usage count: "
+    },
     "vault.u2f.register": {
         "en": "U2F Registration Request",
         "ja": "U2F登録リクエスト",
