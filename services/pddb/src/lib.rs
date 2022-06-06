@@ -478,7 +478,7 @@ impl Pddb {
         }
     }
 
-    pub fn sync(&mut self) -> Result<()> {
+    pub fn sync(&self) -> Result<()> {
         let response = send_message(
             self.conn,
             Message::new_blocking_scalar(Opcode::WriteKeyFlush.to_usize().unwrap(), 0, 0, 0, 0)
