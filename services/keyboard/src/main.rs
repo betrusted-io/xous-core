@@ -886,7 +886,7 @@ fn main() -> ! {
                         }
                     }
                 };
-
+                #cfg[feature="debuginject"]
                 if let Some(conn) = listener_conn {
                     if key != '\u{0000}' {
                         log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
