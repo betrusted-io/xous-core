@@ -894,11 +894,18 @@ where
     fn process_reset(
         &mut self,
         cid: ChannelID,
-        now: ClockValue,
+        _now: ClockValue,
     ) -> Result<ResponseData, Ctap2StatusCode> {
         // Resets are only possible in the first 10 seconds after booting.
         // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?
-        self.check_command_permission(now)?;
+        // self.check_command_permission(now)?;
+        if let Some(c) = crate::ux::request_permission_blocking(locales::t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
+            if c != 'y' {
+                return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+            }
+        } else {
+            return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+        }
         match &self.stateful_command_type {
             Some(StatefulCommand::Reset) => (),
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED),

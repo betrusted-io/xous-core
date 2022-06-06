@@ -30,6 +30,7 @@ from tqdm.auto import tqdm
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.backends import default_backend
 
 from fido2 import ctap
 from fido2 import ctap2
@@ -69,7 +70,7 @@ def get_opensk_devices(batch_mode):
 def get_private_key(data, password=None):
   # First we try without password.
   try:
-    return serialization.load_pem_private_key(data, password=None)
+    return serialization.load_pem_private_key(data, password=None, backend=default_backend())
   except TypeError:
     # Maybe we need a password then.
     if sys.stdin.isatty():
@@ -98,7 +99,7 @@ def main(args):
       fatal("Private key must be 256 bits long.")
     info("Private key is valid.")
 
-    cert = x509.load_pem_x509_certificate(args.certificate.read())
+    cert = x509.load_pem_x509_certificate(args.certificate.read(), backend=default_backend())
     # Some sanity/validity checks
     now = datetime.datetime.utcnow()
     if cert.not_valid_before > now:
@@ -123,6 +124,8 @@ def main(args):
             priv_key.private_numbers().private_value.to_bytes(
                 length=32, byteorder='big', signed=False)
     }
+    print(cbor_data[2][1].hex())
+    print(cbor_data[2][2].hex())
 
   for authenticator in tqdm(get_opensk_devices(args.batch)):
     # If the device supports it, wink to show which device

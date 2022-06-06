@@ -1,9 +1,7 @@
 use super::*;
 use gam::UxRegistration;
-use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, PixelColor};
-use graphics_server::api::GlyphStyle;
+use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor};
 use xous::MessageEnvelope;
-use core::fmt::Write;
 
 #[allow(dead_code)]
 pub(crate) struct Repl {

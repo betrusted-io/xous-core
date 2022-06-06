@@ -10,12 +10,11 @@ use usbd_human_interface_device::device::fido::*;
 use std::thread;
 
 mod ctap;
-use ctap::hid::{ChannelID, CtapHid, KeepaliveStatus, ProcessedPacket};
+use ctap::hid::{ChannelID, CtapHid};
 use ctap::status_code::Ctap2StatusCode;
 use ctap::CtapState;
 mod shims;
 use shims::*;
-use ctap_crypto::rng256::XousRng256;
 
 /*
 UI concept:
@@ -67,9 +66,6 @@ pub(crate) enum VaultOp {
     Quit,
 }
 
-// This name should be (1) unique (2) under 64 characters long and (3) ideally descriptive.
-pub(crate) const SERVER_NAME_VAULT: &str = "Key Vault";
-
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
@@ -91,15 +87,6 @@ fn main() -> ! {
             let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
             let mut ctap_hid = CtapHid::new();
             loop {
-                let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                if /*button_touched.get()*/ false {
-                    ctap_state.u2f_up_state.grant_up(now);
-                }
-                // These calls are making sure that even for long inactivity, wrapping clock values
-                // never randomly wink or grant user presence for U2F.
-                ctap_state.update_command_permission(now);
-                ctap_hid.wink_permission = ctap_hid.wink_permission.check_expiration(now);
-
                 match usb.u2f_wait_incoming() {
                     Ok(msg) => {
                         log::trace!("FIDO listener got message: {:?}", msg);
@@ -122,21 +109,6 @@ fn main() -> ! {
                     }
                     Err(e) => {
                         log::warn!("FIDO listener got an error: {:?}", e);
-                    }
-                }
-                let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                if ctap_hid.wink_permission.is_granted(now) {
-                    log::info!("wink");
-                    // wink_leds(led_counter);
-                } else {
-                    if ctap_state.u2f_up_state.is_up_needed(now) {
-                        // Flash the LEDs with an almost regular pattern. The inaccuracy comes from
-                        // delay caused by processing and sending of packets.
-                        log::info!("leds blink");
-                        //blink_leds(led_counter);
-                    } else {
-                        log::info!("leds off");
-                        //switch_off_leds();
                     }
                 }
             }
@@ -205,92 +177,3 @@ fn check_user_presence(_cid: ChannelID) -> Result<(), Ctap2StatusCode> {
     log::warn!("check user presence called, but not implemented!");
     Ok(())
 }
-const KEEPALIVE_DELAY_MS: i64 = 100;
-const KEEPALIVE_DELAY: Duration<i64> = Duration::from_ms(KEEPALIVE_DELAY_MS);
-const SEND_TIMEOUT: Duration<i64> = Duration::from_ms(1000);
-
-/*
-// Returns whether the keepalive was sent, or false if cancelled.
-fn send_keepalive_up_needed(
-    cid: ChannelID,
-    timeout: Duration<i64>,
-) -> Result<(), Ctap2StatusCode> {
-    let keepalive_msg = CtapHid::keepalive(cid, KeepaliveStatus::UpNeeded);
-    for mut pkt in keepalive_msg {
-        let status = usb_ctap_hid::send_or_recv_with_timeout(&mut pkt, timeout);
-        match status {
-            None => {
-                #[cfg(feature = "debug_ctap")]
-                writeln!(Console::new(), "Sending a KEEPALIVE packet timed out").unwrap();
-                // TODO: abort user presence test?
-            }
-            Some(usb_ctap_hid::SendOrRecvStatus::Error) => panic!("Error sending KEEPALIVE packet"),
-            Some(usb_ctap_hid::SendOrRecvStatus::Sent) => {
-                #[cfg(feature = "debug_ctap")]
-                writeln!(Console::new(), "Sent KEEPALIVE packet").unwrap();
-            }
-            Some(usb_ctap_hid::SendOrRecvStatus::Received) => {
-                // We only parse one packet, because we only care about CANCEL.
-                let (received_cid, processed_packet) = CtapHid::process_single_packet(&pkt);
-                if received_cid != &cid {
-                    #[cfg(feature = "debug_ctap")]
-                    writeln!(
-                        Console::new(),
-                        "Received a packet on channel ID {:?} while sending a KEEPALIVE packet",
-                        received_cid,
-                    )
-                    .unwrap();
-                    return Ok(());
-                }
-                match processed_packet {
-                    ProcessedPacket::InitPacket { cmd, .. } => {
-                        if cmd == CtapHid::COMMAND_CANCEL {
-                            // We ignore the payload, we can't answer with an error code anyway.
-                            #[cfg(feature = "debug_ctap")]
-                            writeln!(Console::new(), "User presence check cancelled").unwrap();
-                            return Err(Ctap2StatusCode::CTAP2_ERR_KEEPALIVE_CANCEL);
-                        } else {
-                            #[cfg(feature = "debug_ctap")]
-                            writeln!(
-                                Console::new(),
-                                "Discarded packet with command {} received while sending a KEEPALIVE packet",
-                                cmd,
-                            )
-                            .unwrap();
-                        }
-                    }
-                    ProcessedPacket::ContinuationPacket { .. } => {
-                        #[cfg(feature = "debug_ctap")]
-                        writeln!(
-                            Console::new(),
-                            "Discarded continuation packet received while sending a KEEPALIVE packet",
-                        )
-                        .unwrap();
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn check_user_presence(cid: ChannelID) -> Result<(), Ctap2StatusCode> {
-    // The timeout is N times the keepalive delay.
-    const TIMEOUT_ITERATIONS: usize = ctap::TOUCH_TIMEOUT_MS as usize / KEEPALIVE_DELAY_MS as usize;
-
-    /*
-      This should do the following:
-        - call send_keepalive_up_needed(cid, KEEPALIVE_DELAY) once every KEEPALIVE_DELAY interval
-        - pop up a dialog box for TOUCH_TIMEOUT_MS asking to approve "something"
-        - if TOUCH_TIMEOUT_MS has elapsed and no user approval is received:
-           - return Err(Ctap2StatusCode::CTAP2_ERR_USER_ACTION_TIMEOUT)
-        - else return Ok(())
-    */
-    send_keepalive_up_needed(cid, KEEPALIVE_DELAY)?;
-    if false {
-        Ok(())
-    } else {
-        Err(Ctap2StatusCode::CTAP2_ERR_USER_ACTION_TIMEOUT)
-    }
-}
-*/

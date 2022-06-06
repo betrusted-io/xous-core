@@ -165,6 +165,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Update AES API level to 0.8, and cipher dependency to 0.4 (on rootkeys). This was necessary to get CBC support for AES, which is needed for FIDO2. This *should* have no user-facing impact.
 - `vault` app commited as a WIP of an end user authentication management app. It aims to provide FIDO2, TOTP, and stored password DB functions.
   - currently only has stubs for FIDO2, which is a vendor-in of Google OpenSK's FIDO2 implementation.
+  - U2F functions are best supported with UX flow. FIDO2 transactions still trying to figure out what the UX flow is even supposed to be:
+    we're lacking actual FIDO2 applications to test against.
 
 
 ## Roadmap to 1.0

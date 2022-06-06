@@ -101,12 +101,20 @@ fn main() -> ! {
                     None
                 ).unwrap();
             }
+            let mut fido_listener: Option<xous::MessageEnvelope> = None;
             loop {
                 let msg = xous::receive_message(usbdev_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
                     Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
                         xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
                     }),
+                    Some(Opcode::U2fRxDeferred) => {
+                        // block any rx requests forever
+                        fido_listener = Some(msg);
+                    }
+                    Some(Opcode::Quit) => {
+                        break;
+                    }
                     _ => {
                         log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
                         // make it so blocking scalars don't block
@@ -123,6 +131,7 @@ fn main() -> ! {
                     }
                 }
             }
+            log::info!("consuming listener: {:?}", fido_listener);
         }
     }
 

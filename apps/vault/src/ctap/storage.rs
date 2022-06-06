@@ -192,7 +192,33 @@ impl PersistentStore {
             }
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
-/*
+
+        /*
+            The point of the attestation key is to delegate the question of the authenticity of your U2F
+            key effectively to a transaction that happens between the factory and the server. If the
+            attestation private key is an impenetrable secret and you can trust the factory, then the
+            attestation key effectively proves the U2F token was made by the factory to its specifications.
+
+            In the case of Precursor's threat model, you don't trust the factory, and you assume there is
+            basically no such thing as an impenetrable secret. So an attestation key is equivalent to any
+            private key created entirely within your own device; its use proves that you're you, or at
+            least, someone has possession of your device and your unlock password.
+
+            Thus, for Precursor, there is no delegation of the question of authenticity -- you
+            choose to verify the device to the level you're satisfied with. If you're happy to
+            just take it out of the box and use it without checking anything, that's your choice,
+            but you can also check everything as much as you like.
+
+            As a result, the "attestation key" serves no role for Precursor users, other than to
+            identify them as Precursor users. A unique per-device key would furthermore allow
+            a server to uniquely identify each Precursor user. Therefore, we commit the private key
+            into this public repository so any and all Precursor users may share it. The more
+            widely it is used, the harder it becomes to de-anonymize a Precursor users.
+
+            This key was generated using the script in `tools/gen_key_materials.sh`, and then printed
+            out by calling
+            `./configure.py --private-key=crypto_data/opensk.key --certificate=crypto_data/opensk_cert.pem`
+         */
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
@@ -206,7 +232,7 @@ impl PersistentStore {
                         log::error!("AAPRIV has an illegal length. Suspect PDDB corruption?");
                         return Err(Ctap2StatusCode::CTAP2_ERR_INVALID_CREDENTIAL);
                     }
-                    let pk = decode_hex("497b200642e71e4ed929359a19aa701b42f3a304bd7e79c4a25b5af2635b2db1").unwrap();
+                    let pk = decode_hex("b8c3abd05cbe17b2faf87659c6f73e8467832112a0e609807cb68996c9a0c6a8").unwrap();
                     log::info!("writing PK of length {}", pk.len());
                     log::info!("pk: {:x?}", pk);
                     assert!(pk.len() == 32, "PK len is wrong");
@@ -226,7 +252,19 @@ impl PersistentStore {
             Ok(mut cert) => {
                 let cert_attr = cert.attributes().unwrap();
                 if cert_attr.len == 0 {
-                    let der = decode_hex("308201283081cf021427bf2c7cc29ae91ffb3d4bb99f25fcda6fb407be300a06082a8648ce3d04030230173115301306035504030c0c507265637572736f72204341301e170d3232303630343136313231335a170d3432303630343136313231335a30173115301306035504030c0c507265637572736f722043413059301306072a8648ce3d020106082a8648ce3d03010703420004a4439a22be033f90e8a160ddd5b3552635f3d951d26724a3e453c8438fb2f9cc32c78e413323c438d276a2e3b081be118f516c4e7cb64455c46b5a4bbca85d04300a06082a8648ce3d0403020348003045022008e4e46b48d462a380be08841a9d9da946aef3948e7e7bd8da51dafeea4d563f022100bd3ef23d840dc653fa821f2e0ae940b91f495b692fb7e94588e6fd3ed7d0a3ae").unwrap();
+                    // DER-encoded public key
+                    let der = decode_hex(
+                        "308201423081e9021449a3e2a4e1078eae2f1a18567f0a734b09db2478300a06\
+                         082a8648ce3d040302301f311d301b06035504030c14507265637572736f7220\
+                         55324620444959204341301e170d3232303630353138313233395a170d333230\
+                         3630343138313233395a30293127302506035504030c1e507265637572736f72\
+                         2053656c662d5665726966696564204465766963653059301306072a8648ce3d\
+                         020106082a8648ce3d030107034200042d8fad76c25851ee70ae651ab2361bee\
+                         1b5d93769aff99d95ad112871060f2f342fb79566fee9e1bade250a29cd65012\
+                         55e731531755284bfcbe85ada1f39f44300a06082a8648ce3d04030203480030\
+                         45022100d27e39187da5efaa376254329499bb705f7188dd8c78e0725c7ed28d\
+                         e5d218e1022070853e1a43707298e07ebe9b9eb7cd5839b794db4c3d22209554\
+                         1f0bdf82d1f4").unwrap();
                     log::info!("writing cert of length {}", der.len());
                     log::info!("der: {:x?}", der);
                     cert.write(&der)
@@ -235,67 +273,89 @@ impl PersistentStore {
             }
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
-*/
+
         Ok(())
     }
-    /*
-    openssl x509 -in cert.der -inform der -noout -text
+    /* Notes in case we want to muck with the above certificates more later on:
+private key:
+-----BEGIN EC PARAMETERS-----
+BggqhkjOPQMBBw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEILjDq9Bcvhey+vh2Wcb3PoRngyESoOYJgHy2iZbJoMaooAoGCCqGSM49
+AwEHoUQDQgAELY+tdsJYUe5wrmUasjYb7htdk3aa/5nZWtEShxBg8vNC+3lWb+6e
+G63iUKKc1lASVecxUxdVKEv8voWtofOfRA==
+-----END EC PRIVATE KEY-----
+
+certificate:
+-----BEGIN CERTIFICATE-----
+MIIBQjCB6QIUSaPipOEHjq4vGhhWfwpzSwnbJHgwCgYIKoZIzj0EAwIwHzEdMBsG
+A1UEAwwUUHJlY3Vyc29yIFUyRiBESVkgQ0EwHhcNMjIwNjA1MTgxMjM5WhcNMzIw
+NjA0MTgxMjM5WjApMScwJQYDVQQDDB5QcmVjdXJzb3IgU2VsZi1WZXJpZmllZCBE
+ZXZpY2UwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQtj612wlhR7nCuZRqyNhvu
+G12Tdpr/mdla0RKHEGDy80L7eVZv7p4breJQopzWUBJV5zFTF1UoS/y+ha2h859E
+MAoGCCqGSM49BAMCA0gAMEUCIQDSfjkYfaXvqjdiVDKUmbtwX3GI3Yx44HJcftKN
+5dIY4QIgcIU+GkNwcpjgfr6bnrfNWDm3lNtMPSIglVQfC9+C0fQ=
+-----END CERTIFICATE-----
+
+analysis:
+openssl x509 -in opensk_cert.pem -inform pem -noout -text
 Certificate:
     Data:
         Version: 1 (0x0)
         Serial Number:
-            27:bf:2c:7c:c2:9a:e9:1f:fb:3d:4b:b9:9f:25:fc:da:6f:b4:07:be
+            49:a3:e2:a4:e1:07:8e:ae:2f:1a:18:56:7f:0a:73:4b:09:db:24:78
         Signature Algorithm: ecdsa-with-SHA256
-        Issuer: CN = Precursor CA
+        Issuer: CN = Precursor U2F DIY CA
         Validity
-            Not Before: Jun  4 16:12:13 2022 GMT
-            Not After : Jun  4 16:12:13 2042 GMT
-        Subject: CN = Precursor CA
+            Not Before: Jun  5 18:12:39 2022 GMT
+            Not After : Jun  4 18:12:39 2032 GMT
+        Subject: CN = Precursor Self-Verified Device
         Subject Public Key Info:
             Public Key Algorithm: id-ecPublicKey
                 Public-Key: (256 bit)
                 pub:
-                    04:a4:43:9a:22:be:03:3f:90:e8:a1:60:dd:d5:b3:
-                    55:26:35:f3:d9:51:d2:67:24:a3:e4:53:c8:43:8f:
-                    b2:f9:cc:32:c7:8e:41:33:23:c4:38:d2:76:a2:e3:
-                    b0:81:be:11:8f:51:6c:4e:7c:b6:44:55:c4:6b:5a:
-                    4b:bc:a8:5d:04
+                    04:2d:8f:ad:76:c2:58:51:ee:70:ae:65:1a:b2:36:
+                    1b:ee:1b:5d:93:76:9a:ff:99:d9:5a:d1:12:87:10:
+                    60:f2:f3:42:fb:79:56:6f:ee:9e:1b:ad:e2:50:a2:
+                    9c:d6:50:12:55:e7:31:53:17:55:28:4b:fc:be:85:
+                    ad:a1:f3:9f:44
                 ASN1 OID: prime256v1
                 NIST CURVE: P-256
     Signature Algorithm: ecdsa-with-SHA256
-         30:45:02:20:08:e4:e4:6b:48:d4:62:a3:80:be:08:84:1a:9d:
-         9d:a9:46:ae:f3:94:8e:7e:7b:d8:da:51:da:fe:ea:4d:56:3f:
-         02:21:00:bd:3e:f2:3d:84:0d:c6:53:fa:82:1f:2e:0a:e9:40:
-         b9:1f:49:5b:69:2f:b7:e9:45:88:e6:fd:3e:d7:d0:a3:ae
+         30:45:02:21:00:d2:7e:39:18:7d:a5:ef:aa:37:62:54:32:94:
+         99:bb:70:5f:71:88:dd:8c:78:e0:72:5c:7e:d2:8d:e5:d2:18:
+         e1:02:20:70:85:3e:1a:43:70:72:98:e0:7e:be:9b:9e:b7:cd:
+         58:39:b7:94:db:4c:3d:22:20:95:54:1f:0b:df:82:d1:f4
 
-openssl asn1parse -in cert.der -inform der
-    0:d=0  hl=4 l= 296 cons: SEQUENCE
-    4:d=1  hl=3 l= 207 cons: SEQUENCE
-    7:d=2  hl=2 l=  20 prim: INTEGER           :27BF2C7CC29AE91FFB3D4BB99F25FCDA6FB407BE
+openssl asn1parse -in opensk_cert.pem -inform pem
+    0:d=0  hl=4 l= 322 cons: SEQUENCE
+    4:d=1  hl=3 l= 233 cons: SEQUENCE
+    7:d=2  hl=2 l=  20 prim: INTEGER           :49A3E2A4E1078EAE2F1A18567F0A734B09DB2478
    29:d=2  hl=2 l=  10 cons: SEQUENCE
    31:d=3  hl=2 l=   8 prim: OBJECT            :ecdsa-with-SHA256
-   41:d=2  hl=2 l=  23 cons: SEQUENCE
-   43:d=3  hl=2 l=  21 cons: SET
-   45:d=4  hl=2 l=  19 cons: SEQUENCE
+   41:d=2  hl=2 l=  31 cons: SEQUENCE
+   43:d=3  hl=2 l=  29 cons: SET
+   45:d=4  hl=2 l=  27 cons: SEQUENCE
    47:d=5  hl=2 l=   3 prim: OBJECT            :commonName
-   52:d=5  hl=2 l=  12 prim: UTF8STRING        :Precursor CA
-   66:d=2  hl=2 l=  30 cons: SEQUENCE
-   68:d=3  hl=2 l=  13 prim: UTCTIME           :220604161213Z
-   83:d=3  hl=2 l=  13 prim: UTCTIME           :420604161213Z
-   98:d=2  hl=2 l=  23 cons: SEQUENCE
-  100:d=3  hl=2 l=  21 cons: SET
-  102:d=4  hl=2 l=  19 cons: SEQUENCE
-  104:d=5  hl=2 l=   3 prim: OBJECT            :commonName
-  109:d=5  hl=2 l=  12 prim: UTF8STRING        :Precursor CA
-  123:d=2  hl=2 l=  89 cons: SEQUENCE
-  125:d=3  hl=2 l=  19 cons: SEQUENCE
-  127:d=4  hl=2 l=   7 prim: OBJECT            :id-ecPublicKey
-  136:d=4  hl=2 l=   8 prim: OBJECT            :prime256v1
-  146:d=3  hl=2 l=  66 prim: BIT STRING
-  214:d=1  hl=2 l=  10 cons: SEQUENCE
-  216:d=2  hl=2 l=   8 prim: OBJECT            :ecdsa-with-SHA256
-  226:d=1  hl=2 l=  72 prim: BIT STRING
-    */
+   52:d=5  hl=2 l=  20 prim: UTF8STRING        :Precursor U2F DIY CA
+   74:d=2  hl=2 l=  30 cons: SEQUENCE
+   76:d=3  hl=2 l=  13 prim: UTCTIME           :220605181239Z
+   91:d=3  hl=2 l=  13 prim: UTCTIME           :320604181239Z
+  106:d=2  hl=2 l=  41 cons: SEQUENCE
+  108:d=3  hl=2 l=  39 cons: SET
+  110:d=4  hl=2 l=  37 cons: SEQUENCE
+  112:d=5  hl=2 l=   3 prim: OBJECT            :commonName
+  117:d=5  hl=2 l=  30 prim: UTF8STRING        :Precursor Self-Verified Device
+  149:d=2  hl=2 l=  89 cons: SEQUENCE
+  151:d=3  hl=2 l=  19 cons: SEQUENCE
+  153:d=4  hl=2 l=   7 prim: OBJECT            :id-ecPublicKey
+  162:d=4  hl=2 l=   8 prim: OBJECT            :prime256v1
+  172:d=3  hl=2 l=  66 prim: BIT STRING
+  240:d=1  hl=2 l=  10 cons: SEQUENCE
+  242:d=2  hl=2 l=   8 prim: OBJECT            :ecdsa-with-SHA256
+  252:d=1  hl=2 l=  72 prim: BIT STRING
+*/
 
     /// The credential ID, as stored in OpenSK, is a 112-entry Vec<u8> that starts with
     /// a random 128-bit AES IV. This effectively takes the 128-bit AES IV and turns it into
@@ -794,10 +854,10 @@ openssl asn1parse -in cert.der -inform der
         ).ok() {
             let mut data = Vec::<u8>::new();
             match acert.read_to_end(&mut data) {
-                Ok(l) => log::info!("read {} bytes", l),
+                Ok(l) => log::trace!("read {} bytes", l),
                 Err(e) => log::error!("error reading certificate: {:?}", e),
             }
-            log::info!("read back cert: {:x?}", data);
+            log::trace!("read back cert: {:x?}", data);
             Ok(Some(data))
         } else {
             Ok(None)

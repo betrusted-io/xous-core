@@ -32,6 +32,10 @@ subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
 rand_core = "0.6.3"
 ticktimer-server = {path = "../../services/ticktimer-server"}
 
+# ux formatting
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+chrono = {version = "0.4.19", default-features = false, features = ["std"]}
+
 [dev-dependencies]
 enum-iterator = "0.6.0"
 

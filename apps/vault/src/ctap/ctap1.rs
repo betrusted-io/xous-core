@@ -198,9 +198,8 @@ impl Ctap1Command {
                 application,
             } => {
                 log::debug!("REGISTER");
-                let mut regstr = String::from(t!("vault.u2f.register", xous::LANG));
-                regstr.push_str(&format!("\n{}\n{:x?}", t!("vault.u2f.apphash", xous::LANG), application));
-                if !ctap_state.u2f_up_state.consume_up(clock_value, regstr) {
+                let regstr = String::from(t!("vault.u2f.register", xous::LANG));
+                if !ctap_state.u2f_up_state.consume_up(clock_value, regstr, application) {
                     log::debug!("still waiting...");
                     return Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED);
                 }
@@ -215,11 +214,10 @@ impl Ctap1Command {
                 flags,
             } => {
                 log::debug!("AUTHENTICATE");
-                let mut authstr = String::from(t!("vault.u2f.authenticate", xous::LANG));
-                authstr.push_str(&format!("\n{}\n{:x?}", t!("vault.u2f.apphash", xous::LANG), application));
+                let authstr = String::from(t!("vault.u2f.authenticate", xous::LANG));
                 // The order is important due to side effects of checking user presence.
                 if flags == Ctap1Flags::EnforceUpAndSign
-                    && !ctap_state.u2f_up_state.consume_up(clock_value, authstr)
+                    && !ctap_state.u2f_up_state.consume_up(clock_value, authstr, application)
                 {
                     return Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED);
                 }
@@ -308,7 +306,7 @@ impl Ctap1Command {
         let signature = attestation_key.sign_rfc6979::<ctap_crypto::sha256::Sha256>(&signature_data);
 
         response.extend(signature.to_asn1_der());
-        log::info!("process_register response: {:x?}", &response[..32]);
+        log::trace!("process_register response: {:x?}", &response[..32]);
         Ok(response)
     }
 

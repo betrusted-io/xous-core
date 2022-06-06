@@ -1,15 +1,69 @@
 {
-    "vault.u2f.authenticate": {
-        "en": "U2F Authentication Request",
-        "ja": "U2F 認証リクエスト",
-        "zh": "U2F 认证请求",
-        "en-tts": "U2F Authentication Request"
+    "vault.u2f.factoryreset": {
+        "en": "Host has requested a factory reset of FIDO/U2F credentials.\n\nThis will permanently erase all registrations!!\n\nPress 'y' to allow, any other key to abort.",
+        "ja": "ホストがFIDO/U2Fクレデンシャルの工場出荷時のリセットを要求しました。 これにより、すべての登録が完全に消去されます。\n「y」を押して許可します。他のキーを中止しますか？",
+        "zh": "主机已请求将 FIDO/U2F 凭据恢复出厂设置。 这将永久删除所有注册。\n按「y」允许，任何其他键中止？",
+        "en-tts": "Host has requested a factory reset of FIDO/U2F credentials. This will permanently erase all registrations.\nPress 'y' to allow, any other key to abort."
     },
-    "vault.u2f.apphash": {
-        "en": "Application hash: ",
-        "ja": "アプリハッシュ: ",
-        "zh": "应用哈希: ",
-        "en-tts": "Application hash: "
+    "vault.u2f.authenticate": {
+        "en": "U2F Authentication Request\nPress any key to approve.",
+        "ja": "U2F 認証リクエスト\nいずれかのキーを押して承認します。",
+        "zh": "U2F 认证请求\n按任意键批准。",
+        "en-tts": "U2F Authentication Request\nPress any key to approve."
+    },
+    "vault.u2f.newapphash": {
+        "en": "New registration request. Press any key to approve.\nHash: ",
+        "ja": "新規登録リクエスト。 承認するには、任意のキーを押してください。\nハッシュ：",
+        "zh": "新的注册请求。 按任意键批准。\n 哈希：",
+        "en-tts": "New registrations request. Press any key to approve.\nHash: "
+    },
+    "vault.u2f.give_app_name": {
+        "en": "Please enter a name for the app:",
+        "ja": "アプリの名前を入力してください:",
+        "zh": "请输入应用名称:",
+        "en-tts": "Please enter a name for the app:"
+    },
+    "vault.u2f.appinfo.name": {
+        "en": "App name: ",
+        "ja": "アプリ名:",
+        "zh": "应用名称:",
+        "en-tts": "App name: "
+    },
+    "vault.u2f.appinfo.last_authtime": {
+        "en": "Last authorized: ",
+        "ja": "最後に承認された:",
+        "zh": "最后授权:",
+        "en-tts": "Last authorized: "
+    },
+    "vault.u2f.appinfo.seconds_ago": {
+        "en": "secs ago",
+        "ja": "秒前",
+        "zh": "秒前",
+        "en-tts": "seconds ago"
+    },
+    "vault.u2f.appinfo.minutes_ago": {
+        "en": "mins ago",
+        "ja": "分前",
+        "zh": "分钟前",
+        "en-tts": "minutes ago"
+    },
+    "vault.u2f.appinfo.hours_ago": {
+        "en": "hours ago",
+        "ja": "時間前",
+        "zh": "小时前",
+        "en-tts": "hours ago"
+    },
+    "vault.u2f.appinfo.days_ago": {
+        "en": "days ago",
+        "ja": "日前",
+        "zh": "天前",
+        "en-tts": "days ago"
+    },
+    "vault.u2f.appinfo.never": {
+        "en": "never",
+        "ja": "使われたことがない",
+        "zh": "没用过",
+        "en-tts": "never"
     },
     "vault.u2f.register": {
         "en": "U2F Registration Request",

@@ -109,7 +109,7 @@ impl MessageAssembler {
             // Expecting an initialization packet.
             match processed_packet {
                 ProcessedPacket::InitPacket { cmd, len, data } => {
-                    log::debug!("init packet cmd: {:x}", cmd);
+                    log::trace!("init packet cmd: {:x}", cmd);
                     Ok(self.accept_init_packet(*cid, cmd, len, data, timestamp))
                 }
                 ProcessedPacket::ContinuationPacket { .. } => {
@@ -141,7 +141,7 @@ impl MessageAssembler {
                     }
                 }
                 ProcessedPacket::ContinuationPacket { seq, data } => {
-                    log::debug!("continuation");
+                    log::trace!("continuation");
                     if seq != self.seq {
                         // Reject packets with the wrong sequence number.
                         self.reset();
