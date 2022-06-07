@@ -10,6 +10,11 @@ use log::info;
 use num_traits::*;
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, MessageSender};
+#[cfg(feature="rawserial")]
+use std::collections::VecDeque;
+#[cfg(feature="rawserial")]
+const BLOCKING_QUEUE_LEN: usize = 128;
+
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
@@ -762,10 +767,14 @@ fn main() -> ! {
         log::warn!("kbd server is overriding WFI for debugging, remember to disable for production");
         llio.wfi_override(true).unwrap();
     }*/
+    #[cfg(not(feature="rawserial"))]
     let mut esc_index: Option<usize> = None;
+    #[cfg(not(feature="rawserial"))]
     let mut esc_chars = [0u8; 16];
     // storage for any blocking listeners
     let mut blocking_listener = Vec::<MessageSender>::new();
+    #[cfg(feature="rawserial")]
+    let mut blocking_queue = VecDeque::<usize>::new();
 
     log::trace!("starting main loop");
     loop {
@@ -842,14 +851,28 @@ fn main() -> ! {
 
                 #[cfg(feature="rawserial")]
                 {
-                    for listener in blocking_listener.drain(..) {
-                        // we must unblock anyways once the key is hit; even if the key is invalid,
-                        // send the invalid key. The receiving library function will clean this up into a nil-response vector.
-                        xous::return_scalar2(listener, k, 0).unwrap();
+                    if blocking_listener.len() == 0 {
+                        if blocking_queue.len() > BLOCKING_QUEUE_LEN {
+                            log::warn!("blocking queue has overflowed, dropping {}", k);
+                        } else {
+                            blocking_queue.push_back(k);
+                        }
+                    } else {
+                        for listener in blocking_listener.drain(..) {
+                            // we must unblock anyways once the key is hit; even if the key is invalid,
+                            // send the invalid key. The receiving library function will clean this up into a nil-response vector.
+                            if blocking_queue.len() != 0 {
+                                blocking_queue.push_back(k);
+                                let k_prime = blocking_queue.pop_front().unwrap();
+                                xous::return_scalar2(listener, k_prime, 0).unwrap();
+                            } else {
+                                xous::return_scalar2(listener, k, 0).unwrap();
+                            }
+                        }
                     }
                     continue; // do not execute the remaining code in this branch
                 }
-
+                #[cfg(not(feature="rawserial"))]
                 let key = match esc_index {
                     Some(i) => {
                         esc_chars[i] = (k & 0xff) as u8;
@@ -896,7 +919,7 @@ fn main() -> ! {
                         }
                     }
                 };
-                #[cfg(feature="debuginject")]
+                #[cfg(all(feature="debuginject", not(feature="rawserial")))]
                 if let Some(conn) = listener_conn {
                     if key != '\u{0000}' {
                         log::info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
@@ -910,7 +933,7 @@ fn main() -> ! {
                         ).unwrap();
                     }
                 }
-                #[cfg(feature="debuginject")]
+                #[cfg(all(feature="debuginject", not(feature="rawserial")))]
                 for listener in blocking_listener.drain(..) {
                     // we must unblock anyways once the key is hit; even if the key is invalid,
                     // send the invalid key. The receiving library function will clean this up into a nil-response vector.
@@ -1018,6 +1041,7 @@ fn main() -> ! {
     xous::terminate_process(0)
 }
 
+#[cfg(not(feature="rawserial"))]
 fn esc_match(esc_chars: &[u8]) -> Result<Option<char>, ()> {
     let mut extended = Vec::<u8>::new();
     for (i, &c) in esc_chars.iter().enumerate() {

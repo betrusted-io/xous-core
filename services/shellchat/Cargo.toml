@@ -93,6 +93,3 @@ aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = []
 default = [] # "debugprint"
-
-[target.'cfg(any(windows,unix))'.dependencies]
-debug-here = "*"
