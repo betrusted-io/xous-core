@@ -315,7 +315,7 @@ pub(crate) fn start_ux_thread() {
                         if deferred {
                             last_timer = 1 + (prompt_expiration_ms - tt.elapsed_ms() as i64 - 1) / 1000;
                             request_str.push_str(
-                                &format!("\n\n⚠   {}{}   ⚠",
+                                &format!("\n\n⚠   {}{}   ⚠\n",
                                 last_timer,
                                 t!("vault.fido.countdown", xous::LANG)
                             ));
@@ -388,13 +388,12 @@ pub(crate) fn start_ux_thread() {
                                         log::info!("new_timer: {}", new_timer);
                                         let mut request_str = String::from(&request_str_base);
                                         request_str.push_str(
-                                            &format!("{}\n\n⚠   {}{}   ⚠",
-                                            &request_str_base,
+                                            &format!("\n\n⚠   {}{}   ⚠\n",
                                             new_timer,
                                             t!("vault.fido.countdown", xous::LANG)
                                         ));
                                         modals.dynamic_notification_update(
-                                            None,
+                                            Some(t!("vault.u2freq", xous::LANG)),
                                             Some(&request_str),
                                         ).unwrap();
                                         last_timer = new_timer;

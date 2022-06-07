@@ -11,6 +11,12 @@
         "zh": "FIDO 提出凭证请求\n按任意键批准",
         "en-tts": "FIDO Make Credential Request. Press any key to approve."
     },
+    "vault.fido.get_assertion": {
+        "en": "FIDO Assertion Request.\nPress any key to consent to this transaction.",
+        "ja": "FIDOアサーションリクエスト。\nこのトランザクションに同意するには、任意のキーを押してください。",
+        "zh": "FIDO 断言请求。\n按任意键同意此事务。",
+        "en-tts": "FIDO Assertion Request.\nPress any key to consent to this transaction."
+    },
     "vault.fido.exclude_list": {
         "en": "FIDO server is excluding existing credentials.\nPress any key to acknowledge.",
         "ja": "FIDOサーバーは既存のクレデンシャルを除外しています。\n任意のキーを押して確認します。",

@@ -106,12 +106,13 @@ mod test {
 
     const CLOCK_FREQUENCY_HZ: usize = 1000;
     const ZERO: ClockValue = ClockValue::new(0, CLOCK_FREQUENCY_HZ);
-    const BIG_POSITIVE: ClockValue = ClockValue::new(isize::MAX / 1000 - 1, CLOCK_FREQUENCY_HZ);
+    const BIG_POSITIVE: ClockValue = ClockValue::new(i64::MAX / 1000 - 1, CLOCK_FREQUENCY_HZ);
     const NEGATIVE: ClockValue = ClockValue::new(-1, CLOCK_FREQUENCY_HZ);
-    const SMALL_NEGATIVE: ClockValue = ClockValue::new(isize::MIN / 1000 + 1, CLOCK_FREQUENCY_HZ);
+    const SMALL_NEGATIVE: ClockValue = ClockValue::new(i64::MIN / 1000 + 1, CLOCK_FREQUENCY_HZ);
     const REQUEST_DURATION: Duration<i64> = Duration::from_ms(1000);
     const PRESENCE_DURATION: Duration<i64> = Duration::from_ms(1000);
 
+    /* // ux tests not valid in xous
     fn grant_up_when_needed(start_time: ClockValue) {
         let mut u2f_state = U2fUserPresenceState::new(REQUEST_DURATION, PRESENCE_DURATION);
         assert!(!u2f_state.consume_up(start_time));
@@ -136,8 +137,8 @@ mod test {
         u2f_state.grant_up(start_time);
         // The timeout excludes equality, so it should be over at this instant.
         assert!(!u2f_state.consume_up(start_time.wrapping_add(PRESENCE_DURATION)));
-    }
-
+    } */
+/*
     #[test]
     fn test_grant_up_timeout() {
         grant_up_timeout(ZERO);
@@ -168,5 +169,5 @@ mod test {
         u2f_state.grant_up(ZERO);
         assert!(!u2f_state.is_up_needed(ZERO));
         assert!(!u2f_state.consume_up(ZERO));
-    }
+    }*/
 }

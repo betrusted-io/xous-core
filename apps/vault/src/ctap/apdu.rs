@@ -19,7 +19,7 @@ use crate::ctap::array_ref;
 
 const APDU_HEADER_LEN: usize = 4;
 
-#[cfg_attr(test, derive(Clone, Debug))]
+#[cfg_attr(test, derive(Clone))]
 #[allow(non_camel_case_types, dead_code)]
 #[derive(PartialEq, Debug)]
 pub enum ApduStatusCode {

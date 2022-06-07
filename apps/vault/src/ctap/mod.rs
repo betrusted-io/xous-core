@@ -472,7 +472,7 @@ where
                     // (self.check_user_presence)(cid)?;
                     let mut desc = String::from(t!("vault.fido.exclude_list", xous::LANG));
                     desc.push_str(
-                        &format!("\nRelying Party: {}\nUser name: {}",
+                        &format!("\n\nRelying Party: {}\nUser name: {}",
                             if let Some(name) = rp.rp_name {name.to_string()} else {rp_id.to_string()},
                             if let Some(name) = user.user_display_name {name} else {user.user_name.unwrap_or("*Unspecified*".to_string())},
                         )
@@ -523,7 +523,7 @@ where
         let mut make_cred_desc = String::from(t!("vault.fido.make_credential", xous::LANG));
         let alt_name = user.user_name.as_deref().unwrap_or("*Unspecified*");
         make_cred_desc.push_str(
-            &format!("\nRelying Party: {}\nUser name: {}",
+            &format!("\n\nRelying Party: {}\nUser name: {}",
                 // prefer the "friendly name" over the technical name
                 if let Some(name) = &rp.rp_name {name.to_string()} else {rp_id.to_string()},
                 if let Some(name) = &user.user_display_name {name} else {alt_name}
@@ -815,7 +815,14 @@ where
         // For CTAP 2.1, it was moved to a later protocol step.
         if options.up {
             //(self.check_user_presence)(cid)?;
-            if crate::ux::request_permission_blocking("process_get_assertion requests user presence".to_string(), cid).is_none() {
+            let mut desc = String::from(t!("vault.fido.get_assertion", xous::LANG));
+            desc.push_str(
+                &format!("\n\nRelying Party: {}\nClient data hash: {}",
+                    rp_id,
+                    hex::encode(&client_data_hash),
+                )
+            );
+            if crate::ux::request_permission_blocking(desc, cid).is_none() {
                 return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
             }
         }

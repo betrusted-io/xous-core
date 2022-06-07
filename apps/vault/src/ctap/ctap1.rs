@@ -373,7 +373,7 @@ mod test {
     const CLOCK_FREQUENCY_HZ: usize = 32768;
     const START_CLOCK_VALUE: ClockValue = ClockValue::new(0, CLOCK_FREQUENCY_HZ);
     const TIMEOUT_CLOCK_VALUE: ClockValue = ClockValue::new(
-        (30001 * CLOCK_FREQUENCY_HZ as isize) / 1000,
+        (30001 * CLOCK_FREQUENCY_HZ as i64) / 1000,
         CLOCK_FREQUENCY_HZ,
     );
 
@@ -423,8 +423,8 @@ mod test {
 
         let application = [0x0A; 32];
         let message = create_register_message(&application);
-        ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
-        ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
         let response = Ctap1Command::process_command(&message, &mut ctap_state, START_CLOCK_VALUE);
         // Certificate and private key are missing
         assert_eq!(response, Err(Ctap1StatusCode::SW_INTERNAL_EXCEPTION));
@@ -434,8 +434,8 @@ mod test {
             .persistent_store
             .set_attestation_private_key(&fake_key)
             .is_ok());
-        ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
-        ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
         let response = Ctap1Command::process_command(&message, &mut ctap_state, START_CLOCK_VALUE);
         // Certificate is still missing
         assert_eq!(response, Err(Ctap1StatusCode::SW_INTERNAL_EXCEPTION));
@@ -445,8 +445,8 @@ mod test {
             .persistent_store
             .set_attestation_certificate(&fake_cert[..])
             .is_ok());
-        ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
-        ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
         let response =
             Ctap1Command::process_command(&message, &mut ctap_state, START_CLOCK_VALUE).unwrap();
         assert_eq!(response[0], Ctap1Command::LEGACY_BYTE);
@@ -488,8 +488,8 @@ mod test {
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
-        ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
-        ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
         let response =
             Ctap1Command::process_command(&message, &mut ctap_state, TIMEOUT_CLOCK_VALUE);
         assert_eq!(response, Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED));
@@ -636,8 +636,8 @@ mod test {
         let message =
             create_authenticate_message(&application, Ctap1Flags::EnforceUpAndSign, &key_handle);
 
-        ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
-        ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
         let response =
             Ctap1Command::process_command(&message, &mut ctap_state, START_CLOCK_VALUE).unwrap();
         assert_eq!(response[0], 0x01);
@@ -689,8 +689,8 @@ mod test {
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
-        ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
-        ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
         let response = Ctap1Command::process_command(&message, &mut ctap_state, START_CLOCK_VALUE);
         assert_eq!(response, Err(Ctap1StatusCode::SW_WRONG_DATA));
     }
@@ -706,8 +706,8 @@ mod test {
         let dummy_user_presence = |_| panic!("Unexpected user presence check in CTAP1");
         let mut ctap_state = CtapState::new(&mut rng, dummy_user_presence, START_CLOCK_VALUE);
 
-        ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
-        ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.consume_up(START_CLOCK_VALUE);
+        //ctap_state.u2f_up_state.grant_up(START_CLOCK_VALUE);
         let response =
             Ctap1Command::process_command(&message, &mut ctap_state, TIMEOUT_CLOCK_VALUE);
         assert_eq!(response, Err(Ctap1StatusCode::SW_COND_USE_NOT_SATISFIED));

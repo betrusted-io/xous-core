@@ -41,8 +41,10 @@ const PIN_TOKEN_LENGTH: usize = 32;
 /// Returns LEFT(HMAC(hmac_key, hmac_contents), 16) == pin_auth).
 fn verify_pin_auth(hmac_key: &[u8], hmac_contents: &[u8], pin_auth: &[u8]) -> bool {
     if pin_auth.len() != PIN_AUTH_LENGTH {
+        log::info!("pin_auth length is wrong: {}", pin_auth.len());
         return false;
     }
+    log::info!("key {:?}, contents: {:?}, pin: {:?}", hmac_key, hmac_contents, pin_auth);
     verify_hmac_256_first_128bits::<Sha256>(
         hmac_key,
         hmac_contents,
@@ -247,10 +249,14 @@ impl PinProtocolV1 {
         pin_auth: &[u8],
         authenticated_message: &[u8],
     ) -> Result<[u8; 32], Ctap2StatusCode> {
+        log::info!("cosekey: {:?}", key_agreement);
         let pk: ctap_crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
+        log::info!("pk: {:?}", pk);
         let shared_secret = self.key_agreement_key.exchange_x_sha256(&pk);
+        log::info!("shared_secret: {:?}", shared_secret);
 
         if !verify_pin_auth(&shared_secret, authenticated_message, pin_auth) {
+            log::info!("pin_auth invalid");
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID);
         }
 
@@ -287,10 +293,12 @@ impl PinProtocolV1 {
         new_pin_enc: Vec<u8>,
     ) -> Result<(), Ctap2StatusCode> {
         if persistent_store.pin_hash()?.is_some() {
+            log::info!("pin_hash() is_some()");
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID);
         }
         let pin_decryption_key =
             self.exchange_decryption_key(key_agreement, &pin_auth, &new_pin_enc)?;
+        log::info!("exchanged decryption key");
         check_and_store_new_pin(persistent_store, &pin_decryption_key, new_pin_enc)?;
         persistent_store.reset_pin_retries()?;
         Ok(())

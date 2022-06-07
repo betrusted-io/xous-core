@@ -623,7 +623,10 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 }
             }
             Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Ok(None),
+                std::io::ErrorKind::NotFound => {
+                    log::info!("pin_hash not found");
+                    Ok(None)
+                },
                 _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
             }
         }

@@ -21,6 +21,8 @@ cbc = "0.1.2"
 aes = {path="../../../../services/aes"}
 sha2 = {path="../../../../services/engine-sha512"}
 
+log = "0.4.14" # xous debugging
+
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.5"
 rand_chacha = "0.3.1"

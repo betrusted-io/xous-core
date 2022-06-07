@@ -140,7 +140,7 @@ impl TryFrom<cbor::Value> for PublicKeyCredentialType {
 
 // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialparameters
 #[derive(PartialEq)]
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
+// #[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug))]
 #[derive(Debug)]
 pub struct PublicKeyCredentialParameter {
     pub cred_type: PublicKeyCredentialType,
