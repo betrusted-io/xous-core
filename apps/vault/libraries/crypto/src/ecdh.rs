@@ -211,6 +211,10 @@ mod test {
     #[cfg(debug_assertions)]
     const ITERATIONS: u32 = 500;
 
+    // This test looks weird, but it's coded so I can copy-paste vectors from both a test bench and the device
+    // and confirm that the math is correct, and that the vectors as printed are also correct without having
+    // to manually check them. The test is also good in that it checks a full e2e exchange between device
+    // and host, as opposed to just checking againt itself.
     #[test]
     fn ecdh_test_vectors() {
         let host_bytes = hex::decode("555054552084aad44bc2306fc07723309c679b2b94c030fc39b23c670813da9e").unwrap();
