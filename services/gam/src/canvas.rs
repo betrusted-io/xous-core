@@ -78,7 +78,13 @@ impl Canvas {
     }
     pub fn pan_offset(&self) -> Point { self.pan_offset }
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
-    pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; *self.state.borrow_mut() = CanvasState::OffScreenDrawable }
+    pub fn set_clip(&mut self, cr: Rectangle) {
+        self.clip_rect = cr;
+        // I think this line is in error -- I don't remember *why* we would set this, but with this line here,
+        // any box that dynamically updates size would become instantly not drawable, with no way to restore that state.
+        // log::info!("set_clip would side effect {:?} to OffScreenDrawable", self.state.borrow());
+        // *self.state.borrow_mut() = CanvasState::OffScreenDrawable
+    }
     pub fn gid(&self) -> Gid { self.gid }
     pub fn trust_level(&self) -> u8 { self.trust_level }
     pub fn set_trust_level(&mut self, level: u8) {self.trust_level = level;}
