@@ -36,10 +36,28 @@ use p256::elliptic_curve::consts::U32;
 use p256::elliptic_curve::generic_array::GenericArray;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use std::convert::TryInto;
+#[cfg(test)]
+use std::convert::TryFrom;
+#[cfg(test)]
+use p256::ecdh::SharedSecret;
+#[cfg(test)]
+use p256::elliptic_curve::ecdh::diffie_hellman;
+#[cfg(test)]
+use p256::NonZeroScalar;
+#[cfg(test)]
+use rand_core::{CryptoRng, RngCore};
+
+use crate::sha256::Sha256;
+use crate::Hash256;
 
 use super::rng256::Rng256;
 pub const NBYTES: usize = 32;
 
+#[cfg(test)]
+pub struct SecKey {
+    a: EphemeralSecretTest,
+}
+#[cfg(not(test))]
 pub struct SecKey {
     a: EphemeralSecret,
 }
@@ -59,7 +77,20 @@ impl SecKey {
         R: Rng256,
     {
         SecKey {
-            a: EphemeralSecret::random(&mut OsRng)
+            #[cfg(test)]
+            a: EphemeralSecretTest::random(&mut OsRng),
+            #[cfg(not(test))]
+            a: EphemeralSecret::random(&mut OsRng),
+        }
+    }
+    #[cfg(test)]
+    pub fn to_bytes(&self) -> Vec::<u8> {
+        self.a.to_bytes()
+    }
+    #[cfg(test)]
+    pub fn from_bytes(b: &[u8]) -> SecKey {
+        SecKey {
+            a: EphemeralSecretTest::from_bytes(b),
         }
     }
 
@@ -72,7 +103,45 @@ impl SecKey {
     // sharedSecret from Authenticator"
     pub fn exchange_x_sha256(&self, other: &PubKey) -> [u8; 32] {
         let shared = self.a.diffie_hellman(&other.p);
-        shared.as_bytes().as_slice().try_into().unwrap()
+        let mut hasher = Sha256::new();
+        hasher.update(shared.as_bytes().as_slice().try_into().unwrap());
+        hasher.finalize()
+    }
+}
+
+#[cfg(test)]
+pub struct EphemeralSecretTest {
+    scalar: NonZeroScalar,
+}
+#[cfg(test)]
+impl EphemeralSecretTest
+{
+    pub fn random(rng: impl CryptoRng + RngCore) -> Self {
+        Self {
+            scalar: NonZeroScalar::random(rng),
+        }
+    }
+    pub fn to_bytes(&self) -> Vec::<u8> {
+        self.scalar.to_bytes().to_vec()
+    }
+    /// Generate an [`EphemeralSecret`] from a test vector.
+    pub fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            scalar: NonZeroScalar::try_from(b).unwrap(),
+        }
+    }
+
+    /// Get the public key associated with this ephemeral secret.
+    ///
+    /// The `compress` flag enables point compression.
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey::from_secret_scalar(&self.scalar)
+    }
+
+    /// Compute a Diffie-Hellman shared secret from an ephemeral secret and the
+    /// public key of the other participant in the exchange.
+    pub fn diffie_hellman(&self, public_key: &PublicKey) -> SharedSecret {
+        diffie_hellman(&self.scalar, public_key.as_affine())
     }
 }
 
@@ -131,6 +200,8 @@ mod test {
     use p256::AffinePoint;
     use p256::elliptic_curve::sec1::FromEncodedPoint;
 
+    use crate::sha256::Sha256;
+
     use super::super::rng256::ThreadRng256;
     use super::*;
 
@@ -139,6 +210,81 @@ mod test {
     const ITERATIONS: u32 = 10000;
     #[cfg(debug_assertions)]
     const ITERATIONS: u32 = 500;
+
+    #[test]
+    fn ecdh_test_vectors() {
+        let host_bytes = hex::decode("555054552084aad44bc2306fc07723309c679b2b94c030fc39b23c670813da9e").unwrap();
+        let host_test = EphemeralSecretTest::from_bytes(host_bytes.as_slice());
+        let host_pk = host_test.public_key();
+        println!("host_ephemeral: {:x?}", host_bytes);
+        println!("host_pk: {:?}", host_pk);
+        let mut hpk_x = [0u8; 32];
+        let mut hpk_y = [0u8; 32];
+        hpk_x.copy_from_slice(host_pk.to_encoded_point(false).x().unwrap().as_slice());
+        hpk_y.copy_from_slice(host_pk.to_encoded_point(false).y().unwrap().as_slice());
+        println!("HOST pk coords computed from private key (host_pk): x: {:?} y: {:?}", hpk_x, hpk_y);
+        let hpk_x_devreported = [28u8, 37, 33, 239, 215, 47, 125, 182, 240, 107, 35, 100, 62, 18, 4, 87, 187, 171, 184, 10, 171, 34, 173, 102, 33, 97, 192, 12, 229, 101, 232, 37];
+        let hpk_y_devreported = [234u8, 162, 255, 73, 37, 228, 113, 9, 190, 194, 228, 203, 16, 80, 70, 55, 220, 244, 109, 232, 83, 169, 100, 10, 203, 220, 185, 32, 222, 78, 128, 255];
+        let hpk_x_hstreported = hex::decode("1c2521efd72f7db6f06b23643e120457bbabb80aab22ad662161c00ce565e825").unwrap();
+        let hpk_y_hstreported = hex::decode("eaa2ff4925e47109bec2e4cb10504637dcf46de853a9640acbdcb920de4e80ff").unwrap();
+        let host_pk_native = PubKey::from_coordinates(
+            &hpk_x_devreported,
+            &hpk_y_devreported,
+        ).unwrap();
+        println!("hpk_x_devreported: {:?}", hpk_x_devreported);
+        println!("hpk_x_hstreported: {:?}", hpk_x_hstreported);
+        println!("hpk_y_devreported: {:?}", hpk_y_devreported.as_slice());
+        println!("hpk_y_hstreported: {:?}", hpk_y_hstreported.as_slice());
+        assert!(&hpk_x_devreported == hpk_x_hstreported.as_slice());
+        assert!(&hpk_y_devreported == hpk_y_hstreported.as_slice());
+
+        let device_bytes = [226, 46, 196, 239, 246, 91, 241, 12, 18, 69, 191, 4, 251, 90, 35, 175, 171, 187, 133, 22, 70, 129, 145, 180, 143, 163, 55, 184, 180, 53, 21, 23];
+        let device_test = EphemeralSecretTest::from_bytes(device_bytes.as_slice());
+        let device_pk_computed = device_test.public_key();
+        let mut dev_x_computed = [0u8; 32];
+        let mut dev_y_computed = [0u8; 32];
+        dev_x_computed.copy_from_slice(device_pk_computed.to_encoded_point(false).x().unwrap().as_slice());
+        dev_y_computed.copy_from_slice(device_pk_computed.to_encoded_point(false).y().unwrap().as_slice());
+        println!("dev_x_computed: {:?}", dev_x_computed);
+        println!("dev_y_computed: {:?}", dev_y_computed);
+
+        let device_x_devreported = [19, 104, 193, 88, 255, 172, 103, 22, 8, 144, 14, 69, 205, 48, 242, 20, 61, 24, 127, 2, 174, 186, 129, 60, 134, 207, 226, 128, 98, 33, 71, 17];
+        let device_y_devreported = [49, 167, 248, 159, 106, 202, 174, 64, 46, 251, 201, 62, 73, 12, 109, 207, 121, 72, 58, 202, 247, 230, 61, 193, 52, 90, 128, 141, 28, 255, 48, 82];
+        let device_pk = PubKey::from_coordinates(
+            &device_x_devreported,
+            &device_y_devreported,
+        ).unwrap();
+        let device_x_hstreported = [19u8, 104, 193, 88, 255, 172, 103, 22, 8, 144, 14, 69, 205, 48, 242, 20, 61, 24, 127, 2, 174, 186, 129, 60, 134, 207, 226, 128, 98, 33, 71, 17,  ];
+        let device_y_hstreported = [49u8, 167, 248, 159, 106, 202, 174, 64, 46, 251, 201, 62, 73, 12, 109, 207, 121, 72, 58, 202, 247, 230, 61, 193, 52, 90, 128, 141, 28, 255, 48, 82,  ];
+        println!("dev_x_hstreported: {:?}", device_x_hstreported);
+        println!("dev_y_hstreported: {:?}", device_y_hstreported);
+        assert!(device_x_hstreported == device_x_devreported);
+        assert!(device_y_hstreported == device_y_devreported);
+        assert!(dev_x_computed == device_x_hstreported);
+        assert!(dev_y_computed == device_y_hstreported);
+        println!("device_pk {:?}", device_pk);
+
+        // this computation is just wrong?
+        let dev_sec_key = SecKey::from_bytes(&device_bytes);
+        //let ss_enc = host_test.diffie_hellman(&device_pk.p);
+        //let ss = ss_enc.as_bytes();
+        let ss = dev_sec_key.exchange_x_sha256(&host_pk_native);
+        // ss is derived using the host's private key, and the device's public key:
+        println!("shared secret: {:?}", ss);
+
+        let host_ss: [u8; 32] = [127, 102, 177, 139, 141, 9, 166, 158, 187, 8, 208, 104, 131, 208, 114, 196, 22, 16, 179, 94, 237, 156, 143, 7, 157, 188, 10, 227, 168, 171, 124, 217,  ];
+        //assert!(&host_ss == ss.as_slice());
+        let dev_printed_ss: [u8; 32] = [243, 239, 96, 163, 197, 222, 100, 144, 94, 171, 211, 129, 183, 100, 165, 75, 6, 210, 183, 83, 224, 80, 127, 250, 42, 145, 139, 202, 193, 73, 166, 53];
+        //assert!(&dev_printed_ss == ss.as_slice());
+
+        let contents = [163, 75, 48, 54, 207, 234, 121, 106, 88, 111, 33, 197, 16, 45, 205, 61, 178, 38, 2, 179, 235, 124, 199, 89, 206, 47, 108, 147, 129, 238, 30, 12, 17, 59, 211, 73, 89, 94, 14, 45, 27, 18, 136, 80, 14, 65, 127, 186, 70, 207, 32, 26, 231, 82, 197, 119, 1, 140, 13, 15, 185, 46, 77, 135];
+        let contents2 = [163u8, 75, 48, 54, 207, 234, 121, 106, 88, 111, 33, 197, 16, 45, 205, 61, 178, 38, 2, 179, 235, 124, 199, 89, 206, 47, 108, 147, 129, 238, 30, 12, 17, 59, 211, 73, 89, 94, 14, 45, 27, 18, 136, 80, 14, 65, 127, 186, 70, 207, 32, 26, 231, 82, 197, 119, 1, 140, 13, 15, 185, 46, 77, 135,  ];
+        assert!(contents == contents2);
+        let pin = [193, 72, 232, 147, 205, 36, 2, 24, 145, 248, 146, 163, 227, 67, 221, 246];
+        let computed_mac = crate::hmac::hmac_256::<Sha256>(ss.as_slice(), &contents);
+        println!("computed_mac: {:?}", computed_mac);
+        assert!(&computed_mac[..16] == &pin);
+    }
 
     /** Test that key generation creates valid keys **/
     #[test]

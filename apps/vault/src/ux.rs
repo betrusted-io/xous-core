@@ -70,7 +70,7 @@ pub(crate) fn set_durations(prompt: i64, presence: i64) {
 /// Some(char) => user is present, and they hit the key indicated
 /// None => user was not present
 pub(crate) fn request_permission_blocking(reason: String, channel_id: [u8; 4]) -> Option<char> {
-    log::info!("requesting permission (blocking");
+    log::info!("requesting permission (blocking)");
     request_permission_inner(reason, channel_id, true, None)
 }
 pub(crate) fn request_permission_polling(reason: String, application: [u8; 32]) -> bool {
@@ -129,6 +129,10 @@ pub(crate) fn start_ux_thread() {
             let mut last_app_id: Option<[u8; 32]> = None;
             let mut app_info: Option<AppInfo> = None;
             let pddb = pddb::Pddb::new();
+            pddb.is_mounted_blocking();
+            #[cfg(feature="autotest")]
+            modals.show_notification("WARNING: FIDO configured for autotest. Do not use for production!", None).unwrap();
+            let mut num_fido_auths = 0; // only counts FIDO2 flow auths, not U2F auths
             loop {
                 let mut msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -333,11 +337,11 @@ pub(crate) fn start_ux_thread() {
                                 // note that if no key is hit, we get None back on dialog box close automatically
                                 match modals::dynamic_notification_blocking_listener(token, conn) {
                                     Ok(Some(c)) => {
-                                        log::info!("kbhit got {}", c);
+                                        log::trace!("kbhit got {}", c);
                                         kbhit.store(c as u32, Ordering::SeqCst)
                                     },
                                     Ok(None) => {
-                                        log::info!("kbhit exited or had no characters");
+                                        log::trace!("kbhit exited or had no characters");
                                         kbhit.store(0, Ordering::SeqCst)
                                     },
                                     Err(e) => log::error!("error waiting for keyboard hit from blocking listener: {:?}", e),
@@ -400,12 +404,21 @@ pub(crate) fn start_ux_thread() {
                                     }
                                 }
                                 // check if we got a hit
-                                if kbhit.load(Ordering::SeqCst) != 0 {
-                                    log::info!("got user presence!");
+                                #[cfg(not(feature="autotest"))]
+                                let key_hit = kbhit.load(Ordering::SeqCst);
+                                #[cfg(feature="autotest")]
+                                let key_hit = if num_fido_auths != 82 { // 82 is the test number of "don't touch it"
+                                    'y' as u32
+                                } else {
+                                    0
+                                };
+                                if key_hit != 0 {
+                                    num_fido_auths += 1;
+                                    log::info!("got user presence! count: {}", num_fido_auths);
                                     if let Some(mut msg) = deferred_req.take() {
                                         let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                                         let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                                        fido_request.granted = char::from_u32(kbhit.load(Ordering::SeqCst));
+                                        fido_request.granted = char::from_u32(key_hit);
                                         log::info!("returning {:?}", fido_request.granted);
                                         buffer.replace(fido_request).unwrap();
                                     }
@@ -423,9 +436,18 @@ pub(crate) fn start_ux_thread() {
                                     tt.sleep_ms(interval).unwrap();
                                     // check if we timed out
                                     if tt.elapsed_ms() as i64 >= prompt_expiration_ms {
+                                        num_fido_auths += 1; // bump it so we can pass the "don't touch it" test
                                         log::info!("timed out");
                                         ux_state = UxState::Idle;
                                         modals.dynamic_notification_close().unwrap();
+                                        // unblock the listener with a `None` response
+                                        if let Some(mut msg) = deferred_req.take() {
+                                            let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                                            let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
+                                            fido_request.granted = None;
+                                            log::trace!("timeout returning {:?}", fido_request.granted);
+                                            buffer.replace(fido_request).unwrap();
+                                        }
                                     } else { // else pump the loop again
                                         send_message(self_cid,
                                             Message::new_scalar(UxOp::Pump.to_usize().unwrap(), KEEPALIVE_MS, 0, 0, 0)

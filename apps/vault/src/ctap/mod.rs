@@ -946,6 +946,7 @@ where
         } else {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
+        #[cfg(all(not(feature="autotest"), not(feature="multireset")))] // skip this check on autotest
         match &self.stateful_command_type {
             Some(StatefulCommand::Reset) => (),
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED),

@@ -250,13 +250,23 @@ impl PinProtocolV1 {
         authenticated_message: &[u8],
     ) -> Result<[u8; 32], Ctap2StatusCode> {
         let pk: ctap_crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
-        log::info!("CONS pk: {:?}", pk);
-        log::info!("CHECK pk: {:?}", self.key_agreement_key.genpk());
+        log::trace!("HOST pk: {:?}", pk);
+        let mut hpk_x = [0u8; 32];
+        let mut hpk_y = [0u8; 32];
+        pk.to_coordinates(&mut hpk_x, &mut hpk_y);
+        log::trace!("HOST pk coords (host_pk): x: {:?} y: {:?}", hpk_x, hpk_y);
+        // log::info!("MY private key: {:?}", self.key_agreement_key.to_bytes()); // requires a "test" feature to access
+        let my_pk = self.key_agreement_key.genpk();
+        log::trace!("MY pk: {:?}", my_pk);
+        let mut x = [0u8; 32];
+        let mut y = [0u8; 32];
+        my_pk.to_coordinates(&mut x, &mut y);
+        log::trace!("MY pk coords (device_pk): x: {:?} y: {:?}", x, y);
         let shared_secret = self.key_agreement_key.exchange_x_sha256(&pk);
-        log::info!("shared_secret: {:?}", shared_secret);
+        log::trace!("shared_secret (expected_ss): {:?}", shared_secret);
 
         if !verify_pin_auth(&shared_secret, authenticated_message, pin_auth) {
-            log::info!("pin_auth invalid");
+            log::debug!("pin_auth invalid");
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID);
         }
 

@@ -86,6 +86,8 @@ fn main() -> ! {
             let usb = usb_device_xous::UsbHid::new();
             let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
             let mut ctap_hid = CtapHid::new();
+            let pddb = pddb::Pddb::new();
+            pddb.is_mounted_blocking();
             loop {
                 match usb.u2f_wait_incoming() {
                     Ok(msg) => {
