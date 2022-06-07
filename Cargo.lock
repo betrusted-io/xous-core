@@ -728,6 +728,7 @@ dependencies = [
  "cbc",
  "cbor",
  "hex 0.3.2",
+ "log",
  "p256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",

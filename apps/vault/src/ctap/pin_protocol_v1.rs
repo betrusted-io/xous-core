@@ -249,9 +249,9 @@ impl PinProtocolV1 {
         pin_auth: &[u8],
         authenticated_message: &[u8],
     ) -> Result<[u8; 32], Ctap2StatusCode> {
-        log::info!("cosekey: {:?}", key_agreement);
         let pk: ctap_crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
-        log::info!("pk: {:?}", pk);
+        log::info!("CONS pk: {:?}", pk);
+        log::info!("CHECK pk: {:?}", self.key_agreement_key.genpk());
         let shared_secret = self.key_agreement_key.exchange_x_sha256(&pk);
         log::info!("shared_secret: {:?}", shared_secret);
 
@@ -278,6 +278,7 @@ impl PinProtocolV1 {
 
     fn process_get_key_agreement(&self) -> Result<AuthenticatorClientPinResponse, Ctap2StatusCode> {
         let pk = self.key_agreement_key.genpk();
+        log::info!("GEN pk: {:?}", pk);
         Ok(AuthenticatorClientPinResponse {
             key_agreement: Some(CoseKey::from(pk)),
             pin_token: None,
@@ -293,7 +294,7 @@ impl PinProtocolV1 {
         new_pin_enc: Vec<u8>,
     ) -> Result<(), Ctap2StatusCode> {
         if persistent_store.pin_hash()?.is_some() {
-            log::info!("pin_hash() is_some()");
+            log::debug!("pin_hash() is_some()");
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID);
         }
         let pin_decryption_key =
