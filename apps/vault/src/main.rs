@@ -16,6 +16,11 @@ use ctap::CtapState;
 mod shims;
 use shims::*;
 
+// CTAP2 testing notes:
+// run our branch and use this to forward the prompts on to the device:
+// netcat -k -u -l 6502 > /dev/ttyS0
+// use the "autotest" feature to remove some excess prompts that interfere with the test
+
 /*
 UI concept:
 

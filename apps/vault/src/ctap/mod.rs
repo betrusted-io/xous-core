@@ -952,6 +952,7 @@ where
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED),
         }
         //(self.check_user_presence)(cid)?;
+        #[cfg(not(feature="autotest"))]
         if crate::ux::request_permission_blocking(t!("vault.u2f.reset_check", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }

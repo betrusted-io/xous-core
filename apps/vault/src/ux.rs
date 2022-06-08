@@ -130,8 +130,8 @@ pub(crate) fn start_ux_thread() {
             let mut app_info: Option<AppInfo> = None;
             let pddb = pddb::Pddb::new();
             pddb.is_mounted_blocking();
-            #[cfg(feature="autotest")]
-            modals.show_notification("WARNING: FIDO configured for autotest. Do not use for production!", None).unwrap();
+            //#[cfg(feature="autotest")]
+            //modals.show_notification("WARNING: FIDO configured for autotest. Do not use for production!", None).unwrap();
             let mut num_fido_auths = 0; // only counts FIDO2 flow auths, not U2F auths
             loop {
                 let mut msg = xous::receive_message(sid).unwrap();
@@ -404,14 +404,14 @@ pub(crate) fn start_ux_thread() {
                                     }
                                 }
                                 // check if we got a hit
-                                #[cfg(not(feature="autotest"))]
+                                //#[cfg(not(feature="autotest"))]
                                 let key_hit = kbhit.load(Ordering::SeqCst);
-                                #[cfg(feature="autotest")]
+                                /*#[cfg(feature="autotest")]
                                 let key_hit = if num_fido_auths != 82 { // 82 is the test number of "don't touch it"
                                     'y' as u32
                                 } else {
                                     0
-                                };
+                                };*/
                                 if key_hit != 0 {
                                     num_fido_auths += 1;
                                     log::info!("got user presence! count: {}", num_fido_auths);
