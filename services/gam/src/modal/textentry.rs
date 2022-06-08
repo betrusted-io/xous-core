@@ -16,7 +16,7 @@ pub type ValidatorErr = xous_ipc::String::<256>;
 pub type Payloads = [TextEntryPayload; MAX_FIELDS as usize];
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
-pub struct TextEntryPayloads (Payloads);
+pub struct TextEntryPayloads (Payloads, usize);
 
 impl TextEntryPayloads {
     pub fn first(&self) -> TextEntryPayload {
@@ -24,10 +24,7 @@ impl TextEntryPayloads {
     }
 
     pub fn content(&self) -> Vec<TextEntryPayload> {
-        self.0
-        .iter().cloned()
-        .filter(|payload| payload.dirty)
-        .collect()
+        self.0[..self.1].to_vec()
     }
 }
 
@@ -400,6 +397,7 @@ impl ActionApi for TextEntry {
                 }
 
                 let mut payloads: TextEntryPayloads = Default::default();
+                payloads.1 = self.max_field_amount as usize;
                 payloads.0[..self.max_field_amount as usize].copy_from_slice(&self.action_payloads[..self.max_field_amount as usize]);
                 let buf = Buffer::into_buf(payloads).expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");

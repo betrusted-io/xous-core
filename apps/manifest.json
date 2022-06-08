@@ -21,6 +21,17 @@
             }
         }
     },
+    "vault": {
+        "context_name": "Key Vault",
+        "menu_name": {
+            "appmenu.vault": {
+                "en": "Key Vault",
+                "ja": "キーボールト",
+                "zh": "密钥库",
+                "en-tts": "Key Vault"
+            }
+        }
+    },
     "repl": {
         "context_name": "repl demo app",
         "menu_name": {

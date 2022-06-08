@@ -76,8 +76,7 @@ fn sleep_loop_0() {
     sleep_loop_1(unsafe { MAIN_CONN } as _);
 }
 
-#[xous::xous_main]
-fn test_main() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");

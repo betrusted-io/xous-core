@@ -108,8 +108,7 @@ fn local_lender() {
     }
 }
 
-#[xous::xous_main]
-fn test_main() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
 
     log::info!(

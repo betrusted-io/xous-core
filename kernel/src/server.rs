@@ -976,7 +976,7 @@ impl Server {
         original_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous_kernel::Error> {
         // klog!(
-        //     "Queueing message: {:?} for pid: {}  tid: {}",
+        //     "Queueing message: {:?} from pid: {}  tid: {}",
         //     message,
         //     pid.get(),
         //     tid

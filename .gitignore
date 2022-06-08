@@ -8,6 +8,9 @@ apps/i18n.json
 services/gam/src/apps.rs
 services/status/src/app_autogen.rs
 
+# shouldn't be committed
+apps/vault/tools/crypto_data
+
 *.map
 
 # Emacs
@@ -24,3 +27,5 @@ tools/__pycache__
 .vscode/settings-hw.json
 .vscode/settings-xous.json
 
+# don't commit local modifications to the Renode filesystem template
+emulation/linux-server-rootfs.jffs2

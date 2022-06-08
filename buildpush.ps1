@@ -3,7 +3,7 @@
 # set RUSTFLAGS=--remap-path-prefix=F:\largework\rust-win\code\xous-core\=build
 # $env:RUSTFLAGS="--remap-path-prefix=$(Get-Location)=build"
 
-cargo xtask app-image ball repl
+cargo xtask app-image ball repl # vault
 # cargo xtask ffi-test
 # cargo xtask minimal precursors/soc.svd
 
@@ -12,7 +12,10 @@ CertUtil -hashfile precursors/soc_csr.bin MD5
 
 CertUtil -hashfile target/riscv32imac-unknown-xous-elf/release/loader.bin MD5
 CertUtil -hashfile target/riscv32imac-unknown-xous-elf/release/xous.img MD5
-scp -i c:/users/bunnie/.ssh/id_pi target/riscv32imac-unknown-xous-elf/release/xous.img target/riscv32imac-unknown-xous-elf/release/loader.bin precursors/soc_csr.bin pi@10.0.245.181:code/precursors/
+scp -i c:/users/bunnie/.ssh/id_pi target/riscv32imac-unknown-xous-elf/release/xous.img target/riscv32imac-unknown-xous-elf/release/loader.bin precursors/soc_csr.bin pi@10.0.245.135:code/precursors/
+
+# scp -i c:/users/bunnie/.ssh/id_ed25519 target/riscv32imac-unknown-xous-elf/release/xous.img target/riscv32imac-unknown-xous-elf/release/loader.bin precursors/soc_csr.bin bunnie@192.168.137.161:code/precursors/
+
 # scp -i c:/users/bunnie/.ssh/id_ed25519 target/riscv32imac-unknown-xous-elf/release/xous.img target/riscv32imac-unknown-xous-elf/release/loader.bin precursors/soc_csr.bin bunnie@10.0.245.9:/mnt/c/Users/bunnie/
 
 # CertUtil -hashfile target/riscv32imac-unknown-none-elf/release/loader.bin MD5

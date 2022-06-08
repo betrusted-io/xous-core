@@ -1,0 +1,48 @@
+[package]
+name = "vault"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+xous = { path = "../../xous-rs" }
+xous-ipc = { path = "../../xous-ipc" }
+rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
+log-server = { path = "../../services/log-server" }
+xous-names = { path = "../../services/xous-names" }
+gam = {path = "../../services/gam" }
+graphics-server = {path = "../../services/graphics-server" }
+locales = {path = "../../locales"}
+tts-frontend = {path="../../services/tts"}
+usb-device-xous = {path="../../services/usb-device-xous"}
+usbd-human-interface-device = {git="https://github.com/betrusted-io/usbd-human-interface-device.git", branch="main"}
+pddb = {path = "../../services/pddb" }
+modals = {path = "../../services/modals" }
+
+ime-plugin-api = {path = "../../services/ime-plugin-api"}
+ime-plugin-shell = {path = "../../services/ime-plugin-shell"}
+content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
+ctap-crypto = {path = "libraries/crypto"}
+cbor = {path = "libraries/cbor"}
+byteorder = { version = "1.4.3", default-features = false }
+arrayref = "0.3.6"
+subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
+rand_core = "0.6.3"
+ticktimer-server = {path = "../../services/ticktimer-server"}
+
+# ux formatting
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+chrono = {version = "0.4.19", default-features = false, features = ["std"]}
+
+[dev-dependencies]
+enum-iterator = "0.6.0"
+
+[features]
+tts = []
+with_ctap1 = ["ctap-crypto/with_ctap1"]
+with_ctap2_1 = []
+autotest = []
+multireset = [] # allows credential reset more than once per boot
+default = ["with_ctap1", "with_ctap2_1", "autotest"]

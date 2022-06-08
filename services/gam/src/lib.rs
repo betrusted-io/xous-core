@@ -385,6 +385,18 @@ impl Gam {
         )
         .expect("couldn't self test");
     }
+    pub fn set_debug_level(&self, level: log::LevelFilter) {
+        let l: usize = match level {
+            log::LevelFilter::Debug => 1,
+            log::LevelFilter::Trace => 2,
+            _ => 0,
+        };
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::SetDebugLevel.to_usize().unwrap(), l, 0, 0, 0),
+        )
+        .expect("couldn't set debug level");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

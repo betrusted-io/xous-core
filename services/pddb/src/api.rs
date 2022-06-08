@@ -120,6 +120,9 @@ pub(crate) enum Opcode {
     /// Menu opcodes
     MenuListBasis,
 
+    /// Security state checks
+    IsEfuseSecured,
+
     /// Suspend/resume callback
     SuspendResume,
     /// quit the server

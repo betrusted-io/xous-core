@@ -1,4 +1,4 @@
-pub(crate) const SERVER_NAME_TRNG: &str = "_TRNG manager_";
+pub(crate) const SERVER_NAME_TRNG: &str = "_TRNG manager_"; // depended upon by getrandom, do not change
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
 pub struct ExcursionTest {
@@ -42,36 +42,40 @@ pub struct TrngErrors {
 /// zero-ing of pages, thrashing the cache and also pegging the CPU for useless work.
 /// Consider revising the data field down to 1023 words in length, but need to revisit the
 /// library implemnetations to make sure this doesn't break any existing code.
+/// Note that this structure had to be mirrored into the local "getrandom" implementation
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TrngBuf {
     pub data: [u32; 1024],
     pub len: u16,
 }
 
+/// These opcode numbers are partially baked into the `getrandom` library --
+/// which kind of acts as a `std`-lib-ish style interface for the trng, so,
+/// by design it can't have a dependency on this crate :-/
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Get one or two 32-bit words of TRNG data
-    GetTrng,
+    GetTrng = 0,
 
     /// Fill a buffer with random data
-    FillTrng,
+    FillTrng = 1,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 2,
 
     /// Notification of an error from the interrupt handler
-    ErrorNotification,
+    ErrorNotification = 3,
 
     /// Subscribe to error notifications
-    ErrorSubscribe,
+    ErrorSubscribe = 4,
 
     /// Get TRNG health stats
-    HealthStats,
+    HealthStats = 5,
 
     /// Get Error stats
-    ErrorStats,
+    ErrorStats = 6,
 
-    Quit,
+    Quit = 7,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

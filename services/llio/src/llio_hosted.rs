@@ -3,14 +3,12 @@ use llio::api::*;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Llio {
-    usb_disable: bool,
 }
 pub fn log_init() -> *mut u32 { 0 as *mut u32 }
 
 impl Llio {
     pub fn new(_handler_conn: xous::CID, _gpio_base: *mut u32) -> Llio {
         Llio {
-            usb_disable: false,
         }
     }
     pub fn suspend(&self) {}
@@ -88,12 +86,6 @@ impl Llio {
     pub fn wfi_override(&mut self, _override_: bool) {
     }
 
-    pub fn get_usb_disable(&self) -> bool {
-        self.usb_disable
-    }
-    pub fn set_usb_disable(&mut self, state: bool) {
-        self.usb_disable = state;
-    }
     #[allow(dead_code)]
     pub fn tts_sleep_indicate(&mut self) {
     }

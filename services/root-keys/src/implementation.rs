@@ -24,9 +24,9 @@ use digest::Digest;
 use graphics_server::BulkRead;
 use core::mem::size_of;
 use core::cell::RefCell;
-use rand_core::RngCore;
 
-use aes::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
+use aes::Aes256;
+use aes::cipher::{KeyInit, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 
 use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
@@ -2034,7 +2034,7 @@ impl<'a> RootKeys {
         let kernel_region = self.kernel();
         let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
-        let sig = Signature::new(sig_rec.signature);
+        let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
 
         let kern_len = sig_rec.signed_len as usize;
         log::debug!("recorded kernel len: {} bytes", kern_len);
@@ -2069,7 +2069,7 @@ impl<'a> RootKeys {
             *dst = src;
         }
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
-        let sig = Signature::new(sig_rec.signature);
+        let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
         log::debug!("sig_rec ({}): {:x?}", sig_rec.signed_len, sig_rec.signature);
         log::debug!("sig: {:x?}", sig.to_bytes());
         log::debug!("pubkey: {:x?}", pubkey.to_bytes());
@@ -2101,7 +2101,7 @@ impl<'a> RootKeys {
             }
         }
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()};
-        let sig = Signature::new(sig_rec.signature);
+        let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
 
         let mut sigtype = SignatureResult::SelfSignOk;
         // check against all the known signature types in detail

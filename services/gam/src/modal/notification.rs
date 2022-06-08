@@ -106,7 +106,7 @@ impl Notification {
         ));
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
     }
-    fn draw_qrcode(&self, at_height: i16, modal: &Modal) {            
+    fn draw_qrcode(&self, at_height: i16, modal: &Modal) {
         // calculate pixel size of each module in the qrcode
         let qrcode_modules: i16 = self.qrwidth.try_into().unwrap();
         let modules: i16 = qrcode_modules + 2 * QUIET_MODULES;
@@ -118,7 +118,7 @@ impl Notification {
         // Iterate thru qrcode and stamp each square module like a typewriter
         let black = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
         let top = at_height + 4 * modal.margin + quiet_px;
-        
+
         let left = modal.margin + quiet_px;
         let right = left + qrcode_modules * mod_size_px;
         let mut module = Rectangle::new_with_style(
@@ -140,7 +140,7 @@ impl Notification {
                     .gam
                     .draw_rectangle(modal.canvas, module)
                     .expect("couldn't draw qrcode module");
-            }            
+            }
             module.translate(step);
         }
     }
@@ -164,26 +164,25 @@ impl ActionApi for Notification {
             if self.qrwidth > 0 {
                 self.draw_qrcode(at_height, modal);
             }
-
-            // divider lines
-            let color = if self.is_password {
-                PixelColor::Light
-            } else {
-                PixelColor::Dark
-            };
-
-            modal
-                .gam
-                .draw_line(
-                    modal.canvas,
-                    Line::new_with_style(
-                        Point::new(modal.margin, at_height + modal.margin),
-                        Point::new(modal.canvas_width - modal.margin, at_height + modal.margin),
-                        DrawStyle::new(color, color, 1),
-                    ),
-                )
-                .expect("couldn't draw entry line");
         }
+        // divider lines
+        let color = if self.is_password {
+            PixelColor::Light
+        } else {
+            PixelColor::Dark
+        };
+
+        modal
+            .gam
+            .draw_line(
+                modal.canvas,
+                Line::new_with_style(
+                    Point::new(modal.margin, at_height + modal.margin),
+                    Point::new(modal.canvas_width - modal.margin, at_height + modal.margin),
+                    DrawStyle::new(color, color, 1),
+                ),
+            )
+            .expect("couldn't draw entry line");
     }
     fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
         log::trace!("key_action: {}", k);
@@ -192,12 +191,12 @@ impl ActionApi for Notification {
                 // ignore null messages
             }
             _ => {
+                send_message(
+                    self.action_conn,
+                    xous::Message::new_scalar(self.action_opcode as usize, k as u32 as usize, 0, 0, 0),
+                )
+                .expect("couldn't pass on dismissal");
                 if self.manual_dismiss {
-                    send_message(
-                        self.action_conn,
-                        xous::Message::new_scalar(self.action_opcode as usize, 0, 0, 0, 0),
-                    )
-                    .expect("couldn't pass on dismissal");
                     return (None, true);
                 }
             }

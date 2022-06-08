@@ -72,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "dns",
         "pddb",
         "modals",
+        "usb-device-xous",
     ];
     let app_pkgs = [
         // "standard" demo apps
@@ -194,7 +195,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &hw_pkgs, &[], None, None)?
+            renode_image(false, &pkgs, &[], None, None)?
         }
         Some("renode-test") => {
             let mut args = env::args();
@@ -289,6 +290,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .open("xous-rs/src/locale.rs")
                 .expect("Can't open locale for modification");
             write!(locale_revert, "{}", "pub const LANG: &str = \"en\";\n").unwrap();
+        }
+        Some("usbdev") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = base_pkgs.to_vec();
+            pkgs.push("usb-test");
+            let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
+            for program in &args {
+                extra_packages.push(program.as_str());
+            }
+            if false {
+                renode_image(
+                    false,
+                    &pkgs,
+                    extra_packages.as_slice(),
+                    None,
+                    Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]),
+                )?;
+            } else {
+                build_hw_image(false, Some("./precursors/soc.svd".to_string()), &pkgs,
+                None,
+                None,
+                None,
+                extra_packages.as_slice(), None)?;
+            }
         }
         Some("libstd-test") => {
             let mut args = env::args();
@@ -611,6 +638,7 @@ Various debug configurations:
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
  ffi-test                builds an image for testing C-FFI bindings and integration
  tts                     builds an image with text to speech support via externally linked C executable
+ usbdev                  minimal, insecure build for new USB core bringup
  install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
 
 Note: By default, the `ticktimer` will get rebuilt every time. You can skip this by appending `--no-timestamp` to the command.
@@ -1802,6 +1830,9 @@ fn overwrite_if_changed(new_string: &String, old_file: &str) {
         _ => String::new(),
     };
     if &original != new_string {
+        // println!("file change in i18n.json detected:");
+        // println!("Old: {}", original);
+        // println!("New: {}", new_string);
         let mut new_file = OpenOptions::new()
             .read(true)
             .write(true)

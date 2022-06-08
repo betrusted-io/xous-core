@@ -78,8 +78,7 @@ mod implementation {
 }
 
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     use crate::implementation::Codec;
 
     log_server::init_wait().unwrap();

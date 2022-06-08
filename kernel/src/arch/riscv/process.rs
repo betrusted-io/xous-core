@@ -7,9 +7,10 @@ pub const MAX_THREAD: TID = 31;
 pub const EXCEPTION_TID: TID = 1;
 pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
+
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous_kernel::{ProcessInit, ThreadInit, PID, TID};
+use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID};
 
 // use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 131072;
@@ -131,7 +132,7 @@ impl Process {
     pub fn current() -> Process {
         let pid = unsafe { PROCESS_TABLE.current };
         let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-        assert!((pid.get() as usize) == hardware_pid);
+        assert_eq!((pid.get() as usize), hardware_pid);
         Process { pid }
     }
 
@@ -285,6 +286,11 @@ impl Process {
         let mut process = unsafe { &mut *PROCESS };
         let tid = INITIAL_TID;
 
+        assert_eq!(
+            pid,
+            crate::arch::current_pid(),
+            "hardware pid does not match setup pid"
+        );
         assert!(tid != IRQ_TID, "tried to init using the irq thread");
         assert!(
             mem::size_of::<ProcessImpl>() == PAGE_SIZE,
@@ -306,6 +312,7 @@ impl Process {
             INITIAL_TID
         );
 
+        klog!("Setting up new process {}", pid.get());
         unsafe {
             let pid_idx = (pid.get() as usize) - 1;
             assert!(
@@ -326,7 +333,6 @@ impl Process {
             *thread = Default::default();
         }
 
-        let process = unsafe { &mut *PROCESS };
         let mut thread = &mut process.threads[tid];
 
         thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
@@ -335,6 +341,8 @@ impl Process {
         thread.registers[10] = thread_init.arg2;
         thread.registers[11] = thread_init.arg3;
         thread.registers[12] = thread_init.arg4;
+
+        klog!("thread_init: {:x?}  thread: {:x?}", thread_init, thread);
 
         #[cfg(any(feature = "debug-print", feature = "print-panics"))]
         {
@@ -357,7 +365,7 @@ impl Process {
                 memory_manager
                     .reserve_range(
                         init_sp as *mut u8,
-                        stack_size + 4096,
+                        stack_size,
                         xous_kernel::MemoryFlags::R | xous_kernel::MemoryFlags::W,
                     )
                     .expect("couldn't reserve stack")
@@ -497,8 +505,44 @@ impl Process {
         );
     }
 
-    pub fn create(_pid: PID, _init_data: ProcessInit) -> PID {
-        todo!();
+    /// Create a brand-new process. The memory space must already be set up.
+    pub fn create(
+        pid: PID,
+        init_data: ProcessInit,
+        services: &mut crate::SystemServices,
+    ) -> Result<ProcessStartup, xous_kernel::Error> {
+        let current_pid = current_pid();
+
+        services.get_process(pid)?.mapping.activate()?;
+        let server_id = services.create_server_id()?;
+        let server_id_array = server_id.to_array();
+
+        // klog!("previous process init was {:x?}", init_data);
+        let initial_thread = ThreadInit::new(
+            init_data.start.get(),
+            init_data.stack,
+            server_id_array[0] as _,
+            server_id_array[1] as _,
+            server_id_array[2] as _,
+            server_id_array[3] as _,
+        );
+
+        Self::setup_process(pid, initial_thread).unwrap();
+
+        services.create_server_with_address(pid, server_id, false)?;
+
+        // klog!("activating parent process {}", current_pid.get());
+        services.get_process(current_pid)?.mapping.activate()?;
+        // klog!("connecting to server in parent process");
+        let cid = services.connect_process_to_server(current_pid, server_id)?;
+
+        services.send_memory(
+            init_data.text.as_ptr() as *mut usize,
+            pid,
+            init_data.text_destination.get() as *mut usize,
+            init_data.text.len(),
+        )?;
+        Ok(ProcessStartup::new(pid, cid))
     }
 
     pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {

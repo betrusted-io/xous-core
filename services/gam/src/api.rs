@@ -180,6 +180,9 @@ pub(crate) enum Opcode {
     /// Show a test pattern. Can only call this once (to prevent abuse)
     TestPattern,
 
+    /// Toggle debug on serial console
+    SetDebugLevel,
+
     Quit,
 }
 

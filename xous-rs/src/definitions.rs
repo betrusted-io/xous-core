@@ -14,6 +14,8 @@ pub const FLASH_PHYS_BASE: u32 = 0x2000_0000;
 pub const SOC_REGION_LOC: u32 = 0x0000_0000;
 pub const SOC_REGION_LEN: u32 = 0x00D0_0000; // gw + staging + loader + kernel
 
+// note to self: if these locations change, be sure to update the "filters" addresses
+// in the gateware, so that we are consistent on what parts of the SPINOR are allowed access via USB debug
 pub const SOC_MAIN_GW_LOC: u32 = 0x0000_0000; // gateware - primary loading address
 pub const SOC_MAIN_GW_LEN: u32 = 0x0028_0000;
 pub const SOC_STAGING_GW_LOC: u32 = 0x0028_0000; // gateware - staging copy
@@ -43,6 +45,15 @@ pub const PDDB_LEN: u32 = EC_REGION_LOC - PDDB_LOC; // must be 64k-aligned (bulk
 // quantum alloted to each process before a context switch is forced
 pub const BASE_QUANTA_MS: u32 = 10;
 
+// sentinel used by test infrastructure to assist with parsing
+// The format of any test infrastructure output to recover is as follows:
+// _|TT|_<ident>,<data separated by commas>,_|TE|_
+// where _|TT|_ and _|TE|_ are bookends around the data to be reported
+// <ident> is a single-word identifier that routes the data to a given parser
+// <data> is free-form data, which will be split at comma boundaries by the parser
+pub const BOOKEND_START: &'static str = "_|TT|_";
+pub const BOOKEND_END: &'static str = "_|TE|_";
+
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 use core::sync::atomic::AtomicU64;
 
@@ -58,8 +69,13 @@ pub static TESTING_RNG_SEED: AtomicU64 = AtomicU64::new(0);
 pub mod exceptions;
 pub use exceptions::*;
 
+pub mod memoryflags;
+pub use memoryflags::*;
+
 pub mod messages;
 pub use messages::*;
+
+use crate::arch::ProcessStartup;
 
 /// Server ID
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -139,50 +155,6 @@ pub type CpuID = usize;
 pub struct MemoryRange {
     pub(crate) addr: MemoryAddress,
     pub(crate) size: MemorySize,
-}
-
-#[cfg(feature = "bitflags")]
-bitflags! {
-    /// Flags to be passed to the MapMemory struct.
-    /// Note that it is an error to have memory be
-    /// writable and not readable.
-    pub struct MemoryFlags: usize {
-        /// Free this memory
-        const FREE      = 0b0000_0000;
-
-        /// Immediately allocate this memory.  Otherwise it will
-        /// be demand-paged.  This is implicitly set when `phys`
-        /// is not 0.
-        const RESERVE   = 0b0000_0001;
-
-        /// Allow the CPU to read from this page.
-        const R         = 0b0000_0010;
-
-        /// Allow the CPU to write to this page.
-        const W         = 0b0000_0100;
-
-        /// Allow the CPU to execute from this page.
-        const X         = 0b0000_1000;
-    }
-}
-#[cfg(feature = "bitflags")]
-pub(crate) fn get_bits(bf: &MemoryFlags) -> usize {
-    bf.bits()
-}
-#[cfg(feature = "bitflags")]
-pub(crate) fn from_bits(raw: usize) -> Option<MemoryFlags> {
-    MemoryFlags::from_bits(raw)
-}
-
-#[cfg(not(feature = "bitflags"))]
-pub type MemoryFlags = usize;
-#[cfg(not(feature = "bitflags"))]
-pub(crate) fn get_bits(bf: &MemoryFlags) -> usize {
-    *bf
-}
-#[cfg(not(feature = "bitflags"))]
-pub(crate) fn from_bits(raw: usize) -> Option<MemoryFlags> {
-    Some(raw)
 }
 
 pub fn pid_from_usize(src: usize) -> core::result::Result<PID, Error> {
@@ -460,10 +432,20 @@ pub enum Result {
         Option<MemorySize>, /* valid */
     ),
 
+    /// Returned when a process has started. This describes the new process to
+    /// the caller.
+    NewProcess(ProcessStartup),
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
 impl Result {
+    fn add_opcode(opcode: usize, args: [usize; 7]) -> [usize; 8] {
+        [
+            opcode, args[0], args[1], args[2], args[3], args[4], args[5], args[6],
+        ]
+    }
+
     pub fn to_args(&self) -> [usize; 8] {
         match self {
             Result::Ok => [0, 0, 0, 0, 0, 0, 0, 0],
@@ -516,6 +498,7 @@ impl Result {
                 0,
                 0,
             ],
+            Result::NewProcess(p) => Self::add_opcode(19, p.into()),
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -592,6 +575,7 @@ impl Result {
             16 => Result::RetryCall,
             17 => Result::None,
             18 => Result::MemoryReturned(MemorySize::new(src[1]), MemorySize::new(src[2])),
+            19 => Result::NewProcess(src.into()),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }

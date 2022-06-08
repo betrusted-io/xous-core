@@ -241,7 +241,7 @@ pub fn start_time_server() {
             }
             // once the PDDB is mounted, read in the time zone offsets and then restart the
             // loop handler using the offsets.
-            let mut offset_handle = Pddb::new();
+            let offset_handle = Pddb::new();
             let mut offset_key = offset_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_UTC_OFFSET,
@@ -249,7 +249,7 @@ pub fn start_time_server() {
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open UTC offset key");
-            let mut tz_handle = Pddb::new();
+            let tz_handle = Pddb::new();
             let mut tz_key = tz_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_TZ_OFFSET,
@@ -496,7 +496,7 @@ pub fn start_time_ux(sid: xous::SID) {
                             modals.show_notification(t!("stats.please_mount", xous::LANG), None).expect("couldn't show notification");
                             continue;
                         }
-                        let mut tz_set_handle = pddb::Pddb::new();
+                        let tz_set_handle = pddb::Pddb::new();
                         let mut tz_set = false;
                         let mut tz_offset_ms = 0i64;
                         let maybe_tz_set_key = tz_set_handle.get(
@@ -516,6 +516,7 @@ pub fn start_time_ux(sid: xous::SID) {
                         // note that we don't do an "else" here because we also want to catch the case of
                         // a key exists, but nothing was written to it (length of key was 0 or inappropriate)
                         if !tz_set {
+                            log::info!("{}RTC.TZ,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                             let tz = modals.alert_builder(t!("rtc.timezone", xous::LANG))
                                 .field(None, Some(tz_ux_validator))
                                 .build()
@@ -536,6 +537,7 @@ pub fn start_time_ux(sid: xous::SID) {
                         }
 
                         // see if we want to try to use NTP or not
+                        log::info!("{}RTC.NTP,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
                         modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
                         let mut try_ntp = true;
@@ -571,10 +573,12 @@ pub fn start_time_ux(sid: xous::SID) {
                                             0, 0,
                                         )
                                     ).expect("couldn't set time");
+                                    log::info!("{}RTC.NTPOK,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     continue;
                                 }
                                 Err(err) => {
                                     log::info!("Err: {:?}", err);
+                                    log::info!("{}RTC.NTPFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     modals.show_notification(t!("rtc.ntp_fail", xous::LANG), None).expect("couldn't show NTP error");
                                 },
                             }

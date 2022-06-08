@@ -23,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     let dirtystr = if dirty { "dirty" } else { "clean" };
                     write!(ret, "EC gateware commit: {:x}, {}\n", rev, dirtystr).unwrap();
                     let (maj, min, rev, commit) = env.com.get_ec_sw_tag().unwrap();
-                    log::info!("EC sw tag: {}.{}.{}+{}", maj, min, rev, commit);
+                    log::info!("{}VER.EC,{},{},{},{},{}", xous::BOOKEND_START, maj, min, rev, commit, xous::BOOKEND_END);
                     write!(ret, "EC sw tag: {}.{}.{}+{}", maj, min, rev, commit).unwrap();
                 }
                 "wf200" => {
@@ -33,12 +33,14 @@ impl<'a> ShellCmdApi<'a> for Ver {
                 "soc" => {
                     let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
                     write!(ret, "SoC git rev {}.{}.{}+{}, commit {:x}", maj, min, rev, extra, gitrev).unwrap();
+                    log::info!("{}VER.SOC,{},{},{},{},{}", xous::BOOKEND_START, maj, min, rev, gitrev, xous::BOOKEND_END);
                 }
                 "dna" => {
                     write!(ret, "SoC silicon DNA: 0x{:x}", env.llio.soc_dna().unwrap()).unwrap();
                 }
                 "xous" => {
                     write!(ret, "Xous version: {}", env.ticktimer.get_version()).unwrap();
+                    log::info!("{}VER.XOUS,{},{}", xous::BOOKEND_START, env.ticktimer.get_version(), xous::BOOKEND_END);
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

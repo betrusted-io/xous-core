@@ -57,8 +57,7 @@ enum RendererState {
     RunDynamicNotification(DynamicNotification),
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -139,6 +138,8 @@ fn xmain() -> ! {
         trng.get_u32().unwrap(),
     ];
     let mut work_queue = Vec::<(xous::MessageSender, [u32; 4])>::new();
+
+    let mut dynamic_notification_listener: Option<xous::MessageSender> = None;
 
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
@@ -328,6 +329,10 @@ fn xmain() -> ! {
                     log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
                     continue;
                 }
+                if let Some(sender) = dynamic_notification_listener.take() {
+                    // unblock the listener with no key hit response
+                    xous::return_scalar2(sender, 0, 0,).unwrap();
+                }
                 send_message(
                     renderer_cid,
                     Message::new_scalar(
@@ -373,6 +378,14 @@ fn xmain() -> ! {
                     renderer_modal.redraw();
                     xous::yield_slice(); // give time for the GAM to redraw
                 }
+            }),
+            Some(Opcode::ListenToDynamicNotification) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
+                let incoming_token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
+                if incoming_token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    xous::return_scalar2(msg.sender, 2, 0).unwrap();
+                }
+                dynamic_notification_listener = Some(msg.sender); // this defers the response, blocking the caller, while we can proceed onwards.
             }),
 
             // ------------------ INTERNAL APIS --------------------
@@ -521,9 +534,10 @@ fn xmain() -> ! {
                         }
                         let mut gutter = gam::modal::Notification::new(
                             renderer_cid,
-                            Opcode::Gutter.to_u32().unwrap(),
+                            Opcode::HandleDynamicNotificationKeyhit.to_u32().unwrap(),
                         );
                         gutter.set_manual_dismiss(false);
+                        // renderer_modal.gam.set_debug_level(log::LevelFilter::Debug);
                         renderer_modal.modify(
                             Some(ActionType::Notification(gutter)),
                             Some(&top_text),
@@ -557,6 +571,8 @@ fn xmain() -> ! {
             }
             Some(Opcode::DoUpdateDynamicNotification) => match op {
                 RendererState::RunDynamicNotification(config) => {
+                    //log::set_max_level(log::LevelFilter::Trace);
+                    //renderer_modal.gam.set_debug_level(log::LevelFilter::Debug);
                     let mut top_text = String::new();
                     if let Some(title) = config.title {
                         top_text.push_str(title.as_str().unwrap());
@@ -573,7 +589,11 @@ fn xmain() -> ! {
                         config.text.is_none(),
                         None,
                     );
+                    log::debug!("UPDATE_DYN gid: {:?}", renderer_modal.canvas);
                     renderer_modal.redraw();
+                    xous::yield_slice();
+                    //log::set_max_level(log::LevelFilter::Info);
+                    //renderer_modal.gam.set_debug_level(log::LevelFilter::Info);
                 }
                 _ => {
                     log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
@@ -584,7 +604,13 @@ fn xmain() -> ! {
                 renderer_modal.gam.relinquish_focus().unwrap();
                 op = RendererState::None;
                 token_lock = next_lock(&mut work_queue);
-            }
+            },
+            Some(Opcode::HandleDynamicNotificationKeyhit) => msg_scalar_unpack!(msg, k, _, _, _, {
+                log::debug!("Dynamic kbd hit: {}({})", k, char::from_u32(k as u32).unwrap_or(' '));
+                if let Some(sender) = dynamic_notification_listener.take() {
+                    xous::return_scalar2(sender, 1, k).unwrap();
+                }
+            }),
             Some(Opcode::TextEntryReturn) => match op {
                 RendererState::RunText(_config) => {
                     log::trace!("validating text entry modal");
@@ -661,7 +687,7 @@ fn xmain() -> ! {
                         match list_hash.get(item.as_str()) {
                             Some(index) => {
                                 match index {
-                                    0...31 => drop(list_selected.set_bit(*index, true)),
+                                    0..=31 => drop(list_selected.set_bit(*index, true)),
                                     _ => log::warn!("invalid bitfield index"),
                                 };
                             }
@@ -699,7 +725,7 @@ fn xmain() -> ! {
                                 Some(item) => match list_hash.get(item.as_str()) {
                                     Some(index) => {
                                         match index {
-                                            0...31 => drop(list_selected.set_bit(*index, true)),
+                                            0..=31 => drop(list_selected.set_bit(*index, true)),
                                             _ => log::warn!("invalid bitfield index"),
                                         };
                                     }

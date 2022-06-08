@@ -144,6 +144,9 @@ for examples of idiomatic ways to write code for Xous.
   - If you get a panic, please snap a photo of it and drop it in a new issue in the `xous-core` repo, along with a description of what you were doing at the time.
 
 ## New in 0.9.9 (currently in development)
+This release requires a new SoC. It is highly recommended to first upload the SoC and install the update, and then
+perform the Xous firmware upgrade. This requires running manual update commands, instead of the all-in-one updater script.
+
 - `modals` text entry has been refactored to allow multi-field text entries with defaults! Thanks to gsora for PR #140.
 - fix issue #141: bug fix in `log-server` where max-length buffers were not being printed + refactor of method to use `send` vs scalars
 - PR #149: index support for modals. Lists can be submitted as a `Vec` now, with an array index returned as the selection result. Thanks to nworbnhoj for the PR.
@@ -154,6 +157,17 @@ for examples of idiomatic ways to write code for Xous.
 - refactor wait threads in net crate - use statically allocated pool of waiters + better filtering of requests for less churn
 - defer Drop on TcpStream until all written packets have been transmitted
 - scheduler quantum is now a tuning parameter in xous definitions.rs (`BASE_QUANTA_MS`). it is now set to 10ms, down from 20ms.
+- USB device core with keyboard HID emulation demo and FIDO2 HID support; fix issue #170
+- Issue #162 and #159: fix bugs with condvar support. condvar IDs are now serial, so re-allocations are not a problem, and the routine to remove old ones from the notification table now looks at the correct sender ID.
+- Add `ceil`, `floor`, and `trunc` (f32 and f64) variants to the built-ins list (this is a `std` lib update, in 1.61.0.2)
+- Add CI test automation facilities - CI infra now drives actual hardware through `expect` scripts, instead of just doing simulation checks
+- Vendor in `getrandom` so we can support a Xous API for the crate, allowing us access some of the more modern rustcrypto APIs. This is necssary for `randcore` 0.6 compatibility. `randcore` 0.5 APIs are retained by integrating them directly into the TRNG object.
+- Update AES API level to 0.8, and cipher dependency to 0.4 (on rootkeys). This was necessary to get CBC support for AES, which is needed for FIDO2. This *should* have no user-facing impact.
+- `vault` app commited as a WIP of an end user authentication management app. It aims to provide FIDO2, TOTP, and stored password DB functions.
+  - U2F/FIDO2 are a vendor-in of Google OpenSK's FIDO2 implementation. The code basically passes the CTAP2 test suite (https://github.com/google/CTAP2-test-tool) ("basically passes" in that the timeouts tests fail because they aren't automated to not "press the button" when timeouts are being tested).
+  - U2F functions are best supported with UX flow. FIDO2 transactions still trying to figure out what the UX flow is even supposed to be:
+    we're lacking actual FIDO2 applications to test against. Some prompts are still just stand-in text.
+
 
 ## Roadmap to 1.0
 

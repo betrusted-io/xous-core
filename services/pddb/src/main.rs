@@ -414,8 +414,7 @@ struct TokenRecord {
     pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -532,6 +531,13 @@ fn xmain() -> ! {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
             }),
+            Some(Opcode::IsEfuseSecured) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if pddb_os.is_efuse_secured() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
             Some(Opcode::IsMounted) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
@@ -545,6 +551,7 @@ fn xmain() -> ! {
                 } else {
                     if !pddb_os.rootkeys_initialized() {
                         // can't mount if we have no root keys
+                        log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         xous::return_scalar(msg.sender, 0).expect("could't return scalar");
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
@@ -555,6 +562,7 @@ fn xmain() -> ! {
                                         xous::return_scalar(requester, 1).expect("couldn't return scalar");
                                     }
                                     assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
+                                    log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -567,6 +575,7 @@ fn xmain() -> ! {
                                         xous::return_scalar(requester, 1).expect("couldn't return scalar");
                                     }
                                     assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
+                                    log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                                 } else {
                                     xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
@@ -1187,6 +1196,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
             }
             PasswordState::Incorrect => {
                 pddb_os.clear_password(); // clear the bad password entry
+                log::info!("{}PDDB.BADPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 // check if the user wants to re-try or not.
                 modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
                 modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
@@ -1238,6 +1248,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
             modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
             modals.add_list_item(t!("pddb.cancel", xous::LANG)).expect("couldn't build radio item list");
             let do_format: bool;
+            log::info!("{}PDDB.REQFMT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
             match modals.get_radiobutton(t!("pddb.requestformat", xous::LANG)) {
                 Ok(response) => {
                     if response.as_str() == t!("pddb.okay", xous::LANG) {

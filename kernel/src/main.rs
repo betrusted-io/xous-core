@@ -155,7 +155,7 @@ pub extern "C" fn kmain() {
         use std::panic;
         panic::set_hook(Box::new(|arg| {
             println!("Panic Details: {:?}", arg);
-            debug_here::debug_here!();
+            // debug_here::debug_here!();
         }));
     }
 

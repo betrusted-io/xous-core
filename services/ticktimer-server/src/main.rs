@@ -516,8 +516,7 @@ fn recalculate_sleep(
     start_sleep(ticktimer, sleep_heap);
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
@@ -629,7 +628,11 @@ fn xmain() -> ! {
 
                     // If we're being asked to recalculate due to a timeout expiring, drop the sent
                     // message from the `entries` list.
-                    if (request_kind == RequestKind::Timeout as usize)
+                    // the first check confirms that the origin of the RecalculateSleep message is the Ticktimer,
+                    // to prevent third-party servers from issuing the command and thus distorting the sleep
+                    // calculations (since this is a public API, anything could happen).
+                    if (msg.sender.pid().map(|p| p.get()).unwrap_or_default() as u32) == xous::process::id()
+                        && (request_kind == RequestKind::Timeout as usize)
                         && (sender > 0)
                     {
                         let entries = notify_hash

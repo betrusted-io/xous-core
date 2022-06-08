@@ -74,6 +74,8 @@ pub(crate) enum Opcode {
     Notification,
     /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically updated
     DynamicNotification,
+    /// listen to dynamic notification - a blocking call, meant to be called from a separate thread from the control loop
+    ListenToDynamicNotification,
 
     /// ask a question, get a free-form answer back
     PromptWithTextResponse,
@@ -116,6 +118,7 @@ pub(crate) enum Opcode {
 
     DoUpdateDynamicNotification,
     DoCloseDynamicNotification,
+    HandleDynamicNotificationKeyhit,
 
     ModalRedraw,
     ModalKeypress,
