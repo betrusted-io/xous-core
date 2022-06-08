@@ -10,6 +10,16 @@ use std::io::{Write, Read};
 use chrono::{Utc, DateTime, NaiveDateTime};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// conceptual note: this UX conflates both the U2F and the FIDO2 paths.
+// - U2F is a polled implementation, where the state goes from Idle->Prompt->Present
+// and then immediately back to Idle. It is non-blocking and always returns a value.
+// - FIDO is a deferred responder, meaning it is blocking the caller. It goes from
+// Idle->Prompt->Idle again. The caller is blocked until the Prompt is answered.
+// You *can* take the state machine to Present after Prompt, in which case, it will
+// "remember" that a user was present for another 30 seconds. This is not actually
+// the mandated behavior, it was only implemented because I got confused on part
+// of the spec, but the code stubs are still around.
+
 pub(crate) const U2F_APP_DICT: &'static str = "fido.u2fapps";
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -413,12 +423,11 @@ pub(crate) fn start_ux_thread() {
                                         fido_request.granted = char::from_u32(key_hit);
                                         log::info!("returning {:?}", fido_request.granted);
                                         buffer.replace(fido_request).unwrap();
+                                        ux_state = UxState::Idle; // comment out this line if you want presence to persist after touch for FIDO2
+                                    } else {
+                                        // this is the U2F flow
+                                        ux_state = UxState::Present(tt.elapsed_ms() as i64 + timeouts.presence_timeout_ms);
                                     }
-
-                                    // this is used only if we want presence to persist after the touch
-                                    //ux_state = UxState::Present(tt.elapsed_ms() as i64 + timeouts.presence_timeout_ms);
-                                    // this will take us straight back to Idle after a touch
-                                    ux_state = UxState::Idle;
 
                                     modals.dynamic_notification_close().unwrap();
                                     send_message(self_cid,
