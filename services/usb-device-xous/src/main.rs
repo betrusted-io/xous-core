@@ -189,6 +189,7 @@ fn main() -> ! {
     let mut fido_rx_queue = VecDeque::<[u8; 64]>::new();
 
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut was_suspend = true;
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
@@ -287,6 +288,7 @@ fn main() -> ! {
                         Err(e) => log::trace!("U2F ERR: {:?}", e),
                     }
                 }
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 if usb_dev.state() == UsbDeviceState::Suspend {
                     log::info!("suspend detected");
                     if was_suspend == false {
