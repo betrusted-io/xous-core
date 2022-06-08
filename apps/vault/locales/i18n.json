@@ -5,6 +5,18 @@
         "zh": "秒 直到中止",
         "en-tts": "s until abort"
     },
+    "vault.fido.pin_uv_auth": {
+        "en": "FIDO host is creating a PIN.\nPress any key to accept.",
+        "ja": "FIDOホストがPINを作成しています。\n任意のキーを押して受け入れます。",
+        "zh": "FIDO 主机正在创建 PIN。\n按任意键接受。",
+        "en-tts": "FIDO host is creating a PIN.\nPress any key to accept."
+    },
+    "vault.fido.next_assertion": {
+        "en": "This site is requires multiple credentials.\nPress any key to allow the next credential.",
+        "ja": "このサイトには複数のクレデンシャルが必要です。\n次のクレデンシャルを許可するには、任意のキーを押してください。",
+        "zh": "此站点需要多个凭据。\n按任意键以允许下一个凭据。",
+        "en-tts": "This site is requires multiple credentials.\nPress any key to allow the next credential."
+    },
     "vault.fido.make_credential": {
         "en": "FIDO Make Credential Request.\nPress any key to approve.",
         "ja": "FIDOは資格情報を要求します\n承認するには任意のキーを押してください",

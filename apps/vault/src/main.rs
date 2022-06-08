@@ -115,7 +115,15 @@ fn main() -> ! {
                         }
                     }
                     Err(e) => {
-                        log::warn!("FIDO listener got an error: {:?}", e);
+                        match e {
+                            xous::Error::ProcessTerminated => { // unplug happened, reset the authenticator
+                                log::info!("CTAP unplug_reset");
+                                ctap_state.unplug_reset();
+                            },
+                            _ => {
+                                log::warn!("FIDO listener got an error: {:?}", e);
+                            }
+                        }
                     }
                 }
             }

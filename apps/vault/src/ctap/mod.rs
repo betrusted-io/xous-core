@@ -397,7 +397,9 @@ where
             // This case was added in FIDO 2.1.
             if auth_param.is_empty() {
                 //(self.check_user_presence)(cid)?;
-                if crate::ux::request_permission_blocking("pin_uv_auth_precheck".to_string(), cid).is_none() {
+                if crate::ux::request_permission_blocking(
+                    t!("vault.fido.pin_uv_auth", xous::LANG).to_string(),
+                    cid).is_none() {
                     return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
                 }
                 if self.persistent_store.pin_hash()?.is_none() {
@@ -859,7 +861,10 @@ where
         _now: ClockValue,
     ) -> Result<ResponseData, Ctap2StatusCode> {
         //self.check_command_permission(now)?;
-        if crate::ux::request_permission_blocking("GetAssertion".to_string(), [0xff, 0xff, 0xff, 0xff]).is_none() {
+        if crate::ux::request_permission_blocking(
+            t!("vault.fido.next_assertion", xous::LANG).to_string(),
+            [0xff, 0xff, 0xff, 0xff]
+        ).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED);
         }
         let (assertion_input, credential) =
@@ -931,6 +936,9 @@ where
         )
     }
 
+    pub fn unplug_reset(&mut self) {
+        self.pin_protocol_v1.reset(self.rng);
+    }
     fn process_reset(
         &mut self,
         cid: ChannelID,
@@ -939,7 +947,7 @@ where
         // Resets are only possible in the first 10 seconds after booting.
         // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?
         // self.check_command_permission(now)?;
-        if let Some(c) = crate::ux::request_permission_blocking(locales::t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
+        if let Some(c) = crate::ux::request_permission_blocking(t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
             if c != 'y' {
                 return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
             }
@@ -952,6 +960,7 @@ where
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED),
         }
         //(self.check_user_presence)(cid)?;
+        // we skip the double-confirmation during autotesting, but leave it here for production
         #[cfg(not(feature="autotest"))]
         if crate::ux::request_permission_blocking(t!("vault.u2f.reset_check", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
