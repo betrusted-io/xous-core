@@ -61,28 +61,28 @@ pub(crate) enum Opcode {
     RegisterRawListener = 3,
 
     /// request for updates for *when* keyboard is pressed
-    RegisterKeyObserver,
+    RegisterKeyObserver = 4,
 
     /// set repeat delay, rate; both in ms
-    SetRepeat = 4, //(u32, u32),
+    SetRepeat = 5, //(u32, u32),
 
     /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord), in ms (for braille keyboards)
-    SetChordInterval = 5, //(u32),
+    SetChordInterval = 6, //(u32),
 
     /// used by host mode emulation and debug UART to inject keys
-    InjectKey = 6, //(char),
+    InjectKey = 7, //(char),
 
     /// used by the interrupt handler to transfer results to the main loop
-    HandlerTrigger = 7,
+    HandlerTrigger = 8,
 
     /// used to turn keyboard vibrate on and off
-    Vibe = 8,
+    Vibe = 9,
 
     /// a blocking key listener - blocks until a key is hit
-    BlockingKeyListener = 9,
+    BlockingKeyListener = 10,
 
     /// Suspend/resume callback
-    SuspendResume = 10,
+    SuspendResume = 11,
 }
 
 // this structure is used to register a keyboard listener. Currently, we only accept

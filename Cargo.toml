@@ -35,7 +35,6 @@ members = [
   "xous-ipc",
   "xous-rs",
   "tools",
-  "macros",
   "services/keyboard-backlight",
   "services/aes-test",
   "services/graphics-server",
