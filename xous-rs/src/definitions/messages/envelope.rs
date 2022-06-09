@@ -124,21 +124,19 @@ impl Envelope {
                 ));
             }
 
-            _ => {
+            Message::Borrow(_) | Message::MutableBorrow(_) | Message::Scalar(_) => {
                 let result = crate::send_message(connection, body);
                 let new_self = ManuallyDrop::into_inner(manual_self);
-
-                if let Ok(crate::Result::Ok) = result {
+                match result {
                     // `new_self` will have its Drop() called
-                    return Ok(());
-                }
+                    Ok(crate::Result::Ok) | Ok(crate::Result::MemoryReturned(_, _)) => Ok(()),
 
-                // If there's an error, reconstitute ourselves and return.
-                if let Err(e) = result {
-                    return Err((new_self, e));
-                }
+                    // If there's an error, reconstitute ourselves and return.
+                    Err(e) => Err((new_self, e)),
 
-                return Err((new_self, crate::Error::MemoryInUse));
+                    // Any other value is a bug in the kernel
+                    o => panic!("unrecognized return from send_message: {:?}", o),
+                }
             }
         }
     }
