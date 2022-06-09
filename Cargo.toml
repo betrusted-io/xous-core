@@ -73,6 +73,7 @@ members = [
   "apps/hello",
   "apps/repl",
   "apps/vault",
+  "apps/wlanman",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",

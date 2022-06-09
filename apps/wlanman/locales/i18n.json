@@ -1,0 +1,8 @@
+{
+    "helloworld.hello": {
+        "en": "Hello World!",
+        "ja": "Hello World!",
+        "zh": "大家好!",
+        "en-tts": "Hello World!"
+    }
+}

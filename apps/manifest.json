@@ -21,6 +21,14 @@
             }
         }
     },
+    "wlanman": {
+        "context_name": "WLAN manager",
+        "menu_name": {
+            "appmenu.wlanman": {
+                "en": "WLAN manager"
+            }
+        }
+    },
     "vault": {
         "context_name": "Key Vault",
         "menu_name": {
