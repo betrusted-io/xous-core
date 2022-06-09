@@ -33,7 +33,8 @@ use core::convert::TryFrom;
 pub const MAX_CREDENTIAL_COUNT_IN_LIST: Option<usize> = None;
 
 // CTAP specification (version 20190130) section 6.1
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub enum Command {
     AuthenticatorMakeCredential(AuthenticatorMakeCredentialParameters),
     AuthenticatorGetAssertion(AuthenticatorGetAssertionParameters),
@@ -127,7 +128,8 @@ impl Command {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct AuthenticatorMakeCredentialParameters {
     pub client_data_hash: Vec<u8>,
     pub rp: PublicKeyCredentialRpEntity,
@@ -212,7 +214,8 @@ impl TryFrom<cbor::Value> for AuthenticatorMakeCredentialParameters {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct AuthenticatorGetAssertionParameters {
     pub rp_id: String,
     pub client_data_hash: Vec<u8>,
@@ -284,7 +287,8 @@ impl TryFrom<cbor::Value> for AuthenticatorGetAssertionParameters {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct AuthenticatorClientPinParameters {
     pub pin_protocol: u64,
     pub sub_command: ClientPinSubCommand,
@@ -385,7 +389,8 @@ impl TryFrom<cbor::Value> for AuthenticatorClientPinParameters {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct AuthenticatorAttestationMaterial {
     pub certificate: Vec<u8>,
     pub private_key: [u8; key_material::ATTESTATION_PRIVATE_KEY_LENGTH],
@@ -414,7 +419,8 @@ impl TryFrom<cbor::Value> for AuthenticatorAttestationMaterial {
     }
 }
 
-#[cfg_attr(any(test, feature = "debug_ctap"), derive(Debug, PartialEq))]
+#[cfg_attr(any(test, feature = "debug_ctap"), derive(PartialEq))]
+#[derive(Debug)]
 pub struct AuthenticatorVendorConfigureParameters {
     pub lockdown: bool,
     pub attestation_material: Option<AuthenticatorAttestationMaterial>,

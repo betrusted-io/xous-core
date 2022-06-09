@@ -791,8 +791,9 @@ fn main() -> ! {
                 else { vibe = false }
             }),
             Some(Opcode::BlockingKeyListener) => {
+                #[cfg(feature="rawserial")]
                 if blocking_queue.len() != 0 {
-                    // we have a pending byte in the queue, return it
+                    // we have a pending byte in the queue, return it.
                     let k_prime = blocking_queue.pop_front().unwrap();
                     xous::return_scalar2(msg.sender, k_prime, 0).unwrap();
                 } else {
@@ -800,10 +801,7 @@ fn main() -> ! {
                     // the sender will remain blocked until the return value is generated
                     blocking_listener.push(msg.sender);
                 }
-            },
-            Some(Opcode::BlockingKeyListener) => {
-                // by simply storing the sender address and not returning a value,
-                // the sender will remain blocked until the return value is generated
+                #[cfg(not(feature="rawserial"))]
                 blocking_listener.push(msg.sender);
             },
             Some(Opcode::RegisterListener) => {

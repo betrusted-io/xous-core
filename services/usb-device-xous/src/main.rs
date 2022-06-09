@@ -189,6 +189,8 @@ fn main() -> ! {
     let mut fido_rx_queue = VecDeque::<[u8; 64]>::new();
 
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    let mut was_suspend = true;
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -285,6 +287,25 @@ fn main() -> ! {
                         },
                         Err(e) => log::trace!("U2F ERR: {:?}", e),
                     }
+                }
+                #[cfg(any(target_os = "none", target_os = "xous"))]
+                if usb_dev.state() == UsbDeviceState::Suspend {
+                    log::info!("suspend detected");
+                    if was_suspend == false {
+                        // FIDO listener needs to know when USB was unplugged, so that it can reset state per FIDO2 spec
+                        if let Some(mut listener) = fido_listener.take() {
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                            };
+                            let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
+                            assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
+                            buf.code = U2fCode::Hangup;
+                            response.replace(buf).unwrap();
+                        }
+                    }
+                    was_suspend = true;
+                } else {
+                    was_suspend = false;
                 }
             },
             Some(Opcode::SwitchCores) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {

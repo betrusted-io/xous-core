@@ -41,8 +41,10 @@ const PIN_TOKEN_LENGTH: usize = 32;
 /// Returns LEFT(HMAC(hmac_key, hmac_contents), 16) == pin_auth).
 fn verify_pin_auth(hmac_key: &[u8], hmac_contents: &[u8], pin_auth: &[u8]) -> bool {
     if pin_auth.len() != PIN_AUTH_LENGTH {
+        log::info!("pin_auth length is wrong: {}", pin_auth.len());
         return false;
     }
+    log::info!("key {:?}, contents: {:?}, pin: {:?}", hmac_key, hmac_contents, pin_auth);
     verify_hmac_256_first_128bits::<Sha256>(
         hmac_key,
         hmac_contents,
@@ -248,9 +250,23 @@ impl PinProtocolV1 {
         authenticated_message: &[u8],
     ) -> Result<[u8; 32], Ctap2StatusCode> {
         let pk: ctap_crypto::ecdh::PubKey = CoseKey::try_into(key_agreement)?;
+        log::trace!("HOST pk: {:?}", pk);
+        let mut hpk_x = [0u8; 32];
+        let mut hpk_y = [0u8; 32];
+        pk.to_coordinates(&mut hpk_x, &mut hpk_y);
+        log::trace!("HOST pk coords (host_pk): x: {:?} y: {:?}", hpk_x, hpk_y);
+        // log::info!("MY private key: {:?}", self.key_agreement_key.to_bytes()); // requires a "test" feature to access
+        let my_pk = self.key_agreement_key.genpk();
+        log::trace!("MY pk: {:?}", my_pk);
+        let mut x = [0u8; 32];
+        let mut y = [0u8; 32];
+        my_pk.to_coordinates(&mut x, &mut y);
+        log::trace!("MY pk coords (device_pk): x: {:?} y: {:?}", x, y);
         let shared_secret = self.key_agreement_key.exchange_x_sha256(&pk);
+        log::trace!("shared_secret (expected_ss): {:?}", shared_secret);
 
         if !verify_pin_auth(&shared_secret, authenticated_message, pin_auth) {
+            log::debug!("pin_auth invalid");
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID);
         }
 
@@ -272,6 +288,7 @@ impl PinProtocolV1 {
 
     fn process_get_key_agreement(&self) -> Result<AuthenticatorClientPinResponse, Ctap2StatusCode> {
         let pk = self.key_agreement_key.genpk();
+        log::info!("GEN pk: {:?}", pk);
         Ok(AuthenticatorClientPinResponse {
             key_agreement: Some(CoseKey::from(pk)),
             pin_token: None,
@@ -287,10 +304,12 @@ impl PinProtocolV1 {
         new_pin_enc: Vec<u8>,
     ) -> Result<(), Ctap2StatusCode> {
         if persistent_store.pin_hash()?.is_some() {
+            log::debug!("pin_hash() is_some()");
             return Err(Ctap2StatusCode::CTAP2_ERR_PIN_AUTH_INVALID);
         }
         let pin_decryption_key =
             self.exchange_decryption_key(key_agreement, &pin_auth, &new_pin_enc)?;
+        log::info!("exchanged decryption key");
         check_and_store_new_pin(persistent_store, &pin_decryption_key, new_pin_enc)?;
         persistent_store.reset_pin_retries()?;
         Ok(())
@@ -496,7 +515,7 @@ impl PinProtocolV1 {
             #[cfg(feature = "with_ctap2_1")]
             return Err(Ctap2StatusCode::CTAP1_ERR_INVALID_PARAMETER);
         }
-
+        log::info!("{:?}", sub_command);
         let response = match sub_command {
             ClientPinSubCommand::GetPinRetries => {
                 Some(self.process_get_pin_retries(persistent_store)?)

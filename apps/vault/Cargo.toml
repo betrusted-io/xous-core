@@ -43,4 +43,6 @@ enum-iterator = "0.6.0"
 tts = []
 with_ctap1 = ["ctap-crypto/with_ctap1"]
 with_ctap2_1 = []
+autotest = []
+multireset = [] # allows credential reset more than once per boot
 default = ["with_ctap1", "with_ctap2_1"]

@@ -10,7 +10,17 @@ use std::io::{Write, Read};
 use chrono::{Utc, DateTime, NaiveDateTime};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const U2F_APP_DICT: &'static str = "fido.u2fapps";
+// conceptual note: this UX conflates both the U2F and the FIDO2 paths.
+// - U2F is a polled implementation, where the state goes from Idle->Prompt->Present
+// and then immediately back to Idle. It is non-blocking and always returns a value.
+// - FIDO is a deferred responder, meaning it is blocking the caller. It goes from
+// Idle->Prompt->Idle again. The caller is blocked until the Prompt is answered.
+// You *can* take the state machine to Present after Prompt, in which case, it will
+// "remember" that a user was present for another 30 seconds. This is not actually
+// the mandated behavior, it was only implemented because I got confused on part
+// of the spec, but the code stubs are still around.
+
+pub(crate) const U2F_APP_DICT: &'static str = "fido.u2fapps";
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct FidoRequest {
@@ -33,6 +43,7 @@ pub(crate) enum UxOp {
     U2fAppUx,
     Quit
 }
+#[allow(dead_code)] // presence_timeout is not used right now, but might be needed in the future if I am not understanding the spec correctly...
 struct Timeouts {
     /// how long after an interaction has happened that the interaction may still be deemed valid and "consumed"
     pub presence_timeout_ms: i64,
@@ -40,6 +51,7 @@ struct Timeouts {
     pub prompt_timeout_ms: i64,
 }
 #[derive(Eq, PartialEq, Debug)]
+#[allow(dead_code)]
 enum UxState {
     Idle,
     Prompt(i64),
@@ -68,7 +80,7 @@ pub(crate) fn set_durations(prompt: i64, presence: i64) {
 /// Some(char) => user is present, and they hit the key indicated
 /// None => user was not present
 pub(crate) fn request_permission_blocking(reason: String, channel_id: [u8; 4]) -> Option<char> {
-    log::info!("requesting permission (blocking");
+    log::info!("requesting permission (blocking)");
     request_permission_inner(reason, channel_id, true, None)
 }
 pub(crate) fn request_permission_polling(reason: String, application: [u8; 32]) -> bool {
@@ -98,7 +110,7 @@ fn request_permission_inner(reason: String, channel_id: [u8; 4], blocking: bool,
 }
 
 const DEFAULT_PRESENCE_TIMEOUT_MS: i64 = 30_000;
-const DEFAULT_PROMPT_TIMEOUT_MS: i64 = 10_000;
+const DEFAULT_PROMPT_TIMEOUT_MS: i64 = 30_000;
 const POLLED_PROMPT_TIMEOUT_MS: i64 = 1000; // how long the screen stays up after the host "gives up" polling
 const KEEPALIVE_MS: usize = 100;
 pub(crate) fn start_ux_thread() {
@@ -127,6 +139,10 @@ pub(crate) fn start_ux_thread() {
             let mut last_app_id: Option<[u8; 32]> = None;
             let mut app_info: Option<AppInfo> = None;
             let pddb = pddb::Pddb::new();
+            pddb.is_mounted_blocking();
+            #[cfg(feature="autotest")]
+            modals.show_notification("WARNING: FIDO configured for autotest. Do not use for production!", None).unwrap();
+            let mut num_fido_auths = 0; // only counts FIDO2 flow auths, not U2F auths
             loop {
                 let mut msg = xous::receive_message(sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -303,7 +319,7 @@ pub(crate) fn start_ux_thread() {
                                 t!("vault.u2f.appinfo.authcount", xous::LANG),
                                 info.count,
                             ));
-                        } else {
+                        } else if !deferred {
                             // no record of the app. Just give the hash.
                             request_str.push_str(&format!("\n{}{}",
                                 t!("vault.u2f.newapphash", xous::LANG),
@@ -311,12 +327,12 @@ pub(crate) fn start_ux_thread() {
                             ))
                         }
                         if deferred {
-                            last_timer = 1 + (prompt_expiration_ms - tt.elapsed_ms() as i64) / 1000;
+                            last_timer = 1 + (prompt_expiration_ms - tt.elapsed_ms() as i64 - 1) / 1000;
                             request_str.push_str(
-                                &format!("{}\n\n{}s remaining",
-                                &request_str_base,
-                                last_timer)
-                            );
+                                &format!("\n\n⚠   {}{}   ⚠\n",
+                                last_timer,
+                                t!("vault.fido.countdown", xous::LANG)
+                            ));
                         }
                         modals.dynamic_notification(
                             Some(t!("vault.u2freq", xous::LANG)),
@@ -331,11 +347,11 @@ pub(crate) fn start_ux_thread() {
                                 // note that if no key is hit, we get None back on dialog box close automatically
                                 match modals::dynamic_notification_blocking_listener(token, conn) {
                                     Ok(Some(c)) => {
-                                        log::info!("kbhit got {}", c);
+                                        log::trace!("kbhit got {}", c);
                                         kbhit.store(c as u32, Ordering::SeqCst)
                                     },
                                     Ok(None) => {
-                                        log::info!("kbhit exited or had no characters");
+                                        log::trace!("kbhit exited or had no characters");
                                         kbhit.store(0, Ordering::SeqCst)
                                     },
                                     Err(e) => log::error!("error waiting for keyboard hit from blocking listener: {:?}", e),
@@ -386,10 +402,10 @@ pub(crate) fn start_ux_thread() {
                                         log::info!("new_timer: {}", new_timer);
                                         let mut request_str = String::from(&request_str_base);
                                         request_str.push_str(
-                                            &format!("{}\n\n{}s remaining",
-                                            &request_str_base,
-                                            new_timer)
-                                        );
+                                            &format!("\n\n⚠   {}{}   ⚠\n",
+                                            new_timer,
+                                            t!("vault.fido.countdown", xous::LANG)
+                                        ));
                                         modals.dynamic_notification_update(
                                             Some(t!("vault.u2freq", xous::LANG)),
                                             Some(&request_str),
@@ -397,17 +413,22 @@ pub(crate) fn start_ux_thread() {
                                         last_timer = new_timer;
                                     }
                                 }
-                                // check if we got a hit
-                                if kbhit.load(Ordering::SeqCst) != 0 {
-                                    log::info!("got user presence!");
+                                let key_hit = kbhit.load(Ordering::SeqCst);
+                                if key_hit != 0 {
+                                    num_fido_auths += 1;
+                                    log::info!("got user presence! count: {}", num_fido_auths);
                                     if let Some(mut msg) = deferred_req.take() {
                                         let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                                         let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                                        fido_request.granted = char::from_u32(kbhit.load(Ordering::SeqCst));
+                                        fido_request.granted = char::from_u32(key_hit);
                                         log::info!("returning {:?}", fido_request.granted);
                                         buffer.replace(fido_request).unwrap();
+                                        ux_state = UxState::Idle; // comment out this line if you want presence to persist after touch for FIDO2
+                                    } else {
+                                        // this is the U2F flow
+                                        ux_state = UxState::Present(tt.elapsed_ms() as i64 + timeouts.presence_timeout_ms);
                                     }
-                                    ux_state = UxState::Present(tt.elapsed_ms() as i64 + timeouts.presence_timeout_ms);
+
                                     modals.dynamic_notification_close().unwrap();
                                     send_message(self_cid,
                                         Message::new_scalar(UxOp::Pump.to_usize().unwrap(), KEEPALIVE_MS, 0, 0, 0)
@@ -416,9 +437,18 @@ pub(crate) fn start_ux_thread() {
                                     tt.sleep_ms(interval).unwrap();
                                     // check if we timed out
                                     if tt.elapsed_ms() as i64 >= prompt_expiration_ms {
+                                        num_fido_auths += 1; // bump it so we can pass the "don't touch it" test
                                         log::info!("timed out");
                                         ux_state = UxState::Idle;
                                         modals.dynamic_notification_close().unwrap();
+                                        // unblock the listener with a `None` response
+                                        if let Some(mut msg) = deferred_req.take() {
+                                            let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                                            let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
+                                            fido_request.granted = None;
+                                            log::trace!("timeout returning {:?}", fido_request.granted);
+                                            buffer.replace(fido_request).unwrap();
+                                        }
                                     } else { // else pump the loop again
                                         send_message(self_cid,
                                             Message::new_scalar(UxOp::Pump.to_usize().unwrap(), KEEPALIVE_MS, 0, 0, 0)

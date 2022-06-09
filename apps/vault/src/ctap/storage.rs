@@ -608,12 +608,25 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Ok(mut ph) => {
                 let mut pin_hash = [0u8; PIN_AUTH_LENGTH];
                 match ph.read(&mut pin_hash) {
-                    Ok(PIN_AUTH_LENGTH) => Ok(Some(pin_hash)),
-                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
+                    Ok(PIN_AUTH_LENGTH) => {
+                        log::info!("pin_hash: {:x?}", &pin_hash);
+                        Ok(Some(pin_hash))
+                    },
+                    Ok(l) => {
+                        log::error!("pin_hash read length incorrect: {}", l);
+                        Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                    }
+                    Err(e) => {
+                        log::error!("pin_hash returned an error: {:?}", e);
+                        Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                    },
                 }
             }
             Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Ok(None),
+                std::io::ErrorKind::NotFound => {
+                    log::info!("pin_hash not found");
+                    Ok(None)
+                },
                 _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
             }
         }
@@ -635,8 +648,14 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Ok(mut ph) => {
                 match ph.write(pin_hash) {
                     Ok(PIN_AUTH_LENGTH) => Ok(()),
-                    // note that this also throws errors on all write return results that are the wrong length!
-                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                    Ok(l) => {
+                        log::error!("set_pin_hash incorrect length: {}", l);
+                        Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                    }
+                    Err(e) => {
+                        log::error!("set_pin_hash write error: {:?}", e);
+                        Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                    }
                 }
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -941,6 +960,13 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Ok(_) => Ok(()),
         }?;
         match self.pddb.borrow().delete_dict(FIDO_CRED_DICT, None) {
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+            }
+            Ok(_) => Ok(()),
+        }?;
+        match self.pddb.borrow().delete_dict(crate::ux::U2F_APP_DICT, None) {
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Ok(()),
                 _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error

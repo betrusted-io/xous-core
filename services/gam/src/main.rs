@@ -178,6 +178,15 @@ fn main() -> ! {
                     }
                 })
             }
+            Some(Opcode::SetDebugLevel) => msg_blocking_scalar_unpack!(msg, level, _, _, _, {
+                match level {
+                    0 => log::set_max_level(log::LevelFilter::Info),
+                    1 => log::set_max_level(log::LevelFilter::Debug),
+                    2 => log::set_max_level(log::LevelFilter::Trace),
+                    _ => log::set_max_level(log::LevelFilter::Info),
+                }
+                xous::return_scalar(msg.sender, level).unwrap();
+            }),
             Some(Opcode::RenderTextView) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut tv = buffer.to_original::<TextView, _>().unwrap();
@@ -302,6 +311,7 @@ fn main() -> ! {
                 log::trace!("renderobject {:?}", obj);
                 if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                     // first, figure out if we should even be drawing to this canvas.
+                    log::debug!("drawable {} onscreen {} state{:?} for canvas {:?}", canvas.is_drawable(), canvas.is_onscreen(), canvas.state(), canvas.gid());
                     if canvas.is_drawable() && canvas.is_onscreen() {
                         match obj.obj {
                             GamObjectType::Line(mut line) => {

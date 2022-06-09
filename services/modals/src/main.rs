@@ -537,6 +537,7 @@ fn main() -> ! {
                             Opcode::HandleDynamicNotificationKeyhit.to_u32().unwrap(),
                         );
                         gutter.set_manual_dismiss(false);
+                        // renderer_modal.gam.set_debug_level(log::LevelFilter::Debug);
                         renderer_modal.modify(
                             Some(ActionType::Notification(gutter)),
                             Some(&top_text),
@@ -570,6 +571,8 @@ fn main() -> ! {
             }
             Some(Opcode::DoUpdateDynamicNotification) => match op {
                 RendererState::RunDynamicNotification(config) => {
+                    //log::set_max_level(log::LevelFilter::Trace);
+                    //renderer_modal.gam.set_debug_level(log::LevelFilter::Debug);
                     let mut top_text = String::new();
                     if let Some(title) = config.title {
                         top_text.push_str(title.as_str().unwrap());
@@ -586,8 +589,11 @@ fn main() -> ! {
                         config.text.is_none(),
                         None,
                     );
+                    log::debug!("UPDATE_DYN gid: {:?}", renderer_modal.canvas);
                     renderer_modal.redraw();
                     xous::yield_slice();
+                    //log::set_max_level(log::LevelFilter::Info);
+                    //renderer_modal.gam.set_debug_level(log::LevelFilter::Info);
                 }
                 _ => {
                     log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");

@@ -68,6 +68,7 @@ use ctap_crypto::Hash256;
 #[cfg(feature = "debug_ctap")]
 use libtock_drivers::console::Console;
 use crate::shims::{ClockValue, Duration};
+use locales::t;
 
 // This flag enables or disables basic attestation for FIDO2. U2F is unaffected by
 // this setting. The basic attestation uses the signing key from key_material.rs
@@ -161,7 +162,7 @@ pub struct CtapState<'a, R: Rng256, CheckUserPresence: Fn(ChannelID) -> Result<(
     rng: &'a mut R,
     // A function to check user presence, ultimately returning true if user presence was detected,
     // false otherwise.
-    check_user_presence: CheckUserPresence,
+    _check_user_presence: CheckUserPresence,
     persistent_store: PersistentStore,
     pin_protocol_v1: PinProtocolV1,
     #[cfg(feature = "with_ctap1")]
@@ -180,14 +181,14 @@ where
 
     pub fn new(
         rng: &'a mut R,
-        check_user_presence: CheckUserPresence,
+        _check_user_presence: CheckUserPresence,
         now: ClockValue,
     ) -> CtapState<'a, R, CheckUserPresence> {
         let persistent_store = PersistentStore::new(rng);
         let pin_protocol_v1 = PinProtocolV1::new(rng);
         CtapState {
             rng,
-            check_user_presence,
+            _check_user_presence,
             persistent_store,
             pin_protocol_v1,
             #[cfg(feature = "with_ctap1")]
@@ -199,11 +200,11 @@ where
             stateful_command_type: Some(StatefulCommand::Reset),
         }
     }
-
+    #[allow(dead_code)] // Tock Legacy
     pub fn update_command_permission(&mut self, now: ClockValue) {
         self.stateful_command_permission = self.stateful_command_permission.check_expiration(now);
     }
-
+    #[allow(dead_code)] // Tock Legacy
     fn check_command_permission(&mut self, now: ClockValue) -> Result<(), Ctap2StatusCode> {
         self.update_command_permission(now);
         if self.stateful_command_permission.is_granted(now) {
@@ -321,6 +322,7 @@ where
         writeln!(&mut Console::new(), "Received command: {:#?}", cmd).unwrap();
         match cmd {
             Ok(command) => {
+                log::debug!("{:?}", command);
                 // Correct behavior between CTAP1 and CTAP2 isn't defined yet. Just a guess.
                 #[cfg(feature = "with_ctap1")]
                 {
@@ -394,7 +396,12 @@ where
         if let Some(auth_param) = &pin_uv_auth_param {
             // This case was added in FIDO 2.1.
             if auth_param.is_empty() {
-                (self.check_user_presence)(cid)?;
+                //(self.check_user_presence)(cid)?;
+                if crate::ux::request_permission_blocking(
+                    t!("vault.fido.pin_uv_auth", xous::LANG).to_string(),
+                    cid).is_none() {
+                    return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+                }
                 if self.persistent_store.pin_hash()?.is_none() {
                     return Err(Ctap2StatusCode::CTAP2_ERR_PIN_NOT_SET);
                 } else {
@@ -464,7 +471,17 @@ where
                 {
                     // Perform this check, so bad actors can't brute force exclude_list
                     // without user interaction.
-                    (self.check_user_presence)(cid)?;
+                    // (self.check_user_presence)(cid)?;
+                    let mut desc = String::from(t!("vault.fido.exclude_list", xous::LANG));
+                    desc.push_str(
+                        &format!("\n\nRelying Party: {}\nUser name: {}",
+                            if let Some(name) = rp.rp_name {name.to_string()} else {rp_id.to_string()},
+                            if let Some(name) = user.user_display_name {name} else {user.user_name.unwrap_or("*Unspecified*".to_string())},
+                        )
+                    );
+                    if crate::ux::request_permission_blocking(desc, cid).is_none() {
+                        return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+                    }
                     return Err(Ctap2StatusCode::CTAP2_ERR_CREDENTIAL_EXCLUDED);
                 }
             }
@@ -504,7 +521,19 @@ where
             }
         };
 
-        (self.check_user_presence)(cid)?;
+        //(self.check_user_presence)(cid)?;
+        let mut make_cred_desc = String::from(t!("vault.fido.make_credential", xous::LANG));
+        let alt_name = user.user_name.as_deref().unwrap_or("*Unspecified*");
+        make_cred_desc.push_str(
+            &format!("\n\nRelying Party: {}\nUser name: {}",
+                // prefer the "friendly name" over the technical name
+                if let Some(name) = &rp.rp_name {name.to_string()} else {rp_id.to_string()},
+                if let Some(name) = &user.user_display_name {name} else {alt_name}
+            )
+        );
+        if crate::ux::request_permission_blocking(make_cred_desc, cid).is_none() {
+            return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+        }
 
         let sk = ctap_crypto::ecdsa::SecKey::gensk(self.rng);
         let pk = sk.genpk();
@@ -787,7 +816,17 @@ where
         // This check comes before CTAP2_ERR_NO_CREDENTIALS in CTAP 2.0.
         // For CTAP 2.1, it was moved to a later protocol step.
         if options.up {
-            (self.check_user_presence)(cid)?;
+            //(self.check_user_presence)(cid)?;
+            let mut desc = String::from(t!("vault.fido.get_assertion", xous::LANG));
+            desc.push_str(
+                &format!("\n\nRelying Party: {}\nClient data hash: {}",
+                    rp_id,
+                    hex::encode(&client_data_hash),
+                )
+            );
+            if crate::ux::request_permission_blocking(desc, cid).is_none() {
+                return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+            }
         }
 
         let credential = applicable_credentials
@@ -819,9 +858,15 @@ where
 
     fn process_get_next_assertion(
         &mut self,
-        now: ClockValue,
+        _now: ClockValue,
     ) -> Result<ResponseData, Ctap2StatusCode> {
-        self.check_command_permission(now)?;
+        //self.check_command_permission(now)?;
+        if crate::ux::request_permission_blocking(
+            t!("vault.fido.next_assertion", xous::LANG).to_string(),
+            [0xff, 0xff, 0xff, 0xff]
+        ).is_none() {
+            return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED);
+        }
         let (assertion_input, credential) =
             if let Some(StatefulCommand::GetAssertion(assertion_state)) =
                 &mut self.stateful_command_type
@@ -891,6 +936,9 @@ where
         )
     }
 
+    pub fn unplug_reset(&mut self) {
+        self.pin_protocol_v1.reset(self.rng);
+    }
     fn process_reset(
         &mut self,
         cid: ChannelID,
@@ -899,18 +947,24 @@ where
         // Resets are only possible in the first 10 seconds after booting.
         // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?
         // self.check_command_permission(now)?;
-        if let Some(c) = crate::ux::request_permission_blocking(locales::t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
+        if let Some(c) = crate::ux::request_permission_blocking(t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
             if c != 'y' {
                 return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
             }
         } else {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
+        #[cfg(all(not(feature="autotest"), not(feature="multireset")))] // skip this check on autotest
         match &self.stateful_command_type {
             Some(StatefulCommand::Reset) => (),
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED),
         }
-        (self.check_user_presence)(cid)?;
+        //(self.check_user_presence)(cid)?;
+        // we skip the double-confirmation during autotesting, but leave it here for production
+        #[cfg(not(feature="autotest"))]
+        if crate::ux::request_permission_blocking(t!("vault.u2f.reset_check", xous::LANG).to_string(), cid).is_none() {
+            return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+        }
 
         self.persistent_store.reset(self.rng)?;
         self.pin_protocol_v1.reset(self.rng);
@@ -926,7 +980,10 @@ where
 
     #[cfg(feature = "with_ctap2_1")]
     fn process_selection(&self, cid: ChannelID) -> Result<ResponseData, Ctap2StatusCode> {
-        (self.check_user_presence)(cid)?;
+        //(self.check_user_presence)(cid)?;
+        if crate::ux::request_permission_blocking(t!("vault.u2f.authenticator_selection", xous::LANG).to_string(), cid).is_none() {
+            return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+        }
         Ok(ResponseData::AuthenticatorSelection)
     }
 
@@ -935,7 +992,10 @@ where
         params: AuthenticatorVendorConfigureParameters,
         cid: ChannelID,
     ) -> Result<ResponseData, Ctap2StatusCode> {
-        (self.check_user_presence)(cid)?;
+        // (self.check_user_presence)(cid)?;
+        if crate::ux::request_permission_blocking(t!("vault.u2f.vendor_configure", xous::LANG).to_string(), cid).is_none() {
+            return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
+        }
 
         // Sanity checks
         let current_priv_key = self.persistent_store.attestation_private_key()?;

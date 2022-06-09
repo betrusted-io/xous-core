@@ -727,7 +727,8 @@ dependencies = [
  "byteorder",
  "cbc",
  "cbor",
- "hex",
+ "hex 0.3.2",
+ "log",
  "p256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -785,7 +786,7 @@ dependencies = [
  "engine-25519",
  "engine25519-as",
  "fiat-crypto",
- "hex",
+ "hex 0.4.3",
  "log",
  "packed_simd_2",
  "rand 0.7.3",
@@ -948,7 +949,7 @@ dependencies = [
  "criterion",
  "curve25519-dalek-loader",
  "ed25519",
- "hex",
+ "hex 0.4.3",
  "merlin",
  "rand 0.7.3",
  "rand_core 0.5.1",
@@ -1505,6 +1506,12 @@ dependencies = [
 
 [[package]]
 name = "hex"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "805026a5d0141ffc30abb3be3173848ad46a1b1664fe632428479619a3644d77"
+
+[[package]]
+name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
@@ -1731,7 +1738,7 @@ dependencies = [
  "crossbeam-channel",
  "gdbstub",
  "gdbstub_arch",
- "hex",
+ "hex 0.4.3",
  "lazy_static",
  "rand 0.7.3",
  "rand_chacha 0.3.1",
@@ -2756,7 +2763,7 @@ dependencies = [
  "engine-25519",
  "gam",
  "graphics-server",
- "hex",
+ "hex 0.4.3",
  "jtag",
  "llio",
  "locales",
@@ -2973,7 +2980,7 @@ version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "678b5a069e50bf00ecd22d0cd8ddf7c236f68581b03db652061ed5eb13a312ff"
 dependencies = [
- "hex",
+ "hex 0.4.3",
  "serde",
  "serde_with_macros",
 ]
@@ -3039,7 +3046,7 @@ dependencies = [
  "engine-25519",
  "gam",
  "graphics-server",
- "hex",
+ "hex 0.4.3",
  "ime-plugin-api",
  "ime-plugin-shell",
  "ime-plugin-tts",
@@ -3697,7 +3704,7 @@ dependencies = [
  "enum-iterator",
  "gam",
  "graphics-server",
- "hex",
+ "hex 0.4.3",
  "ime-plugin-api",
  "ime-plugin-shell",
  "locales",
