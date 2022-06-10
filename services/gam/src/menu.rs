@@ -105,8 +105,7 @@ impl<'a> Menu<'a> {
         self.helper_data = Some(buf);
         xous::create_thread_3(forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");
     }
-
-    // if successful, returns None, otherwise, the menu item
+    /// Appends a menu item to the end of the current Menu
     pub fn add_item(&mut self, new_item: MenuItem) {
         if new_item.name.as_str().unwrap() == "🔇" { // suppress the addition of menu items that are not applicable for a given locale
             return;
@@ -132,6 +131,38 @@ impl<'a> Menu<'a> {
         log::debug!("add_item requesting bounds of {:?}", new_bounds);
         self.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
     }
+    // Attempts to insert a MenuItem at the index given. This displaces the item at that index down
+    // by one slot. Returns false if the index is invalid.
+    pub fn insert_item(&mut self, new_item: MenuItem, at: usize) -> bool {
+        if new_item.name.as_str().unwrap() == "🔇" { // suppress the addition of menu items that are not applicable for a given locale
+            return false;
+        }
+        // first, do the insertion.
+        // add the menu item to the first free slot
+        // any modifications to the menu structure should guarantee that the list is compacted
+        // and has no holes, in order for the "selected index" logic to work
+        if at <= self.items.len() {
+            self.items.insert(at, new_item);
+            // now, recompute the height
+            let mut total_items = self.num_items();
+            if total_items == 0 {
+                total_items = 1; // just so we see a blank menu at least, and have a clue how to debug
+            }
+            let current_bounds = self.gam.get_canvas_bounds(self.canvas).expect("couldn't get current bounds");
+            let mut new_bounds = SetCanvasBoundsRequest {
+                requested: Point::new(current_bounds.x, total_items as i16 * self.line_height + self.margin * 2),
+                granted: None,
+                token_type: TokenType::App,
+                token: self.authtoken,
+            };
+            log::debug!("add_item requesting bounds of {:?}", new_bounds);
+            self.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+            true
+        } else {
+            false
+        }
+    }
+
     // note: this routine has yet to be tested. (remove this comment once it has been actually used by something)
     pub fn delete_item(&mut self, item: &str) -> bool {
         let len_before = self.items.len();
@@ -364,6 +395,20 @@ impl MenuMatic {
             false
         }
     }
+    pub fn insert_item(&self, item: MenuItem, at: usize) -> bool {
+        let mm = MenuManagement {
+            item,
+            op: MenuMgrOp::InsertItem(at),
+        };
+        let mut buf = Buffer::into_buf(mm).expect("Couldn't convert to memory structure");
+        buf.lend_mut(self.cid, 0).expect("Couldn't issue management opcode");
+        let ret = buf.to_original::<MenuManagement, _>().unwrap();
+        if ret.op == MenuMgrOp::Ok {
+            true
+        } else {
+            false
+        }
+    }
     pub fn delete_item(&self, item_name: &str) -> bool {
         let mm = MenuManagement {
             item: MenuItem {
@@ -474,6 +519,15 @@ pub fn menu_matic(items: Vec::<MenuItem>, menu_name: &'static str, maybe_manager
                             menu.lock().unwrap().add_item(mgmt.item);
                             mgmt.op = MenuMgrOp::Ok;
                             buffer.replace(mgmt).unwrap();
+                        }
+                        MenuMgrOp::InsertItem(at) => {
+                            if menu.lock().unwrap().insert_item(mgmt.item, at) {
+                                mgmt.op = MenuMgrOp::Ok;
+                                buffer.replace(mgmt).unwrap();
+                            } else {
+                                mgmt.op = MenuMgrOp::Err;
+                                buffer.replace(mgmt).unwrap();
+                            }
                         }
                         MenuMgrOp::DeleteItem => {
                             if !menu.lock().unwrap().delete_item(mgmt.item.name.as_str().unwrap()) {
