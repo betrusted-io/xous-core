@@ -19,6 +19,28 @@ impl KeyboardBacklight {
     pub fn cid(&self) -> xous::CID {
         self.conn
     }
+    
+    pub fn enable(&self) {
+        xous::send_message(self.conn,
+            xous::Message::new_scalar(KbbOps::EnableAutomaticBacklight.to_usize().unwrap(),
+                0,
+                0,
+                0,
+                0
+            )
+        ).map(|_|()).unwrap();
+    }
+
+    pub fn disable(&self) {
+        xous::send_message(self.conn,
+            xous::Message::new_scalar(KbbOps::DisableAutomaticBacklight.to_usize().unwrap(),
+                0,
+                0,
+                0,
+                0
+            )
+        ).map(|_|()).unwrap();
+    }
 
     pub fn enabled(&self) -> Result<bool, xous::Error> {
         match xous::send_message(self.conn,

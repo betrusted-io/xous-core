@@ -56,6 +56,12 @@ pub(crate) enum StatusOpcode {
     /// Set the keyboard map
     SetKeyboard,
 
+    /// Sets automatic backlight on
+    EnableAutomaticBacklight,
+
+    /// Sets automatic backlight off
+    DisableAutomaticBacklight,
+
     /// Suspend handler from the main menu
     TrySuspend,
     /// Ship mode handler for the main menu
@@ -335,7 +341,9 @@ fn main() -> ! {
     let keyboard_backlight = keyboard_backlight::KeyboardBacklight::new(&xns).unwrap();
 
     log::debug!("starting main menu thread");
-    create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com, time_cid, &keyboard_backlight);
+    let main_menu_sid = xous::create_server().unwrap();
+    let status_cid = xous::connect(status_sid).unwrap();
+    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
     create_app_menu(xous::connect(status_sid).unwrap());
     let kbd_mgr = xous::create_server().unwrap();
     let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
@@ -366,6 +374,59 @@ fn main() -> ! {
         let msg = xous::receive_message(status_sid).unwrap();
         log::trace!("|status: Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            // TODO: handle tts
+            Some(StatusOpcode::EnableAutomaticBacklight) => {              
+                // first: enable automatic backlight.
+                keyboard_backlight.enable();
+
+                // second: delete the first three elements off the menu
+                menu_manager.delete_item(t!("mainmenu.backlighton", xous::LANG));
+                menu_manager.delete_item(t!("mainmenu.backlightoff", xous::LANG));
+                menu_manager.delete_item(t!("mainmenu.autobacklighton", xous::LANG));
+
+                // third: add a "disable automatic backlight element"
+                menu_manager.insert_item(gam::MenuItem {
+                    name: xous_ipc::String::from_str(t!("mainmenu.autobacklightoff", xous::LANG)),
+                    action_conn: Some(status_cid),
+                    action_opcode: StatusOpcode::DisableAutomaticBacklight.to_u32().unwrap(),
+                    action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+                    close_on_select: true,
+                }, 0);
+            }
+            Some(StatusOpcode::DisableAutomaticBacklight) => {
+                // first: disable automatic backlight.
+                keyboard_backlight.disable();
+
+                // second: delete the first element off the menu.
+                menu_manager.delete_item(t!("mainmenu.autobacklightoff", xous::LANG));
+
+                // third: construct an array of the new elements to add to the menu.
+                let new_elems = [
+                    gam::MenuItem {
+                        name: xous_ipc::String::from_str(t!("mainmenu.backlighton", xous::LANG)),
+                        action_conn: Some(com.conn()),
+                        action_opcode: com.getop_backlight(),
+                        action_payload: gam::MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
+                        close_on_select: true,
+                    },
+                    gam::MenuItem {
+                        name: xous_ipc::String::from_str(t!("mainmenu.backlightoff", xous::LANG)),
+                        action_conn: Some(com.conn()),
+                        action_opcode: com.getop_backlight(),
+                        action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    },
+                    gam::MenuItem {
+                        name: xous_ipc::String::from_str(t!("mainmenu.autobacklighton", xous::LANG)),
+                        action_conn: Some(status_cid),
+                        action_opcode: StatusOpcode::EnableAutomaticBacklight.to_u32().unwrap(),
+                        action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    }
+                ];
+
+                new_elems.iter().enumerate().for_each(|(index, element)| {let _ = menu_manager.insert_item(*element, index);});
+            }
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
                 battstats_tv.clear_str();
