@@ -853,13 +853,15 @@ impl UsbBus for SpinalUsbDevice {
     /// continue be polled, and it shall return a value other than `Suspend` from `poll` when it no
     /// longer detects the suspend condition.
     fn suspend(&self) {
-        log::warn!("USB suspend called, doing nothing");
+        log::info!("{}USB.SUSPEND,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+        log::warn!("USB suspend called; this implementation does nothing.");
     }
 
     /// Resumes from suspend mode. This may only be called after the peripheral has been previously
     /// suspended.
     fn resume(&self) {
-        log::warn!("USB resume called, but suspend is not implemented");
+        log::info!("{}USB.RESUME,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+        log::info!("USB resume called.");
     }
 
     /// Gets information about events and incoming data. Usually called in a loop or from an
