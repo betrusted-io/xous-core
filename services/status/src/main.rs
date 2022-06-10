@@ -9,6 +9,7 @@ mod kbdmenu;
 use kbdmenu::*;
 mod app_autogen;
 mod time;
+mod wifi;
 
 use com::api::*;
 use core::fmt::Write;
@@ -62,6 +63,9 @@ pub(crate) enum StatusOpcode {
     BatteryDisconnect,
     /// for returning wifi stats
     WifiStats,
+
+    /// Raise the wifi menu
+    WifiMenu,
     Quit,
 }
 
@@ -359,6 +363,8 @@ fn main() -> ! {
     #[cfg(any(target_os = "none", target_os = "xous"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
 
+    wifi::start_background_thread();
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -422,6 +428,10 @@ fn main() -> ! {
                     xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
                 };
                 wifi_status = WlanStatus::from_ipc(buffer.to_original::<com::WlanStatusIpc, _>().unwrap());
+            },
+            Some(StatusOpcode::WifiMenu) => {
+                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
+                gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
             },
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();

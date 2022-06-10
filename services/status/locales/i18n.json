@@ -78,6 +78,10 @@
         "zh": "睡眠模式",
         "en-tts": "Sleep now"
     },
+    "mainmenu.wifimenu": {
+        "en": "Wi-Fi menu",
+        "en-tts": "Wi-Fi menu"
+    },
     "mainmenu.backlighton": {
         "en": "Backlight on",
         "ja": "バックライト点灯",
