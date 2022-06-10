@@ -3,7 +3,7 @@
 # set RUSTFLAGS=--remap-path-prefix=F:\largework\rust-win\code\xous-core\=build
 # $env:RUSTFLAGS="--remap-path-prefix=$(Get-Location)=build"
 
-cargo xtask app-image vault
+cargo xtask app-image vault ball
 # cargo xtask ffi-test
 # cargo xtask minimal precursors/soc.svd
 
