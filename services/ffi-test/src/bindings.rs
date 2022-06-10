@@ -148,6 +148,10 @@ pub unsafe extern "C" fn realloc(
     ptr: *mut c_void,
     size: c_uint
 ) -> *mut c_void {
+    if ptr.is_null() {
+        // if ptr is null, realloc() is identical to malloc()
+        return malloc(size);
+    }
     let mut region_index: Option<usize> = None;
     for (index, region) in C_HEAP.iter().enumerate() {
         if region.as_ptr() as usize == ptr as usize {
@@ -158,7 +162,7 @@ pub unsafe extern "C" fn realloc(
     match region_index {
         Some(index) => {
             log::info!("realloc/free success: {:x}", ptr as usize);
-            let mut old = C_HEAP.remove(index);
+            let mut old = C_HEAP.swap_remove(index);
             let checked_size = if size == 0 {
                 1 // at least 1 element so we have a pointer we can pass back
             } else {
@@ -170,6 +174,7 @@ pub unsafe extern "C" fn realloc(
                 alloc.push(src);
             }
             old.clear();
+            alloc.set_len(checked_size as usize);
             C_HEAP.push(alloc);
             log::info!("realloc/allocated: {:x}", ret_ptr as usize);
 
