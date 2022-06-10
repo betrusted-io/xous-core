@@ -39,7 +39,7 @@ fn sha256load(v2: [u32; 4], v3: [u32; 4]) -> [u32; 4] {
 fn sha256swap(v0: [u32; 4]) -> [u32; 4] {
     [v0[2], v0[3], v0[0], v0[1]]
 }
-
+#[inline(never)] // bunnie: reduce binary size
 fn sha256msg1(v0: [u32; 4], v1: [u32; 4]) -> [u32; 4] {
     // sigma 0 on vectors
     #[inline]
@@ -52,7 +52,7 @@ fn sha256msg1(v0: [u32; 4], v1: [u32; 4]) -> [u32; 4] {
 
     add(v0, sigma0x4(sha256load(v0, v1)))
 }
-
+#[inline(never)] // bunnie: reduce binary size
 fn sha256msg2(v4: [u32; 4], v3: [u32; 4]) -> [u32; 4] {
     macro_rules! sigma1 {
         ($a:expr) => {
@@ -70,7 +70,7 @@ fn sha256msg2(v4: [u32; 4], v3: [u32; 4]) -> [u32; 4] {
 
     [w19, w18, w17, w16]
 }
-
+#[inline(never)] // bunnie: reduce binary size
 fn sha256_digest_round_x2(cdgh: [u32; 4], abef: [u32; 4], wk: [u32; 4]) -> [u32; 4] {
     macro_rules! big_sigma0 {
         ($a:expr) => {
@@ -162,6 +162,7 @@ macro_rules! schedule_rounds4 {
 }
 
 /// Process a block with the SHA-256 algorithm.
+#[inline(never)] // bunnie: reduce binary size
 fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
     let mut abef = [state[0], state[1], state[4], state[5]];
     let mut cdgh = [state[2], state[3], state[6], state[7]];
