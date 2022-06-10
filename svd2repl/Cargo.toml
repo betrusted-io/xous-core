@@ -7,7 +7,7 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 quick-xml = "0.19.0"
 clap = "2.33.3"

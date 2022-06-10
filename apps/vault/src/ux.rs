@@ -80,7 +80,8 @@ pub(crate) fn set_durations(prompt: i64, presence: i64) {
 /// Some(char) => user is present, and they hit the key indicated
 /// None => user was not present
 pub(crate) fn request_permission_blocking(reason: String, channel_id: [u8; 4]) -> Option<char> {
-    log::info!("requesting permission (blocking)");
+    log::trace!("requesting permission (blocking)");
+    log::info!("{}VAULT.PERMISSION,{}", xous::BOOKEND_START, xous::BOOKEND_END);
     request_permission_inner(reason, channel_id, true, None)
 }
 pub(crate) fn request_permission_polling(reason: String, application: [u8; 32]) -> bool {

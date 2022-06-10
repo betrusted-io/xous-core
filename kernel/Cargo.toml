@@ -6,7 +6,7 @@ name = "kernel"
 version = "0.8.2"
 resolver = "2"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = "1.2.1"
 # gdbstub branch "dev/0.6"

@@ -204,6 +204,7 @@ pub const MODAL_Y_MAX: i16 = 350; // in absolute screen coords, not relative to 
 pub(crate) enum MenuMgrOp {
     // incoming is one of these ops
     AddItem,
+    InsertItem(usize),
     DeleteItem,
     SetIndex(usize),
     Quit,

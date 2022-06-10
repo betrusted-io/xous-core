@@ -8,7 +8,7 @@ description = "Low level access to RISC-V processors"
 keywords = ["riscv", "register", "peripheral"]
 license = "ISC"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 bare-metal = ">=0.2.0,<0.2.5"
 bit_field = "0.9.0"
