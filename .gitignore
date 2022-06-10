@@ -18,10 +18,14 @@ apps/vault/tools/crypto_data
 
 # local utility shellscripts
 update-precursors.sh
+buildpush.ps1
 
 # pddb debug files
 tools/pddb-images/
 tools/__pycache__
+
+# renode will tickle this every time you run it, but you shouldn't commit that back to the tree
+emulation/linux-server-rootfs.jffs2
 
 # don't record weirdnesses dealing with vscode
 .vscode/settings-hw.json

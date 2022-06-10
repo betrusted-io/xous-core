@@ -16,6 +16,16 @@ use ctap::CtapState;
 mod shims;
 use shims::*;
 
+// CTAP2 testing notes:
+// run our branch and use this to forward the prompts on to the device:
+// netcat -k -u -l 6502 > /dev/ttyS0
+// use the "autotest" feature to remove some excess prompts that interfere with the test
+
+// the OpenSK code is based off of commit f2496a8e6d71a4e838884996a1c9b62121f87df2 from the
+// Google OpenSK repository. The last push was Nov 19 2021, and the initial merge into Xous
+// was finished on June 9 2022. Any patches to this code base will have to be manually
+// applied. Please update the information here to reflect the latest patch status.
+
 /*
 UI concept:
 
@@ -110,7 +120,15 @@ fn main() -> ! {
                         }
                     }
                     Err(e) => {
-                        log::warn!("FIDO listener got an error: {:?}", e);
+                        match e {
+                            xous::Error::ProcessTerminated => { // unplug happened, reset the authenticator
+                                log::info!("CTAP unplug_reset");
+                                ctap_state.unplug_reset();
+                            },
+                            _ => {
+                                log::warn!("FIDO listener got an error: {:?}", e);
+                            }
+                        }
                     }
                 }
             }

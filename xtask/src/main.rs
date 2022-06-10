@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "llio",
         "susres",
         "codec",
-        "sha2:0.9.8",
+        "sha2",
         "engine-25519",
         "spinor",
         "root-keys",

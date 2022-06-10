@@ -54,5 +54,6 @@ pub enum U2fCode {
     TxAck,
     RxWait,
     RxAck,
+    Hangup,
     Denied,
 }
