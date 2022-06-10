@@ -3262,6 +3262,7 @@ dependencies = [
  "gam",
  "graphics-server",
  "keyboard",
+ "keyboard-backlight",
  "llio",
  "locales",
  "log",

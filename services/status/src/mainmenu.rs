@@ -4,11 +4,12 @@ use root_keys::RootKeys;
 use std::sync::{Arc, Mutex};
 use xous_ipc::String;
 use num_traits::*;
+use keyboard_backlight::api::*;
 
 use crate::StatusOpcode;
 
 #[allow(unused_variables)] // quiets a warning about unused com that is emitted in tts config. Would be nice to make this more targeted...
-pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com: &com::Com, time_ux_conn: xous::CID) {
+pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com: &com::Com, time_ux_conn: xous::CID, kbb: &keyboard_backlight::KeyboardBacklight) {
     let key_conn = keys.lock().unwrap().conn();
 
     let mut menuitems = Vec::<MenuItem>::new();
@@ -32,6 +33,24 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
         close_on_select: true,
     });
 
+    #[cfg(not(feature="tts"))]
+    menuitems.push(MenuItem {
+        name: String::from_str(t!("mainmenu.autobacklighton", xous::LANG)),
+        action_conn: Some(kbb.cid()),
+        action_opcode: KbbOps::EnableAutomaticBacklight.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+
+    #[cfg(not(feature="tts"))]
+    menuitems.push(MenuItem {
+        name: String::from_str(t!("mainmenu.autobacklightoff", xous::LANG)),
+        action_conn: Some(kbb.cid()),
+        action_opcode: KbbOps::DisableAutomaticBacklight.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+        
     menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.sleep", xous::LANG)),
         action_conn: Some(status_conn),

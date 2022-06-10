@@ -1,23 +1,17 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+mod api;
+use api::*;
+
 use crossbeam::channel::{at, select, unbounded, Receiver, Sender};
 use num_traits::*;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::RwLock;
-
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-enum KbbOps {
-    Keypress,
-    TurnLightsOff,
-    TurnLightsOn,
-    EnableAutomaticBacklight,
-    DisableAutomaticBacklight,
-}
 
 enum ThreadOps {
     Renew,
+    Stop,
 }
 
 fn main() -> ! {
@@ -27,7 +21,7 @@ fn main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     let kbb_sid = xns
-        .register_name("_Keyboard backlight_", Some(2))
+        .register_name(api::KBB_SERVER_NAME, Some(2))
         .expect("can't register server");
 
     // connect to com
@@ -39,8 +33,7 @@ fn main() -> ! {
         KbbOps::Keypress.to_u32().unwrap() as usize,
     );
     
-    // TODO: wire this to a real activation routine
-    let enabled = Arc::new(RwLock::new(true));
+    let enabled = Arc::new(Mutex::new(false));
     let (tx, rx): (Sender<ThreadOps>, Receiver<ThreadOps>) = unbounded();
 
     let rx = Box::new(rx);
@@ -52,7 +45,8 @@ fn main() -> ! {
         let msg = xous::receive_message(kbb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(KbbOps::Keypress) => {
-                if !*enabled.read().unwrap() {
+                if !*enabled.lock().unwrap() {
+                    log::trace!("ignoring keypress, automatic backlight is disabled");
                     continue
                 }
                 let mut run_lock = thread_already_running.lock().unwrap();
@@ -83,11 +77,16 @@ fn main() -> ! {
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
             Some(KbbOps::EnableAutomaticBacklight) => {
-                *enabled.write().unwrap() = true;
+                *enabled.lock().unwrap() = true;
             }
             Some(KbbOps::DisableAutomaticBacklight) => {
-                *enabled.write().unwrap() = false;
+                *enabled.lock().unwrap() = false;
+                tx.send(ThreadOps::Stop).unwrap();
             }
+            Some(KbbOps::Status) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let status = *enabled.lock().unwrap();
+                xous::return_scalar(msg.sender, status.into()).unwrap();
+            }),
             _ => {}
         }
     }
@@ -102,9 +101,17 @@ fn turn_lights_on(rx: Box<Receiver<ThreadOps>>, cid: xous::CID) {
 
     loop {
         select! {
-            recv(rx) -> _ => {
-                timeout = std::time::Instant::now() + standard_duration;
-                total_waited += 1
+            recv(rx) -> op => {
+                match op.unwrap() {
+                    ThreadOps::Renew => {
+                        timeout = std::time::Instant::now() + standard_duration;
+                        total_waited += 1;
+                    },
+                    ThreadOps::Stop => {
+                        log::trace!("received Stop op, killing background backlight thread");
+                        return;
+                    },
+                }
             },
             recv(at(timeout)) -> _ => {
                 log::trace!("timeout finished, total re-waited {}, returning!", total_waited);

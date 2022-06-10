@@ -332,8 +332,10 @@ fn main() -> ! {
     // used to show notifications, e.g. can't sleep while power is engaged.
     let modals = modals::Modals::new(&xns).unwrap();
 
+    let keyboard_backlight = keyboard_backlight::KeyboardBacklight::new(&xns).unwrap();
+
     log::debug!("starting main menu thread");
-    create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com, time_cid);
+    create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com, time_cid, &keyboard_backlight);
     create_app_menu(xous::connect(status_sid).unwrap());
     let kbd_mgr = xous::create_server().unwrap();
     let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
