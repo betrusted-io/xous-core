@@ -5,7 +5,7 @@ edition = "2018"
 name = "rkyv-test-server"
 version = "0.1.0"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
 log-server = {path = "../log-server"}
