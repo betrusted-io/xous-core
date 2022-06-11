@@ -312,11 +312,9 @@ fn main() -> ! {
                 if core == 1 {
                     log::info!("Connecting USB device core; disconnecting debug USB core");
                     usbmgmt.connect_device_core(true);
-                    tt.sleep_ms(500).unwrap();
                 } else {
                     log::info!("Connecting debug core; disconnecting USB device core");
                     usbmgmt.connect_device_core(false);
-                    tt.sleep_ms(500).unwrap();
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
