@@ -25,9 +25,9 @@ use hosted::*;
 use num_traits::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device_xous::KeyboardLedsReport;
-use usbd_human_interface_device::device::fido::FidoMsg;
+use usbd_human_interface_device::device::fido::RawFidoMsg;
 #[cfg(any(target_os = "none", target_os = "xous"))]
-use usbd_human_interface_device::device::fido::FidoInterface;
+use usbd_human_interface_device::device::fido::RawFidoInterface;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use core::num::NonZeroU8;
 use std::collections::BTreeMap;
@@ -157,13 +157,13 @@ fn main() -> ! {
             NKROBootKeyboardInterface::default_config(&clock),
         )
         .add_interface(
-            FidoInterface::default_config()
+            RawFidoInterface::default_config()
         )
         .build(&usb_alloc);
     #[cfg(all(any(target_os = "none", target_os = "xous"), not(feature="emukbd")))]
     let mut composite = UsbHidClassBuilder::new()
         .add_interface(
-            FidoInterface::default_config()
+            RawFidoInterface::default_config()
         )
         .build(&usb_alloc);
 
@@ -240,11 +240,11 @@ fn main() -> ! {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
                 if fido_listener_pid == msg.sender.pid() {
-                    let mut u2f_msg = FidoMsg::default();
+                    let mut u2f_msg = RawFidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
                     u2f_msg.packet.copy_from_slice(&u2f_ipc.data);
                     #[cfg(any(target_os = "none", target_os = "xous"))]
-                    let u2f = composite.interface::<FidoInterface<'_, _>, _>();
+                    let u2f = composite.interface::<RawFidoInterface<'_, _>, _>();
                     #[cfg(any(target_os = "none", target_os = "xous"))]
                     u2f.write_report(&u2f_msg).ok();
                     log::debug!("sent U2F packet {:x?}", u2f_ipc.data);
@@ -267,7 +267,7 @@ fn main() -> ! {
                             Err(e) => log::trace!("KEYB ERR: {:?}", e),
                         }
                     }
-                    let u2f = composite.interface::<FidoInterface<'_, _>, _>();
+                    let u2f = composite.interface::<RawFidoInterface<'_, _>, _>();
                     match u2f.read_report() {
                         Ok(u2f_report) => {
                             if let Some(mut listener) = fido_listener.take() {

@@ -18,6 +18,7 @@ locales = {path = "../../locales"}
 tts-frontend = {path="../../services/tts"}
 usb-device-xous = {path="../../services/usb-device-xous"}
 usbd-human-interface-device = {git="https://github.com/betrusted-io/usbd-human-interface-device.git", branch="main"}
+#usbd-human-interface-device = {path="../../../usbd-human-interface-device"}
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 

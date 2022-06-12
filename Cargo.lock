@@ -3670,7 +3670,7 @@ dependencies = [
 [[package]]
 name = "usbd-human-interface-device"
 version = "0.1.1"
-source = "git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main#34fca5ed645bcbfb36ceb28db771444b47c33a77"
+source = "git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main#1bf7df956d26b25485a6d9faa186e5b387c55a67"
 dependencies = [
  "delegate",
  "embedded-time",

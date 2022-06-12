@@ -24,6 +24,7 @@ bitfield = "0.13.2"
 vcell = "0.1.3"
 
 usbd-human-interface-device = {git="https://github.com/betrusted-io/usbd-human-interface-device.git", branch="main"}
+#usbd-human-interface-device = {path="../../../usbd-human-interface-device"}
 embedded-time = "0.12.1" # required by the keyboard interface
 packed_struct = { version = "0.10", default-features = false } # used by the usbd-human-interface-device crate
 num_enum = { version = "0.5", default-features = false } # used by the usbd-human-interface-device crate

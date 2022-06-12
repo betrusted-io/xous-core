@@ -9,7 +9,7 @@ pub use usbd_human_interface_device::device::keyboard::KeyboardLedsReport;
 pub use usbd_human_interface_device::page::Keyboard as UsbKeyCode;
 use packed_struct::PackedStruct;
 use xous_ipc::Buffer;
-pub use usbd_human_interface_device::device::fido::FidoMsg;
+pub use usbd_human_interface_device::device::fido::RawFidoMsg;
 
 pub enum UsbDeviceType {
     Debug = 0,
@@ -201,7 +201,7 @@ impl UsbHid {
             _ => panic!("Internal error: illegal return type"),
         }
     }
-    pub fn u2f_wait_incoming(&self) -> Result<FidoMsg, xous::Error> {
+    pub fn u2f_wait_incoming(&self) -> Result<RawFidoMsg, xous::Error> {
         let req = U2fMsgIpc {
             data: [0; 64],
             code: U2fCode::RxWait
@@ -211,7 +211,7 @@ impl UsbHid {
         let ack = buf.to_original::<U2fMsgIpc, _>().unwrap();
         match ack.code {
             U2fCode::RxAck => {
-                let mut u2fmsg = FidoMsg::default();
+                let mut u2fmsg = RawFidoMsg::default();
                 u2fmsg.packet.copy_from_slice(&ack.data);
                 Ok(u2fmsg)
             },
@@ -221,7 +221,7 @@ impl UsbHid {
             _ => Err(xous::Error::InternalError)
         }
     }
-    pub fn u2f_send(&self, msg: FidoMsg) -> Result<(), xous::Error> {
+    pub fn u2f_send(&self, msg: RawFidoMsg) -> Result<(), xous::Error> {
         let mut req = U2fMsgIpc {
             data: [0; 64],
             code: U2fCode::Tx

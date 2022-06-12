@@ -106,7 +106,7 @@ fn main() -> ! {
                         let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
                         // This block handles sending packets.
                         for pkt_reply in reply {
-                            let mut reply = FidoMsg::default();
+                            let mut reply = RawFidoMsg::default();
                             reply.packet.copy_from_slice(&pkt_reply);
                             let status = usb.u2f_send(reply);
                             match status {
