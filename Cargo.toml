@@ -101,6 +101,7 @@ strip = true
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
+opt-level = 2 # improves code size, may actually be faster than "3" because we have small caches?
 #opt-level = 's'  # z,s: Optimize for size instead of performance
 
 [patch.crates-io]
