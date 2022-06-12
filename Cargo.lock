@@ -845,6 +845,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delegate"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d70a2d4995466955a415223acf3c9c934b9ff2339631cdf4ffc893da4bacd717"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "der"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3618,7 +3629,7 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "usb-device",
- "usbd-human-interface-device 0.1.1 (git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main)",
+ "usbd-human-interface-device 0.2.1",
  "utralib",
  "vcell",
  "xous",
@@ -3642,7 +3653,7 @@ dependencies = [
  "susres",
  "ticktimer-server",
  "usb-device",
- "usbd-human-interface-device 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "usbd-human-interface-device 0.1.1",
  "utralib",
  "vcell",
  "xous",
@@ -3655,7 +3666,7 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "262ce4294612a8fc830daeaded8b111e241dff8520965979d1754eb87fb33951"
 dependencies = [
- "delegate",
+ "delegate 0.6.2",
  "embedded-time",
  "frunk",
  "hash32",
@@ -3669,14 +3680,13 @@ dependencies = [
 
 [[package]]
 name = "usbd-human-interface-device"
-version = "0.1.1"
-source = "git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main#1bf7df956d26b25485a6d9faa186e5b387c55a67"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f01ee9d05b01603f4d6ee43e7d0ebe140f16567d6ff99fde0dc1ea6e7564e65"
 dependencies = [
- "delegate",
+ "delegate 0.7.0",
  "embedded-time",
  "frunk",
- "hash32",
- "hash32-derive",
  "heapless",
  "log",
  "num_enum",
@@ -3720,7 +3730,7 @@ dependencies = [
  "ticktimer-server",
  "tts-frontend",
  "usb-device-xous",
- "usbd-human-interface-device 0.1.1 (git+https://github.com/betrusted-io/usbd-human-interface-device.git?branch=main)",
+ "usbd-human-interface-device 0.2.1",
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",
