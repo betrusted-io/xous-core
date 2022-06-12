@@ -4023,27 +4023,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
-name = "wlanman"
-version = "0.1.0"
-dependencies = [
- "com",
- "gam",
- "graphics-server",
- "locales",
- "log",
- "log-server",
- "modals",
- "net",
- "num-derive",
- "num-traits",
- "pddb",
- "tts-frontend",
- "xous",
- "xous-ipc 0.9.7",
- "xous-names",
-]
-
-[[package]]
 name = "wycheproof-import"
 version = "0.1.0"
 dependencies = [
