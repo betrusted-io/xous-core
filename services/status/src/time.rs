@@ -36,6 +36,7 @@ use gam::modal::*;
 // ntp imports
 use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::num::ParseIntError;
 
 /// This is a "well known name" used by `libstd` to connect to the time server
 /// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
@@ -478,6 +479,36 @@ fn to_bcd(binary: u8) -> u8 {
     (msd << 4) | lsd
 }
 
+/// this will parse a simple decimal into an i32, multiplied by 1000
+/// we do this because the full f32 parsing stuff is pretty heavy, some
+/// 28kiB of code
+#[inline(never)]
+fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntError> {
+    if let Some((integer, fraction)) = input.split_once('.') {
+        let mut result = integer.parse::<i32>()? * 1000;
+        let mut significance = 100i32;
+        for (place, digit) in fraction.chars().enumerate() {
+            if place >= 3 {
+                break;
+            }
+            if let Some(d) = digit.to_digit(10) {
+                if result >= 0 {
+                    result += (d as i32) * significance;
+                } else {
+                    result -= (d as i32) * significance;
+                }
+                significance /= 10;
+            } else {
+                return "z".parse::<i32>() // you can't create a ParseIntError any other way
+            }
+        }
+        Ok(result)
+    } else {
+        let base = input.parse::<i32>()?;
+        Ok(base * 1000)
+    }
+}
+
 pub fn start_time_ux(sid: xous::SID) {
     thread::spawn({
         move || {
@@ -517,15 +548,14 @@ pub fn start_time_ux(sid: xous::SID) {
                         // a key exists, but nothing was written to it (length of key was 0 or inappropriate)
                         if !tz_set {
                             log::info!("{}RTC.TZ,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                            let tz = modals.alert_builder(t!("rtc.timezone", xous::LANG))
+                            let tz_str = modals.alert_builder(t!("rtc.timezone", xous::LANG))
                                 .field(None, Some(tz_ux_validator))
                                 .build()
                                 .expect("couldn't get timezone")
-                                .first()
-                                .as_str()
-                                .parse::<f32>().expect("pre-validated input failed to re-parse!");
+                                .first();
+                            let tz = simple_kilofloat_parse(tz_str.as_str()).expect("pre-validated input failed to re-parse!");
                             log::info!("got tz offset {}", tz);
-                            tz_offset_ms = (tz * 3600.0 * 1000.0) as i64;
+                            tz_offset_ms = (tz * 3600) as i64;
                             xous::send_message(timeserver_cid,
                                 Message::new_scalar(
                                     crate::time::TimeOp::SetTzOffsetMs.to_usize().unwrap(),
@@ -632,15 +662,15 @@ pub fn start_time_ux(sid: xous::SID) {
                             continue;
                         }
 
-                        let tz = modals.alert_builder(t!("rtc.timezone", xous::LANG))
+                        let tz_str = modals.alert_builder(t!("rtc.timezone", xous::LANG))
                             .field(None, Some(tz_ux_validator))
                             .build()
                             .expect("couldn't get timezone")
-                            .first()
-                            .as_str()
-                            .parse::<f32>().expect("pre-validated input failed to re-parse!");
+                            .first();
+                        let tz = simple_kilofloat_parse(tz_str.as_str())
+                            .expect("pre-validated input failed to re-parse!");
                         log::info!("got tz offset {}", tz);
-                        let tzoff_ms = (tz * 3600.0 * 1000.0) as i64;
+                        let tzoff_ms = (tz * 3600) as i64;
                         xous::send_message(timeserver_cid,
                             Message::new_scalar(
                                 crate::time::TimeOp::SetTzOffsetMs.to_usize().unwrap(),
@@ -678,8 +708,8 @@ pub(crate) enum ValidatorOp {
 fn tz_ux_validator(input: TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
-    match text_str.parse::<f32>() {
-        Ok(input) => if input < -12.0 || input > 14.0 {
+    match simple_kilofloat_parse(text_str) {
+        Ok(input) => if input < -12_000 || input > 14_000 {
             return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)));
         },
         _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),

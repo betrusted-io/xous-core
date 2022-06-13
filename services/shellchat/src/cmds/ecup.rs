@@ -127,7 +127,7 @@ fn do_update(com: &mut com::Com, callback_conn: xous::CID, package: &[u8], pkg_o
         prog_addr += 1024;
         progress_ctr += 1;
         if (progress_ctr % 12) == 0 {
-            write!(update_str, "{:.0}% complete", ((prog_addr - flash_start) as f64 / image_len as f64) * 100.0).unwrap();
+            write!(update_str, "{}% complete", ((prog_addr - flash_start) * 100) / image_len).unwrap();
             Buffer::into_buf(update_str).unwrap().lend(callback_conn, CB_ID.load(Ordering::Relaxed)).unwrap();
             update_str.clear();
         }
@@ -480,7 +480,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         write!(ret, "Starting EC wf200 update").unwrap();
                     }
                     "auto" => {
-                        if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                        if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 1.5V
                             // if power is plugged in, deny powerdown request
                             write!(ret, "Can't EC auto update while charging. Unplug charging cable and try again.").unwrap();
                             return Ok(Some(ret));
@@ -523,13 +523,13 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
         } else { // otherwise, unpack it and use the first argument as a sub-opcode type
             xous::msg_scalar_unpack!(msg, result_code, progress, _, _, {
                 let end = env.ticktimer.elapsed_ms();
-                let elapsed: f64 = (end - self.start_time.unwrap()) as f64;
+                let elapsed = end - self.start_time.unwrap();
                 match FromPrimitive::from_usize(result_code) {
                     Some(UpdateResult::PackageValid) => {
                         write!(ret, "Firmware package validated in {}ms", elapsed).unwrap();
                     },
                     Some(UpdateResult::ProgramDone) => {
-                        write!(ret, "Programming of {} bytes done in {:.1}s. Please restart EC with `ecup reset`.", progress, elapsed / 1000.0).unwrap();
+                        write!(ret, "Programming of {} bytes done in {}s. Please restart EC with `ecup reset`.", progress, elapsed / 1000).unwrap();
                         env.netmgr.connection_manager_run().unwrap();
                         self.in_progress = false;
                     },
@@ -539,7 +539,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         self.in_progress = false;
                     },
                     Some(UpdateResult::Abort) => {
-                        write!(ret, "Programming aborted in {:.1}s. Did you stage all the firmware objects?", elapsed / 1000.0).unwrap();
+                        write!(ret, "Programming aborted in {}s. Did you stage all the firmware objects?", elapsed / 1000).unwrap();
                         env.netmgr.connection_manager_run().unwrap();
                         self.in_progress = false;
                     }

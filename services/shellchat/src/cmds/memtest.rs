@@ -191,7 +191,7 @@ impl<'a> ShellCmdApi<'a> for Memtest {
 
         xous::msg_scalar_unpack!(msg, errs, iters, dummy, _, {
             let end = env.ticktimer.elapsed_ms();
-            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / iters as f64;
+            let elapsed: f32 = ((end - self.start_time.unwrap()) as f32) / iters as f32;
             write!(ret, "memtest finished: {} errs, {}ms/iter", errs, elapsed).unwrap();
             log::info!("dummy var: {}", dummy); // just make sure it's not optimized out for any reason!
         });

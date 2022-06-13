@@ -91,7 +91,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     write!(ret, "Starting suspend/resume stress test. Hard reboot required to exit.").unwrap();
                 }
                 "now" => {
-                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 1.5V
                         // if power is plugged in, deny powerdown request
                         write!(ret, "System can't sleep while charging. Unplug charging cable and try again.").unwrap();
                     } else {
@@ -121,7 +121,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     }
                 }
                 "ship" => {
-                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 1.5V
                         // if power is plugged in, deny powerdown request
                         write!(ret, "System can't go into ship mode while charging. Unplug charging cable and try again.").unwrap();
                     } else {
@@ -147,7 +147,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     }
                 }
                 "coldboot" => {
-                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                         // if power is plugged in, deny powerdown request
                         write!(ret, "System can't cold boot while charging. Unplug charging cable and try again.").unwrap();
                     } else {
@@ -177,7 +177,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     xous::create_thread_1(kill_thread, 0).unwrap();
                 }
                 "killbounce" => {
-                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                         // if power is plugged in, deny powerdown request
                         write!(ret, "Unplug charging cable and try again.").unwrap();
                     } else {

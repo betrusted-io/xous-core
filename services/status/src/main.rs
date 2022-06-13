@@ -377,17 +377,21 @@ fn main() -> ! {
                     write!(&mut battstats_tv, "{}", t!("stats.measuring", xous::LANG)).unwrap();
                 } else {
                     // toggle between two views of the data every time we have a status update
-                    let mut wattage = stats.current as f32 / 1000.0 * stats.voltage as f32 / 1000.0;
-                    let sign = if wattage > 0.005 {
+                    let mut wattage_mw = (stats.current as i32 * stats.voltage as i32) / 1000i32;
+                    let sign = if wattage_mw > 5 {
                         '\u{2b06}' // up arrow
-                    } else if wattage < -0.005 {
+                    } else if wattage_mw < -5 {
                         '\u{2b07}' // down arrow
                     } else {
                         '\u{1f50c}' // plugged in icon (e.g., fully charged, running on wall power now)
                     };
-                    wattage = wattage.abs();
+                    wattage_mw = wattage_mw.abs();
                     if battstats_phase {
-                        write!(&mut battstats_tv, "{:.3}W{}{:.2}V {}%", wattage, sign, stats.voltage as f32 / 1000.0, stats.soc).unwrap();
+                        write!(&mut battstats_tv, "{}.{}W{}{}.{}V {}%",
+                        wattage_mw / 1000, wattage_mw % 1000,
+                        sign,
+                        stats.voltage as u32 / 1000, (stats.voltage as u32 % 1000) / 10, // 2 decimal places
+                        stats.soc).unwrap();
                     } else {
                         if let Some(ssid) = wifi_status.ssid {
                             write!(
@@ -431,7 +435,7 @@ fn main() -> ! {
                     let (latest_activity, period) = llio
                         .activity_instantaneous()
                         .expect("couldn't get CPU activity");
-                    let activity_to_width = ((latest_activity as f32) / (period as f32)) * (cpuload_rect.width() - 4) as f32;
+                    let activity_to_width = (((latest_activity * 1000) / (period)) * (cpuload_rect.width() - 4) as u32) / 1000;
                     draw_list.push(GamObjectType::Rect(
                         Rectangle::new_coords_with_style(
                             cpuload_rect.tl().x + 2,
@@ -503,7 +507,7 @@ fn main() -> ! {
                     // confirm that the charger is in the right state.
                     if stats.soc < 95 || stats.remaining_capacity < 1000 {
                         // only request if we aren't fully charged, either by SOC or capacity metrics
-                        if (llio.adc_vbus().unwrap() as f64) * 0.005033 > 4.45 {
+                        if (llio.adc_vbus().unwrap() as u32) * 503 > 445_000 { // 0.005033 * 100_000 against 4.45V * 100_000
                             // 4.45V is our threshold for deciding if a cable is present
                             // charging cable is present
                             if !com.is_charging().expect("couldn't check charging state") {
@@ -575,7 +579,7 @@ fn main() -> ! {
                 stats_phase = stats_phase.wrapping_add(1);
             }
             Some(StatusOpcode::Reboot) => {
-                if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 0.005033 * 100_000 against 1.5V * 100_000
                     // power plugged in, do a reboot using a warm boot method
                     susres.reboot(true).expect("couldn't issue reboot command");
                 } else {
@@ -638,14 +642,14 @@ fn main() -> ! {
                 ).expect("couldn't trigger status update");
             }),
             Some(StatusOpcode::TrySuspend) => {
-                if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
                     susres.initiate_suspend().expect("couldn't initiate suspend op");
                 }
             },
             Some(StatusOpcode::BatteryDisconnect) => {
-                if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
                     gam.shipmode_blank_request().ok();

@@ -343,7 +343,7 @@ impl<'a> ShellCmdApi<'a> for Aes {
 
         xous::msg_scalar_unpack!(msg, pass, hw_mode, keybits, _, {
             let end = env.ticktimer.elapsed_ms();
-            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / (TEST_ITERS as f64 * (TEST_MAX_LEN / aes::BLOCK_SIZE) as f64);
+            let elapsed: f32= ((end - self.start_time.unwrap()) as f32) / (TEST_ITERS as f32 * (TEST_MAX_LEN / aes::BLOCK_SIZE) as f32);
             let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
             if pass != 0 {
                 write!(ret, "[{}] passed: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();

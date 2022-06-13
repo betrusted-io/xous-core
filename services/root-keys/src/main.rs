@@ -578,9 +578,9 @@ fn main() -> ! {
                 llio.boost_on(false).unwrap();
                 ticktimer.sleep_ms(50).unwrap(); // give some time for the voltage to move
 
-                let vbus = (llio.adc_vbus().unwrap() as f64) * 0.005033;
-                log::info!("Vbus is: {:.3}V", vbus);
-                if vbus > 1.5 {
+                let vbus = (llio.adc_vbus().unwrap() as u32) * 503;
+                log::info!("Vbus is: {}mV", vbus / 100);
+                if vbus > 150_000 { // 1.5V
                     // if power is plugged in, request that it be removed
                     modals.show_notification(t!("rootkeys.init.unplug_power", xous::LANG), None).expect("modals error");
                     log::info!("vbus is high, holding off on reboot");
