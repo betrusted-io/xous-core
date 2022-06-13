@@ -1,12 +1,6 @@
 #![allow(dead_code)]
 use super::*;
-#[cfg(feature = "ditherpunk")]
-use dither::prelude::{Img, RGB};
 use gam::*;
-#[cfg(feature = "ditherpunk")]
-use jpeg_decoder as jpeg;
-#[cfg(feature = "ditherpunk")]
-use std::fs::File;
 use std::thread;
 use xous_names::XousNames;
 
@@ -149,7 +143,10 @@ pub fn spawn_test() {
             {
                 log::info!("testing image");
                 match get_test_png("../services/modals/src/tests/bunny.png") {
-                    Some(img) => modals.show_image(&img).expect("show image modal failed"),
+                    Some((pixels, width)) => {
+                        let img = Img::new(pixels, width);
+                        modals.show_image(&img).expect("show image modal failed");
+                    }
                     None => log::warn!("failed to load test image"),
                 }
                 log::info!("image modal test done");
@@ -162,8 +159,8 @@ pub fn spawn_test() {
     feature = "ditherpunk",
     not(any(target_os = "none", target_os = "xous"))
 ))]
-fn get_test_png(path: &str) -> Option<Img<RGB<u8>>> {
-    let file = match File::open(path) {
+fn get_test_png(path: &str) -> Option<(Vec<u8>, usize)> {
+    let file = match std::fs::File::open(path) {
         Err(err) => {
             log::error!("cannot load png image, {}", err);
             return None;
@@ -174,48 +171,32 @@ fn get_test_png(path: &str) -> Option<Img<RGB<u8>>> {
     let mut reader = decoder.read_info().expect("failed to read png info");
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).expect("failed to decode png");
-
-    let (width, height) = (info.width, info.height);
-    Some(vec_u8_to_img_rgb(buf, width, height))
+    log::info!("png width {:?}", info.width);
+    let width: usize = info.width.try_into().unwrap();
+    Some((buf, width))
 }
 
 #[cfg(all(
     feature = "ditherpunk",
     not(any(target_os = "none", target_os = "xous"))
 ))]
-fn get_test_jpeg(path: &str) -> Option<Img<RGB<u8>>> {
-    let file = match File::open(path) {
+fn get_test_jpeg(path: &str) -> Option<(Vec<u8>, usize)> {
+    let file = match std::fs::File::open(path) {
         Err(err) => {
             log::error!("cannot load jpeg image, {}", err);
             return None;
         }
         Ok(r) => r,
     };
-    let mut decoder = jpeg::Decoder::new(file);
+    let mut decoder = jpeg_decoder::Decoder::new(file);
     decoder
         .scale(Modals::MODAL_WIDTH as u16, Modals::MODAL_HEIGHT as u16)
         .expect("failed to scale jpeg");
     let _reader = decoder.read_info().expect("failed to read png info");
     let pixels = decoder.decode().expect("failed to decode jpeg image");
     let info = decoder.info().unwrap();
-
-    let (width, height) = (info.width, info.height);
-    Some(vec_u8_to_img_rgb(pixels, width.into(), height.into()))
-}
-
-#[cfg(all(
-    feature = "ditherpunk",
-    not(any(target_os = "none", target_os = "xous"))
-))]
-fn vec_u8_to_img_rgb(buf: Vec<u8>, width: u32, height: u32) -> Img<RGB<u8>> {
-    let px = width * height;
-    let mut pixels: Vec<RGB<u8>> = Vec::with_capacity(px.try_into().unwrap());
-    let mut i = 0;
-    while i < buf.len() {
-        pixels.push(RGB::from([buf[i], buf[i + 1], buf[i + 2]]));
-        i += 3;
-    }
-    Img::new(pixels, width).expect("failed to create Image")
+    let width: usize = info.width.try_into().unwrap();
+    Some((pixels, width))
 }
 
 fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
