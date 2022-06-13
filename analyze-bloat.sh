@@ -45,7 +45,7 @@ env | sort > env.txt
 mkdir -p reports
 mkdir -p reports/old
 # move just the files, not the directory
-find reports/ -maxdepth 1 -type f -name '[!.]*' -exec mv -n {} reports/old/ \;
+find reports/ -maxdepth 1 -type f -name '[!.]*' -exec mv {} reports/old/ \;
 
 echo "===== TURNING OFF STRIP ====="
 sed -i 's/strip = true/strip = false/g' Cargo.toml
