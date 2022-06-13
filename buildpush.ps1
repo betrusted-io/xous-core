@@ -3,7 +3,7 @@
 # set RUSTFLAGS=--remap-path-prefix=F:\largework\rust-win\code\xous-core\=build
 # $env:RUSTFLAGS="--remap-path-prefix=$(Get-Location)=build"
 
-cargo xtask app-image vault ball
+cargo xtask app-image vault
 # cargo xtask ffi-test
 # cargo xtask minimal precursors/soc.svd
 
@@ -23,3 +23,9 @@ scp -i c:/users/bunnie/.ssh/id_pi target/riscv32imac-unknown-xous-elf/release/xo
 # scp -i c:/users/bunnie/.ssh/id_pi target/riscv32imac-unknown-none-elf/release/xous.img target/riscv32imac-unknown-none-elf/release/loader.bin precursors/soc_csr.bin precursors/bbram-test1.nky pi@10.0.245.90:code/precursors/
 
 # wishbone-tool --load-name target/riscv32imac-unknown-none-elf/release/xous.img  --load-address 0x980000 --load-flash
+
+$file = Get-Item target/riscv32imac-unknown-xous-elf/release/xous.img
+$SizeinBytes = $file.Length
+if($SizeinBytes -gt 6815743) {
+    "Warning: xous.img exceeds the 24-bit limit of JTAG. Upload using USB instead!"
+}
