@@ -27,6 +27,7 @@ pub struct SpinalUsbMgmt {
     eps: AtomicPtr<UdcEpStatus>,
     srmem: ManagedMem<{ utralib::generated::HW_USBDEV_MEM_LEN / core::mem::size_of::<u32>() }>,
     regs: SpinalUdcRegs,
+    tt: ticktimer_server::Ticktimer,
 }
 impl SpinalUsbMgmt {
     #[allow(dead_code)]
@@ -57,17 +58,22 @@ impl SpinalUsbMgmt {
         assert!(4096 == self.regs.ramsize(), "hardware ramsize parameter does not match our expectations");
     }
     pub fn connect_device_core(&mut self, state: bool) {
-        log::trace!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_USBSELECT));
+        log::trace!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_SELECT_DEVICE));
+        self.csr.rmwf(utra::usbdev::USBSELECT_FORCE_RESET, 1);
+        // give some time for the host to recognize that we've unplugged before swapping our behavior out
+        self.tt.sleep_ms(1000).unwrap();
         if state {
             log::trace!("connecting USB device core");
-            self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 1);
+            self.csr.rmwf(utra::usbdev::USBSELECT_SELECT_DEVICE, 1);
         } else {
             log::trace!("connecting USB debug core");
-            self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 0);
+            self.csr.rmwf(utra::usbdev::USBSELECT_SELECT_DEVICE, 0);
         }
+        self.tt.sleep_ms(1000).unwrap();
+        self.csr.rmwf(utra::usbdev::USBSELECT_FORCE_RESET, 0);
     }
     pub fn is_device_connected(&self) -> bool {
-        if self.csr.rf(utra::usbdev::USBSELECT_USBSELECT) == 1 {
+        if self.csr.rf(utra::usbdev::USBSELECT_SELECT_DEVICE) == 1 {
             true
         } else {
             false
@@ -197,6 +203,7 @@ impl SpinalUsbDevice {
             }),
             srmem: ManagedMem::new(self.usb),
             regs: self.regs.clone(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
     fn print_poll_result(&self, poll_result: &PollResult) {

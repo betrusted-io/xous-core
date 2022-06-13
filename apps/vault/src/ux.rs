@@ -5,7 +5,7 @@ use xous::{msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
 use locales::t;
 use crate::ctap::hid::{CtapHid, KeepaliveStatus};
-use usbd_human_interface_device::device::fido::FidoMsg;
+use usbd_human_interface_device::device::fido::RawFidoMsg;
 use std::io::{Write, Read};
 use chrono::{Utc, DateTime, NaiveDateTime};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -390,7 +390,7 @@ pub(crate) fn start_ux_thread() {
                                 if deferred_req.is_some() { // keepalives are only needed for deferred requests
                                     let keepalive_msg = CtapHid::keepalive(channel_id, KeepaliveStatus::UpNeeded);
                                     for pkt in keepalive_msg {
-                                        let mut ka = FidoMsg::default();
+                                        let mut ka = RawFidoMsg::default();
                                         ka.packet.copy_from_slice(&pkt);
                                         let status = usb.u2f_send(ka);
                                         match status {

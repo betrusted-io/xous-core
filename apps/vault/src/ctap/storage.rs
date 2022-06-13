@@ -273,6 +273,8 @@ impl PersistentStore {
             }
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
+        self.pddb.borrow().sync()
+        .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
 
         Ok(())
     }
@@ -436,6 +438,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 let value = serialize_credential(new_credential)?;
                 cred.write(&value)
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 Ok(())
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -525,6 +529,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                         gsc.seek(SeekFrom::Start(0)).ok(); // make sure we're writing to the beginning position
                         gsc.write(&INITIAL_SIGNATURE_COUNTER.to_ne_bytes())
                         .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                        self.pddb.borrow().sync()
+                        .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                         Ok(INITIAL_SIGNATURE_COUNTER)
                     },
                     _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
@@ -548,6 +554,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Ok(mut gsc) => {
                 gsc.write(&new_value.to_ne_bytes())
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
@@ -647,7 +655,11 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         ) {
             Ok(mut ph) => {
                 match ph.write(pin_hash) {
-                    Ok(PIN_AUTH_LENGTH) => Ok(()),
+                    Ok(PIN_AUTH_LENGTH) => {
+                        self.pddb.borrow().sync()
+                        .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                        Ok(())
+                    },
                     Ok(l) => {
                         log::error!("set_pin_hash incorrect length: {}", l);
                         Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -696,6 +708,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             ) {
                 Ok(mut pr) => {
                     pr.write(&[new_value])
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                    self.pddb.borrow().sync()
                     .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 }
                 _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
@@ -857,6 +871,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Ok(mut apk) => {
                 apk.write(attestation_private_key)
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -899,6 +915,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Ok(mut acert) => {
                 acert.write(attestation_certificate)
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -942,6 +960,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Ok(mut guid) => {
                 guid.write(aaguid)
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
