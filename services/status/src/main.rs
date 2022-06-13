@@ -387,7 +387,7 @@ fn main() -> ! {
                     };
                     wattage_mw = wattage_mw.abs();
                     if battstats_phase {
-                        write!(&mut battstats_tv, "{}.{}W{}{}.{}V {}%",
+                        write!(&mut battstats_tv, "{}.{:02}W{}{}.{:02}V {}%",
                         wattage_mw / 1000, wattage_mw % 1000,
                         sign,
                         stats.voltage as u32 / 1000, (stats.voltage as u32 % 1000) / 10, // 2 decimal places

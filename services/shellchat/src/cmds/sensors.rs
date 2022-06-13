@@ -26,7 +26,7 @@ impl<'a> ShellCmdApi<'a> for Sensors {
            ((env.llio.adc_vccbram().unwrap() as u32) * 1000) / 1365,
            ((env.llio.adc_usb_p().unwrap() as u32) * 1000) / 1365,
            ((env.llio.adc_usb_n().unwrap() as u32) * 1000) / 1365,
-           milli_celcius / 1000, (milli_celcius % 1000) / 10
+           milli_celcius / 1000, (milli_celcius % 1000) / 100 // 1 decimal extra
         ).unwrap();
 
         Ok(Some(ret))
