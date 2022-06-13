@@ -47,7 +47,7 @@ mkdir -p reports/old
 # move just the files, not the directory
 find reports/ -maxdepth 1 -type f -name '[!.]*' -exec mv -n {} reports/old/ \;
 
-echo "===== TURNING OF STRIP ====="
+echo "===== TURNING OFF STRIP ====="
 sed -i 's/strip = true/strip = false/g' Cargo.toml
 
 echo "===== STARTING BUILD at $(date) ====="
