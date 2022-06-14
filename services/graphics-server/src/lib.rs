@@ -220,6 +220,7 @@ impl Gfx {
             clip,
             obj: ClipObjectType::Tile(tile),
         };
+        log::info!("ClipObject size: {}", core::mem::size_of::<ClipObject>());
         let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap())
             .map(|_| ())

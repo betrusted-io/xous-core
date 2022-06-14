@@ -598,6 +598,7 @@ pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
     let bound = tile.bound();
     let tl_x = bound.tl.x as usize;
     let tl_y = bound.tl.y as usize;
+    log::info!("bound: {:?}, clip: {:?}", bound, clip);
     let (mut br_x, mut br_y) = match clip {
         Some(clip) => {
             let x = min(bound.br.x, clip.br.x) as usize;
@@ -620,10 +621,11 @@ pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
 
     let first_word = tl_x / 32;
     let last_word = LCD_WORDS_PER_LINE - 1;
-
+    log::info!("tl_y {}, br_y {}, clip: {:?}", tl_y, br_y, clip);
     for tile_ln in tl_y..=br_y {
         let fb_ln = tile_ln * LCD_WORDS_PER_LINE;
         let tile_line = tile.get_line(Point::new(tl_x as i16, tile_ln as i16));
+        // log::info!("tile_line: {:x?}", tile_line);
         let mut fb_wd = first_word;
         let mut tile_wd = 0;
         let mut fb_word = fb[fb_ln + fb_wd];
@@ -652,6 +654,8 @@ pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
         fb[fb_ln + last_word] = left_part | right_part;
 
         // set the dirty bit on the line
+        let old = fb[fb_ln + (LCD_WORDS_PER_LINE - 1)];
         fb[fb_ln + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+        // log::info!("dirty[{}] {:x}->{:x}", fb_ln, old, fb[fb_ln + (LCD_WORDS_PER_LINE - 1)]);
     }
 }
