@@ -168,7 +168,7 @@ fn main() -> ! {
         .build(&usb_alloc);
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x0001))
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("Kosagi")
         .product("Precursor")
         .serial_number(&serial_number)

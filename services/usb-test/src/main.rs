@@ -100,7 +100,7 @@ fn main() -> ! {
             NKROBootKeyboardInterface::default_config(&clock),
         )
         .build(&usb_alloc);
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x0001))
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
         .manufacturer("usbd-human-interface-device")
         .product("NKRO Keyboard")
         .serial_number("PRECURSOR")
