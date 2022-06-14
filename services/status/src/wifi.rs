@@ -11,7 +11,22 @@ enum WlanManOp {
     AddNetworkManually,
     ScanForNetworks,
     Status,
-    KnownNetworks = 8,
+    DeleteNetwork,
+    KnownNetworks = 9,
+}
+
+impl Display for WlanManOp {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::TurnWlanOn => write!(f, "Turn WLAN on"),
+            Self::TurnWlanOff => write!(f, "Turn WLAN off"),
+            Self::AddNetworkManually => write!(f, "Manually add a network"),
+            Self::ScanForNetworks => write!(f, "Scan for networks"),
+            Self::Status => write!(f, "Network status"),
+            Self::DeleteNetwork => write!(f, "Delete network"),
+            Self::KnownNetworks => write!(f, "List known networks"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -70,16 +85,17 @@ impl WLANMan {
         }
     }
 
-    fn actions(&self) -> Vec<(&str, WlanManOp)> {
+    fn actions(&self) -> Vec<WlanManOp> {
         use WlanManOp::*;
 
         vec![
-            ("Turn WLAN on", TurnWlanOn),
-            ("Turn WLAN off", TurnWlanOff),
-            ("Manually add a network", AddNetworkManually),
-            ("Scan for networks", ScanForNetworks),
-            ("Network status", Status),
-            ("List known networks", KnownNetworks),
+            TurnWlanOn,
+            TurnWlanOff,
+            AddNetworkManually,
+            ScanForNetworks,
+            Status,
+            KnownNetworks,
+            DeleteNetwork,
         ]
     }
 
@@ -266,14 +282,46 @@ impl WLANMan {
         Ok(())
     }
 
+    fn delete_network(&mut self) -> Result<(), WLANError> {
+        let networks = self.pddb.list_keys(net::AP_DICT_NAME, None)?;
+
+        if networks.is_empty() {
+            self.modals
+                .show_notification("No known networks.", None)
+                .unwrap();
+            return Ok(());
+        }
+
+        let cancel_item = "Cancel";
+        self.modals
+            .add_list(networks.iter().map(|s| s.as_str()).collect())
+            .unwrap();
+        self.modals.add_list_item(cancel_item).unwrap();
+
+        let ssid_to_be_deleted = self
+            .modals
+            .get_radiobutton("Choose network to delete:")
+            .unwrap();
+
+        if ssid_to_be_deleted.eq(cancel_item) {
+            return Ok(());
+        }
+        
+        self
+                .pddb
+                .delete_key(net::AP_DICT_NAME, &ssid_to_be_deleted, None).map_err(|e| WLANError::PDDBIoError(e))?;
+
+        self.pddb.sync().map_err(|e| WLANError::PDDBIoError(e))
+    }
+
     fn claim_menumatic_menu(&self, cid: xous::CID) {
         let mut menus = self
             .actions()
             .iter()
             .map(|action| gam::MenuItem {
-                name: xous_ipc::String::from_str(action.0),
+                name: xous_ipc::String::from_str(&action.to_string()),
                 action_conn: Some(cid),
-                action_opcode: action.1.to_u32().unwrap(),
+                action_opcode: action.to_u32().unwrap(),
                 action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
                 close_on_select: true,
             })
@@ -297,6 +345,7 @@ impl WLANMan {
             WlanManOp::AddNetworkManually => self.add_new_ssid(),
             WlanManOp::ScanForNetworks => self.show_available_networks(),
             WlanManOp::Status => self.network_status(),
+            WlanManOp::DeleteNetwork => self.delete_network(),
             WlanManOp::KnownNetworks => self.known_networks(),
         };
 
