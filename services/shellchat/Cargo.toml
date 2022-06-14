@@ -62,6 +62,9 @@ threadpool = "1.8.1"
 # a *lot* of useful packages are chasing this devil.
 rand = {version = "0.8.5", features = ["getrandom"]}
 
+# for ditherpunk testing
+png = {version = "0.17.5", optional = true}
+
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 hex = {version = "0.4.3", default-features = false, features = []}
@@ -92,5 +95,5 @@ benchmarks = [] # adds the benchmark routines. Left off normally to free up code
 aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = []
-ditherpunk = []
+ditherpunk = ["png"]
 default = [] # "debugprint"

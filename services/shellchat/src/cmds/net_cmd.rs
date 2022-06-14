@@ -17,9 +17,7 @@ use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issu
 #[cfg(feature="ditherpunk")]
 use std::str::FromStr;
 #[cfg(feature="ditherpunk")]
-use std::convert::TryInto;
-
-use gam::{Img, RGB};
+use gam::Img;
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -368,7 +366,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                         let mut buf = vec![0; reader.output_buffer_size()];
                                                         let info = reader.next_frame(&mut buf).expect("failed to decode png");
 
-                                                        let (width, height) = (info.width, info.height);
+                                                        let (width, _height) = (info.width, info.height);
                                                         let img = Img::new(buf, width as usize);
 
                                                         modals.show_image(&img).expect("show image modal failed");
