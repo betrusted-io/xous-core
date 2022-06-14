@@ -283,8 +283,65 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
+                #[cfg(feature="ditherpunk")]
+                "image" => {
+                    const MAX_IMAGE_LEN: usize = 256 * 1024; // includes HTTP headers
+                    if let Some(url) = tokens.next() {
+                        match url.split_once('/') {
+                            Some((host, path)) => {
+                                match TcpStream::connect((host, 80)) {
+                                    Ok(mut stream) => {
+                                        let mut heap_image = match xous::syscall::map_memory(
+                                            None,
+                                            None,
+                                            MAX_IMAGE_LEN,
+                                            xous::MemoryFlags::R | xous::MemoryFlags::W,
+                                        ) {
+                                            Ok(d) => d,
+                                            Err(e) => {
+                                                log::error!("couldn't allocate data for image, aborting");
+                                                write!(ret, "Couldn't allocate memory for image, aborting: {:?}", e).unwrap();
+                                                return Ok(Some(ret));
+                                            }
+                                        };
+                                        stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                        stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                        match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
+                                            Ok(_) => log::trace!("sent GET"),
+                                            Err(e) => {
+                                                log::error!("GET err {:?}", e);
+                                                write!(ret, "Error sending GET: {:?}", e).unwrap();
+                                            }
+                                        }
+                                        write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
+                                        write!(stream, "Connection: close\r\n").expect("stream error");
+                                        write!(stream, "\r\n").expect("stream error");
+                                        log::info!("fetching response....");
+                                        match stream.read(heap_image.as_slice_mut()) {
+                                            Ok(len) => {
+                                                log::info!("fetched {} bytes of http data", len);
+                                            }
+                                            Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
+                                        }
+                                        if let Some(start) = find_subsequence(
+                                            heap_image.as_slice::<u8>(),
+                                            &[0x0d, 0x0a, 0x0d, 0x0a], // this is \r\n\r\n, which indicates end of header.
+                                        ) {
+                                            log::info!("image data is {} bytes long", heap_image.len() - start);
+                                        }
+                                        xous::syscall::unmap_memory(heap_image).expect("couldn't de-allocate image memory");
+                                    }
+                                    Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
+                                }
+                            }
+                            _ => write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap(),
+                        }
+                    } else {
+                        write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap();
+                    }
+                }
                 "tls" => {
-
+                    write!(ret, "Work in progress. Please check back later!").unwrap();
                 }
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {
@@ -415,6 +472,12 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         }
         Ok(Some(ret))
     }
+}
+
+// yep. this is from stackoverflow copypasta
+#[cfg(feature="ditherpunk")]
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|window| window == needle)
 }
 
 enum Responses {

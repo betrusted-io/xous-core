@@ -92,4 +92,5 @@ benchmarks = [] # adds the benchmark routines. Left off normally to free up code
 aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = []
+ditherpunk = []
 default = [] # "debugprint"

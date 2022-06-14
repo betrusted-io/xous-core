@@ -346,6 +346,15 @@ fn main() -> ! {
                                     canvas.clip_rect(),
                                 ).expect("couldn't draw rounded rectangle");
                             }
+                            #[cfg(feature="ditherpunk")]
+                            GamObjectType::Tile(mut tile) => {
+                                tile.translate(canvas.clip_rect().tl);
+                                tile.translate(canvas.pan_offset());
+                                gfx.draw_tile_clipped(
+                                    tile,
+                                    canvas.clip_rect(),
+                                ).expect("couldn't draw bitmap");
+                            }
                         }
                         canvas.do_drawn().expect("couldn't set canvas to drawn");
                     } else {
@@ -385,6 +394,12 @@ fn main() -> ! {
                                         rr.translate(canvas.clip_rect().tl);
                                         rr.translate(canvas.pan_offset());
                                         obj_list.push(ClipObjectType::RoundRect(rr), canvas.clip_rect()).unwrap();
+                                    },
+                                    #[cfg(feature="ditherpunk")]
+                                    GamObjectType::Tile(mut tile) => {
+                                        tile.translate(canvas.clip_rect().tl);
+                                        tile.translate(canvas.pan_offset());
+                                        obj_list.push(ClipObjectType::Tile(tile), canvas.clip_rect()).unwrap();
                                     }
                                 }
                             } else {

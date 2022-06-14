@@ -27,7 +27,8 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
-mod tests;
+#[cfg(feature="ditherpunk")]
+use gam::Bitmap;
 
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
@@ -55,6 +56,8 @@ enum RendererState {
     RunProgress(ManagedProgress),
     RunNotification(ManagedNotification),
     RunDynamicNotification(DynamicNotification),
+    #[cfg(feature="ditherpunk")]
+    RunImage(ManagedImage),
 }
 
 fn main() -> ! {
@@ -68,6 +71,7 @@ fn main() -> ! {
         .expect("can't register server");
     log::trace!("registered with NS -- {:?}", modals_sid);
 
+    #[cfg(feature = "tts")]
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     // we are our own renderer now that we implement deferred responses
@@ -122,11 +126,6 @@ fn main() -> ! {
 
     let mut list_hash = HashMap::<String, usize>::new();
     let mut list_selected = 0u32;
-
-    if cfg!(feature = "ux_tests") {
-        tt.sleep_ms(1000).unwrap();
-        tests::spawn_test();
-    }
 
     let mut token_lock: Option<[u32; 4]> = None;
     let trng = trng::Trng::new(&xns).unwrap();
@@ -235,6 +234,25 @@ fn main() -> ! {
                     continue;
                 }
                 op = RendererState::RunNotification(spec);
+                dr = Some(msg);
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't initiate UX op");
+            }
+            #[cfg(feature="ditherpunk")]
+            Some(Opcode::Image) => {
+                let spec = {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    buffer.to_original::<ManagedImage, _>().unwrap()
+                };
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                op = RendererState::RunImage(spec);
                 dr = Some(msg);
                 send_message(
                     renderer_cid,
@@ -432,6 +450,23 @@ fn main() -> ! {
                         renderer_modal.modify(
                             Some(ActionType::Notification(notification)),
                             Some(text),
+                            false,
+                            None,
+                            true,
+                            None,
+                        );
+                        renderer_modal.activate();
+                    }
+                    #[cfg(feature="ditherpunk")]
+                    RendererState::RunImage(config) => {
+                        let mut image = gam::modal::Image::new(
+                            renderer_cid,
+                            Opcode::ImageReturn.to_u32().unwrap(),
+                        );
+                        image.set_bitmap(Some(Bitmap::from(config.tiles)));
+                        renderer_modal.modify(
+                            Some(ActionType::Image(image)),
+                            None,
                             false,
                             None,
                             true,
@@ -652,6 +687,26 @@ fn main() -> ! {
             Some(Opcode::NotificationReturn) => {
                 match op {
                     RendererState::RunNotification(_) => {
+                        op = RendererState::None;
+                        dr.take(); // unblocks the caller, but without any response data
+                        token_lock = next_lock(&mut work_queue);
+                    }
+                    RendererState::None => {
+                        log::warn!("Notification detected a fat finger event, ignoring.")
+                    }
+                    _ => {
+                        log::error!(
+                            "UX return opcode does not match our current operation in flight: {:?}",
+                            op
+                        );
+                        panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    }
+                }
+            },
+            #[cfg(feature="ditherpunk")]
+            Some(Opcode::ImageReturn) => {
+                match op {
+                    RendererState::RunImage(_) => {
                         op = RendererState::None;
                         dr.take(); // unblocks the caller, but without any response data
                         token_lock = next_lock(&mut work_queue);

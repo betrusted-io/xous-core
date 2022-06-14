@@ -2,11 +2,16 @@
 
 pub mod api;
 use api::*;
+pub mod tests;
 
 use bit_field::BitField;
 use core::cell::Cell;
 use gam::*;
 use num_traits::*;
+#[cfg(feature = "ditherpunk")]
+use std::convert::TryInto;
+#[cfg(feature = "ditherpunk")]
+use std::num::NonZeroU32;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -187,6 +192,97 @@ impl Modals {
             .or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
+    }
+
+    #[cfg(feature = "ditherpunk")]
+    const MODAL_WIDTH: u32 = 300;
+    #[cfg(feature = "ditherpunk")]
+    const MODAL_HEIGHT: u32 = 370;
+    /// this blocks until the image has been dismissed.
+    #[cfg(feature = "ditherpunk")]
+    pub fn show_image(&self, img: &Img) -> Result<(), xous::Error> {
+        self.lock();
+        // resize and/or rotate
+        let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
+        let (w, h, _) = img.size();
+        let (img_width, img_height) = (w as f32, h as f32);
+        let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
+        let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
+        let mut rotate = false;
+        let modal_img;
+        if portrait_scale >= 1.0 {
+            modal_img = img.clone();
+        } else if landscape_scale >= 1.0 {
+            modal_img = img.clone();
+            rotate = true;
+        } else if portrait_scale >= landscape_scale {
+            modal_img = Modals::resize_image(img.clone(), portrait_scale)
+        } else {
+            rotate = true;
+            modal_img = Modals::resize_image(img.clone(), landscape_scale)
+        };
+
+        let mut bm = Bitmap::from(modal_img);
+        bm = if rotate { bm.rotate90() } else { bm };
+        let (bm_width, bm_height) = bm.size();
+        let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
+
+        // center image in modal
+        let center = Point::new(
+            ((Modals::MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
+            ((Modals::MODAL_HEIGHT - bm_height) / 2).try_into().unwrap(),
+        );
+
+        let mut tiles: [Option<Tile>; 6] = [None; 6];
+        for (t, tile) in bm.iter().enumerate() {
+            if t >= tiles.len() {
+                continue;
+            }
+            let mut copy = tile.clone();
+            copy.translate(center);
+            tiles[t] = Some(copy);
+        }
+
+        let spec = ManagedImage {
+            token: self.token,
+            tiles: tiles,
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Image.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        Ok(())
+    }
+
+    #[cfg(feature = "ditherpunk")]
+    fn resize_image(img: Img, scale: f32) -> Img {
+        let (w, h, _) = img.size();
+        let (img_width, img_height) = (w as f32, h as f32);
+        let height: u32 = (scale * img_height).floor() as u32;
+        let width: u32 = (scale * img_width).floor() as u32;
+
+        let fir_img = fast_image_resize::Image::from_vec_u8(
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+            img.into_raw(),
+            fast_image_resize::PixelType::U8x3,
+        )
+        .unwrap();
+
+        // Create container for data of destination image
+        let mut resized = fast_image_resize::Image::new(
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+            fir_img.pixel_type(),
+        );
+        let mut rsz_view = resized.view_mut();
+
+        // resize image with fastest available algorithm
+        let mut resizer = fast_image_resize::Resizer::new(fast_image_resize::ResizeAlg::Nearest);
+        resizer.resize(&fir_img.view(), &mut rsz_view).unwrap();
+
+        let width: usize = resized.width().get().try_into().unwrap();
+        Img::new(resized.into_vec(), width )
     }
 
     pub fn start_progress(

@@ -14,6 +14,10 @@ mod progressbar;
 pub use progressbar::*;
 mod consoleinput;
 pub use consoleinput::*;
+#[cfg(feature="ditherpunk")]
+mod image;
+#[cfg(feature="ditherpunk")]
+pub use self::image::*;
 
 use enum_dispatch::enum_dispatch;
 
@@ -37,6 +41,8 @@ pub enum ActionType {
     CheckBoxes,
     Slider,
     Notification,
+    #[cfg(feature="ditherpunk")]
+    Image,
     ConsoleInput
 }
 

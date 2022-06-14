@@ -1095,6 +1095,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fast_image_resize"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccf174e621dc44fc6118d0e3289a1286c166ac28599e15651a82da23a14a3425"
+dependencies = [
+ "num-traits",
+ "thiserror",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2012,6 +2022,7 @@ name = "modals"
 version = "0.1.0"
 dependencies = [
  "bit_field 0.9.0",
+ "fast_image_resize",
  "gam",
  "locales",
  "log",

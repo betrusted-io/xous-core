@@ -1,7 +1,6 @@
-#![allow(dead_code)]
+use super::*;
 use gam::*;
 use std::thread;
-
 use xous_names::XousNames;
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
@@ -15,12 +14,13 @@ const CHECKBOX_TEST: [&'static str; 5] = ["happy", "😃", "安", "peaceful", ".
 ///
 /// Each thread will create a series of Modal primitives, including progess bars, notifications,
 /// check boxes and radio boxes.
-pub(crate) fn spawn_test() {
+pub fn spawn_test() {
     // spawn two threads that compete for modal resources, to test the interlocking mechanisms
+
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
-            let modals = modals::Modals::new(&xns).unwrap();
+            let modals = Modals::new(&xns).unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
             // 0. multi-modal test
@@ -84,7 +84,7 @@ pub(crate) fn spawn_test() {
     thread::spawn({
         move || {
             let xns = XousNames::new().unwrap();
-            let modals = modals::Modals::new(&xns).unwrap();
+            let modals = Modals::new(&xns).unwrap();
 
             // 1. test radio box
             for item in RADIO_TEST {
@@ -133,8 +133,72 @@ pub(crate) fn spawn_test() {
                 )
                 .expect("qrcode failed");
             log::info!("qrcode test done");
+
+            // 5. test image - because it reads a local file, only makes sense on hosted mode
+            /*
+             Note there are stack allocation challenges with crates `png_encode` and `jpg`
+
+             png = {version = "0.17.5", optional = true}
+             -------------------------------------------
+             let decoder = png::Decoder::new(file);
+             let mut reader = decoder.read_info().expect("failed to read png info");
+             let mut buf = vec![0; reader.output_buffer_size()];
+             let info = reader.next_frame(&mut buf).expect("failed to decode png");
+             let width: usize = info.width.try_into().unwrap();
+             let img = Img::new(buf, width);
+
+             jpeg-decoder = {version = "0.2.6", optional = true}
+             ---------------------------------------------------
+             let mut decoder = jpeg_decoder::Decoder::new(file);
+             decoder
+                 .scale(Modals::MODAL_WIDTH as u16, Modals::MODAL_HEIGHT as u16)
+                 .expect("failed to scale jpeg");
+             let _reader = decoder.read_info().expect("failed to read png info");
+             let pixels = decoder.decode().expect("failed to decode jpeg image");
+             let info = decoder.info().unwrap();
+             let width: usize = info.width.try_into().unwrap();
+             let img = Img::new(pixels, width);
+            */
+            #[cfg(all(
+                feature = "ditherpunk",
+                not(any(target_os = "none", target_os = "xous"))
+            ))]
+            {
+                log::info!("testing image");
+                let img = clifford();
+                modals.show_image(&img).expect("show image modal failed");
+                log::info!("image modal test done");
+            }
         }
     });
+}
+
+// https://sequelaencollection.home.blog/2d-chaotic-attractors/
+fn clifford() -> Img {
+    const SIZE: u32 = Modals::MODAL_WIDTH;
+    const CENTER: f32 = (SIZE / 2) as f32;
+    const SCALE: f32 = 70.0;
+    let mut buf = vec![255u8; (SIZE * SIZE).try_into().unwrap()];
+    let (a, b, c, d) = (-2.0, -2.4, 1.1, -0.9);
+    let (mut x, mut y): (f32, f32) = (0.0, 0.0);
+    for _ in 0..=4000000 {
+        let x1 = f32::sin(a * y) + c * f32::cos(a * x);
+        let y1 = f32::sin(b * x) + d * f32::cos(b * y);
+        (x, y) = (x1, y1);
+        let (a, b): (u32, u32) = ((x * SCALE + CENTER) as u32, (y * SCALE + CENTER) as u32);
+        let i: usize = (a + SIZE * b).try_into().unwrap();
+        if buf[i] > 0 {
+            buf[i] -= 1;
+        }
+    }
+    let mut rgb = vec![0u8; 3 * buf.len()];
+    let mut i: usize = 0;
+    while i < buf.len() {
+        let j = 3 * i;
+        (rgb[j], rgb[j + 1], rgb[j + 2]) = (buf[i], buf[i], buf[i]);
+        i += 1;
+    }
+    Img::new(rgb, SIZE.try_into().unwrap())
 }
 
 fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {

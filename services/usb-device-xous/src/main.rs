@@ -25,9 +25,12 @@ use hosted::*;
 use num_traits::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usb_device_xous::KeyboardLedsReport;
+<<<<<<< HEAD
 use usbd_human_interface_device::device::fido::RawFidoMsg;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usbd_human_interface_device::device::fido::RawFidoInterface;
+=======
+>>>>>>> origin/dither2
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use core::num::NonZeroU8;
 use std::collections::BTreeMap;
@@ -44,6 +47,10 @@ use usbd_human_interface_device::device::keyboard::NKROBootKeyboardInterface;
 use usbd_human_interface_device::prelude::*;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use num_enum::FromPrimitive as EnumFromPrimitive;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use core::ops::{DerefMut, Deref};
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use usbd_human_interface_device::device::fido::{FidoInterface, FidoMsg};
 
 use embedded_time::Clock;
 use std::convert::TryInto;
@@ -101,7 +108,11 @@ fn main() -> ! {
                     None
                 ).unwrap();
             }
+<<<<<<< HEAD
             let mut fido_listener: Option<xous::MessageEnvelope> = None;
+=======
+            let mut fido_blocker: Option<xous::MessageEnvelope> = None;
+>>>>>>> origin/dither2
             loop {
                 let msg = xous::receive_message(usbdev_sid).unwrap();
                 match FromPrimitive::from_usize(msg.body.id()) {
@@ -109,8 +120,13 @@ fn main() -> ! {
                         xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
                     }),
                     Some(Opcode::U2fRxDeferred) => {
+<<<<<<< HEAD
                         // block any rx requests forever
                         fido_listener = Some(msg);
+=======
+                        // this will prevent the FIDO stack from ever moving forward
+                        fido_blocker = Some(msg);
+>>>>>>> origin/dither2
                     }
                     Some(Opcode::Quit) => {
                         break;
@@ -131,7 +147,11 @@ fn main() -> ! {
                     }
                 }
             }
+<<<<<<< HEAD
             log::info!("consuming listener: {:?}", fido_listener);
+=======
+            log::info!("Statement to consume the blocked message, preventing it from being dropped: {:?}", fido_blocker);
+>>>>>>> origin/dither2
         }
     }
 
@@ -173,11 +193,18 @@ fn main() -> ! {
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
+<<<<<<< HEAD
     #[cfg(all(any(target_os = "none", target_os = "xous"), feature="emukbd"))]
     {
         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
         keyboard.write_report(&Vec::<Keyboard>::new()).ok();
         keyboard.tick().unwrap();
+=======
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    {
+        keyboard.interface().write_report(&Vec::<Keyboard>::new()).ok();
+        keyboard.interface().tick().unwrap();
+>>>>>>> origin/dither2
     }
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -239,6 +266,7 @@ fn main() -> ! {
                 }
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 if fido_listener_pid == msg.sender.pid() {
                     let mut u2f_msg = RawFidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
@@ -252,6 +280,8 @@ fn main() -> ! {
                 } else {
                     u2f_ipc.code = U2fCode::Denied;
                 }
+                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                {u2f_ipc.code = U2fCode::Denied;}
                 buffer.replace(u2f_ipc).unwrap();
             }
             Some(Opcode::UsbIrqHandler) => {
