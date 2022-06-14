@@ -464,10 +464,11 @@ fn main() -> ! {
                             Opcode::ImageReturn.to_u32().unwrap(),
                         );
                         image.set_bitmap(Some(Bitmap::from(config.tiles)));
+                        log::debug!("image: {:x?}", image);
                         renderer_modal.modify(
                             Some(ActionType::Image(image)),
                             None,
-                            false,
+                            true,
                             None,
                             true,
                             None,
