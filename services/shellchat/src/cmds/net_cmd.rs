@@ -14,6 +14,12 @@ use std::time::{Duration, Instant};
 use std::thread;
 use std::sync::mpsc;
 use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
+#[cfg(feature="ditherpunk")]
+use std::str::FromStr;
+#[cfg(feature="ditherpunk")]
+use std::convert::TryInto;
+
+use gam::{Img, RGB};
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -317,17 +323,61 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         write!(stream, "Connection: close\r\n").expect("stream error");
                                         write!(stream, "\r\n").expect("stream error");
                                         log::info!("fetching response....");
-                                        match stream.read(heap_image.as_slice_mut()) {
-                                            Ok(len) => {
-                                                log::info!("fetched {} bytes of http data", len);
+                                        let init_len = match stream.read(heap_image.as_slice_mut::<u8>()) {
+                                            Ok(init_len) => {
+                                                log::info!("fetched {} bytes of http header data", init_len);
+                                                init_len
                                             }
-                                            Err(e) => write!(ret, "Didn't get response from host: {:?}", e).unwrap(),
-                                        }
+                                            Err(e) => {
+                                                write!(ret, "Didn't get response from host: {:?}", e).unwrap();
+                                                return Ok(Some(ret));
+                                            },
+                                        };
                                         if let Some(start) = find_subsequence(
                                             heap_image.as_slice::<u8>(),
                                             &[0x0d, 0x0a, 0x0d, 0x0a], // this is \r\n\r\n, which indicates end of header.
                                         ) {
-                                            log::info!("image data is {} bytes long", heap_image.len() - start);
+                                            log::info!("header is {} bytes long", start);
+                                            let header = std::string::String::from_utf8_lossy(&heap_image.as_slice::<u8>()[..start]);
+                                            let lines = header.split("\r\n");
+                                            let mut content_length = 0;
+                                            for line in lines {
+                                                let l_line_split = line.to_ascii_lowercase();
+                                                let l_line: Vec<&str> = l_line_split.split(':').collect();
+                                                if l_line.len() > 1 {
+                                                    log::info!("attr: {}, {}", l_line[0], l_line[1]);
+                                                    match l_line[0] {
+                                                        "content-length" => {
+                                                            content_length = usize::from_str(l_line[1].trim()).unwrap_or(0);
+                                                            log::info!("found content-length of {}", content_length);
+                                                            break;
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                }
+                                            }
+                                            if content_length > 0 {
+                                                let remaining_len = content_length - (init_len - start);
+                                                log::info!("fetching remaining length of {}", remaining_len);
+                                                match stream.read_exact(&mut heap_image.as_slice_mut::<u8>()[init_len..remaining_len]) {
+                                                    Ok(_) => {
+                                                        log::info!("read image data remaining len {}", remaining_len);
+                                                        let modals = modals::Modals::new(&env.xns).unwrap();
+                                                        let decoder = png::Decoder::new(&heap_image.as_slice::<u8>()[start..start+content_length]);
+                                                        let mut reader = decoder.read_info().expect("failed to read png info");
+                                                        let mut buf = vec![0; reader.output_buffer_size()];
+                                                        let info = reader.next_frame(&mut buf).expect("failed to decode png");
+
+                                                        let (width, height) = (info.width, info.height);
+                                                        let img = Img::new(buf, width as usize);
+
+                                                        modals.show_image(&img).expect("show image modal failed");
+                                                    }
+                                                    Err(e) => {
+                                                        log::info!("couldn't read remaining image length: {:?}", e);
+                                                    }
+                                                }
+                                            }
                                         }
                                         xous::syscall::unmap_memory(heap_image).expect("couldn't de-allocate image memory");
                                     }
