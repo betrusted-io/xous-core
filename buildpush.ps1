@@ -4,6 +4,7 @@
 # $env:RUSTFLAGS="--remap-path-prefix=$(Get-Location)=build"
 
 cargo xtask app-image vault
+# cargo xtask ditherpunk-image vault
 # cargo xtask ffi-test
 # cargo xtask minimal precursors/soc.svd
 
