@@ -159,10 +159,7 @@ pub fn spawn_test() {
              let width: usize = info.width.try_into().unwrap();
              let img = Img::new(pixels, width);
             */
-            #[cfg(all(
-                feature = "ditherpunk",
-                not(any(target_os = "none", target_os = "xous"))
-            ))]
+            #[cfg(feature = "ditherpunk")]
             {
                 log::info!("testing image");
                 let img = clifford();
@@ -174,7 +171,7 @@ pub fn spawn_test() {
 }
 
 // https://sequelaencollection.home.blog/2d-chaotic-attractors/
-#[allow(dead_code)]
+#[cfg(feature = "ditherpunk")]
 fn clifford() -> Img {
     const SIZE: u32 = Modals::MODAL_WIDTH;
     const CENTER: f32 = (SIZE / 2) as f32;

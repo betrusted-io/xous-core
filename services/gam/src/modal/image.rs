@@ -36,6 +36,7 @@ impl ActionApi for Image {
     fn redraw(&self, _at_height: i16, modal: &Modal) {
         if self.bitmap.is_some() {
             //bm.translate(Point::new(0, at_height));
+            log::info!("drawing bitmap");
             modal
                 .gam
                 .draw_bitmap(modal.canvas, self.bitmap.as_ref().unwrap())

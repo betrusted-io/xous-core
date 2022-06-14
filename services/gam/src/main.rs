@@ -348,6 +348,7 @@ fn main() -> ! {
                             }
                             #[cfg(feature="ditherpunk")]
                             GamObjectType::Tile(mut tile) => {
+                                log::info!("drawing tile {:?}", tile);
                                 tile.translate(canvas.clip_rect().tl);
                                 tile.translate(canvas.pan_offset());
                                 gfx.draw_tile_clipped(
