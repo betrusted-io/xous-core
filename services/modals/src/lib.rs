@@ -206,6 +206,8 @@ impl Modals {
         let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
         let (w, h, _) = img.size();
         let (img_width, img_height) = (w as f32, h as f32);
+
+        /*
         let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
         let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
         let mut rotate = false;
@@ -226,12 +228,15 @@ impl Modals {
         bm = if rotate { bm.rotate90() } else { bm };
         let (bm_width, bm_height) = bm.size();
         let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
+        */
+        let mut bm = Bitmap::from(img.clone());
 
         // center image in modal
+        /*
         let center = Point::new(
             ((Modals::MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
             ((Modals::MODAL_HEIGHT - bm_height) / 2).try_into().unwrap(),
-        );
+        );*/
 
         let mut tiles: [Option<Tile>; 6] = [None; 6];
         for (t, tile) in bm.iter().enumerate() {
@@ -239,7 +244,7 @@ impl Modals {
                 continue;
             }
             let mut copy = tile.clone();
-            copy.translate(center);
+            //copy.translate(center);
             tiles[t] = Some(copy);
         }
 
