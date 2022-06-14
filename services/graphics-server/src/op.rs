@@ -654,8 +654,6 @@ pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
         fb[fb_ln + last_word] = left_part | right_part;
 
         // set the dirty bit on the line
-        let old = fb[fb_ln + (LCD_WORDS_PER_LINE - 1)];
         fb[fb_ln + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
-        // log::info!("dirty[{}] {:x}->{:x}", fb_ln, old, fb[fb_ln + (LCD_WORDS_PER_LINE - 1)]);
     }
 }

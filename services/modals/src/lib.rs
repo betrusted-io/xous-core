@@ -196,6 +196,7 @@ impl Modals {
 
     #[cfg(feature = "ditherpunk")]
     const MODAL_WIDTH: u32 = 300;
+    #[allow(dead_code)]
     #[cfg(feature = "ditherpunk")]
     const MODAL_HEIGHT: u32 = 370;
     /// this blocks until the image has been dismissed.
@@ -203,11 +204,11 @@ impl Modals {
     pub fn show_image(&self, img: &Img) -> Result<(), xous::Error> {
         self.lock();
         // resize and/or rotate
+        /*
         let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
         let (w, h, _) = img.size();
         let (img_width, img_height) = (w as f32, h as f32);
 
-        /*
         let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
         let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
         let mut rotate = false;
@@ -229,7 +230,7 @@ impl Modals {
         let (bm_width, bm_height) = bm.size();
         let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
         */
-        let mut bm = Bitmap::from(img.clone());
+        let bm = Bitmap::from(img.clone());
 
         // center image in modal
         /*
@@ -243,7 +244,7 @@ impl Modals {
             if t >= tiles.len() {
                 continue;
             }
-            let mut copy = tile.clone();
+            let copy = tile.clone();
             //copy.translate(center);
             tiles[t] = Some(copy);
         }
@@ -259,6 +260,7 @@ impl Modals {
         Ok(())
     }
 
+    #[allow(dead_code)]
     #[cfg(feature = "ditherpunk")]
     fn resize_image(img: Img, scale: f32) -> Img {
         let (w, h, _) = img.size();
