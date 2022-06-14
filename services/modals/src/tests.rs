@@ -174,6 +174,7 @@ pub fn spawn_test() {
 }
 
 // https://sequelaencollection.home.blog/2d-chaotic-attractors/
+#[allow(dead_code)]
 fn clifford() -> Img {
     const SIZE: u32 = Modals::MODAL_WIDTH;
     const CENTER: f32 = (SIZE / 2) as f32;
