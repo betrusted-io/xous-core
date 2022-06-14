@@ -241,7 +241,7 @@ pub fn start_time_server() {
             }
             // once the PDDB is mounted, read in the time zone offsets and then restart the
             // loop handler using the offsets.
-            let mut offset_handle = Pddb::new();
+            let offset_handle = Pddb::new();
             let mut offset_key = offset_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_UTC_OFFSET,
@@ -249,7 +249,7 @@ pub fn start_time_server() {
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open UTC offset key");
-            let mut tz_handle = Pddb::new();
+            let tz_handle = Pddb::new();
             let mut tz_key = tz_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_TZ_OFFSET,
@@ -496,7 +496,7 @@ pub fn start_time_ux(sid: xous::SID) {
                             modals.show_notification(t!("stats.please_mount", xous::LANG), None).expect("couldn't show notification");
                             continue;
                         }
-                        let mut tz_set_handle = pddb::Pddb::new();
+                        let tz_set_handle = pddb::Pddb::new();
                         let mut tz_set = false;
                         let mut tz_offset_ms = 0i64;
                         let maybe_tz_set_key = tz_set_handle.get(

@@ -18,6 +18,7 @@ use std::thread::JoinHandle;
 use core::sync::atomic::{AtomicU32, Ordering};
 pub(crate) static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 pub(crate) static POLLER_REFCOUNT: AtomicU32 = AtomicU32::new(0);
+use std::cell::RefCell;
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub enum CbOp {
@@ -73,7 +74,8 @@ impl Drop for PddbMountPoller {
 pub struct Pddb {
     conn: CID,
     /// a SID that we can directly share with the PDDB server for the purpose of handling key change callbacks
-    cb: Option<(SID, JoinHandle::<()>)>,
+    cb: RefCell<Option<SID>>,
+    cb_handle: RefCell<Option<JoinHandle::<()>>>,
     /// Handle key change updates. The general intent is that the closure implements a
     /// `send` of a message to the server to deal with a key change appropriately,
     /// but no mutable data is allowed within the closure itself due to safety problems.
@@ -95,13 +97,14 @@ impl Pddb {
         let keys: Arc<Mutex<HashMap<ApiToken, Box<dyn Fn() + 'static + Send> >>> = Arc::new(Mutex::new(HashMap::new()));
         Pddb {
             conn,
-            cb: None,
+            cb: RefCell::new(None),
+            cb_handle: RefCell::new(None),
             keys,
             trng: trng::Trng::new(&xns).unwrap(),
         }
     }
-    fn ensure_async_responder(&mut self) {
-        if self.cb.is_none() {
+    fn ensure_async_responder(&self) {
+        if self.cb.borrow().is_none() {
             let sid = xous::create_server().unwrap();
             let handle = thread::spawn({
                 let keys = Arc::clone(&self.keys);
@@ -128,7 +131,8 @@ impl Pddb {
                     xous::destroy_server(sid).unwrap();
                 }
             });
-            self.cb = Some((sid, handle));
+            self.cb.replace(Some(sid));
+            self.cb_handle.replace(Some(handle));
         }
     }
     /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
@@ -296,7 +300,7 @@ impl Pddb {
     /// is perfectly fine, it just has a potential performance impact, especially for very large keys.
     /// `key_changed_cb` is a static function meant to initiate a message to a server in case the key in question
     /// goes away due to a basis locking.
-    pub fn get(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>,
+    pub fn get(&self, dict_name: &str, key_name: &str, basis_name: Option<&str>,
         create_dict: bool, create_key: bool, alloc_hint: Option<usize>, key_changed_cb: Option<impl Fn() + 'static + Send>) -> Result<PddbKey> {
         if key_name.len() > (KEY_NAME_LEN - 1) {
             return Err(Error::new(ErrorKind::InvalidInput, "key name too long"));
@@ -316,11 +320,15 @@ impl Pddb {
         if key_changed_cb.is_some() {
             self.ensure_async_responder();
         }
-        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+
+        let maybe_cb = self.cb.take();
+        let cb_sid = if let Some(sid) = maybe_cb {
             Some(sid.to_array())
         } else {
             None
         };
+        self.cb.replace(maybe_cb);
+
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -375,7 +383,7 @@ impl Pddb {
     }
 
     /// deletes a key within the dictionary
-    pub fn delete_key(&mut self, dict_name: &str, key_name: &str, basis_name: Option<&str>) -> Result<()> {
+    pub fn delete_key(&self, dict_name: &str, key_name: &str, basis_name: Option<&str>) -> Result<()> {
         if key_name.len() > (KEY_NAME_LEN - 1) {
             return Err(Error::new(ErrorKind::InvalidInput, "key name too long"));
         }
@@ -391,11 +399,14 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
-        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+        let maybe_cb = self.cb.take();
+        let cb_sid = if let Some(sid) = maybe_cb {
             Some(sid.to_array())
         } else {
             None
         };
+        self.cb.replace(maybe_cb);
+
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -421,7 +432,7 @@ impl Pddb {
         }
     }
     /// deletes the entire dictionary
-    pub fn delete_dict(&mut self, dict_name: &str, basis_name: Option<&str>) -> Result<()> {
+    pub fn delete_dict(&self, dict_name: &str, basis_name: Option<&str>) -> Result<()> {
         if dict_name.len() > (DICT_NAME_LEN - 1) {
             return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
         }
@@ -434,11 +445,14 @@ impl Pddb {
             xous_ipc::String::<BASIS_NAME_LEN>::new()
         };
 
-        let cb_sid = if let Some((sid, _handle)) = &self.cb {
+        let maybe_cb = self.cb.take();
+        let cb_sid = if let Some(sid) = maybe_cb {
             Some(sid.to_array())
         } else {
             None
         };
+        self.cb.replace(maybe_cb);
+
         let request = PddbKeyRequest {
             basis_specified: basis_name.is_some(),
             basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
@@ -481,7 +495,7 @@ impl Pddb {
         }
     }
 
-    pub fn list_keys(&mut self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
+    pub fn list_keys(&self, dict_name: &str, basis_name: Option<&str>) -> Result<Vec::<String>> {
         if dict_name.len() > (DICT_NAME_LEN - 1) {
             return Err(Error::new(ErrorKind::InvalidInput, "dictionary name too long"));
         }
@@ -543,7 +557,7 @@ impl Pddb {
     }
 
 
-    pub fn list_dict(&mut self, basis_name: Option<&str>) -> Result<Vec::<String>> {
+    pub fn list_dict(&self, basis_name: Option<&str>) -> Result<Vec::<String>> {
         let bname = if let Some(bname) = basis_name {
             if bname.len() > BASIS_NAME_LEN - 1 {
                 return Err(Error::new(ErrorKind::InvalidInput, "basis name too long"));
@@ -599,6 +613,21 @@ impl Pddb {
         }
         Ok(dict_list)
     }
+    /// Public function to query efuse security state. Replicated here to avoid exposing RootKeys full API to the world.
+    pub fn is_efuse_secured(&self) -> bool {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsEfuseSecured.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't make call to query efuse security state");
+        if let xous::Result::Scalar1(result) = response {
+            if result == 1 {
+                true
+            } else {
+                false
+            }
+        } else {
+            panic!("Internal error: wrong return code for is_efuse_secured()");
+        }
+    }
     /// Triggers a dump of the PDDB to host disk
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {
@@ -628,7 +657,8 @@ impl Pddb {
 
 impl Drop for Pddb {
     fn drop(&mut self) {
-        if let Some((cb_sid, handle)) = self.cb.take() {
+        if let Some(cb_sid) = self.cb.take() {
+            let handle = self.cb_handle.take().unwrap(); // we guarantee this is always set when cb is set
             let cid = xous::connect(cb_sid).unwrap();
             send_message(cid, Message::new_blocking_scalar(CbOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
             unsafe{xous::disconnect(cid).ok();}

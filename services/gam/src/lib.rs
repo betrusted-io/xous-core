@@ -13,7 +13,7 @@ pub use apps::*;
 #[cfg(feature="ditherpunk")]
 pub mod bitmap;
 #[cfg(feature="ditherpunk")]
-pub use bitmap::*;
+pub use bitmap::{Bitmap, Img, RGB};
 
 use graphics_server::api::{TextOp, TextView};
 use graphics_server::api::{Gid, Line, Circle, RoundedRectangle, TokenClaim};

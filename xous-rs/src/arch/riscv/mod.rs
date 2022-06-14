@@ -1,15 +1,11 @@
-use crate::{MemoryRange, PID, TID};
-use core::convert::TryInto;
+use crate::{MemoryRange, TID};
 
 mod mem;
 pub use mem::*;
+pub mod process;
+pub use process::*;
 mod syscall;
 pub use syscall::*;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ProcessArgs {
-    name: [u8; 16],
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {
@@ -59,24 +55,10 @@ impl Default for ThreadInit {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ProcessKey([u8; 8]);
-impl ProcessKey {
-    pub fn new(key: [u8; 8]) -> ProcessKey {
-        ProcessKey(key)
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ProcessInit {
-    pub key: ProcessKey,
-}
-
 pub struct WaitHandle<T> {
     tid: TID,
     data: core::marker::PhantomData<T>,
 }
-pub struct ProcessHandle(());
 
 pub fn thread_to_args(syscall: usize, init: &ThreadInit) -> [usize; 8] {
     [
@@ -138,31 +120,6 @@ where
 pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
     let call = crate::SysCall::JoinThread(joiner.tid);
     crate::syscall::rsyscall(call)
-}
-
-pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
-    [
-        call,
-        u32::from_le_bytes(init.key.0[0..4].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key.0[4..8].try_into().unwrap()) as _,
-        0,
-        0,
-        0,
-        0,
-        0,
-    ]
-}
-
-pub fn args_to_process(
-    _a1: usize,
-    _a2: usize,
-    _a3: usize,
-    _a4: usize,
-    _a5: usize,
-    _a6: usize,
-    _a7: usize,
-) -> core::result::Result<ProcessInit, crate::Error> {
-    todo!()
 }
 
 pub fn create_thread_0_pre<U>(f: &fn() -> U) -> core::result::Result<ThreadInit, crate::Error>
@@ -329,20 +286,6 @@ where
     })
 }
 
-/// If no connection exists, create a new connection to the server. This means
-/// our parent PID will be PID1. Otherwise, reuse the same connection.
-pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessInit, crate::Error> {
-    todo!()
-}
-
-pub fn create_process_post(
-    _args: ProcessArgs,
-    _init: ProcessInit,
-    _pid: PID,
-) -> core::result::Result<ProcessHandle, crate::Error> {
-    todo!()
-}
-
 pub fn create_thread_n_pre(
     start: usize,
     arg1: &usize,
@@ -350,10 +293,7 @@ pub fn create_thread_n_pre(
     arg3: &usize,
     arg4: &usize,
 ) -> core::result::Result<ThreadInit, crate::Error> {
-    #[cfg(feature = "bit-flags")]
     let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
-    #[cfg(not(feature = "bit-flags"))]
-    let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
 
     let stack = crate::map_memory(None, None, 131_072, flags)?;
     Ok(ThreadInit::new(start, stack, *arg1, *arg2, *arg3, *arg4))
@@ -374,12 +314,6 @@ where
         tid: thread_id,
         data: core::marker::PhantomData,
     })
-}
-
-pub fn wait_process(_joiner: ProcessHandle) -> crate::SysCallResult {
-    loop {
-        crate::wait_event();
-    }
 }
 
 extern "C" {

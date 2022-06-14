@@ -1,18 +1,14 @@
 [package]
 name = "xous"
-version = "0.9.7"
+version = "0.9.8"
 authors = ["Sean Cross <sean@xobs.io>"]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "System call interface for Xous"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
-# Dependency policy: fully specify dependencies to the minor version number
 [dependencies]
-bitflags = {version = "1.2.1", optional = true }
-xous-macros = { path = "../macros", version = "0.1.0", optional = true }
-log = { version = "0.4.14", optional = true }
 core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
 compiler_builtins = { version = '0.1.0', optional = true }
 
@@ -22,13 +18,6 @@ compiler_builtins = { version = '0.1.0', optional = true }
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
 
-# Enable using `bitflags`
-bit-flags = ["bitflags"]
-
-# `logging` causes this program to connect to a log server on startup
-# so you can run log commands such as `info!()`.
-logging = ["log"]
-
 # This is being built as part of libstd
 rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
 
@@ -36,9 +25,5 @@ rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
 # testing.
 processes-as-threads = []
 
-default = ["bit-flags", "xous-macros"]
-
 [target.'cfg(any(windows,unix))'.dependencies]
 lazy_static = "1.4.0"
-hex = "0.4.3"
-debug-here = "0.2.2"

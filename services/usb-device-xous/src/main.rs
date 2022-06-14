@@ -70,10 +70,7 @@ impl Clock for EmbeddedClock {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
-    use crate::SpinalUsbDevice;
-
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
@@ -170,6 +167,11 @@ fn xmain() -> ! {
         .product("Precursor")
         .serial_number(&serial_number)
         .build();
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    {
+        keyboard.interface().write_report(&Vec::<Keyboard>::new()).ok();
+        keyboard.interface().tick().unwrap();
+    }
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();

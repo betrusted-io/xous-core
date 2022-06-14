@@ -8,8 +8,7 @@ use log::{error, info};
 use xous_ipc::{String, Buffer};
 use num_traits::FromPrimitive;
 
-#[xous::xous_main]
-fn xmain() -> ! {
+fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());

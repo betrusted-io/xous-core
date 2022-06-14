@@ -84,7 +84,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     };
                 }
                 "save" => {
-                    let mut pddb = pddb::Pddb::new();
+                    let pddb = pddb::Pddb::new();
                     if let Some(ssid) = &self.current_ssid {
                         if let Some(pass) = &self.current_pass {
                             match pddb.get(
@@ -121,7 +121,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     }
                 }
                 "known" => {
-                    let mut pddb = pddb::Pddb::new();
+                    let pddb = pddb::Pddb::new();
                     match pddb.list_keys(net::AP_DICT_NAME, None) {
                         Ok(list) => {
                             write!(ret, "Saved network configs:\n").unwrap();

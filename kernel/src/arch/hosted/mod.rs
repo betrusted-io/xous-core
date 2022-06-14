@@ -192,7 +192,7 @@ fn handle_connection(
     std::thread::Builder::new()
         .name(format!("PID {}: client should_exit thread", pid))
         .spawn(move || loop {
-            if should_exit.load(core::sync::atomic::Ordering::Relaxed) {
+            if should_exit.load(Ordering::Relaxed) {
                 eprintln!("KERNEL: should_exit == 1");
                 // sender.send(ServerMessage::Exit).ok();
                 // WARNING: This functionality is unimplemented right now
@@ -385,7 +385,7 @@ fn listen_thread(
         should_exit: std::sync::Arc<core::sync::atomic::AtomicBool>,
         clients: Vec<(std::thread::JoinHandle<()>, TcpStream)>,
     ) {
-        should_exit.store(true, core::sync::atomic::Ordering::Relaxed);
+        should_exit.store(true, Ordering::Relaxed);
         for (jh, conn) in clients {
             use std::net::Shutdown;
             conn.shutdown(Shutdown::Both).ok();
@@ -485,9 +485,9 @@ pub fn idle() -> bool {
     let pid1_init = ProcessInit {
         key: ProcessKey::new(pid1_key),
     };
-    let pid1 = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
-    assert_eq!(pid1.get(), 1);
-    let _tid1 = SystemServices::with_mut(|ss| ss.create_thread(pid1, ThreadInit {})).unwrap();
+    let process_1 = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
+    assert_eq!(process_1.pid().get(), 1);
+    let _tid1 = SystemServices::with_mut(|ss| ss.create_thread(process_1.pid(), ThreadInit {})).unwrap();
 
     let listen_addr = env::var("XOUS_LISTEN_ADDR")
         .map(|s| {
@@ -524,7 +524,7 @@ pub fn idle() -> bool {
 
         // Set the current PID to 1, which was created above. This ensures all init processes
         // are owned by PID1.
-        crate::arch::process::set_current_pid(pid1);
+        crate::arch::process::set_current_pid(process_1.pid());
 
         // Go through each arg and spawn it as a new process. Failures here will
         // halt the entire system.
@@ -535,10 +535,10 @@ pub fn idle() -> bool {
             let init = xous_kernel::ProcessInit {
                 key: ProcessKey::new(process_key),
             };
-            let new_pid = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
-            println!(" {:^5} |  {}", new_pid, arg);
+            let new_process = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
+            println!(" {:^5} |  {}", new_process, arg);
             let process_args = xous_kernel::ProcessArgs::new("program", arg);
-            xous_kernel::arch::create_process_post(process_args, init, new_pid)
+            xous_kernel::arch::create_process_post(process_args, init, new_process)
                 .expect("couldn't spawn");
         }
     }

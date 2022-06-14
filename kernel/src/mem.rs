@@ -455,7 +455,7 @@ impl MemoryManager {
         if is_user {
             crate::arch::mem::hand_page_to_user(virt as _)?;
         }
-        // println!(
+        // klog!(
         //     "Mapped {:08x} -> {:08x} (user? {})",
         //     phys as usize, virt as usize, is_user
         // );
@@ -568,6 +568,38 @@ impl MemoryManager {
         )
     }
 
+    #[allow(dead_code)]
+    /// Move the page in the process mapping listing without manipulating
+    /// the pagetables at all.
+    pub fn move_page_raw(
+        &mut self,
+        phys_addr: *mut usize,
+        dest_pid: PID,
+    ) -> Result<(), xous_kernel::Error> {
+        self.claim_release_move(
+            phys_addr as *mut usize,
+            dest_pid,
+            ClaimReleaseMove::Move(crate::arch::process::current_pid()),
+        )
+    }
+
+    // /// Transfer ownership of a page without moving it. This is a very
+    // /// specialized function which should only be used when creating a
+    // /// brand-new process.
+    // pub fn move_page_ownership(
+    //     &mut self,
+    //     src_addr: *mut u8,
+    //     src_pid: PID,
+    //     dest_pid: PID,
+    // ) -> Result<(), xous_kernel::Error> {
+    //     let phys_addr = crate::arch::mem::virt_to_phys(src_addr as usize)?;
+    //     self.claim_release_move(
+    //         phys_addr as *mut usize,
+    //         dest_pid,
+    //         ClaimReleaseMove::Move(src_pid),
+    //     )
+    // }
+
     /// Mark the page in the current process as being lent.  If the borrow is
     /// read-only, then additionally remove the "write" bit on it.  If the page
     /// is writable, then remove it from the current process until the borrow is
@@ -652,7 +684,7 @@ impl MemoryManager {
         ) -> Result<(), xous_kernel::Error> {
             if let Some(current_pid) = *owner_addr {
                 if current_pid != pid {
-                    // println!(
+                    // klog!(
                     //     "In claim_or_release({}, {}, {:?}) -- addr is owned by {} not {}",
                     //     owner_addr.map(|v| v.get()).unwrap_or_default(),
                     //     pid,

@@ -40,6 +40,11 @@ impl MemoryMapping {
         Ok(())
     }
 
+    /// Does nothing in hosted mode.
+    pub unsafe fn allocate(&mut self, _pid: PID) -> Result<(), xous_kernel::Error> {
+        Ok(())
+    }
+
     pub fn reserve_address(
         &mut self,
         _mm: &mut MemoryManager,

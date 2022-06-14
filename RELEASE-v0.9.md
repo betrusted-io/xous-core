@@ -161,6 +161,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Issue #162 and #159: fix bugs with condvar support. condvar IDs are now serial, so re-allocations are not a problem, and the routine to remove old ones from the notification table now looks at the correct sender ID.
 - Add `ceil`, `floor`, and `trunc` (f32 and f64) variants to the built-ins list (this is a `std` lib update, in 1.61.0.2)
 - Add CI test automation facilities - CI infra now drives actual hardware through `expect` scripts, instead of just doing simulation checks
+- Vendor in `getrandom` so we can support a Xous API for the crate, allowing us access some of the more modern rustcrypto APIs. This is necssary for `randcore` 0.6 compatibility. `randcore` 0.5 APIs are retained by integrating them directly into the TRNG object.
+- Update AES API level to 0.8, and cipher dependency to 0.4 (on rootkeys). This was necessary to get CBC support for AES, which is needed for FIDO2. This *should* have no user-facing impact.
 
 
 ## Roadmap to 1.0
