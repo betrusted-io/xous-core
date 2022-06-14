@@ -289,27 +289,14 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
                 #[cfg(feature="ditherpunk")]
                 "image" => {
-                    const MAX_IMAGE_LEN: usize = 256 * 1024; // includes HTTP headers
+                    // use std::io::BufRead; // not implemented yet!
                     if let Some(url) = tokens.next() {
                         match url.split_once('/') {
                             Some((host, path)) => {
                                 match TcpStream::connect((host, 80)) {
                                     Ok(mut stream) => {
-                                        let mut heap_image = match xous::syscall::map_memory(
-                                            None,
-                                            None,
-                                            MAX_IMAGE_LEN,
-                                            xous::MemoryFlags::R | xous::MemoryFlags::W,
-                                        ) {
-                                            Ok(d) => d,
-                                            Err(e) => {
-                                                log::error!("couldn't allocate data for image, aborting");
-                                                write!(ret, "Couldn't allocate memory for image, aborting: {:?}", e).unwrap();
-                                                return Ok(Some(ret));
-                                            }
-                                        };
-                                        stream.set_read_timeout(Some(Duration::from_millis(10_000))).unwrap();
-                                        stream.set_write_timeout(Some(Duration::from_millis(10_000))).unwrap();
+                                        stream.set_read_timeout(Some(Duration::from_millis(5_000))).unwrap();
+                                        stream.set_write_timeout(Some(Duration::from_millis(5_000))).unwrap();
                                         match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
                                             Ok(_) => log::trace!("sent GET"),
                                             Err(e) => {
@@ -321,22 +308,57 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         write!(stream, "Connection: close\r\n").expect("stream error");
                                         write!(stream, "\r\n").expect("stream error");
                                         log::info!("fetching response....");
-                                        let init_len = match stream.read(heap_image.as_slice_mut::<u8>()) {
-                                            Ok(init_len) => {
-                                                log::info!("fetched {} bytes of http header data", init_len);
-                                                init_len
-                                            }
+                                        // let mut reader = std::io::BufReader::new(&mut stream);
+                                        log::info!("trying to read entire response...");
+                                        let mut received = Vec::<u8>::new();
+                                        received.reserve(128 * 1024); // up to 128k image size...
+                                        let mut rx_len = 0;
+                                        const CHUNK: usize = 4096;
+                                        /*
+                                        let rx_len = match reader.read_to_end(&mut received) {
+                                            Ok(len) => len,
                                             Err(e) => {
-                                                write!(ret, "Didn't get response from host: {:?}", e).unwrap();
-                                                return Ok(Some(ret));
-                                            },
-                                        };
+                                                log::error!("couldn't read image: {:?}", e);
+                                                write!(ret, "Couldn't read image: {:?}", e).unwrap();
+                                                return Ok(Some(ret))
+                                            }
+                                        }; */
+                                        let mut rx_buf = [0u8; CHUNK];
+                                        log::info!("starting read loop");
+                                        // stream.set_nonblocking(true).expect("couldn't set stream to nonblocking");
+                                        let mut last_chunk = 0;
+                                        loop {
+                                            match stream.read(&mut rx_buf) {
+                                                Ok(len) => {
+                                                    log::info!("got {} bytes", len);
+                                                    received.extend_from_slice(&rx_buf[..len]);
+                                                    rx_len += len;
+                                                    if len == 0 {
+                                                        log::info!("got 0-length read, concluding we're at an EOF...");
+                                                        break;
+                                                    }
+                                                    if last_chunk == 0 {
+                                                        last_chunk = len;
+                                                    } else {
+                                                        if len < last_chunk {
+                                                            log::info!("heuristic termination of read loop");
+                                                            break;
+                                                        }
+                                                    }
+                                                },
+                                                Err(e) => {
+                                                    log::info!("quitting read loop with err {:?}", e);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        log::info!("read {} bytes", rx_len);
                                         if let Some(start) = find_subsequence(
-                                            heap_image.as_slice::<u8>(),
+                                            &received,
                                             &[0x0d, 0x0a, 0x0d, 0x0a], // this is \r\n\r\n, which indicates end of header.
                                         ) {
                                             log::info!("header is {} bytes long", start);
-                                            let header = std::string::String::from_utf8_lossy(&heap_image.as_slice::<u8>()[..start]);
+                                            let header = std::string::String::from_utf8_lossy(&received[..start]);
                                             let lines = header.split("\r\n");
                                             let mut content_length = 0;
                                             for line in lines {
@@ -355,29 +377,27 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 }
                                             }
                                             if content_length > 0 {
-                                                let remaining_len = content_length - (init_len - start);
-                                                log::info!("fetching remaining length of {}", remaining_len);
-                                                match stream.read_exact(&mut heap_image.as_slice_mut::<u8>()[init_len..remaining_len]) {
-                                                    Ok(_) => {
-                                                        log::info!("read image data remaining len {}", remaining_len);
-                                                        let modals = modals::Modals::new(&env.xns).unwrap();
-                                                        let decoder = png::Decoder::new(&heap_image.as_slice::<u8>()[start..start+content_length]);
-                                                        let mut reader = decoder.read_info().expect("failed to read png info");
-                                                        let mut buf = vec![0; reader.output_buffer_size()];
-                                                        let info = reader.next_frame(&mut buf).expect("failed to decode png");
+                                                let modals = modals::Modals::new(&env.xns).unwrap();
+                                                // have to add 4 to the start because the index is at the beginning of the header sequence,
+                                                // not the end of the sequence.
+                                                log::info!("decoding png starting with: {:x?}", &received[start+4..start+4+64]);
+                                                let decoder = png::Decoder::new(&received[start+4..]);
+                                                let mut reader = decoder.read_info().expect("failed to read png info");
+                                                let mut buf = vec![0; reader.output_buffer_size()];
+                                                let info = reader.next_frame(&mut buf).expect("failed to decode png");
 
-                                                        let (width, _height) = (info.width, info.height);
-                                                        let img = Img::new(buf, width as usize);
+                                                let (width, height) = (info.width, info.height);
+                                                log::info!("image is {} x {}", width, height);
+                                                log::info!("some image bytes: {:x?}", &buf[..64]);
+                                                let img = Img::new(buf, width as usize);
 
-                                                        modals.show_image(&img).expect("show image modal failed");
-                                                    }
-                                                    Err(e) => {
-                                                        log::info!("couldn't read remaining image length: {:?}", e);
-                                                    }
-                                                }
+                                                modals.show_image(&img).expect("show image modal failed");
+                                                write!(ret, "Image of {} bytes read successfully", content_length).unwrap();
+                                            } else {
+                                                write!(ret, "content-length was 0, no image read").unwrap();
                                             }
                                         }
-                                        xous::syscall::unmap_memory(heap_image).expect("couldn't de-allocate image memory");
+                                        // reader.consume(received.len());
                                     }
                                     Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
                                 }
