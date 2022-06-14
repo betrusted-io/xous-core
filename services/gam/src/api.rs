@@ -11,14 +11,18 @@ pub enum GamObjectType {
     Circ(Circle),
     Rect(Rectangle),
     RoundRect(RoundedRectangle),
-    #[cfg(feature="ditherpunk")]
-    Tile(Tile),
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct GamObject {
     pub canvas: Gid,
     pub obj: GamObjectType,
+}
+#[cfg(feature="ditherpunk")]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct GamTile {
+    pub canvas: Gid,
+    pub tile: Tile,
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct GamObjectList {
@@ -121,6 +125,10 @@ pub(crate) enum Opcode {
     // draws an object
     RenderObject, //(GamObject),
     RenderObjectList,
+    // draws a tile. this is *not* part of the ObjectList because then every vector object suddenly also carries
+    // the allocation burden of a bitmap tile.
+    #[cfg(feature="ditherpunk")]
+    RenderTile,
 
     // renders a TextView
     RenderTextView, //(TextView),

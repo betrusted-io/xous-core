@@ -305,6 +305,31 @@ fn main() -> ! {
                 let ret = api::Return::ContentCanvasReturn(context_mgr.get_content_canvas(req));
                 buffer.replace(ret).unwrap();
             }
+            #[cfg(feature="ditherpunk")]
+            Some(Opcode::RenderTile) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut obj = buffer.to_original::<GamTile, _>().unwrap();
+                log::debug!("RenderTile {:?}", obj);
+                if let Some(canvas) = canvases.get_mut(&obj.canvas) {
+                    // first, figure out if we should even be drawing to this canvas.
+                    log::debug!("drawable {} onscreen {} state{:?} for canvas {:?}", canvas.is_drawable(), canvas.is_onscreen(), canvas.state(), canvas.gid());
+                    if canvas.is_drawable() && canvas.is_onscreen() {
+                        obj.tile.translate(canvas.clip_rect().tl);
+                        obj.tile.translate(canvas.pan_offset());
+                        log::trace!("drawing tile {:?}", obj.tile);
+                        gfx.draw_tile_clipped(
+                            obj.tile,
+                            canvas.clip_rect(),
+                        ).expect("couldn't draw bitmap");
+                        canvas.do_drawn().expect("couldn't set canvas to drawn");
+                    } else {
+                        log::info!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj);
+                    }
+                } else {
+                    info!("bogus GID in Object, not doing anything in response to draw request.");
+                }
+                log::trace!("leaving RenderTile");
+            }
             Some(Opcode::RenderObject) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let obj = buffer.to_original::<GamObject, _>().unwrap();
@@ -346,16 +371,6 @@ fn main() -> ! {
                                     canvas.clip_rect(),
                                 ).expect("couldn't draw rounded rectangle");
                             }
-                            #[cfg(feature="ditherpunk")]
-                            GamObjectType::Tile(mut tile) => {
-                                log::info!("drawing tile {:?}", tile);
-                                tile.translate(canvas.clip_rect().tl);
-                                tile.translate(canvas.pan_offset());
-                                gfx.draw_tile_clipped(
-                                    tile,
-                                    canvas.clip_rect(),
-                                ).expect("couldn't draw bitmap");
-                            }
                         }
                         canvas.do_drawn().expect("couldn't set canvas to drawn");
                     } else {
@@ -396,12 +411,6 @@ fn main() -> ! {
                                         rr.translate(canvas.pan_offset());
                                         obj_list.push(ClipObjectType::RoundRect(rr), canvas.clip_rect()).unwrap();
                                     },
-                                    #[cfg(feature="ditherpunk")]
-                                    GamObjectType::Tile(mut tile) => {
-                                        tile.translate(canvas.clip_rect().tl);
-                                        tile.translate(canvas.pan_offset());
-                                        obj_list.push(ClipObjectType::Tile(tile), canvas.clip_rect()).unwrap();
-                                    }
                                 }
                             } else {
                                 break;

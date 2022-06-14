@@ -197,13 +197,16 @@ impl Gam {
     }
     #[cfg(feature="ditherpunk")]
     pub fn draw_bitmap(&self, gid: Gid, bm: &Bitmap) -> Result<(), xous::Error> {
-        let mut list = GamObjectList::new(gid);
         for (_i, tile) in bm.iter().enumerate(){
-            list.push(GamObjectType::Tile(*tile)).unwrap();
+            let gt = GamTile {
+                tile: *tile,
+                canvas: gid,
+            };
+            let buf = Buffer::into_buf(gt).or(Err(xous::Error::InternalError))?;
+            buf.lend(self.conn, Opcode::RenderTile.to_u32().unwrap())
+                .map(|_| ())?;
         };
-        let buf = Buffer::into_buf(list).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::RenderObjectList.to_u32().unwrap())
-            .map(|_| ())
+        Ok(())
     }
     pub fn draw_circle(&self, gid: Gid, circ: Circle) -> Result<(), xous::Error> {
         let go = GamObject {
