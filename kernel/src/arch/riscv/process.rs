@@ -13,7 +13,10 @@ use crate::services::ProcessInner;
 use xous_kernel::{ProcessInit, ProcessStartup, ThreadInit, PID, TID};
 
 // use crate::args::KernelArguments;
-pub const DEFAULT_STACK_SIZE: usize = 131072;
+#[cfg(not(feature="ditherpunk"))]
+pub const DEFAULT_STACK_SIZE: usize = 128 * 1024;
+#[cfg(feature="ditherpunk")] // image processing needs a lot more stack space to run...
+pub const DEFAULT_STACK_SIZE: usize = 1024 * 1024;
 pub const MAX_PROCESS_COUNT: usize = 64;
 // pub use crate::arch::mem::DEFAULT_STACK_TOP;
 

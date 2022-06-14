@@ -194,7 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &pkgs, &[], None, None)?
+            renode_image(false, &pkgs, &[], None, None, None)?
         }
         Some("renode-test") => {
             let mut args = env::args();
@@ -211,7 +211,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &cbtest_pkgs, &[], None, None)?
+            renode_image(false, &cbtest_pkgs, &[], None, None, None)?
         }
         Some("tts") => {
             let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
@@ -280,6 +280,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "tts", "--features", "braille"]),
                 &[&tts_exec_string],
                 None,
+                None,
             )?;
             let mut locale_revert = OpenOptions::new()
                 .read(true)
@@ -307,13 +308,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     extra_packages.as_slice(),
                     None,
                     Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]),
+                    None,
                 )?;
             } else {
                 build_hw_image(false, Some("./precursors/soc.svd".to_string()), &pkgs,
                 None,
                 None,
                 None,
-                extra_packages.as_slice(), None)?;
+                extra_packages.as_slice(), None, None)?;
             }
         }
         Some("libstd-test") => {
@@ -331,6 +333,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 extra_packages.as_slice(),
                 None,
                 Some(&["--features", "renode-bypass"]),
+                None,
             )?;
         }
         Some("ffi-test") => {
@@ -353,6 +356,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None,
                 &[],
                 Some(&["--features", "renode-bypass"]),
+                None,
             )?
             //renode_image(false, &pkgs, extra_packages.as_slice(),
             //None, Some(&["--features", "renode-bypass"]))?;
@@ -376,15 +380,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 extra_packages.as_slice(),
                 Some(&["--features", "renode-minimal"]),
                 Some(&["--features", "renode-bypass"]),
+                None,
             )?;
         }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
-            renode_image(false, &aestest_pkgs, &[], None, None)?
+            renode_image(false, &aestest_pkgs, &[], None, None, None)?
         }
         Some("renode-image-debug") => {
             generate_app_menus(&vec!["ball".to_string()]);
-            renode_image(true, &hw_pkgs, &[], None, None)?
+            renode_image(true, &hw_pkgs, &[], None, None, None)?
         }
         Some("pddb-ci") => {
             generate_app_menus(&Vec::<String>::new());
@@ -465,6 +470,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ]),
                 &[],
                 None,
+                Some(&[
+                    "--features", "ditherpunk",
+                    ]),
             )?
         }
         Some("hw-image") => {
@@ -489,6 +497,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None,
                 &[],
                 None,
+                None,
             )?
         }
         Some("gfx-dev") => run(
@@ -506,6 +515,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None,
             &[],
             None,
+            None,
         )?,
         Some("pddb-hosted") => run(false, &pddb_dev_pkgs, None, false)?,
         Some("benchmark") => build_hw_image(
@@ -517,6 +527,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None,
             &[],
             None,
+            None,
         )?,
         Some("minimal") => build_hw_image(
             false,
@@ -527,6 +538,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None,
             &[],
             None,
+            None,
         )?,
         Some("cbtest") => build_hw_image(
             false,
@@ -536,6 +548,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             None,
             &[],
+            None,
             None,
         )?,
         Some("trng-test") => {
@@ -548,6 +561,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kkey,
                 Some(&["--features", "urandomtest"]),
                 &[],
+                None,
                 None,
             )?
         }
@@ -562,6 +576,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "ringosctest"]),
                 &[],
                 None,
+                None,
             )?
         }
         Some("av-test") => {
@@ -575,6 +590,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "avalanchetest"]),
                 &[],
                 None,
+                None,
             )?
         }
         Some("sr-test") => build_hw_image(
@@ -585,6 +601,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             None,
             &[],
+            None,
             None,
         )?,
         Some("burn-kernel") => update_usb(true, false, false, false)?,
@@ -796,6 +813,7 @@ fn build_hw_image(
     extra_args: Option<&[&str]>,
     extra_packages: &[&str],
     loader_features: Option<&[&str]>,
+    kernel_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
@@ -816,7 +834,7 @@ fn build_hw_image(
     let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
     let kernelkey_file = kkey.unwrap_or_else(|| "devkey/dev.key".into());
 
-    let kernel = build_kernel(debug)?;
+    let kernel = build_kernel(debug, kernel_features)?;
     let mut init = vec![];
     let base_path = build(
         packages,
@@ -965,6 +983,7 @@ fn renode_image(
     extra_packages: &[&str],
     xous_features: Option<&[&str]>,
     loader_features: Option<&[&str]>,
+    kernel_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
     // Regenerate the Platform file
     let status = Command::new(cargo())
@@ -992,6 +1011,7 @@ fn renode_image(
         xous_features,
         extra_packages,
         loader_features,
+        kernel_features,
     )
 }
 
@@ -1056,8 +1076,8 @@ fn run(
     Ok(())
 }
 
-fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
-    let mut path = build(&["kernel"], debug, Some(KERNEL_TARGET), None, None, None)?;
+fn build_kernel(debug: bool, features: Option<&[&str]>) -> Result<PathBuf, DynError> {
+    let mut path = build(&["kernel"], debug, Some(KERNEL_TARGET), None, None, features)?;
     path.push("kernel");
     Ok(path)
 }

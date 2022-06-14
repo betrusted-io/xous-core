@@ -36,6 +36,7 @@ print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
 # default = ["print-panics", "debug-print", "wrap-print"]
+ditherpunk = []
 default = ["print-panics", "gdbserver"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
