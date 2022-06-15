@@ -708,6 +708,16 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             if delta & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
             }
+            // Special case for a delta of 0 -- just return the current heap size
+            if delta == 0 {
+                let (start, length) = ArchProcess::with_inner_mut(|process_inner| {
+                    (process_inner.mem_heap_base, process_inner.mem_heap_size)
+                });
+                return Ok(xous_kernel::Result::MemoryRange(unsafe {
+                    MemoryRange::new(start, length).unwrap()
+                }));
+            }
+
             let start = {
                 ArchProcess::with_inner_mut(|process_inner| {
                     if process_inner.mem_heap_size + delta > process_inner.mem_heap_max {
@@ -719,6 +729,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     Ok(start as *mut u8)
                 })?
             };
+
+            // Mark the new pages as "reserved"
             MemoryManager::with_mut(|mm| {
                 Ok(xous_kernel::Result::MemoryRange(
                     mm.reserve_range(start, delta, flags)?,
@@ -729,22 +741,33 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             if delta & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
             }
-            let start = ArchProcess::with_inner_mut(|process_inner| {
-                if process_inner.mem_heap_size + delta > process_inner.mem_heap_max {
+            let (start, length, end) = ArchProcess::with_inner_mut(|process_inner| {
+                // Don't allow decreasing the heap beyond the current allocation
+                if delta > process_inner.mem_heap_size {
                     return Err(xous_kernel::Error::OutOfMemory);
                 }
 
-                let start = process_inner.mem_heap_base + process_inner.mem_heap_size;
+                let end = process_inner.mem_heap_base + process_inner.mem_heap_size;
                 process_inner.mem_heap_size -= delta;
-                Ok(start)
+                Ok((
+                    process_inner.mem_heap_base,
+                    process_inner.mem_heap_size,
+                    end,
+                ))
             })?;
+
+            // Unmap the pages from the heap
             MemoryManager::with_mut(|mm| {
-                for page in ((start - delta)..start).step_by(crate::arch::mem::PAGE_SIZE) {
+                for page in ((end - delta)..end).step_by(crate::arch::mem::PAGE_SIZE) {
                     mm.unmap_page(page as *mut usize)
                         .expect("unable to unmap page");
                 }
             });
-            Ok(xous_kernel::Result::Ok)
+
+            // Return the new size of the heap
+            Ok(xous_kernel::Result::MemoryRange(unsafe {
+                MemoryRange::new(start, length).unwrap()
+            }))
         }
         SysCall::SwitchTo(new_pid, new_context) => SystemServices::with_mut(|ss| {
             unsafe {
