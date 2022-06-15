@@ -460,6 +460,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &pkgs,
                 lkey,
                 kkey,
+                None,
+                &[],
+                None,
+            )?
+        }
+        Some("ditherpunk-image") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let apps = get_packages();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            build_hw_image(
+                false,
+                Some("./precursors/soc.svd".to_string()),
+                &pkgs,
+                lkey,
+                kkey,
                 Some(&[
                     "--features", "ditherpunk",
                     ]),
