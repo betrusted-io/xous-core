@@ -34,8 +34,19 @@ fn imef_cb(s: String::<4000>) {
         buf.lend(cb_to_main_conn, Opcode::InputLine.to_u32().unwrap()).unwrap();
     }
 }
-
-fn main() -> ! {
+fn main () -> ! {
+    #[cfg(feature="ditherpunk")]
+    let stack_size = 1024 * 1024;
+    #[cfg(not(feature="ditherpunk"))]
+    let stack_size = 128 * 1024;
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
