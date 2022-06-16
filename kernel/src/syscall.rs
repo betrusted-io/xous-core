@@ -714,7 +714,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     (process_inner.mem_heap_base, process_inner.mem_heap_size)
                 });
                 return Ok(xous_kernel::Result::MemoryRange(unsafe {
-                    MemoryRange::new(start, length).unwrap()
+                    MemoryRange::new(
+                        start,
+                        // 0-length MemoryRanges are disallowed -- so return 4096 as the minimum in any case, even though it's a lie
+                    if length == 0 { 4096 } else { length }
+                    ).unwrap()
                 }));
             }
 
