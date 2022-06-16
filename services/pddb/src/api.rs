@@ -114,6 +114,9 @@ pub(crate) enum Opcode {
     WriteKey,
     WriteKeyFlush,
 
+    // GC methods
+    PeriodicScrub,
+
     /// drops any connection state associated with a given key
     KeyDrop,
 
