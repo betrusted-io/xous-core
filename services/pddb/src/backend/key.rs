@@ -97,6 +97,8 @@ pub(crate) struct KeyCacheEntry {
     pub(crate) reserved: u64,
     pub(crate) flags: KeyFlags,
     pub(crate) age: u32,
+    /// this is an ephemeral time since boot, not commited to disk, used only for deciding which entries to evict
+    pub(crate) atime: u64,
     /// the current on-disk index of the KeyCacheEntry item, enumerated as "0" being the Dict descriptor and
     /// "1" being the first valid key. This is used to find the location of the key's metadata as stored on disk;
     /// it has nothing to do with where the data itself is stored (that's derived from `start`).
@@ -132,6 +134,21 @@ impl KeyCacheEntry {
         }
         vpages
     }
+    /// returns a rough measure of the amount of data consumed by a given entry. It's not meant to
+    /// be absolutely accurate, but it should give an accurate impression of the relative size of
+    /// different cache entries. This metric is used to help decide which entries to discard.
+    pub(crate) fn size(&self) -> usize {
+        let data_size = match &self.data {
+            None => 0,
+            Some(kcd) => match kcd {
+                KeyCacheData::Small(ksd) => ksd.data.len(),
+                KeyCacheData::Large(kld) => kld.data.len(),
+            }
+        };
+        core::mem::size_of::<KeyCacheEntry>() + data_size
+    }
+    pub(crate) fn atime(&self) -> u64 { self.atime }
+    pub(crate) fn set_atime(&mut self, atime: u64) { self.atime = atime; }
 }
 
 pub (crate) enum KeyCacheData {
