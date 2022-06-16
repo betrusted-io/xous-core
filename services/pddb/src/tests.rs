@@ -424,9 +424,12 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         basis_cache.basis_create(pddb_os,
             EXTRA_BASIS, EXTRA_BASIS_PW).expect("couldn't build test basis");
 
+        log::info!("heap usage: {}", heap_usage());
+        test_prune(pddb_os, &mut basis_cache);
         log::info!("Doing delete/add consistency with data extension");
         delete_add_dict_consistency(pddb_os, &mut basis_cache, None,
             None, None, None, None)?;
+        test_prune(pddb_os, &mut basis_cache);
         log::info!("Saving `dachecke` to local host");
         pddb_os.dbg_dump(Some("dachecke".to_string()), None);
 
@@ -454,18 +457,21 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
             Some(50), None, None, None)?;
         log::info!("Saving `dachecke2` to local host");
         pddb_os.dbg_dump(Some("dachecke2".to_string()), None);
+        test_prune(pddb_os, &mut basis_cache);
 
         log::info!("Doing delete/add consistency with data extension 3");
         delete_add_dict_consistency(pddb_os, &mut basis_cache, Some(3),
             Some(50), None, None, None)?;
         log::info!("Saving `dachecke3` to local host");
         pddb_os.dbg_dump(Some("dachecke3".to_string()), None);
+        test_prune(pddb_os, &mut basis_cache);
 
         log::info!("Doing delete/add consistency with data extension 4");
         delete_add_dict_consistency(pddb_os, &mut basis_cache, Some(6),
             Some(50), None, None, None)?;
         log::info!("Saving `dachecke4` to local host");
         pddb_os.dbg_dump(Some("dachecke4".to_string()), None);
+        test_prune(pddb_os, &mut basis_cache);
 
         let mut pre_list = HashSet::<String>::new();
         for dict in basis_cache.dict_list(pddb_os, None).iter() {
@@ -492,6 +498,7 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
         delete_add_dict_consistency(pddb_os, &mut basis_cache, Some(3),
             Some(15), None, None, Some(EXTRA_BASIS))?;
         log::info!("Saving `basis2` to local host");
+        test_prune(pddb_os, &mut basis_cache);
         pddb_os.dbg_dump(Some("basis2".to_string()), Some(&export));
         log::set_max_level(log::LevelFilter::Info);
 
@@ -560,4 +567,14 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
 
         Ok(())
     }
+}
+
+fn test_prune(hw: &mut PddbOs, basis_cache: &mut BasisCache) {
+    const TARGET_SIZE: usize = 150*1024;
+    let cache_size = basis_cache.cache_size();
+    if cache_size > TARGET_SIZE {
+        log::info!("size is {}, requesting prune of {}", cache_size, cache_size - TARGET_SIZE);
+        log::info!("pruned {}", basis_cache.cache_prune(hw, cache_size - TARGET_SIZE));
+    }
+    log::info!("size is now {}", basis_cache.cache_size());
 }
