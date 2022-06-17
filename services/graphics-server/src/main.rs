@@ -128,8 +128,13 @@ fn wrapped_main() -> ! {
     // these connections should be established:
     // - GAM
     // - keyrom (for verifying font maps)
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
+        .expect("can't register server");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let sid = xns
+        .register_name(api::SERVER_NAME_GFX, Some(1))
         .expect("can't register server");
 
     draw_boot_logo(&mut display);

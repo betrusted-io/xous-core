@@ -125,7 +125,10 @@ fn main() -> ! {
     // - time server
     // - llio
     // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(1)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let _ = thread::spawn({
         let i2c_sid = i2c_sid.clone();

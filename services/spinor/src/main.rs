@@ -609,7 +609,10 @@ fn main() -> ! {
           - PDDB
           - keyboard (for updating the key map setting, which needs to be loaded upstream of the PDDB)
     */
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(5)).expect("can't register server");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
     let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");

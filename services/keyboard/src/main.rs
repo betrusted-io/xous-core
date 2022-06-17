@@ -743,7 +743,7 @@ fn main() -> ! {
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(5)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 
     // Create a new kbd object
