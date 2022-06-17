@@ -194,17 +194,12 @@ impl Modals {
         Ok(())
     }
 
-    #[cfg(feature = "ditherpunk")]
-    const MODAL_WIDTH: u32 = 296;
-    #[allow(dead_code)]
-    #[cfg(feature = "ditherpunk")]
-    const MODAL_HEIGHT: u32 = 300;
     /// this blocks until the image has been dismissed.
     #[cfg(feature = "ditherpunk")]
     pub fn show_image(&self, img: &Img) -> Result<(), xous::Error> {
         self.lock();
         // resize and/or rotate
-        let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
+        let (modal_width, modal_height) = (gam::IMG_MODAL_WIDTH as f32, gam::IMG_MODAL_HEIGHT as f32);
         let (w, h, _) = img.size();
         let (img_width, img_height) = (w as f32, h as f32);
 
@@ -227,8 +222,8 @@ impl Modals {
 
         // center image in modal
         let center = Point::new(
-            ((Modals::MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
-            ((Modals::MODAL_HEIGHT - bm_height) / 2).try_into().unwrap(),
+            ((gam::IMG_MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
+            ((gam::IMG_MODAL_HEIGHT - bm_height) / 2).try_into().unwrap(),
         );        
         bm.translate(center);
 

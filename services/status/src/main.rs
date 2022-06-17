@@ -19,6 +19,7 @@ use graphics_server::api::GlyphStyle;
 use locales::t;
 use gam::{GamObjectList, GamObjectType};
 use chrono::prelude::*;
+use crossbeam::channel::{at, select, unbounded, Receiver, Sender};
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -31,6 +32,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
+const SERVER_NAME_STATUS: &str = "_Status_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum StatusOpcode {
@@ -55,6 +57,17 @@ pub(crate) enum StatusOpcode {
 
     /// Set the keyboard map
     SetKeyboard,
+
+    /// Tells keyboard watching thread that a new keypress happened.
+    Keypress,
+    /// Turns backlight off.
+    TurnLightsOff,
+    /// Turns backlight on.
+    TurnLightsOn,
+    /// Enables automatic backlight handling.
+    EnableAutomaticBacklight,
+    /// Disables automatic backlight handling.
+    DisableAutomaticBacklight,
 
     /// Suspend handler from the main menu
     TrySuspend,
@@ -149,7 +162,8 @@ fn wrapped_main() -> ! {
 
     log::debug!("|status: registering GAM|status thread");
 
-    let status_sid = xous::create_server().unwrap(); // completely private to this crate
+     // allow only one connection, from keyboard to us.
+    let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(1)).unwrap();
     // create a connection for callback hooks
     let cb_cid = xous::connect(status_sid).unwrap();
     unsafe { CB_TO_MAIN_CONN = Some(cb_cid) };
@@ -345,7 +359,9 @@ fn wrapped_main() -> ! {
     let modals = modals::Modals::new(&xns).unwrap();
 
     log::debug!("starting main menu thread");
-    create_main_menu(keys.clone(), xous::connect(status_sid).unwrap(), &com, time_cid);
+    let main_menu_sid = xous::create_server().unwrap();
+    let status_cid = xous::connect(status_sid).unwrap();
+    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
     create_app_menu(xous::connect(status_sid).unwrap());
     let kbd_mgr = xous::create_server().unwrap();
     let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
@@ -371,11 +387,76 @@ fn wrapped_main() -> ! {
     #[cfg(any(target_os = "none", target_os = "xous"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
 
+    // Automatic backlight-related variables.
+    kbd.register_observer(
+        SERVER_NAME_STATUS,
+        StatusOpcode::Keypress.to_u32().unwrap() as usize,
+    );
+
+    let enabled = Arc::new(Mutex::new(false));
+    let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
+
+    let rx = Box::new(rx);
+
+    let thread_already_running = Arc::new(Mutex::new(false));
+    let thread_conn = xous::connect(status_sid).unwrap();
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
         log::trace!("|status: Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(StatusOpcode::EnableAutomaticBacklight) => {
+                *enabled.lock().unwrap() = true;
+
+                // second: delete the first three elements off the menu
+                menu_manager.delete_item(t!("mainmenu.backlighton", xous::LANG));
+                menu_manager.delete_item(t!("mainmenu.backlightoff", xous::LANG));
+                menu_manager.delete_item(t!("mainmenu.autobacklighton", xous::LANG));
+
+                // third: add a "disable automatic backlight element"
+                menu_manager.insert_item(gam::MenuItem {
+                    name: xous_ipc::String::from_str(t!("mainmenu.autobacklightoff", xous::LANG)),
+                    action_conn: Some(status_cid),
+                    action_opcode: StatusOpcode::DisableAutomaticBacklight.to_u32().unwrap(),
+                    action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+                    close_on_select: true,
+                }, 0);
+            }
+            Some(StatusOpcode::DisableAutomaticBacklight) => {
+                *enabled.lock().unwrap() = false;
+                tx.send(BacklightThreadOps::Stop).unwrap();
+
+                // second: delete the first element off the menu.
+                menu_manager.delete_item(t!("mainmenu.autobacklightoff", xous::LANG));
+
+                // third: construct an array of the new elements to add to the menu.
+                let new_elems = [
+                    gam::MenuItem {
+                        name: xous_ipc::String::from_str(t!("mainmenu.backlighton", xous::LANG)),
+                        action_conn: Some(com.conn()),
+                        action_opcode: com.getop_backlight(),
+                        action_payload: gam::MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
+                        close_on_select: true,
+                    },
+                    gam::MenuItem {
+                        name: xous_ipc::String::from_str(t!("mainmenu.backlightoff", xous::LANG)),
+                        action_conn: Some(com.conn()),
+                        action_opcode: com.getop_backlight(),
+                        action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    },
+                    gam::MenuItem {
+                        name: xous_ipc::String::from_str(t!("mainmenu.autobacklighton", xous::LANG)),
+                        action_conn: Some(status_cid),
+                        action_opcode: StatusOpcode::EnableAutomaticBacklight.to_u32().unwrap(),
+                        action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    }
+                ];
+
+                new_elems.iter().enumerate().for_each(|(index, element)| {let _ = menu_manager.insert_item(*element, index);});
+            }
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
                 battstats_tv.clear_str();
@@ -672,6 +753,40 @@ fn wrapped_main() -> ! {
                     com.power_off_soc().unwrap();
                 }
             },
+
+            Some(StatusOpcode::Keypress) => {
+                if !*enabled.lock().unwrap() {
+                    log::trace!("ignoring keypress, automatic backlight is disabled");
+                    continue
+                }
+                let mut run_lock = thread_already_running.lock().unwrap();
+                match *run_lock {
+                    true => {
+                        log::trace!("renewing backlight timer");
+                        tx.send(BacklightThreadOps::Renew).unwrap();
+                        continue
+                    },
+                    false => {
+                        *run_lock = true;
+                        com.set_backlight(255, 128).expect("cannot set backlight on");
+                        std::thread::spawn({
+                            let rx = rx.clone();
+                            move || turn_lights_on(rx, thread_conn)
+                        });
+                    },
+                }
+            }
+            Some(StatusOpcode::TurnLightsOn) => {
+                log::trace!("turning lights on");
+                com.set_backlight(255, 128).expect("cannot set backlight on");
+            },
+            Some(StatusOpcode::TurnLightsOff) => {
+                log::trace!("turning lights off");
+                let mut run_lock = thread_already_running.lock().unwrap();
+                *run_lock = false;
+                com.set_backlight(0, 0).expect("cannot set backlight off");
+            },
+
             Some(StatusOpcode::Quit) => {
                 break;
             }
@@ -695,3 +810,41 @@ fn wrapped_main() -> ! {
     xous::terminate_process(0)
 }
 
+enum BacklightThreadOps {
+    /// Renew renews the backlight timer for another instance of standard_duration.
+    Renew,
+
+    /// Stop stops the background backlight thread.
+    Stop,
+}
+
+fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID) {
+    let standard_duration = std::time::Duration::from_secs(10);
+
+    let mut timeout = std::time::Instant::now() + standard_duration;
+
+    let mut total_waited = 0;
+
+    loop {
+        select! {
+            recv(rx) -> op => {
+                match op.unwrap() {
+                    BacklightThreadOps::Renew => {
+                        timeout = std::time::Instant::now() + standard_duration;
+                        total_waited += 1;
+                    },
+                    BacklightThreadOps::Stop => {
+                        log::trace!("received Stop op, killing background backlight thread");
+                        xous::send_message(cid, xous::Message::new_scalar(StatusOpcode::TurnLightsOff.to_usize().unwrap(), 0,0,0,0)).unwrap();
+                        return;
+                    },
+                }
+            },
+            recv(at(timeout)) -> _ => {
+                log::trace!("timeout finished, total re-waited {}, returning!", total_waited);
+                xous::send_message(cid, xous::Message::new_scalar(StatusOpcode::TurnLightsOff.to_usize().unwrap(), 0,0,0,0)).unwrap();
+                break;
+            }
+        };
+    }
+}

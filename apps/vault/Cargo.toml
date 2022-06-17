@@ -22,7 +22,6 @@ pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
-ime-plugin-shell = {path = "../../services/ime-plugin-shell"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
 ctap-crypto = {path = "libraries/crypto"}
 cbor = {path = "libraries/cbor"}
