@@ -739,10 +739,9 @@ fn main() -> ! {
     //  - graphics (if building for hosted mode)
     //  - oqc (for factory test)
     //  - status sub system (for setting the layout)
-    //  - keyboard-backlight (to start backlight when a key is pressed)
     //  - USB (for getting layout)
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(6)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(5)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);

@@ -33,3 +33,6 @@ emulation/linux-server-rootfs.jffs2
 
 # don't commit local modifications to the Renode filesystem template
 emulation/linux-server-rootfs.jffs2
+
+# bloat analyzer reports
+reports/
