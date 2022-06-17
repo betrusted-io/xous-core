@@ -205,6 +205,9 @@ pub enum ImefOpcode {
     /// internal use for passing keyboard events from the keyboard callback
     ProcessKeys,
 
+    /// set menu mode -- this turns the predictor area into a menu buttons-like behavior
+    SetMenuMode,
+
     /// force a redraw of the UI
     Redraw,
 
@@ -231,6 +234,7 @@ pub trait ImeFrontEndApi {
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
     fn conn(&self) -> xous::CID;
     fn getop_process_keys(&self) -> u32;
+    fn set_menu_mode(&self, mode: bool) -> Result<(), xous::Error>;
 }
 
 pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
@@ -304,6 +308,20 @@ impl ImeFrontEndApi for ImeFrontEnd {
                 keys[1] as u32 as usize,
                 keys[2] as u32 as usize,
                 keys[3] as u32 as usize,
+            ),
+        )
+        .map(|_| ())
+    }
+
+    fn set_menu_mode(&self, mode: bool) -> Result<(), xous::Error> {
+        xous::send_message(
+            self.cid,
+            xous::Message::new_scalar(
+                ImefOpcode::SetMenuMode.to_usize().unwrap(),
+                if mode { 1 } else { 0 },
+                0,
+                0,
+                0,
             ),
         )
         .map(|_| ())

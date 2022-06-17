@@ -63,6 +63,9 @@ struct InputTracker {
     /// keep track if our box was grown
     was_grown: bool,
 
+    /// if set to true, the F1-F4 keys work as menu selects, and not as predictive inputs
+    menu_mode: bool,
+
     /// render the predictions. Slightly awkward because this code comes from before we had libstd
     pred_options: [Option<String>; MAX_PREDICTION_OPTIONS],
     #[cfg(feature = "tts")]
@@ -88,6 +91,7 @@ impl InputTracker {
             last_height: 0,
             was_grown: false,
             pred_options: Default::default(),
+            menu_mode: false,
             #[cfg(feature="tts")]
             tts: TtsFrontend::new(xns).unwrap(),
         }
@@ -118,6 +122,9 @@ impl InputTracker {
     }
     pub fn activate_emoji(&self) {
         self.gam.raise_menu(gam::EMOJI_MENU_NAME).expect("couldn't activate emoji menu");
+    }
+    pub fn set_menu_mode(&mut self, mode: bool) {
+        self.menu_mode = mode;
     }
 
     pub fn clear_area(&mut self) -> Result<(), xous::Error> {
@@ -292,20 +299,37 @@ impl InputTracker {
                         self.last_trigger_char = Some(self.characters);
                     }
                     '\u{0011}' => { // F1
-                        self.insert_prediction(0);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(0);
+                            do_redraw = true;
+                        } else {
+                            log::info!("menu mode return");
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0011}")));
+                        }
                     }
                     '\u{0012}' => { // F2
-                        self.insert_prediction(1);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(1);
+                            do_redraw = true;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0012}")));
+                        }
                     }
                     '\u{0013}' => { // F3
-                        self.insert_prediction(2);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(2);
+                            do_redraw = true;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0013}")));
+                        }
                     }
                     '\u{0014}' => { // F4
-                        self.insert_prediction(3);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(3);
+                            do_redraw = true;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0014}")));
+                        }
                     }
                     '\u{0008}' => { // backspace
                         #[cfg(feature="tts")]
@@ -566,7 +590,7 @@ impl InputTracker {
             }
 
             let debug_canvas = false;
-            if valid_predictions == 0 {
+            if valid_predictions == 0 && !self.menu_mode {
                 let mut empty_tv = TextView::new(pc,
                     TextBounds::BoundingBox(Rectangle::new(Point::new(0, 1), pc_bounds)));
                 empty_tv.draw_border = false;
@@ -575,7 +599,7 @@ impl InputTracker {
                 write!(empty_tv.text, "{}", t!("input.greeting", xous::LANG)).expect("couldn't set up empty TextView");
                 if debug_canvas { info!("pc canvas {:?}", pc) }
                 self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
-            } else if update_predictor || force_redraw {
+            } else if update_predictor || force_redraw || self.menu_mode {
                 // alright, first, let's clear the area
                 self.gam.draw_rectangle(pc, pc_clip).expect("couldn't clear predictor area");
 
@@ -747,6 +771,13 @@ fn main() -> ! {
                 } else {
                     log::trace!("got redraw, but we're not initialized");
                     // ignore keyboard events until we've fully initialized
+                }
+            }),
+            Some(ImefOpcode::SetMenuMode) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                if arg == 1 {
+                    tracker.set_menu_mode(true);
+                } else {
+                    tracker.set_menu_mode(false);
                 }
             }),
             Some(ImefOpcode::Quit) => {log::error!("recevied quit, goodbye!"); break;}

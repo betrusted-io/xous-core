@@ -512,6 +512,10 @@ fn wrapped_main() -> ! {
                 if ena != 0 { context_mgr.vibe(true) }
                 else { context_mgr.vibe(false) }
             }),
+            Some(Opcode::ToggleMenuMode) => msg_scalar_unpack!(msg, t1, t2, t3, t4, {
+                let token = [t1 as u32, t2 as u32, t3 as u32, t4 as u32];
+                context_mgr.toggle_menu_mode(token);
+            }),
             Some(Opcode::RevertFocus) => {
                 match context_mgr.revert_focus(&gfx, &mut canvases) {
                     Ok(_) => xous::return_scalar(msg.sender, 0).expect("couldn't unblock caller"),

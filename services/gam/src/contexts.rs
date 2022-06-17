@@ -73,6 +73,8 @@ pub(crate) struct UxContext {
     pub audioframe_id: Option<u32>,
     /// opcode ID for focus change
     pub focuschange_id: Option<u32>,
+    /// sets the behavior of the IMEF
+    pub imef_menu_mode: bool,
 }
 pub(crate) const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
@@ -154,6 +156,7 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: None,
                         vibe: false,
+                        imef_menu_mode: false,
                     };
                     self.contexts.insert(token, ux_context);
                 },
@@ -175,6 +178,7 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
+                        imef_menu_mode: false,
                     };
 
                     if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
@@ -202,6 +206,7 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
+                        imef_menu_mode: false,
                     };
                     self.contexts.insert(token, ux_context);
                     // this check gives permissions to password boxes to render inverted text
@@ -229,6 +234,7 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
+                        imef_menu_mode: false,
                     };
                     self.contexts.insert(token, ux_context);
                 }
@@ -425,6 +431,7 @@ impl ContextManager {
 
                 // revert the keyboard vibe state
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
+                self.imef.set_menu_mode(context.imef_menu_mode).expect("couldn't set menu mode");
 
                 log::trace!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
@@ -584,6 +591,12 @@ impl ContextManager {
         self.kbd.set_vibe(set_vibe).expect("couldn't set vibe on keyboard");
         if let Some(context) = self.focused_context_mut() {
             (*context).vibe = set_vibe;
+        }
+    }
+    pub(crate) fn toggle_menu_mode(&mut self, token: [u32; 4]) {
+        if let Some(context) = self.contexts.get_mut(&token) {
+            context.imef_menu_mode = !context.imef_menu_mode;
+            log::info!("menu mode for token {:?} is now {}", token, context.imef_menu_mode);
         }
     }
     pub(crate) fn raise_menu(&mut self,
