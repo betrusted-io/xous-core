@@ -1,6 +1,4 @@
-use crate::api::{
-    Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, RoundedRectangle,
-};
+use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, RoundedRectangle};
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -589,50 +587,51 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
  *
  * author: nworbnhoj
  */
-#[cfg(feature="ditherpunk")]
+#[cfg(feature = "ditherpunk")]
 use crate::api::Tile;
-#[cfg(feature="ditherpunk")]
+#[cfg(feature = "ditherpunk")]
 pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
-    use std::cmp::min;
-    // prepare the clip boundries: min (LCD, clip, tile)
-    let bound = tile.bound();
-    let tl_x = bound.tl.x as usize;
-    let tl_y = bound.tl.y as usize;
-    log::info!("bound: {:?}, clip: {:?}", bound, clip);
-    let (mut br_x, mut br_y) = match clip {
-        Some(clip) => {
-            let x = min(bound.br.x, clip.br.x) as usize;
-            let y = min(bound.br.y, clip.br.y) as usize;
-            (x, y)
-        }
-        None => (bound.br.x as usize, bound.br.y as usize),
+    use std::cmp::{max, min};
+    let fb_size: Point = Point::new((LCD_PX_PER_LINE - 1) as i16, (LCD_LINES - 1) as i16);
+    const FB_WORDS_PER_LINE: usize = LCD_WORDS_PER_LINE;
+    let clip = match clip {
+        // alter clip to work around an odd use (bug?) of the clip origin
+        // clip.tl appears to relate to the the usable screen area as origin
+        // clip.br appears to relate to the clip.tl as origin
+        Some(clip) => Rectangle::new(Point::new(0, 0), clip.br),
+        // default to the LcdFB dimensions
+        None => Rectangle::new(Point::new(0, 0), fb_size),
     };
-    br_x = min(br_x, LCD_PX_PER_LINE - 1);
-    br_y = min(br_y, LCD_LINES - 1);
+    // determine the sub-region of the tile to transfer to the fb (in Tile coords)
+    let (tl_x, tl_y, br_x, br_y): (usize, usize, usize, usize) = (
+        max(tile.bound().tl.x, clip.tl.x) as usize,
+        max(tile.bound().tl.y, clip.tl.y) as usize,
+        min(tile.bound().br.x, clip.br.x) as usize,
+        min(tile.bound().br.y, clip.br.y) as usize,
+    );
 
     // prepare to cut and mask misaligned words
     let r_cut = tl_x % 32;
     let l_cut = 32 - r_cut;
     let mask = (1 << r_cut) - 1;
 
-    // prepare to clip a word spanning br_y
+    // prepare to clip a word spanning br_x
     let c_clip = br_x % 32;
     let c_mask = (1 << c_clip) - 1;
 
-    let first_word = tl_x / 32;
-    let last_word = LCD_WORDS_PER_LINE - 1;
-    log::info!("tl_y {}, br_y {}, clip: {:?}", tl_y, br_y, clip);
+    let first_wd = tl_x / 32;
+    let clip_wd = br_x / 32;
+    let last_wd = min(clip_wd, FB_WORDS_PER_LINE - 1);
     for tile_ln in tl_y..=br_y {
-        let fb_ln = tile_ln * LCD_WORDS_PER_LINE;
+        let fb_ln = tile_ln * FB_WORDS_PER_LINE;
         let tile_line = tile.get_line(Point::new(tl_x as i16, tile_ln as i16));
-        // log::info!("tile_line: {:x?}", tile_line);
-        let mut fb_wd = first_word;
+        let mut fb_wd = first_wd;
         let mut tile_wd = 0;
         let mut fb_word = fb[fb_ln + fb_wd];
         let mut left_part = fb_word & mask;
         let mut right_part;
         let mut tile_word: u32;
-        while (fb_wd <= last_word) & (tile_wd < tile_line.len()) {
+        while (fb_wd <= last_wd) & (tile_wd < tile_line.len()) {
             fb_word = fb[fb_ln + fb_wd];
             tile_word = tile_line[tile_wd];
             fb[fb_ln + fb_wd] = match r_cut {
@@ -648,12 +647,20 @@ pub fn tile(fb: &mut LcdFB, tile: Tile, clip: Option<Rectangle>) {
             fb_wd += 1;
             tile_wd += 1;
         }
-        // clip the last word in the line (ie word containing br_x)
-        left_part = fb[fb_ln + last_word] & c_mask;
-        right_part = fb_word & !c_mask;
-        fb[fb_ln + last_word] = left_part | right_part;
+        // complete the right side of the tile
+        if fb_wd > last_wd {
+            // encountered clip before end of tile
+            left_part = fb[fb_ln + fb_wd - 1] & c_mask;
+            right_part = fb_word & !c_mask;
+            fb[fb_ln + fb_wd - 1] = left_part | right_part;
+        } else {
+            // encountered end of tile before clip
+            left_part = left_part & c_mask;
+            right_part = fb[fb_ln + fb_wd] & !c_mask;
+            fb[fb_ln + fb_wd] = left_part | right_part;
+        }
 
         // set the dirty bit on the line
-        fb[fb_ln + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+        fb[fb_ln + (FB_WORDS_PER_LINE - 1)] |= 0x1_0000;
     }
 }

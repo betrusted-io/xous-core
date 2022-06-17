@@ -173,9 +173,9 @@ pub fn spawn_test() {
 // https://sequelaencollection.home.blog/2d-chaotic-attractors/
 #[cfg(feature = "ditherpunk")]
 fn clifford() -> Img {
-    const SIZE: u32 = Modals::MODAL_WIDTH;
+    const SIZE: u32 = Modals::MODAL_WIDTH - 10;
     const CENTER: f32 = (SIZE / 2) as f32;
-    const SCALE: f32 = 70.0;
+    const SCALE: f32 = 60.0;
     let mut buf = vec![255u8; (SIZE * SIZE).try_into().unwrap()];
     let (a, b, c, d) = (-2.0, -2.4, 1.1, -0.9);
     let (mut x, mut y): (f32, f32) = (0.0, 0.0);
