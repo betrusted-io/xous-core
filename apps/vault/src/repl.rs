@@ -1,7 +1,8 @@
 use super::*;
-use gam::UxRegistration;
-use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor};
+use gam::{UxRegistration, GlyphStyle};
+use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor, TextView};
 use xous::MessageEnvelope;
+use std::fmt::Write;
 
 #[allow(dead_code)]
 pub(crate) struct Repl {
@@ -81,6 +82,19 @@ impl Repl{
     }
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         self.clear_area();
+        let mut test_text = TextView::new(self.content,
+            graphics_server::TextBounds::CenteredTop(
+                Rectangle::new(
+                    Point::new(self.margin.x, 0),
+                    Point::new(self.screensize.x - self.margin.x, 48)
+                )
+            )
+        );
+        test_text.draw_border = false;
+        test_text.clear_area = true;
+        test_text.style = GlyphStyle::Large;
+        write!(test_text, "FIDO").ok();
+        self.gam.post_textview(&mut test_text).expect("couldn't post test text");
 
         log::trace!("repl app redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
