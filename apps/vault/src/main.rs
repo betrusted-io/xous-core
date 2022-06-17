@@ -16,6 +16,7 @@ use ctap::CtapState;
 mod shims;
 use shims::*;
 mod icontray;
+mod submenu;
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -73,6 +74,12 @@ pub(crate) enum VaultOp {
     Redraw,
     /// change focus
     ChangeFocus,
+
+    /// Menu items
+    MenuAutotype,
+    MenuEdit,
+    MenuDelete,
+
     /// exit the application
     Quit,
 }
@@ -144,6 +151,10 @@ fn main() -> ! {
         }
     });
 
+    let conn = xous::connect(sid).unwrap();
+    let menu_sid = xous::create_server().unwrap();
+    let menu_mgr = submenu::create_submenu(conn, menu_sid);
+
     let xns = xous_names::XousNames::new().unwrap();
     let mut repl = Repl::new(&xns, sid);
     let mut update_repl = true;
@@ -156,9 +167,36 @@ fn main() -> ! {
             Some(VaultOp::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
-                log::info!("repl got input line: {}", s.as_str());
-                // TODO: decode the input line here to catch F1-F4 keys and select the right app/mode
-                repl.input(s.as_str()).expect("Vault couldn't accept input string");
+                log::debug!("repl got input line: {}", s.as_str());
+                match s.as_str() {
+                    "\u{0011}" => {
+                        log::info!("fido");
+                    }
+                    "\u{0012}" => {
+                        log::info!("totp");
+                    }
+                    "\u{0013}" => {
+                        log::info!("passwords");
+                    }
+                    "\u{0014}" => {
+                        repl.raise_menu();
+                    }
+                    "↓" => {
+                        log::info!("down arrow");
+                    }
+                    "↑" => {
+                        log::info!("up arrow");
+                    }
+                    "←" => {
+                        log::info!("left arrow");
+                    }
+                    "→" => {
+                        log::info!("right arrow");
+                    }
+                    _ => {
+                        repl.input(s.as_str()).expect("Vault couldn't accept input string");
+                    }
+                }
                 update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 was_callback = false;
             }
@@ -179,6 +217,15 @@ fn main() -> ! {
                 }
                 repl.redraw().ok();
             }),
+            Some(VaultOp::MenuAutotype) => {
+                log::info!("got autotype");
+            },
+            Some(VaultOp::MenuDelete) => {
+                log::info!("got delete");
+            },
+            Some(VaultOp::MenuEdit) => {
+                log::info!("got edit");
+            }
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");
                 break;

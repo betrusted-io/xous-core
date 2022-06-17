@@ -136,5 +136,29 @@
         "ja": "FIDOリクエスト",
         "zh": "FIDO 请求",
         "en-tts": "FIDO Request"
+    },
+    "vault.menu_autotype": {
+        "en": "Autotype",
+        "ja": "自動的に入力",
+        "zh": "自动输入",
+        "en-tts": "Autotype"
+    },
+    "vault.menu_edit": {
+        "en": "Edit item",
+        "ja": "アイテムを編集する",
+        "zh": "编辑项目",
+        "en-tts": "Edit item"
+    },
+    "vault.menu_delete": {
+        "en": "Delete item",
+        "ja": "アイテムを削除",
+        "zh": "删除项目",
+        "en-tts": "Delete item"
+    },
+    "vault.menu_close": {
+        "en": "Close submenu",
+        "ja": "メニューを閉じる",
+        "zh": "关闭功能表",
+        "en-tts": "Close submenu"
     }
 }

@@ -26,10 +26,7 @@ impl Repl{
     pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
-        #[cfg(not(test))]
         let app_name_ref = gam::APP_NAME_VAULT;
-        #[cfg(test)]
-        let app_name_ref = "test name";
         let token = gam.register_ux(UxRegistration {
             app_name: xous_ipc::String::<128>::from_str(app_name_ref),
             ux_type: gam::UxType::Chat,
@@ -88,5 +85,9 @@ impl Repl{
         log::trace!("repl app redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
         Ok(())
+    }
+
+    pub(crate) fn raise_menu(&self) {
+        self.gam.raise_menu(gam::APP_MENU_0_VAULT).expect("couldn't raise our submenu");
     }
 }
