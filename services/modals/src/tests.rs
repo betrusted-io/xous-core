@@ -191,14 +191,7 @@ fn clifford() -> Img {
             buf[i] -= 1;
         }
     }
-    let mut rgb = vec![0u8; 3 * buf.len()];
-    let mut i: usize = 0;
-    while i < buf.len() {
-        let j = 3 * i;
-        (rgb[j], rgb[j + 1], rgb[j + 2]) = (buf[i], buf[i], buf[i]);
-        i += 1;
-    }
-    Img::new(rgb, SIZE.try_into().unwrap(), PixelType::U8x3)
+    Img::new(buf, SIZE.try_into().unwrap(), PixelType::U8)
 }
 
 fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
