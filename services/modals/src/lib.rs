@@ -210,26 +210,20 @@ impl Modals {
 
         let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
         let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
-        let mut rotate = false;
-        let modal_img;
-        if portrait_scale >= 1.0 {
-            modal_img = img.clone();
-        } else if landscape_scale >= 1.0 {
-            modal_img = img.clone();
-            rotate = true;
+        let bm = if portrait_scale >= 1.0 {
+            Bitmap::from(img)
+        } else if landscape_scale >= 1.0 {        
+            Bitmap::from(img).rotate90()
         } else if portrait_scale >= landscape_scale {
-            modal_img = Modals::resize_image(img.clone(), portrait_scale)
+            let resized = Modals::resize_image(img, portrait_scale);
+            Bitmap::from(&resized)
         } else {
-            rotate = true;
-            modal_img = Modals::resize_image(img.clone(), landscape_scale)
+            let resized = Modals::resize_image(img, landscape_scale);
+            Bitmap::from(&resized).rotate90()
         };
 
-        let mut bm = Bitmap::from(modal_img);
-        bm = if rotate { bm.rotate90() } else { bm };
         let (bm_width, bm_height) = bm.size();
         let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
-
-        let bm = Bitmap::from(img.clone());
 
         // center image in modal
         let center = Point::new(
@@ -260,7 +254,7 @@ impl Modals {
 
     #[allow(dead_code)]
     #[cfg(feature = "ditherpunk")]
-    fn resize_image(img: Img, scale: f32) -> Img {
+    fn resize_image(img: &Img, scale: f32) -> Img {
         let (w, h, _) = img.size();
         let (img_width, img_height) = (w as f32, h as f32);
         let height: u32 = (scale * img_height).floor() as u32;

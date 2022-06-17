@@ -235,8 +235,8 @@ impl From<[Option<Tile>; 6]> for Bitmap {
     }
 }
 
-impl From<Img> for Bitmap {
-    fn from(image: Img) -> Self {
+impl From<&Img> for Bitmap {
+    fn from(image: &Img) -> Self {
         let (bm_width, bm_height, _) = image.size();
         let bm_bottom = bm_height - 1;
         let bm_right = bm_width - 1;
@@ -251,7 +251,7 @@ impl From<Img> for Bitmap {
         };
         let mut mosaic: Vec<Tile> = Vec::new();
 
-        let pixels = Dither::new(BURKES.to_vec()).dither(image);
+        let pixels = Dither::new(BURKES.to_vec()).dither(&image);
         let mut px_index = 0;
         let bits_per_word: i16 = BITS_PER_WORD.try_into().unwrap();
         for t in 0..tile_count {
@@ -456,7 +456,7 @@ impl Dither {
             PixelColor::Light
         }
     }
-    pub fn dither(&mut self, image: Img) -> Vec<PixelColor> {
+    pub fn dither(&mut self, image: &Img) -> Vec<PixelColor> {
         let (width, height, length) = image.size();
         self.provision(width.try_into().unwrap());
         let mut pixels: Vec<PixelColor> = Vec::with_capacity(length);
