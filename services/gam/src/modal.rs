@@ -17,7 +17,7 @@ pub use consoleinput::*;
 #[cfg(feature="ditherpunk")]
 mod image;
 #[cfg(feature="ditherpunk")]
-pub use self::image::*;
+pub use image::*;
 
 use enum_dispatch::enum_dispatch;
 
