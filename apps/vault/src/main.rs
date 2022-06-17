@@ -2,8 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod ux;
-mod repl;
-use repl::*;
+use ux::*;
 use num_traits::*;
 use xous_ipc::Buffer;
 use usbd_human_interface_device::device::fido::*;
@@ -15,7 +14,6 @@ use ctap::status_code::Ctap2StatusCode;
 use ctap::CtapState;
 mod shims;
 use shims::*;
-mod icontray;
 mod submenu;
 
 // CTAP2 testing notes:
@@ -84,14 +82,21 @@ pub(crate) enum VaultOp {
     Quit,
 }
 
+enum VaultMode {
+    Fido,
+    Totp,
+    Password,
+}
+
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
+    let mut mode = VaultMode::Fido;
 
     // let's try keeping this completely private as a server. can we do that?
     let sid = xous::create_server().unwrap();
-    ux::start_ux_thread();
+    start_fido_ux_thread();
 
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
@@ -147,7 +152,7 @@ fn main() -> ! {
     // spawn the icontray handler
     let _ = thread::spawn({
         move || {
-            icontray::icontray_server();
+            icontray_server();
         }
     });
 
@@ -156,8 +161,8 @@ fn main() -> ! {
     let _menu_mgr = submenu::create_submenu(conn, menu_sid);
 
     let xns = xous_names::XousNames::new().unwrap();
-    let mut repl = Repl::new(&xns, sid);
-    let mut update_repl = true;
+    let mut vaultux = VaultUx::new(&xns, sid);
+    let mut update_vaultux = true;
     let mut was_callback = false;
     let mut allow_redraw = false;
     loop {
@@ -167,19 +172,22 @@ fn main() -> ! {
             Some(VaultOp::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
-                log::debug!("repl got input line: {}", s.as_str());
+                log::debug!("vaultux got input line: {}", s.as_str());
                 match s.as_str() {
                     "\u{0011}" => {
+                        mode = VaultMode::Fido;
                         log::info!("fido");
                     }
                     "\u{0012}" => {
+                        mode = VaultMode::Totp;
                         log::info!("totp");
                     }
                     "\u{0013}" => {
+                        mode = VaultMode::Password;
                         log::info!("passwords");
                     }
                     "\u{0014}" => {
-                        repl.raise_menu();
+                        vaultux.raise_menu();
                     }
                     "↓" => {
                         log::info!("down arrow");
@@ -194,15 +202,15 @@ fn main() -> ! {
                         log::info!("right arrow");
                     }
                     _ => {
-                        repl.input(s.as_str()).expect("Vault couldn't accept input string");
+                        vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
                     }
                 }
-                update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
+                update_vaultux = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 was_callback = false;
             }
             Some(VaultOp::Redraw) => {
                 if allow_redraw {
-                    repl.redraw().expect("Vault couldn't redraw");
+                    vaultux.redraw().expect("Vault couldn't redraw");
                 }
             }
             Some(VaultOp::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
@@ -215,7 +223,7 @@ fn main() -> ! {
                         allow_redraw = true;
                     }
                 }
-                repl.redraw().ok();
+                vaultux.redraw().ok();
             }),
             Some(VaultOp::MenuAutotype) => {
                 log::info!("got autotype");
@@ -232,14 +240,14 @@ fn main() -> ! {
             }
             _ => {
                 log::trace!("got unknown message, passing on to REPL");
-                repl.msg(msg);
-                update_repl = true;
+                vaultux.msg(msg);
+                update_vaultux = true;
                 was_callback = true;
             }
         }
-        if update_repl {
-            repl.update(was_callback);
-            update_repl = false;
+        if update_vaultux {
+            vaultux.update(was_callback);
+            update_vaultux = false;
         }
         log::trace!("reached bottom of main loop");
     }

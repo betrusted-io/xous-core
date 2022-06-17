@@ -1,12 +1,12 @@
-use super::*;
+use crate::*;
 use gam::{UxRegistration, GlyphStyle};
 use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor, TextView};
 use xous::MessageEnvelope;
 use std::fmt::Write;
 
 #[allow(dead_code)]
-pub(crate) struct Repl {
-    // optional structures that indicate new input to the Repl loop per iteration
+pub(crate) struct VaultUx {
+    // optional structures that indicate new input to the VaultUx loop per iteration
     // an input string
     input: Option<String>,
     // messages not handled by the main loop are routed here
@@ -23,7 +23,7 @@ pub(crate) struct Repl {
     // our security token for making changes to our record on the GAM
     token: [u32; 4],
 }
-impl Repl{
+impl VaultUx{
     pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
@@ -44,7 +44,7 @@ impl Repl{
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
         gam.toggle_menu_mode(token).expect("couldnt't toggle menu mode");
 
-        Repl {
+        VaultUx {
             input: None,
             msg: None,
             content,
