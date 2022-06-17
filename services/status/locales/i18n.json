@@ -90,6 +90,14 @@
         "zh": "背光关闭",
         "en-tts": "🔇"
     },
+    "mainmenu.autobacklighton": {
+        "en": "Automatic backlight on",
+        "en-tts": "🔇"
+    },
+    "mainmenu.autobacklightoff": {
+        "en": "Automatic backlight off",
+        "en-tts": "🔇"
+    },
     "mainmenu.init_keys": {
         "en": "Initialize root keys",
         "ja": "ルートキーの初期化",
