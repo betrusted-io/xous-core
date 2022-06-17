@@ -262,48 +262,63 @@ impl InputTracker {
                 match k {
                     '\u{0000}' => (),
                     '←' => { // move insertion point back
-                        if self.insertion > 0 {
-                            log::debug!("moving insertion point back");
-                            self.insertion -= 1;
+                        if !self.menu_mode {
+                            if self.insertion > 0 {
+                                log::debug!("moving insertion point back");
+                                self.insertion -= 1;
+                            }
+                            do_redraw = true;
+                            self.pred_phrase.clear(); // don't track predictions on edits
+                            self.can_unpick = false;
+                            self.last_trigger_char = None;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("←")));
                         }
-                        do_redraw = true;
-                        self.pred_phrase.clear(); // don't track predictions on edits
-                        self.can_unpick = false;
-                        self.last_trigger_char = None;
                     }
                     '→' => {
-                        if self.insertion < self.characters {
-                            self.insertion += 1;
+                        if !self.menu_mode {
+                            if self.insertion < self.characters {
+                                self.insertion += 1;
+                            }
+                            do_redraw = true;
+                            self.pred_phrase.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = None;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("→")));
                         }
-                        do_redraw = true;
-                        self.pred_phrase.clear();
-                        self.can_unpick = false;
-                        self.last_trigger_char = None;
                     }
                     '↑' => {
-                        // bring the insertion point to the front of the text box
-                        self.insertion = 0;
-                        do_redraw = true;
-                        self.pred_phrase.clear();
-                        self.can_unpick = false;
-                        self.last_trigger_char = None;
+                        if !self.menu_mode {
+                            // bring the insertion point to the front of the text box
+                            self.insertion = 0;
+                            do_redraw = true;
+                            self.pred_phrase.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = None;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("↑")));
+                        }
                     }
                     '↓' => {
-                        // bring insertion point to the very end of the text box
-                        self.insertion = self.characters;
-                        do_redraw = true;
-                        self.pred_phrase.clear();
-                        self.can_unpick = false;
-                        // this means that when we resume typing after an edit, the predictor will set its insertion point
-                        // at the very end, not the space prior to the last word...
-                        self.last_trigger_char = Some(self.characters);
+                        if !self.menu_mode {
+                            // bring insertion point to the very end of the text box
+                            self.insertion = self.characters;
+                            do_redraw = true;
+                            self.pred_phrase.clear();
+                            self.can_unpick = false;
+                            // this means that when we resume typing after an edit, the predictor will set its insertion point
+                            // at the very end, not the space prior to the last word...
+                            self.last_trigger_char = Some(self.characters);
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("↓")));
+                        }
                     }
                     '\u{0011}' => { // F1
                         if !self.menu_mode {
                             self.insert_prediction(0);
                             do_redraw = true;
                         } else {
-                            log::info!("menu mode return");
                             return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0011}")));
                         }
                     }
