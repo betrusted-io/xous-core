@@ -144,6 +144,7 @@ use std::iter::IntoIterator;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::io::{Result, Error, ErrorKind};
 use std::cmp::Reverse;
+use std::cmp::Ordering;
 use core::num::NonZeroU32;
 
 pub(crate) const SMALL_POOL_START: u64 = 0x0000_003F_8000_0000;
@@ -245,10 +246,15 @@ impl DerefMut for BasisRoot {
 pub(crate) struct BasisCache {
     /// the cache entries themselves
     cache: Vec::<BasisCacheEntry>,
+    /// ticktimer reference, for managing atimes
+    pub(crate) tt: ticktimer_server::Ticktimer,
 }
 impl BasisCache {
     pub(crate) fn new() -> Self {
-        BasisCache { cache: Vec::new() }
+        BasisCache {
+            cache: Vec::new(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
+        }
     }
     fn select_basis(&mut self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
@@ -314,6 +320,7 @@ impl BasisCache {
                 small_pool: Vec::<KeySmallPool>::new(),
                 small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
                 aad: my_aad,
+                tt: ticktimer_server::Ticktimer::new().unwrap(),
             };
             log::debug!("adding dictionary {}", name);
             basis.dicts.insert(String::from(name), dict_cache);
@@ -418,6 +425,7 @@ impl BasisCache {
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
                     let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                    kcache.set_atime(self.tt.elapsed_ms());
                     // the key exists, *and* there's sufficient space for the data
                     if kcache.start < SMALL_POOL_END {
                         // small pool fetch
@@ -964,7 +972,97 @@ impl BasisCache {
             self.basis_unmount(hw, &basis).ok();
         }
     }
+
+    /// returns a relative measure of cache size. It is not absolutely accurate as
+    /// overhead is not accounted for, but the actual data cached is relatively correct.
+    pub(crate) fn cache_size(&mut self) -> usize {
+        let mut total_size = 0;
+        for basis in self.cache.iter() {
+            for dict in basis.dicts.values() {
+                for key in dict.keys.values() {
+                    total_size += key.size();
+                }
+            }
+        }
+        total_size
+    }
+    /// attempts to prune `target_bytes` out of the cached data set
+    pub(crate) fn cache_prune(&mut self, hw: &mut PddbOs, target_bytes: usize) -> usize {
+        let mut pruned = 0;
+        // this does it a "dumb" way, but at least it's sort of obvious how it works
+        // 0. sync the basis and dictionaries to disk, so that removing cache entries are guaranteed not to be problematic.
+        // 1. iterate through all the known keys, creating a sorted heap of fully-specified keys (basis/dict/key)
+        //    sorted by access time
+        // 2. evict keys with the oldest access time, until target_bytes is hit.
+        self.sync(hw, None).unwrap();
+
+        let mut candidates = BinaryHeap::new();
+        for basis in self.cache.iter() {
+            for (dict_name, dict) in basis.dicts.iter() {
+                for (key_name, key) in dict.keys.iter() {
+                    candidates.push(Reverse(
+                        KeyAge {
+                            atime: key.atime(),
+                            _size: key.size(),
+                            key: key_name.to_string(),
+                            dict: dict_name.to_string(),
+                            basis: basis.name.to_string(),
+                        }
+                    ));
+                }
+            }
+        }
+
+        loop {
+            if let Some(Reverse(ka)) = candidates.pop() {
+                for basis in self.cache.iter_mut() {
+                    if basis.name == ka.basis {
+                        match basis.dicts.get_mut(&ka.dict) {
+                            Some(dentry) => {
+                                let freed = dentry.evict_keycache_entry(&ka.key);
+                                log::debug!("pruned {} bytes from atime {} / total {}", freed, ka.atime, pruned);
+                                pruned += freed;
+                                if pruned >= target_bytes {
+                                    return pruned;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        pruned
+    }
 }
+// Revise this to use references instead of allocations once we've refactored the interior mutability
+// issues with the PDDB.
+struct KeyAge {
+    atime: u64,
+    // currently unused but collected in case we want to use it in the future
+    _size: usize,
+    key: String,
+    dict: String,
+    basis: String,
+}
+impl Ord for KeyAge {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.atime.cmp(&other.atime)
+    }
+}
+impl PartialOrd for KeyAge {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for KeyAge {
+    fn eq(&self, other: &Self) -> bool {
+        self.atime == other.atime
+    }
+}
+impl Eq for KeyAge {}
 
 /// This is the RAM cached copy of a basis as maintained in the PDDB.
 pub(crate) struct BasisCacheEntry {

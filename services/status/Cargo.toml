@@ -48,3 +48,4 @@ braille = [] # used for braille mode, so console isn't overwhelmed with status
 tts = []
 # default = ["debugprint"] # "debugprint"
 default = []
+ditherpunk = []
