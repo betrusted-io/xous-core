@@ -3755,7 +3755,6 @@ dependencies = [
  "graphics-server",
  "hex 0.4.3",
  "ime-plugin-api",
- "ime-plugin-shell",
  "locales",
  "log",
  "log-server",

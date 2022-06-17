@@ -15,6 +15,7 @@ use ctap::status_code::Ctap2StatusCode;
 use ctap::CtapState;
 mod shims;
 use shims::*;
+mod icontray;
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -85,6 +86,7 @@ fn main() -> ! {
     let sid = xous::create_server().unwrap();
     ux::start_ux_thread();
 
+    // spawn the FIDO2 USB handler
     let _ = thread::spawn({
         move || {
             let xns = xous_names::XousNames::new().unwrap();
@@ -135,6 +137,13 @@ fn main() -> ! {
         }
     });
 
+    // spawn the icontray handler
+    let _ = thread::spawn({
+        move || {
+            icontray::icontray_server();
+        }
+    });
+
     let xns = xous_names::XousNames::new().unwrap();
     let mut repl = Repl::new(&xns, sid);
     let mut update_repl = true;
@@ -147,7 +156,8 @@ fn main() -> ! {
             Some(VaultOp::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
-                log::trace!("repl got input line: {}", s.as_str());
+                log::info!("repl got input line: {}", s.as_str());
+                // TODO: decode the input line here to catch F1-F4 keys and select the right app/mode
                 repl.input(s.as_str()).expect("Vault couldn't accept input string");
                 update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 was_callback = false;
@@ -167,13 +177,14 @@ fn main() -> ! {
                         allow_redraw = true;
                     }
                 }
+                repl.redraw().ok();
             }),
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");
                 break;
             }
             _ => {
-                log::trace!("got unknown message, treating as callback");
+                log::trace!("got unknown message, passing on to REPL");
                 repl.msg(msg);
                 update_repl = true;
                 was_callback = true;

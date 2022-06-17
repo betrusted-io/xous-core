@@ -8,14 +8,14 @@ pub(crate) struct Repl {
     // optional structures that indicate new input to the Repl loop per iteration
     // an input string
     input: Option<String>,
-    // messages from other servers
+    // messages not handled by the main loop are routed here
     msg: Option<MessageEnvelope>,
 
-    // record our input history
+    /// the content area
     content: Gid,
     gam: gam::Gam,
 
-    // variables that define our graphical attributes
+    /// screensize of the content area
     screensize: Point,
     margin: Point, // margin to edge of canvas
 
@@ -33,17 +33,19 @@ impl Repl{
         let token = gam.register_ux(UxRegistration {
             app_name: xous_ipc::String::<128>::from_str(app_name_ref),
             ux_type: gam::UxType::Chat,
-            predictor: Some(xous_ipc::String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
+            predictor: Some(xous_ipc::String::<64>::from_str(icontray::SERVER_NAME_ICONTRAY)),
             listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
             redraw_id: VaultOp::Redraw.to_u32().unwrap(),
             gotinput_id: Some(VaultOp::Line.to_u32().unwrap()),
             audioframe_id: None,
             rawkeys_id: None,
             focuschange_id: Some(VaultOp::ChangeFocus.to_u32().unwrap()),
-        }).expect("couldn't register Ux context for repl");
+        }).expect("couldn't register Ux context for repl").unwrap();
 
-        let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
+        let content = gam.request_content_canvas(token).expect("couldn't get content canvas");
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
+        gam.toggle_menu_mode(token).expect("couldnt't toggle menu mode");
+
         Repl {
             input: None,
             msg: None,
@@ -51,7 +53,7 @@ impl Repl{
             gam,
             screensize,
             margin: Point::new(4, 4),
-            token: token.unwrap(),
+            token,
         }
     }
 
