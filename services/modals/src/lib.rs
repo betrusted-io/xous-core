@@ -210,7 +210,7 @@ impl Modals {
 
         let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
         let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
-        let bm = if portrait_scale >= 1.0 {
+        let mut bm = if portrait_scale >= 1.0 {
             Bitmap::from(img)
         } else if landscape_scale >= 1.0 {        
             Bitmap::from(img).rotate90()
@@ -229,16 +229,15 @@ impl Modals {
         let center = Point::new(
             ((Modals::MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
             ((Modals::MODAL_HEIGHT - bm_height) / 2).try_into().unwrap(),
-        );
+        );        
+        bm.translate(center);
 
         let mut tiles: [Option<Tile>; 6] = [None; 6];
         for (t, tile) in bm.iter().enumerate() {
             if t >= tiles.len() {
                 continue;
             }
-            let mut copy = tile.clone();
-            copy.translate(center);
-            tiles[t] = Some(copy);
+            tiles[t] = Some(*tile);
         }
 
         let spec = ManagedImage {
