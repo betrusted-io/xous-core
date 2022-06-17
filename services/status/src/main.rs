@@ -392,7 +392,7 @@ fn wrapped_main() -> ! {
         SERVER_NAME_STATUS,
         StatusOpcode::Keypress.to_u32().unwrap() as usize,
     );
-    
+
     let enabled = Arc::new(Mutex::new(false));
     let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
 
@@ -407,7 +407,7 @@ fn wrapped_main() -> ! {
         log::trace!("|status: Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             // TODO: handle tts
-            Some(StatusOpcode::EnableAutomaticBacklight) => {   
+            Some(StatusOpcode::EnableAutomaticBacklight) => {
                 *enabled.lock().unwrap() = true;
 
                 // second: delete the first three elements off the menu

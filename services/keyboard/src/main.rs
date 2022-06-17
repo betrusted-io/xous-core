@@ -738,7 +738,7 @@ fn main() -> ! {
     //  - GAM
     //  - graphics (if building for hosted mode)
     //  - oqc (for factory test)
-    //  - status sub system (for setting the layout)
+    //  - status sub system (for setting the layout, autobacklight feature)
     //  - USB (for getting layout)
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
