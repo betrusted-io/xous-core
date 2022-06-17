@@ -406,7 +406,6 @@ fn wrapped_main() -> ! {
         let msg = xous::receive_message(status_sid).unwrap();
         log::trace!("|status: Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
-            // TODO: handle tts
             Some(StatusOpcode::EnableAutomaticBacklight) => {
                 *enabled.lock().unwrap() = true;
 
