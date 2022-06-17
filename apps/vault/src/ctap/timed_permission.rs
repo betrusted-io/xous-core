@@ -68,7 +68,7 @@ impl U2fUserPresenceState {
         request_duration: Duration<i64>,
         presence_duration: Duration<i64>,
     ) -> U2fUserPresenceState {
-        crate::ux::set_durations(request_duration.ms(), presence_duration.ms());
+        crate::fido::set_durations(request_duration.ms(), presence_duration.ms());
         U2fUserPresenceState {
         }
     }
@@ -81,7 +81,7 @@ impl U2fUserPresenceState {
 
     // This marks user presence as needed or uses it up if already granted. Also cleans up.
     pub fn consume_up(&mut self, _now: ClockValue, reason: String, application: [u8; 32]) -> bool {
-        crate::ux::request_permission_polling(String::from(reason), application)
+        crate::fido::request_permission_polling(String::from(reason), application)
     }
 
     // Returns if user presence was requested. Also cleans up.

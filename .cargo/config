@@ -3,3 +3,6 @@ xtask = "run --package xtask --"
 
 # [net]
 # offline = true              # do not access the network
+
+[build]
+rustflags = ["--cfg", "crossbeam_no_atomic_64"]

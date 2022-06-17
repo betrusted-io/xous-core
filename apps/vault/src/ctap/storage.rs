@@ -986,7 +986,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             }
             Ok(_) => Ok(()),
         }?;
-        match self.pddb.borrow().delete_dict(crate::ux::U2F_APP_DICT, None) {
+        match self.pddb.borrow().delete_dict(crate::fido::U2F_APP_DICT, None) {
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Ok(()),
                 _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error

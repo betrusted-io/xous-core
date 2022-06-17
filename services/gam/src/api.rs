@@ -169,6 +169,8 @@ pub(crate) enum Opcode {
 
     /// used to turn keyboard vibrate on and off
     Vibe,
+    /// used to toggle menu mode behavior for the prediction area (default: false)
+    ToggleMenuMode,
 
     /// called by a context when it's done with taking the screen; requests the GAM to revert focus to the last-focused app
     RevertFocus,

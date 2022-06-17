@@ -1,5 +1,7 @@
 use crate::*;
 
+pub const IMG_MODAL_HEIGHT: u32 = 300;
+pub const IMG_MODAL_WIDTH: u32 = 296;
 #[derive(Debug)]
 pub struct Image {
     pub action_conn: xous::CID,
@@ -31,7 +33,10 @@ impl ActionApi for Image {
         };
 
         log::info!("bitmap height {:?} : margin {}", bm_height, margin);
-        margin * 2 + bm_height
+        // the modals routine always tries to center the image within a box of a given height.
+        // make this height consistent with what the target is
+        //margin * 2 + bm_height
+        IMG_MODAL_HEIGHT as i16
     }
     fn redraw(&self, _at_height: i16, modal: &Modal) {
         if self.bitmap.is_some() {
