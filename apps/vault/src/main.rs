@@ -153,7 +153,7 @@ fn main() -> ! {
 
     let conn = xous::connect(sid).unwrap();
     let menu_sid = xous::create_server().unwrap();
-    let menu_mgr = submenu::create_submenu(conn, menu_sid);
+    let _menu_mgr = submenu::create_submenu(conn, menu_sid);
 
     let xns = xous_names::XousNames::new().unwrap();
     let mut repl = Repl::new(&xns, sid);
