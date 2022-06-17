@@ -91,11 +91,15 @@
         "en-tts": "🔇"
     },
     "mainmenu.autobacklighton": {
-        "en": "Automatic backlight on",
+        "en": "Enable automatic backlight",
+        "ja": "自動バックライトを有効にする",
+        "zh": "启用自动背光",
         "en-tts": "🔇"
     },
     "mainmenu.autobacklightoff": {
-        "en": "Automatic backlight off",
+        "en": "Disable automatic backlight",
+        "ja": "自動バックライトを無効にする",
+        "zh": "禁用自动背光",
         "en-tts": "🔇"
     },
     "mainmenu.init_keys": {
