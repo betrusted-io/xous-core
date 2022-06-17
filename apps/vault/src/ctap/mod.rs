@@ -397,7 +397,7 @@ where
             // This case was added in FIDO 2.1.
             if auth_param.is_empty() {
                 //(self.check_user_presence)(cid)?;
-                if crate::ux::request_permission_blocking(
+                if crate::fido::request_permission_blocking(
                     t!("vault.fido.pin_uv_auth", xous::LANG).to_string(),
                     cid).is_none() {
                     return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
@@ -479,7 +479,7 @@ where
                             if let Some(name) = user.user_display_name {name} else {user.user_name.unwrap_or("*Unspecified*".to_string())},
                         )
                     );
-                    if crate::ux::request_permission_blocking(desc, cid).is_none() {
+                    if crate::fido::request_permission_blocking(desc, cid).is_none() {
                         return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
                     }
                     return Err(Ctap2StatusCode::CTAP2_ERR_CREDENTIAL_EXCLUDED);
@@ -531,7 +531,7 @@ where
                 if let Some(name) = &user.user_display_name {name} else {alt_name}
             )
         );
-        if crate::ux::request_permission_blocking(make_cred_desc, cid).is_none() {
+        if crate::fido::request_permission_blocking(make_cred_desc, cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
 
@@ -824,7 +824,7 @@ where
                     hex::encode(&client_data_hash),
                 )
             );
-            if crate::ux::request_permission_blocking(desc, cid).is_none() {
+            if crate::fido::request_permission_blocking(desc, cid).is_none() {
                 return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
             }
         }
@@ -861,7 +861,7 @@ where
         _now: ClockValue,
     ) -> Result<ResponseData, Ctap2StatusCode> {
         //self.check_command_permission(now)?;
-        if crate::ux::request_permission_blocking(
+        if crate::fido::request_permission_blocking(
             t!("vault.fido.next_assertion", xous::LANG).to_string(),
             [0xff, 0xff, 0xff, 0xff]
         ).is_none() {
@@ -947,7 +947,7 @@ where
         // Resets are only possible in the first 10 seconds after booting.
         // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?
         // self.check_command_permission(now)?;
-        if let Some(c) = crate::ux::request_permission_blocking(t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
+        if let Some(c) = crate::fido::request_permission_blocking(t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
             if c != 'y' {
                 return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
             }
@@ -962,7 +962,7 @@ where
         //(self.check_user_presence)(cid)?;
         // we skip the double-confirmation during autotesting, but leave it here for production
         #[cfg(not(feature="autotest"))]
-        if crate::ux::request_permission_blocking(t!("vault.u2f.reset_check", xous::LANG).to_string(), cid).is_none() {
+        if crate::fido::request_permission_blocking(t!("vault.u2f.reset_check", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
 
@@ -981,7 +981,7 @@ where
     #[cfg(feature = "with_ctap2_1")]
     fn process_selection(&self, cid: ChannelID) -> Result<ResponseData, Ctap2StatusCode> {
         //(self.check_user_presence)(cid)?;
-        if crate::ux::request_permission_blocking(t!("vault.u2f.authenticator_selection", xous::LANG).to_string(), cid).is_none() {
+        if crate::fido::request_permission_blocking(t!("vault.u2f.authenticator_selection", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
         Ok(ResponseData::AuthenticatorSelection)
@@ -993,7 +993,7 @@ where
         cid: ChannelID,
     ) -> Result<ResponseData, Ctap2StatusCode> {
         // (self.check_user_presence)(cid)?;
-        if crate::ux::request_permission_blocking(t!("vault.u2f.vendor_configure", xous::LANG).to_string(), cid).is_none() {
+        if crate::fido::request_permission_blocking(t!("vault.u2f.vendor_configure", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
 
