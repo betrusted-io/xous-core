@@ -1663,6 +1663,7 @@ use std::string::String;
 struct AppManifest {
     context_name: String,
     menu_name: HashMap<String, HashMap<String, String>>,
+    submenu: Option::<u8>,
 }
 #[derive(Deserialize, Serialize, Debug)]
 struct Locales {
@@ -1720,14 +1721,38 @@ fn generate_app_menus(apps: &Vec<String>) {
             manifest.context_name,
         )
         .unwrap();
+        if let Some(menu_count) = manifest.submenu {
+            for i in 0..menu_count {
+                writeln!(
+                    gam_tokens,
+                    "pub const APP_MENU_{}_{}: &'static str = \"{} Submenu {}\";",
+                    i,
+                    app_name.to_uppercase(),
+                    manifest.context_name,
+                    i,
+                )
+                .unwrap();
+            }
+        }
     }
     writeln!(
         gam_tokens,
         "\npub const EXPECTED_APP_CONTEXTS: &[&'static str] = &["
     )
     .unwrap();
-    for (app_name, _manifest) in working_set.iter() {
+    for (app_name, manifest) in working_set.iter() {
         writeln!(gam_tokens, "    APP_NAME_{},", app_name.to_uppercase(),).unwrap();
+        if let Some(menu_count) = manifest.submenu {
+            for i in 0..menu_count {
+                writeln!(
+                    gam_tokens,
+                    "    APP_MENU_{}_{},",
+                    i,
+                    app_name.to_uppercase(),
+                )
+                .unwrap();
+            }
+        }
     }
     writeln!(gam_tokens, "];").unwrap();
     overwrite_if_changed(&gam_tokens, "services/gam/src/apps.rs");
