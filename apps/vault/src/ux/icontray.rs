@@ -15,7 +15,9 @@ const ICONS: [&'static str; 4] = [
 pub(crate) fn icontray_server() {
     let xns = xous_names::XousNames::new().unwrap();
     // one connection only, should be the GAM
-    let ime_sh_sid = xns.register_name(SERVER_NAME_ICONTRAY, Some(1)).expect("can't register server");
+    // however, because the predictor is connected only on demand -- we leave this as open-ended, which
+    // means anyone could send something to this server if they knew the name of it.
+    let ime_sh_sid = xns.register_name(SERVER_NAME_ICONTRAY, None).expect("can't register server");
 
     let mytriggers = PredictionTriggers {
         newline: false,

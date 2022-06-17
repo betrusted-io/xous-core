@@ -92,7 +92,6 @@ fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
-    let mut mode = VaultMode::Fido;
 
     // let's try keeping this completely private as a server. can we do that?
     let sid = xous::create_server().unwrap();
@@ -175,16 +174,13 @@ fn main() -> ! {
                 log::debug!("vaultux got input line: {}", s.as_str());
                 match s.as_str() {
                     "\u{0011}" => {
-                        mode = VaultMode::Fido;
-                        log::info!("fido");
+                        vaultux.set_mode(VaultMode::Fido);
                     }
                     "\u{0012}" => {
-                        mode = VaultMode::Totp;
-                        log::info!("totp");
+                        vaultux.set_mode(VaultMode::Totp);
                     }
                     "\u{0013}" => {
-                        mode = VaultMode::Password;
-                        log::info!("passwords");
+                        vaultux.set_mode(VaultMode::Password);
                     }
                     "\u{0014}" => {
                         vaultux.raise_menu();

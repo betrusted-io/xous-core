@@ -22,7 +22,13 @@ pub(crate) struct VaultUx {
 
     // our security token for making changes to our record on the GAM
     token: [u32; 4],
+
+    // current operation mode
+    mode: VaultMode,
 }
+
+const TITLE_HEIGHT: i16 = 32;
+
 impl VaultUx{
     pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
@@ -52,9 +58,10 @@ impl VaultUx{
             screensize,
             margin: Point::new(4, 4),
             token,
+            mode: VaultMode::Fido,
         }
     }
-
+    pub(crate) fn set_mode(&mut self, mode: VaultMode) { self.mode = mode; }
     /// accept a new input string
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
         self.input = Some(String::from(line));
@@ -82,21 +89,64 @@ impl VaultUx{
     }
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         self.clear_area();
-        let mut test_text = TextView::new(self.content,
+
+        // ---- draw title area ----
+        let mut title_text = TextView::new(self.content,
             graphics_server::TextBounds::CenteredTop(
                 Rectangle::new(
                     Point::new(self.margin.x, 0),
-                    Point::new(self.screensize.x - self.margin.x, 48)
+                    Point::new(self.screensize.x - self.margin.x, TITLE_HEIGHT)
                 )
             )
         );
-        test_text.draw_border = false;
-        test_text.clear_area = true;
-        test_text.style = GlyphStyle::Large;
-        write!(test_text, "FIDO").ok();
-        self.gam.post_textview(&mut test_text).expect("couldn't post test text");
+        title_text.draw_border = true;
+        title_text.rounded_border = Some(8);
+        title_text.clear_area = true;
+        title_text.style = GlyphStyle::Large;
+        match self.mode {
+            VaultMode::Fido => write!(title_text, "FIDO").ok(),
+            VaultMode::Totp => write!(title_text, "⏳1234").ok(),
+            VaultMode::Password => write!(title_text, "🔐****").ok(),
+        };
+        self.gam.post_textview(&mut title_text).expect("couldn't post title");
 
-        log::trace!("repl app redraw##");
+        // ---- draw list body area ----
+        let available_height = self.screensize.y - TITLE_HEIGHT;
+        let style = GlyphStyle::Large;
+        let glyph_height = self.gam.glyph_height_hint(style).unwrap();
+        let box_height = (glyph_height * 2) as i16;
+        let line_count = available_height / box_height;
+
+        let mut test_list = Vec::new();
+        for i in 0..16 {
+            let test_string = format!("Test item {}\nMore info about the item.", i);
+            test_list.push(test_string);
+        }
+
+        let mut insert_at = TITLE_HEIGHT;
+        for item in test_list {
+            if insert_at > self.screensize.y - box_height {
+                break;
+            }
+            let mut box_text = TextView::new(self.content,
+                graphics_server::TextBounds::BoundingBox(
+                    Rectangle::new(
+                        Point::new(self.margin.x, insert_at),
+                        Point::new(self.screensize.x - self.margin.x, insert_at + box_height)
+                    )
+                )
+            );
+            box_text.draw_border = true;
+            box_text.rounded_border = None;
+            box_text.clear_area = true;
+            box_text.style = style;
+            write!(box_text, "{}", item).ok();
+            self.gam.post_textview(&mut box_text).expect("couldn't post list item");
+
+            insert_at += box_height;
+        }
+
+        log::trace!("vault app redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
         Ok(())
     }
