@@ -262,8 +262,8 @@ impl Modals {
         let fir_img = fast_image_resize::Image::from_vec_u8(
             NonZeroU32::new(width).unwrap(),
             NonZeroU32::new(height).unwrap(),
-            img.into_raw(),
-            fast_image_resize::PixelType::U8x3,
+            img.as_slice().to_vec(),
+            fast_image_resize::PixelType::U8,
         )
         .unwrap();
 

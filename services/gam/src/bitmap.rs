@@ -291,50 +291,37 @@ impl From<&Img> for Bitmap {
 }
 
 /*
- * Image as a minimal flat buffer of RGB pixels; accessible by (x, y)
+ * Image as a minimal flat buffer of grey u8 pixels; accessible by (x, y)
  *
  * author: nworbnhoj
  */
- 
- #[derive(Debug, Clone, Copy)]
-pub struct RGB(pub u8, pub u8, pub u8);
-
-impl RGB {
-    const R: u32 = 2126;
-    const G: u32 = 7152;
-    const B: u32 = 722;
-    const BLACK: u32 = RGB::R + RGB::G + RGB::B;
-    /// chromatic conversion from RGB to grey
-    pub fn to_grey(&self) -> u8 {
-        let grey_r = RGB::R * self.0 as u32;
-        let grey_g = RGB::G * self.1 as u32;
-        let grey_b = RGB::B * self.2 as u32;
-        ((grey_r + grey_g + grey_b) / RGB::BLACK).try_into().unwrap()
-    }
-}
-
 
 #[derive(Debug, Clone)]
 pub struct Img {
-    pixels: Vec<RGB>,
+    pixels: Vec<u8>,
     width: usize,
 }
 
 impl Img {
     pub fn new(buf: Vec<u8>, width: usize) -> Self {
+        const R: u32 = 2126;
+        const G: u32 = 7152;
+        const B: u32 = 722;
+        const BLACK: u32 = R + G + B;
         let px_len = buf.len() / 3;
-        let mut pixels: Vec<RGB> = Vec::with_capacity(px_len);
+        let mut pixels: Vec<u8> = Vec::with_capacity(px_len);
         for px in 0..px_len {
             let b = px * 3;
-            pixels.push(RGB {
-                0: buf[b],
-                1: buf[b + 1],
-                2: buf[b + 2],
-            });
+            let grey_r = R * buf[b] as u32;
+            let grey_g = G * buf[b + 1] as u32;
+            let grey_b = B * buf[b + 2] as u32;
+            pixels.push(((grey_r + grey_g + grey_b) / BLACK)
+                .try_into()
+                .unwrap());
         }
         Self { pixels, width }
     }
-    pub fn get(&self, x: usize, y: usize) -> Option<&RGB> {
+    pub fn get(&self, x: usize, y: usize) -> Option<&u8> {
         let i: usize = (y * self.width) + x;
         self.pixels.get(i)
     }
@@ -344,18 +331,10 @@ impl Img {
         let height: usize = length / width;
         (width, height, length)
     }
-    pub fn into_raw(&self) -> Vec<u8> {
-        let len = self.pixels.len() as usize;
-        let mut bytes: Vec<u8> = Vec::with_capacity(len);
-        for px in &self.pixels {
-            bytes.push(px.0);
-            bytes.push(px.1);
-            bytes.push(px.2);
-        }
-        bytes
+    pub fn as_slice(&self) -> &[u8] {
+        self.pixels.as_slice()
     }
 }
-
 
 /*
  * Dithering involves aplying a threshold to each pixel to round down to Black
@@ -363,13 +342,12 @@ impl Img {
  * the surrounding pixels. So the luminosity lost by forcing a pixel down to Black,
  * results in the surrounding pixels incrementally more likely to round up to White.
  * Pixels are processed from left to right and then top to bottom. The residual
- * error from each Black/White determination is carried-forward to pixels to the 
+ * error from each Black/White determination is carried-forward to pixels to the
  * right and below as per the diffusion scheme.
  * https://tannerhelland.com/2012/12/28/dithering-eleven-algorithms-source-code.html
  *
  * author: nworbnhoj
  */
-
 
 /// Burkes dithering diffusion scheme was chosen for its modest resource
 /// requirements with impressive quality outcome.
@@ -387,7 +365,6 @@ const BURKES: [(isize, isize, i16); 7] = [
     (1, 1, 4),
     (2, 1, 2),
 ];
-
 
 struct Dither {
     // the width of the image to be dithered
@@ -463,7 +440,7 @@ impl Dither {
         for y in 0..height {
             for x in 0..width {
                 let pixel = match image.get(x, y) {
-                    Some(rgb) => self.pixel(rgb.to_grey()),
+                    Some(grey) => self.pixel(*grey),
                     None => PixelColor::Dark,
                 };
                 pixels.push(pixel);
@@ -473,8 +450,6 @@ impl Dither {
         pixels
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
