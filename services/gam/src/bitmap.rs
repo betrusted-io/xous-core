@@ -290,6 +290,12 @@ impl From<&Img> for Bitmap {
     }
 }
 
+pub enum PixelType {
+    U8,
+    U8x3,
+    U8x4,
+}
+
 /*
  * Image as a minimal flat buffer of grey u8 pixels; accessible by (x, y)
  *
@@ -303,21 +309,33 @@ pub struct Img {
 }
 
 impl Img {
-    pub fn new(buf: Vec<u8>, width: usize) -> Self {
+    pub fn new(buf: Vec<u8>, width: usize, px_type: PixelType) -> Self {
         const R: u32 = 2126;
         const G: u32 = 7152;
         const B: u32 = 722;
         const BLACK: u32 = R + G + B;
-        let px_len = buf.len() / 3;
+        let px_len = match px_type {
+            PixelType::U8 => buf.len(),
+            PixelType::U8x3 => buf.len() / 3,
+            _ => 0,
+        };
         let mut pixels: Vec<u8> = Vec::with_capacity(px_len);
         for px in 0..px_len {
-            let b = px * 3;
-            let grey_r = R * buf[b] as u32;
-            let grey_g = G * buf[b + 1] as u32;
-            let grey_b = B * buf[b + 2] as u32;
-            pixels.push(((grey_r + grey_g + grey_b) / BLACK)
-                .try_into()
-                .unwrap());
+            let pixel: u8 = match px_type {
+                PixelType::U8 => buf[px],
+                PixelType::U8x3 => {
+                    let b = px * 3;
+                    let grey_r = R * buf[b] as u32;
+                    let grey_g = G * buf[b + 1] as u32;
+                    let grey_b = B * buf[b + 2] as u32;
+                    ((grey_r + grey_g + grey_b) / BLACK).try_into().unwrap()
+                }
+                _ => {
+                    log::warn!("unsupported PixelType");
+                    0
+                }
+            };
+            pixels.push(pixel);
         }
         Self { pixels, width }
     }

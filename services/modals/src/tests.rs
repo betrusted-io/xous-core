@@ -2,6 +2,8 @@ use super::*;
 use gam::*;
 use std::thread;
 use xous_names::XousNames;
+#[cfg(feature = "ditherpunk")]
+use bitmap::PixelType;
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
 
@@ -196,7 +198,7 @@ fn clifford() -> Img {
         (rgb[j], rgb[j + 1], rgb[j + 2]) = (buf[i], buf[i], buf[i]);
         i += 1;
     }
-    Img::new(rgb, SIZE.try_into().unwrap())
+    Img::new(rgb, SIZE.try_into().unwrap(), PixelType::U8x3)
 }
 
 fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {

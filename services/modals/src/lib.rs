@@ -12,6 +12,8 @@ use num_traits::*;
 use std::convert::TryInto;
 #[cfg(feature = "ditherpunk")]
 use std::num::NonZeroU32;
+#[cfg(feature = "ditherpunk")]
+use bitmap::PixelType;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -280,7 +282,7 @@ impl Modals {
         resizer.resize(&fir_img.view(), &mut rsz_view).unwrap();
 
         let width: usize = resized.width().get().try_into().unwrap();
-        Img::new(resized.into_vec(), width )
+        Img::new(resized.into_vec(), width, PixelType::U8x3)
     }
 
     pub fn start_progress(
