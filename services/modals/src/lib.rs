@@ -195,58 +195,49 @@ impl Modals {
     }
 
     #[cfg(feature = "ditherpunk")]
-    const MODAL_WIDTH: u32 = 300;
+    const MODAL_WIDTH: u32 = 296;
     #[allow(dead_code)]
     #[cfg(feature = "ditherpunk")]
-    const MODAL_HEIGHT: u32 = 370;
+    const MODAL_HEIGHT: u32 = 300;
     /// this blocks until the image has been dismissed.
     #[cfg(feature = "ditherpunk")]
     pub fn show_image(&self, img: &Img) -> Result<(), xous::Error> {
         self.lock();
         // resize and/or rotate
-        /*
         let (modal_width, modal_height) = (Modals::MODAL_WIDTH as f32, Modals::MODAL_HEIGHT as f32);
         let (w, h, _) = img.size();
         let (img_width, img_height) = (w as f32, h as f32);
 
         let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
         let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
-        let mut rotate = false;
-        let modal_img;
-        if portrait_scale >= 1.0 {
-            modal_img = img.clone();
-        } else if landscape_scale >= 1.0 {
-            modal_img = img.clone();
-            rotate = true;
+        let mut bm = if portrait_scale >= 1.0 {
+            Bitmap::from(img)
+        } else if landscape_scale >= 1.0 {        
+            Bitmap::from(img).rotate90()
         } else if portrait_scale >= landscape_scale {
-            modal_img = Modals::resize_image(img.clone(), portrait_scale)
+            let resized = Modals::resize_image(img, portrait_scale);
+            Bitmap::from(&resized)
         } else {
-            rotate = true;
-            modal_img = Modals::resize_image(img.clone(), landscape_scale)
+            let resized = Modals::resize_image(img, landscape_scale);
+            Bitmap::from(&resized).rotate90()
         };
 
-        let mut bm = Bitmap::from(modal_img);
-        bm = if rotate { bm.rotate90() } else { bm };
         let (bm_width, bm_height) = bm.size();
         let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
-        */
-        let bm = Bitmap::from(img.clone());
 
         // center image in modal
-        /*
         let center = Point::new(
             ((Modals::MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
             ((Modals::MODAL_HEIGHT - bm_height) / 2).try_into().unwrap(),
-        );*/
+        );        
+        bm.translate(center);
 
         let mut tiles: [Option<Tile>; 6] = [None; 6];
         for (t, tile) in bm.iter().enumerate() {
             if t >= tiles.len() {
                 continue;
             }
-            let copy = tile.clone();
-            //copy.translate(center);
-            tiles[t] = Some(copy);
+            tiles[t] = Some(*tile);
         }
 
         let spec = ManagedImage {
@@ -262,7 +253,7 @@ impl Modals {
 
     #[allow(dead_code)]
     #[cfg(feature = "ditherpunk")]
-    fn resize_image(img: Img, scale: f32) -> Img {
+    fn resize_image(img: &Img, scale: f32) -> Img {
         let (w, h, _) = img.size();
         let (img_width, img_height) = (w as f32, h as f32);
         let height: u32 = (scale * img_height).floor() as u32;
