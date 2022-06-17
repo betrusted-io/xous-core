@@ -247,6 +247,10 @@ fn wrapped_main() -> ! {
                             Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2),
                         TextBounds::GrowableFromTr(tr, width) =>
                             Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2),
+                        TextBounds::CenteredTop(r) =>
+                            Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
+                        TextBounds::CenteredBot(r) =>
+                            Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
                     };
                     let mut typesetter = Typesetter::setup(
                         tv.to_str(),
@@ -274,6 +278,29 @@ fn wrapped_main() -> ! {
                             tl.add(tv.margin),
                         TextBounds::GrowableFromTr(tr, _width) =>
                             Point::new(tr.x - (composition.bb_width() as i16 + tv.margin.x), tr.y + tv.margin.y),
+                        TextBounds::CenteredTop(r) => {
+                            if r.width() as i16 > composition.bb_width() {
+                                r.tl().add(Point::new(
+                                        (r.width() as i16 - composition.bb_width()) / 2, 0
+                                ))
+                            } else {
+                                r.tl().add(tv.margin)
+                            }
+                        },
+                        TextBounds::CenteredBot(r) => {
+                            if r.width() as i16 > composition.bb_width() {
+                                r.tl().add(Point::new(
+                                        (r.width() as i16 - composition.bb_width()) / 2,
+                                        if (r.height() as i16) > (composition.bb_height() + tv.margin.y) {
+                                            (r.height() as i16) - (composition.bb_height() + tv.margin.y)
+                                        } else {
+                                            0
+                                        }
+                                ))
+                            } else {
+                                r.tl().add(tv.margin)
+                            }
+                        }
                     }
                     .add(screen_offset);
 
