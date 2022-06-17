@@ -72,12 +72,14 @@ pub enum SysCall {
     /// Add the given number of bytes to the heap.  The number of bytes must be
     /// divisible by the page size.  The newly-allocated pages will have the
     /// specified flags.  To get the current heap base, call this with a size of
-    /// `0`.
+    /// `0`, which will return a `MemoryRange` containing the heap base and the size.
     ///
     /// # Returns
     ///
-    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new
-    ///   size of the heap */)
+    /// * **MemoryRange(
+    ///         *mut usize, /* The newly-allocated offset */
+    ///         usize,      /* The amount of data added */
+    ///     )**
     ///
     /// # Errors
     ///
