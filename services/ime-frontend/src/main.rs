@@ -245,7 +245,7 @@ impl InputTracker {
 
     pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool) -> Result<Option<xous_ipc::String::<4000>>, xous::Error> {
         let debug1= false;
-        let mut update_predictor = false;
+        let mut update_predictor = force_redraw;
         let mut retstring: Option<xous_ipc::String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("updating input area");}
@@ -590,7 +590,7 @@ impl InputTracker {
             }
 
             let debug_canvas = false;
-            if valid_predictions == 0 && !self.menu_mode {
+            if valid_predictions == 0 {
                 let mut empty_tv = TextView::new(pc,
                     TextBounds::BoundingBox(Rectangle::new(Point::new(0, 1), pc_bounds)));
                 empty_tv.draw_border = false;
@@ -599,7 +599,7 @@ impl InputTracker {
                 write!(empty_tv.text, "{}", t!("input.greeting", xous::LANG)).expect("couldn't set up empty TextView");
                 if debug_canvas { info!("pc canvas {:?}", pc) }
                 self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
-            } else if update_predictor || force_redraw || self.menu_mode {
+            } else if update_predictor || force_redraw {
                 // alright, first, let's clear the area
                 self.gam.draw_rectangle(pc, pc_clip).expect("couldn't clear predictor area");
 
@@ -666,6 +666,7 @@ fn main() -> ! {
     emoji_menu(xous::connect(imef_sid).unwrap());
 
     log::trace!("Initialized but still waiting for my canvas Gids");
+    let imef_cid = xous::connect(imef_sid).unwrap();
     loop {
         let msg = xous::receive_message(imef_sid).unwrap();
         log::trace!("Message: {:?}", msg);
@@ -776,8 +777,14 @@ fn main() -> ! {
             Some(ImefOpcode::SetMenuMode) => msg_scalar_unpack!(msg, arg, _, _, _, {
                 if arg == 1 {
                     tracker.set_menu_mode(true);
+                    xous::send_message(imef_cid,
+                        xous::Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(), 1, 0, 0, 0)
+                    ).ok();
                 } else {
                     tracker.set_menu_mode(false);
+                    xous::send_message(imef_cid,
+                        xous::Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(), 1, 0, 0, 0)
+                    ).ok();
                 }
             }),
             Some(ImefOpcode::Quit) => {log::error!("recevied quit, goodbye!"); break;}
