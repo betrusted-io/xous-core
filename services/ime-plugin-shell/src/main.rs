@@ -55,7 +55,6 @@ fn main() -> ! {
                 if active_history.is_none() {
                     if let Some(token) = ret.token {
                         if let Some(h) = history_store.remove(&token) {
-                            log::info!("existing API token: {:x?}", token);
                             active_history = Some((token, h));
                             ret.token = Some(token);
                         } else {
@@ -64,7 +63,6 @@ fn main() -> ! {
                         }
                     } else {
                         let new_token = xous::create_server_id().unwrap().to_array();
-                        log::info!("new API token: {:x?}", new_token);
                         active_history = Some((new_token, Vec::new()));
                         ret.token = Some(new_token);
                     }
