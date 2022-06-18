@@ -28,5 +28,6 @@ scp -i c:/users/bunnie/.ssh/id_pi target/riscv32imac-unknown-xous-elf/release/xo
 $file = Get-Item target/riscv32imac-unknown-xous-elf/release/xous.img
 $SizeinBytes = $file.Length
 if($SizeinBytes -gt 6815743) {
-    "Warning: xous.img exceeds the 24-bit limit of JTAG. Upload using USB instead!"
+    $Overage = $SizeinBytes - 6815743
+    "Warning: xous.img is getting bloated. Bloat over ideal target: $Overage bytes."
 }
