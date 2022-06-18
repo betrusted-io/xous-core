@@ -27,7 +27,7 @@ pub(crate) struct VaultUx {
     mode: VaultMode,
 }
 
-const TITLE_HEIGHT: i16 = 32;
+const TITLE_HEIGHT: i16 = 26;
 
 impl VaultUx{
     pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
@@ -99,8 +99,7 @@ impl VaultUx{
                 )
             )
         );
-        title_text.draw_border = true;
-        title_text.rounded_border = Some(8);
+        title_text.draw_border = false;
         title_text.clear_area = true;
         title_text.style = GlyphStyle::Large;
         match self.mode {
@@ -114,7 +113,7 @@ impl VaultUx{
         let available_height = self.screensize.y - TITLE_HEIGHT;
         let style = GlyphStyle::Large;
         let glyph_height = self.gam.glyph_height_hint(style).unwrap();
-        let box_height = (glyph_height * 2) as i16;
+        let box_height = (glyph_height * 2) as i16 + self.margin.y * 2 + 2; // +2 because of the border width
         let line_count = available_height / box_height;
 
         let mut test_list = Vec::new();
@@ -123,16 +122,22 @@ impl VaultUx{
             test_list.push(test_string);
         }
 
-        let mut insert_at = TITLE_HEIGHT;
-        for item in test_list {
-            if insert_at > self.screensize.y - box_height {
+        // line up the list to justify to the bottom of the screen, based on the actual font requested
+        let available_height = self.screensize.y - TITLE_HEIGHT;
+        let fitting_items = available_height / box_height;
+        let items_height = fitting_items * box_height;
+        let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
+
+        let selected = 2;
+        for (index, item) in test_list.iter().enumerate() {
+            if insert_at - 1 > self.screensize.y - box_height { // -1 because of the overlapping border
                 break;
             }
             let mut box_text = TextView::new(self.content,
                 graphics_server::TextBounds::BoundingBox(
                     Rectangle::new(
-                        Point::new(self.margin.x, insert_at),
-                        Point::new(self.screensize.x - self.margin.x, insert_at + box_height)
+                        Point::new(0, insert_at),
+                        Point::new(self.screensize.x, insert_at + box_height)
                     )
                 )
             );
@@ -140,6 +145,10 @@ impl VaultUx{
             box_text.rounded_border = None;
             box_text.clear_area = true;
             box_text.style = style;
+            box_text.margin = self.margin;
+            if index == selected {
+                box_text.border_width = 4;
+            }
             write!(box_text, "{}", item).ok();
             self.gam.post_textview(&mut box_text).expect("couldn't post list item");
 
