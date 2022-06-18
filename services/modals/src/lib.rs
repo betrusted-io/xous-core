@@ -10,10 +10,6 @@ use gam::*;
 use num_traits::*;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
-#[cfg(feature = "ditherpunk")]
-use std::num::NonZeroU32;
-#[cfg(feature = "ditherpunk")]
-use bitmap::PixelType;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -201,7 +197,8 @@ impl Modals {
     pub fn show_image(&self, img: &Img) -> Result<(), xous::Error> {
         self.lock();
         // resize and/or rotate
-        let (modal_width, modal_height) = (gam::IMG_MODAL_WIDTH as f32, gam::IMG_MODAL_HEIGHT as f32);
+        let (modal_width, modal_height) =
+            (gam::IMG_MODAL_WIDTH as f32, gam::IMG_MODAL_HEIGHT as f32);
         let (w, h, _) = img.size();
         let (img_width, img_height) = (w as f32, h as f32);
 
@@ -209,13 +206,19 @@ impl Modals {
         let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
         let mut bm = if portrait_scale >= 1.0 {
             Bitmap::from(img)
-        } else if landscape_scale >= 1.0 {        
+        } else if landscape_scale >= 1.0 {
             Bitmap::from(img).rotate90()
         } else if portrait_scale >= landscape_scale {
-            let resized = Modals::resize_image(img, portrait_scale);
+            let resized = img.resize(
+                (portrait_scale * img_width) as usize,
+                (portrait_scale * img_height) as usize,
+            );
             Bitmap::from(&resized)
         } else {
-            let resized = Modals::resize_image(img, landscape_scale);
+            let resized = img.resize(
+                (landscape_scale * img_width) as usize,
+                (landscape_scale * img_height) as usize,
+            );
             Bitmap::from(&resized).rotate90()
         };
 
@@ -225,8 +228,10 @@ impl Modals {
         // center image in modal
         let center = Point::new(
             ((gam::IMG_MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
-            ((gam::IMG_MODAL_HEIGHT - bm_height) / 2).try_into().unwrap(),
-        );        
+            ((gam::IMG_MODAL_HEIGHT - bm_height) / 2)
+                .try_into()
+                .unwrap(),
+        );
         bm.translate(center);
 
         let mut tiles: [Option<Tile>; 6] = [None; 6];
@@ -246,38 +251,6 @@ impl Modals {
             .or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
-    }
-
-    #[allow(dead_code)]
-    #[cfg(feature = "ditherpunk")]
-    fn resize_image(img: &Img, scale: f32) -> Img {
-        let (w, h, _) = img.size();
-        let (img_width, img_height) = (w as f32, h as f32);
-        let height: u32 = (scale * img_height).floor() as u32;
-        let width: u32 = (scale * img_width).floor() as u32;
-
-        let fir_img = fast_image_resize::Image::from_vec_u8(
-            NonZeroU32::new(width).unwrap(),
-            NonZeroU32::new(height).unwrap(),
-            img.as_slice().to_vec(),
-            fast_image_resize::PixelType::U8,
-        )
-        .unwrap();
-
-        // Create container for data of destination image
-        let mut resized = fast_image_resize::Image::new(
-            NonZeroU32::new(width).unwrap(),
-            NonZeroU32::new(height).unwrap(),
-            fir_img.pixel_type(),
-        );
-        let mut rsz_view = resized.view_mut();
-
-        // resize image with fastest available algorithm
-        let mut resizer = fast_image_resize::Resizer::new(fast_image_resize::ResizeAlg::Nearest);
-        resizer.resize(&fir_img.view(), &mut rsz_view).unwrap();
-
-        let width: usize = resized.width().get().try_into().unwrap();
-        Img::new(resized.into_vec(), width, PixelType::U8x3)
     }
 
     pub fn start_progress(
@@ -532,10 +505,14 @@ impl Modals {
     fn unlock(&self) {
         self.have_lock.set(false);
     }
-    pub fn conn(&self) -> CID {self.conn}
+    pub fn conn(&self) -> CID {
+        self.conn
+    }
     /// Don't leak this token outside of your server, otherwise, another server can pretend to be you and
     /// steal your modal information!
-    pub fn token(&self) -> [u32; 4] {self.token}
+    pub fn token(&self) -> [u32; 4] {
+        self.token
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -563,7 +540,10 @@ impl Drop for Modals {
 ///
 /// This function is "broken out" so that it can be called from a thread without having
 /// to wrap a mutex around the primary Modals structure.
-pub fn dynamic_notification_blocking_listener(token: [u32; 4], conn: CID) -> Result<Option<char>, xous::Error> {
+pub fn dynamic_notification_blocking_listener(
+    token: [u32; 4],
+    conn: CID,
+) -> Result<Option<char>, xous::Error> {
     match send_message(
         conn,
         Message::new_blocking_scalar(
@@ -573,7 +553,9 @@ pub fn dynamic_notification_blocking_listener(token: [u32; 4], conn: CID) -> Res
             token[2] as usize,
             token[3] as usize,
         ),
-    ).expect("couldn't listen") {
+    )
+    .expect("couldn't listen")
+    {
         xous::Result::Scalar2(is_some, code) => {
             if is_some == 1 {
                 let c = char::from_u32(code as u32).unwrap_or('\u{0000}');
@@ -585,6 +567,6 @@ pub fn dynamic_notification_blocking_listener(token: [u32; 4], conn: CID) -> Res
                 Ok(None)
             }
         }
-        _ => Err(xous::Error::InternalError)
+        _ => Err(xous::Error::InternalError),
     }
 }

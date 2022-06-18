@@ -352,6 +352,31 @@ impl Img {
     pub fn as_slice(&self) -> &[u8] {
         self.pixels.as_slice()
     }
+    // simply retains the closest pixel
+    pub fn resize(&self, width: usize, height: usize) -> Img {
+        let mut buf = vec![0u8; (width * height).try_into().unwrap()];
+        let (self_width, self_height, _) = self.size();
+        let x_scale = self_width as f32 / width as f32;
+        let y_scale = self_height as f32 / height as f32;
+        let self_x_base = x_scale * 0.5;
+        let self_y_base = y_scale * 0.5;
+        
+        // Pretabulate horizontal pixel positions
+        let mut self_x_tab: Vec<usize> = Vec::with_capacity(width);
+        for buf_x in 0..width {
+            self_x_tab.push(((self_x_base + x_scale * buf_x as f32) as usize).min(self_width - 1));
+        }
+
+        for buf_y in 0..height {
+            let self_y = ((self_y_base + y_scale * buf_y as f32) as usize).min(self_height - 1);
+            let self_row = self_y * self_width;
+            let buf_row = buf_y * width;
+            for (buf_x, self_x) in self_x_tab.iter().enumerate() {
+                buf[buf_row + buf_x] = self.pixels[self_row + self_x];
+            }
+        }
+        Img::new(buf, width.try_into().unwrap(), PixelType::U8)
+    }
 }
 
 /*
