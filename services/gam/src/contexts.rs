@@ -412,9 +412,7 @@ impl ContextManager {
                         token: context.gam_token,
                         predictor_token: context.pred_token,
                     };
-                    log::info!("sending api token: {:x?}", descriptor.predictor_token);
                     let pred_api_token = self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
-                    log::info!("got api token: {:x?}", pred_api_token);
                     self.imef_active = true;
                     Some(pred_api_token)
                 } else {
@@ -427,7 +425,6 @@ impl ContextManager {
                 pred_token
             } else { None };
             if let Some(c) = self.get_context_by_token_mut(token) {
-                log::info!("setting pred api token: {:x?} on context {:x?}", pred_api_token, token);
                 c.pred_token = pred_api_token;
             }
         }
