@@ -17,7 +17,7 @@ use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issu
 #[cfg(feature="ditherpunk")]
 use std::str::FromStr;
 #[cfg(feature="ditherpunk")]
-use gam::Img;
+use gam::{Img, PixelType};
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -380,16 +380,19 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 let modals = modals::Modals::new(&env.xns).unwrap();
                                                 // have to add 4 to the start because the index is at the beginning of the header sequence,
                                                 // not the end of the sequence.
+                                                log::info!("heap size: {}", heap_usage());
                                                 log::info!("decoding png starting with: {:x?}", &received[start+4..start+4+64]);
-                                                let decoder = png::Decoder::new(&received[start+4..]);
+                                                let decoder = png::Decoder::new_with_limits(&received[start+4..], png::Limits { bytes: 400 * 1024 });
+                                                log::info!("heap size: {}", heap_usage());
                                                 let mut reader = decoder.read_info().expect("failed to read png info");
                                                 let mut buf = vec![0; reader.output_buffer_size()];
                                                 let info = reader.next_frame(&mut buf).expect("failed to decode png");
+                                                log::info!("heap size: {}", heap_usage());
 
                                                 let (width, height) = (info.width, info.height);
                                                 log::info!("image is {} x {}", width, height);
                                                 log::info!("some image bytes: {:x?}", &buf[..64]);
-                                                let img = Img::new(buf, width as usize);
+                                                let img = Img::new(buf, width as usize, PixelType::U8x3);
 
                                                 modals.show_image(&img).expect("show image modal failed");
                                                 write!(ret, "Image of {} bytes read successfully", content_length).unwrap();
@@ -699,5 +702,19 @@ impl Worker {
             id,
             thread: Some(thread),
         }
+    }
+}
+
+#[cfg(feature="ditherpunk")]
+fn heap_usage() -> usize {
+    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R)).expect("couldn't get heap size") {
+        xous::Result::MemoryRange(m) => {
+            let usage = m.len();
+            usage
+        }
+        _ => {
+            log::error!("Couldn't measure heap usage");
+            0
+         },
     }
 }
