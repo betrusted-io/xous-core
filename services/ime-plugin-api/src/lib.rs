@@ -9,6 +9,11 @@ pub struct Prediction {
     pub index: u32,
     pub valid: bool,
     pub string: String<1000>,
+    pub api_token: [u32; 4],
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct AcquirePredictor {
+    pub token: Option<[u32; 4]>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -66,6 +71,10 @@ pub enum Opcode {
     /// whole predictive unit has been entered.
     GetPredictionTriggers,
 
+    /// Access control & data cleanup
+    Acquire,
+    Release,
+
     Quit,
 }
 
@@ -80,7 +89,11 @@ pub trait PredictionApi {
     fn unpick(&self) -> Result<(), xous::Error>;
     fn set_input(&self, s: String<4000>) -> Result<(), xous::Error>;
     fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error>;
-    fn get_prediction(&self, index: u32) -> Result<Option<String<4000>>, xous::Error>;
+    fn get_prediction(&self, index: u32, api_token: [u32; 4]) -> Result<Option<String<4000>>, xous::Error>;
+    /// gets an exclusive lock on the predictor. Returns an error if the predictor is already locked.
+    fn acquire(&self, api_token: Option<[u32; 4]>) -> Result<[u32; 4], xous::Error>;
+    /// releases the lock. Also clears any sensitive data that may be in the predictor.
+    fn release(&self, api_token: [u32; 4]);
 }
 
 // provide a convenience version of the API for generic/standard calls
@@ -150,13 +163,15 @@ impl PredictionApi for PredictionPlugin {
         }
     }
 
-    fn get_prediction(&self, index: u32) -> Result<Option<String<4000>>, xous::Error> {
+    /// this function could disclose sensitive data, so it requires an API token to call
+    fn get_prediction(&self, index: u32, api_token: [u32; 4]) -> Result<Option<String<4000>>, xous::Error> {
         match self.connection {
             Some(cid) => {
                 let prediction = Prediction {
                     index,
                     string: String::<1000>::new(),
                     valid: false,
+                    api_token,
                 };
                 let mut buf = Buffer::into_buf(prediction).or(Err(xous::Error::InternalError))?;
                 buf.lend_mut(cid, Opcode::Prediction.to_u32().unwrap())
@@ -183,6 +198,43 @@ impl PredictionApi for PredictionPlugin {
                 }
             }
             _ => Err(xous::Error::UseBeforeInit),
+        }
+    }
+
+    fn acquire(&self, api_token: Option<[u32; 4]>) -> Result<[u32; 4], xous::Error> {
+        match self.connection {
+            Some(cid) => {
+                let request = AcquirePredictor {
+                    token: api_token,
+                };
+                let mut buf = Buffer::into_buf(request).unwrap();
+                buf.lend_mut(
+                    cid,
+                    Opcode::Acquire.to_u32().unwrap()
+                ).unwrap();
+                let ret = buf.to_original::<AcquirePredictor, _>().unwrap();
+                match ret.token {
+                    Some(token) => Ok(token),
+                    _ => Err(xous::Error::AccessDenied),
+                }
+            }
+            _ => Err(xous::Error::UseBeforeInit),
+        }
+    }
+
+    fn release(&self, api_token: [u32; 4]) {
+        match self.connection {
+            Some(cid) => {
+                send_message(
+                    cid,
+                    Message::new_scalar(Opcode::Release.to_usize().unwrap(),
+                    api_token[0] as usize,
+                    api_token[1] as usize,
+                    api_token[2] as usize,
+                    api_token[3] as usize,
+                )).ok();
+            }
+            _ => log::warn!("release called on a predictor with no connection"),
         }
     }
 }
@@ -225,10 +277,11 @@ pub struct ImefDescriptor {
     pub prediction_canvas: Option<graphics_server::Gid>,
     pub predictor: Option<String<64>>,
     pub token: [u32; 4], // token used to lookup our connected app inside the GAM
+    pub predictor_token: Option<[u32;4]>,
 }
 
 pub trait ImeFrontEndApi {
-    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error>;
+    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<[u32; 4], xous::Error>;
     fn hook_listener_callback(&mut self, cb: fn(String<4000>)) -> Result<(), xous::Error>;
     fn redraw(&self, force_all: bool) -> Result<(), xous::Error>;
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
@@ -291,11 +344,16 @@ impl ImeFrontEndApi for ImeFrontEnd {
     fn getop_process_keys(&self) -> u32 {
         ImefOpcode::ProcessKeys.to_u32().unwrap()
     }
-    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error> {
-        let buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
-        buf.send(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap())
+    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<[u32; 4], xous::Error> {
+        let mut buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))
-            .map(|_| ())
+            .map(|_| ())?;
+        let ret = buf.to_original::<ImefDescriptor, _>().unwrap();
+        match ret.predictor_token {
+            Some(token) => Ok(token),
+            _ => Err(xous::Error::AccessDenied),
+        }
     }
 
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error> {

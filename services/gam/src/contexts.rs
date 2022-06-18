@@ -60,6 +60,8 @@ pub(crate) struct UxContext {
     pub gam_token: [u32; 4],
     /// set to true if keyboard vibrate is turned on
     pub vibe: bool,
+    /// API token for the predictor. Allows our prediction history to be shown only when our context is active.
+    pub pred_token: Option<[u32; 4]>,
 
     /// CID to send ContextEvents
     pub listener: xous::CID,
@@ -157,6 +159,8 @@ impl ContextManager {
                         rawkeys_id: None,
                         vibe: false,
                         imef_menu_mode: false,
+                        // this gets initialized on the first attempt to change predictors, not here
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                 },
@@ -179,6 +183,7 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                         imef_menu_mode: false,
+                        pred_token: None,
                     };
 
                     if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
@@ -207,6 +212,7 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                         imef_menu_mode: false,
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                     // this check gives permissions to password boxes to render inverted text
@@ -235,6 +241,7 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                         imef_menu_mode: false,
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                 }
@@ -381,8 +388,8 @@ impl ContextManager {
         {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
-            if let Some(context) = maybe_new_focus {
-                if context.predictor.is_some() {
+            let pred_api_token = if let Some(context) = maybe_new_focus {
+                let pred_token = if context.predictor.is_some() {
                     // only hook up the IMEF if a predictor is selected for this context
                     let descriptor = ImefDescriptor {
                         input_canvas:
@@ -403,15 +410,25 @@ impl ContextManager {
                             },
                         predictor: context.predictor,
                         token: context.gam_token,
+                        predictor_token: context.pred_token,
                     };
-                    self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
+                    log::info!("sending api token: {:x?}", descriptor.predictor_token);
+                    let pred_api_token = self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
+                    log::info!("got api token: {:x?}", pred_api_token);
                     self.imef_active = true;
+                    Some(pred_api_token)
                 } else {
                     self.imef_active = false;
-                }
+                    None
+                };
 
                 // now recompute the drawability of canvases, based on on-screen visibility and trust state
                 recompute_canvases(canvases);
+                pred_token
+            } else { None };
+            if let Some(c) = self.get_context_by_token_mut(token) {
+                log::info!("setting pred api token: {:x?} on context {:x?}", pred_api_token, token);
+                c.pred_token = pred_api_token;
             }
         }
         log::trace!("foregrounding new context");

@@ -243,7 +243,7 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool) -> Result<Option<xous_ipc::String::<4000>>, xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool, api_token: [u32; 4]) -> Result<Option<xous_ipc::String::<4000>>, xous::Error> {
         let debug1= false;
         let mut update_predictor = force_redraw;
         let mut retstring: Option<xous_ipc::String::<4000>> = None;
@@ -586,7 +586,8 @@ impl InputTracker {
                 // Query the prediction engine for the latest predictions
                 if let Some(pred) = self.predictor {
                     for i in 0..self.pred_options.len() {
-                        let p = if let Some(prediction) = pred.get_prediction(i as u32).expect("couldn't query prediction engine") {
+                        let p = if let Some(prediction) =
+                        pred.get_prediction(i as u32, api_token).expect("couldn't query prediction engine") {
                             Some(String::from(prediction.as_str().unwrap_or("UTF-8 Error")))
                         } else {
                             None
@@ -682,13 +683,15 @@ fn main() -> ! {
 
     log::trace!("Initialized but still waiting for my canvas Gids");
     let imef_cid = xous::connect(imef_sid).unwrap();
+    // the API token allows individual predictor back end uses to have their own history buffers
+    let mut api_token: Option<[u32; 4]> = None;
     loop {
-        let msg = xous::receive_message(imef_sid).unwrap();
+        let mut msg = xous::receive_message(imef_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ImefOpcode::ConnectBackend) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let descriptor = buffer.to_original::<ImefDescriptor, _>().unwrap();
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut descriptor = buffer.to_original::<ImefDescriptor, _>().unwrap();
 
                 if let Some(input) = descriptor.input_canvas {
                     if debug1 || dbgcanvas {info!("got input canvas {:?}", input);}
@@ -703,7 +706,8 @@ fn main() -> ! {
                     tracker.clear_pred_canvas();
                 }
                 // disconnect any existing predictor, if we have one already
-                if let Some(_pred) = tracker.get_predictor() {
+                if let Some(pred) = tracker.get_predictor() {
+                    pred.release(api_token.take().unwrap()); // api token *should* be Some() if pred is Some()
                     if let Some((name, token)) = tracker.predictor_conn {
                         xns.disconnect_with_token(name.as_str().unwrap(), token)
                            .expect("couldn't disconnect from previous predictor. Something is wrong with internal state!");
@@ -715,7 +719,16 @@ fn main() -> ! {
                     log::trace!("got prediction server: {}", s.as_str().unwrap());
                     match xns.request_connection_with_token(s.as_str().unwrap()) {
                         Ok((pc, token)) => {
-                            tracker.set_predictor( Some(ime_plugin_api::PredictionPlugin {connection: Some(pc)}) );
+                            let pred = ime_plugin_api::PredictionPlugin {connection: Some(pc)};
+                            match pred.acquire(descriptor.predictor_token) {
+                                Ok(confirmation) => {
+                                    api_token = Some(confirmation);
+                                    // we are required to send back the returned token as confirmation of the connection
+                                    descriptor.predictor_token = Some(confirmation);
+                                },
+                                Err(e) => log::error!("Internal error: {:?}", e),
+                            }
+                            tracker.set_predictor( Some(pred) );
                             tracker.predictor_conn = Some(
                                 (xous_ipc::String::<64>::from_str(s.as_str().unwrap()),
                                 token.expect("didn't get the disconnect token!"))
@@ -725,6 +738,7 @@ fn main() -> ! {
                     }
                 }
                 tracker.set_gam_token(descriptor.token);
+                buffer.replace(descriptor).unwrap();
             }
             Some(ImefOpcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
@@ -749,7 +763,7 @@ fn main() -> ! {
                         if keys[0] == '😊' {
                             tracker.activate_emoji();
                         } else {
-                            if let Some(line) = tracker.update(keys, false).expect("couldn't update input tracker with latest key presses") {
+                            if let Some(line) = tracker.update(keys, false, api_token.unwrap()).expect("couldn't update input tracker with latest key presses") {
                                 if dbglistener{info!("sending listeners {:?}", line);}
                                 if let Some(conn) = listener {
                                     if dbglistener{info!("sending to conn {:?}", conn);}
@@ -783,7 +797,7 @@ fn main() -> ! {
                 if tracker.is_init() {
                     let force = if arg != 0 { true } else { false };
                     tracker.clear_area().expect("can't initially clear areas");
-                    tracker.update(['\u{0000}'; 4], force).expect("can't setup initial screen arrangement");
+                    tracker.update(['\u{0000}'; 4], force, api_token.unwrap()).expect("can't setup initial screen arrangement");
                 } else {
                     log::trace!("got redraw, but we're not initialized");
                     // ignore keyboard events until we've fully initialized
