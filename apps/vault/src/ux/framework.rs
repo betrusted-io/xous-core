@@ -1,7 +1,6 @@
 use crate::*;
 use gam::{UxRegistration, GlyphStyle};
 use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor, TextView};
-use xous::MessageEnvelope;
 use std::fmt::Write;
 use pddb::Pddb;
 use std::cell::RefCell;
@@ -45,9 +44,6 @@ pub(crate) enum NavDir {
 
 #[allow(dead_code)]
 pub(crate) struct VaultUx {
-    // messages not handled by the main loop are routed here
-    msg: Option<MessageEnvelope>,
-
     /// the content area
     content: Gid,
     gam: gam::Gam,
@@ -171,7 +167,6 @@ impl VaultUx {
         let items_per_screen = available_height / item_height;
 
         VaultUx {
-            msg: None,
             content,
             gam,
             screensize,
@@ -253,10 +248,6 @@ impl VaultUx {
         Ok(())
     }
 
-    pub(crate) fn msg(&mut self, message: MessageEnvelope) {
-        self.msg = Some(message);
-    }
-
     fn clear_area(&self) {
         self.gam.draw_rectangle(self.content,
             Rectangle::new_with_style(Point::new(0, 0), self.screensize,
@@ -267,13 +258,9 @@ impl VaultUx {
             }
         )).expect("can't clear content area");
     }
-    // dummy function for now - but this is where the action happens when input events come
-    pub (crate) fn update(&mut self, _was_callback: bool) {
-        self.redraw().unwrap();
-    }
+
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         self.clear_area();
-
         // ---- draw title area ----
         let mut title_text = TextView::new(self.content,
             graphics_server::TextBounds::CenteredTop(
@@ -329,7 +316,7 @@ impl VaultUx {
             insert_at += self.item_height;
         }
 
-        log::trace!("vault app redraw##");
+        log::debug!("vault app redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
         Ok(())
     }

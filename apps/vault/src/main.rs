@@ -169,8 +169,6 @@ fn main() -> ! {
     // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
     let mut vaultux = VaultUx::new(&xns, sid);
     vaultux.set_mode(VaultMode::Fido);
-    let mut update_vaultux = true;
-    let mut was_callback = false;
     let mut allow_redraw = false;
     let modals = modals::Modals::new(&xns).unwrap();
     loop {
@@ -182,8 +180,6 @@ fn main() -> ! {
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
                 log::info!("Incremental input: {}", s.as_str());
                 vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
-                update_vaultux = true; // set a flag, instead of calling here, so message can drop and calling server is released
-                was_callback = false;
                 send_message(conn,
                     Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
@@ -222,8 +218,6 @@ fn main() -> ! {
                         vaultux.raise_menu();
                     }
                 }
-                update_vaultux = true; // set a flag, instead of calling here, so message can drop and calling server is released
-                was_callback = false;
                 send_message(conn,
                     Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
@@ -243,7 +237,11 @@ fn main() -> ! {
                         allow_redraw = true;
                     }
                 }
-                vaultux.redraw().ok();
+                /*
+                xous::yield_slice();
+                send_message(conn,
+                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok(); */
             }),
             Some(VaultOp::MenuAutotype) => {
                 log::info!("got autotype");
@@ -272,15 +270,8 @@ fn main() -> ! {
                 break;
             }
             _ => {
-                log::trace!("got unknown message, passing on to REPL");
-                vaultux.msg(msg);
-                update_vaultux = true;
-                was_callback = true;
+                log::trace!("got unknown message {:?}", msg);
             }
-        }
-        if update_vaultux {
-            vaultux.update(was_callback);
-            update_vaultux = false;
         }
         log::trace!("reached bottom of main loop");
     }
