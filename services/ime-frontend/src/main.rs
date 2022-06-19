@@ -326,7 +326,14 @@ impl InputTracker {
                             self.insert_prediction(0);
                             do_redraw = true;
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0011}")));
+                            self.pred_phrase.clear();
+                            self.line.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = Some(0);
+                            self.characters = 0;
+                            self.insertion = 0;
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0011}"));
+                            do_redraw = true;
                         }
                     }
                     '\u{0012}' => { // F2
@@ -334,7 +341,14 @@ impl InputTracker {
                             self.insert_prediction(1);
                             do_redraw = true;
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0012}")));
+                            self.pred_phrase.clear();
+                            self.line.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = Some(0);
+                            self.characters = 0;
+                            self.insertion = 0;
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0012}"));
+                            do_redraw = true;
                         }
                     }
                     '\u{0013}' => { // F3
@@ -342,7 +356,14 @@ impl InputTracker {
                             self.insert_prediction(2);
                             do_redraw = true;
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0013}")));
+                            self.pred_phrase.clear();
+                            self.line.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = Some(0);
+                            self.characters = 0;
+                            self.insertion = 0;
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0013}"));
+                            do_redraw = true;
                         }
                     }
                     '\u{0014}' => { // F4
@@ -350,7 +371,14 @@ impl InputTracker {
                             self.insert_prediction(3);
                             do_redraw = true;
                         } else {
-                            return Ok(Some(xous_ipc::String::<4000>::from_str("\u{0014}")));
+                            self.pred_phrase.clear();
+                            self.line.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = Some(0);
+                            self.characters = 0;
+                            self.insertion = 0;
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0014}"));
+                            do_redraw = true;
                         }
                     }
                     '\u{0008}' => { // backspace
@@ -369,7 +397,8 @@ impl InputTracker {
                                     self.can_unpick = false;
                                     update_predictor = true;
                                 }
-                                self.pred_phrase.clear();
+                                self.pred_phrase.pop();
+                                if self.menu_mode { update_predictor = true; }
                             }
                         } else if (self.characters > 0)  && (self.insertion > 0) {
                             if debug1{info!("mid-string backspace case")}
@@ -404,6 +433,7 @@ impl InputTracker {
                             self.insertion -= 1;
                             self.characters -= 1;
                             do_redraw = true;
+                            if self.menu_mode { update_predictor = true; }
                         } else {
                             // ignore, we are either at the front of the string, or the string had no characters
                         }
@@ -583,7 +613,7 @@ impl InputTracker {
             if debug1{info!("got pc_bound {:?}", pc_bounds);}
 
             if update_predictor {
-                if self.pred_phrase.len() > 0 {
+                if self.pred_phrase.len() > 0 || self.menu_mode {
                     if let Some(pred) = self.predictor {
                         pred.set_input(
                             xous_ipc::String::<4000>::from_str(&self.pred_phrase)).expect("couldn't update predictor with current input");
