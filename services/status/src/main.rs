@@ -113,10 +113,12 @@ pub fn pump_thread(conn: usize, pump_run: Arc<AtomicBool>) {
     }
 }
 fn main () -> ! {
+    #[cfg(not(feature="ditherpunk"))]
+    wrapped_main();
+
     #[cfg(feature="ditherpunk")]
     let stack_size = 1024 * 1024;
-    #[cfg(not(feature="ditherpunk"))]
-    let stack_size = 128 * 1024;
+    #[cfg(feature="ditherpunk")]
     std::thread::Builder::new()
         .stack_size(stack_size)
         .spawn(wrapped_main)
