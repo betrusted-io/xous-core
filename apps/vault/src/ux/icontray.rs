@@ -1,7 +1,7 @@
 use ime_plugin_api::*;
 
-use xous_ipc::{String, Buffer};
-use num_traits::FromPrimitive;
+use xous_ipc::Buffer;
+use num_traits::*;
 use xous::msg_scalar_unpack;
 
 pub(crate) const SERVER_NAME_ICONTRAY: &'static str = "_vault icon tray plugin_";
@@ -13,7 +13,7 @@ const ICONS: [&'static str; 4] = [
     "\t🧾🛠",
 ];
 
-pub(crate) fn icontray_server() {
+pub(crate) fn icontray_server(conn_to_main: xous::CID) {
     let xns = xous_names::XousNames::new().unwrap();
     // one connection only, should be the GAM
     // however, because the predictor is connected only on demand -- we leave this as open-ended, which
@@ -64,10 +64,10 @@ pub(crate) fn icontray_server() {
                 }
             }),
             Some(Opcode::Input) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<String::<4000>, _>().unwrap();
-                // input is dynamically updated here
-                log::info!("Input: {}", s.as_str());
+                msg.forward(
+                    conn_to_main,
+                    crate::VaultOp::IncrementalLine.to_usize().unwrap()
+                ).expect("couldn't forward input");
             }
             Some(Opcode::Picked) => {
                 // this is ignored

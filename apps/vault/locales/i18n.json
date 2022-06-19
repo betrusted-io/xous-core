@@ -162,10 +162,10 @@
         "en-tts": "Delete item"
     },
     "vault.menu_change_font": {
-        "en": "Change font",
+        "en": "Change list font",
         "ja": "フォントを変更する",
         "zh": "更改字体",
-        "en-tts": "Change font"
+        "en-tts": "🔇"
     },
     "vault.menu_close": {
         "en": "Close submenu",

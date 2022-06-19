@@ -45,9 +45,6 @@ pub(crate) enum NavDir {
 
 #[allow(dead_code)]
 pub(crate) struct VaultUx {
-    // optional structures that indicate new input to the VaultUx loop per iteration
-    // an input string
-    input: Option<String>,
     // messages not handled by the main loop are routed here
     msg: Option<MessageEnvelope>,
 
@@ -174,7 +171,6 @@ impl VaultUx {
         let items_per_screen = available_height / item_height;
 
         VaultUx {
-            input: None,
             msg: None,
             content,
             gam,
@@ -251,8 +247,9 @@ impl VaultUx {
     }
     /// accept a new input string
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
-        self.input = Some(String::from(line));
-
+        log::info!("filtering by {}", line);
+        self.filter(line);
+        log::info!("filtered item count: {}", self.filtered_list.len());
         Ok(())
     }
 

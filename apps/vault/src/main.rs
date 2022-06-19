@@ -71,6 +71,8 @@ UI concept:
 pub(crate) enum VaultOp {
     /// a line of text has arrived
     Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
+    /// incremental line of text
+    IncrementalLine,
     /// redraw our UI
     Redraw,
     /// change focus
@@ -152,21 +154,21 @@ fn main() -> ! {
         }
     });
 
+    let conn = xous::connect(sid).unwrap();
     // spawn the icontray handler
     let _ = thread::spawn({
         move || {
-            icontray_server();
+            icontray_server(conn);
         }
     });
 
-    let conn = xous::connect(sid).unwrap();
     let menu_sid = xous::create_server().unwrap();
     let _menu_mgr = submenu::create_submenu(conn, menu_sid);
 
     let xns = xous_names::XousNames::new().unwrap();
     // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
     let mut vaultux = VaultUx::new(&xns, sid);
-    vaultux.gen_fake_data(0); // THIS IS FOR TESTING ONLY replace with a call that does something "more proper"
+    vaultux.set_mode(VaultMode::Fido);
     let mut update_vaultux = true;
     let mut was_callback = false;
     let mut allow_redraw = false;
@@ -175,6 +177,17 @@ fn main() -> ! {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(VaultOp::IncrementalLine) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
+                log::info!("Incremental input: {}", s.as_str());
+                vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
+                update_vaultux = true; // set a flag, instead of calling here, so message can drop and calling server is released
+                was_callback = false;
+                send_message(conn,
+                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
+            }
             Some(VaultOp::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
@@ -205,7 +218,8 @@ fn main() -> ! {
                         vaultux.nav(NavDir::PageDown);
                     }
                     _ => {
-                        vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
+                        // someone hit enter. The string is the whole search query, but what we care is that someone hit enter.
+                        vaultux.raise_menu();
                     }
                 }
                 update_vaultux = true; // set a flag, instead of calling here, so message can drop and calling server is released
