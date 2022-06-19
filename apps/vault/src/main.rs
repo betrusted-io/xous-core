@@ -5,6 +5,7 @@ mod ux;
 use ux::*;
 use num_traits::*;
 use xous_ipc::Buffer;
+use xous::{send_message, Message};
 use usbd_human_interface_device::device::fido::*;
 use std::thread;
 
@@ -15,6 +16,8 @@ use ctap::CtapState;
 mod shims;
 use shims::*;
 mod submenu;
+
+use locales::t;
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -77,6 +80,7 @@ pub(crate) enum VaultOp {
     MenuAutotype,
     MenuEdit,
     MenuDelete,
+    MenuChangeFont,
 
     /// exit the application
     Quit,
@@ -160,10 +164,13 @@ fn main() -> ! {
     let _menu_mgr = submenu::create_submenu(conn, menu_sid);
 
     let xns = xous_names::XousNames::new().unwrap();
+    // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
     let mut vaultux = VaultUx::new(&xns, sid);
+    vaultux.gen_fake_data(0); // THIS IS FOR TESTING ONLY replace with a call that does something "more proper"
     let mut update_vaultux = true;
     let mut was_callback = false;
     let mut allow_redraw = false;
+    let modals = modals::Modals::new(&xns).unwrap();
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("got message {:?}", msg);
@@ -186,16 +193,16 @@ fn main() -> ! {
                         vaultux.raise_menu();
                     }
                     "↓" => {
-                        log::info!("down arrow");
+                        vaultux.nav(NavDir::Down);
                     }
                     "↑" => {
-                        log::info!("up arrow");
+                        vaultux.nav(NavDir::Up);
                     }
                     "←" => {
-                        log::info!("left arrow");
+                        vaultux.nav(NavDir::PageUp);
                     }
                     "→" => {
-                        log::info!("right arrow");
+                        vaultux.nav(NavDir::PageDown);
                     }
                     _ => {
                         vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
@@ -203,6 +210,9 @@ fn main() -> ! {
                 }
                 update_vaultux = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 was_callback = false;
+                send_message(conn,
+                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
             }
             Some(VaultOp::Redraw) => {
                 if allow_redraw {
@@ -229,6 +239,19 @@ fn main() -> ! {
             },
             Some(VaultOp::MenuEdit) => {
                 log::info!("got edit");
+            }
+            Some(VaultOp::MenuChangeFont) => {
+                for item in FONT_LIST {
+                    modals
+                        .add_list_item(item)
+                        .expect("couldn't build radio item list");
+                }
+                match modals.get_radiobutton(t!("vault.select_font", xous::LANG)) {
+                    Ok(style) => {
+                        vaultux.set_glyph_style(name_to_style(&style).unwrap_or(DEFAULT_FONT));
+                    },
+                    _ => log::error!("get_radiobutton failed"),
+                }
             }
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");

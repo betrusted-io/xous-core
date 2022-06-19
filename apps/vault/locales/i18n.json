@@ -137,6 +137,12 @@
         "zh": "FIDO 请求",
         "en-tts": "FIDO Request"
     },
+    "vault.select_font": {
+        "en": "Select a font style",
+        "ja": "フォントを選択する",
+        "zh": "选择字体",
+        "en-tts": "Select a font style"
+    },
     "vault.menu_autotype": {
         "en": "Autotype",
         "ja": "自動的に入力",
@@ -154,6 +160,12 @@
         "ja": "アイテムを削除",
         "zh": "删除项目",
         "en-tts": "Delete item"
+    },
+    "vault.menu_change_font": {
+        "en": "Change font",
+        "ja": "フォントを変更する",
+        "zh": "更改字体",
+        "en-tts": "Change font"
     },
     "vault.menu_close": {
         "en": "Close submenu",
