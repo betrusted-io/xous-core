@@ -289,6 +289,64 @@ pub enum PixelType {
     U8x4,
 }
 
+pub struct GreyScale<I> {
+    iter: I,
+    px_type: PixelType,
+}
+
+impl<'a, I: Iterator<Item = &'a u8>> GreyScale<I> {
+    fn new(iter: I, px_type: PixelType) -> GreyScale<I> {
+        Self { iter, px_type }
+    }
+}
+
+impl<'a, I: Iterator<Item = &'a u8>> Iterator for GreyScale<I> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // chromatic coversion from RGB to Greyscale
+        const R: u32 = 2126;
+        const G: u32 = 7152;
+        const B: u32 = 722;
+        const BLACK: u32 = R + G + B;
+        match self.px_type {
+            PixelType::U8 => {
+                match self.iter.next() {
+                    Some(gr) => Some(*gr),
+                    None => None,
+                }
+            }
+            PixelType::U8x3 => {
+                let r = self.iter.next();
+                let g = self.iter.next();
+                let b = self.iter.next();
+                if r.is_some() && g.is_some() && b.is_some() {
+                    let grey_r = R * *r.unwrap() as u32;
+                    let grey_g = G * *g.unwrap() as u32;
+                    let grey_b = B * *b.unwrap() as u32;
+                    let grey: u8 = ((grey_r + grey_g + grey_b) / BLACK).try_into().unwrap();
+                    Some(grey)
+                } else {
+                    None
+                }
+            }
+            _ => {
+                log::warn!("unsupported PixelType");
+                None
+            }
+        }
+    }
+}
+
+pub trait GreyScaleIterator<'a>: Iterator<Item = &'a u8> + Sized {
+    /// converts pixels of PixelType to u8 greyscale
+    fn to_grey(self, px_type: PixelType) -> GreyScale<Self> {
+        GreyScale::new(self, px_type)
+    }
+}
+
+impl<'a, I: Iterator<Item = &'a u8>> GreyScaleIterator<'a> for I {}
+
 /*
  * Image as a minimal flat buffer of grey u8 pixels; accessible by (x, y)
  *
@@ -303,33 +361,16 @@ pub struct Img {
 
 impl Img {
     pub fn new(buf: Vec<u8>, width: usize, px_type: PixelType) -> Self {
-        const R: u32 = 2126;
-        const G: u32 = 7152;
-        const B: u32 = 722;
-        const BLACK: u32 = R + G + B;
         let px_len = match px_type {
             PixelType::U8 => buf.len(),
             PixelType::U8x3 => buf.len() / 3,
             _ => 0,
         };
         let mut pixels: Vec<u8> = Vec::with_capacity(px_len);
-        for px in 0..px_len {
-            let pixel: u8 = match px_type {
-                PixelType::U8 => buf[px],
-                PixelType::U8x3 => {
-                    let b = px * 3;
-                    let grey_r = R * buf[b] as u32;
-                    let grey_g = G * buf[b + 1] as u32;
-                    let grey_b = B * buf[b + 2] as u32;
-                    ((grey_r + grey_g + grey_b) / BLACK).try_into().unwrap()
-                }
-                _ => {
-                    log::warn!("unsupported PixelType");
-                    0
-                }
-            };
+
+        for pixel in buf.iter().to_grey(px_type) {
             pixels.push(pixel);
-        }
+        }       
         Self { pixels, width }
     }
     pub fn get(&self, x: usize, y: usize) -> Option<&u8> {
