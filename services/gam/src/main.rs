@@ -6,6 +6,7 @@ use api::*;
 mod canvas;
 use canvas::*;
 mod tokens;
+use ime_plugin_api::ApiToken;
 use tokens::*;
 mod layouts;
 use layouts::*;
@@ -443,6 +444,11 @@ fn wrapped_main() -> ! {
                 let mut tokenclaim = buffer.to_original::<TokenClaim, _>().unwrap();
                 tokenclaim.token = context_mgr.claim_token(tokenclaim.name.as_str().unwrap());
                 buffer.replace(tokenclaim).unwrap();
+            },
+            Some(Opcode::PredictorApiToken) => {
+                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let at = buf.to_original::<ApiToken, _>().unwrap();
+                context_mgr.set_pred_api_token(at);
             },
             Some(Opcode::TrustedInitDone) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if context_mgr.allow_untrusted_code() {

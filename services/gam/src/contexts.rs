@@ -56,7 +56,7 @@ pub(crate) struct UxContext {
     /// a putative human-readable name given to the context. The name itself is stored in the TokenManager, not in this struct.
     /// Passed to the TokenManager to compute a trust level; add the app's name to tokens.rs EXPECTED_BOOT_CONTEXTS if you want this to succeed.
     pub app_token: [u32; 4], // shared with the app, can be used for other auths to other servers (e.g. audio codec)
-    /// a token associated with the UxContext, but private to the GAM (not shared with the app). [currently no use for this, just seems like a good idea...]
+    /// a token associated with the UxContext, but private to the GAM (not shared with the app). (used by predictor to set API tokens)
     pub gam_token: [u32; 4],
     /// set to true if keyboard vibrate is turned on
     pub vibe: bool,
@@ -388,8 +388,8 @@ impl ContextManager {
         {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
-            let pred_api_token = if let Some(context) = maybe_new_focus {
-                let pred_token = if context.predictor.is_some() {
+            if let Some(context) = maybe_new_focus {
+                if context.predictor.is_some() {
                     // only hook up the IMEF if a predictor is selected for this context
                     let descriptor = ImefDescriptor {
                         input_canvas:
@@ -412,20 +412,15 @@ impl ContextManager {
                         token: context.gam_token,
                         predictor_token: context.pred_token,
                     };
-                    let pred_api_token = self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
+                    log::debug!("context gam token: {:?}, pred token: {:?}", context.gam_token, context.pred_token);
+                    self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
                     self.imef_active = true;
-                    Some(pred_api_token)
                 } else {
                     self.imef_active = false;
-                    None
                 };
 
                 // now recompute the drawability of canvases, based on on-screen visibility and trust state
                 recompute_canvases(canvases);
-                pred_token
-            } else { None };
-            if let Some(c) = self.get_context_by_token_mut(token) {
-                c.pred_token = pred_api_token;
             }
         }
         log::trace!("foregrounding new context");
@@ -433,10 +428,10 @@ impl ContextManager {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
             if let Some(context) = maybe_new_focus {
+                self.imef.set_menu_mode(context.imef_menu_mode).expect("couldn't set menu mode");
                 if clear {
                     context.layout.clear(gfx, canvases).expect("can't clear on context activation");
                 }
-                // now update the IMEF area, since we're initialized
                 // note: we may need to skip this call if the context does not utilize a predictor...
                 if context.predictor.is_some() {
                     log::debug!("calling IMEF redraw");
@@ -445,7 +440,6 @@ impl ContextManager {
 
                 // revert the keyboard vibe state
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
-                self.imef.set_menu_mode(context.imef_menu_mode).expect("couldn't set menu mode");
 
                 log::trace!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
@@ -460,6 +454,15 @@ impl ContextManager {
             self.redraw().expect("couldn't redraw the currently focused app");
         }
         Ok(())
+    }
+    pub(crate) fn set_pred_api_token(&mut self, at: ApiToken) {
+        for context in self.contexts.values_mut() {
+            if context.gam_token == at.gam_token {
+                log::debug!("setting {:?} token to {:?}", at.gam_token, at.api_token);
+                context.pred_token = Some(at.api_token);
+                break;
+            }
+        }
     }
     pub(crate) fn revert_focus(&mut self,
         gfx: &graphics_server::Gfx,

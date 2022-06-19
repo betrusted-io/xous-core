@@ -15,6 +15,11 @@ pub struct Prediction {
 pub struct AcquirePredictor {
     pub token: Option<[u32; 4]>,
 }
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct ApiToken {
+    pub gam_token: [u32; 4],
+    pub api_token: [u32; 4],
+}
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PredictionTriggers {
@@ -281,7 +286,7 @@ pub struct ImefDescriptor {
 }
 
 pub trait ImeFrontEndApi {
-    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<[u32; 4], xous::Error>;
+    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error>;
     fn hook_listener_callback(&mut self, cb: fn(String<4000>)) -> Result<(), xous::Error>;
     fn redraw(&self, force_all: bool) -> Result<(), xous::Error>;
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
@@ -344,16 +349,11 @@ impl ImeFrontEndApi for ImeFrontEnd {
     fn getop_process_keys(&self) -> u32 {
         ImefOpcode::ProcessKeys.to_u32().unwrap()
     }
-    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<[u32; 4], xous::Error> {
-        let mut buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap())
+    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error> {
+        let buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
+        buf.send(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))
-            .map(|_| ())?;
-        let ret = buf.to_original::<ImefDescriptor, _>().unwrap();
-        match ret.predictor_token {
-            Some(token) => Ok(token),
-            _ => Err(xous::Error::AccessDenied),
-        }
+            .map(|_| ())
     }
 
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error> {

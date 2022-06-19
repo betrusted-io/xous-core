@@ -156,6 +156,8 @@ pub(crate) enum Opcode {
 
     // used to claim a GAM registration token (should be used only by status.rs)
     ClaimToken,
+    // used to set a predictor API token (should be used only by ime-frontend)
+    PredictorApiToken,
 
     /// system-level API that can be called by the Xous process launcher to check if we're at a state where less trusted code could be run
     /// it basically checks that all tokens have been claimed by trusted OS procesess, thus blocking any further token creation

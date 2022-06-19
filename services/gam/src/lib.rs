@@ -27,7 +27,7 @@ use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
-use ime_plugin_api::ImefCallback;
+use ime_plugin_api::{ImefCallback, ApiToken};
 
 #[doc = include_str!("../README.md")]
 
@@ -279,6 +279,15 @@ impl Gam {
         let returned_claim = buf.to_original::<TokenClaim, _>().unwrap();
 
         Ok(returned_claim.token)
+    }
+    pub fn set_predictor_api_token(&self, api_token: [u32; 4], gam_token: [u32; 4]) -> Result<(), xous::Error> {
+        let at = ApiToken {
+            gam_token,
+            api_token,
+        };
+        let buf = Buffer::into_buf(at).or(Err(xous::Error::InternalError))?;
+        buf.send(self.conn, Opcode::PredictorApiToken.to_u32().unwrap())
+        .or(Err(xous::Error::InternalError)).map(|_|())
     }
     pub fn trusted_init_done(&self) -> Result<bool, xous::Error> {
         let response = send_message(self.conn,
