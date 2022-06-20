@@ -226,12 +226,12 @@ impl VaultUx {
         self.items_per_screen = available_height / self.item_height;
     }
     fn mark_as_dirty(&mut self, index: usize) {
-        let list_len = self.filtered_list.len() - 1;
-        self.filtered_list[index.min(list_len)].dirty = true;
+        let list_len = self.filtered_list.len();
+        self.filtered_list[index.min(list_len - 1)].dirty = true;
     }
     fn mark_screen_as_dirty(&mut self, index: usize) {
         let page = index as i16 / self.items_per_screen;
-        let list_len = self.filtered_list.len() - 1;
+        let list_len = self.filtered_list.len();
         for item in self.filtered_list[
             ((page as usize) * self.items_per_screen as usize).min(list_len) ..
             ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
@@ -249,7 +249,7 @@ impl VaultUx {
                 }
             }
             NavDir::Down => {
-                if self.selection_index < self.filtered_list.len() - 1 {
+                if self.selection_index < self.filtered_list.len() {
                     self.mark_as_dirty(self.selection_index);
                     self.selection_index += 1;
                     self.mark_as_dirty(self.selection_index);
@@ -267,7 +267,7 @@ impl VaultUx {
                 }
             }
             NavDir::PageDown => {
-                if self.selection_index < self.filtered_list.len() - 1 - self.items_per_screen as usize {
+                if self.selection_index < self.filtered_list.len() - self.items_per_screen as usize {
                     self.mark_screen_as_dirty(self.selection_index);
                     self.selection_index += self.items_per_screen as usize;
                     self.mark_screen_as_dirty(self.selection_index);
@@ -281,9 +281,7 @@ impl VaultUx {
     }
     /// accept a new input string
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
-        log::info!("filtering by {}", line);
         self.filter(line);
-        log::info!("filtered item count: {}", self.filtered_list.len());
         Ok(())
     }
 
@@ -293,7 +291,6 @@ impl VaultUx {
 
         // handle the title region separately
         if self.title_dirty {
-            self.title_dirty = false;
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
                     Point::new(0, 0),
@@ -310,7 +307,7 @@ impl VaultUx {
         let mut dirty_br: Option<Point> = None;
 
         let page = self.selection_index as i16 / self.items_per_screen;
-        let list_len = self.filtered_list.len() - 1;
+        let list_len = self.filtered_list.len();
         for item in self.filtered_list[
             ((page as usize) * self.items_per_screen as usize).min(list_len) ..
             ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
@@ -361,23 +358,26 @@ impl VaultUx {
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         self.clear_area();
         // ---- draw title area ----
-        let mut title_text = TextView::new(self.content,
-            graphics_server::TextBounds::CenteredTop(
-                Rectangle::new(
-                    Point::new(self.margin.x, 0),
-                    Point::new(self.screensize.x - self.margin.x, TITLE_HEIGHT)
+        if self.title_dirty {
+            let mut title_text = TextView::new(self.content,
+                graphics_server::TextBounds::CenteredTop(
+                    Rectangle::new(
+                        Point::new(self.margin.x, 0),
+                        Point::new(self.screensize.x - self.margin.x, TITLE_HEIGHT)
+                    )
                 )
-            )
-        );
-        title_text.draw_border = false;
-        title_text.clear_area = true;
-        title_text.style = GlyphStyle::Large;
-        match self.mode {
-            VaultMode::Fido => write!(title_text, "FIDO").ok(),
-            VaultMode::Totp => write!(title_text, "⏳1234").ok(),
-            VaultMode::Password => write!(title_text, "🔐****").ok(),
-        };
-        self.gam.post_textview(&mut title_text).expect("couldn't post title");
+            );
+            title_text.draw_border = false;
+            title_text.clear_area = true;
+            title_text.style = GlyphStyle::Large;
+            match self.mode {
+                VaultMode::Fido => write!(title_text, "FIDO").ok(),
+                VaultMode::Totp => write!(title_text, "⏳1234").ok(),
+                VaultMode::Password => write!(title_text, "🔐****").ok(),
+            };
+            self.gam.post_textview(&mut title_text).expect("couldn't post title");
+            self.title_dirty = false;
+        }
 
         // ---- draw list body area ----
         // line up the list to justify to the bottom of the screen, based on the actual font requested
@@ -386,7 +386,7 @@ impl VaultUx {
 
         let page = self.selection_index as i16 / self.items_per_screen;
         let selected = self.selection_index as i16 % self.items_per_screen;
-        let list_len = self.filtered_list.len() - 1;
+        let list_len = self.filtered_list.len();
         for (index, item) in self.filtered_list[
             ((page as usize) * self.items_per_screen as usize).min(list_len) ..
             ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
@@ -439,7 +439,11 @@ impl VaultUx {
         }
         // the selection index must always be at a valid point
         if self.selection_index >= self.filtered_list.len() {
-            self.selection_index = self.filtered_list.len() - 1;
+            if self.filtered_list.len() > 0 {
+                self.selection_index = self.filtered_list.len() - 1;
+            } else {
+                self.selection_index = 0;
+            }
         }
     }
 

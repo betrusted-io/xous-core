@@ -237,11 +237,6 @@ fn main() -> ! {
                         allow_redraw = true;
                     }
                 }
-                /*
-                xous::yield_slice();
-                send_message(conn,
-                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok(); */
             }),
             Some(VaultOp::MenuAutotype) => {
                 log::info!("got autotype");
