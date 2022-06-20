@@ -12,10 +12,11 @@ use std::io::{Read, Write as FsWrite};
 struct ListItem {
     name: String,
     extra: String,
+    dirty: bool,
 }
 impl ListItem {
     pub fn clone(&self) -> ListItem {
-        ListItem { name: self.name.to_string(), extra: self.extra.to_string() }
+        ListItem { name: self.name.to_string(), extra: self.extra.to_string(), dirty: self.dirty }
     }
 }
 impl Ord for ListItem {
@@ -57,6 +58,7 @@ pub(crate) struct VaultUx {
 
     /// current operation mode
     mode: VaultMode,
+    title_dirty: bool,
 
     /// list of all items to be displayed
     item_list: Vec::<ListItem>,
@@ -173,6 +175,7 @@ impl VaultUx {
             margin,
             token,
             mode: VaultMode::Fido,
+            title_dirty: true,
             item_list: Vec::new(),
             selection_index: 0,
             filtered_list: Vec::new(),
@@ -183,7 +186,9 @@ impl VaultUx {
         }
     }
     pub(crate) fn set_mode(&mut self, mode: VaultMode) {
+        self.title_dirty = true;
         self.item_list.clear();
+        self.filtered_list.clear();
         match mode {
             VaultMode::Fido | VaultMode::Password => self.gen_fake_data(0),
             VaultMode::Totp => self.gen_fake_data(1),
@@ -194,6 +199,12 @@ impl VaultUx {
         self.mode = mode;
     }
     pub(crate) fn set_glyph_style(&mut self, style: GlyphStyle) {
+        // force redraw of all the items
+        self.title_dirty = true;
+        for item in self.filtered_list.iter_mut() {
+            item.dirty = true;
+        }
+
         self.pddb.borrow().delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, None)
         .expect("couldn't delete previous setting");
 
@@ -214,28 +225,56 @@ impl VaultUx {
         self.item_height = (glyph_height * 2) as i16 + self.margin.y * 2 + 2; // +2 because of the border width
         self.items_per_screen = available_height / self.item_height;
     }
+    fn mark_as_dirty(&mut self, index: usize) {
+        let list_len = self.filtered_list.len() - 1;
+        self.filtered_list[index.min(list_len)].dirty = true;
+    }
+    fn mark_screen_as_dirty(&mut self, index: usize) {
+        let page = index as i16 / self.items_per_screen;
+        let list_len = self.filtered_list.len() - 1;
+        for item in self.filtered_list[
+            ((page as usize) * self.items_per_screen as usize).min(list_len) ..
+            ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
+        ].iter_mut() {
+            item.dirty = true;
+        }
+    }
     pub(crate) fn nav(&mut self, dir: NavDir) {
         match dir {
             NavDir::Up => {
-                if self.selection_index > 0 {self.selection_index -= 1;}
+                if self.selection_index > 0 {
+                    self.mark_as_dirty(self.selection_index);
+                    self.selection_index -= 1;
+                    self.mark_as_dirty(self.selection_index);
+                }
             }
             NavDir::Down => {
                 if self.selection_index < self.filtered_list.len() - 1 {
+                    self.mark_as_dirty(self.selection_index);
                     self.selection_index += 1;
+                    self.mark_as_dirty(self.selection_index);
                 }
             }
             NavDir::PageUp => {
                 if self.selection_index > self.items_per_screen as usize {
+                    self.mark_screen_as_dirty(self.selection_index);
                     self.selection_index -= self.items_per_screen as usize;
+                    self.mark_screen_as_dirty(self.selection_index);
                 } else {
+                    self.mark_as_dirty(self.selection_index);
                     self.selection_index = 0;
+                    self.mark_as_dirty(self.selection_index);
                 }
             }
             NavDir::PageDown => {
                 if self.selection_index < self.filtered_list.len() - 1 - self.items_per_screen as usize {
+                    self.mark_screen_as_dirty(self.selection_index);
                     self.selection_index += self.items_per_screen as usize;
+                    self.mark_screen_as_dirty(self.selection_index);
                 } else {
+                    self.mark_as_dirty(self.selection_index);
                     self.selection_index = self.filtered_list.len() - 1;
+                    self.mark_as_dirty(self.selection_index);
                 }
             }
         }
@@ -248,15 +287,75 @@ impl VaultUx {
         Ok(())
     }
 
-    fn clear_area(&self) {
-        self.gam.draw_rectangle(self.content,
-            Rectangle::new_with_style(Point::new(0, 0), self.screensize,
-            DrawStyle {
-                fill_color: Some(PixelColor::Light),
-                stroke_color: None,
-                stroke_width: 0
+    fn clear_area(&mut self) {
+        let items_height = self.items_per_screen * self.item_height;
+        let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
+
+        // handle the title region separately
+        if self.title_dirty {
+            self.title_dirty = false;
+            self.gam.draw_rectangle(self.content,
+                Rectangle::new_with_style(
+                    Point::new(0, 0),
+                    Point::new(self.screensize.x, insert_at - 1),
+                DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0
+                }
+            )).expect("can't clear content area");
+        }
+        // iterate through every item to figure out the extent of the "dirty" area
+        let mut dirty_tl: Option<Point> = None;
+        let mut dirty_br: Option<Point> = None;
+
+        let page = self.selection_index as i16 / self.items_per_screen;
+        let list_len = self.filtered_list.len() - 1;
+        for item in self.filtered_list[
+            ((page as usize) * self.items_per_screen as usize).min(list_len) ..
+            ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
+        ].iter() {
+            if item.dirty && dirty_tl.is_none() {
+                // start the dirty area
+                dirty_tl = Some(Point::new(0, insert_at));
             }
-        )).expect("can't clear content area");
+            if !item.dirty && dirty_tl.is_some() && dirty_br.is_none() {
+                // end the dirty area
+                dirty_br = Some(Point::new(self.screensize.y, insert_at));
+            }
+            if let Some(tl) = dirty_tl {
+                if let Some(br) = dirty_br {
+                    // start & end found: now draw a rectangle over it
+                    self.gam.draw_rectangle(self.content,
+                        Rectangle::new_with_style(
+                            tl,
+                            br,
+                        DrawStyle {
+                            fill_color: Some(PixelColor::Light),
+                            stroke_color: None,
+                            stroke_width: 0
+                        }
+                    )).expect("can't clear content area");
+                    // reset the search
+                    dirty_tl = None;
+                    dirty_br = None;
+                }
+            }
+            insert_at += self.item_height;
+        }
+        if let Some(tl) = dirty_tl {
+            // handle the case that we were dirty all the way to the bottom
+            self.gam.draw_rectangle(self.content,
+                Rectangle::new_with_style(
+                    tl,
+                    self.screensize,
+                DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0
+                }
+            )).expect("can't clear content area");
+        }
     }
 
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
@@ -287,31 +386,35 @@ impl VaultUx {
 
         let page = self.selection_index as i16 / self.items_per_screen;
         let selected = self.selection_index as i16 % self.items_per_screen;
+        let list_len = self.filtered_list.len() - 1;
         for (index, item) in self.filtered_list[
-            ((page as usize) * self.items_per_screen as usize).min(self.filtered_list.len()) ..
-            ((1 + page as usize) * self.items_per_screen as usize).min(self.filtered_list.len())
-        ].iter().enumerate() {
+            ((page as usize) * self.items_per_screen as usize).min(list_len) ..
+            ((1 + page as usize) * self.items_per_screen as usize).min(list_len)
+        ].iter_mut().enumerate() {
             if insert_at - 1 > self.screensize.y - self.item_height { // -1 because of the overlapping border
                 break;
             }
-            let mut box_text = TextView::new(self.content,
-                graphics_server::TextBounds::BoundingBox(
-                    Rectangle::new(
-                        Point::new(0, insert_at),
-                        Point::new(self.screensize.x, insert_at + self.item_height)
+            if item.dirty {
+                let mut box_text = TextView::new(self.content,
+                    graphics_server::TextBounds::BoundingBox(
+                        Rectangle::new(
+                            Point::new(0, insert_at),
+                            Point::new(self.screensize.x, insert_at + self.item_height)
+                        )
                     )
-                )
-            );
-            box_text.draw_border = true;
-            box_text.rounded_border = None;
-            box_text.clear_area = true;
-            box_text.style = self.style;
-            box_text.margin = self.margin;
-            if index == selected as usize {
-                box_text.border_width = 4;
+                );
+                box_text.draw_border = true;
+                box_text.rounded_border = None;
+                box_text.clear_area = true;
+                box_text.style = self.style;
+                box_text.margin = self.margin;
+                if index == selected as usize {
+                    box_text.border_width = 4;
+                }
+                write!(box_text, "{}\n{}", item.name, item.extra).ok();
+                self.gam.post_textview(&mut box_text).expect("couldn't post list item");
+                item.dirty = false;
             }
-            write!(box_text, "{}\n{}", item.name, item.extra).ok();
-            self.gam.post_textview(&mut box_text).expect("couldn't post list item");
 
             insert_at += self.item_height;
         }
@@ -329,9 +432,12 @@ impl VaultUx {
         self.filtered_list.clear();
         for item in self.item_list.iter() {
             if item.name.starts_with(criteria) {
-                self.filtered_list.push(item.clone());
+                let mut staged_item = item.clone();
+                staged_item.dirty = true;
+                self.filtered_list.push(staged_item);
             }
         }
+        // the selection index must always be at a valid point
         if self.selection_index >= self.filtered_list.len() {
             self.selection_index = self.filtered_list.len() - 1;
         }
@@ -340,29 +446,31 @@ impl VaultUx {
     // populates the display list with testing data
     pub(crate) fn gen_fake_data(&mut self, set: usize) {
         if set == 0 {
-            self.item_list.push(ListItem { name: "test.com".to_string(), extra: "Used 5 mins ago".to_string() });
-            self.item_list.push(ListItem { name: "google.com".to_string(), extra: "Never used".to_string() });
-            self.item_list.push(ListItem { name: "my app".to_string(), extra: "Used 2 hours ago".to_string() });
-            self.item_list.push(ListItem { name: "💎🙌".to_string(), extra: "Used 2 days ago".to_string() });
-            self.item_list.push(ListItem { name: "百度".to_string(), extra: "Used 1 month ago".to_string() });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 1 week ago".to_string() });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 8 mins ago".to_string() });
-            self.item_list.push(ListItem { name: "amazon.com".to_string(), extra: "Used 3 days ago".to_string() });
-            self.item_list.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "Never used".to_string() });
-            self.item_list.push(ListItem { name: "another long domain name.com".to_string(), extra: "Used 2 months ago".to_string() });
-            self.item_list.push(ListItem { name: "bunniestudios.com".to_string(), extra: "Used 30 mins ago".to_string() });
-            self.item_list.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string() });
+            self.item_list.push(ListItem { name: "test.com".to_string(), extra: "Used 5 mins ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "google.com".to_string(), extra: "Never used".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "my app".to_string(), extra: "Used 2 hours ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "💎🙌".to_string(), extra: "Used 2 days ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "百度".to_string(), extra: "Used 1 month ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 1 week ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 8 mins ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "amawhat.com".to_string(), extra: "Used 6 days ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "amazon.com".to_string(), extra: "Used 3 days ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "amazingcode.org".to_string(), extra: "Never used".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "Never used".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "another long domain name.com".to_string(), extra: "Used 2 months ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "bunniestudios.com".to_string(), extra: "Used 30 mins ago".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string(), dirty: true });
         } else {
-            self.item_list.push(ListItem { name: "gmail.com".to_string(), extra: "162 321".to_string() });
-            self.item_list.push(ListItem { name: "google.com".to_string(), extra: "445 768".to_string() });
-            self.item_list.push(ListItem { name: "my 图片 app".to_string(), extra: "982 111".to_string() });
-            self.item_list.push(ListItem { name: "🍕🍔🍟🌭".to_string(), extra: "056 182".to_string() });
-            self.item_list.push(ListItem { name: "百度".to_string(), extra: "111 111".to_string() });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string() });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string() });
-            self.item_list.push(ListItem { name: "amazon.com".to_string(), extra: "842 012".to_string() });
-            self.item_list.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "462 212".to_string() });
-            self.item_list.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string() });
+            self.item_list.push(ListItem { name: "gmail.com".to_string(), extra: "162 321".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "google.com".to_string(), extra: "445 768".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "my 图片 app".to_string(), extra: "982 111".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "🍕🍔🍟🌭".to_string(), extra: "056 182".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "百度".to_string(), extra: "111 111".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "amazon.com".to_string(), extra: "842 012".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "462 212".to_string(), dirty: true });
+            self.item_list.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string(), dirty: true });
         }
     }
 }

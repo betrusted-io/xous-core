@@ -173,7 +173,7 @@ fn main() -> ! {
     let modals = modals::Modals::new(&xns).unwrap();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        log::debug!("got message {:?}", msg);
+        log::trace!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(VaultOp::IncrementalLine) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
