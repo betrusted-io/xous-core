@@ -35,22 +35,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "aes"
-version = "0.8.1"
-source = "git+https://github.com/rozbb/block-ciphers.git?branch=parblocks-impls#f16732be15633abb059a1fbba20cabe5acee7d18"
-dependencies = [
- "cfg-if 1.0.0",
- "cipher 0.4.3",
- "cpufeatures",
-]
-
-[[package]]
 name = "aes-gcm-siv"
-version = "0.10.3"
-source = "git+https://github.com/rozbb/AEADs.git?branch=update-cipher#2f9297f39e4e12beea9bf8e8f38ea4c5a35a8a9e"
+version = "0.11.0-pre"
+source = "git+https://github.com/RustCrypto/AEADs.git?branch=master#479ae5f8f37d265847da80c4e713597c2c4813ac"
 dependencies = [
  "aead",
- "aes 0.8.1 (git+https://github.com/rozbb/block-ciphers.git?branch=parblocks-impls)",
+ "aes",
  "cipher 0.4.3",
  "ctr",
  "polyval",
@@ -752,7 +742,7 @@ dependencies = [
 name = "ctap-crypto"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "arrayref",
  "byteorder",
  "cbc",
@@ -2336,7 +2326,7 @@ checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
 name = "pddb"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "aes-gcm-siv",
  "bitfield",
  "bitflags",
@@ -2814,7 +2804,7 @@ dependencies = [
 name = "root-keys"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "blowfish 0.8.0",
  "byteorder",
  "cipher 0.4.3",
@@ -3103,7 +3093,7 @@ dependencies = [
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "chrono",
  "cipher 0.3.0",
  "codec",
