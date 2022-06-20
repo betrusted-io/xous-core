@@ -80,6 +80,7 @@ pub(crate) enum VaultOp {
 
     /// Menu items
     MenuAutotype,
+    MenuAddnew,
     MenuEdit,
     MenuDelete,
     MenuChangeFont,
@@ -163,11 +164,11 @@ fn main() -> ! {
     });
 
     let menu_sid = xous::create_server().unwrap();
-    let _menu_mgr = submenu::create_submenu(conn, menu_sid);
+    let menu_mgr = submenu::create_submenu(conn, menu_sid);
 
     let xns = xous_names::XousNames::new().unwrap();
     // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
-    let mut vaultux = VaultUx::new(&xns, sid);
+    let mut vaultux = VaultUx::new(&xns, sid, menu_mgr);
     vaultux.set_mode(VaultMode::Fido);
     let mut allow_redraw = false;
     let modals = modals::Modals::new(&xns).unwrap();
@@ -229,6 +230,7 @@ fn main() -> ! {
             }
             Some(VaultOp::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
+                vaultux.change_focus_to(&new_state);
                 match new_state {
                     gam::FocusState::Background => {
                         allow_redraw = false;
@@ -246,6 +248,9 @@ fn main() -> ! {
             },
             Some(VaultOp::MenuEdit) => {
                 log::info!("got edit");
+            }
+            Some(VaultOp::MenuAddnew) => {
+                log::info!("got add new");
             }
             Some(VaultOp::MenuChangeFont) => {
                 for item in FONT_LIST {

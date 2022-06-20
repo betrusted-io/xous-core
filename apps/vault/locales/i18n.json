@@ -149,6 +149,12 @@
         "zh": "自动输入",
         "en-tts": "Autotype"
     },
+    "vault.menu_addnew": {
+        "en": "Add new item",
+        "ja": "新しいアイテムを追加する",
+        "zh": "添加新项目",
+        "en-tts": "Add new item"
+    },
     "vault.menu_edit": {
         "en": "Edit item",
         "ja": "アイテムを編集する",

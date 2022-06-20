@@ -1,5 +1,5 @@
 use crate::*;
-use gam::{UxRegistration, GlyphStyle};
+use gam::{UxRegistration, GlyphStyle, MenuMatic, MenuItem, MenuPayload};
 use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor, TextView};
 use std::fmt::Write;
 use pddb::Pddb;
@@ -74,6 +74,10 @@ pub(crate) struct VaultUx {
     style: GlyphStyle,
     item_height: i16,
     items_per_screen: i16,
+
+    /// menu manager
+    menu_mgr: MenuMatic,
+    main_conn: xous::CID,
 }
 
 pub(crate) const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
@@ -108,7 +112,7 @@ const TITLE_HEIGHT: i16 = 26;
 const VAULT_CONFIG_DICT: &'static str = "vault.config";
 const VAULT_CONFIG_KEY_FONT: &'static str = "fontstyle";
 impl VaultUx {
-    pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
+    pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID, menu_mgr: MenuMatic) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
         let app_name_ref = gam::APP_NAME_VAULT;
@@ -183,6 +187,8 @@ impl VaultUx {
             style,
             item_height,
             items_per_screen,
+            menu_mgr,
+            main_conn: xous::connect(sid).unwrap(),
         }
     }
     pub(crate) fn set_mode(&mut self, mode: VaultMode) {
@@ -196,8 +202,63 @@ impl VaultUx {
         self.item_list.sort();
         self.selection_index = 0;
         self.filter("");
+        self.swap_submenu(&mode);
         self.mode = mode;
     }
+
+    /*
+    Entry               Users
+    -------------------------------------
+    - autotype          pw
+    - add new           pw  totp
+    - edit              pw  totp    fido
+    - delete            pw  totp    fido
+    - change font       pw  totp    fido
+    - close             pw  totp    fido
+    */
+    pub fn swap_submenu(&mut self, mode: &VaultMode) {
+        // always call delete on the potential optional items, to return us to a known state
+        self.menu_mgr.delete_item(t!("vault.menu_autotype", xous::LANG));
+        self.menu_mgr.delete_item(t!("vault.menu_addnew", xous::LANG));
+        match mode {
+            VaultMode::Fido => (),
+            VaultMode::Totp => {
+                self.menu_mgr.insert_item(
+                    MenuItem {
+                        name: xous_ipc::String::from_str(t!("vault.menu_addnew", xous::LANG)),
+                        action_conn: Some(self.main_conn),
+                        action_opcode: VaultOp::MenuAddnew.to_u32().unwrap(),
+                        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    },
+                    0
+                );
+            },
+            VaultMode::Password => {
+                self.menu_mgr.insert_item(
+                    MenuItem {
+                        name: xous_ipc::String::from_str(t!("vault.menu_addnew", xous::LANG)),
+                        action_conn: Some(self.main_conn),
+                        action_opcode: VaultOp::MenuAddnew.to_u32().unwrap(),
+                        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    },
+                    0
+                );
+                self.menu_mgr.insert_item(
+                    MenuItem {
+                        name: xous_ipc::String::from_str(t!("vault.menu_autotype", xous::LANG)),
+                        action_conn: Some(self.main_conn),
+                        action_opcode: VaultOp::MenuAutotype.to_u32().unwrap(),
+                        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+                        close_on_select: true,
+                    },
+                    0
+                );
+            }
+        }
+    }
+
     pub(crate) fn set_glyph_style(&mut self, style: GlyphStyle) {
         // force redraw of all the items
         self.title_dirty = true;
@@ -281,6 +342,7 @@ impl VaultUx {
     }
     /// accept a new input string
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
+        self.title_dirty = true;
         self.filter(line);
         Ok(())
     }
@@ -424,8 +486,12 @@ impl VaultUx {
         Ok(())
     }
 
-    pub(crate) fn raise_menu(&self) {
+    pub(crate) fn raise_menu(&mut self) {
+        self.title_dirty = true;
         self.gam.raise_menu(gam::APP_MENU_0_VAULT).expect("couldn't raise our submenu");
+    }
+    pub (crate) fn change_focus_to(&mut self, _state: &gam::FocusState) {
+        self.title_dirty = true;
     }
 
     pub(crate) fn filter(&mut self, criteria: &str) {
