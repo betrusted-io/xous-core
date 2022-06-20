@@ -209,17 +209,9 @@ impl Modals {
         } else if landscape_scale >= 1.0 {
             Bitmap::from(img).rotate90()
         } else if portrait_scale >= landscape_scale {
-            let resized = img.resize(
-                (portrait_scale * img_width) as usize,
-                (portrait_scale * img_height) as usize,
-            );
-            Bitmap::from(&resized)
+            Bitmap::new_resize(img, (portrait_scale * img_width) as usize)
         } else {
-            let resized = img.resize(
-                (landscape_scale * img_width) as usize,
-                (landscape_scale * img_height) as usize,
-            );
-            Bitmap::from(&resized).rotate90()
+            Bitmap::new_resize(img, (landscape_scale * img_width) as usize).rotate90()
         };
 
         let (bm_width, bm_height) = bm.size();
