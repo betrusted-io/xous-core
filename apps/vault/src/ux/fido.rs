@@ -182,7 +182,7 @@ pub(crate) fn start_fido_ux_thread() {
                                         U2F_APP_DICT,
                                         &app_id_str,
                                         None, true, false,
-                                        Some(256), None::<fn()>
+                                        Some(256), Some(crate::basis_change)
                                     ) {
                                         Ok(mut app_data) => {
                                             let app_attr = app_data.attributes().unwrap();
@@ -496,7 +496,7 @@ pub(crate) fn start_fido_ux_thread() {
                                 U2F_APP_DICT,
                                 &app_id_str,
                                 None, true, true,
-                                Some(256), None::<fn()>
+                                Some(256), Some(crate::basis_change)
                             ) {
                                 Ok(mut app_data) => {
                                     app_data.write(&ser).expect("couldn't update atime");

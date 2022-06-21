@@ -6,17 +6,19 @@ use pddb::Pddb;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::io::{Read, Write as FsWrite};
+use actions::ActionOp;
 
 /// Display list for items. "name" is the key by which the list is sorted.
 /// "extra" is more information about the item, which should not be part of the sort.
-struct ListItem {
-    name: String,
-    extra: String,
-    dirty: bool,
+pub(crate) struct ListItem {
+    pub(crate) name: String,
+    pub(crate) extra: String,
+    pub(crate) dirty: bool,
+    pub(crate) guid: String,
 }
 impl ListItem {
     pub fn clone(&self) -> ListItem {
-        ListItem { name: self.name.to_string(), extra: self.extra.to_string(), dirty: self.dirty }
+        ListItem { name: self.name.to_string(), extra: self.extra.to_string(), dirty: self.dirty, guid: self.guid.to_string() }
     }
 }
 impl Ord for ListItem {
@@ -57,11 +59,11 @@ pub(crate) struct VaultUx {
     token: [u32; 4],
 
     /// current operation mode
-    mode: VaultMode,
+    mode: Arc::<Mutex::<VaultMode>>,
     title_dirty: bool,
 
     /// list of all items to be displayed
-    item_list: Vec::<ListItem>,
+    item_list: Arc::<Mutex::<Vec::<ListItem>>>,
     /// list of items displayable after filtering
     filtered_list: Vec::<ListItem>,
     /// the index into the item_list that is selected
@@ -78,6 +80,7 @@ pub(crate) struct VaultUx {
     /// menu manager
     menu_mgr: MenuMatic,
     main_conn: xous::CID,
+    actions_conn: xous::CID,
 }
 
 pub(crate) const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
@@ -111,8 +114,16 @@ fn style_to_name(style: &GlyphStyle) -> String {
 const TITLE_HEIGHT: i16 = 26;
 const VAULT_CONFIG_DICT: &'static str = "vault.config";
 const VAULT_CONFIG_KEY_FONT: &'static str = "fontstyle";
+
 impl VaultUx {
-    pub(crate) fn new(xns: &xous_names::XousNames, sid: xous::SID, menu_mgr: MenuMatic) -> Self {
+    pub(crate) fn new(
+        xns: &xous_names::XousNames,
+        sid: xous::SID,
+        menu_mgr: MenuMatic,
+        actions_conn: xous::CID,
+        mode: Arc::<Mutex::<VaultMode>>,
+        item_list: Arc::<Mutex::<Vec::<ListItem>>>,
+    ) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
         let app_name_ref = gam::APP_NAME_VAULT;
@@ -142,7 +153,7 @@ impl VaultUx {
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
             None, true, true,
-            Some(32), None::<fn()>
+            Some(32), Some(crate::basis_change)
         ) {
             Ok(mut style_key) => {
                 style_key.read(&mut style_name_bytes).ok();
@@ -157,7 +168,7 @@ impl VaultUx {
                     VAULT_CONFIG_DICT,
                     VAULT_CONFIG_KEY_FONT,
                     None, true, true,
-                    Some(32), None::<fn()>
+                    Some(32), Some(crate::basis_change)
                 ) {
                     Ok(mut style_key) => {
                         style_key.write(style_to_name(&DEFAULT_FONT).as_bytes()).ok();
@@ -178,9 +189,9 @@ impl VaultUx {
             screensize,
             margin,
             token,
-            mode: VaultMode::Fido,
+            mode,
             title_dirty: true,
-            item_list: Vec::new(),
+            item_list,
             selection_index: 0,
             filtered_list: Vec::new(),
             pddb: RefCell::new(pddb),
@@ -189,21 +200,15 @@ impl VaultUx {
             items_per_screen,
             menu_mgr,
             main_conn: xous::connect(sid).unwrap(),
+            actions_conn,
         }
     }
-    pub(crate) fn set_mode(&mut self, mode: VaultMode) {
+    pub(crate) fn update_mode(&mut self) {
         self.title_dirty = true;
-        self.item_list.clear();
         self.filtered_list.clear();
-        match mode {
-            VaultMode::Fido | VaultMode::Password => self.gen_fake_data(0),
-            VaultMode::Totp => self.gen_fake_data(1),
-        }
-        self.item_list.sort();
         self.selection_index = 0;
         self.filter("");
-        self.swap_submenu(&mode);
-        self.mode = mode;
+        self.swap_submenu();
     }
 
     /*
@@ -216,18 +221,18 @@ impl VaultUx {
     - change font       pw  totp    fido
     - close             pw  totp    fido
     */
-    pub fn swap_submenu(&mut self, mode: &VaultMode) {
+    pub fn swap_submenu(&mut self) {
         // always call delete on the potential optional items, to return us to a known state
         self.menu_mgr.delete_item(t!("vault.menu_autotype", xous::LANG));
         self.menu_mgr.delete_item(t!("vault.menu_addnew", xous::LANG));
-        match mode {
+        match *self.mode.lock().unwrap() {
             VaultMode::Fido => (),
             VaultMode::Totp => {
                 self.menu_mgr.insert_item(
                     MenuItem {
                         name: xous_ipc::String::from_str(t!("vault.menu_addnew", xous::LANG)),
-                        action_conn: Some(self.main_conn),
-                        action_opcode: VaultOp::MenuAddnew.to_u32().unwrap(),
+                        action_conn: Some(self.actions_conn),
+                        action_opcode: ActionOp::MenuAddnew.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
                         close_on_select: true,
                     },
@@ -238,8 +243,8 @@ impl VaultUx {
                 self.menu_mgr.insert_item(
                     MenuItem {
                         name: xous_ipc::String::from_str(t!("vault.menu_addnew", xous::LANG)),
-                        action_conn: Some(self.main_conn),
-                        action_opcode: VaultOp::MenuAddnew.to_u32().unwrap(),
+                        action_conn: Some(self.actions_conn),
+                        action_opcode: ActionOp::MenuAddnew.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
                         close_on_select: true,
                     },
@@ -248,8 +253,8 @@ impl VaultUx {
                 self.menu_mgr.insert_item(
                     MenuItem {
                         name: xous_ipc::String::from_str(t!("vault.menu_autotype", xous::LANG)),
-                        action_conn: Some(self.main_conn),
-                        action_opcode: VaultOp::MenuAutotype.to_u32().unwrap(),
+                        action_conn: Some(self.actions_conn),
+                        action_opcode: ActionOp::MenuAutotype.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
                         close_on_select: true,
                     },
@@ -273,7 +278,7 @@ impl VaultUx {
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
             None, true, true,
-            Some(32), None::<fn()>
+            Some(32), Some(crate::basis_change)
         ) {
             Ok(mut style_key) => {
                 style_key.write(style_to_name(&style).as_bytes()).ok();
@@ -352,7 +357,7 @@ impl VaultUx {
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
 
         // handle the title region separately
-        if self.title_dirty {
+        if self.title_dirty && self.filtered_list.len() != 0 {
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
                     Point::new(0, 0),
@@ -363,6 +368,19 @@ impl VaultUx {
                     stroke_width: 0
                 }
             )).expect("can't clear content area");
+        } else if self.filtered_list.len() == 0 {
+            // no items in list case -- just blank the whole area
+            self.gam.draw_rectangle(self.content,
+                Rectangle::new_with_style(
+                    Point::new(0, 0),
+                    self.screensize,
+                DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0
+                }
+            )).expect("can't clear content area");
+            return;
         }
         // iterate through every item to figure out the extent of the "dirty" area
         let mut dirty_tl: Option<Point> = None;
@@ -414,6 +432,20 @@ impl VaultUx {
                     stroke_width: 0
                 }
             )).expect("can't clear content area");
+        } else if dirty_tl.is_none() && dirty_br.is_none() {
+            // this is the case that nothing was selected on the list, and there is "blank space" below
+            // the list because the list is shorter than the total screen size. We clear this because the
+            // space can be defaced eg. after a menu pops up.
+            self.gam.draw_rectangle(self.content,
+                Rectangle::new_with_style(
+                    Point::new(0, insert_at),
+                    self.screensize,
+                DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0
+                }
+            )).expect("can't clear content area");
         }
     }
 
@@ -432,7 +464,7 @@ impl VaultUx {
             title_text.draw_border = false;
             title_text.clear_area = true;
             title_text.style = GlyphStyle::Large;
-            match self.mode {
+            match *self.mode.lock().unwrap() {
                 VaultMode::Fido => write!(title_text, "FIDO").ok(),
                 VaultMode::Totp => write!(title_text, "⏳1234").ok(),
                 VaultMode::Password => write!(title_text, "🔐****").ok(),
@@ -441,11 +473,28 @@ impl VaultUx {
             self.title_dirty = false;
         }
 
-        // ---- draw list body area ----
         // line up the list to justify to the bottom of the screen, based on the actual font requested
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
 
+        if self.filtered_list.len() == 0 {
+            let mut box_text = TextView::new(self.content,
+                graphics_server::TextBounds::CenteredBot(
+                    Rectangle::new(
+                        Point::new(0, insert_at),
+                        Point::new(self.screensize.x, insert_at + self.item_height)
+                    )
+                )
+            );
+            box_text.draw_border = false;
+            box_text.clear_area = true;
+            box_text.style = self.style;
+            box_text.margin = self.margin;
+            write!(box_text, "{}", t!("vault.no_items", xous::LANG)).ok();
+            self.gam.post_textview(&mut box_text).expect("couldn't post empty notification");
+            return Ok(());
+        }
+        // ---- draw list body area ----
         let page = self.selection_index as i16 / self.items_per_screen;
         let selected = self.selection_index as i16 % self.items_per_screen;
         let list_len = self.filtered_list.len();
@@ -489,6 +538,7 @@ impl VaultUx {
     pub(crate) fn raise_menu(&mut self) {
         self.title_dirty = true;
         self.gam.raise_menu(gam::APP_MENU_0_VAULT).expect("couldn't raise our submenu");
+        log::info!("raised menu");
     }
     pub (crate) fn change_focus_to(&mut self, _state: &gam::FocusState) {
         self.title_dirty = true;
@@ -496,7 +546,7 @@ impl VaultUx {
 
     pub(crate) fn filter(&mut self, criteria: &str) {
         self.filtered_list.clear();
-        for item in self.item_list.iter() {
+        for item in self.item_list.lock().unwrap().iter() {
             if item.name.starts_with(criteria) {
                 let mut staged_item = item.clone();
                 staged_item.dirty = true;
@@ -510,37 +560,6 @@ impl VaultUx {
             } else {
                 self.selection_index = 0;
             }
-        }
-    }
-
-    // populates the display list with testing data
-    pub(crate) fn gen_fake_data(&mut self, set: usize) {
-        if set == 0 {
-            self.item_list.push(ListItem { name: "test.com".to_string(), extra: "Used 5 mins ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "google.com".to_string(), extra: "Never used".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "my app".to_string(), extra: "Used 2 hours ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "💎🙌".to_string(), extra: "Used 2 days ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "百度".to_string(), extra: "Used 1 month ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 1 week ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 8 mins ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "amawhat.com".to_string(), extra: "Used 6 days ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "amazon.com".to_string(), extra: "Used 3 days ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "amazingcode.org".to_string(), extra: "Never used".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "Never used".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "another long domain name.com".to_string(), extra: "Used 2 months ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "bunniestudios.com".to_string(), extra: "Used 30 mins ago".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string(), dirty: true });
-        } else {
-            self.item_list.push(ListItem { name: "gmail.com".to_string(), extra: "162 321".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "google.com".to_string(), extra: "445 768".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "my 图片 app".to_string(), extra: "982 111".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "🍕🍔🍟🌭".to_string(), extra: "056 182".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "百度".to_string(), extra: "111 111".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "amazon.com".to_string(), extra: "842 012".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "462 212".to_string(), dirty: true });
-            self.item_list.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string(), dirty: true });
         }
     }
 }

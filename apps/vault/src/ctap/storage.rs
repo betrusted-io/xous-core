@@ -130,7 +130,7 @@ impl PersistentStore {
             FIDO_DICT,
             key::MASTER_KEYS,
             None, true, true,
-            Some(64), None::<fn()>
+            Some(64), Some(crate::basis_change)
         ) {
             Ok(mut master_keys) => {
                 let mk_attr = master_keys.attributes().unwrap(); // attribute fetches should not fail, so we don't kick it up. We want to see the panic at this line if it does fail.
@@ -155,7 +155,7 @@ impl PersistentStore {
             FIDO_CRED_DICT,
             key::CRED_RANDOM_SECRET,
             None, true, true,
-            Some(64), None::<fn()>
+            Some(64), Some(crate::basis_change)
         ) {
             Ok(mut cred_random) => {
                 let cred_attr = cred_random.attributes().unwrap();
@@ -177,7 +177,7 @@ impl PersistentStore {
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
             None, true, true,
-            Some(16), None::<fn()>
+            Some(16), Some(crate::basis_change)
         ) {
             Ok(mut aaguid) => {
                 let aaguid_attr = aaguid.attributes().unwrap();
@@ -223,7 +223,7 @@ impl PersistentStore {
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
             None, true, true,
-            Some(32), None::<fn()>
+            Some(32), Some(crate::basis_change)
         ) {
             Ok(mut aapriv) => {
                 let aapriv_attr = aapriv.attributes().unwrap();
@@ -247,7 +247,7 @@ impl PersistentStore {
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
             None, true, true,
-            Some(512), None::<fn()>
+            Some(512), Some(crate::basis_change)
         ) {
             Ok(mut cert) => {
                 let cert_attr = cert.attributes().unwrap();
@@ -388,7 +388,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_CRED_DICT,
             &shortid,
             None, false, false,
-            Some(CREDENTIAL_ID_SIZE), None::<fn()>
+            Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
         ) {
             Ok(mut cred) => {
                 let mut data = Vec::<u8>::new();
@@ -432,7 +432,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_CRED_DICT,
             &shortid,
             None, false, true,
-            Some(CRED_INITAL_SIZE), None::<fn()>
+            Some(CRED_INITAL_SIZE), Some(crate::basis_change)
         ) {
             Ok(mut cred) => {
                 let value = serialize_credential(new_credential)?;
@@ -463,7 +463,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 FIDO_CRED_DICT,
                 cred_name,
                 None, false, false,
-                Some(CREDENTIAL_ID_SIZE), None::<fn()>
+                Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
             ).ok() {
                 let mut data = Vec::<u8>::new();
                 cred_entry.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
@@ -501,7 +501,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 FIDO_CRED_DICT,
                 cred_name,
                 None, false, false,
-                Some(CREDENTIAL_ID_SIZE), None::<fn()>
+                Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
             ).ok() {
                 let mut data = Vec::<u8>::new();
                 cred_entry.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
@@ -519,7 +519,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_DICT,
             key::GLOBAL_SIGNATURE_COUNTER,
             None, false, true,
-            Some(4), None::<fn()>
+            Some(4), Some(crate::basis_change)
         ) {
             Ok(mut gsc) => {
                 let mut value = [0u8; 4];
@@ -549,7 +549,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_DICT,
             key::GLOBAL_SIGNATURE_COUNTER,
             None, false, true,
-            Some(4), None::<fn()>
+            Some(4), Some(crate::basis_change)
         ) {
             Ok(mut gsc) => {
                 gsc.write(&new_value.to_ne_bytes())
@@ -567,7 +567,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MASTER_KEYS,
-            None, false, false, None, None::<fn()>
+            None, false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut mk) => {
                 let mut master_keys = [0u8; 64];
@@ -590,7 +590,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_CRED_DICT,
             key::CRED_RANDOM_SECRET,
-            None, false, false, None, None::<fn()>
+            None, false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut crs) => {
                 let mut cred_random_secret = [0u8; 64];
@@ -611,7 +611,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_HASH,
-            None, false, false, None, None::<fn()>
+            None, false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut ph) => {
                 let mut pin_hash = [0u8; PIN_AUTH_LENGTH];
@@ -651,7 +651,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_DICT,
             key::PIN_HASH,
             None, false, true,
-            Some(PIN_AUTH_LENGTH), None::<fn()>
+            Some(PIN_AUTH_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut ph) => {
                 match ph.write(pin_hash) {
@@ -679,7 +679,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_RETRIES,
-            None, false, false, None, None::<fn()>
+            None, false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut pr) => {
                 let mut value = [0u8; 1];
@@ -704,7 +704,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 FIDO_DICT,
                 key::PIN_RETRIES,
                 None, false, true,
-                Some(1), None::<fn()>
+                Some(1), Some(crate::basis_change)
             ) {
                 Ok(mut pr) => {
                     pr.write(&[new_value])
@@ -739,7 +739,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MIN_PIN_LENGTH,
-            None, false, false, None, None::<fn()>
+            None, false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut pr) => {
                 let mut value = [0u8; 1];
@@ -762,7 +762,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_DICT,
             key::MIN_PIN_LENGTH,
             None, false, true,
-            Some(1), None::<fn()>
+            Some(1), Some(crate::basis_change)
         ) {
             Ok(mut pl) => {
                 match pl.write(&[min_pin_length]) {
@@ -782,7 +782,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_DICT,
             key::_MIN_PIN_LENGTH_RP_IDS,
             None, false, false,
-            None, None::<fn()>
+            None, Some(crate::basis_change)
         ).ok() {
             let mut data = Vec::<u8>::new();
             mplri.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
@@ -815,7 +815,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_DICT,
             key::_MIN_PIN_LENGTH_RP_IDS,
             None, false, true,
-            Some(_MAX_RP_IDS_LENGTH), None::<fn()>
+            Some(_MAX_RP_IDS_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut mrpli) => {
                 mrpli.write(&_serialize_min_pin_length_rp_ids(min_pin_length_rp_ids)?)
@@ -833,7 +833,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
-            None, false, false, None, None::<fn()>
+            None, false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut apk) => {
                 let mut key = [0u8; key_material::ATTESTATION_PRIVATE_KEY_LENGTH];
@@ -866,7 +866,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
             None, false, true,
-            Some(key_material::ATTESTATION_PRIVATE_KEY_LENGTH), None::<fn()>
+            Some(key_material::ATTESTATION_PRIVATE_KEY_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut apk) => {
                 apk.write(attestation_private_key)
@@ -885,7 +885,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
             None, false, false,
-            None, None::<fn()>
+            None, Some(crate::basis_change)
         ).ok() {
             let mut data = Vec::<u8>::new();
             match acert.read_to_end(&mut data) {
@@ -910,7 +910,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
             None, false, true,
-            Some(1024), None::<fn()>
+            Some(1024), Some(crate::basis_change)
         ) {
             Ok(mut acert) => {
                 acert.write(attestation_certificate)
@@ -929,7 +929,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
             None, false, false,
-            None, None::<fn()>
+            None, Some(crate::basis_change)
         ).ok() {
             let mut data = [0u8; key_material::AAGUID_LENGTH];
             match guid.read(&mut data) {
@@ -955,7 +955,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
             None, false, true,
-            Some(key_material::AAGUID_LENGTH), None::<fn()>
+            Some(key_material::AAGUID_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut guid) => {
                 guid.write(aaguid)

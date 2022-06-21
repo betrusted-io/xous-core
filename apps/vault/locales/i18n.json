@@ -1,4 +1,88 @@
 {
+    "vault.yes": {
+        "en": "Yes",
+        "ja": "はい",
+        "zh": "确定",
+        "en-tts": "Yes"
+    },
+    "vault.no": {
+        "en": "No",
+        "ja": "いいえ",
+        "zh": "取消",
+        "en-tts": "No"
+    },
+    "vault.newitem.name": {
+        "en": "Please name the credential:",
+        "ja": "クレデンシャルに名前を付ける:",
+        "zh": "命名凭证:",
+        "en-tts": "Please name the credential"
+    },
+    "vault.newitem.username": {
+        "en": "Enter the associated username:",
+        "ja": "関連するユーザー名を入力します:",
+        "zh": "输入关联的用户名:",
+        "en-tts": "Enter the associated username"
+    },
+    "vault.newitem.password": {
+        "en": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n",
+        "ja": "Enterキーを押して提案を受け入れるか、入力を開始して独自の提案を作成します。\n\n空白のままにしてジェネレータをカスタマイズします。\n",
+        "zh": "按 Enter 接受建议，或开始输入以创建您自己的建议。\n\n留空以自定义生成器。\n",
+        "en-tts": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n"
+    },
+    "vault.newitem.approve": {
+        "en": "Is this password okay?",
+        "ja": "このパスワードは大丈夫ですか?",
+        "zh": "这个密码可以吗?",
+        "en-tts": "Is this password okay?"
+    },
+    "vault.newitem.configure_generator": {
+        "en": "Select options for the password generator:",
+        "ja": "パスワードジェネレータを設定してください：",
+        "zh": "请配置密码生成器：",
+        "en-tts": "Select options for the password generator:"
+    },
+    "vault.newitem.configure_length": {
+        "en": "Desired length of password:",
+        "ja": "パスワードの文字数:",
+        "zh": "密码有多少个字符:",
+        "en-tts": "Desired length of password:"
+    },
+    "vault.newitem.uppercase": {
+        "en": "Uppercase letters",
+        "ja": "大文字",
+        "zh": "大写字母",
+        "en-tts": "Uppercase letters"
+    },
+    "vault.newitem.numbers": {
+        "en": "Numbers",
+        "ja": "数字",
+        "zh": "数字",
+        "en-tts": "Numbers"
+    },
+    "vault.newitem.symbols": {
+        "en": "Symbols",
+        "ja": "シンボル",
+        "zh": "符号",
+        "en-tts": "Symbols"
+    },
+    "vault.illegal_char": {
+        "en": "Entries may not contain a newline character.",
+        "ja": "エントリに改行文字を含めることはできません。",
+        "zh": "条目可能不包含换行符。",
+        "en-tts": "Entries may not contain a newline character."
+    },
+    "vault.illegal_number": {
+        "en": "Please enter a number from 1-128",
+        "ja": "1〜128の数字を入力してください",
+        "zh": "请输入 1-128 之间的数字",
+        "en-tts": "Please enter a number from 1-128"
+    },
+    "vault.no_items": {
+        "en": "No items found",
+        "ja": "項目は見つかりませんでした",
+        "zh": "未找到任何项目",
+        "en-tts": "No items found"
+    },
     "vault.fido.countdown": {
         "en": "s until abort",
         "ja": "秒 中止するまで",

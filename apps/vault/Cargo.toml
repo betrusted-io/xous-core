@@ -20,6 +20,7 @@ usb-device-xous = {path="../../services/usb-device-xous"}
 usbd-human-interface-device = "0.2.1"
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
+trng = {path="../../services/trng"}
 
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
@@ -34,6 +35,9 @@ ticktimer-server = {path = "../../services/ticktimer-server"}
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 chrono = {version = "0.4.19", default-features = false, features = ["std"]}
+
+# password generation
+passwords = "3.1.9"
 
 [dev-dependencies]
 enum-iterator = "0.6.0"

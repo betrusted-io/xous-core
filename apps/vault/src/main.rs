@@ -8,6 +8,8 @@ use xous_ipc::Buffer;
 use xous::{send_message, Message};
 use usbd_human_interface_device::device::fido::*;
 use std::thread;
+use core::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 mod ctap;
 use ctap::hid::{ChannelID, CtapHid};
@@ -16,8 +18,12 @@ use ctap::CtapState;
 mod shims;
 use shims::*;
 mod submenu;
+mod actions;
 
 use locales::t;
+
+use framework::ListItem;
+use actions::{ActionOp, start_actions_thread};
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -78,12 +84,11 @@ pub(crate) enum VaultOp {
     /// change focus
     ChangeFocus,
 
-    /// Menu items
-    MenuAutotype,
-    MenuAddnew,
-    MenuEdit,
-    MenuDelete,
+    /// Partial menu
     MenuChangeFont,
+
+    /// PDDB basis change
+    BasisChange,
 
     /// exit the application
     Quit,
@@ -95,6 +100,8 @@ enum VaultMode {
     Password,
 }
 
+static SELF_CONN: AtomicU32 = AtomicU32::new(0);
+
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
@@ -103,6 +110,17 @@ fn main() -> ! {
     // let's try keeping this completely private as a server. can we do that?
     let sid = xous::create_server().unwrap();
     start_fido_ux_thread();
+
+    // global shared state between threads.
+    let mode = Arc::new(Mutex::new(VaultMode::Fido));
+    let item_list = Arc::new(Mutex::new(Vec::<ListItem>::new()));
+
+    // spawn the actions server. This is responsible for grooming the UX elements. It
+    // has to be in its own thread because it uses blocking modal calls that would cause
+    // redraws of the background list to block/fail.
+    let actions_sid = xous::create_server().unwrap();
+    start_actions_thread(actions_sid, mode.clone(), item_list.clone());
+    let actions_conn = xous::connect(actions_sid).unwrap();
 
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
@@ -156,6 +174,7 @@ fn main() -> ! {
     });
 
     let conn = xous::connect(sid).unwrap();
+    SELF_CONN.store(conn, Ordering::SeqCst);
     // spawn the icontray handler
     let _ = thread::spawn({
         move || {
@@ -164,17 +183,22 @@ fn main() -> ! {
     });
 
     let menu_sid = xous::create_server().unwrap();
-    let menu_mgr = submenu::create_submenu(conn, menu_sid);
+    let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid);
 
     let xns = xous_names::XousNames::new().unwrap();
     // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
-    let mut vaultux = VaultUx::new(&xns, sid, menu_mgr);
-    vaultux.set_mode(VaultMode::Fido);
+    let mut vaultux = VaultUx::new(&xns, sid, menu_mgr, actions_conn, mode.clone(), item_list);
+    // Trigger the mode update in the actions
+    send_message(actions_conn,
+        Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+    ).ok();
+    vaultux.update_mode();
+
     let mut allow_redraw = false;
     let modals = modals::Modals::new(&xns).unwrap();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        log::trace!("got message {:?}", msg);
+        log::info!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(VaultOp::IncrementalLine) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -191,13 +215,25 @@ fn main() -> ! {
                 log::debug!("vaultux got input line: {}", s.as_str());
                 match s.as_str() {
                     "\u{0011}" => {
-                        vaultux.set_mode(VaultMode::Fido);
+                        *mode.lock().unwrap() = VaultMode::Fido;
+                        send_message(actions_conn,
+                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).ok();
+                        vaultux.update_mode();
                     }
                     "\u{0012}" => {
-                        vaultux.set_mode(VaultMode::Totp);
+                        *mode.lock().unwrap() = VaultMode::Totp;
+                        send_message(actions_conn,
+                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).ok();
+                        vaultux.update_mode();
                     }
                     "\u{0013}" => {
-                        vaultux.set_mode(VaultMode::Password);
+                        *mode.lock().unwrap() = VaultMode::Password;
+                        send_message(actions_conn,
+                            Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).ok();
+                        vaultux.update_mode();
                     }
                     "\u{0014}" => {
                         vaultux.raise_menu();
@@ -228,9 +264,22 @@ fn main() -> ! {
                     vaultux.redraw().expect("Vault couldn't redraw");
                 }
             }
+            Some(VaultOp::BasisChange) => {
+                // this set of calls will effectively force a reload of any UX data
+                *mode.lock().unwrap() = VaultMode::Fido;
+                send_message(actions_conn,
+                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
+                vaultux.update_mode();
+                vaultux.input("").unwrap();
+                send_message(conn,
+                    Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
+            }
             Some(VaultOp::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
                 vaultux.change_focus_to(&new_state);
+                log::info!("change focus: {:?}", new_state);
                 match new_state {
                     gam::FocusState::Background => {
                         allow_redraw = false;
@@ -240,18 +289,6 @@ fn main() -> ! {
                     }
                 }
             }),
-            Some(VaultOp::MenuAutotype) => {
-                log::info!("got autotype");
-            },
-            Some(VaultOp::MenuDelete) => {
-                log::info!("got delete");
-            },
-            Some(VaultOp::MenuEdit) => {
-                log::info!("got edit");
-            }
-            Some(VaultOp::MenuAddnew) => {
-                log::info!("got add new");
-            }
             Some(VaultOp::MenuChangeFont) => {
                 for item in FONT_LIST {
                     modals
@@ -286,4 +323,10 @@ fn main() -> ! {
 fn check_user_presence(_cid: ChannelID) -> Result<(), Ctap2StatusCode> {
     log::warn!("check user presence called, but not implemented!");
     Ok(())
+}
+
+pub(crate) fn basis_change() {
+    xous::send_message(SELF_CONN.load(Ordering::SeqCst),
+        Message::new_scalar(VaultOp::BasisChange.to_usize().unwrap(), 0, 0, 0, 0)
+    ).unwrap();
 }
