@@ -155,8 +155,9 @@ fn wrapped_main() -> ! {
 
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
-        log::debug!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             // ------------------ EXTERNAL APIS --------------------
             Some(Opcode::GetMutex) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
                 let incoming_token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
