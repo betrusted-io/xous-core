@@ -54,7 +54,7 @@ pub struct TextEntry {
     field_height: Cell::<i16>,
     /// track if keys were hit since initialized: this allows us to clear the default text,
     /// instead of having it re-appear every time the text area is cleared
-    keys_hit: bool,
+    keys_hit: [bool; MAX_FIELDS as usize],
 }
 
 impl Default for TextEntry {
@@ -69,7 +69,7 @@ impl Default for TextEntry {
             action_payloads: Default::default(),
             max_field_amount: 0,
             field_height: Cell::new(0),
-            keys_hit: false,
+            keys_hit: [false; MAX_FIELDS as usize],
         }
     }
 }
@@ -109,7 +109,7 @@ impl TextEntry {
 
         self.action_payloads = payload;
         self.max_field_amount = fields;
-        self.keys_hit = false;
+        self.keys_hit = [false; MAX_FIELDS as usize];
     }
 }
 
@@ -199,7 +199,7 @@ impl ActionApi for TextEntry {
             tv.style = if self.is_password {
                 GlyphStyle::Monospace
             } else {
-                if payload.placeholder.is_some() && payload.content.len().is_zero() && self.keys_hit {
+                if payload.placeholder.is_some() && payload.content.len().is_zero() && self.keys_hit[index] {
                     // note: this is just a "recommendation" - if there is an emoji or chinese character in this string, the height revers to modal.style's height
                     GlyphStyle::Small
                 } else {
@@ -215,7 +215,7 @@ impl ActionApi for TextEntry {
             match self.visibility {
                 TextEntryVisibility::Visible => {
                     let content = {
-                        if payload.placeholder.is_some() && payload.content.len().is_zero()  && !self.keys_hit {
+                        if payload.placeholder.is_some() && payload.content.len().is_zero() && !self.keys_hit[index] {
                             let placeholder_content = payload.placeholder.unwrap();
                             placeholder_content.to_string()
                         } else {
@@ -407,7 +407,7 @@ impl ActionApi for TextEntry {
                 }
             },
             '∴' | '\u{d}' => {
-                if payload.content.len() == 0 && !self.keys_hit {
+                if payload.content.len() == 0 && !self.keys_hit[self.selected_field as usize] {
                     if let Some(placeholder) = payload.placeholder {
                         payload.content.append(placeholder.to_str()).ok();
                     }
@@ -419,6 +419,14 @@ impl ActionApi for TextEntry {
                     }
                 }
 
+                // now check all the other potential fields for default re-population
+                for (index, raw_payload) in self.action_payloads[..self.max_field_amount as usize].iter_mut().enumerate() {
+                    if raw_payload.content.len() == 0 && !self.keys_hit[index] {
+                        if let Some(placeholder) = raw_payload.placeholder {
+                            raw_payload.content.append(placeholder.to_str()).ok();
+                        }
+                    }
+                }
                 let mut payloads: TextEntryPayloads = Default::default();
                 payloads.1 = self.max_field_amount as usize;
                 payloads.0[..self.max_field_amount as usize].copy_from_slice(&self.action_payloads[..self.max_field_amount as usize]);
@@ -428,7 +436,7 @@ impl ActionApi for TextEntry {
                 for payload in self.action_payloads.iter_mut() {
                     payload.volatile_clear();
                 }
-                self.keys_hit = false;
+                self.keys_hit[self.selected_field as usize] = false;
 
                 return (None, true)
             }
@@ -446,7 +454,7 @@ impl ActionApi for TextEntry {
                 // ignore null messages
             }
             '\u{8}' => { // backspace
-                self.keys_hit = true;
+                self.keys_hit[self.selected_field as usize] = true;
                 #[cfg(feature="tts")]
                 {
                     let xns = xous_names::XousNames::new().unwrap();
@@ -466,7 +474,7 @@ impl ActionApi for TextEntry {
                 }
             }
             _ => { // text entry
-                self.keys_hit = true;
+                self.keys_hit[self.selected_field as usize] = true;
                 #[cfg(feature="tts")]
                 {
                     let xns = xous_names::XousNames::new().unwrap();
