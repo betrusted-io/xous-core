@@ -504,7 +504,10 @@ fn wrapped_main() -> ! {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let inputline = buffer.to_original::<String::<4000>, _>().unwrap();
                 log::debug!("received input line, forwarding on... {}", inputline);
-                context_mgr.forward_input(inputline).expect("couldn't forward input line to focused app");
+                match context_mgr.forward_input(inputline) {
+                    Err(e) => log::warn!("InputLine missed its target {:?}; input ignored", e),
+                    _ => (),
+                }
                 log::debug!("returned from forward_input");
             },
             Some(Opcode::KeyboardEvent) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
