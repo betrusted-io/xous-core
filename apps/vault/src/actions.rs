@@ -770,6 +770,8 @@ pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
                         return None;
                     }
                 }
+            } else {
+                log::debug!("invalid line skipped: {:?}", line);
             }
         }
         Some(pr)

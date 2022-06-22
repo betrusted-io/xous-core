@@ -553,6 +553,8 @@ pub(crate) fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
                         return None;
                     }
                 }
+            } else {
+                log::debug!("invalid line skipped: {:?}", line);
             }
         }
         if appinfo.name.len() > 0
