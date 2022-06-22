@@ -328,8 +328,9 @@ impl ContextManager {
         let mut leaving_visibility: bool = false;
         {
             // using a temp copy of the old focus, check if we need to update any visibility state
-            let maybe_leaving_focused_context = if self.focused_context.is_some() {
-                if let Some(old_context) = self.get_context_by_token(self.focused_context.unwrap()) {
+            let maybe_leaving_focused_context = if let Some(focused_token) = self.focused_context {
+                log::debug!("leaving {:?}", self.tm.lookup_name(&focused_token));
+                if let Some(old_context) = self.get_context_by_token(focused_token) {
                     Some(old_context.clone())
                 } else {
                     None
@@ -337,6 +338,7 @@ impl ContextManager {
             } else {
                 None
             };
+            log::debug!("entering {:?}", self.tm.lookup_name(&token));
             let maybe_new_focus = self.get_context_by_token_mut(token);
             log::trace!("resolving visibility rules");
             if let Some(context) = maybe_new_focus {
