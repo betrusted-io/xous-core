@@ -532,7 +532,8 @@ fn wrapped_main() -> ! {
             },
             Some(Opcode::RevertFocusNb) => {
                 match context_mgr.revert_focus(&gfx, &mut canvases) {
-                    _ => log::warn!("failed to revert focus, silent error!"),
+                    Ok(_) => {},
+                    Err(e) => log::warn!("failed to revert focus: {:?}", e),
                 }
             },
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
