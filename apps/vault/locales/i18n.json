@@ -35,6 +35,12 @@
         "zh": "找不到条目.",
         "en-tts": "Entry not found."
     },
+    "vault.error.update_error": {
+        "en": "Couldn't update access times. Record lost forever!",
+        "ja": "アクセス時間を更新できませんでした。 記録は永遠に失われました！",
+        "zh": "无法更新访问时间。 记录永远丢失！",
+        "en-tts": "Couldn't update access times. Record lost forever!"
+    },
     "vault.error.fido2": {
         "en": "Can't edit FIDO2 tokens.",
         "ja": "FIDO2トークンを編集できません。",

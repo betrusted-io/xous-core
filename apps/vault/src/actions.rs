@@ -16,7 +16,7 @@ use crate::{VaultMode, SelectedEntry};
 
 pub(crate) const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 /// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
-const VAULT_ALLOC_HINT: usize = 256;
+pub(crate) const VAULT_ALLOC_HINT: usize = 256;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
 const SWAP_DELAY_MS: usize = 300;
@@ -699,7 +699,7 @@ fn length_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
     }
 }
 
-fn serialize_password<'a>(record: &PasswordRecord) -> Vec::<u8> {
+pub(crate) fn serialize_password<'a>(record: &PasswordRecord) -> Vec::<u8> {
     format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
         "version", record.version,
         "description", record.description,

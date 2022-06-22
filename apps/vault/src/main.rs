@@ -329,6 +329,8 @@ fn main() -> ! {
                         allow_redraw = false;
                     }
                     gam::FocusState::Foreground => {
+                        // HID is always selected if the vault is foregrounded
+                        vaultux.ensure_hid();
                         allow_redraw = true;
                     }
                 }
@@ -366,6 +368,10 @@ fn main() -> ! {
                         modals.dynamic_notification_update(Some(t!("vault.error.nothing_selected", xous::LANG)), None).ok();
                         tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
                     },
+                    Err(xous::Error::OutOfMemory) => { // trouble updating the key
+                        modals.dynamic_notification_update(Some(t!("vault.error.update_error", xous::LANG)), None).ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    }
                     Ok(_) => {},
                     Err(e) => { // unknown error
                         modals.dynamic_notification(Some(

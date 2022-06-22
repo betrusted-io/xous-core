@@ -447,7 +447,7 @@ impl VaultUx {
             // space can be defaced eg. after a menu pops up.
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
-                    Point::new(0, insert_at),
+                    Point::new(0, insert_at + 1),
                     self.screensize,
                 DrawStyle {
                     fill_color: Some(PixelColor::Light),
@@ -543,7 +543,7 @@ impl VaultUx {
             insert_at += self.item_height;
         }
 
-        log::debug!("vault app redraw##");
+        log::trace!("vault app redraw##");
         self.gam.redraw().expect("couldn't redraw screen");
         Ok(())
     }
@@ -582,7 +582,7 @@ impl VaultUx {
         }
         let entry = &self.filtered_list[self.selection_index].guid;
         // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
-        match self.pddb.borrow().get(
+        let updated_pw = match self.pddb.borrow().get(
             crate::actions::VAULT_PASSWORD_DICT,
             entry,
             None,
@@ -593,30 +593,62 @@ impl VaultUx {
                 let mut data = Vec::<u8>::new();
                 match record.read_to_end(&mut data) {
                     Ok(_len) => {
-                        if let Some(pw) = crate::actions::deserialize_password(data) {
+                        if let Some(mut pw) = crate::actions::deserialize_password(data) {
                             match self.usb_dev.send_str(&pw.password) {
-                                Ok(_) => Ok(()),
+                                Ok(_) => {
+                                    pw.count += 1;
+                                    pw.atime = utc_now().timestamp() as u64;
+                                    pw
+                                },
                                 Err(e) => {
                                     log::error!("couldn't autotype password: {:?}", e);
-                                    Err(xous::Error::UseBeforeInit)
+                                    return Err(xous::Error::UseBeforeInit);
                                 }
                             }
                         } else {
                             log::error!("couldn't deserialize {}", entry);
-                            Err(xous::Error::InvalidString)
+                            return Err(xous::Error::InvalidString);
                         }
                     }
                     Err(e) => {
                         log::error!("couldn't access key {}: {:?}", entry, e);
-                        Err(xous::Error::ProcessNotFound)
+                        return Err(xous::Error::ProcessNotFound);
                     },
                 }
             }
             Err(e) => {
                 log::error!("couldn't access key {}: {:?}", entry, e);
-                Err(xous::Error::ProcessNotFound)
+                return Err(xous::Error::ProcessNotFound);
+            }
+        };
+        match self.pddb.borrow().delete_key(crate::actions::VAULT_PASSWORD_DICT, entry, None) {
+            Ok(_) => {}
+            Err(_e) => {
+                return Err(xous::Error::InternalError);
             }
         }
+        match self.pddb.borrow().get(
+            crate::actions::VAULT_PASSWORD_DICT, entry, None,
+            false, true, Some(crate::actions::VAULT_ALLOC_HINT),
+            Some(crate::basis_change)
+        ) {
+            Ok(mut record) => {
+                let ser = crate::actions::serialize_password(&updated_pw);
+                match record.write(&ser) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("couldn't update key {}: {:?}", entry, e);
+                        return Err(xous::Error::OutOfMemory);
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("couldn't update key {}: {:?}", entry, e);
+                return Err(xous::Error::OutOfMemory);
+            }
+        }
+        self.pddb.borrow().sync().ok();
+        Ok(())
     }
     pub(crate) fn selected_entry(&self) -> Option<SelectedEntry> {
         if self.selection_index >= self.filtered_list.len() {
@@ -631,5 +663,8 @@ impl VaultUx {
                 }
             )
         }
+    }
+    pub(crate) fn ensure_hid(&self) {
+        self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Hid).unwrap();
     }
 }
