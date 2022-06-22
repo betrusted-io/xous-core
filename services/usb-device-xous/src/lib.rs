@@ -29,11 +29,34 @@ impl UsbHid {
             conn
         }
     }
+    /// this will always trigger a reset, even if it's the same core we're switching to
     pub fn switch_to_core(&self, core: UsbDeviceType) -> Result<(), xous::Error> {
         match send_message(
             self.conn,
             Message::new_blocking_scalar(
                 Opcode::SwitchCores.to_usize().unwrap(),
+                match core {
+                    UsbDeviceType::Debug => 0,
+                    UsbDeviceType::Hid => 1,
+                },
+                0, 0, 0
+            )
+        ) {
+            Ok(xous::Result::Scalar1(code)) => {
+                match code {
+                    0 => Ok(()),
+                    _ => Err(xous::Error::InternalError)
+                }
+            }
+            _ => panic!("Internal error: illegal return type"),
+        }
+    }
+    /// this will not trigger a reset if we're already on the requested core
+    pub fn ensure_core(&self, core: UsbDeviceType) -> Result<(), xous::Error> {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                Opcode::EnsureCore.to_usize().unwrap(),
                 match core {
                     UsbDeviceType::Debug => 0,
                     UsbDeviceType::Hid => 1,

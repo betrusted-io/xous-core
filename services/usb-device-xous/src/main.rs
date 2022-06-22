@@ -318,6 +318,20 @@ fn main() -> ! {
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
+            Some(Opcode::EnsureCore) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
+                if core == 1 {
+                    if !usbmgmt.is_device_connected() {
+                        log::info!("Connecting USB device core; disconnecting debug USB core");
+                        usbmgmt.connect_device_core(true);
+                    }
+                } else {
+                    if usbmgmt.is_device_connected() {
+                        log::info!("Connecting debug core; disconnecting USB device core");
+                        usbmgmt.connect_device_core(false);
+                    }
+                }
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }),
             Some(Opcode::WhichCore) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if usbmgmt.is_device_connected() {
                     xous::return_scalar(msg.sender, 1).unwrap();

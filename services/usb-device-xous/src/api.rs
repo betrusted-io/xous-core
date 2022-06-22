@@ -12,6 +12,8 @@ pub(crate) enum Opcode {
     GetLedState,
     /// Switch to a specified device core
     SwitchCores,
+    /// Makes sure a given core is selected
+    EnsureCore,
     /// Check which core is connected
     WhichCore,
     /// Restrict the debug core
