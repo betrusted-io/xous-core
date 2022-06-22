@@ -368,7 +368,7 @@ impl ActionApi for TextEntry {
         log::trace!("key_action: {}", k);
         match k {
             '←' => {
-                if self.visibility as u32 > 0 {
+                if (self.visibility as u32 > 0) && self.is_password {
                     match FromPrimitive::from_u32(self.visibility as u32 - 1) {
                         Some(new_visibility) => {
                             log::trace!("new visibility: {:?}", new_visibility);
@@ -378,10 +378,17 @@ impl ActionApi for TextEntry {
                             panic!("internal error: an TextEntryVisibility did not resolve correctly");
                         }
                     }
+                } else if !self.is_password {
+                    if payload.content.len() == 0 {
+                        if let Some(placeholder) = payload.placeholder {
+                            payload.content.append(placeholder.to_str()).ok();
+                        }
+                    }
                 }
             },
             '→' => {
-                if (self.visibility as u32) < (TextEntryVisibility::Hidden as u32) {
+                if ((self.visibility as u32) < (TextEntryVisibility::Hidden as u32))
+                && self.is_password {
                     match FromPrimitive::from_u32(self.visibility as u32 + 1) {
                         Some(new_visibility) => {
                             log::trace!("new visibility: {:?}", new_visibility);
@@ -389,6 +396,12 @@ impl ActionApi for TextEntry {
                         },
                         _ => {
                             panic!("internal error: an TextEntryVisibility did not resolve correctly");
+                        }
+                    }
+                } else if !self.is_password {
+                    if payload.content.len() == 0 {
+                        if let Some(placeholder) = payload.placeholder {
+                            payload.content.append(placeholder.to_str()).ok();
                         }
                     }
                 }
