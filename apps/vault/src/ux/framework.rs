@@ -154,37 +154,8 @@ impl VaultUx {
         let pddb = pddb::Pddb::new();
         // TODO: put some informative message asking to mount the PDDB if it's not mounted, right now you just get a blank screen.
         pddb.is_mounted_blocking();
-        // extract the style name from the settings, or update them if never initialized
-        let mut style_name_bytes = [0u8; 32];
-        let style_name = match pddb.get(
-            VAULT_CONFIG_DICT,
-            VAULT_CONFIG_KEY_FONT,
-            None, true, true,
-            Some(32), Some(crate::basis_change)
-        ) {
-            Ok(mut style_key) => {
-                style_key.read(&mut style_name_bytes).ok();
-                String::from_utf8_lossy(&style_name_bytes)
-            }
-            _ => panic!("PDDB access erorr"),
-        };
-        let style = match name_to_style(style_name.as_ref()) {
-            Some(s) => s,
-            None => {
-                match pddb.get(
-                    VAULT_CONFIG_DICT,
-                    VAULT_CONFIG_KEY_FONT,
-                    None, true, true,
-                    Some(32), Some(crate::basis_change)
-                ) {
-                    Ok(mut style_key) => {
-                        style_key.write(style_to_name(&DEFAULT_FONT).as_bytes()).ok();
-                    }
-                    _ => panic!("PDDB access erorr"),
-                };
-                GlyphStyle::Regular
-            },
-        };
+        // temporary style setting, this will get over-ridden after init
+        let style = GlyphStyle::Regular;
         let available_height = screensize.y - TITLE_HEIGHT;
         let glyph_height = gam.glyph_height_hint(style).unwrap();
         let item_height = (glyph_height * 2) as i16 + margin.y * 2 + 2; // +2 because of the border width
@@ -273,13 +244,41 @@ impl VaultUx {
         }
     }
 
-    pub(crate) fn set_glyph_style(&mut self, style: GlyphStyle) {
+    pub(crate) fn get_glyph_style(&mut self) {
+        let style = match self.pddb.borrow().get(
+            VAULT_CONFIG_DICT,
+            VAULT_CONFIG_KEY_FONT,
+            None, true, false,
+            Some(32), Some(crate::basis_change)
+        ) {
+            Ok(mut style_key) => {
+                let mut name_bytes = Vec::<u8>::new();
+                match style_key.read_to_end(&mut name_bytes) {
+                    Ok(_len) => {
+                        log::info!("name_bytes: {:?} {:?}", name_bytes, String::from_utf8(name_bytes.to_vec()));
+                        name_to_style(&String::from_utf8(name_bytes).unwrap_or("regular".to_string()))
+                            .unwrap_or(GlyphStyle::Regular)
+                    },
+                    Err(_) => GlyphStyle::Regular
+                }
+            }
+            _ => {
+                log::warn!("PDDB access error reading default glyph size");
+                GlyphStyle::Regular
+            },
+        };
         // force redraw of all the items
         self.title_dirty = true;
         for item in self.filtered_list.iter_mut() {
             item.dirty = true;
         }
-
+        self.style = style;
+        let available_height = self.screensize.y - TITLE_HEIGHT;
+        let glyph_height = self.gam.glyph_height_hint(self.style).unwrap();
+        self.item_height = (glyph_height * 2) as i16 + self.margin.y * 2 + 2; // +2 because of the border width
+        self.items_per_screen = available_height / self.item_height;
+    }
+    pub(crate) fn set_glyph_style(&mut self, style: GlyphStyle) {
         self.pddb.borrow().delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, None)
         .expect("couldn't delete previous setting");
 
@@ -294,11 +293,8 @@ impl VaultUx {
             }
             _ => panic!("PDDB access erorr"),
         };
-        self.style = style;
-        let available_height = self.screensize.y - TITLE_HEIGHT;
-        let glyph_height = self.gam.glyph_height_hint(self.style).unwrap();
-        self.item_height = (glyph_height * 2) as i16 + self.margin.y * 2 + 2; // +2 because of the border width
-        self.items_per_screen = available_height / self.item_height;
+        self.pddb.borrow().sync().ok();
+        self.get_glyph_style();
     }
     fn mark_as_dirty(&mut self, index: usize) {
         let list_len = self.filtered_list.len();

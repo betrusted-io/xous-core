@@ -215,6 +215,7 @@ fn main() -> ! {
         Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
     ).ok();
     vaultux.update_mode();
+    vaultux.get_glyph_style();
 
     let mut allow_redraw = false;
     let modals = modals::Modals::new(&xns).unwrap();
