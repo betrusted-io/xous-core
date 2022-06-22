@@ -8,7 +8,7 @@ use xous_ipc::Buffer;
 use xous::{send_message, Message};
 use usbd_human_interface_device::device::fido::*;
 use std::thread;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod ctap;
@@ -81,6 +81,8 @@ pub(crate) enum VaultOp {
     IncrementalLine,
     /// redraw our UI
     Redraw,
+    /// ignore dirty rectangles and redraw everything
+    FullRedraw,
     /// change focus
     ChangeFocus,
 
@@ -94,6 +96,7 @@ pub(crate) enum VaultOp {
     Quit,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum VaultMode {
     Fido,
     Totp,
@@ -114,12 +117,15 @@ fn main() -> ! {
     // global shared state between threads.
     let mode = Arc::new(Mutex::new(VaultMode::Fido));
     let item_list = Arc::new(Mutex::new(Vec::<ListItem>::new()));
+    let action_active = Arc::new(AtomicBool::new(false));
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
     // redraws of the background list to block/fail.
     let actions_sid = xous::create_server().unwrap();
-    start_actions_thread(actions_sid, mode.clone(), item_list.clone());
+    let conn = xous::connect(sid).unwrap();
+    SELF_CONN.store(conn, Ordering::SeqCst);
+    start_actions_thread(conn, actions_sid, mode.clone(), item_list.clone(), action_active.clone());
     let actions_conn = xous::connect(actions_sid).unwrap();
 
     // spawn the FIDO2 USB handler
@@ -173,8 +179,6 @@ fn main() -> ! {
         }
     });
 
-    let conn = xous::connect(sid).unwrap();
-    SELF_CONN.store(conn, Ordering::SeqCst);
     // spawn the icontray handler
     let _ = thread::spawn({
         move || {
@@ -187,7 +191,7 @@ fn main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
-    let mut vaultux = VaultUx::new(&xns, sid, menu_mgr, actions_conn, mode.clone(), item_list);
+    let mut vaultux = VaultUx::new(&xns, sid, menu_mgr, actions_conn, mode.clone(), item_list, action_active.clone());
     // Trigger the mode update in the actions
     send_message(actions_conn,
         Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
@@ -198,18 +202,33 @@ fn main() -> ! {
     let modals = modals::Modals::new(&xns).unwrap();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        log::info!("got message {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<VaultOp> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(VaultOp::IncrementalLine) => {
+                if action_active.load(Ordering::SeqCst) {
+                    log::trace!("action active, skipping incremental input");
+                    send_message(conn,
+                        Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).ok();
+                    continue;
+                }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
-                log::info!("Incremental input: {}", s.as_str());
+                log::debug!("Incremental input: {}", s.as_str());
                 vaultux.input(s.as_str()).expect("Vault couldn't accept input string");
                 send_message(conn,
                     Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
             }
             Some(VaultOp::Line) => {
+                if action_active.load(Ordering::SeqCst) {
+                    log::trace!("action active, skipping line input");
+                    send_message(conn,
+                        Message::new_scalar(VaultOp::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).ok();
+                    continue;
+                }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<xous_ipc::String<4000>, _>().unwrap();
                 log::debug!("vaultux got input line: {}", s.as_str());
@@ -264,6 +283,12 @@ fn main() -> ! {
                     vaultux.redraw().expect("Vault couldn't redraw");
                 }
             }
+            Some(VaultOp::FullRedraw) => {
+                vaultux.update_mode();
+                if allow_redraw {
+                    vaultux.redraw().expect("Vault couldn't redraw");
+                }
+            }
             Some(VaultOp::BasisChange) => {
                 // this set of calls will effectively force a reload of any UX data
                 *mode.lock().unwrap() = VaultMode::Fido;
@@ -301,6 +326,7 @@ fn main() -> ! {
                     },
                     _ => log::error!("get_radiobutton failed"),
                 }
+                vaultux.update_mode();
             }
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");

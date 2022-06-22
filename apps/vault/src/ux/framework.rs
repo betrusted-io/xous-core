@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::io::{Read, Write as FsWrite};
 use actions::ActionOp;
+use std::sync::atomic::Ordering as AtomicOrdering;
 
 /// Display list for items. "name" is the key by which the list is sorted.
 /// "extra" is more information about the item, which should not be part of the sort.
@@ -61,6 +62,7 @@ pub(crate) struct VaultUx {
     /// current operation mode
     mode: Arc::<Mutex::<VaultMode>>,
     title_dirty: bool,
+    action_active: Arc::<AtomicBool>,
 
     /// list of all items to be displayed
     item_list: Arc::<Mutex::<Vec::<ListItem>>>,
@@ -123,6 +125,7 @@ impl VaultUx {
         actions_conn: xous::CID,
         mode: Arc::<Mutex::<VaultMode>>,
         item_list: Arc::<Mutex::<Vec::<ListItem>>>,
+        action_active: Arc::<AtomicBool>,
     ) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
@@ -201,6 +204,7 @@ impl VaultUx {
             menu_mgr,
             main_conn: xous::connect(sid).unwrap(),
             actions_conn,
+            action_active,
         }
     }
     pub(crate) fn update_mode(&mut self) {
@@ -356,19 +360,7 @@ impl VaultUx {
         let items_height = self.items_per_screen * self.item_height;
         let mut insert_at = 1 + self.screensize.y - items_height; // +1 to get the border to overlap at the bottom
 
-        // handle the title region separately
-        if self.title_dirty && self.filtered_list.len() != 0 {
-            self.gam.draw_rectangle(self.content,
-                Rectangle::new_with_style(
-                    Point::new(0, 0),
-                    Point::new(self.screensize.x, insert_at - 1),
-                DrawStyle {
-                    fill_color: Some(PixelColor::Light),
-                    stroke_color: None,
-                    stroke_width: 0
-                }
-            )).expect("can't clear content area");
-        } else if self.filtered_list.len() == 0 {
+        if self.filtered_list.len() == 0 || self.action_active.load(AtomicOrdering::SeqCst) {
             // no items in list case -- just blank the whole area
             self.gam.draw_rectangle(self.content,
                 Rectangle::new_with_style(
@@ -381,6 +373,18 @@ impl VaultUx {
                 }
             )).expect("can't clear content area");
             return;
+        } else if self.title_dirty && self.filtered_list.len() != 0 {
+            // handle the title region separately
+            self.gam.draw_rectangle(self.content,
+                Rectangle::new_with_style(
+                    Point::new(0, 0),
+                    Point::new(self.screensize.x, insert_at - 1),
+                DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0
+                }
+            )).expect("can't clear content area");
         }
         // iterate through every item to figure out the extent of the "dirty" area
         let mut dirty_tl: Option<Point> = None;
@@ -452,7 +456,7 @@ impl VaultUx {
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
         self.clear_area();
         // ---- draw title area ----
-        if self.title_dirty {
+        if self.title_dirty || self.action_active.load(AtomicOrdering::SeqCst) {
             let mut title_text = TextView::new(self.content,
                 graphics_server::TextBounds::CenteredTop(
                     Rectangle::new(
@@ -471,6 +475,10 @@ impl VaultUx {
             };
             self.gam.post_textview(&mut title_text).expect("couldn't post title");
             self.title_dirty = false;
+        }
+        if self.action_active.load(AtomicOrdering::SeqCst) {
+            // don't redraw the list in the back when menus are active above
+            return Ok(())
         }
 
         // line up the list to justify to the bottom of the screen, based on the actual font requested

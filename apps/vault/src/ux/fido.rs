@@ -7,8 +7,7 @@ use locales::t;
 use crate::ctap::hid::{CtapHid, KeepaliveStatus};
 use usbd_human_interface_device::device::fido::RawFidoMsg;
 use std::io::{Write, Read};
-use chrono::{Utc, DateTime, NaiveDateTime};
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::ux::utc_now;
 
 // conceptual note: this UX conflates both the U2F and the FIDO2 paths.
 // - U2F is a polled implementation, where the state goes from Idle->Prompt->Present
@@ -279,43 +278,9 @@ pub(crate) fn start_fido_ux_thread() {
                             request_str.push_str(&format!("\n{}{}",
                                 t!("vault.u2f.appinfo.name", xous::LANG), info.name
                             ));
-                            if info.atime == 0 {
-                                request_str.push_str(&format!("\n{}{}",
-                                    t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                    t!("vault.u2f.appinfo.never", xous::LANG)
-                                ));
-                            } else {
-                                let now = utc_now();
-                                let atime = DateTime::<Utc>::from_utc(
-                                    NaiveDateTime::from_timestamp(info.atime as i64, 0),
-                                    Utc
-                                );
-                                if now.signed_duration_since(atime).num_days() > 1 {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_days(),
-                                        t!("vault.u2f.appinfo.days_ago", xous::LANG),
-                                    ));
-                                } else if now.signed_duration_since(atime).num_hours() > 1 {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_hours(),
-                                        t!("vault.u2f.appinfo.hours_ago", xous::LANG),
-                                    ));
-                                } else if now.signed_duration_since(atime).num_minutes() > 1 {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_minutes(),
-                                        t!("vault.u2f.appinfo.minutes_ago", xous::LANG),
-                                    ));
-                                } else {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_seconds(),
-                                        t!("vault.u2f.appinfo.seconds_ago", xous::LANG),
-                                    ));
-                                }
-                            }
+                            request_str.push_str(&format!("\n{}",
+                                crate::ux::atime_to_str(info.atime)
+                            ));
                             request_str.push_str(&format!("\n{}{}",
                                 t!("vault.u2f.appinfo.authcount", xous::LANG),
                                 info.count,
@@ -606,12 +571,4 @@ fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
         "atime", appinfo.atime,
         "count", appinfo.count,
     ).into_bytes()
-}
-
-/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid target
-fn utc_now() -> DateTime::<Utc> {
-    let now =
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
-    let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
-    DateTime::from_utc(naive, Utc)
 }
