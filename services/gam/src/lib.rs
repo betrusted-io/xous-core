@@ -354,6 +354,8 @@ impl Gam {
             0, 0, 0, 0,)
         ).map(|_| ())
     }
+    /// note to self: this call isn't actually used - it might come in handy to debug a problem, but
+    /// in general if a context isn't redrawing, this isn't the root cause.
     pub fn relinquish_focus_nb(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::RevertFocusNb.to_usize().unwrap(),
