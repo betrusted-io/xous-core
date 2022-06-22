@@ -354,6 +354,12 @@ impl Gam {
             0, 0, 0, 0,)
         ).map(|_| ())
     }
+    pub fn relinquish_focus_nb(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RevertFocusNb.to_usize().unwrap(),
+            0, 0, 0, 0,)
+        ).map(|_| ())
+    }
 
     pub fn glyph_height_hint(&self, glyph: GlyphStyle) -> Result<usize, xous::Error> {
         let response = send_message(self.conn,

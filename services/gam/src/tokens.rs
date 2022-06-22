@@ -82,4 +82,12 @@ impl<'a> TokenManager {
             None
         }
     }
+    pub(crate) fn lookup_name(&self, token: &[u32; 4]) -> Option<String> {
+        for entry in self.tokens.iter() {
+            if entry.token == *token {
+                return Some(entry.name.to_string())
+            }
+        }
+        None
+    }
 }
