@@ -183,6 +183,7 @@ impl VaultUx {
             usb_dev: usb_device_xous::UsbHid::new(),
         }
     }
+
     pub(crate) fn update_mode(&mut self) {
         self.title_dirty = true;
         self.filtered_list.clear();
@@ -248,7 +249,7 @@ impl VaultUx {
         let style = match self.pddb.borrow().get(
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
-            None, true, false,
+            None, true, true,
             Some(32), Some(crate::basis_change)
         ) {
             Ok(mut style_key) => {

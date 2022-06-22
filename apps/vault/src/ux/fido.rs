@@ -568,7 +568,7 @@ pub(crate) fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
 }
 
 pub(crate) fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
+    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
         "name", appinfo.name,
         "id", hex::encode(appinfo.id),
         "ctime", appinfo.ctime,

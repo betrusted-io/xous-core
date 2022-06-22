@@ -305,7 +305,7 @@ impl ActionManager {
                 ) {
                     Ok(mut data) => {
                         match data.write(&ser) {
-                            Ok(_) => {}
+                            Ok(len) => log::debug!("wrote {} bytes", len),
                             Err(e) => {
                                 self.modals.show_notification(&format!("{}\n{:?}",
                                     t!("vault.error.internal_error", xous::LANG), e
@@ -319,6 +319,7 @@ impl ActionManager {
                         ), None).ok();
                     }
                 }
+                log::info!("syncing...");
                 self.pddb.borrow().sync().ok();
             }
             _ => {} // not valid for these other modes
@@ -700,7 +701,7 @@ fn length_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
 }
 
 pub(crate) fn serialize_password<'a>(record: &PasswordRecord) -> Vec::<u8> {
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
+    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
         "version", record.version,
         "description", record.description,
         "username", record.username,
@@ -732,6 +733,7 @@ pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
                         if let Ok(ver) = u32::from_str_radix(data, 10) {
                             pr.version = ver
                         } else {
+                            log::warn!("ver error");
                             return None;
                         }
                     }
@@ -743,6 +745,7 @@ pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
                         if let Ok(ctime) = u64::from_str_radix(data, 10) {
                             pr.ctime = ctime;
                         } else {
+                            log::warn!("ctime error");
                             return None;
                         }
                     }
@@ -750,6 +753,7 @@ pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
                         if let Ok(atime) = u64::from_str_radix(data, 10) {
                             pr.atime = atime;
                         } else {
+                            log::warn!("atime error");
                             return None;
                         }
                     }
@@ -757,6 +761,7 @@ pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
                         if let Ok(count) = u64::from_str_radix(data, 10) {
                             pr.count = count;
                         } else {
+                            log::warn!("count error");
                             return None;
                         }
                     }

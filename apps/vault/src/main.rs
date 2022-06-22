@@ -209,8 +209,10 @@ fn main() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
+    log::info!("creating vaultux");
     let mut vaultux = VaultUx::new(&xns, sid, menu_mgr, actions_conn, mode.clone(), item_list, action_active.clone());
     // Trigger the mode update in the actions
+    log::info!("vaultux created");
     send_message(actions_conn,
         Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
     ).ok();
