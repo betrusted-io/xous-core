@@ -627,7 +627,7 @@ impl ActionManager {
                                             t!("vault.u2f.appinfo.authcount", xous::LANG),
                                             pw.count,
                                         );
-                                        let desc = format!("{} @ {}", pw.username, pw.description);
+                                        let desc = format!("{}/{}", pw.description, pw.username);
                                         let li = ListItem {
                                             name: desc,
                                             extra,
