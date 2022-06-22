@@ -443,6 +443,7 @@ pub(crate) fn start_fido_ux_thread() {
                                     Ok(name) => {
                                         let info = AppInfo {
                                             name: name.content()[0].content.to_string(),
+                                            notes: t!("vault.notes", xous::LANG).to_string(),
                                             id,
                                             ctime: utc_now().timestamp() as u64,
                                             atime: 0,
@@ -493,18 +494,20 @@ pub(crate) fn start_fido_ux_thread() {
 /// hash: app hash in hex string, lowercase
 /// created: decimal number representing epoch of the creation date
 /// last auth: decimal number representing epoch of the last auth time
-struct AppInfo {
-    name: String,
-    id: [u8; 32],
-    ctime: u64,
-    atime: u64,
-    count: u64,
+pub(crate) struct AppInfo {
+    pub name: String,
+    pub id: [u8; 32],
+    pub notes: String,
+    pub ctime: u64,
+    pub atime: u64,
+    pub count: u64,
 }
 
-fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
+pub(crate) fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
     if let Ok(desc_str) = String::from_utf8(descriptor) {
         let mut appinfo = AppInfo {
             name: String::new(),
+            notes: String::new(),
             id: [0u8; 32],
             ctime: 0,
             atime: 0,
@@ -517,6 +520,7 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
                     "name" => {
                         appinfo.name.push_str(data);
                     }
+                    "notes" => appinfo.notes.push_str(data),
                     "id" => {
                         if let Ok(id) = hex::decode(data) {
                             appinfo.id.copy_from_slice(&id);
@@ -563,7 +567,7 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
     }
 }
 
-fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
+pub(crate) fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
     format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
         "name", appinfo.name,
         "id", hex::encode(appinfo.id),

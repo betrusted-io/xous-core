@@ -80,7 +80,7 @@ const _DEFAULT_MIN_PIN_LENGTH_RP_IDS: Vec<String> = Vec::new();
 const _MAX_RP_IDS_LENGTH: usize = 8;
 
 const FIDO_DICT: &'static str = "fido.cfg";
-const FIDO_CRED_DICT: &'static str = "fido.cred";
+use crate::ctap::FIDO_CRED_DICT;
 const FIDO_PERSISTENT_DICT: &'static str = "fido.persistent";
 
 /// Wrapper for master keys.

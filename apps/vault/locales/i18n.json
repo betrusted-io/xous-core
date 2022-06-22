@@ -1,4 +1,70 @@
 {
+    "vault.edit_dialog": {
+        "en": "Make your changes and press enter.\nUse the d-pad to navigate entries.",
+        "ja": "変更を加えてEnterキーを押します。 D-PADを使用してエントリをナビゲートします。",
+        "zh": "进行更改并按 Enter。 使用 D-PAD 导航条目。",
+        "en-tts": "Make your changes and press enter.\nUse the d-pad to navigate entries."
+    },
+    "vault.notes": {
+        "en": "Notes",
+        "ja": "ノート",
+        "zh": "笔录",
+        "en-tts": "Notes"
+    },
+    "vault.autotyping": {
+        "en": "Autotyping...",
+        "ja": "今すぐ自動入力...",
+        "zh": "现在自动输入...",
+        "en-tts": "Autotyping..."
+    },
+    "vault.error.usb_error": {
+        "en": "USB error. Check connection to host.",
+        "ja": "USBエラー。 ホストへの接続を確認してください。",
+        "zh": "USB错误。 检查与主机的连接。",
+        "en-tts": "USB error. Check connection to host."
+    },
+    "vault.error.record_error": {
+        "en": "Corrupt database entry.",
+        "ja": "破損したデータベースエントリ",
+        "zh": "损坏的数据库条目.",
+        "en-tts": "Corrupt database entry."
+    },
+    "vault.error.not_found": {
+        "en": "Entry not found.",
+        "ja": "エントリが見つかりません.",
+        "zh": "找不到条目.",
+        "en-tts": "Entry not found."
+    },
+    "vault.error.fido2": {
+        "en": "Can't edit FIDO2 tokens.",
+        "ja": "FIDO2トークンを編集できません。",
+        "zh": "无法编辑 FIDO2 令牌。",
+        "en-tts": "Can't edit FIDO2 tokens."
+    },
+    "vault.error.internal_error": {
+        "en": "Internal error.",
+        "ja": "内部エラー.",
+        "zh": "内部错误.",
+        "en-tts": "Internal error."
+    },
+    "vault.error.nothing_selected": {
+        "en": "Nothing selected.",
+        "ja": "何も選択されていません.",
+        "zh": "未选择任何内容.",
+        "en-tts": "Nothing selected."
+    },
+    "vault.delete.confirm": {
+        "en": "Confirm entry deletion: ",
+        "ja": "エントリの削除を確認する: ",
+        "zh": "确认条目删除: ",
+        "en-tts": "Confirm entry deletion: "
+    },
+    "vault.completed": {
+        "en": "Operation completed.",
+        "ja": "操作が完了しました.",
+        "zh": "操作完成.",
+        "en-tts": "Operation completed."
+    },
     "vault.yes": {
         "en": "Yes",
         "ja": "はい",
@@ -168,10 +234,10 @@
         "en-tts": "App name: "
     },
     "vault.u2f.appinfo.last_authtime": {
-        "en": "Last authorized: ",
-        "ja": "最後に承認された:",
-        "zh": "最后授权:",
-        "en-tts": "Last authorized: "
+        "en": "Last accessed: ",
+        "ja": "最後にアクセスした:",
+        "zh": "最后访问:",
+        "en-tts": "Last accessed: "
     },
     "vault.u2f.appinfo.seconds_ago": {
         "en": "secs ago",

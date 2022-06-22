@@ -10,15 +10,15 @@ pub fn create_submenu(vault_conn: xous::CID, actions_conn: xous::CID, menu_mgr: 
 
     menu_items.push(MenuItem {
         name: xous_ipc::String::from_str(t!("vault.menu_edit", xous::LANG)),
-        action_conn: Some(actions_conn),
-        action_opcode: ActionOp::MenuEdit.to_u32().unwrap(),
+        action_conn: Some(vault_conn),
+        action_opcode: VaultOp::MenuEditStage1.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
     menu_items.push(MenuItem {
         name: xous_ipc::String::from_str(t!("vault.menu_delete", xous::LANG)),
-        action_conn: Some(actions_conn),
-        action_opcode: ActionOp::MenuDelete.to_u32().unwrap(),
+        action_conn: Some(vault_conn),
+        action_opcode: VaultOp::MenuDeleteStage1.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });

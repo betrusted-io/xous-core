@@ -15,6 +15,7 @@ pub(crate) struct ListItem {
     pub(crate) name: String,
     pub(crate) extra: String,
     pub(crate) dirty: bool,
+    /// this is the name of the key used to refer to the item
     pub(crate) guid: String,
 }
 impl ListItem {
@@ -83,6 +84,9 @@ pub(crate) struct VaultUx {
     menu_mgr: MenuMatic,
     main_conn: xous::CID,
     actions_conn: xous::CID,
+
+    /// usb interface
+    usb_dev: usb_device_xous::UsbHid,
 }
 
 pub(crate) const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
@@ -205,6 +209,7 @@ impl VaultUx {
             main_conn: xous::connect(sid).unwrap(),
             actions_conn,
             action_active,
+            usb_dev: usb_device_xous::UsbHid::new(),
         }
     }
     pub(crate) fn update_mode(&mut self) {
@@ -257,8 +262,8 @@ impl VaultUx {
                 self.menu_mgr.insert_item(
                     MenuItem {
                         name: xous_ipc::String::from_str(t!("vault.menu_autotype", xous::LANG)),
-                        action_conn: Some(self.actions_conn),
-                        action_opcode: ActionOp::MenuAutotype.to_u32().unwrap(),
+                        action_conn: Some(self.main_conn),
+                        action_opcode: VaultOp::MenuAutotype.to_u32().unwrap(),
                         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
                         close_on_select: true,
                     },
@@ -568,6 +573,63 @@ impl VaultUx {
             } else {
                 self.selection_index = 0;
             }
+        }
+    }
+
+    pub(crate) fn autotype(&mut self) -> Result<(), xous::Error> {
+        if self.selection_index >= self.filtered_list.len() {
+            return Err(xous::Error::InvalidPID);
+        }
+        let entry = &self.filtered_list[self.selection_index].guid;
+        // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
+        match self.pddb.borrow().get(
+            crate::actions::VAULT_PASSWORD_DICT,
+            entry,
+            None,
+            false, false, None,
+            Some(crate::basis_change)
+        ) {
+            Ok(mut record) => {
+                let mut data = Vec::<u8>::new();
+                match record.read_to_end(&mut data) {
+                    Ok(_len) => {
+                        if let Some(pw) = crate::actions::deserialize_password(data) {
+                            match self.usb_dev.send_str(&pw.password) {
+                                Ok(_) => Ok(()),
+                                Err(e) => {
+                                    log::error!("couldn't autotype password: {:?}", e);
+                                    Err(xous::Error::UseBeforeInit)
+                                }
+                            }
+                        } else {
+                            log::error!("couldn't deserialize {}", entry);
+                            Err(xous::Error::InvalidString)
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("couldn't access key {}: {:?}", entry, e);
+                        Err(xous::Error::ProcessNotFound)
+                    },
+                }
+            }
+            Err(e) => {
+                log::error!("couldn't access key {}: {:?}", entry, e);
+                Err(xous::Error::ProcessNotFound)
+            }
+        }
+    }
+    pub(crate) fn selected_entry(&self) -> Option<SelectedEntry> {
+        if self.selection_index >= self.filtered_list.len() {
+            None
+        } else {
+            let entry = &self.filtered_list[self.selection_index];
+            Some(
+                SelectedEntry {
+                    key_name: xous_ipc::String::from_str(entry.guid.to_string()),
+                    mode: (*self.mode.lock().unwrap()).clone(),
+                    description: xous_ipc::String::from_str(entry.name.to_string()),
+                }
+            )
         }
     }
 }

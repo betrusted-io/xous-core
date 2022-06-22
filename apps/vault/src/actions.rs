@@ -3,6 +3,7 @@ use gam::TextEntryPayload;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use num_traits::*;
 use xous::{SID, msg_blocking_scalar_unpack, Message, send_message};
+use xous_ipc::Buffer;
 use locales::t;
 use std::io::{Write, Read};
 use passwords::PasswordGenerator;
@@ -11,32 +12,32 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::cell::RefCell;
 
 use crate::ux::ListItem;
-use crate::VaultMode;
+use crate::{VaultMode, SelectedEntry};
 
-const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
+pub(crate) const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 /// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
 const VAULT_ALLOC_HINT: usize = 256;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
 const SWAP_DELAY_MS: usize = 300;
 
-struct PasswordRecord {
-    version: u32,
-    description: String,
-    username: String,
-    password: String,
-    ctime: u64,
-    atime: u64,
-    count: u64,
+pub(crate) struct PasswordRecord {
+    pub version: u32,
+    pub description: String,
+    pub username: String,
+    pub password: String,
+    pub notes: String,
+    pub ctime: u64,
+    pub atime: u64,
+    pub count: u64,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum ActionOp {
     /// Menu items
-    MenuAutotype,
     MenuAddnew,
-    MenuEdit,
-    MenuDelete,
+    MenuEditStage2,
+    MenuDeleteStage2,
     MenuClose,
     /// Internal ops
     UpdateMode,
@@ -60,19 +61,24 @@ pub(crate) fn start_actions_thread(
                     Some(ActionOp::MenuAddnew) => {
                         manager.activate();
                         manager.menu_addnew();
+                        // this is necessary so the next redraw shows the newly added entry
+                        manager.retrieve_db();
                         manager.deactivate();
                     },
-                    Some(ActionOp::MenuAutotype) => {
+                    Some(ActionOp::MenuDeleteStage2) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
+                        manager.menu_delete(entry);
+                        manager.retrieve_db();
                         manager.deactivate();
                     },
-                    Some(ActionOp::MenuDelete) => {
+                    Some(ActionOp::MenuEditStage2) => {
+                        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                        let entry = buffer.to_original::<SelectedEntry, _>().unwrap();
                         manager.activate();
-                        manager.deactivate();
-
-                    },
-                    Some(ActionOp::MenuEdit) => {
-                        manager.activate();
+                        manager.menu_edit(entry);
+                        manager.retrieve_db();
                         manager.deactivate();
                     },
                     Some(ActionOp::MenuClose) => {
@@ -283,6 +289,7 @@ impl ActionManager {
                     description,
                     username,
                     password,
+                    notes: t!("vault.notes", xous::LANG).to_string(),
                     ctime: utc_now().timestamp() as u64,
                     atime: 0,
                     count: 0,
@@ -297,16 +304,268 @@ impl ActionManager {
                     Some(VAULT_ALLOC_HINT), Some(crate::basis_change)
                 ) {
                     Ok(mut data) => {
-                        data.write(&ser).expect("couldn't store password record");
+                        match data.write(&ser) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                self.modals.show_notification(&format!("{}\n{:?}",
+                                    t!("vault.error.internal_error", xous::LANG), e
+                                ), None).ok();
+                            }
+                        }
                     }
-                    _ => log::error!("Error storing new password"),
+                    Err(e) => {
+                        self.modals.show_notification(&format!("{}\n{:?}",
+                            t!("vault.error.internal_error", xous::LANG), e
+                        ), None).ok();
+                    }
                 }
                 self.pddb.borrow().sync().ok();
             }
             _ => {} // not valid for these other modes
         }
     }
-    #[allow(dead_code)]
+
+    pub(crate) fn menu_delete(&mut self, entry: SelectedEntry) {
+        if self.yes_no_approval(&format!("{}\n{}", t!("vault.delete.confirm", xous::LANG), entry.description)) {
+            let dict = match entry.mode {
+                VaultMode::Password => VAULT_PASSWORD_DICT,
+                VaultMode::Fido => crate::fido::U2F_APP_DICT,
+                VaultMode::Totp => unimplemented!(),
+            };
+            match self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap_or("UTF8-error"), None) {
+                Ok(_) => {
+                    self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
+                }
+                Err(e) => {
+                    match e.kind() {
+                        std::io::ErrorKind::NotFound => {
+                            // handle special case of FIDO which is two dicts combined
+                            if entry.mode == VaultMode::Fido {
+                                // try the "other" dictionary
+                                match self.pddb.borrow()
+                                .delete_key(
+                                    crate::ctap::FIDO_CRED_DICT,
+                                    entry.key_name.as_str().unwrap_or("UTF8-error"),
+                                    None) {
+                                        Ok(_) => {
+                                            self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
+                                            return;
+                                        }
+                                        _ => {}
+                                }
+                            }
+                            self.modals.show_notification(t!("vault.error.not_found", xous::LANG), None).ok();
+                        }
+                        _ => {
+                            self.modals.show_notification(&format!("{}\n{:?}",
+                                t!("vault.error.internal_error", xous::LANG),
+                                e
+                            ), None).ok();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn menu_edit(&mut self, entry: SelectedEntry) {
+        let dict = match entry.mode {
+            VaultMode::Password => VAULT_PASSWORD_DICT,
+            VaultMode::Fido => crate::fido::U2F_APP_DICT,
+            VaultMode::Totp => unimplemented!(),
+        };
+        match entry.mode {
+            VaultMode::Password => {
+                let maybe_update = match self.pddb.borrow().get(
+                    dict, entry.key_name.as_str().unwrap(), None,
+                    false, false, None, Some(crate::basis_change)
+                ) {
+                    Ok(mut record) => {
+                        let mut data = Vec::<u8>::new();
+                        let maybe_update = match record.read_to_end(&mut data) {
+                            Ok(_len) => {
+                                if let Some(mut pw) = deserialize_password(data) {
+                                    let edit_data = self.modals
+                                        .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                                        .field(Some(pw.description), Some(name_validator))
+                                        .field(Some(pw.username), Some(name_validator))
+                                        .field(Some(pw.password), Some(name_validator))
+                                        .field(Some(pw.notes), Some(name_validator))
+                                        .build().expect("modals error in edit");
+                                    pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
+                                    pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
+                                    pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
+                                    pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
+                                    pw.atime = utc_now().timestamp() as u64;
+                                    Some(pw)
+                                } else {
+                                    log::error!("couldn't deserialize {}", entry.key_name);
+                                    self.modals.show_notification(t!("vault.error.record_error", xous::LANG), None).ok();
+                                    None
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("couldn't access key {}: {:?}", entry.key_name, e);
+                                self.modals.show_notification(&format!("{}\n{:?}",
+                                    t!("vault.error.internal_error", xous::LANG), e),
+                                    None
+                                ).ok();
+                                None
+                            }
+                        };
+                        maybe_update
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => {
+                                self.modals.show_notification(t!("vault.error.not_found", xous::LANG), None).ok();
+                            }
+                            _ => {
+                                self.modals.show_notification(&format!("{}\n{:?}",
+                                    t!("vault.error.internal_error", xous::LANG),
+                                    e
+                                ), None).ok();
+                            }
+                        }
+                        None
+                    }
+                };
+                if let Some(update) = maybe_update {
+                    match self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            self.modals.show_notification(&format!("{}\n{:?}",
+                                t!("vault.error.internal_error", xous::LANG),
+                                e
+                            ), None).ok();
+                            return;
+                        }
+                    }
+                    match self.pddb.borrow().get(
+                        dict, entry.key_name.as_str().unwrap(), None,
+                        false, true, Some(VAULT_ALLOC_HINT),
+                        Some(crate::basis_change)
+                    ) {
+                        Ok(mut record) => {
+                            let ser = serialize_password(&update);
+                            match record.write(&ser) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    self.modals.show_notification(&format!("{}\n{:?}",
+                                        t!("vault.error.internal_error", xous::LANG), e
+                                    ), None).ok();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            self.modals.show_notification(&format!("{}\n{:?}",
+                                t!("vault.error.internal_error", xous::LANG), e
+                            ), None).ok();
+                            return;
+                        }
+                    }
+                }
+                self.pddb.borrow().sync().ok();
+            }
+            VaultMode::Fido => {
+                // at the moment only U2F records are supported for editing. The FIDO2 stuff is done with a different record
+                // storage format that's a bit funkier to edit.
+                let maybe_update = match self.pddb.borrow().get(
+                    dict, entry.key_name.as_str().unwrap(), None,
+                    false, false, None, Some(crate::basis_change)
+                ) {
+                    Ok(mut record) => {
+                        let mut data = Vec::<u8>::new();
+                        let maybe_update = match record.read_to_end(&mut data) {
+                            Ok(_len) => {
+                                if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
+                                    let edit_data = self.modals
+                                        .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                                        .field(Some(ai.name), Some(name_validator))
+                                        .field(Some(ai.notes), Some(name_validator))
+                                        .field(Some(hex::encode(ai.id)), None)
+                                        .build().expect("modals error in edit");
+                                    ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
+                                    ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
+                                    ai.atime = utc_now().timestamp() as u64;
+                                    Some(ai)
+                                } else {
+                                    log::error!("couldn't deserialize {}", entry.key_name);
+                                    self.modals.show_notification(t!("vault.error.record_error", xous::LANG), None).ok();
+                                    None
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("couldn't access key {}: {:?}", entry.key_name, e);
+                                self.modals.show_notification(&format!("{}\n{:?}",
+                                    t!("vault.error.internal_error", xous::LANG), e),
+                                    None
+                                ).ok();
+                                None
+                            }
+                        };
+                        maybe_update
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => {
+                                // most likely this is due to this being a FIDO2 token, which we can't edit
+                                // there are no editable fields -- if we change them, it can break the authentication protocol.
+                                self.modals.show_notification(t!("vault.error.fido2", xous::LANG), None).ok();
+                            }
+                            _ => {
+                                self.modals.show_notification(&format!("{}\n{:?}",
+                                    t!("vault.error.internal_error", xous::LANG),
+                                    e
+                                ), None).ok();
+                            }
+                        }
+                        None
+                    }
+                };
+                if let Some(update) = maybe_update {
+                    match self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            self.modals.show_notification(&format!("{}\n{:?}",
+                                t!("vault.error.internal_error", xous::LANG),
+                                e
+                            ), None).ok();
+                            return;
+                        }
+                    }
+                    match self.pddb.borrow().get(
+                        dict, entry.key_name.as_str().unwrap(), None,
+                        false, true, Some(VAULT_ALLOC_HINT),
+                        Some(crate::basis_change)
+                    ) {
+                        Ok(mut record) => {
+                            let ser = crate::fido::serialize_app_info(&update);
+                            match record.write(&ser) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    self.modals.show_notification(&format!("{}\n{:?}",
+                                        t!("vault.error.internal_error", xous::LANG), e
+                                    ), None).ok();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            self.modals.show_notification(&format!("{}\n{:?}",
+                                t!("vault.error.internal_error", xous::LANG), e
+                            ), None).ok();
+                            return;
+                        }
+                    }
+                }
+                self.pddb.borrow().sync().ok();
+            }
+            VaultMode::Totp => {
+                unimplemented!()
+            }
+        }
+    }
+
     fn yes_no_approval(&self, query: &str) -> bool {
         self.modals.add_list(
             vec![t!("vault.yes", xous::LANG), t!("vault.no", xous::LANG)]
@@ -332,7 +591,8 @@ impl ActionManager {
         hex::encode(guid)
     }
 
-    // populates the display list with testing data
+    /// Populate the display list with data from the PDDB. Limited by total available RAM; probably
+    /// would stop working if you have over 500-1k records with the current heap limits.
     pub(crate) fn retrieve_db(&mut self) {
         self.mode_cache = {
             (*self.mode.lock().unwrap()).clone()
@@ -419,7 +679,7 @@ impl ActionManager {
 }
 
 
-fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+pub(crate) fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
     let proposed_name = input.as_str();
     if proposed_name.contains('\n') { // the '\n' is reserved as the delimiter to end the name field
         Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", xous::LANG)))
@@ -440,24 +700,26 @@ fn length_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
 }
 
 fn serialize_password<'a>(record: &PasswordRecord) -> Vec::<u8> {
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
+    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
         "version", record.version,
         "description", record.description,
         "username", record.username,
         "password", record.password,
+        "notes", record.notes,
         "ctime", record.ctime,
         "atime", record.atime,
         "count", record.count,
     ).into_bytes()
 }
 
-fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
+pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
     if let Ok(desc_str) = String::from_utf8(data) {
         let mut pr = PasswordRecord {
             version: 0,
             description: String::new(),
             username: String::new(),
             password: String::new(),
+            notes: String::new(),
             ctime: 0,
             atime: 0,
             count: 0
@@ -465,7 +727,6 @@ fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
         let lines = desc_str.split('\n');
         for line in lines {
             if let Some((tag, data)) = line.split_once(':') {
-                log::info!("tag: {}, data: {}", tag, data);
                 match tag {
                     "version" => {
                         if let Ok(ver) = u32::from_str_radix(data, 10) {
@@ -477,6 +738,7 @@ fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
                     "description" => pr.description.push_str(data),
                     "username" => pr.username.push_str(data),
                     "password" => pr.password.push_str(data),
+                    "notes" => pr.notes.push_str(data),
                     "ctime" => {
                         if let Ok(ctime) = u64::from_str_radix(data, 10) {
                             pr.ctime = ctime;

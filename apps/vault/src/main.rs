@@ -71,6 +71,13 @@ UI concept:
   Left/right arrow: moves up or down the list view in pages
   Enter: picks the selected list view
   Select: *alaways* raises system 'main menu'
+
+  Organization:
+    - Main thread (vaultux object): "responsive" UI operations - must always be able to respond to redraw commands.
+      operates on lists of data shared between main & actions thread
+    - Actions thread (actions object): "blocking" UI operations - manages multi-sequence dialog queries, database access
+    - Fido thread: handles USB interactions. Can always pop up a dialog box, but it cannot override a dialog-in-progress.
+    - Icontray thread: a simple server that serves as a shim between the IME structure and this to create an icontray function
  */
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -88,6 +95,9 @@ pub(crate) enum VaultOp {
 
     /// Partial menu
     MenuChangeFont,
+    MenuDeleteStage1,
+    MenuEditStage1,
+    MenuAutotype,
 
     /// PDDB basis change
     BasisChange,
@@ -96,14 +106,22 @@ pub(crate) enum VaultOp {
     Quit,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 enum VaultMode {
     Fido,
     Totp,
     Password,
 }
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+struct SelectedEntry {
+    key_name: xous_ipc::String::<256>,
+    description: xous_ipc::String::<256>,
+    mode: VaultMode,
+}
+
 static SELF_CONN: AtomicU32 = AtomicU32::new(0);
+const ERR_TIMEOUT_MS: usize = 5000;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
@@ -200,6 +218,7 @@ fn main() -> ! {
 
     let mut allow_redraw = false;
     let modals = modals::Modals::new(&xns).unwrap();
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
     loop {
         let msg = xous::receive_message(sid).unwrap();
         let opcode: Option<VaultOp> = FromPrimitive::from_usize(msg.body.id());
@@ -327,6 +346,55 @@ fn main() -> ! {
                     _ => log::error!("get_radiobutton failed"),
                 }
                 vaultux.update_mode();
+            }
+            Some(VaultOp::MenuAutotype) => {
+                modals.dynamic_notification(Some(t!("vault.autotyping", xous::LANG)), None).ok();
+                match vaultux.autotype() {
+                    Err(xous::Error::UseBeforeInit) => { // USB not plugged in
+                        modals.dynamic_notification_update(Some(t!("vault.error.usb_error", xous::LANG)), None).ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    },
+                    Err(xous::Error::InvalidString) => { // deserialzation error
+                        modals.dynamic_notification_update(Some(t!("vault.error.record_error", xous::LANG)), None).ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    },
+                    Err(xous::Error::ProcessNotFound) => { // key or dictionary not found
+                        modals.dynamic_notification_update(Some(t!("vault.error.not_found", xous::LANG)), None).ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    },
+                    Err(xous::Error::InvalidPID) => { // nothing was selected
+                        modals.dynamic_notification_update(Some(t!("vault.error.nothing_selected", xous::LANG)), None).ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    },
+                    Ok(_) => {},
+                    Err(e) => { // unknown error
+                        modals.dynamic_notification(Some(
+                            &format!("{}\n{:?}", t!("vault.error.internal_error", xous::LANG), e),
+                        ), None).ok();
+                        tt.sleep_ms(ERR_TIMEOUT_MS).unwrap();
+                    }
+                }
+                modals.dynamic_notification_close().ok();
+            }
+            Some(VaultOp::MenuDeleteStage1) => {
+                // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
+                if let Some(entry) = vaultux.selected_entry() {
+                    let buf = Buffer::into_buf(entry).expect("IPC error");
+                    buf.send(actions_conn, ActionOp::MenuDeleteStage2.to_u32().unwrap()).expect("messaging error");
+                } else {
+                    // this will block redraws, but it's just one notification in a sequence so it's OK.
+                    modals.show_notification(t!("vault.error.nothing_selected", xous::LANG), None).ok();
+                }
+            }
+            Some(VaultOp::MenuEditStage1) => {
+                // stage 1 happens here because the filtered list and selection entry are in the responsive UX section.
+                if let Some(entry) = vaultux.selected_entry() {
+                    let buf = Buffer::into_buf(entry).expect("IPC error");
+                    buf.send(actions_conn, ActionOp::MenuEditStage2.to_u32().unwrap()).expect("messaging error");
+                } else {
+                    // this will block redraws, but it's just one notification in a sequence so it's OK.
+                    modals.show_notification(t!("vault.error.nothing_selected", xous::LANG), None).ok();
+                }
             }
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");
