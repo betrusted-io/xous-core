@@ -155,6 +155,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349a06037c7bf932dd7e7d1f653678b2038b9ad46a74102f1fc7bd7872678cce"
 
 [[package]]
+name = "base32"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
+
+[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3096,6 +3102,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha-1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "028f48d513f9678cda28f6e4064755b3fbb2af6acd672f2c209b62323f7aea0f"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cpufeatures",
+ "digest 0.10.3",
+]
+
+[[package]]
 name = "sha2"
 version = "0.9.8"
 dependencies = [
@@ -3890,15 +3907,19 @@ name = "vault"
 version = "0.1.0"
 dependencies = [
  "arrayref",
+ "base32",
  "byteorder",
  "cbor",
  "chrono",
  "content-plugin-api",
+ "crypto-common",
  "ctap-crypto",
+ "digest 0.9.0",
  "enum-iterator",
  "gam",
  "graphics-server",
  "hex 0.4.3",
+ "hmac 0.12.1",
  "ime-plugin-api",
  "locales",
  "log",
@@ -3909,7 +3930,9 @@ dependencies = [
  "passwords",
  "pddb",
  "rand_core 0.6.3",
+ "random-pick",
  "rkyv",
+ "sha-1",
  "subtle",
  "ticktimer-server",
  "trng",

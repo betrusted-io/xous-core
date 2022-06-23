@@ -1,3 +1,4 @@
+use core::convert::TryFrom;
 use std::thread;
 use gam::TextEntryPayload;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
@@ -11,13 +12,19 @@ use chrono::{Utc, DateTime, NaiveDateTime};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::cell::RefCell;
 
-use crate::ux::ListItem;
+use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT};
 use crate::{VaultMode, SelectedEntry};
 
+use crate::fido::U2F_APP_DICT;
+use crate::totp::TotpAlgorithm;
+
 pub(crate) const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
+pub(crate) const VAULT_TOTP_DICT: &'static str = "vault.totp";
 /// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
 pub(crate) const VAULT_ALLOC_HINT: usize = 256;
+pub(crate) const VAULT_TOTP_ALLOC_HINT: usize = 128;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
+const VAULT_TOTP_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
 const SWAP_DELAY_MS: usize = 300;
 
@@ -32,6 +39,18 @@ pub(crate) struct PasswordRecord {
     pub count: u64,
 }
 
+pub(crate) struct TotpRecord {
+    pub version: u32,
+    // as base32
+    pub secret: String,
+    pub name: String,
+    pub algorithm: TotpAlgorithm,
+    pub notes: String,
+    pub digits: u32,
+    pub timestep: u64,
+    pub ctime: u64,
+}
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum ActionOp {
     /// Menu items
@@ -42,6 +61,9 @@ pub(crate) enum ActionOp {
     /// Internal ops
     UpdateMode,
     Quit,
+    #[cfg(feature="testing")]
+    /// Testing
+    GenerateTests,
 }
 
 pub(crate) fn start_actions_thread(
@@ -95,6 +117,11 @@ pub(crate) fn start_actions_thread(
                     }
                     None => {
                         log::error!("msg could not be decoded {:?}", msg);
+                    }
+                    #[cfg(feature="testing")]
+                    Some(ActionOp::GenerateTests) => {
+                        manager.populate_tests();
+                        manager.retrieve_db();
                     }
                 }
             }
@@ -331,7 +358,7 @@ impl ActionManager {
             let dict = match entry.mode {
                 VaultMode::Password => VAULT_PASSWORD_DICT,
                 VaultMode::Fido => crate::fido::U2F_APP_DICT,
-                VaultMode::Totp => unimplemented!(),
+                VaultMode::Totp => VAULT_TOTP_DICT,
             };
             match self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap_or("UTF8-error"), None) {
                 Ok(_) => {
@@ -647,35 +674,328 @@ impl ActionManager {
                 }
             }
             VaultMode::Fido => {
-                il.push(ListItem { name: "test.com".to_string(), extra: "Used 5 mins ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "google.com".to_string(), extra: "Never used".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "my app".to_string(), extra: "Used 2 hours ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "💎🙌".to_string(), extra: "Used 2 days ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "百度".to_string(), extra: "Used 1 month ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 1 week ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "duplicate.com".to_string(), extra: "Used 8 mins ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "amawhat.com".to_string(), extra: "Used 6 days ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "amazon.com".to_string(), extra: "Used 3 days ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "amazingcode.org".to_string(), extra: "Never used".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "Never used".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "another long domain name.com".to_string(), extra: "Used 2 months ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "bunniestudios.com".to_string(), extra: "Used 30 mins ago".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string(), dirty: true, guid: self.gen_guid() });
+                // first assemble U2F records
+                let keylist = match self.pddb.borrow().list_keys(U2F_APP_DICT, None) {
+                    Ok(keylist) => keylist,
+                    Err(e) => {
+                        log::error!("error accessing password database: {:?}", e);
+                        Vec::new()
+                    }
+                };
+                for key in keylist {
+                    match self.pddb.borrow().get(
+                        U2F_APP_DICT,
+                        &key,
+                        None,
+                        false, false, None,
+                        Some(crate::basis_change)
+                    ) {
+                        Ok(mut record) => {
+                            let mut data = Vec::<u8>::new();
+                            match record.read_to_end(&mut data) {
+                                Ok(_len) => {
+                                    if let Some(ai) = deserialize_app_info(data) {
+                                        let extra = format!("{}; {}{}",
+                                            crate::ux::atime_to_str(ai.atime),
+                                            t!("vault.u2f.appinfo.authcount", xous::LANG),
+                                            ai.count,
+                                        );
+                                        let desc = format!("{}", ai.name);
+                                        let li = ListItem {
+                                            name: desc,
+                                            extra,
+                                            dirty: true,
+                                            guid: key,
+                                        };
+                                        il.push(li);
+                                    } else {
+                                        log::error!("couldn't deserialize {}", key);
+                                    }
+                                }
+                                Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                            }
+                        }
+                        Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                    }
+                }
+                let keylist = match self.pddb.borrow().list_keys(FIDO_CRED_DICT, None) {
+                    Ok(keylist) => keylist,
+                    Err(e) => {
+                        log::error!("error accessing password database: {:?}", e);
+                        Vec::new()
+                    }
+                };
+                // now merge in the FIDO2 records
+                for key in keylist {
+                    match self.pddb.borrow().get(
+                        FIDO_CRED_DICT,
+                        &key,
+                        None,
+                        false, false, None,
+                        Some(crate::basis_change)
+                    ) {
+                        Ok(mut record) => {
+                            let mut data = Vec::<u8>::new();
+                            match record.read_to_end(&mut data) {
+                                Ok(_len) => {
+                                    match crate::ctap::storage::deserialize_credential(&data) {
+                                        Some(result) => {
+                                            let name = if let Some(display_name) = result.user_display_name {
+                                                display_name
+                                            } else {
+                                                String::from_utf8(result.user_handle).unwrap_or("".to_string())
+                                            };
+                                            let desc = format!("{} / {}", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
+                                            let extra = format!("FIDO2 {}", name);
+                                            let li = ListItem {
+                                                name: desc,
+                                                extra,
+                                                dirty: true,
+                                                guid: key,
+                                            };
+                                            il.push(li);
+                                        }
+                                        None => {
+                                            log::error!("couldn't deserialize {}", key);
+                                        }
+                                    }
+                                }
+                                Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                            }
+                        }
+                        Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                    }
+                }
             }
             VaultMode::Totp => {
-                il.push(ListItem { name: "gmail.com".to_string(), extra: "162 321".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "google.com".to_string(), extra: "445 768".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "my 图片 app".to_string(), extra: "982 111".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "🍕🍔🍟🌭".to_string(), extra: "056 182".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "百度".to_string(), extra: "111 111".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "duplicate.com".to_string(), extra: "462 124".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "amazon.com".to_string(), extra: "842 012".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "ziggyziggyziggylongdomain.com".to_string(), extra: "462 212".to_string(), dirty: true, guid: self.gen_guid() });
-                il.push(ListItem { name: "github.com".to_string(), extra: "Used 6 hours ago".to_string(), dirty: true, guid: self.gen_guid() });
+                let keylist = match self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None) {
+                    Ok(keylist) => keylist,
+                    Err(e) => {
+                        log::error!("error accessing password database: {:?}", e);
+                        Vec::new()
+                    }
+                };
+                for key in keylist {
+                    match self.pddb.borrow().get(
+                        VAULT_TOTP_DICT,
+                        &key,
+                        None,
+                        false, false, None,
+                        Some(crate::basis_change)
+                    ) {
+                        Ok(mut record) => {
+                            let mut data = Vec::<u8>::new();
+                            match record.read_to_end(&mut data) {
+                                Ok(_len) => {
+                                    if let Some(totp) = deserialize_totp(data) {
+                                        let extra = totp.secret;
+                                        let desc = format!("{}", totp.name);
+                                        let li = ListItem {
+                                            name: desc,
+                                            extra,
+                                            dirty: true,
+                                            guid: key,
+                                        };
+                                        il.push(li);
+                                    } else {
+                                        log::error!("couldn't deserialize {}", key);
+                                    }
+                                }
+                                Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                            }
+                        }
+                        Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                    }
+                }
             }
         }
         il.sort();
+    }
+    #[cfg(feature="testing")]
+    pub(crate) fn populate_tests(&mut self) {
+        use crate::ux::serialize_app_info;
+
+        let words = [
+            "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",
+            "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
+        let weights = [1; 21];
+        const TARGET_ENTRIES: usize = 35;
+        // for each database, populate up to TARGET_ENTRIES
+        // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
+        // --- passwords ---
+        let pws = self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None).unwrap_or(Vec::new());
+        if pws.len() < TARGET_ENTRIES {
+            let extra_count = TARGET_ENTRIES - pws.len();
+            for _ in 0..extra_count {
+                let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
+                let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
+                let username = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
+                let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
+                let pg = PasswordGenerator {
+                    length: 20,
+                    numbers: true,
+                    lowercase_letters: true,
+                    uppercase_letters: true,
+                    symbols: true,
+                    spaces: false,
+                    exclude_similar_characters: true,
+                    strict: true,
+                };
+                let password = pg.generate_one().unwrap();
+                let record = PasswordRecord {
+                    version: VAULT_PASSWORD_REC_VERSION,
+                    description,
+                    username,
+                    password,
+                    notes,
+                    ctime: utc_now().timestamp() as u64,
+                    atime: 0,
+                    count: 0,
+                };
+                let ser = serialize_password(&record);
+                let guid = self.gen_guid();
+                match self.pddb.borrow().get(
+                    VAULT_PASSWORD_DICT,
+                    &guid,
+                    None, true, true,
+                    Some(VAULT_ALLOC_HINT), Some(crate::basis_change)
+                ) {
+                    Ok(mut data) => {
+                        match data.write(&ser) {
+                            Ok(len) => log::debug!("wrote {} bytes", len),
+                            Err(e) => {
+                                self.modals.show_notification(&format!("{}\n{:?}",
+                                    t!("vault.error.internal_error", xous::LANG), e
+                                ), None).ok();
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.modals.show_notification(&format!("{}\n{:?}",
+                            t!("vault.error.internal_error", xous::LANG), e
+                        ), None).ok();
+                    }
+                }
+            }
+        }
+        // --- U2F + FIDO ---
+        let fido = self.pddb.borrow().list_keys(FIDO_CRED_DICT, None).unwrap_or(Vec::new());
+        let u2f = self.pddb.borrow().list_keys(U2F_APP_DICT, None).unwrap_or(Vec::new());
+        let total = fido.len() + u2f.len();
+        if total < TARGET_ENTRIES {
+            let extra_u2f = (TARGET_ENTRIES - total) / 2;
+            let extra_fido = TARGET_ENTRIES - extra_u2f;
+            for _ in 0..extra_u2f {
+                let n = random_pick::pick_multiple_from_slice(&words, &weights, 2);
+                let name = format!("{} {}", n[0], n[1]);
+                let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
+                let mut id = [0u8; 32];
+                self.trng.borrow_mut().fill_bytes(&mut id);
+                let record = crate::AppInfo {
+                    name,
+                    id,
+                    notes,
+                    ctime: utc_now().timestamp() as u64,
+                    atime: 0,
+                    count: 0,
+                };
+                let ser = serialize_app_info(&record);
+                let app_id_str = hex::encode(id);
+                match self.pddb.borrow().get(
+                    U2F_APP_DICT,
+                    &app_id_str,
+                    None, true, true,
+                    Some(256), Some(crate::basis_change)
+                ) {
+                    Ok(mut app_data) => {
+                        app_data.write(&ser).expect("couldn't create");
+                    }
+                    _ => log::error!("Error creating record"),
+                }
+            }
+            let xns = xous_names::XousNames::new().unwrap();
+            let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
+            for _ in 0..extra_fido {
+                use crate::ctap::data_formats::*;
+                let c_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
+                let cred_id = format!("{} {}", c_id[0], c_id[1]);
+                let r_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
+                let rp_id = format!("{} {}", r_id[0], r_id[1]);
+                let handle = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
+                let new_credential = PublicKeyCredentialSource {
+                    key_type: PublicKeyCredentialType::PublicKey,
+                    credential_id: cred_id.as_bytes().to_vec(),
+                    private_key: ctap_crypto::ecdsa::SecKey::gensk(&mut rng),
+                    rp_id,
+                    user_handle: handle.as_bytes().to_vec(),
+                    user_display_name: None,
+                    cred_protect_policy: None,
+                    creation_order: 0,
+                    user_name: None,
+                    user_icon: None,
+                };
+                let shortid = &cred_id;
+                match self.pddb.borrow().get(
+                    FIDO_CRED_DICT,
+                    shortid,
+                    None, true, true,
+                    Some(crate::ctap::storage::CRED_INITAL_SIZE), Some(crate::basis_change)
+                ) {
+                    Ok(mut cred) => {
+                        let value = crate::ctap::storage::serialize_credential(new_credential).unwrap();
+                        cred.write(&value).unwrap();
+                    }
+                    _ => log::error!("couldn't create FIDO2 credential")
+                }
+            }
+        }
+        // TOTP
+        let totp = self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None).unwrap_or(Vec::new());
+        if totp.len() < TARGET_ENTRIES {
+            let extra = TARGET_ENTRIES - totp.len();
+            for _ in 0..extra {
+                let names = random_pick::pick_multiple_from_slice(&words, &weights, 3);
+                let name = format!("{} {} {}", names[0], names[1], names[2]);
+                let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
+                let mut secret_bytes = [0u8; 10];
+                self.trng.borrow_mut().fill_bytes(&mut secret_bytes);
+                let record = TotpRecord {
+                    version: VAULT_TOTP_REC_VERSION,
+                    secret: base32::encode(base32::Alphabet::RFC4648 { padding: false }, &secret_bytes),
+                    name,
+                    algorithm: TotpAlgorithm::HmacSha1,
+                    notes,
+                    digits: 6,
+                    timestep: 30,
+                    ctime: utc_now().timestamp() as u64,
+                };
+                let ser = serialize_totp(&record);
+                let guid = self.gen_guid();
+                match self.pddb.borrow().get(
+                    VAULT_TOTP_DICT,
+                    &guid,
+                    None, true, true,
+                    Some(VAULT_TOTP_ALLOC_HINT), Some(crate::basis_change)
+                ) {
+                    Ok(mut data) => {
+                        match data.write(&ser) {
+                            Ok(len) => log::debug!("wrote {} bytes", len),
+                            Err(e) => {
+                                self.modals.show_notification(&format!("{}\n{:?}",
+                                    t!("vault.error.internal_error", xous::LANG), e
+                                ), None).ok();
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.modals.show_notification(&format!("{}\n{:?}",
+                            t!("vault.error.internal_error", xous::LANG), e
+                        ), None).ok();
+                    }
+                }
+            }
+        }
+        self.pddb.borrow().sync().ok();
     }
 }
 
@@ -766,12 +1086,94 @@ pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
                         }
                     }
                     _ => {
-                        log::warn!("unexpected tag {} encountered parsing app info, aborting", tag);
-                        return None;
+                        log::warn!("unexpected tag {} encountered parsing password info, ignoring", tag);
                     }
                 }
             } else {
-                log::debug!("invalid line skipped: {:?}", line);
+                log::trace!("invalid line skipped: {:?}", line);
+            }
+        }
+        Some(pr)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn serialize_totp<'a>(record: &TotpRecord) -> Vec::<u8> {
+    let ta: String = record.algorithm.into();
+    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
+        "version", record.version,
+        "secret", record.secret,
+        "name", record.name,
+        "algorithm", ta,
+        "notes", record.notes,
+        "digits", record.digits,
+        "timestep", record.timestep,
+        "ctime", record.ctime,
+    ).into_bytes()
+}
+
+pub(crate) fn deserialize_totp(data: Vec::<u8>) -> Option<TotpRecord> {
+    if let Ok(desc_str) = String::from_utf8(data) {
+        let mut pr = TotpRecord {
+            version: 0,
+            secret: String::new(),
+            name: String::new(),
+            algorithm: TotpAlgorithm::HmacSha1,
+            notes: String::new(),
+            digits: 0,
+            ctime: 0,
+            timestep: 0,
+        };
+        let lines = desc_str.split('\n');
+        for line in lines {
+            if let Some((tag, data)) = line.split_once(':') {
+                match tag {
+                    "version" => {
+                        if let Ok(ver) = u32::from_str_radix(data, 10) {
+                            pr.version = ver
+                        } else {
+                            log::warn!("ver error");
+                            return None;
+                        }
+                    }
+                    "secret" => pr.secret.push_str(data),
+                    "name" => pr.name.push_str(data),
+                    "algorithm" => pr.algorithm = match TotpAlgorithm::try_from(data) {
+                        Ok(a) => a,
+                        Err(_) => return None
+                    },
+                    "notes" => pr.notes.push_str(data),
+                    "digits" => {
+                        if let Ok(digits) = u32::from_str_radix(data, 10) {
+                            pr.digits = digits;
+                        } else {
+                            log::warn!("digits error");
+                            return None;
+                        }
+                    }
+                    "ctime" => {
+                        if let Ok(ctime) = u64::from_str_radix(data, 10) {
+                            pr.ctime = ctime;
+                        } else {
+                            log::warn!("ctime error");
+                            return None;
+                        }
+                    }
+                    "timestep" => {
+                        if let Ok(timestep) = u64::from_str_radix(data, 10) {
+                            pr.timestep = timestep;
+                        } else {
+                            log::warn!("timestep error");
+                            return None;
+                        }
+                    }
+                    _ => {
+                        log::warn!("unexpected tag {} encountered parsing TOTP info, ignoring", tag);
+                    }
+                }
+            } else {
+                log::trace!("invalid line skipped: {:?}", line);
             }
         }
         Some(pr)
