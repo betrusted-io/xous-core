@@ -1,7 +1,6 @@
 use crypto_common::InvalidLength;
 use sha1::Sha1;
 use hmac::{Hmac, Mac};
-use digest::Update;
 use std::{
     convert::TryFrom,
     time::{SystemTime, SystemTimeError},
@@ -46,16 +45,15 @@ impl Into<String> for TotpAlgorithm {
 }
 
 #[derive(Debug)]
-struct TotpEntry {
-    name: String,
-    step_seconds: u16,
-    shared_secret: Vec<u8>,
-    digit_count: u8,
-    algorithm: TotpAlgorithm,
+pub(crate) struct TotpEntry {
+    pub step_seconds: u16,
+    pub shared_secret: Vec<u8>,
+    pub digit_count: u8,
+    pub algorithm: TotpAlgorithm,
 }
 
 #[derive(Debug)]
-enum Error {
+pub(crate) enum Error {
     Io(std::io::Error),
     DigestLength(InvalidLength),
 }
@@ -72,7 +70,7 @@ impl From<InvalidLength> for Error {
     }
 }
 
-fn get_current_unix_time() -> Result<u64, SystemTimeError> {
+pub(crate) fn get_current_unix_time() -> Result<u64, SystemTimeError> {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
@@ -102,7 +100,7 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
     Ok(computed_hmac)
 }
 
-fn generate_totp_code(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<String, Error> {
+pub(crate) fn generate_totp_code(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<String, Error> {
     let hash = generate_hmac_bytes(unix_timestamp, totp_entry)?;
     let offset: usize = (hash.last().unwrap_or(&0) & 0xf) as usize;
     let binary: u64 = (((hash[offset] & 0x7f) as u64) << 24)

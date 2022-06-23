@@ -788,7 +788,8 @@ impl ActionManager {
                             match record.read_to_end(&mut data) {
                                 Ok(_len) => {
                                     if let Some(totp) = deserialize_totp(data) {
-                                        let extra = totp.secret;
+                                        let alg: String = totp.algorithm.into();
+                                        let extra = format!("{}:{}:{}:{}", totp.secret, totp.digits, totp.timestep, alg);
                                         let desc = format!("{}", totp.name);
                                         let li = ListItem {
                                             name: desc,
@@ -992,6 +993,41 @@ impl ActionManager {
                             t!("vault.error.internal_error", xous::LANG), e
                         ), None).ok();
                     }
+                }
+            }
+            // specific TOTP entry with a known shared secret for testing
+            let record = TotpRecord {
+                version: VAULT_TOTP_REC_VERSION,
+                secret: "I65VU7K5ZQL7WB4E".to_string(),
+                name: "totp@authenticationtest.com".to_string(),
+                algorithm: TotpAlgorithm::HmacSha1,
+                notes: "Predefined test".to_string(),
+                digits: 6,
+                timestep: 30,
+                ctime: utc_now().timestamp() as u64,
+            };
+            let ser = serialize_totp(&record);
+            let guid = self.gen_guid();
+            match self.pddb.borrow().get(
+                VAULT_TOTP_DICT,
+                &guid,
+                None, true, true,
+                Some(VAULT_TOTP_ALLOC_HINT), Some(crate::basis_change)
+            ) {
+                Ok(mut data) => {
+                    match data.write(&ser) {
+                        Ok(len) => log::debug!("wrote {} bytes", len),
+                        Err(e) => {
+                            self.modals.show_notification(&format!("{}\n{:?}",
+                                t!("vault.error.internal_error", xous::LANG), e
+                            ), None).ok();
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.modals.show_notification(&format!("{}\n{:?}",
+                        t!("vault.error.internal_error", xous::LANG), e
+                    ), None).ok();
                 }
             }
         }

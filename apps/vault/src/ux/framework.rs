@@ -1,4 +1,5 @@
 use crate::*;
+use crate::totp::{TotpAlgorithm, generate_totp_code};
 use gam::{UxRegistration, GlyphStyle, MenuMatic, MenuItem, MenuPayload};
 use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor, TextView};
 use std::fmt::Write;
@@ -8,6 +9,7 @@ use std::cmp::Ordering;
 use std::io::{Read, Write as FsWrite};
 use actions::ActionOp;
 use std::sync::atomic::Ordering as AtomicOrdering;
+use std::convert::TryFrom;
 
 /// Display list for items. "name" is the key by which the list is sorted.
 /// "extra" is more information about the item, which should not be part of the sort.
@@ -153,6 +155,7 @@ impl VaultUx {
 
         let pddb = pddb::Pddb::new();
         // TODO: put some informative message asking to mount the PDDB if it's not mounted, right now you just get a blank screen.
+        // TODO: also add routines to detect if time is not set up, and block initialization until that happens.
         pddb.is_mounted_blocking();
         // temporary style setting, this will get over-ridden after init
         let style = GlyphStyle::Regular;
@@ -532,7 +535,33 @@ impl VaultUx {
                 if index == selected as usize {
                     box_text.border_width = 4;
                 }
-                write!(box_text, "{}\n{}", item.name, item.extra).ok();
+                match *self.mode.lock().unwrap() {
+                    VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name, item.extra).ok();},
+                    VaultMode::Totp => {
+                        let fields = item.extra.split(':').collect::<Vec<&str>>();
+                        if fields.len() == 4 {
+                            let shared_secret = base32::decode(
+                                base32::Alphabet::RFC4648 { padding: false }, fields[0])
+                                .unwrap_or(vec![]);
+                            let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
+                            let step_seconds = u16::from_str_radix(fields[2], 10).unwrap_or(30);
+                            let algorithm = TotpAlgorithm::try_from(fields[2]).unwrap_or(TotpAlgorithm::HmacSha1);
+                            let totp = totp::TotpEntry {
+                                step_seconds,
+                                shared_secret,
+                                digit_count,
+                                algorithm
+                            };
+                            let code = generate_totp_code(
+                                totp::get_current_unix_time().unwrap_or(0),
+                                &totp
+                            ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                            write!(box_text, "{}\n{}", item.name, code).ok();
+                        } else {
+                            write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();
+                        }
+                    },
+                }
                 self.gam.post_textview(&mut box_text).expect("couldn't post list item");
                 item.dirty = false;
             }
