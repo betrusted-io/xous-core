@@ -171,7 +171,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Autobacklight feature: selectable feature to automatically raise the backlight when keys are pressed. Thanks to gsora for the feature!
   - More importantly, this adds `crossbeam` into the kernel. This is a somewhat heavyweight item and is not recommended for use in core
     services, but by including it to drive the auto-backlight feature, we get regular code coverage of the condvar pathway.
-
+- TOTP integration thanks to blakesmith's PoC TOTP code!
 
 ## Roadmap to 1.0
 

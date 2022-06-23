@@ -556,7 +556,9 @@ impl VaultUx {
                                 totp::get_current_unix_time().unwrap_or(0),
                                 &totp
                             ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
-                            write!(box_text, "{}\n{}", item.name, code).ok();
+                            // why code on top? because the item.name can be very long, and it can wrap which would cause
+                            // the code to become hidden.
+                            write!(box_text, "{}\n{}", code, item.name).ok();
                         } else {
                             write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();
                         }

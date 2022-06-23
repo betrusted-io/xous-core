@@ -1,6 +1,6 @@
-use crypto_common::InvalidLength;
+use crypto_mac::InvalidKeyLength;
 use sha1::Sha1;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, Mac, NewMac};
 use std::{
     convert::TryFrom,
     time::{SystemTime, SystemTimeError},
@@ -55,7 +55,7 @@ pub(crate) struct TotpEntry {
 #[derive(Debug)]
 pub(crate) enum Error {
     Io(std::io::Error),
-    DigestLength(InvalidLength),
+    DigestLength(InvalidKeyLength),
 }
 
 impl From<std::io::Error> for Error {
@@ -64,8 +64,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<InvalidLength> for Error {
-    fn from(err: InvalidLength) -> Self {
+impl From<InvalidKeyLength> for Error {
+    fn from(err: InvalidKeyLength) -> Self {
         Error::DigestLength(err)
     }
 }
@@ -94,7 +94,19 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
-        _ => todo!(),
+        // note: sha256/sha512 implementations not yet tested, as we have yet to find a site that uses this to test against.
+        TotpAlgorithm::HmacSha256 => {
+            let mut mac: Hmac<sha2::Sha256> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
+            mac.update(&unpack_u64(unix_timestamp / totp_entry.step_seconds as u64));
+            let hash: &[u8] = &mac.finalize().into_bytes();
+            computed_hmac.extend_from_slice(hash);
+        }
+        TotpAlgorithm::HmacSha512 => {
+            let mut mac: Hmac<sha2::Sha512> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
+            mac.update(&unpack_u64(unix_timestamp / totp_entry.step_seconds as u64));
+            let hash: &[u8] = &mac.finalize().into_bytes();
+            computed_hmac.extend_from_slice(hash);
+        }
     }
 
     Ok(computed_hmac)
