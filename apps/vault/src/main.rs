@@ -223,6 +223,10 @@ fn main() -> ! {
             icontray_server(conn);
         }
     });
+    // spawn the TOTP pumper
+    let pump_sid = xous::create_server().unwrap();
+    crate::totp::pumper(mode.clone(), pump_sid, conn);
+    let pump_conn = xous::connect(pump_sid).unwrap();
 
     let menu_sid = xous::create_server().unwrap();
     let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid);
@@ -288,6 +292,10 @@ fn main() -> ! {
                             Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
                         ).ok();
                         vaultux.update_mode();
+                        // this will start a periodic pump to keep the UX updating
+                        send_message(pump_conn,
+                            Message::new_scalar(totp::PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).ok();
                     }
                     "\u{0013}" => {
                         *mode.lock().unwrap() = VaultMode::Password;

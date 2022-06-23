@@ -89,6 +89,10 @@ pub(crate) struct VaultUx {
 
     /// usb interface
     usb_dev: usb_device_xous::UsbHid,
+
+    /// totp redraw state
+    last_epoch: u64,
+    current_time: u64,
 }
 
 pub(crate) const DEFAULT_FONT: GlyphStyle = GlyphStyle::Regular;
@@ -164,6 +168,8 @@ impl VaultUx {
         let item_height = (glyph_height * 2) as i16 + margin.y * 2 + 2; // +2 because of the border width
         let items_per_screen = available_height / item_height;
 
+        let current_time = totp::get_current_unix_time().unwrap_or(0);
+
         VaultUx {
             content,
             gam,
@@ -184,6 +190,8 @@ impl VaultUx {
             actions_conn,
             action_active,
             usb_dev: usb_device_xous::UsbHid::new(),
+            last_epoch: current_time / 30,
+            current_time,
         }
     }
 
@@ -459,7 +467,27 @@ impl VaultUx {
     }
 
     pub(crate) fn redraw(&mut self) -> Result<(), xous::Error> {
+        // to reduce locking thrash, we cache a copy of the current mode at the top of redraw.
+        // this could lead to some race conditions that lead to awkward problems, we'll see, but it
+        // is probably worth the performance improvement.
+        let mode_at_entry = (*self.mode.lock().unwrap()).clone();
+
+        if mode_at_entry == VaultMode::Totp { // always redraw the title in TOTP mode
+            self.title_dirty = true;
+            // always grab the current time, regardless of the mode? saves an extra call to get time...
+            self.current_time = totp::get_current_unix_time().unwrap_or(0);
+            // duration bar is hard-coded to once every 30 seconds, even if the keys may not change that often.
+            let epoch = self.current_time / 30;
+            if self.last_epoch != epoch {
+                self.last_epoch = epoch;
+                // force a redraw of all the items if the epoch has changed
+                for item in self.filtered_list.iter_mut() {
+                    item.dirty = true;
+                }
+            }
+        }
         self.clear_area();
+
         // ---- draw title area ----
         if self.title_dirty || self.action_active.load(AtomicOrdering::SeqCst) {
             let mut title_text = TextView::new(self.content,
@@ -473,12 +501,28 @@ impl VaultUx {
             title_text.draw_border = false;
             title_text.clear_area = true;
             title_text.style = GlyphStyle::Large;
-            match *self.mode.lock().unwrap() {
+            match mode_at_entry {
                 VaultMode::Fido => write!(title_text, "FIDO").ok(),
                 VaultMode::Totp => write!(title_text, "⏳1234").ok(),
                 VaultMode::Password => write!(title_text, "🔐****").ok(),
             };
             self.gam.post_textview(&mut title_text).expect("couldn't post title");
+            if mode_at_entry == VaultMode::Totp {
+                const BAR_HEIGHT: i16 = 5;
+                const BAR_GAP: i16 = -10;
+                // draw the duration bar
+                let delta = (self.current_time - (self.last_epoch * 30)) as i32;
+                let width = (self.screensize.x - (self.margin.x * 2)) as i32;
+                let delta_width = (delta * width * 100) / (30 * 100);
+                self.gam.draw_rectangle(
+                    self.content,
+                    Rectangle {
+                        tl: Point::new(self.margin.x, TITLE_HEIGHT - (BAR_HEIGHT + BAR_GAP)),
+                        br: Point::new(self.screensize.x - self.margin.x - delta_width as i16, TITLE_HEIGHT - BAR_GAP),
+                        style: DrawStyle { fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0 }
+                    }
+                ).ok();
+            }
             self.title_dirty = false;
         }
         if self.action_active.load(AtomicOrdering::SeqCst) {
@@ -535,7 +579,7 @@ impl VaultUx {
                 if index == selected as usize {
                     box_text.border_width = 4;
                 }
-                match *self.mode.lock().unwrap() {
+                match mode_at_entry {
                     VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name, item.extra).ok();},
                     VaultMode::Totp => {
                         let fields = item.extra.split(':').collect::<Vec<&str>>();
