@@ -453,7 +453,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         check_cred_protect: bool,
     ) -> Result<Vec<PublicKeyCredentialSource>, Ctap2StatusCode> {
         let mut result = Vec::<PublicKeyCredentialSource>::new();
-        let mut cred_list = self.pddb.borrow().list_keys(
+        let cred_list = self.pddb.borrow().list_keys(
             FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
         for cred_name in cred_list.iter() {
             if let Some(mut cred_entry) = self.pddb.borrow().get(
@@ -486,7 +486,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     /// Returns the next creation order.
     pub fn new_creation_order(&self) -> Result<u64, Ctap2StatusCode> {
         let mut max = 0;
-        let mut cred_list = self.pddb.borrow().list_keys(
+        let cred_list = self.pddb.borrow().list_keys(
             FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
         if cred_list.len() == 0 {
             return Ok(0)
