@@ -262,6 +262,7 @@ fn main() -> ! {
                         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                         match keyboard.read_report() {
                             Ok(l) => {
+                                log::info!("keyboard LEDs: {:?}", l);
                                 led_state = l;
                             }
                             Err(e) => log::trace!("KEYB ERR: {:?}", e),
