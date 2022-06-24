@@ -98,6 +98,12 @@ batch_id: -1883047711
 
 >>> b32decode("I65VU7K5ZQL7WB4E").hex()
 '47bb5a7d5dcc17fb0784'
+
+To clear test entries:
+  pddb dictdelete vault.passwords
+  pddb dictdelete vault.totp
+  pddb dictdelete fido.cred
+  pddb dictdelete fido.u2fapps
 */
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
