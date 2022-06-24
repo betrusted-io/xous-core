@@ -5,6 +5,7 @@
 // Full license text is available in 'licenses/MIT.txt'.
 //
 using System;
+using System.IO;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Exceptions;
 using Antmicro.Renode.Logging;
@@ -138,6 +139,90 @@ namespace Antmicro.Renode.Peripherals.SPI
             }
             return 0;
         }
+
+        private string InternalBackingFileName;
+        private FileStream InternalBackingFile;
+        public string BackingFile
+        {
+            get { return InternalBackingFileName; }
+            set
+            {
+                // If the user passes an empty string, don't do anything.
+                if (string.IsNullOrEmpty(value))
+                {
+                    this.Log(LogLevel.Error, "Unconfiguring backing file");
+                    if (InternalBackingFile != null)
+                    {
+                        InternalBackingFile.Close();
+                    }
+                    InternalBackingFileName = null;
+                    InternalBackingFile = null;
+                    return;
+                }
+
+                // Ensure the path name is fully-qualified, using the current working
+                // directory if necessary.
+                if (System.IO.Path.IsPathRooted(value))
+                {
+                    InternalBackingFileName = value;
+                }
+                else
+                {
+                    InternalBackingFileName = System.IO.Path.Combine(Environment.CurrentDirectory, value);
+                }
+                try
+                {
+                    this.Log(LogLevel.Debug, "Trying to load or create backing file {0}", InternalBackingFileName);
+                    InternalBackingFile = new FileStream(InternalBackingFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite);
+                    byte[] copyBuffer = new byte[4096];
+                    var currentOffset = 0;
+
+                    // Assume that if the length is 0, then the file was just created and we need
+                    // to copy RAM into the newly-created file.
+                    if (InternalBackingFile.Length == 0)
+                    {
+                        this.Log(LogLevel.Debug, "Backing file {0} was created, dumping {1} bytes of ROM to backing file", InternalBackingFileName, underlyingMemory.Size);
+                        // 4096 is a safe size, since that is the page size.
+                        for (currentOffset = 0; currentOffset < underlyingMemory.Size; currentOffset += copyBuffer.Length)
+                        {
+                            underlyingMemory.ReadBytes(currentOffset, copyBuffer.Length, copyBuffer, 0);
+                            InternalBackingFile.Write(copyBuffer, 0, copyBuffer.Length);
+                        }
+                    }
+                    // If the length is NOT 0, read data from the backing file
+                    else
+                    {
+                        this.Log(LogLevel.Debug, "Backing file {0} was loaded, restoring {1} bytes (vs ROM: {2}) of ROM from file", InternalBackingFileName, InternalBackingFile.Length, underlyingMemory.Size);
+                        InternalBackingFile.Seek(0, SeekOrigin.Begin);
+                        if (InternalBackingFile.Length != underlyingMemory.Size)
+                        {
+                            this.Log(LogLevel.Warning, "Backing file {0} was a different size than ROM (file was {1} bytes, ROM is {2} bytes) -- resizing backing file to match ROM size", InternalBackingFileName, InternalBackingFile.Length, underlyingMemory.Size);
+                            InternalBackingFile.SetLength(underlyingMemory.Size);
+                        }
+
+                        // 4096 is a safe size, since that is the page size.
+                        for (currentOffset = 0;
+                            (currentOffset < underlyingMemory.Size) && (currentOffset < InternalBackingFile.Length);
+                            currentOffset += copyBuffer.Length)
+                        {
+                            InternalBackingFile.Read(copyBuffer, 0, copyBuffer.Length);
+                            underlyingMemory.WriteBytes(currentOffset, copyBuffer);
+                        }
+                    }
+                }
+                catch (IOException e)
+                {
+                    if (InternalBackingFile != null)
+                    {
+                        InternalBackingFile.Close();
+                    }
+                    InternalBackingFileName = null;
+                    InternalBackingFile = null;
+                    throw new RecoverableException(e);
+                }
+            }
+        }
+
 
         public MappedMemory UnderlyingMemory => underlyingMemory;
 
@@ -537,6 +622,11 @@ namespace Antmicro.Renode.Peripherals.SPI
                 var length = (int)Math.Min(SegmentSize, underlyingMemory.Size - position);
 
                 underlyingMemory.WriteBytes(position, segment, length);
+                if (InternalBackingFile != null)
+                {
+                    InternalBackingFile.Seek(position, SeekOrigin.Begin);
+                    InternalBackingFile.Write(segment, 0, length);
+                }
                 position += length;
             }
         }
@@ -553,6 +643,11 @@ namespace Antmicro.Renode.Peripherals.SPI
 
             var position = SegmentSize * (currentOperation.ExecutionAddress / SegmentSize);
             underlyingMemory.WriteBytes(position, segment);
+            if (InternalBackingFile != null)
+            {
+                InternalBackingFile.Seek(position, SeekOrigin.Begin);
+                InternalBackingFile.Write(segment, 0, segment.Length);
+            }
         }
 
         private void EraseSubsector4K()
@@ -567,6 +662,11 @@ namespace Antmicro.Renode.Peripherals.SPI
 
             var position = 4.KB() * (currentOperation.ExecutionAddress / 4.KB());
             underlyingMemory.WriteBytes(position, segment);
+            if (InternalBackingFile != null)
+            {
+                InternalBackingFile.Seek(position, SeekOrigin.Begin);
+                InternalBackingFile.Write(segment, 0, segment.Length);
+            }
         }
 
         private void WriteToMemory(byte val)
@@ -579,6 +679,13 @@ namespace Antmicro.Renode.Peripherals.SPI
 
             var position = currentOperation.ExecutionAddress + currentOperation.CommandBytesHandled;
             underlyingMemory.WriteByte(position, val);
+            if (InternalBackingFile != null)
+            {
+                var tmp_byte = new byte[1];
+                tmp_byte[0] = val;
+                InternalBackingFile.Seek(position, SeekOrigin.Begin);
+                InternalBackingFile.Write(tmp_byte, 0, 1);
+            }
         }
 
         private byte ReadFromMemory()
