@@ -880,6 +880,7 @@ impl ActionManager {
     pub(crate) fn populate_tests(&mut self) {
         use crate::ux::serialize_app_info;
 
+        self.modals.dynamic_notification(Some("Creating test entries..."), None).ok();
         let words = [
             "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",
             "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
@@ -892,7 +893,7 @@ impl ActionManager {
         let pws = self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None).unwrap_or(Vec::new());
         if pws.len() < TARGET_ENTRIES_PW {
             let extra_count = TARGET_ENTRIES_PW - pws.len();
-            for _ in 0..extra_count {
+            for index in 0..extra_count {
                 let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
                 let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
                 let username = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
@@ -928,19 +929,14 @@ impl ActionManager {
                 ) {
                     Ok(mut data) => {
                         match data.write(&ser) {
-                            Ok(len) => log::debug!("wrote {} bytes", len),
-                            Err(e) => {
-                                self.modals.show_notification(&format!("{}\n{:?}",
-                                    t!("vault.error.internal_error", xous::LANG), e
-                                ), None).ok();
-                            }
+                            Ok(len) => {
+                                log::debug!("pw wrote {} bytes", len);
+                                self.modals.dynamic_notification_update(Some(&format!("pw entry {}, {} bytes", index, len)), None).ok();
+                            },
+                            Err(e) => log::error!("PW Error: {:?}", e),
                         }
                     }
-                    Err(e) => {
-                        self.modals.show_notification(&format!("{}\n{:?}",
-                            t!("vault.error.internal_error", xous::LANG), e
-                        ), None).ok();
-                    }
+                    Err(e) => log::error!("PW Error: {:?}", e),
                 }
             }
         }
@@ -951,7 +947,7 @@ impl ActionManager {
         if total < TARGET_ENTRIES {
             let extra_u2f = (TARGET_ENTRIES - total) / 2;
             let extra_fido = TARGET_ENTRIES - extra_u2f;
-            for _ in 0..extra_u2f {
+            for index in 0..extra_u2f {
                 let n = random_pick::pick_multiple_from_slice(&words, &weights, 2);
                 let name = format!("{} {}", n[0], n[1]);
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
@@ -974,9 +970,15 @@ impl ActionManager {
                     Some(256), Some(crate::basis_change)
                 ) {
                     Ok(mut app_data) => {
-                        app_data.write(&ser).expect("couldn't create");
+                        match app_data.write(&ser) {
+                            Ok(len) => {
+                                log::debug!("u2f wrote {} bytes", len);
+                                self.modals.dynamic_notification_update(Some(&format!("u2f entry {}, {} bytes", index, len)), None).ok();
+                            }
+                            Err(e) => log::error!("U2F Error: {:?}", e),
+                        }
                     }
-                    _ => log::error!("Error creating record"),
+                    _ => log::error!("U2F Error creating record"),
                 }
             }
             let xns = xous_names::XousNames::new().unwrap();
@@ -1009,7 +1011,13 @@ impl ActionManager {
                 ) {
                     Ok(mut cred) => {
                         let value = crate::ctap::storage::serialize_credential(new_credential).unwrap();
-                        cred.write(&value).unwrap();
+                        match cred.write(&value) {
+                            Ok(len) => {
+                                log::debug!("fido2 wrote {} bytes", len);
+                                self.modals.dynamic_notification_update(Some(&format!("fido2 entry {}, {} bytes", index, len)), None).ok();
+                            }
+                            Err(e) => log::error!("FIDO2 Error: {:?}", e),
+                        }
                     }
                     _ => log::error!("couldn't create FIDO2 credential")
                 }
@@ -1019,7 +1027,7 @@ impl ActionManager {
         let totp = self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None).unwrap_or(Vec::new());
         if totp.len() < TARGET_ENTRIES {
             let extra = TARGET_ENTRIES - totp.len();
-            for _ in 0..extra {
+            for index in 0..extra {
                 let names = random_pick::pick_multiple_from_slice(&words, &weights, 3);
                 let name = format!("{} {} {}", names[0], names[1], names[2]);
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
@@ -1045,19 +1053,14 @@ impl ActionManager {
                 ) {
                     Ok(mut data) => {
                         match data.write(&ser) {
-                            Ok(len) => log::debug!("wrote {} bytes", len),
-                            Err(e) => {
-                                self.modals.show_notification(&format!("{}\n{:?}",
-                                    t!("vault.error.internal_error", xous::LANG), e
-                                ), None).ok();
-                            }
+                            Ok(len) => {
+                                self.modals.dynamic_notification_update(Some(&format!("totp entry {}, {} bytes", index, len)), None).ok();
+                                log::debug!("totp wrote {} bytes", len);
+                            },
+                            Err(e) => log::error!("TOTP Error: {:?}", e),
                         }
                     }
-                    Err(e) => {
-                        self.modals.show_notification(&format!("{}\n{:?}",
-                            t!("vault.error.internal_error", xous::LANG), e
-                        ), None).ok();
-                    }
+                    Err(e) => log::error!("TOTP Error: {:?}", e),
                 }
             }
             // specific TOTP entry with a known shared secret for testing
@@ -1081,22 +1084,19 @@ impl ActionManager {
             ) {
                 Ok(mut data) => {
                     match data.write(&ser) {
-                        Ok(len) => log::debug!("wrote {} bytes", len),
-                        Err(e) => {
-                            self.modals.show_notification(&format!("{}\n{:?}",
-                                t!("vault.error.internal_error", xous::LANG), e
-                            ), None).ok();
-                        }
+                        Ok(len) => {
+                            self.modals.dynamic_notification_update(Some(&format!("totp entry hardcoded, {} bytes", len)), None).ok();
+                            log::debug!("totp wrote {} bytes", len);
+                        },
+                        Err(e) => log::error!("TOTP Error: {:?}", e),
                     }
                 }
-                Err(e) => {
-                    self.modals.show_notification(&format!("{}\n{:?}",
-                        t!("vault.error.internal_error", xous::LANG), e
-                    ), None).ok();
-                }
+                Err(e) => log::error!("TOTP Error: {:?}", e),
             }
         }
+        self.modals.dynamic_notification_update(Some("Syncing PDDB..."), None).ok();
         self.pddb.borrow().sync().ok();
+        self.modals.dynamic_notification_close().ok();
     }
 
     fn report_err<T: std::fmt::Debug>(&self, note: &str, e: Option<T>) {
