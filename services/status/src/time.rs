@@ -39,8 +39,7 @@ use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::num::ParseIntError;
 
 /// This is a "well known name" used by `libstd` to connect to the time server
-/// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
-/// hence the scope of the name is private to this crate.
+/// Anyone who wants to check if time has been initialized would use this name.
 pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
 
 /// Dictionary for RTC settings.
