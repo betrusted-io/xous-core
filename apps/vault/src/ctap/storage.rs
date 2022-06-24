@@ -385,7 +385,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_CRED_DICT,
             &shortid,
-            None, true, false,
+            None, false, false,
             Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
         ) {
             Ok(mut cred) => {
@@ -413,7 +413,10 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             }
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Ok(None),
-                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+                _ => {
+                    log::error!("PDDB internal error in find_credential: {:?}", e);
+                    Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }, // PDDB internal error
             }
         }
     }
@@ -454,7 +457,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     ) -> Result<Vec<PublicKeyCredentialSource>, Ctap2StatusCode> {
         let mut result = Vec::<PublicKeyCredentialSource>::new();
         let cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         for cred_name in cred_list.iter() {
             if let Some(mut cred_entry) = self.pddb.borrow().get(
                 FIDO_CRED_DICT,
@@ -479,7 +482,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     #[cfg(test)]
     pub fn count_credentials(&self) -> Result<usize, Ctap2StatusCode> {
         let mut cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         Ok(cred_list.len())
     }
 
@@ -487,7 +490,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     pub fn new_creation_order(&self) -> Result<u64, Ctap2StatusCode> {
         let mut max = 0;
         let cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         if cred_list.len() == 0 {
             return Ok(0)
         }
