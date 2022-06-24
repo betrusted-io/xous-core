@@ -326,16 +326,24 @@ impl VaultUx {
         match dir {
             NavDir::Up => {
                 if self.selection_index > 0 {
+                    let starting_page = self.get_page();
                     self.mark_as_dirty(self.selection_index);
                     self.selection_index -= 1;
                     self.mark_as_dirty(self.selection_index);
+                    if starting_page != self.get_page() {
+                        self.mark_screen_as_dirty(self.selection_index);
+                    }
                 }
             }
             NavDir::Down => {
                 if self.selection_index < self.filtered_list.len() {
+                    let starting_page = self.get_page();
                     self.mark_as_dirty(self.selection_index);
                     self.selection_index += 1;
                     self.mark_as_dirty(self.selection_index);
+                    if starting_page != self.get_page() {
+                        self.mark_screen_as_dirty(self.selection_index);
+                    }
                 }
             }
             NavDir::PageUp => {
@@ -367,6 +375,9 @@ impl VaultUx {
         self.title_dirty = true;
         self.filter(line);
         Ok(())
+    }
+    fn get_page(&self) -> i16 {
+        self.selection_index as i16 / self.items_per_screen
     }
 
     fn clear_area(&mut self) {
@@ -403,7 +414,7 @@ impl VaultUx {
         let mut dirty_tl: Option<Point> = None;
         let mut dirty_br: Option<Point> = None;
 
-        let page = self.selection_index as i16 / self.items_per_screen;
+        let page = self.get_page();
         let list_len = self.filtered_list.len();
         for item in self.filtered_list[
             ((page as usize) * self.items_per_screen as usize).min(list_len) ..
@@ -552,7 +563,7 @@ impl VaultUx {
             return Ok(());
         }
         // ---- draw list body area ----
-        let page = self.selection_index as i16 / self.items_per_screen;
+        let page = self.get_page();
         let selected = self.selection_index as i16 % self.items_per_screen;
         let list_len = self.filtered_list.len();
         for (index, item) in self.filtered_list[
