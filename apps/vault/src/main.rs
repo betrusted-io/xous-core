@@ -20,11 +20,14 @@ use shims::*;
 mod submenu;
 mod actions;
 mod totp;
+mod prereqs;
 
 use locales::t;
 
 use framework::ListItem;
 use actions::{ActionOp, start_actions_thread};
+
+use crate::prereqs::ntp_updater;
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -128,6 +131,9 @@ pub(crate) enum VaultOp {
     /// PDDB basis change
     BasisChange,
 
+    /// Nop while waiting for prerequisites to be filled
+    Nop,
+
     /// exit the application
     Quit,
 }
@@ -154,8 +160,11 @@ fn main() -> ! {
     log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
-    // let's try keeping this completely private as a server. can we do that?
+    let xns = xous_names::XousNames::new().unwrap();
     let sid = xous::create_server().unwrap();
+    // TODO: fix this so there is a uniform public API for the time server
+    let time_conn = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
+
     start_fido_ux_thread();
 
     // global shared state between threads.
@@ -184,8 +193,6 @@ fn main() -> ! {
             let usb = usb_device_xous::UsbHid::new();
             let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
             let mut ctap_hid = CtapHid::new();
-            let pddb = pddb::Pddb::new();
-            pddb.is_mounted_blocking();
             loop {
                 match usb.u2f_wait_incoming() {
                     Ok(msg) => {
@@ -237,19 +244,19 @@ fn main() -> ! {
     let menu_sid = xous::create_server().unwrap();
     let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid);
 
-    let xns = xous_names::XousNames::new().unwrap();
-    // TODO: add a UX loop that indicates we're waiting for a PDDB mount before moving forward
-    log::info!("creating vaultux");
-    let mut vaultux = VaultUx::new(&xns, sid, menu_mgr, actions_conn, mode.clone(), item_list, action_active.clone());
+    // this will block all initialization until the prereqs are met
+    let (token, mut allow_redraw) = prereqs::prereqs(sid, time_conn);
+    let mut vaultux = VaultUx::new(token, &xns, sid, menu_mgr, actions_conn, mode.clone(), item_list, action_active.clone());
     // Trigger the mode update in the actions
-    log::info!("vaultux created");
     send_message(actions_conn,
         Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
     ).ok();
     vaultux.update_mode();
     vaultux.get_glyph_style();
 
-    let mut allow_redraw = false;
+    // starts a thread to keep NTP up-to-date
+    ntp_updater(time_conn);
+
     let modals = modals::Modals::new(&xns).unwrap();
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     loop {
@@ -443,6 +450,7 @@ fn main() -> ! {
                 log::error!("got Quit");
                 break;
             }
+            Some(VaultOp::Nop) => {},
             _ => {
                 log::trace!("got unknown message {:?}", msg);
             }

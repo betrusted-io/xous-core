@@ -17,6 +17,18 @@
         "zh": "现在自动输入...",
         "en-tts": "Autotyping..."
     },
+    "vault.error.mount_pddb": {
+        "en": "PDDB not mounted. Please init root keys and then init PDDB.",
+        "ja": "PDDBがマウントされていません。 ルートキーを初期化してから、PDDBを初期化してください。",
+        "zh": "未安装 PDDB。 请初始化根密钥，然后初始化 PDDB。",
+        "en-tts": "PDDB not mounted. Please init rootkeys and then init PDDB."
+    },
+    "vault.error.time_init": {
+        "en": "Please set the time.",
+        "ja": "時間を設定してください.",
+        "zh": "请设定时间.",
+        "en-tts": "Please set the time."
+    },
     "vault.error.usb_error": {
         "en": "USB error. Check connection to host.",
         "ja": "USBエラー。 ホストへの接続を確認してください。",

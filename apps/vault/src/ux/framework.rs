@@ -1,6 +1,6 @@
 use crate::*;
 use crate::totp::{TotpAlgorithm, generate_totp_code};
-use gam::{UxRegistration, GlyphStyle, MenuMatic, MenuItem, MenuPayload};
+use gam::{GlyphStyle, MenuMatic, MenuItem, MenuPayload};
 use graphics_server::{Gid, Point, Rectangle, DrawStyle, PixelColor, TextView};
 use std::fmt::Write;
 use pddb::Pddb;
@@ -129,6 +129,7 @@ const VAULT_CONFIG_KEY_FONT: &'static str = "fontstyle";
 
 impl VaultUx {
     pub(crate) fn new(
+        token: [u32; 4],
         xns: &xous_names::XousNames,
         sid: xous::SID,
         menu_mgr: MenuMatic,
@@ -139,28 +140,11 @@ impl VaultUx {
     ) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
 
-        let app_name_ref = gam::APP_NAME_VAULT;
-        let token = gam.register_ux(UxRegistration {
-            app_name: xous_ipc::String::<128>::from_str(app_name_ref),
-            ux_type: gam::UxType::Chat,
-            predictor: Some(xous_ipc::String::<64>::from_str(icontray::SERVER_NAME_ICONTRAY)),
-            listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
-            redraw_id: VaultOp::Redraw.to_u32().unwrap(),
-            gotinput_id: Some(VaultOp::Line.to_u32().unwrap()),
-            audioframe_id: None,
-            rawkeys_id: None,
-            focuschange_id: Some(VaultOp::ChangeFocus.to_u32().unwrap()),
-        }).expect("couldn't register Ux context for repl").unwrap();
-
         let content = gam.request_content_canvas(token).expect("couldn't get content canvas");
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
-        gam.toggle_menu_mode(token).expect("couldnt't toggle menu mode");
         let margin = Point::new(4, 4);
 
         let pddb = pddb::Pddb::new();
-        // TODO: put some informative message asking to mount the PDDB if it's not mounted, right now you just get a blank screen.
-        // TODO: also add routines to detect if time is not set up, and block initialization until that happens.
-        pddb.is_mounted_blocking();
         // temporary style setting, this will get over-ridden after init
         let style = GlyphStyle::Regular;
         let available_height = screensize.y - TITLE_HEIGHT;

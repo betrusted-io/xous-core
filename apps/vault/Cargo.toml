@@ -46,6 +46,9 @@ hmac = "0.11.0"
 digest = "0.9.0"
 base32 = "0.4.0"
 sha2 = {path="../../services/engine-sha512"}
+sntpc = {version = "0.3.1"}
+net = {path="../../services/net"}
+com_rs-ref = {path = "../../imports/com_rs-ref"}
 
 # testing
 random-pick = {version = "1.2.15", optional = true}

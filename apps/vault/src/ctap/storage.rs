@@ -232,7 +232,7 @@ impl PersistentStore {
                     }
                     let pk = decode_hex("b8c3abd05cbe17b2faf87659c6f73e8467832112a0e609807cb68996c9a0c6a8").unwrap();
                     log::info!("writing PK of length {}", pk.len());
-                    log::info!("pk: {:x?}", pk);
+                    log::debug!("pk: {:x?}", pk);
                     assert!(pk.len() == 32, "PK len is wrong");
                     aapriv.write(&pk)
                     .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
@@ -264,7 +264,7 @@ impl PersistentStore {
                          e5d218e1022070853e1a43707298e07ebe9b9eb7cd5839b794db4c3d22209554\
                          1f0bdf82d1f4").unwrap();
                     log::info!("writing cert of length {}", der.len());
-                    log::info!("der: {:x?}", der);
+                    log::debug!("der: {:x?}", der);
                     cert.write(&der)
                     .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 }
