@@ -54,7 +54,7 @@ pub(crate) fn prereqs(sid: xous::SID, time_conn: xous::CID) -> ([u32; 4], bool) 
     loop {
         let msg = xous::receive_message(sid).unwrap();
         let opcode: Option<VaultOp> = FromPrimitive::from_usize(msg.body.id());
-        log::debug!("{:?}", opcode);
+        log::trace!("{:?}", opcode);
         let is_mounted = pddb.is_mounted_nonblocking();
         let time_init = match send_message(time_conn,
             Message::new_blocking_scalar(6, /* WallClockTimeInit */
