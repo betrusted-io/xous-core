@@ -174,14 +174,15 @@ namespace Antmicro.Renode.Peripherals.SPI
                 {
                     this.Log(LogLevel.Debug, "Trying to load or create backing file {0}", InternalBackingFileName);
                     InternalBackingFile = new FileStream(InternalBackingFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite);
+                    byte[] copyBuffer = new byte[4096];
+                    var currentOffset = 0;
+
                     // Assume that if the length is 0, then the file was just created and we need
                     // to copy RAM into the newly-created file.
                     if (InternalBackingFile.Length == 0)
                     {
                         this.Log(LogLevel.Debug, "Backing file {0} was created, dumping {1} bytes of ROM to backing file", InternalBackingFileName, underlyingMemory.Size);
                         // 4096 is a safe size, since that is the page size.
-                        byte[] copyBuffer = new byte[4096];
-                        var currentOffset = 0;
                         for (currentOffset = 0; currentOffset < underlyingMemory.Size; currentOffset += copyBuffer.Length)
                         {
                             underlyingMemory.ReadBytes(currentOffset, copyBuffer.Length, copyBuffer, 0);
@@ -193,9 +194,13 @@ namespace Antmicro.Renode.Peripherals.SPI
                     {
                         this.Log(LogLevel.Debug, "Backing file {0} was loaded, restoring {1} bytes (vs ROM: {2}) of ROM from file", InternalBackingFileName, InternalBackingFile.Length, underlyingMemory.Size);
                         InternalBackingFile.Seek(0, SeekOrigin.Begin);
+                        if (InternalBackingFile.Length != underlyingMemory.Size)
+                        {
+                            this.Log(LogLevel.Warning, "Backing file {0} was a different size than ROM (file was {1} bytes, ROM is {2} bytes) -- resizing backing file to match ROM size", InternalBackingFileName, InternalBackingFile.Length, underlyingMemory.Size);
+                            InternalBackingFile.SetLength(underlyingMemory.Size);
+                        }
+
                         // 4096 is a safe size, since that is the page size.
-                        byte[] copyBuffer = new byte[4096];
-                        var currentOffset = 0;
                         for (currentOffset = 0;
                             (currentOffset < underlyingMemory.Size) && (currentOffset < InternalBackingFile.Length);
                             currentOffset += copyBuffer.Length)

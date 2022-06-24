@@ -83,6 +83,9 @@ sysbus SilenceRange <0xf0003000, 0xF0003FFF>
 # Silence POWER
 sysbus SilenceRange <0xF0014000 100>
 
+# Attach the flash backing to the filesystem
+sysbus.spinor.flash BackingFile $ORIGIN/../tools/pddb-images/renode.bin
+
 # Load the SPI flash into RAM
 sysbus LoadBinary @precursors/soc_csr.bin 0x20000000
 
@@ -115,7 +118,7 @@ machine LoadPlatformDescription @ec/betrusted-ec.repl
 # logLevel -1 i2c
 # logLevel -1 i2c.bq27421
 # logLevel -1 wifi
-logLevel 0 wifi.wf200
+# logLevel 0 wifi.wf200
 # sysbus LogPeripheralAccess wifi true
 
 machine StartGdbServer 3334 true
