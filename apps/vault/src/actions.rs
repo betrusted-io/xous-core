@@ -41,7 +41,7 @@ pub(crate) struct PasswordRecord {
 
 pub(crate) struct TotpRecord {
     pub version: u32,
-    // as base32
+    // as base32, RFC4648 no padding
     pub secret: String,
     pub name: String,
     pub algorithm: TotpAlgorithm,
@@ -323,7 +323,7 @@ impl ActionManager {
                 };
                 let ser = serialize_password(&record);
                 let guid = self.gen_guid();
-                log::info!("storing into guid: {}", guid);
+                log::debug!("storing into guid: {}", guid);
                 match self.pddb.borrow().get(
                     VAULT_PASSWORD_DICT,
                     &guid,
@@ -333,23 +333,87 @@ impl ActionManager {
                     Ok(mut data) => {
                         match data.write(&ser) {
                             Ok(len) => log::debug!("wrote {} bytes", len),
-                            Err(e) => {
-                                self.modals.show_notification(&format!("{}\n{:?}",
-                                    t!("vault.error.internal_error", xous::LANG), e
-                                ), None).ok();
-                            }
+                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                     }
-                    Err(e) => {
-                        self.modals.show_notification(&format!("{}\n{:?}",
-                            t!("vault.error.internal_error", xous::LANG), e
-                        ), None).ok();
-                    }
+                    Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                 }
-                log::info!("syncing...");
+                log::debug!("syncing...");
                 self.pddb.borrow().sync().ok();
             }
-            _ => {} // not valid for these other modes
+            VaultMode::Fido => {
+                self.report_err(t!("vault.error.add_fido2", xous::LANG), None::<std::io::Error>);
+            }
+            VaultMode::Totp => {
+                let description = match self.modals
+                    .alert_builder(t!("vault.newitem.name", xous::LANG))
+                    .field(None, Some(name_validator))
+                    .build()
+                {
+                    Ok(text) => {
+                        text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string()
+                    },
+                    _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+                };
+                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                let secret = match self.modals
+                    .alert_builder(t!("vault.newitem.totp_ss", xous::LANG))
+                    .field(None, Some(totp_ss_validator))
+                    .build()
+                {
+                    Ok(text) => {
+                        text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string()
+                    },
+                    _ => {log::error!("TOTP ss entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+                };
+                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                let ss = secret.to_uppercase();
+                let ss_vec = if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: false }, &ss) {
+                    ss
+                } else {
+                    if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: true }, &ss) {
+                        ss
+                    } else {
+                        if let Some(ss) = base32::decode(base32::Alphabet::Crockford, &ss) {
+                            ss
+                        } else {
+                            log::error!("Shouldn't have happened: validated shared secret didn't decode!");
+                            Vec::new()
+                        }
+                    }
+                };
+                let validated_secret = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &ss_vec);
+                // time, hash, etc. are all the "expected defaults" -- if you want to change them, edit the record after entering it.
+                let totp = TotpRecord {
+                    version: VAULT_TOTP_REC_VERSION,
+                    name: description,
+                    secret: validated_secret,
+                    algorithm: TotpAlgorithm::HmacSha1,
+                    digits: 6,
+                    timestep: 30,
+                    ctime: utc_now().timestamp() as u64,
+                    notes: t!("vault.notes", xous::LANG).to_string(),
+                };
+                let ser = serialize_totp(&totp);
+                let guid = self.gen_guid();
+                log::debug!("storing into guid: {}", guid);
+                match self.pddb.borrow().get(
+                    VAULT_TOTP_DICT,
+                    &guid,
+                    None, true, true,
+                    Some(VAULT_TOTP_ALLOC_HINT), Some(crate::basis_change)
+                ) {
+                    Ok(mut data) => {
+                        match data.write(&ser) {
+                            Ok(len) => log::debug!("wrote {} bytes", len),
+                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                        }
+                    }
+                    Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                }
+                log::debug!("syncing...");
+                self.pddb.borrow().sync().ok();
+            }
         }
     }
 
@@ -382,14 +446,9 @@ impl ActionManager {
                                         _ => {}
                                 }
                             }
-                            self.modals.show_notification(t!("vault.error.not_found", xous::LANG), None).ok();
+                            self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>);
                         }
-                        _ => {
-                            self.modals.show_notification(&format!("{}\n{:?}",
-                                t!("vault.error.internal_error", xous::LANG),
-                                e
-                            ), None).ok();
-                        }
+                        _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                     }
                 }
             }
@@ -426,49 +485,23 @@ impl ActionManager {
                                     pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
                                     pw.atime = utc_now().timestamp() as u64;
                                     Some(pw)
-                                } else {
-                                    log::error!("couldn't deserialize {}", entry.key_name);
-                                    self.modals.show_notification(t!("vault.error.record_error", xous::LANG), None).ok();
-                                    None
-                                }
+                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
                             }
-                            Err(e) => {
-                                log::error!("couldn't access key {}: {:?}", entry.key_name, e);
-                                self.modals.show_notification(&format!("{}\n{:?}",
-                                    t!("vault.error.internal_error", xous::LANG), e),
-                                    None
-                                ).ok();
-                                None
-                            }
+                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
                         };
                         maybe_update
                     }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                self.modals.show_notification(t!("vault.error.not_found", xous::LANG), None).ok();
-                            }
-                            _ => {
-                                self.modals.show_notification(&format!("{}\n{:?}",
-                                    t!("vault.error.internal_error", xous::LANG),
-                                    e
-                                ), None).ok();
-                            }
+                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
+                            _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                         None
                     }
                 };
                 if let Some(update) = maybe_update {
-                    match self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            self.modals.show_notification(&format!("{}\n{:?}",
-                                t!("vault.error.internal_error", xous::LANG),
-                                e
-                            ), None).ok();
-                            return;
-                        }
-                    }
+                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None)
+                    .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
                     match self.pddb.borrow().get(
                         dict, entry.key_name.as_str().unwrap(), None,
                         false, true, Some(VAULT_ALLOC_HINT),
@@ -476,21 +509,11 @@ impl ActionManager {
                     ) {
                         Ok(mut record) => {
                             let ser = serialize_password(&update);
-                            match record.write(&ser) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    self.modals.show_notification(&format!("{}\n{:?}",
-                                        t!("vault.error.internal_error", xous::LANG), e
-                                    ), None).ok();
-                                }
-                            }
+                            record.write(&ser)
+                            .unwrap_or_else(|e| {
+                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
                         }
-                        Err(e) => {
-                            self.modals.show_notification(&format!("{}\n{:?}",
-                                t!("vault.error.internal_error", xous::LANG), e
-                            ), None).ok();
-                            return;
-                        }
+                        Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                     }
                 }
                 self.pddb.borrow().sync().ok();
@@ -517,51 +540,23 @@ impl ActionManager {
                                     ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
                                     ai.atime = utc_now().timestamp() as u64;
                                     Some(ai)
-                                } else {
-                                    log::error!("couldn't deserialize {}", entry.key_name);
-                                    self.modals.show_notification(t!("vault.error.record_error", xous::LANG), None).ok();
-                                    None
-                                }
+                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
                             }
-                            Err(e) => {
-                                log::error!("couldn't access key {}: {:?}", entry.key_name, e);
-                                self.modals.show_notification(&format!("{}\n{:?}",
-                                    t!("vault.error.internal_error", xous::LANG), e),
-                                    None
-                                ).ok();
-                                None
-                            }
+                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
                         };
                         maybe_update
                     }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                // most likely this is due to this being a FIDO2 token, which we can't edit
-                                // there are no editable fields -- if we change them, it can break the authentication protocol.
-                                self.modals.show_notification(t!("vault.error.fido2", xous::LANG), None).ok();
-                            }
-                            _ => {
-                                self.modals.show_notification(&format!("{}\n{:?}",
-                                    t!("vault.error.internal_error", xous::LANG),
-                                    e
-                                ), None).ok();
-                            }
+                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
+                            _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                         None
                     }
                 };
                 if let Some(update) = maybe_update {
-                    match self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            self.modals.show_notification(&format!("{}\n{:?}",
-                                t!("vault.error.internal_error", xous::LANG),
-                                e
-                            ), None).ok();
-                            return;
-                        }
-                    }
+                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None)
+                    .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
                     match self.pddb.borrow().get(
                         dict, entry.key_name.as_str().unwrap(), None,
                         false, true, Some(VAULT_ALLOC_HINT),
@@ -569,27 +564,78 @@ impl ActionManager {
                     ) {
                         Ok(mut record) => {
                             let ser = crate::fido::serialize_app_info(&update);
-                            match record.write(&ser) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    self.modals.show_notification(&format!("{}\n{:?}",
-                                        t!("vault.error.internal_error", xous::LANG), e
-                                    ), None).ok();
-                                }
-                            }
+                            record.write(&ser).unwrap_or_else(|e| {
+                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
                         }
-                        Err(e) => {
-                            self.modals.show_notification(&format!("{}\n{:?}",
-                                t!("vault.error.internal_error", xous::LANG), e
-                            ), None).ok();
-                            return;
-                        }
+                        Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                     }
                 }
                 self.pddb.borrow().sync().ok();
             }
             VaultMode::Totp => {
-                unimplemented!()
+                let maybe_update = match self.pddb.borrow().get(
+                    dict, entry.key_name.as_str().unwrap(), None,
+                    false, false, None, Some(crate::basis_change)
+                ) {
+                    Ok(mut record) => {
+                        let mut data = Vec::<u8>::new();
+                        let maybe_update = match record.read_to_end(&mut data) {
+                            Ok(_len) => {
+                                if let Some(mut pw) = deserialize_totp(data) {
+                                    let alg: String = pw.algorithm.into();
+                                    let edit_data = self.modals
+                                        .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                                        .field(Some(pw.name), Some(name_validator))
+                                        .field(Some(pw.secret), Some(name_validator))
+                                        .field(Some(pw.notes), Some(name_validator))
+                                        .field(Some(pw.timestep.to_string()), Some(name_validator))
+                                        .field(Some(alg), Some(name_validator))
+                                        .field(Some(pw.digits.to_string()), Some(name_validator))
+                                        .build().expect("modals error in edit");
+                                    pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
+                                    pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
+                                    pw.notes = edit_data.content()[2].content.as_str().unwrap().to_string();
+                                    if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str().unwrap(), 10) {
+                                        pw.timestep = t;
+                                    }
+                                    if let Ok(alg) = TotpAlgorithm::try_from(edit_data.content()[4].content.as_str().unwrap()) {
+                                        pw.algorithm = alg;
+                                    }
+                                    if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str().unwrap(), 10) {
+                                        pw.digits = d;
+                                    }
+                                    Some(pw)
+                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
+                            }
+                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
+                        };
+                        maybe_update
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
+                            _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                        }
+                        None
+                    }
+                };
+                if let Some(update) = maybe_update {
+                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None)
+                    .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
+                    match self.pddb.borrow().get(
+                        dict, entry.key_name.as_str().unwrap(), None,
+                        false, true, Some(VAULT_ALLOC_HINT),
+                        Some(crate::basis_change)
+                    ) {
+                        Ok(mut record) => {
+                            let ser = serialize_totp(&update);
+                            record.write(&ser).unwrap_or_else(|e| {
+                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
+                        }
+                        Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                    }
+                }
+                self.pddb.borrow().sync().ok();
             }
         }
     }
@@ -632,7 +678,12 @@ impl ActionManager {
                 let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
-                        log::error!("error accessing password database: {:?}", e);
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => {
+                                log::debug!("Password dictionary not yet created");
+                            }
+                            _ => self.report_err("Dictionary error accessing password database", Some(e)),
+                        }
                         Vec::new()
                     }
                 };
@@ -663,13 +714,13 @@ impl ActionManager {
                                         };
                                         il.push(li);
                                     } else {
-                                        log::error!("couldn't deserialize {}", key);
+                                        self.report_err("Couldn't deserialize password:", Some(key));
                                     }
                                 }
-                                Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                                Err(e) => self.report_err("Couldn't access password key", Some(e)),
                             }
                         }
-                        Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                        Err(e) => self.report_err("Couldn't access password key", Some(e)),
                     }
                 }
             }
@@ -678,7 +729,12 @@ impl ActionManager {
                 let keylist = match self.pddb.borrow().list_keys(U2F_APP_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
-                        log::error!("error accessing password database: {:?}", e);
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => {
+                                log::debug!("U2F dictionary not yet created");
+                            }
+                            _ => self.report_err("Dictionary error accessing U2F database", Some(e)),
+                        }
                         Vec::new()
                     }
                 };
@@ -709,19 +765,24 @@ impl ActionManager {
                                         };
                                         il.push(li);
                                     } else {
-                                        log::error!("couldn't deserialize {}", key);
+                                        self.report_err("Couldn't deserialize U2F:", Some(key));
                                     }
                                 }
-                                Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                                Err(e) => self.report_err("Couldn't access U2F key", Some(e)),
                             }
                         }
-                        Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                        Err(e) => self.report_err("Couldn't access U2F key", Some(e)),
                     }
                 }
                 let keylist = match self.pddb.borrow().list_keys(FIDO_CRED_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
-                        log::error!("error accessing password database: {:?}", e);
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => {
+                                log::debug!("FIDO2 dictionary not yet created");
+                            }
+                            _ => self.report_err("Dictionary error accessing FIDO2 database", Some(e)),
+                        }
                         Vec::new()
                     }
                 };
@@ -755,15 +816,13 @@ impl ActionManager {
                                             };
                                             il.push(li);
                                         }
-                                        None => {
-                                            log::error!("couldn't deserialize {}", key);
-                                        }
+                                        None => self.report_err("Couldn't deserialize FIDO2:", Some(key)),
                                     }
                                 }
-                                Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                                Err(e) => self.report_err("Couldn't access FIDO2 key", Some(e)),
                             }
                         }
-                        Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                        Err(e) => self.report_err("Couldn't access FIDO2 key", Some(e)),
                     }
                 }
             }
@@ -771,7 +830,12 @@ impl ActionManager {
                 let keylist = match self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
-                        log::error!("error accessing password database: {:?}", e);
+                        match e.kind() {
+                            std::io::ErrorKind::NotFound => {
+                                log::debug!("TOTP dictionary not yet created");
+                            }
+                            _ => self.report_err("Dictionary error accessing TOTP database", Some(e)),
+                        }
                         Vec::new()
                     }
                 };
@@ -799,13 +863,13 @@ impl ActionManager {
                                         };
                                         il.push(li);
                                     } else {
-                                        log::error!("couldn't deserialize {}", key);
+                                        self.report_err("Couldn't deserialize TOTP:", Some(key));
                                     }
                                 }
-                                Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                                Err(e) => self.report_err("Couldn't access TOTP key", Some(e)),
                             }
                         }
-                        Err(e) => log::error!("couldn't access key {}: {:?}", key, e),
+                        Err(e) => self.report_err("Couldn't access TOTP key", Some(e)),
                     }
                 }
             }
@@ -821,11 +885,12 @@ impl ActionManager {
             "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
         let weights = [1; 21];
         const TARGET_ENTRIES: usize = 35;
+        const TARGET_ENTRIES_PW: usize = 300;
         // for each database, populate up to TARGET_ENTRIES
         // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
         // --- passwords ---
         let pws = self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None).unwrap_or(Vec::new());
-        if pws.len() < TARGET_ENTRIES {
+        if pws.len() < TARGET_ENTRIES_PW {
             let extra_count = TARGET_ENTRIES - pws.len();
             for _ in 0..extra_count {
                 let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
@@ -1033,9 +1098,43 @@ impl ActionManager {
         }
         self.pddb.borrow().sync().ok();
     }
+
+    fn report_err<T: std::fmt::Debug>(&self, note: &str, e: Option<T>) {
+        log::error!("{}: {:?}", note, e);
+        if let Some(e) = e {
+            self.modals.show_notification(&format!("{}\n{:?}", note, e), None).ok();
+        } else {
+            self.modals.show_notification(&format!("{}", note), None).ok();
+        }
+    }
 }
 
 
+pub(crate) fn totp_ss_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+    let proposed_ss = input.as_str().to_uppercase();
+    if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: false }, &proposed_ss) {
+        if ss.len() > 0 {
+            return None;
+        } else {
+            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", xous::LANG)));
+        }
+    }
+    if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: true }, &proposed_ss) {
+        if ss.len() > 0 {
+            return None;
+        } else {
+            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", xous::LANG)));
+        }
+    }
+    if let Some(ss) = base32::decode(base32::Alphabet::Crockford, &proposed_ss) {
+        if ss.len() > 0 {
+            return None;
+        } else {
+            return Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", xous::LANG)));
+        }
+    }
+    Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_totp", xous::LANG)))
+}
 pub(crate) fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
     let proposed_name = input.as_str();
     if proposed_name.contains('\n') { // the '\n' is reserved as the delimiter to end the name field
