@@ -22,7 +22,7 @@ mod key_material;
 mod pin_protocol_v1;
 pub mod response;
 pub mod status_code;
-mod storage;
+pub mod storage;
 mod timed_permission;
 
 #[cfg(feature = "with_ctap2_1")]

@@ -47,6 +47,12 @@
         "zh": "无法编辑 FIDO2 令牌。",
         "en-tts": "Can't edit FIDO2 tokens."
     },
+    "vault.error.add_fido2": {
+        "en": "FIDO tokens are added through the web.",
+        "ja": "FIDOトークンはWebを使用して追加されます.",
+        "zh": "FIDO 令牌是使用网络添加的.",
+        "en-tts": "FIDO tokens are added through the web."
+    },
     "vault.error.internal_error": {
         "en": "Internal error.",
         "ja": "内部エラー.",
@@ -82,6 +88,12 @@
         "ja": "いいえ",
         "zh": "取消",
         "en-tts": "No"
+    },
+    "vault.newitem.totp_ss": {
+        "en": "Enter the TOTP shared secret in Base32:",
+        "ja": "Base32にTOTP共有シークレットを入力します。",
+        "zh": "在 Base32 中输入 TOTP 共享密钥：",
+        "en-tts": "Enter the TOTP shared secret in Base32:"
     },
     "vault.newitem.name": {
         "en": "Please name the credential:",
@@ -148,6 +160,12 @@
         "ja": "1〜128の数字を入力してください",
         "zh": "请输入 1-128 之间的数字",
         "en-tts": "Please enter a number from 1-128"
+    },
+    "vault.illegal_totp": {
+        "en": "Shared secret is not valid Base32",
+        "ja": "共有秘密は無効ですBase32",
+        "zh": "共享密钥无效 Base32",
+        "en-tts": "Shared secret is not valid Base32"
     },
     "vault.no_items": {
         "en": "No items found",

@@ -29,6 +29,14 @@ pub fn create_submenu(vault_conn: xous::CID, actions_conn: xous::CID, menu_mgr: 
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
+    #[cfg(feature="testing")]
+    menu_items.push(MenuItem {
+        name: xous_ipc::String::from_str("Generate test vectors"),
+        action_conn: Some(actions_conn),
+        action_opcode: ActionOp::GenerateTests.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
     menu_items.push(MenuItem {
         name: xous_ipc::String::from_str(t!("vault.menu_close", xous::LANG)),
         action_conn: Some(actions_conn),

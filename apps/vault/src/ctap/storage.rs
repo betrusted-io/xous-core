@@ -43,7 +43,7 @@ use super::CREDENTIAL_ID_SIZE;
 /// credentials, but what happens in this case is just a re-allocation in the PDDB.
 /// Whereas if this number is "too big" you end up with wasted space. I think a
 /// typical record will be around 300-400 bytes, so, this is a good compromise.
-const CRED_INITAL_SIZE: usize = 512;
+pub(crate) const CRED_INITAL_SIZE: usize = 512;
 
 // Those constants may be modified before compilation to tune the behavior of the key.
 //
@@ -149,10 +149,8 @@ impl PersistentStore {
         }
 
         // Generate and store the CredRandom secrets if they are missing.
-        // note this goes into the FIDO_CRED_DICT, in order to force its creation.
-        // It does mean we have a special case key in the dictionary.
         match self.pddb.borrow().get(
-            FIDO_CRED_DICT,
+            FIDO_DICT,
             key::CRED_RANDOM_SECRET,
             None, true, true,
             Some(64), Some(crate::basis_change)
@@ -415,7 +413,10 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             }
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Ok(None),
-                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+                _ => {
+                    log::error!("PDDB internal error in find_credential: {:?}", e);
+                    Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }, // PDDB internal error
             }
         }
     }
@@ -431,7 +432,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_CRED_DICT,
             &shortid,
-            None, false, true,
+            None, true, true,
             Some(CRED_INITAL_SIZE), Some(crate::basis_change)
         ) {
             Ok(mut cred) => {
@@ -455,9 +456,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         check_cred_protect: bool,
     ) -> Result<Vec<PublicKeyCredentialSource>, Ctap2StatusCode> {
         let mut result = Vec::<PublicKeyCredentialSource>::new();
-        let mut cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
-        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't try to investigate this one key
+        let cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         for cred_name in cred_list.iter() {
             if let Some(mut cred_entry) = self.pddb.borrow().get(
                 FIDO_CRED_DICT,
@@ -482,17 +482,15 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     #[cfg(test)]
     pub fn count_credentials(&self) -> Result<usize, Ctap2StatusCode> {
         let mut cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
-        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't count this special case key
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         Ok(cred_list.len())
     }
 
     /// Returns the next creation order.
     pub fn new_creation_order(&self) -> Result<u64, Ctap2StatusCode> {
         let mut max = 0;
-        let mut cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
-        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't try to investigate this one key
+        let cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         if cred_list.len() == 0 {
             return Ok(0)
         }
@@ -588,7 +586,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     /// Returns the CredRandom secret.
     pub fn cred_random_secret(&self, has_uv: bool) -> Result<[u8; 32], Ctap2StatusCode> {
         match self.pddb.borrow().get(
-            FIDO_CRED_DICT,
+            FIDO_DICT,
             key::CRED_RANDOM_SECRET,
             None, false, false, None, Some(crate::basis_change)
         ) {
@@ -1000,13 +998,13 @@ openssl asn1parse -in opensk_cert.pem -inform pem
 }
 
 /// Deserializes a credential from storage representation.
-fn deserialize_credential(data: &[u8]) -> Option<PublicKeyCredentialSource> {
+pub(crate) fn deserialize_credential(data: &[u8]) -> Option<PublicKeyCredentialSource> {
     let cbor = cbor::read(data).ok()?;
     cbor.try_into().ok()
 }
 
 /// Serializes a credential to storage representation.
-fn serialize_credential(credential: PublicKeyCredentialSource) -> Result<Vec<u8>, Ctap2StatusCode> {
+pub(crate) fn serialize_credential(credential: PublicKeyCredentialSource) -> Result<Vec<u8>, Ctap2StatusCode> {
     let mut data = Vec::new();
     if cbor::write(credential.into(), &mut data) {
         Ok(data)
