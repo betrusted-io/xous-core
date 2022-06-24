@@ -267,7 +267,7 @@ impl VaultUx {
                 let mut name_bytes = Vec::<u8>::new();
                 match style_key.read_to_end(&mut name_bytes) {
                     Ok(_len) => {
-                        log::info!("name_bytes: {:?} {:?}", name_bytes, String::from_utf8(name_bytes.to_vec()));
+                        log::debug!("name_bytes: {:?} {:?}", name_bytes, String::from_utf8(name_bytes.to_vec()));
                         name_to_style(&String::from_utf8(name_bytes).unwrap_or("regular".to_string()))
                             .unwrap_or(GlyphStyle::Regular)
                     },

@@ -459,7 +459,7 @@ impl ActionManager {
         let dict = match entry.mode {
             VaultMode::Password => VAULT_PASSWORD_DICT,
             VaultMode::Fido => crate::fido::U2F_APP_DICT,
-            VaultMode::Totp => unimplemented!(),
+            VaultMode::Totp => VAULT_TOTP_DICT,
         };
         match entry.mode {
             VaultMode::Password => {
@@ -885,13 +885,13 @@ impl ActionManager {
             "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
         let weights = [1; 21];
         const TARGET_ENTRIES: usize = 35;
-        const TARGET_ENTRIES_PW: usize = 300;
+        const TARGET_ENTRIES_PW: usize = 100;
         // for each database, populate up to TARGET_ENTRIES
         // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
         // --- passwords ---
         let pws = self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None).unwrap_or(Vec::new());
         if pws.len() < TARGET_ENTRIES_PW {
-            let extra_count = TARGET_ENTRIES - pws.len();
+            let extra_count = TARGET_ENTRIES_PW - pws.len();
             for _ in 0..extra_count {
                 let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
                 let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
@@ -981,10 +981,10 @@ impl ActionManager {
             }
             let xns = xous_names::XousNames::new().unwrap();
             let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
-            for _ in 0..extra_fido {
+            for index in 0..extra_fido {
                 use crate::ctap::data_formats::*;
                 let c_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
-                let cred_id = format!("{} {}", c_id[0], c_id[1]);
+                let cred_id = format!("{} {} {}", c_id[0], c_id[1], index);
                 let r_id = random_pick::pick_multiple_from_slice(&words, &weights, 2);
                 let rp_id = format!("{} {}", r_id[0], r_id[1]);
                 let handle = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
