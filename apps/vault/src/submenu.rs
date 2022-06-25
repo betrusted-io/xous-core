@@ -23,6 +23,20 @@ pub fn create_submenu(vault_conn: xous::CID, actions_conn: xous::CID, menu_mgr: 
         close_on_select: true,
     });
     menu_items.push(MenuItem {
+        name: xous_ipc::String::from_str(t!("vault.menu_unlock_basis", xous::LANG)),
+        action_conn: Some(actions_conn),
+        action_opcode: ActionOp::MenuUnlockBasis.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+    menu_items.push(MenuItem {
+        name: xous_ipc::String::from_str(t!("vault.menu_manage_basis", xous::LANG)),
+        action_conn: Some(actions_conn),
+        action_opcode: ActionOp::MenuManageBasis.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+    menu_items.push(MenuItem {
         name: xous_ipc::String::from_str(t!("vault.menu_change_font", xous::LANG)),
         action_conn: Some(vault_conn),
         action_opcode: VaultOp::MenuChangeFont.to_u32().unwrap(),

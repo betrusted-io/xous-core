@@ -256,6 +256,14 @@ impl BasisCache {
             tt: ticktimer_server::Ticktimer::new().unwrap(),
         }
     }
+    /// Returns a Vec which is a list of Bases to visit, in order of visitation, to create the union view.
+    pub(crate) fn access_list(&self) -> Vec::<String> {
+        let mut al = Vec::<String>::new();
+        for entry in self.cache.iter().rev() {
+            al.push(entry.name.to_string());
+        }
+        al
+    }
     fn select_basis(&mut self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
             log::error!("Can't select basis: PDDB is not mounted");
@@ -941,6 +949,7 @@ impl BasisCache {
             }
         } else {
             for basis in self.cache.iter_mut() {
+                log::info!("syncing {}", basis.name);
                 basis.sync(hw)?;
             }
         }
