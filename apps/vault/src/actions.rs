@@ -548,7 +548,7 @@ impl ActionManager {
                     }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
+                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.fido2", xous::LANG), None::<std::io::Error>),
                             _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                         None
