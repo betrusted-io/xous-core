@@ -85,59 +85,59 @@ pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWA
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
-    IsMounted,
-    TryMount,
+    IsMounted = 0,
+    TryMount = 1,
 
-    ListBasis,
-    LatestBasis,
+    ListBasis = 2,
+    LatestBasis = 3,
     /// Note that creating a basis does not automatically open it!
-    CreateBasis,
-    OpenBasis,
-    CloseBasis,
+    CreateBasis = 4,
+    OpenBasis = 5,
+    CloseBasis = 6,
     /// warning, the Delete routines have not been well tested
-    DeleteBasis,
-    DeleteKey,
-    DeleteDict,
-    KeyAttributes,
+    DeleteBasis = 7,
+    DeleteKey = 8,
+    DeleteDict = 9,
+    KeyAttributes = 10,
 
     // routines to list available resources
-    KeyCountInDict,
-    GetKeyNameAtIndex,
-    DictCountInBasis,
-    GetDictNameAtIndex,
+    KeyCountInDict = 11,
+    GetKeyNameAtIndex = 12,
+    DictCountInBasis = 13,
+    GetDictNameAtIndex = 14,
 
     /// primary method for accessing the database
-    KeyRequest,
+    KeyRequest = 15,
 
     // pddbkey methods
-    ReadKey,
-    WriteKey,
-    WriteKeyFlush,
+    ReadKey = 16,
+    WriteKey = 17,
+    WriteKeyFlush = 18,
 
     // GC methods
-    PeriodicScrub,
+    PeriodicScrub = 19,
 
     /// drops any connection state associated with a given key
-    KeyDrop,
+    KeyDrop = 20,
 
     /// Menu opcodes
-    MenuListBasis,
+    MenuListBasis = 21,
 
     /// Security state checks
-    IsEfuseSecured,
+    IsEfuseSecured = 22,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 23,
     /// quit the server
-    Quit,
+    Quit = 24,
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    DangerousDebug,
+    DangerousDebug = 25,
 }
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum PollOp {
-    Poll,
-    Quit,
+    Poll = 0,
+    Quit = 1,
 }
 
 pub type ApiToken = [u32; 3];
@@ -150,17 +150,17 @@ pub struct PddbBasisList {
 }
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum PddbRequestCode {
-    Create,
-    Open,
-    Close,
-    Delete,
-    NoErr,
-    NotMounted,
-    NoFreeSpace,
-    NotFound,
-    InternalError,
-    AccessDenied,
-    Uninit,
+    Create = 0,
+    Open = 1,
+    Close = 2,
+    Delete = 3,
+    NoErr = 4,
+    NotMounted = 5,
+    NoFreeSpace = 6,
+    NotFound = 7,
+    InternalError = 8,
+    AccessDenied = 9,
+    Uninit = 10,
 }
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -342,8 +342,8 @@ pub struct PddbDangerousDebug {
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum DebugRequest {
-    Dump,
-    Remount,
+    Dump = 0,
+    Remount = 1,
 }
 
 #[cfg(test)]
