@@ -245,7 +245,7 @@ pub fn start_time_server() {
             let mut offset_key = offset_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_UTC_OFFSET,
-                None, true, true,
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open UTC offset key");
@@ -253,7 +253,7 @@ pub fn start_time_server() {
             let mut tz_key = tz_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_TZ_OFFSET,
-                None, true, true,
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open TZ offset key");
@@ -532,7 +532,7 @@ pub fn start_time_ux(sid: xous::SID) {
                         let maybe_tz_set_key = tz_set_handle.get(
                             TIME_SERVER_DICT,
                             TIME_SERVER_TZ_OFFSET,
-                            None, false, false,
+                            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
                             None,
                             None::<fn()>
                         ).ok();

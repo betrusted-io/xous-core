@@ -471,6 +471,7 @@ fn check_user_presence(_cid: ChannelID) -> Result<(), Ctap2StatusCode> {
 }
 
 pub(crate) fn basis_change() {
+    log::info!("got basis change");
     xous::send_message(SELF_CONN.load(Ordering::SeqCst),
         Message::new_scalar(VaultOp::BasisChange.to_usize().unwrap(), 0, 0, 0, 0)
     ).unwrap();

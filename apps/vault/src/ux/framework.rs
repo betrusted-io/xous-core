@@ -238,7 +238,7 @@ impl VaultUx {
         let style = match self.pddb.borrow().get(
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(32), Some(crate::basis_change)
         ) {
             Ok(mut style_key) => {
@@ -269,13 +269,13 @@ impl VaultUx {
         self.items_per_screen = available_height / self.item_height;
     }
     pub(crate) fn set_glyph_style(&mut self, style: GlyphStyle) {
-        self.pddb.borrow().delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, None)
+        self.pddb.borrow().delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS))
         .expect("couldn't delete previous setting");
 
         match self.pddb.borrow().get(
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(32), Some(crate::basis_change)
         ) {
             Ok(mut style_key) => {

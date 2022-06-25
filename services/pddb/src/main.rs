@@ -789,6 +789,7 @@ fn main() -> ! {
                     };
                     let dict = req.dict.as_str().expect("dict utf-8 decode error");
                     let key = req.key.as_str().expect("key utf-8 decode error");
+                    log::info!("get: {:?} {}", bname, key);
                     if basis_cache.dict_attributes(&mut pddb_os, dict, bname).is_err() {
                         if req.create_dict {
                             match basis_cache.dict_add(&mut pddb_os, dict, bname) {
@@ -848,6 +849,7 @@ fn main() -> ! {
                     req.token = Some(token);
                     req.result = PddbRequestCode::NoErr;
                     buffer.replace(req).unwrap();
+                    break; // if we got here, entry was found, stop searching
                 }
             }
             Some(Opcode::KeyDrop) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
@@ -1128,7 +1130,7 @@ fn main() -> ! {
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
                         let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
-                        log::info!("accessing {:?}", temp);
+                        log::info!("read (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
                         match basis_cache.key_read(&mut pddb_os,
                             &rec.dict, &rec.key,
                             &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
@@ -1161,6 +1163,8 @@ fn main() -> ! {
                 let token = pbuf.token;
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
+                        let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
+                        log::info!("write (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
                         match basis_cache.key_update(&mut pddb_os,
                             &rec.dict, &rec.key,
                             &pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
