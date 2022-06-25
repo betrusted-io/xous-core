@@ -73,6 +73,8 @@ pub(crate) struct VaultUx {
     filtered_list: Vec::<ListItem>,
     /// the index into the item_list that is selected
     selection_index: usize,
+    /// last filter query, so we can re-use it when mode is changed
+    last_query: String,
 
     /// pddb handle
     pddb: RefCell::<Pddb>,
@@ -176,6 +178,7 @@ impl VaultUx {
             usb_dev: usb_device_xous::UsbHid::new(),
             last_epoch: current_time / 30,
             current_time,
+            last_query: String::new(),
         }
     }
 
@@ -183,7 +186,8 @@ impl VaultUx {
         self.title_dirty = true;
         self.filtered_list.clear();
         self.selection_index = 0;
-        self.filter("");
+        let query = self.last_query.to_string();
+        self.filter(&query);
         self.swap_submenu();
     }
 
@@ -195,6 +199,8 @@ impl VaultUx {
     - edit              pw  totp    fido
     - delete            pw  totp    fido
     - change font       pw  totp    fido
+    - unlock basis      pw  totp    fido
+    - list/lock basis   pw  totp    fido
     - close             pw  totp    fido
     */
     pub fn swap_submenu(&mut self) {
@@ -346,6 +352,7 @@ impl VaultUx {
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
         self.title_dirty = true;
         self.filter(line);
+        self.last_query = line.to_string();
         Ok(())
     }
     fn get_page(&self) -> i16 {
