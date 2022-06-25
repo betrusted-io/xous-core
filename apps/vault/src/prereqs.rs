@@ -178,10 +178,10 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
             let trng = trng::Trng::new(&xns).unwrap();
             let netmgr = net::NetManager::new();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            let now = SystemTime::now();
-            let mut last_update = 0;
+            let mut now = SystemTime::now();
+            let mut force_update = true;
             loop {
-                if last_update == 0 || (now.elapsed().unwrap().as_secs() - last_update) > 3600 * 24 { // once a day in real time
+                if force_update || now.elapsed().unwrap().as_secs() > 3600 * 24 { // once a day in real time
                     // check if we have a network connection. if not, repeat the loop, after a short delay
                     match netmgr.get_ipv4_config() {
                         Some(conf) => {
@@ -220,7 +220,8 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
                                     0, 0,
                                 )
                             ).expect("couldn't set time");
-                            last_update = now.elapsed().unwrap().as_secs();
+                            now = SystemTime::now();
+                            force_update = false;
                         }
                         Err(err) => {
                             // if NTP server is down, wait a bit longer and try again
