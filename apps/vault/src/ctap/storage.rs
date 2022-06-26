@@ -129,7 +129,7 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MASTER_KEYS,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(64), Some(crate::basis_change)
         ) {
             Ok(mut master_keys) => {
@@ -152,7 +152,7 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::CRED_RANDOM_SECRET,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(64), Some(crate::basis_change)
         ) {
             Ok(mut cred_random) => {
@@ -174,7 +174,7 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(16), Some(crate::basis_change)
         ) {
             Ok(mut aaguid) => {
@@ -220,7 +220,7 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(32), Some(crate::basis_change)
         ) {
             Ok(mut aapriv) => {
@@ -244,7 +244,7 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(512), Some(crate::basis_change)
         ) {
             Ok(mut cert) => {
@@ -516,7 +516,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::GLOBAL_SIGNATURE_COUNTER,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(4), Some(crate::basis_change)
         ) {
             Ok(mut gsc) => {
@@ -546,7 +546,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::GLOBAL_SIGNATURE_COUNTER,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(4), Some(crate::basis_change)
         ) {
             Ok(mut gsc) => {
@@ -565,7 +565,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MASTER_KEYS,
-            None, false, false, None, Some(crate::basis_change)
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut mk) => {
                 let mut master_keys = [0u8; 64];
@@ -588,7 +588,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::CRED_RANDOM_SECRET,
-            None, false, false, None, Some(crate::basis_change)
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut crs) => {
                 let mut cred_random_secret = [0u8; 64];
@@ -609,7 +609,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_HASH,
-            None, false, false, None, Some(crate::basis_change)
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut ph) => {
                 let mut pin_hash = [0u8; PIN_AUTH_LENGTH];
@@ -648,7 +648,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_HASH,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(PIN_AUTH_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut ph) => {
@@ -677,7 +677,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_RETRIES,
-            None, false, false, None, Some(crate::basis_change)
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut pr) => {
                 let mut value = [0u8; 1];
@@ -701,7 +701,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             match self.pddb.borrow().get(
                 FIDO_DICT,
                 key::PIN_RETRIES,
-                None, false, true,
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
                 Some(1), Some(crate::basis_change)
             ) {
                 Ok(mut pr) => {
@@ -721,7 +721,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().delete_key(
             FIDO_DICT,
             PIN_RETRIES,
-            None
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS)
         ) {
             Ok(_) => Ok(()),
             Err(e) => match e.kind() {
@@ -737,7 +737,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MIN_PIN_LENGTH,
-            None, false, false, None, Some(crate::basis_change)
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS),
+            false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut pr) => {
                 let mut value = [0u8; 1];
@@ -759,7 +760,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MIN_PIN_LENGTH,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(1), Some(crate::basis_change)
         ) {
             Ok(mut pl) => {
@@ -779,7 +780,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         if let Some(mut mplri) = self.pddb.borrow().get(
             FIDO_DICT,
             key::_MIN_PIN_LENGTH_RP_IDS,
-            None, false, false,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
             None, Some(crate::basis_change)
         ).ok() {
             let mut data = Vec::<u8>::new();
@@ -812,7 +813,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::_MIN_PIN_LENGTH_RP_IDS,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(_MAX_RP_IDS_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut mrpli) => {
@@ -831,7 +832,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
-            None, false, false, None, Some(crate::basis_change)
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
+            None, Some(crate::basis_change)
         ) {
             Ok(mut apk) => {
                 let mut key = [0u8; key_material::ATTESTATION_PRIVATE_KEY_LENGTH];
@@ -863,7 +865,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(key_material::ATTESTATION_PRIVATE_KEY_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut apk) => {
@@ -882,7 +884,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         if let Some(mut acert) = self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
-            None, false, false,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
             None, Some(crate::basis_change)
         ).ok() {
             let mut data = Vec::<u8>::new();
@@ -907,7 +909,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(1024), Some(crate::basis_change)
         ) {
             Ok(mut acert) => {
@@ -926,7 +928,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         if let Some(mut guid) = self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
-            None, false, false,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
             None, Some(crate::basis_change)
         ).ok() {
             let mut data = [0u8; key_material::AAGUID_LENGTH];
@@ -952,7 +954,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
-            None, false, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
             Some(key_material::AAGUID_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut guid) => {
@@ -970,27 +972,29 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     ///
     /// In particular persistent entries are not reset.
     pub fn reset(&mut self, _rng: &mut impl Rng256) -> Result<(), Ctap2StatusCode> {
-        match self.pddb.borrow().delete_dict(FIDO_DICT, None) {
+        match self.pddb.borrow().delete_dict(FIDO_DICT, Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS)) {
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Ok(()),
                 _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
             }
             Ok(_) => Ok(()),
         }?;
-        match self.pddb.borrow().delete_dict(FIDO_CRED_DICT, None) {
-            Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Ok(()),
-                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
-            }
-            Ok(_) => Ok(()),
-        }?;
-        match self.pddb.borrow().delete_dict(crate::fido::U2F_APP_DICT, None) {
-            Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Ok(()),
-                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
-            }
-            Ok(_) => Ok(()),
-        }?;
+        for basis in self.pddb.borrow().list_basis().iter () {
+            match self.pddb.borrow().delete_dict(FIDO_CRED_DICT, Some(basis)) {
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::NotFound => Ok(()),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+                }
+                Ok(_) => Ok(()),
+            }?;
+            match self.pddb.borrow().delete_dict(crate::fido::U2F_APP_DICT, Some(basis)) {
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::NotFound => Ok(()),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+                }
+                Ok(_) => Ok(()),
+            }?;
+        }
         // don't delete the persistent dictionary...
         self.init()?;
         Ok(())

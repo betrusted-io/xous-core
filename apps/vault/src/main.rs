@@ -107,6 +107,10 @@ To clear test entries:
   pddb dictdelete vault.totp
   pddb dictdelete fido.cred
   pddb dictdelete fido.u2fapps
+
+Issue: editing an entry in a non-secret basis while a secret basis is open won't work because
+the delete key function doesn't work in that case. Need to modify the `get` routine to return
+the basis so we can specify which basis to edit...
 */
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
