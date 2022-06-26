@@ -431,7 +431,7 @@ impl SystemServices {
             entry.state = ProcessState::Ready(1 << INITIAL_TID);
         }
         // entry.ppid = _ppid;
-        klog!("created new process for PID {} with PPID {}", new_pid, ppid);
+        klog!("created new process for PID {} with PPID {}", new_pid, _ppid);
         return Ok(startup);
     }
 
