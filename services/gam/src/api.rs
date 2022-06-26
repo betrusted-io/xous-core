@@ -113,93 +113,93 @@ pub struct UxRegistration {
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     // clears a canvas with a given GID
-    ClearCanvas, //(Gid),
+    ClearCanvas = 0, //(Gid),
 
     // return the dimensions of a canvas as a Point (the top left is always (0,0))
-    GetCanvasBounds, //(Gid),
+    GetCanvasBounds = 1, //(Gid),
 
     // request a new size for my canvas.
     // This normally will be denied, unless the requested Gid corresponds to a special canvas that allows resizing.
-    SetCanvasBounds, //(SetCanvasBoundsRequest),
+    SetCanvasBounds = 2, //(SetCanvasBoundsRequest),
 
     // draws an object
-    RenderObject, //(GamObject),
-    RenderObjectList,
+    RenderObject = 3, //(GamObject),
+    RenderObjectList = 4,
     // draws a tile. this is *not* part of the ObjectList because then every vector object suddenly also carries
     // the allocation burden of a bitmap tile.
     #[cfg(feature="ditherpunk")]
-    RenderTile,
+    RenderTile = 5,
 
     // renders a TextView
-    RenderTextView, //(TextView),
+    RenderTextView = 6, //(TextView),
 
     // forces a redraw (which also does defacement, etc.)
-    Redraw,
+    Redraw = 7,
 
     // returns a GID to the "content" Canvas of the token holder
-    RequestContentCanvas,
+    RequestContentCanvas = 8,
 
     // registers a Ux of a requested type
     // takes in the LayoutType, default PredictorType, a SID for UxEvents, a human-readable identifier token; returns a content canvas GID
     // also takes a bunch of optional ID codes for the various callbacks
     // internally assigns a trust level, based on a first-come first-serve basis for known services, and then a much lower trust for rando ones
-    RegisterUx,
+    RegisterUx = 9,
 
     // updates the audio connection ID post-registration
-    SetAudioOpcode,
+    SetAudioOpcode = 10,
 
     // Requests setting the UI to the power down screen
-    PowerDownRequest,
+    PowerDownRequest = 11,
 
     // Request blank screen for ship mode
-    ShipModeBlankRequest,
+    ShipModeBlankRequest = 12,
 
     // used to claim a GAM registration token (should be used only by status.rs)
-    ClaimToken,
+    ClaimToken = 13,
     // used to set a predictor API token (should be used only by ime-frontend)
-    PredictorApiToken,
+    PredictorApiToken = 14,
 
     /// system-level API that can be called by the Xous process launcher to check if we're at a state where less trusted code could be run
     /// it basically checks that all tokens have been claimed by trusted OS procesess, thus blocking any further token creation
-    TrustedInitDone,
+    TrustedInitDone = 15,
 
     /// this is used internally to route input lines from the IMEF
-    InputLine,
+    InputLine = 16,
 
     /// passed to the keyboard server to notify me of a keyboard event
-    KeyboardEvent,
+    KeyboardEvent = 17,
 
     /// used to turn keyboard vibrate on and off
-    Vibe,
+    Vibe = 18,
     /// used to toggle menu mode behavior for the prediction area (default: false)
-    ToggleMenuMode,
+    ToggleMenuMode = 19,
 
     /// called by a context when it's done with taking the screen; requests the GAM to revert focus to the last-focused app
-    RevertFocus,
-    RevertFocusNb, // non-blocking version
+    RevertFocus = 20,
+    RevertFocusNb = 21, // non-blocking version
 
     /// pass-through to get glyph heights to assist with layout planning, without having to create a gfx connection
-    QueryGlyphProps,
+    QueryGlyphProps = 22,
 
     /// request redraw of IME area
-    RedrawIme,
+    RedrawIme = 23,
 
     /// switch focus to an app
-    SwitchToApp,
+    SwitchToApp = 24,
 
     /// raise a context menu
-    RaiseMenu,
+    RaiseMenu = 25,
 
     /// Turn on Devboot Flag
-    Devboot,
+    Devboot = 26,
 
     /// Show a test pattern. Can only call this once (to prevent abuse)
-    TestPattern,
+    TestPattern = 27,
 
     /// Toggle debug on serial console
-    SetDebugLevel,
+    SetDebugLevel = 28,
 
-    Quit,
+    Quit = 29,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
