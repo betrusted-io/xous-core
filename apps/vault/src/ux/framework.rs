@@ -73,6 +73,8 @@ pub(crate) struct VaultUx {
     filtered_list: Vec::<ListItem>,
     /// the index into the item_list that is selected
     selection_index: usize,
+    /// last filter query, so we can re-use it when mode is changed
+    last_query: String,
 
     /// pddb handle
     pddb: RefCell::<Pddb>,
@@ -176,6 +178,7 @@ impl VaultUx {
             usb_dev: usb_device_xous::UsbHid::new(),
             last_epoch: current_time / 30,
             current_time,
+            last_query: String::new(),
         }
     }
 
@@ -183,18 +186,21 @@ impl VaultUx {
         self.title_dirty = true;
         self.filtered_list.clear();
         self.selection_index = 0;
-        self.filter("");
+        let query = self.last_query.to_string();
+        self.filter(&query);
         self.swap_submenu();
     }
 
     /*
     Entry               Users
     -------------------------------------
-    - autotype          pw
+    - autotype          pw  totp
     - add new           pw  totp
     - edit              pw  totp    fido
     - delete            pw  totp    fido
     - change font       pw  totp    fido
+    - unlock basis      pw  totp    fido
+    - list/lock basis   pw  totp    fido
     - close             pw  totp    fido
     */
     pub fn swap_submenu(&mut self) {
@@ -203,19 +209,7 @@ impl VaultUx {
         self.menu_mgr.delete_item(t!("vault.menu_addnew", xous::LANG));
         match *self.mode.lock().unwrap() {
             VaultMode::Fido => (),
-            VaultMode::Totp => {
-                self.menu_mgr.insert_item(
-                    MenuItem {
-                        name: xous_ipc::String::from_str(t!("vault.menu_addnew", xous::LANG)),
-                        action_conn: Some(self.actions_conn),
-                        action_opcode: ActionOp::MenuAddnew.to_u32().unwrap(),
-                        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-                        close_on_select: true,
-                    },
-                    0
-                );
-            },
-            VaultMode::Password => {
+            VaultMode::Password | VaultMode::Totp => {
                 self.menu_mgr.insert_item(
                     MenuItem {
                         name: xous_ipc::String::from_str(t!("vault.menu_addnew", xous::LANG)),
@@ -244,7 +238,7 @@ impl VaultUx {
         let style = match self.pddb.borrow().get(
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(32), Some(crate::basis_change)
         ) {
             Ok(mut style_key) => {
@@ -275,13 +269,13 @@ impl VaultUx {
         self.items_per_screen = available_height / self.item_height;
     }
     pub(crate) fn set_glyph_style(&mut self, style: GlyphStyle) {
-        self.pddb.borrow().delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, None)
+        self.pddb.borrow().delete_key(VAULT_CONFIG_DICT, VAULT_CONFIG_KEY_FONT, Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS))
         .expect("couldn't delete previous setting");
 
         match self.pddb.borrow().get(
             VAULT_CONFIG_DICT,
             VAULT_CONFIG_KEY_FONT,
-            None, true, true,
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
             Some(32), Some(crate::basis_change)
         ) {
             Ok(mut style_key) => {
@@ -358,6 +352,7 @@ impl VaultUx {
     pub(crate) fn input(&mut self, line: &str) -> Result<(), xous::Error> {
         self.title_dirty = true;
         self.filter(line);
+        self.last_query = line.to_string();
         Ok(())
     }
     fn get_page(&self) -> i16 {
@@ -647,74 +642,102 @@ impl VaultUx {
         if self.selection_index >= self.filtered_list.len() {
             return Err(xous::Error::InvalidPID);
         }
-        let entry = &self.filtered_list[self.selection_index].guid;
-        // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
-        let updated_pw = match self.pddb.borrow().get(
-            crate::actions::VAULT_PASSWORD_DICT,
-            entry,
-            None,
-            false, false, None,
-            Some(crate::basis_change)
-        ) {
-            Ok(mut record) => {
-                let mut data = Vec::<u8>::new();
-                match record.read_to_end(&mut data) {
-                    Ok(_len) => {
-                        if let Some(mut pw) = crate::actions::deserialize_password(data) {
-                            match self.usb_dev.send_str(&pw.password) {
-                                Ok(_) => {
-                                    pw.count += 1;
-                                    pw.atime = utc_now().timestamp() as u64;
-                                    pw
-                                },
-                                Err(e) => {
-                                    log::error!("couldn't autotype password: {:?}", e);
-                                    return Err(xous::Error::UseBeforeInit);
+        let mode_cache = (*self.mode.lock().unwrap()).clone();
+        match mode_cache {
+            VaultMode::Password => {
+                let entry = &self.filtered_list[self.selection_index].guid;
+                // we re-fetch the entry for autotype, because the PDDB could have unmounted a basis.
+                let updated_pw = match self.pddb.borrow().get(
+                    crate::actions::VAULT_PASSWORD_DICT,
+                    entry,
+                    None,
+                    false, false, None,
+                    Some(crate::basis_change)
+                ) {
+                    Ok(mut record) => {
+                        let mut data = Vec::<u8>::new();
+                        match record.read_to_end(&mut data) {
+                            Ok(_len) => {
+                                if let Some(mut pw) = crate::actions::deserialize_password(data) {
+                                    match self.usb_dev.send_str(&pw.password) {
+                                        Ok(_) => {
+                                            pw.count += 1;
+                                            pw.atime = utc_now().timestamp() as u64;
+                                            pw
+                                        },
+                                        Err(e) => {
+                                            log::error!("couldn't autotype password: {:?}", e);
+                                            return Err(xous::Error::UseBeforeInit);
+                                        }
+                                    }
+                                } else {
+                                    log::error!("couldn't deserialize {}", entry);
+                                    return Err(xous::Error::InvalidString);
                                 }
                             }
-                        } else {
-                            log::error!("couldn't deserialize {}", entry);
-                            return Err(xous::Error::InvalidString);
+                            Err(e) => {
+                                log::error!("couldn't access key {}: {:?}", entry, e);
+                                return Err(xous::Error::ProcessNotFound);
+                            },
                         }
                     }
                     Err(e) => {
                         log::error!("couldn't access key {}: {:?}", entry, e);
                         return Err(xous::Error::ProcessNotFound);
-                    },
-                }
-            }
-            Err(e) => {
-                log::error!("couldn't access key {}: {:?}", entry, e);
-                return Err(xous::Error::ProcessNotFound);
-            }
-        };
-        match self.pddb.borrow().delete_key(crate::actions::VAULT_PASSWORD_DICT, entry, None) {
-            Ok(_) => {}
-            Err(_e) => {
-                return Err(xous::Error::InternalError);
-            }
-        }
-        match self.pddb.borrow().get(
-            crate::actions::VAULT_PASSWORD_DICT, entry, None,
-            false, true, Some(crate::actions::VAULT_ALLOC_HINT),
-            Some(crate::basis_change)
-        ) {
-            Ok(mut record) => {
-                let ser = crate::actions::serialize_password(&updated_pw);
-                match record.write(&ser) {
+                    }
+                };
+                match self.pddb.borrow().delete_key(crate::actions::VAULT_PASSWORD_DICT, entry, None) {
                     Ok(_) => {}
+                    Err(_e) => {
+                        return Err(xous::Error::InternalError);
+                    }
+                }
+                match self.pddb.borrow().get(
+                    crate::actions::VAULT_PASSWORD_DICT, entry, None,
+                    false, true, Some(crate::actions::VAULT_ALLOC_HINT),
+                    Some(crate::basis_change)
+                ) {
+                    Ok(mut record) => {
+                        let ser = crate::actions::serialize_password(&updated_pw);
+                        match record.write(&ser) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                log::error!("couldn't update key {}: {:?}", entry, e);
+                                return Err(xous::Error::OutOfMemory);
+                            }
+                        }
+                    }
                     Err(e) => {
                         log::error!("couldn't update key {}: {:?}", entry, e);
                         return Err(xous::Error::OutOfMemory);
                     }
                 }
+                self.pddb.borrow().sync().ok();
             }
-            Err(e) => {
-                log::error!("couldn't update key {}: {:?}", entry, e);
-                return Err(xous::Error::OutOfMemory);
+            VaultMode::Totp => {
+                let fields = self.filtered_list[self.selection_index].extra.split(':').collect::<Vec<&str>>();
+                if fields.len() == 4 {
+                    let shared_secret = base32::decode(
+                        base32::Alphabet::RFC4648 { padding: false }, fields[0])
+                        .unwrap_or(vec![]);
+                    let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
+                    let step_seconds = u16::from_str_radix(fields[2], 10).unwrap_or(30);
+                    let algorithm = TotpAlgorithm::try_from(fields[2]).unwrap_or(TotpAlgorithm::HmacSha1);
+                    let totp = totp::TotpEntry {
+                        step_seconds,
+                        shared_secret,
+                        digit_count,
+                        algorithm
+                    };
+                    let code = generate_totp_code(
+                        totp::get_current_unix_time().unwrap_or(0),
+                        &totp
+                    ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                    self.usb_dev.send_str(&code).ok();
+                }
             }
+            _ => log::error!("Illegal state! we shouldn't be having an autotype on {:?}", mode_cache),
         }
-        self.pddb.borrow().sync().ok();
         Ok(())
     }
     pub(crate) fn selected_entry(&self) -> Option<SelectedEntry> {

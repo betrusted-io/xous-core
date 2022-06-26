@@ -1,4 +1,34 @@
 {
+    "vault.basis.name": {
+        "en": "Enter name of Basis to unlock:",
+        "ja": "ロックを解除する基準の名前を入力してください:",
+        "zh": "输入要解锁的基础名称:",
+        "en-tts": "Enter name of Basis to unlock:"
+    },
+    "vault.basis.create": {
+        "en": "Enter name of Basis to create:",
+        "ja": "作成する基準の名前を入力します:",
+        "zh": "输入要创建的基础名称：",
+        "en-tts": "Enter name of Basis to create:"
+    },
+    "vault.basis.created_mount": {
+        "en": "Basis created. Mount it now?",
+        "ja": "ベーシスが作成されました。 今それをマウントしますか？",
+        "zh": "创建的基础。 现在装吗？",
+        "en-tts": "Basis created. Mount it now?"
+    },
+    "vault.basis.none": {
+        "en": "No active secret Bases. Would you like to create one?",
+        "ja": "アクティブな秘密の根拠はありません。 作成しますか？",
+        "zh": "没有有效的秘密基础。 你想创建一个吗？",
+        "en-tts": "No active secret Bases. Would you like to create one?"
+    },
+    "vault.basis.unmount": {
+        "en": "Select the Bases to unmount:",
+        "ja": "アンマウントするベースを選択します:",
+        "zh": "选择要卸载的基础:",
+        "en-tts": "Select the Bases to unmount:"
+    },
     "vault.edit_dialog": {
         "en": "Make your changes and press enter.\nUse the d-pad to navigate entries.",
         "ja": "変更を加えてEnterキーを押します。 D-PADを使用してエントリをナビゲートします。",
@@ -16,6 +46,12 @@
         "ja": "今すぐ自動入力...",
         "zh": "现在自动输入...",
         "en-tts": "Autotyping..."
+    },
+    "vault.error.basis_unlock_error": {
+        "en": "Basis does not exist. Or maybe wrong password?",
+        "ja": "根拠は存在しません。 または多分間違ったパスワード？",
+        "zh": "基础不存在。 或者密码错误？",
+        "en-tts": "Basis does not exist. Or maybe wrong password?"
     },
     "vault.error.mount_pddb": {
         "en": "PDDB not mounted. Please init root keys and then init PDDB.",
@@ -358,6 +394,18 @@
         "ja": "フォントを変更する",
         "zh": "更改字体",
         "en-tts": "🔇"
+    },
+    "vault.menu_unlock_basis": {
+        "en": "Unlock secret Basis",
+        "ja": "シークレットベースのロックを解除",
+        "zh": "解锁秘密基础",
+        "en-tts": "Unlock secret basis"
+    },
+    "vault.menu_manage_basis": {
+        "en": "Manage Bases",
+        "ja": "管理基盤",
+        "zh": "管理基础",
+        "en-tts": "Manage Bases"
     },
     "vault.menu_close": {
         "en": "Close submenu",

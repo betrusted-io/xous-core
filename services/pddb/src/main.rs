@@ -779,74 +779,78 @@ fn main() -> ! {
                 buffer.replace(mgmt).unwrap();
             }
             Some(Opcode::KeyRequest) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
-                let bname = if req.basis_specified {
-                    Some(req.basis.as_str().unwrap())
-                } else {
-                    None
-                };
-                let dict = req.dict.as_str().expect("dict utf-8 decode error");
-                let key = req.key.as_str().expect("key utf-8 decode error");
-                if basis_cache.dict_attributes(&mut pddb_os, dict, bname).is_err() {
-                    if req.create_dict {
-                        match basis_cache.dict_add(&mut pddb_os, dict, bname) {
-                            Ok(_) => (),
-                            Err(e) => {
-                                match e.kind() {
-                                    std::io::ErrorKind::OutOfMemory => {req.result = PddbRequestCode::NoFreeSpace; buffer.replace(req).unwrap(); continue}
-                                    std::io::ErrorKind::NotFound => {req.result = PddbRequestCode::NotMounted; buffer.replace(req).unwrap(); continue}
-                                    _ => {req.result = PddbRequestCode::InternalError; buffer.replace(req).unwrap(); continue}
+                for basis in basis_cache.access_list().iter() {
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
+                    let bname = if req.basis_specified {
+                        Some(req.basis.as_str().unwrap())
+                    } else {
+                        Some(basis.as_str())
+                    };
+                    let dict = req.dict.as_str().expect("dict utf-8 decode error");
+                    let key = req.key.as_str().expect("key utf-8 decode error");
+                    log::debug!("get: {:?} {}", bname, key);
+                    if basis_cache.dict_attributes(&mut pddb_os, dict, bname).is_err() {
+                        if req.create_dict {
+                            match basis_cache.dict_add(&mut pddb_os, dict, bname) {
+                                Ok(_) => (),
+                                Err(e) => {
+                                    match e.kind() {
+                                        std::io::ErrorKind::OutOfMemory => {req.result = PddbRequestCode::NoFreeSpace; buffer.replace(req).unwrap(); continue}
+                                        std::io::ErrorKind::NotFound => {req.result = PddbRequestCode::NotMounted; buffer.replace(req).unwrap(); continue}
+                                        _ => {req.result = PddbRequestCode::InternalError; buffer.replace(req).unwrap(); continue}
+                                    }
+                                }
+                            }
+                        } else {
+                            req.result = PddbRequestCode::NotFound;
+                            buffer.replace(req).unwrap(); continue
+                        }
+                    }
+                    let alloc_hint = if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None};
+                    if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
+                        if !req.create_key {
+                            req.result = PddbRequestCode::NotFound;
+                            buffer.replace(req).unwrap(); continue
+                        } else {
+                            // create an empty key placeholder
+                            let empty: [u8; 0] = [];
+                            match basis_cache.key_update(&mut pddb_os,
+                                dict, key, &empty, None, alloc_hint, bname, true
+                            ) {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    log::error!("Couldn't allocate key: {:?}", e);
+                                    match e.kind() {
+                                        std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotMounted,
+                                        std::io::ErrorKind::OutOfMemory => req.result = PddbRequestCode::NoFreeSpace,
+                                        _ => req.result = PddbRequestCode::InternalError,
+                                    }
+                                    buffer.replace(req).unwrap(); continue
                                 }
                             }
                         }
-                    } else {
-                        req.result = PddbRequestCode::NotFound;
-                        buffer.replace(req).unwrap(); continue
                     }
-                }
-                let alloc_hint = if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None};
-                if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
-                    if !req.create_key {
-                        req.result = PddbRequestCode::NotFound;
-                        buffer.replace(req).unwrap(); continue
+                    // at this point, we have established a basis/dict/key tuple.
+                    let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
+                    let cid = if let Some(cb_sid) = req.cb_sid {
+                        Some(xous::connect(xous::SID::from_array(cb_sid)).expect("couldn't connect for callback"))
                     } else {
-                        // create an empty key placeholder
-                        let empty: [u8; 0] = [];
-                        match basis_cache.key_update(&mut pddb_os,
-                            dict, key, &empty, None, alloc_hint, bname, true
-                        ) {
-                            Ok(_) => {},
-                            Err(e) => {
-                                log::error!("Couldn't allocate key: {:?}", e);
-                                match e.kind() {
-                                    std::io::ErrorKind::NotFound => req.result = PddbRequestCode::NotMounted,
-                                    std::io::ErrorKind::OutOfMemory => req.result = PddbRequestCode::NoFreeSpace,
-                                    _ => req.result = PddbRequestCode::InternalError,
-                                }
-                                buffer.replace(req).unwrap(); continue
-                            }
-                        }
-                    }
+                        None
+                    };
+                    let token_record = TokenRecord {
+                        dict: String::from(dict),
+                        key: String::from(key),
+                        basis: if let Some(name) = bname {Some(String::from(name))} else {None},
+                        conn: cid,
+                        alloc_hint,
+                    };
+                    token_dict.insert(token, token_record);
+                    req.token = Some(token);
+                    req.result = PddbRequestCode::NoErr;
+                    buffer.replace(req).unwrap();
+                    break; // if we got here, entry was found, stop searching
                 }
-                // at this point, we have established a basis/dict/key tuple.
-                let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
-                let cid = if let Some(cb_sid) = req.cb_sid {
-                    Some(xous::connect(xous::SID::from_array(cb_sid)).expect("couldn't connect for callback"))
-                } else {
-                    None
-                };
-                let token_record = TokenRecord {
-                    dict: String::from(dict),
-                    key: String::from(key),
-                    basis: if let Some(name) = bname {Some(String::from(name))} else {None},
-                    conn: cid,
-                    alloc_hint,
-                };
-                token_dict.insert(token, token_record);
-                req.token = Some(token);
-                req.result = PddbRequestCode::NoErr;
-                buffer.replace(req).unwrap();
             }
             Some(Opcode::KeyDrop) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
                 let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
@@ -1124,19 +1128,28 @@ fn main() -> ! {
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
                 let token = pbuf.token;
                 if let Some(rec) = token_dict.get(&token) {
-                    match basis_cache.key_read(&mut pddb_os,
-                        &rec.dict, &rec.key,
-                        &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
-                        if let Some (name) = &rec.basis {Some(&name)} else {None}) {
-                        Ok(readlen) => {
-                            pbuf.len = readlen as u16;
-                            pbuf.retcode = PddbRetcode::Ok;
-                        }
-                        Err(e) => match e.kind() {
-                            std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
-                            std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
-                            std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
-                            _ => pbuf.retcode = PddbRetcode::InternalError,
+                    for basis in basis_cache.access_list().iter() {
+                        let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
+                        log::debug!("read (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
+                        match basis_cache.key_read(&mut pddb_os,
+                            &rec.dict, &rec.key,
+                            &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
+                            // this is a bit inefficient because if a specific basis is specified *and* the key does not exist,
+                            // it'll retry the same basis for a number of times equal to the number of bases open.
+                            // However, usually, there's only 1-2 bases open, and usually, if you specify a basis,
+                            // the key will be a hit, so, we let it stand.
+                            if let Some (name) = &rec.basis {Some(&name)} else {Some(basis)}) {
+                            Ok(readlen) => {
+                                pbuf.len = readlen as u16;
+                                pbuf.retcode = PddbRetcode::Ok;
+                                break;
+                            }
+                            Err(e) => match e.kind() {
+                                std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
+                                std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                                std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
+                                _ => pbuf.retcode = PddbRetcode::InternalError,
+                            }
                         }
                     }
                 } else {
@@ -1149,20 +1162,25 @@ fn main() -> ! {
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
                 let token = pbuf.token;
                 if let Some(rec) = token_dict.get(&token) {
-                    match basis_cache.key_update(&mut pddb_os,
-                        &rec.dict, &rec.key,
-                        &pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
-                        rec.alloc_hint, if let Some (name) = &rec.basis {Some(&name)} else {None},
-                        false
-                    ) {
-                        Ok(_) => {
-                            pbuf.retcode = PddbRetcode::Ok;
-                        }
-                        Err(e) => match e.kind() {
-                            std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
-                            std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
-                            std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
-                            _ => pbuf.retcode = PddbRetcode::InternalError,
+                    for basis in basis_cache.access_list().iter() {
+                        let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
+                        log::debug!("write (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
+                        match basis_cache.key_update(&mut pddb_os,
+                            &rec.dict, &rec.key,
+                            &pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
+                            rec.alloc_hint, if let Some (name) = &rec.basis {Some(&name)} else {Some(basis)},
+                            false
+                        ) {
+                            Ok(_) => {
+                                pbuf.retcode = PddbRetcode::Ok;
+                                break;
+                            }
+                            Err(e) => match e.kind() {
+                                std::io::ErrorKind::NotFound => pbuf.retcode = PddbRetcode::BasisLost,
+                                std::io::ErrorKind::UnexpectedEof => pbuf.retcode = PddbRetcode::UnexpectedEof,
+                                std::io::ErrorKind::OutOfMemory => pbuf.retcode = PddbRetcode::DiskFull,
+                                _ => pbuf.retcode = PddbRetcode::InternalError,
+                            }
                         }
                     }
                 } else {
@@ -1188,6 +1206,7 @@ fn main() -> ! {
                 let mut note = String::from(t!("pddb.menu.listbasis_response", xous::LANG));
                 for basis in bases.iter() {
                     note.push_str(basis);
+                    note.push_str("\n");
                 }
                 modals.show_notification(&note, None).expect("couldn't show basis list");
             },

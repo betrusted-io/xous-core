@@ -1,6 +1,7 @@
 use core::convert::TryFrom;
-use std::thread;
+use std::{thread, io::ErrorKind};
 use gam::TextEntryPayload;
+use pddb::BasisRetentionPolicy;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use num_traits::*;
 use xous::{SID, msg_blocking_scalar_unpack, Message, send_message};
@@ -58,6 +59,8 @@ pub(crate) enum ActionOp {
     MenuEditStage2,
     MenuDeleteStage2,
     MenuClose,
+    MenuUnlockBasis,
+    MenuManageBasis,
     /// Internal ops
     UpdateMode,
     Quit,
@@ -103,6 +106,18 @@ pub(crate) fn start_actions_thread(
                         manager.retrieve_db();
                         manager.deactivate();
                     },
+                    Some(ActionOp::MenuUnlockBasis) => {
+                        manager.activate();
+                        manager.unlock_basis();
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    },
+                    Some(ActionOp::MenuManageBasis) => {
+                        manager.activate();
+                        manager.manage_basis();
+                        manager.retrieve_db();
+                        manager.deactivate();
+                    }
                     Some(ActionOp::MenuClose) => {
                         // dummy activate/de-activate cycle because we have to trigger a redraw of the underlying UX
                         manager.activate();
@@ -333,10 +348,12 @@ impl ActionManager {
                     Ok(mut data) => {
                         match data.write(&ser) {
                             Ok(len) => log::debug!("wrote {} bytes", len),
-                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                            Err(e) => {log::error!("internal error");
+                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))},
                         }
                     }
-                    Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                    Err(e) => { log::error!("internal error");
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))},
                 }
                 log::debug!("syncing...");
                 self.pddb.borrow().sync().ok();
@@ -485,23 +502,31 @@ impl ActionManager {
                                     pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
                                     pw.atime = utc_now().timestamp() as u64;
                                     Some(pw)
-                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
+                                } else { log::error!("record error");
+                                    self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
                             }
-                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
+                            Err(e) => { log::error!("internal error"); self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
                         };
                         maybe_update
                     }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
-                            _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                            std::io::ErrorKind::NotFound => {
+                                log::error!("not found");
+                                self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>)
+                            },
+                            _ => {
+                                log::error!("internal error");
+                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))
+                            },
                         }
                         None
                     }
                 };
                 if let Some(update) = maybe_update {
                     self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None)
-                    .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
+                    .unwrap_or_else(|e| {log::error!("internal error");
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))});
                     match self.pddb.borrow().get(
                         dict, entry.key_name.as_str().unwrap(), None,
                         false, true, Some(VAULT_ALLOC_HINT),
@@ -511,9 +536,13 @@ impl ActionManager {
                             let ser = serialize_password(&update);
                             record.write(&ser)
                             .unwrap_or_else(|e| {
+                                log::error!("internal error");
                                 self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
                         }
-                        Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                        Err(e) => {
+                            log::error!("internal error");
+                            self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))
+                        },
                     }
                 }
                 self.pddb.borrow().sync().ok();
@@ -548,7 +577,7 @@ impl ActionManager {
                     }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
+                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.fido2", xous::LANG), None::<std::io::Error>),
                             _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
                         None
@@ -682,7 +711,10 @@ impl ActionManager {
                             std::io::ErrorKind::NotFound => {
                                 log::debug!("Password dictionary not yet created");
                             }
-                            _ => self.report_err("Dictionary error accessing password database", Some(e)),
+                            _ => {
+                                log::error!("Dictionary error accessing password database");
+                                self.report_err("Dictionary error accessing password database", Some(e))
+                            },
                         }
                         Vec::new()
                     }
@@ -714,13 +746,20 @@ impl ActionManager {
                                         };
                                         il.push(li);
                                     } else {
+                                        log::error!("Couldn't deserialize password");
                                         self.report_err("Couldn't deserialize password:", Some(key));
                                     }
                                 }
-                                Err(e) => self.report_err("Couldn't access password key", Some(e)),
+                                Err(e) => {
+                                    log::error!("Couldn't access password key");
+                                    self.report_err("Couldn't access password key", Some(e))
+                                },
                             }
                         }
-                        Err(e) => self.report_err("Couldn't access password key", Some(e)),
+                        Err(e) => {
+                            log::error!("Couldn't access password key");
+                            self.report_err("Couldn't access password key", Some(e))
+                        },
                     }
                 }
             }
@@ -876,6 +915,87 @@ impl ActionManager {
         }
         il.sort();
     }
+
+    pub(crate) fn unlock_basis(&mut self) {
+        let name = match self.modals
+            .alert_builder(t!("vault.basis.name", xous::LANG))
+            .field(None, Some(name_validator))
+            .build()
+        {
+            Ok(text) => {
+                text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string()
+            },
+            _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+        };
+        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+        match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
+            Ok(_) => log::debug!("Basis {} unlocked", name),
+            Err(e) => match e.kind() {
+                ErrorKind::PermissionDenied => {
+                    self.report_err(t!("vault.error.basis_unlock_error", xous::LANG), None::<std::io::Error>)
+                },
+                _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+            }
+        }
+    }
+
+    pub(crate) fn manage_basis(&mut self) {
+        let mut bases = self.pddb.borrow().list_basis();
+        bases.retain(|name| name != pddb::PDDB_DEFAULT_SYSTEM_BASIS);
+        let b: Vec<&str> = bases.iter().map(AsRef::as_ref).collect();
+        if bases.len() > 0 {
+            self.modals
+                .add_list(
+                    b
+                ).expect("couldn't create unmount modal");
+            match self.modals.get_checkbox(t!("vault.basis.unmount", xous::LANG)) {
+                Ok(unmount) => {
+                    for b in unmount {
+                        match self.pddb.borrow().lock_basis(&b) {
+                            Ok(_) => log::debug!("basis {} locked", b),
+                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                        }
+                    }
+                }
+                Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+            }
+        } else {
+            if self.yes_no_approval(t!("vault.basis.none", xous::LANG)) {
+            let name = match self.modals
+                .alert_builder(t!("vault.basis.create", xous::LANG))
+                .field(None, Some(name_validator))
+                .build()
+            {
+                Ok(text) => {
+                    text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string()
+                },
+                Err(e) => {self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return}
+            };
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+            match self.pddb.borrow().create_basis(&name) {
+                Ok(_) => {
+                    if self.yes_no_approval(t!("vault.basis.created_mount", xous::LANG)) {
+                        match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
+                            Ok(_) => log::debug!("Basis {} unlocked", name),
+                            Err(e) => match e.kind() {
+                                ErrorKind::PermissionDenied => {
+                                    self.report_err(t!("vault.error.basis_unlock_error", xous::LANG), None::<std::io::Error>)
+                                },
+                                _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                            }
+                        }
+                    } else {
+                        // do nothing
+                    }
+                }
+                Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+            }
+        } else {
+                // do nothing
+            }
+        }
+    }
+
     #[cfg(feature="testing")]
     pub(crate) fn populate_tests(&mut self) {
         use crate::ux::serialize_app_info;

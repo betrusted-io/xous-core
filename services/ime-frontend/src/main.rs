@@ -326,12 +326,6 @@ impl InputTracker {
                             self.insert_prediction(0);
                             do_redraw = true;
                         } else {
-                            self.pred_phrase.clear();
-                            self.line.clear();
-                            self.can_unpick = false;
-                            self.last_trigger_char = Some(0);
-                            self.characters = 0;
-                            self.insertion = 0;
                             retstring = Some(xous_ipc::String::<4000>::from_str("\u{0011}"));
                             do_redraw = true;
                         }
@@ -341,12 +335,6 @@ impl InputTracker {
                             self.insert_prediction(1);
                             do_redraw = true;
                         } else {
-                            self.pred_phrase.clear();
-                            self.line.clear();
-                            self.can_unpick = false;
-                            self.last_trigger_char = Some(0);
-                            self.characters = 0;
-                            self.insertion = 0;
                             retstring = Some(xous_ipc::String::<4000>::from_str("\u{0012}"));
                             do_redraw = true;
                         }
@@ -356,12 +344,6 @@ impl InputTracker {
                             self.insert_prediction(2);
                             do_redraw = true;
                         } else {
-                            self.pred_phrase.clear();
-                            self.line.clear();
-                            self.can_unpick = false;
-                            self.last_trigger_char = Some(0);
-                            self.characters = 0;
-                            self.insertion = 0;
                             retstring = Some(xous_ipc::String::<4000>::from_str("\u{0013}"));
                             do_redraw = true;
                         }
@@ -371,12 +353,6 @@ impl InputTracker {
                             self.insert_prediction(3);
                             do_redraw = true;
                         } else {
-                            self.pred_phrase.clear();
-                            self.line.clear();
-                            self.can_unpick = false;
-                            self.last_trigger_char = Some(0);
-                            self.characters = 0;
-                            self.insertion = 0;
                             retstring = Some(xous_ipc::String::<4000>::from_str("\u{0014}"));
                             do_redraw = true;
                         }

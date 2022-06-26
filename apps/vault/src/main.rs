@@ -107,6 +107,10 @@ To clear test entries:
   pddb dictdelete vault.totp
   pddb dictdelete fido.cred
   pddb dictdelete fido.u2fapps
+
+Issue: editing an entry in a non-secret basis while a secret basis is open won't work because
+the delete key function doesn't work in that case. Need to modify the `get` routine to return
+the basis so we can specify which basis to edit...
 */
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -471,6 +475,7 @@ fn check_user_presence(_cid: ChannelID) -> Result<(), Ctap2StatusCode> {
 }
 
 pub(crate) fn basis_change() {
+    log::info!("got basis change");
     xous::send_message(SELF_CONN.load(Ordering::SeqCst),
         Message::new_scalar(VaultOp::BasisChange.to_usize().unwrap(), 0, 0, 0, 0)
     ).unwrap();
