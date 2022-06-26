@@ -774,5 +774,6 @@ impl VaultUx {
     }
     pub(crate) fn ensure_hid(&self) {
         self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Hid).unwrap();
+        self.usb_dev.restrict_debug_access(true).unwrap();
     }
 }
