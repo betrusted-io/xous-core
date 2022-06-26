@@ -180,7 +180,7 @@ fn main() -> ! {
     {
         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
         keyboard.write_report(&Vec::<Keyboard>::new()).ok();
-        keyboard.tick().unwrap();
+        keyboard.tick().ok();
     }
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -414,11 +414,11 @@ fn main() -> ! {
                     {
                         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                         keyboard.write_report(&codes).ok();
-                        keyboard.tick().unwrap();
+                        keyboard.tick().ok();
                         tt.sleep_ms(30).ok();
                         if auto_up {
                             keyboard.write_report(&[]).ok(); // this is the key-up
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                         }
                     }
@@ -450,10 +450,10 @@ fn main() -> ! {
                         {
                             let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                             keyboard.write_report(&codes).ok();
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                             keyboard.write_report(&[]).ok(); // this is the key-up
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                         }
                         sent += 1;
