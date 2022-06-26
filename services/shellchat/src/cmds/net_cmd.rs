@@ -289,6 +289,25 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
                 #[cfg(feature="ditherpunk")]
                 "image" => {
+                    let new_limit = 2048 * 1024;
+                    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+                        xous::Limits::HeapMaximum as usize,
+                        0,
+                        new_limit,
+                    ));
+
+                    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
+                        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+                            xous::Limits::HeapMaximum as usize,
+                            current_limit,
+                            new_limit,
+                        ))
+                        .unwrap();
+                        log::info!("Our new heap is: {}", new_limit);
+                    } else {
+                        panic!("Unsupported syscall!");
+                    }
+
                     #[cfg(feature="tracking-alloc")]
                     use tracking_allocator::{
                         AllocationGroupToken, AllocationRegistry,
@@ -360,7 +379,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                     } else {
                                                         if len < last_chunk {
                                                             log::info!("heuristic termination of read loop");
-                                                            // break;
+                                                            break;
                                                         }
                                                     }
                                                 },

@@ -362,7 +362,7 @@ fn main () -> ! {
     wrapped_main();
 
     #[cfg(feature="ditherpunk")]
-    let stack_size = 1024 * 1024;
+    let stack_size = 2048 * 1024;
     #[cfg(feature="ditherpunk")]
     std::thread::Builder::new()
         .stack_size(stack_size)
