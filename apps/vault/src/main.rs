@@ -108,9 +108,6 @@ To clear test entries:
   pddb dictdelete fido.cred
   pddb dictdelete fido.u2fapps
 
-Issue: editing an entry in a non-secret basis while a secret basis is open won't work because
-the delete key function doesn't work in that case. Need to modify the `get` routine to return
-the basis so we can specify which basis to edit...
 */
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -161,7 +158,7 @@ const ERR_TIMEOUT_MS: usize = 5000;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
