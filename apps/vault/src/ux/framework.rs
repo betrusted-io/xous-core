@@ -686,14 +686,32 @@ impl VaultUx {
                         return Err(xous::Error::ProcessNotFound);
                     }
                 };
-                match self.pddb.borrow().delete_key(crate::actions::VAULT_PASSWORD_DICT, entry, None) {
+
+                // this get determines which basis the key is in
+                let basis = match self.pddb.borrow().get(
+                    crate::actions::VAULT_PASSWORD_DICT,
+                    entry,
+                    None, true, true,
+                    Some(256), Some(crate::basis_change)
+                ) {
+                    Ok(app_data) => {
+                        let attr = app_data.attributes().expect("couldn't get attributes");
+                        attr.basis
+                    }
+                    Err(e) => {
+                        log::error!("error updating key atime: {:?}", e);
+                        return Err(xous::Error::InternalError);
+                    }
+                };
+
+                match self.pddb.borrow().delete_key(crate::actions::VAULT_PASSWORD_DICT, entry, Some(&basis)) {
                     Ok(_) => {}
                     Err(_e) => {
                         return Err(xous::Error::InternalError);
                     }
                 }
                 match self.pddb.borrow().get(
-                    crate::actions::VAULT_PASSWORD_DICT, entry, None,
+                    crate::actions::VAULT_PASSWORD_DICT, entry, Some(&basis),
                     false, true, Some(crate::actions::VAULT_ALLOC_HINT),
                     Some(crate::basis_change)
                 ) {

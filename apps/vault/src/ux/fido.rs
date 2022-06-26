@@ -457,11 +457,27 @@ pub(crate) fn start_fido_ux_thread() {
                                         }
                                 }
                             };
-                            pddb.delete_key(U2F_APP_DICT, &app_id_str, None).ok();
-                            match pddb.get(
+                            // this get determines which basis the key is in
+                            let basis = match pddb.get(
                                 U2F_APP_DICT,
                                 &app_id_str,
                                 None, true, true,
+                                Some(256), Some(crate::basis_change)
+                            ) {
+                                Ok(app_data) => {
+                                    let attr = app_data.attributes().expect("couldn't get attributes");
+                                    attr.basis
+                                }
+                                Err(e) => {
+                                    log::error!("error updating app atime: {:?}", e);
+                                    continue;
+                                }
+                            };
+                            pddb.delete_key(U2F_APP_DICT, &app_id_str, Some(&basis)).ok();
+                            match pddb.get(
+                                U2F_APP_DICT,
+                                &app_id_str,
+                                Some(&basis), true, true,
                                 Some(256), Some(crate::basis_change)
                             ) {
                                 Ok(mut app_data) => {
