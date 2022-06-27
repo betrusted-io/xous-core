@@ -551,26 +551,26 @@ fn main() -> ! {
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+        match FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidOpcode) {
+            Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
             }),
-            Some(Opcode::IsEfuseSecured) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            Opcode::IsEfuseSecured => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if pddb_os.is_efuse_secured() {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
-            Some(Opcode::IsMounted) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            Opcode::IsMounted => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                 } else {
                     mount_notifications.push(msg.sender); // defer response until later
                 }
             }),
-            Some(Opcode::TryMount) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 {
                     xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
                 } else {
@@ -617,7 +617,7 @@ fn main() -> ! {
                     }
                 }
             }),
-            Some(Opcode::PeriodicScrub) => {
+            Opcode::PeriodicScrub => {
                 let current_heap = heap_usage();
                 let current_cache = basis_cache.cache_size();
                 if current_heap != latest_heap || current_cache != latest_cache {
@@ -661,7 +661,7 @@ fn main() -> ! {
                     heap_increased = true;
                 }
             }
-            Some(Opcode::ListBasis) => {
+            Opcode::ListBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut list_ipc = buffer.to_original::<PddbBasisList, _>().unwrap();
                 let basis_list = basis_cache.basis_list();
@@ -672,7 +672,7 @@ fn main() -> ! {
                 list_ipc.num = basis_list.len() as u32;
                 buffer.replace(list_ipc).unwrap();
             }
-            Some(Opcode::LatestBasis) => {
+            Opcode::LatestBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 if let Some(name) = basis_cache.basis_latest() {
@@ -684,7 +684,7 @@ fn main() -> ! {
                 }
                 buffer.replace(mgmt).unwrap();
             }
-            Some(Opcode::CreateBasis) => {
+            Opcode::CreateBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
@@ -711,7 +711,7 @@ fn main() -> ! {
                 }
                 buffer.replace(mgmt).unwrap();
             }
-            Some(Opcode::OpenBasis) => {
+            Opcode::OpenBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 match mgmt.code {
@@ -764,7 +764,7 @@ fn main() -> ! {
                 }
                 buffer.replace(mgmt).unwrap();
             }
-            Some(Opcode::CloseBasis) => {
+            Opcode::CloseBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
@@ -784,7 +784,7 @@ fn main() -> ! {
                 }
                 buffer.replace(mgmt).unwrap();
             }
-            Some(Opcode::DeleteBasis) => {
+            Opcode::DeleteBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
                 notify_of_disconnect(&mut pddb_os, &token_dict, &mut basis_cache);
@@ -804,7 +804,7 @@ fn main() -> ! {
                 }
                 buffer.replace(mgmt).unwrap();
             }
-            Some(Opcode::KeyRequest) => {
+            Opcode::KeyRequest => {
                 for basis in basis_cache.access_list().iter() {
                     let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
@@ -878,7 +878,7 @@ fn main() -> ! {
                     break; // if we got here, entry was found, stop searching
                 }
             }
-            Some(Opcode::KeyDrop) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
+            Opcode::KeyDrop => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
                 let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
                 if let Some(rec) = token_dict.remove(&token) {
                     // now check if we can safely disconnect and recycle our connection number.
@@ -904,7 +904,7 @@ fn main() -> ! {
                 }
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack KeyDrop");
             }),
-            Some(Opcode::DeleteKey) => {
+            Opcode::DeleteKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
                 let bname = if req.basis_specified {
@@ -954,7 +954,7 @@ fn main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
-            Some(Opcode::DeleteDict) => {
+            Opcode::DeleteDict => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
                 let bname = if req.basis_specified {
@@ -1004,7 +1004,7 @@ fn main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
-            Some(Opcode::KeyAttributes) => {
+            Opcode::KeyAttributes => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbKeyAttrIpc, _>().unwrap();
                 if let Some(token_record) = token_dict.get(&req.token) {
@@ -1024,7 +1024,7 @@ fn main() -> ! {
                     }
                 }
             }
-            Some(Opcode::KeyCountInDict) => {
+            Opcode::KeyCountInDict => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if key_token.is_some() {
@@ -1070,7 +1070,7 @@ fn main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
-            Some(Opcode::GetKeyNameAtIndex) => {
+            Opcode::GetKeyNameAtIndex => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if let Some(token) = key_token {
@@ -1097,7 +1097,7 @@ fn main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
-            Some(Opcode::DictCountInBasis) => {
+            Opcode::DictCountInBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if key_token.is_some() {
@@ -1125,7 +1125,7 @@ fn main() -> ! {
                 req.code = PddbRequestCode::NoErr;
                 buffer.replace(req).unwrap();
             }
-            Some(Opcode::GetDictNameAtIndex) => {
+            Opcode::GetDictNameAtIndex => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if let Some(token) = dict_token {
@@ -1149,7 +1149,7 @@ fn main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
-            Some(Opcode::ReadKey) => {
+            Opcode::ReadKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
                 let token = pbuf.token;
@@ -1183,7 +1183,7 @@ fn main() -> ! {
                 }
                 // we don't nede a "replace" operation because all ops happen in-place
             }
-            Some(Opcode::WriteKey) => {
+            Opcode::WriteKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
                 let token = pbuf.token;
@@ -1217,7 +1217,7 @@ fn main() -> ! {
                 // for now, do an expensive sync operation after every write to ensure data integrity
                 basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
             }
-            Some(Opcode::WriteKeyFlush) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+            Opcode::WriteKeyFlush => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 match basis_cache.sync(&mut pddb_os, None) {
                     Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
                     Err(e) => match e.kind() {
@@ -1227,7 +1227,7 @@ fn main() -> ! {
                     }
                 };
             }),
-            Some(Opcode::MenuListBasis) => {
+            Opcode::MenuListBasis => {
                 let bases = basis_cache.basis_list();
                 let mut note = String::from(t!("pddb.menu.listbasis_response", xous::LANG));
                 for basis in bases.iter() {
@@ -1237,7 +1237,7 @@ fn main() -> ! {
                 modals.show_notification(&note, None).expect("couldn't show basis list");
             },
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
-            Some(Opcode::DangerousDebug) => {
+            Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dbg = buffer.to_original::<PddbDangerousDebug, _>().unwrap();
                 match dbg.request {
@@ -1257,7 +1257,7 @@ fn main() -> ! {
                     }
                 }
             }
-            Some(Opcode::Quit) => {
+            Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
                 send_message(
                     pw_cid,
@@ -1266,7 +1266,7 @@ fn main() -> ! {
                 xous::return_scalar(msg.sender, 0).unwrap();
                 break
             }
-            None => {
+            Opcode::InvalidOpcode => {
                 log::error!("couldn't convert opcode: {:?}", msg);
             }
         }
