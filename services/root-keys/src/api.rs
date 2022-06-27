@@ -6,74 +6,74 @@ pub(crate) const SIG_VERSION: u32 = 1;
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// use to check if we've been initialized
-    KeysInitialized,
+    KeysInitialized = 0,
     /// check that the digital signature on the gateware
-    CheckGatewareSignature,
+    CheckGatewareSignature = 1,
     /// check if the efuse has been locked down
-    IsEfuseSecured,
+    IsEfuseSecured = 2,
     /// quick check to see if the JTAG can read its IDCODE
-    IsJtagWorking,
+    IsJtagWorking = 3,
     /// initiate an AES oracle operation
-    AesOracle,
+    AesOracle = 4,
     /// initiate key wrapper operation
-    AesKwp,
+    AesKwp = 5,
     /// create new FPGA keys; provisioning requires a slave device to be connected that can run the JTAG sequence
-    BbramProvision,
+    BbramProvision = 6,
     /// clear a cached password
-    ClearPasswordCacheEntry,
+    ClearPasswordCacheEntry = 7,
 
-    TestUx,
+    TestUx = 8,
 
     /// attempt to initialize keys on a brand new system. Does nothing if the keys are already provisioned.
-    UxTryInitKeys,
-    UxInitBootPasswordReturn,
-    UxInitUpdatePasswordReturn,
+    UxTryInitKeys = 9,
+    UxInitBootPasswordReturn = 10,
+    UxInitUpdatePasswordReturn = 11,
 
     /// provision a gateware update with our secret data
-    UxUpdateGateware,
-    UxUpdateGwPasswordReturn,
-    UxUpdateGwRun,
+    UxUpdateGateware = 12,
+    UxUpdateGwPasswordReturn = 13,
+    UxUpdateGwRun = 14,
 
     /// self-sign kernel/loader
-    UxSelfSignXous,
-    UxSignXousPasswordReturn,
-    UxSignXousRun,
+    UxSelfSignXous = 15,
+    UxSignXousPasswordReturn = 16,
+    UxSignXousRun = 17,
 
     /// Ux AES calls
-    UxAesEnsurePassword,
-    UxAesPasswordPolicy,
-    UxAesEnsureReturn,
+    UxAesEnsurePassword = 18,
+    UxAesPasswordPolicy = 19,
+    UxAesEnsureReturn = 20,
 
     /// Ux BBRAM flow
-    UxBbramCheckReturn,
-    UxBbramPasswordReturn,
-    UxBbramRun,
+    UxBbramCheckReturn = 21,
+    UxBbramPasswordReturn = 22,
+    UxBbramRun = 23,
 
     // General Ux calls
-    UxGutter, // NOP for UX calls that require a destination
+    UxGutter = 24, // NOP for UX calls that require a destination
     #[cfg(feature = "policy-menu")]
-    UxGetPolicy,
+    UxGetPolicy = 25,
     #[cfg(feature = "policy-menu")]
-    UxPolicyReturn,
-    UxTryReboot,
-    UxDoReboot,
+    UxPolicyReturn = 26,
+    UxTryReboot = 27,
+    UxDoReboot = 28,
 
     /// UX opcodes
-    ModalRedraw,
-    ModalKeys,
-    ModalDrop,
+    ModalRedraw = 29,
+    ModalKeys = 30,
+    ModalDrop = 31,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 32,
 
-    Quit
+    Quit = 33,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
 pub enum PasswordRetentionPolicy {
-    AlwaysKeep,
-    EraseOnSuspend,
-    AlwaysPurge,
+    AlwaysKeep = 0,
+    EraseOnSuspend = 1,
+    AlwaysPurge = 2,
 }
 
 /// Enumerate the possible password types dealt with by this manager.
@@ -89,10 +89,10 @@ pub enum PasswordType {
 #[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(dead_code))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum RootkeyResult {
-    AlignmentError,
-    KeyError,
-    IntegrityError,
-    FlashError,
+    AlignmentError = 0,
+    KeyError = 1,
+    IntegrityError = 2,
+    FlashError = 3,
 }
 
 /// AES operation definitions
@@ -125,8 +125,8 @@ pub enum AesBlockType {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]
 pub enum AesOpType {
-    Encrypt,
-    Decrypt,
+    Encrypt = 0,
+    Decrypt = 1,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]
@@ -158,20 +158,20 @@ impl AesOp {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq, Copy, Clone)]
 pub enum KeywrapError {
     /// Input is too big.
-    TooBig,
+    TooBig = 0,
     /// Input is too small.
-    TooSmall,
+    TooSmall = 1,
     /// Ciphertext has invalid padding.
-    Unpadded,
+    Unpadded = 2,
     /// The ciphertext is not valid for the expected length.
-    InvalidExpectedLen,
+    InvalidExpectedLen = 3,
     /// The ciphertext couldn't be authenticated.
-    AuthenticationFailed,
+    AuthenticationFailed = 4,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq)]
 pub enum KeyWrapOp {
-    Wrap,
-    Unwrap,
+    Wrap = 0,
+    Unwrap = 1,
 }
 
 use std::error::Error;
