@@ -94,8 +94,10 @@ impl Susres {
         ).expect("couldn't query if my suspend was successful");
         if let xous::Result::Scalar1(result) = response {
             if result != 0 {
+                log::debug!("resume pid {} clean", xous::process::id()); // <-- use this to debug s/r
                 Ok(true)
             } else {
+                log::debug!("resume pid {} dirty", xous::process::id()); // <-- use this to debug s/r
                 Ok(false)
             }
         } else {
