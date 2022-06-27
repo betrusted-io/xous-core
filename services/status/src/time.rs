@@ -31,7 +31,7 @@ use num_traits::*;
 // imports for time ux
 use locales::t;
 use chrono::prelude::*;
-use xous::Message;
+use xous::{Message, send_message};
 use gam::modal::*;
 // ntp imports
 use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
@@ -271,16 +271,20 @@ pub fn start_time_server() {
             log::debug!("start_tt_ms: {}", start_tt_ms);
             loop {
                 let msg = xous::receive_message(pub_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                let opcode: Option<TimeOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", opcode);
+                match opcode {
                     Some(TimeOp::PddbMountPoll) => {
                         // do nothing, we're mounted now.
                         continue;
                     },
                     Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                         susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                        // resync time on resume
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        // resync time on resume, but give a little time for other processes to clear as this is not urgent
+                        tt.sleep_ms(180).unwrap();
+                        send_message(self_cid,
+                            Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't queue sync request");
                     }),
                     Some(TimeOp::HwSync) => {
                         start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
