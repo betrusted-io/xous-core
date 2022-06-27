@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod ux;
+use susres::SuspendOrder;
 use ux::*;
 use num_traits::*;
 use xous_ipc::Buffer;
@@ -131,6 +132,9 @@ pub(crate) enum VaultOp {
 
     /// PDDB basis change
     BasisChange,
+
+    /// Suspend/resume notifications
+    SuspendResume,
 
     /// Nop while waiting for prerequisites to be filled
     Nop,
@@ -263,6 +267,12 @@ fn main() -> ! {
     // starts a thread to keep NTP up-to-date
     ntp_updater(time_conn);
 
+    // register with the susres so we can enforce our USB policy
+    let mut susres = susres::Susres::new(
+        Some(SuspendOrder::Early), &xns,
+        VaultOp::SuspendResume as u32, conn
+    ).expect("couldn't create suspend/resume object");
+
     let modals = modals::Modals::new(&xns).unwrap();
     let tt = ticktimer_server::Ticktimer::new().unwrap();
     loop {
@@ -270,6 +280,16 @@ fn main() -> ! {
         let opcode: Option<VaultOp> = FromPrimitive::from_usize(msg.body.id());
         log::debug!("{:?}", opcode);
         match opcode {
+            Some(VaultOp::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                vaultux.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                if allow_redraw {
+                    // if we're in the foreground, we set the USB policy. This is a cooperative measure,
+                    // nothing prevents other processes from being stupid about this, but see
+                    // issue #178: https://github.com/betrusted-io/xous-core/issues/178
+                    vaultux.resume();
+                }
+            }),
             Some(VaultOp::IncrementalLine) => {
                 if action_active.load(Ordering::SeqCst) {
                     log::trace!("action active, skipping incremental input");

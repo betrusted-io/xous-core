@@ -3940,6 +3940,7 @@ dependencies = [
  "sha2",
  "sntpc",
  "subtle",
+ "susres",
  "ticktimer-server",
  "trng",
  "tts-frontend",
