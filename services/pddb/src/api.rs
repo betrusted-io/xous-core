@@ -133,7 +133,11 @@ pub(crate) enum Opcode {
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     DangerousDebug = 25,
+
+    /// This key type could not be decoded
+    InvalidOpcode = u32::MAX as _,
 }
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum PollOp {
     Poll = 0,
