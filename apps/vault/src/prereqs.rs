@@ -229,6 +229,8 @@ pub(crate) fn ntp_updater(time_conn: xous::CID) {
                             tt.sleep_ms(1000 * 127).unwrap();
                         },
                     }
+                } else {
+                    tt.sleep_ms(1000 * 60 * 3).unwrap(); // once every 3 minutes of screen-on time, poll the loop.
                 }
             }
         }
