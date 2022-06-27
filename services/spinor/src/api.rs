@@ -33,6 +33,8 @@ pub(crate) enum Opcode {
 
     /// internal interrupt handler ops
     EccError,
+    /// read out the ECC log
+    EccLog,
 }
 // Erase/Write are uninterruptable operations. Split suspend/resume
 // into a separate server to asynchronously manage this.

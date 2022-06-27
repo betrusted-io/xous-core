@@ -9,6 +9,9 @@ use xous_ipc::Buffer;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 
 use core::sync::atomic::{AtomicBool, Ordering};
+
+use std::collections::HashSet;
+
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
@@ -228,11 +231,32 @@ mod implementation {
     fn ecc_handler(_irq_no: usize, arg: *mut usize) {
         let spinor = unsafe { &mut *(arg as *mut Spinor) };
 
+        let mut failstat = flash_rdcr2(&mut spinor.csr, 0x800) & 0xFFFF; // lower 512 mbits
+        failstat |= flash_rdcr2(&mut spinor.csr, 0x04000800) << 16; // upper 512 mbits
+        // in case of error in lower 512Mbits
+        let mut failaddr = [0u8; 4];
+        failaddr[0] = flash_rdcr2(&mut spinor.csr, 0xC00) as u8;
+        failaddr[1] = flash_rdcr2(&mut spinor.csr, 0xD00) as u8;
+        failaddr[2] = flash_rdcr2(&mut spinor.csr, 0xE00) as u8;
+        failaddr[3] = flash_rdcr2(&mut spinor.csr, 0xF00) as u8;
+        // in case of error in upper 512Mbits
+        let mut failaddr2 = [0u8; 4];
+        failaddr2[0] = flash_rdcr2(&mut spinor.csr, 0x04000C00) as u8;
+        failaddr2[1] = flash_rdcr2(&mut spinor.csr, 0x04000D00) as u8;
+        failaddr2[2] = flash_rdcr2(&mut spinor.csr, 0x04000E00) as u8;
+        failaddr2[3] = flash_rdcr2(&mut spinor.csr, 0x04000F00) as u8;
+
+        // write 0 into the register to clear it
+        spinor.csr.wfo(utra::spinor::WDATA_WDATA, 0);
+        flash_wrcr2(&mut spinor.csr, 0x800);
+
         xous::try_send_message(spinor.handler_conn,
             xous::Message::new_scalar(Opcode::EccError.to_usize().unwrap(),
                 spinor.csr.rf(utra::spinor::ECC_ADDRESS_ECC_ADDRESS) as usize,
-                spinor.csr.rf(utra::spinor::ECC_STATUS_ECC_OVERFLOW) as usize,
-                0, 0)).map(|_|()).unwrap();
+                failstat as usize,
+                u32::from_le_bytes(failaddr) as usize,
+                u32::from_le_bytes(failaddr2) as usize,)
+            ).map(|_|()).unwrap();
 
         spinor.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
     }
@@ -249,6 +273,33 @@ mod implementation {
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
         csr.r(utra::spinor::CMD_RBK_DATA)
+    }
+
+    fn flash_rdcr2(csr: &mut utralib::CSR<u32>, addr: u32) -> u32 {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, addr);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+            | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+            | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x71) // RDCR2
+            | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
+            | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+        csr.r(utra::spinor::CMD_RBK_DATA)
+    }
+
+    fn flash_wrcr2(csr: &mut utralib::CSR<u32>, addr: u32) {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, addr);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+            | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+            | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x72) // WRCR2
+            | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 0)
+            | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
     fn flash_rdscur(csr: &mut utralib::CSR<u32>) -> u32 {
@@ -630,7 +681,8 @@ fn main() -> ! {
 
     let mut client_id: Option<[u32; 4]> = None;
     let mut soc_token: Option<[u32; 4]> = None;
-    let mut ecc_errors: [Option<u32>; 4] = [None, None, None, None]; // just record the first few errors, until we can get `std` and a convenient Vec/Queue
+    const MAX_ERRLOG_LEN: usize = 512; // this will span a couple erase blocks if my math is right
+    let mut ecc_errors: HashSet<(u32, u32, u32, u32)> = HashSet::new();
     let mut staging_write_protect: bool = false;
 
     loop {
@@ -768,23 +820,41 @@ fn main() -> ! {
                 }
                 buffer.replace(wr).expect("couldn't return response code to WriteRegion");
             }
-            Some(Opcode::EccError) => msg_scalar_unpack!(msg, address, _overflow, _, _, {
-                // just some stand-in code -- should probably do something more clever, e.g. a rolling log
-                // plus some error handling callback. But this is in the distant future once we have enough
-                // of a system to eventually create such errors...
-                log::error!("ECC error reported at 0x{:x}", address);
-                let mut saved = false;
-                for item in ecc_errors.iter_mut() {
-                    if item.is_none() {
-                        *item = Some(address as u32);
-                        saved = true;
-                        break;
+            Some(Opcode::EccError) => msg_scalar_unpack!(msg, hw_rep, status, lower_addr, upper_addr, {
+                /*
+                  Historical notes:
+                    - First ECC failure noted June 27, 2022 on CI unit (24/7 re-write testing, few times/day, 2-3 yrs continuous)
+                      Location 0x7305030, code 0xb3.
+                        Meaning: ecc error; 2 bits flipped (detect but uncorrectable); failure chunk 3.
+                        Address is 0x7305030. Chunk 3 means bits 48-63 offset from the address on the left.
+                           The lower 4 bits are 0, so the chunk is the bit-offset of the failure into the 16 bytes encoded by the 4 lowest bits.
+                           So more precisely, somewhere around 0x7305036-7 range there is a bit flip.
+                           This is fairly deep within the PDDB array...suspect possibly a bad power-down event during the CI process?
+                 */
+                if !ecc_errors.contains(&(hw_rep as u32, status as u32, lower_addr as u32, upper_addr as u32)) {
+                    if ecc_errors.len() < MAX_ERRLOG_LEN {
+                        ecc_errors.insert((hw_rep as u32, status as u32, lower_addr as u32, upper_addr as u32));
+                    } else {
+                        log::warn!("ECC log overflow, error not stored");
                     }
-                }
-                if !saved {
-                    log::error!("ran out of slots to record ECC errors");
+                    log::error!("ECC error reported: 0x{:x} 0x{:x} 0x{:x} 0x{:x}", hw_rep, status, lower_addr, upper_addr);
+                    // how to read:
+                    // first word is what address the HW PHY was set to when the interrupt flipped. This doesn't seem to be useful.
+                    // second word is the status. Top 16 bits -> top 512Mbits; lower 16 bits is lower 512Mbits
+                    //    the 16-bit word will be double-byte repeated because DDR.
+                    // third word is the lower 512Mbit address
+                    // fourth word is the upper 512Mbit address
+                    // There is only an error if the second word is non-zero for a given ECC address. That is, it seems
+                    //   the address word is always updated, so you'll read something out akin to the last thing touched
+                    //   by the ECC engine, but there's only an error if the status word indicates that.
                 }
             }),
+            Some(Opcode::EccLog) => {
+                for (index, entry) in ecc_errors.iter().enumerate() {
+                    log::info!("{}: {:x?}", index, entry);
+                }
+                ecc_errors.clear();
+            }
             None => {
                 log::error!("couldn't convert opcode");
                 break
