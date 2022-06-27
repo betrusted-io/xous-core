@@ -830,6 +830,9 @@ fn main() -> ! {
                            The lower 4 bits are 0, so the chunk is the bit-offset of the failure into the 16 bytes encoded by the 4 lowest bits.
                            So more precisely, somewhere around 0x7305036-7 range there is a bit flip.
                            This is fairly deep within the PDDB array...suspect possibly a bad power-down event during the CI process?
+                    This is the raw log:
+                    ERR :spinor: ECC error reported: 0xfffffffc 0xb3b30000 0x3305080 0x7305030 (services\spinor\src\main.rs:830)
+                    Archived here: https://ci.betrusted.io/view/Enabled/job/ctap2-tests/64/console
                  */
                 if !ecc_errors.contains(&(hw_rep as u32, status as u32, lower_addr as u32, upper_addr as u32)) {
                     if ecc_errors.len() < MAX_ERRLOG_LEN {
