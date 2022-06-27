@@ -196,11 +196,20 @@ fn main() -> ! {
     let mut was_suspend = true;
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                usbmgmt.xous_resume();
+                // resume1 + reset brings us to an initialized state
+                usbmgmt.xous_resume1();
+                match usb_dev.force_reset() {
+                    Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                    _ => ()
+                };
+                // resume2 brings us to our last application state
+                usbmgmt.xous_resume2();
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
             }),
             Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
