@@ -142,12 +142,14 @@ pub(crate) enum PollOp {
 
 pub type ApiToken = [u32; 3];
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C)]
 pub struct PddbBasisList {
     /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
     pub list: [xous_ipc::String::<BASIS_NAME_LEN>; 63],
     /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
     pub num: u32,
 }
+
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum PddbRequestCode {
     Create = 0,
@@ -222,26 +224,31 @@ pub(crate) enum PddbRetcode {
     InternalError = 5,
     DiskFull = 6,
 }
+
 /// PddbBuf is a C-representation of a page of memory that's used
 /// to shuttle data for streaming channels. It must be exactly one
 /// page in size, with some overhead specific to the PDDB book-keeping
 /// at the top, and the remainder available for shuttling data.
-///
-/// It does not use rkyv, as the blanket implementation of that tends to
-/// incur too many extra copies an/or zeroing operations.
-#[repr(C, packed)]
+#[repr(C, align(4096))]
 pub(crate) struct PddbBuf {
     /// api token for the given buffer
     pub(crate) token: ApiToken,
-    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
-    pub(crate) position: u64,
-    /// length of the data field
-    pub(crate) len: u16,
     /// a field reserved for the return code
     pub(crate) retcode: PddbRetcode,
-    pub(crate) reserved: u8,
+    reserved: u8,
+    /// length of the data field
+    pub(crate) len: u16,
+    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
+    pub(crate) position: u64,
     pub(crate) data: [u8; 4072],
 }
+
+#[allow(dead_code)]
+/// Ensure that the `PddbBuf` struct is exactly one page big
+const fn _assert_pddbbuf_is_4096_bytes() {
+    unsafe { core::mem::transmute::<_, PddbBuf>([0u8; 4096]); }
+}
+
 impl PddbBuf {
     pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
         // this transforms the slice [u8] into a PddbBuf ref.
