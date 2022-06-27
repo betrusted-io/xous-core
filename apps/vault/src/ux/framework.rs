@@ -182,14 +182,6 @@ impl VaultUx {
         }
     }
 
-    pub(crate) fn suspend(&self) {
-        // nothing to do in particular. PDDB should sync itself.
-    }
-    pub(crate) fn resume(&self) {
-        self.usb_dev.switch_to_core(usb_device_xous::UsbDeviceType::Hid).unwrap();
-        self.usb_dev.restrict_debug_access(true).unwrap();
-    }
-
     pub(crate) fn update_mode(&mut self) {
         self.title_dirty = true;
         self.filtered_list.clear();
