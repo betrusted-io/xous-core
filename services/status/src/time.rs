@@ -287,8 +287,19 @@ pub fn start_time_server() {
                         ).expect("couldn't queue sync request");
                     }),
                     Some(TimeOp::HwSync) => {
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        match llio.get_rtc_secs() {
+                            Ok(val) => {
+                                start_rtc_secs = val;
+                                start_tt_ms = tt.elapsed_ms();
+                            }
+                            Err(e) => {
+                                log::warn!("Error syncing time: {:?}; retrying!", e);
+                                tt.sleep_ms(82).unwrap();
+                                send_message(self_cid,
+                                    Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
+                                ).expect("couldn't queue sync request");
+                            }
+                        }
                     },
                     Some(TimeOp::GetUtcTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         let t =
