@@ -204,6 +204,7 @@ fn main() -> ! {
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 // resume1 + reset brings us to an initialized state
                 usbmgmt.xous_resume1();
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 match usb_dev.force_reset() {
                     Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
                     _ => ()
