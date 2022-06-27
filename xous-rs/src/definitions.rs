@@ -75,6 +75,9 @@ pub use memoryflags::*;
 pub mod messages;
 pub use messages::*;
 
+pub mod limits;
+pub use limits::*;
+
 use crate::arch::ProcessStartup;
 
 /// Server ID
@@ -194,6 +197,7 @@ pub enum Error {
     UseBeforeInit = 24,
     DoubleFree = 25,
     DebugInProgress = 26,
+    InvalidLimit = 27,
 }
 
 impl Error {
@@ -226,6 +230,7 @@ impl Error {
             24 => UseBeforeInit,
             25 => DoubleFree,
             26 => DebugInProgress,
+            27 => InvalidLimit,
             _ => UnknownError,
         }
     }
@@ -258,6 +263,7 @@ impl Error {
             UseBeforeInit => 24,
             DoubleFree => 25,
             DebugInProgress => 26,
+            InvalidLimit => 27,
             UnknownError => usize::MAX,
         }
     }

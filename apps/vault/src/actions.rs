@@ -441,33 +441,46 @@ impl ActionManager {
                 VaultMode::Fido => crate::fido::U2F_APP_DICT,
                 VaultMode::Totp => VAULT_TOTP_DICT,
             };
-            match self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap_or("UTF8-error"), None) {
-                Ok(_) => {
-                    self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
-                }
-                Err(e) => {
-                    match e.kind() {
-                        std::io::ErrorKind::NotFound => {
-                            // handle special case of FIDO which is two dicts combined
-                            if entry.mode == VaultMode::Fido {
-                                // try the "other" dictionary
-                                match self.pddb.borrow()
-                                .delete_key(
-                                    crate::ctap::FIDO_CRED_DICT,
-                                    entry.key_name.as_str().unwrap_or("UTF8-error"),
-                                    None) {
-                                        Ok(_) => {
-                                            self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
-                                            return;
-                                        }
-                                        _ => {}
-                                }
-                            }
-                            self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>);
+            // first "get" the key, to resolve exactly what basis the key is in. This is because `delete_key()` will
+            // only look in the most recently unlocked secret basis, it won't automatically descend into the database
+            // and try to cull something willy-nilly.
+            match self.pddb.borrow().get(dict, entry.key_name.as_str().unwrap_or("UTF8-error"),
+                None, false, false, None, None::<fn()>
+            ) {
+                Ok(candidate) => {
+                    let attr = candidate.attributes().expect("couldn't get key attributes");
+                    match self.pddb.borrow().delete_key(dict,
+                        entry.key_name.as_str().unwrap_or("UTF8-error"),
+                        Some(&attr.basis)) {
+                        Ok(_) => {
+                            self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
                         }
-                        _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                        Err(e) => {
+                            match e.kind() {
+                                std::io::ErrorKind::NotFound => {
+                                    // handle special case of FIDO which is two dicts combined
+                                    if entry.mode == VaultMode::Fido {
+                                        // try the "other" dictionary
+                                        match self.pddb.borrow()
+                                        .delete_key(
+                                            crate::ctap::FIDO_CRED_DICT,
+                                            entry.key_name.as_str().unwrap_or("UTF8-error"),
+                                            Some(&attr.basis)) {
+                                                Ok(_) => {
+                                                    self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
+                                                    return;
+                                                }
+                                                _ => {}
+                                        }
+                                    }
+                                    self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>);
+                                }
+                                _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                            }
+                        }
                     }
                 }
+                Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
             }
         }
     }
@@ -485,6 +498,8 @@ impl ActionManager {
                     false, false, None, Some(crate::basis_change)
                 ) {
                     Ok(mut record) => {
+                        // resolve the basis of the key, so that we are editing it "in place"
+                        let attr = record.attributes().expect("couldn't get key attributes");
                         let mut data = Vec::<u8>::new();
                         let maybe_update = match record.read_to_end(&mut data) {
                             Ok(_len) => {
@@ -501,13 +516,13 @@ impl ActionManager {
                                     pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
                                     pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
                                     pw.atime = utc_now().timestamp() as u64;
-                                    Some(pw)
+                                    pw
                                 } else { log::error!("record error");
-                                    self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
+                                    self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); return }
                             }
-                            Err(e) => { log::error!("internal error"); self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
+                            Err(e) => { log::error!("internal error"); self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return }
                         };
-                        maybe_update
+                        Some((maybe_update, attr.basis))
                     }
                     Err(e) => {
                         match e.kind() {
@@ -523,12 +538,12 @@ impl ActionManager {
                         None
                     }
                 };
-                if let Some(update) = maybe_update {
-                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None)
+                if let Some((update, basis)) = maybe_update {
+                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
                     .unwrap_or_else(|e| {log::error!("internal error");
                         self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))});
                     match self.pddb.borrow().get(
-                        dict, entry.key_name.as_str().unwrap(), None,
+                        dict, entry.key_name.as_str().unwrap(), Some(&basis),
                         false, true, Some(VAULT_ALLOC_HINT),
                         Some(crate::basis_change)
                     ) {
@@ -555,6 +570,8 @@ impl ActionManager {
                     false, false, None, Some(crate::basis_change)
                 ) {
                     Ok(mut record) => {
+                        // resolve the basis of the key, so that we are editing it "in place"
+                        let attr = record.attributes().expect("couldn't get key attributes");
                         let mut data = Vec::<u8>::new();
                         let maybe_update = match record.read_to_end(&mut data) {
                             Ok(_len) => {
@@ -568,26 +585,26 @@ impl ActionManager {
                                     ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
                                     ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
                                     ai.atime = utc_now().timestamp() as u64;
-                                    Some(ai)
-                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
+                                    ai
+                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); return }
                             }
-                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
+                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return }
                         };
-                        maybe_update
+                        Some((maybe_update, attr.basis))
                     }
                     Err(e) => {
                         match e.kind() {
                             std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.fido2", xous::LANG), None::<std::io::Error>),
                             _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
-                        None
+                        return
                     }
                 };
-                if let Some(update) = maybe_update {
-                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None)
+                if let Some((update, basis)) = maybe_update {
+                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
                     .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
                     match self.pddb.borrow().get(
-                        dict, entry.key_name.as_str().unwrap(), None,
+                        dict, entry.key_name.as_str().unwrap(), Some(&basis),
                         false, true, Some(VAULT_ALLOC_HINT),
                         Some(crate::basis_change)
                     ) {
@@ -607,6 +624,8 @@ impl ActionManager {
                     false, false, None, Some(crate::basis_change)
                 ) {
                     Ok(mut record) => {
+                        // resolve the basis of the key, so that we are editing it "in place"
+                        let attr = record.attributes().expect("couldn't get key attributes");
                         let mut data = Vec::<u8>::new();
                         let maybe_update = match record.read_to_end(&mut data) {
                             Ok(_len) => {
@@ -633,26 +652,26 @@ impl ActionManager {
                                     if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str().unwrap(), 10) {
                                         pw.digits = d;
                                     }
-                                    Some(pw)
-                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); None }
+                                    pw
+                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); return }
                             }
-                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); None }
+                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return }
                         };
-                        maybe_update
+                        Some((maybe_update, attr.basis))
                     }
                     Err(e) => {
                         match e.kind() {
                             std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
                             _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
-                        None
+                        return
                     }
                 };
-                if let Some(update) = maybe_update {
-                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), None)
+                if let Some((update, basis)) = maybe_update {
+                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
                     .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
                     match self.pddb.borrow().get(
-                        dict, entry.key_name.as_str().unwrap(), None,
+                        dict, entry.key_name.as_str().unwrap(), Some(&basis),
                         false, true, Some(VAULT_ALLOC_HINT),
                         Some(crate::basis_change)
                     ) {

@@ -65,8 +65,9 @@ pub(crate) const CRED_INITAL_SIZE: usize = 512;
 // With P=20 and K=150, we have I=2M which is enough for 500 increments per day for 10 years.
 #[allow(dead_code)] // openSK legacy
 const NUM_PAGES: usize = 20;
-#[allow(dead_code)] // OpenSK legacy
-const MAX_SUPPORTED_RESIDENTIAL_KEYS: usize = 150;
+// The limit is based on the performance of the PDDB to get a query response within
+// the compliance time-out limit. Optimization is needed to improve this number!
+const MAX_SUPPORTED_RESIDENTIAL_KEYS: usize = 32;
 
 const MAX_PIN_RETRIES: u8 = 8;
 #[cfg(feature = "with_ctap2_1")]
@@ -389,6 +390,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
         ) {
             Ok(mut cred) => {
+                log::trace!("find {}", shortid);
                 let mut data = Vec::<u8>::new();
                 cred.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 match deserialize_credential(&data) {
@@ -428,6 +430,9 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         &mut self,
         new_credential: PublicKeyCredentialSource,
     ) -> Result<(), Ctap2StatusCode> {
+        if self.count_credentials()? >= MAX_SUPPORTED_RESIDENTIAL_KEYS {
+            return Err(Ctap2StatusCode::CTAP2_ERR_KEY_STORE_FULL);
+        }
         let shortid = self.cid_to_str(&new_credential.credential_id);
         match self.pddb.borrow().get(
             FIDO_CRED_DICT,
@@ -437,6 +442,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         ) {
             Ok(mut cred) => {
                 let value = serialize_credential(new_credential)?;
+                log::trace!("writing {}", shortid);
                 cred.write(&value)
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 self.pddb.borrow().sync()
@@ -465,11 +471,13 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 None, false, false,
                 Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
             ).ok() {
+                log::trace!("checking {}", cred_name);
                 let mut data = Vec::<u8>::new();
                 cred_entry.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 if let Some(cred) = deserialize_credential(&data) {
                     if cred.rp_id == rp_id
                     && (cred.is_discoverable() || !check_cred_protect) {
+                        log::trace!("filtered {}", cred_name);
                         result.push(cred);
                     }
                 }
@@ -479,9 +487,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     }
 
     /// Returns the number of credentials.
-    #[cfg(test)]
     pub fn count_credentials(&self) -> Result<usize, Ctap2StatusCode> {
-        let mut cred_list = self.pddb.borrow().list_keys(
+        let cred_list = self.pddb.borrow().list_keys(
             FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         Ok(cred_list.len())
     }
@@ -615,7 +622,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 let mut pin_hash = [0u8; PIN_AUTH_LENGTH];
                 match ph.read(&mut pin_hash) {
                     Ok(PIN_AUTH_LENGTH) => {
-                        log::info!("pin_hash: {:x?}", &pin_hash);
+                        log::trace!("pin_hash: {:x?}", &pin_hash);
                         Ok(Some(pin_hash))
                     },
                     Ok(l) => {

@@ -29,6 +29,24 @@ impl UsbHid {
             conn
         }
     }
+    /// used to query if the HID core was able to start. Mainly to handle edge cases between updates.
+    pub fn is_soc_compatible(&self) -> bool {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                Opcode::IsSocCompatible.to_usize().unwrap(),
+                0, 0, 0, 0
+            )
+        ) {
+            Ok(xous::Result::Scalar1(code)) => {
+                match code {
+                    0 => false,
+                    _ => true
+                }
+            }
+            _ => panic!("Internal error: illegal return type"),
+        }
+    }
     /// this will always trigger a reset, even if it's the same core we're switching to
     pub fn switch_to_core(&self, core: UsbDeviceType) -> Result<(), xous::Error> {
         match send_message(

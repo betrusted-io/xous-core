@@ -28,6 +28,9 @@ pub(crate) enum Opcode {
     /// Blocks the caller, waiting for a U2F message
     U2fRxDeferred,
 
+    /// Query if the HID driver was able to start
+    IsSocCompatible,
+
     /// Handle the USB interrupt
     UsbIrqHandler,
     /// Suspend/resume callback

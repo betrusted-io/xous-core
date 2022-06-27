@@ -112,6 +112,9 @@ fn main() -> ! {
                         // block any rx requests forever
                         fido_listener = Some(msg);
                     }
+                    Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
+                    }),
                     Some(Opcode::Quit) => {
                         break;
                     }
@@ -177,7 +180,7 @@ fn main() -> ! {
     {
         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
         keyboard.write_report(&Vec::<Keyboard>::new()).ok();
-        keyboard.tick().unwrap();
+        keyboard.tick().ok();
     }
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -199,6 +202,9 @@ fn main() -> ! {
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 usbmgmt.xous_resume();
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
+            }),
+            Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, 1).expect("couldn't return compatibility status")
             }),
             Some(Opcode::U2fRxDeferred) => {
                 if fido_listener_pid.is_none() {
@@ -408,11 +414,11 @@ fn main() -> ! {
                     {
                         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                         keyboard.write_report(&codes).ok();
-                        keyboard.tick().unwrap();
+                        keyboard.tick().ok();
                         tt.sleep_ms(30).ok();
                         if auto_up {
                             keyboard.write_report(&[]).ok(); // this is the key-up
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                         }
                     }
@@ -444,10 +450,10 @@ fn main() -> ! {
                         {
                             let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                             keyboard.write_report(&codes).ok();
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                             keyboard.write_report(&[]).ok(); // this is the key-up
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                         }
                         sent += 1;

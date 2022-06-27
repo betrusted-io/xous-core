@@ -423,8 +423,6 @@ fn main() -> ! {
     let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", pddb_sid);
 
-    log::trace!("ready to accept requests");
-
     // shared entropy cache across all process-local services (it's more efficient to request entropy in blocks from the TRNG)
     let entropy = Rc::new(RefCell::new(TrngPool::new()));
 
@@ -542,8 +540,11 @@ fn main() -> ! {
     let mut initial_heap: usize = 0;
     let mut latest_heap: usize = 0;
     let mut latest_cache: usize = 0;
-    const HEAP_GC_THRESH: usize = 400 * 1024; // the heap breaks at 512kiB, so try cleaning up at 400k
-    const HEAP_GC_TARGET: usize = 64 * 1024; // how much to try cleaning out in any one go.
+    const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
+    const HEAP_GC_THRESH: usize = 1500 * 1024; // the largel limit is at 2048kiB, so try cleaning up at 1500k
+    const HEAP_GC_TARGET: usize = 1024 * 1024; // how much to try cleaning out in any one go.
+    const HEAP_INC_THRESH: usize = 256 * 1024; // increase from the default heap size of 512k if we pass this limit
+    let mut heap_increased = false;
 
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
@@ -633,6 +634,31 @@ fn main() -> ! {
                     let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
                     latest_heap = heap_usage();
                     log::info!("{} pruned, now: {} heap, {} cache", pruned, latest_heap, basis_cache.cache_size())
+                }
+
+                // one-shot increase of heap limit once we pass a threshold
+                // we don't put this at the very top of main because there may be some concurrency issue
+                // if a heap increase is attempted while a lot of new processes are spawning.
+                if (latest_heap > HEAP_INC_THRESH) && !heap_increased {
+                    let new_limit = HEAP_LARGER_LIMIT;
+                    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+                        xous::Limits::HeapMaximum as usize,
+                        0,
+                        new_limit,
+                    ));
+
+                    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
+                        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+                            xous::Limits::HeapMaximum as usize,
+                            current_limit,
+                            new_limit,
+                        ))
+                        .unwrap();
+                        log::info!("Heap limit increased to: {}", new_limit);
+                    } else {
+                        panic!("Unsupported syscall!");
+                    }
+                    heap_increased = true;
                 }
             }
             Some(Opcode::ListBasis) => {

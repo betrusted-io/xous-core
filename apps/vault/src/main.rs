@@ -108,9 +108,6 @@ To clear test entries:
   pddb dictdelete fido.cred
   pddb dictdelete fido.u2fapps
 
-Issue: editing an entry in a non-secret basis while a secret basis is open won't work because
-the delete key function doesn't work in that case. Need to modify the `get` routine to return
-the basis so we can specify which basis to edit...
 */
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -161,7 +158,7 @@ const ERR_TIMEOUT_MS: usize = 5000;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -195,41 +192,46 @@ fn main() -> ! {
             let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
             // this call will block until the PDDB is mounted.
             let usb = usb_device_xous::UsbHid::new();
-            let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
-            let mut ctap_hid = CtapHid::new();
-            loop {
-                match usb.u2f_wait_incoming() {
-                    Ok(msg) => {
-                        log::trace!("FIDO listener got message: {:?}", msg);
-                        let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                        let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
-                        // This block handles sending packets.
-                        for pkt_reply in reply {
-                            let mut reply = RawFidoMsg::default();
-                            reply.packet.copy_from_slice(&pkt_reply);
-                            let status = usb.u2f_send(reply);
-                            match status {
-                                Ok(()) => {
-                                    log::trace!("Sent U2F packet");
-                                }
-                                Err(e) => {
-                                    log::error!("Error sending U2F packet: {:?}", e);
+            // only run the main loop if the SoC is compatible
+            if usb.is_soc_compatible() {
+                let mut ctap_state = CtapState::new(&mut rng, check_user_presence, boot_time);
+                let mut ctap_hid = CtapHid::new();
+                loop {
+                    match usb.u2f_wait_incoming() {
+                        Ok(msg) => {
+                            log::trace!("FIDO listener got message: {:?}", msg);
+                            let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
+                            let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
+                            // This block handles sending packets.
+                            for pkt_reply in reply {
+                                let mut reply = RawFidoMsg::default();
+                                reply.packet.copy_from_slice(&pkt_reply);
+                                let status = usb.u2f_send(reply);
+                                match status {
+                                    Ok(()) => {
+                                        log::trace!("Sent U2F packet");
+                                    }
+                                    Err(e) => {
+                                        log::error!("Error sending U2F packet: {:?}", e);
+                                    }
                                 }
                             }
                         }
-                    }
-                    Err(e) => {
-                        match e {
-                            xous::Error::ProcessTerminated => { // unplug happened, reset the authenticator
-                                log::info!("CTAP unplug_reset");
-                                ctap_state.unplug_reset();
-                            },
-                            _ => {
-                                log::warn!("FIDO listener got an error: {:?}", e);
+                        Err(e) => {
+                            match e {
+                                xous::Error::ProcessTerminated => { // unplug happened, reset the authenticator
+                                    log::info!("CTAP unplug_reset");
+                                    ctap_state.unplug_reset();
+                                },
+                                _ => {
+                                    log::warn!("FIDO listener got an error: {:?}", e);
+                                }
                             }
                         }
                     }
                 }
+            } else {
+                log::warn!("SoC rev is incompatible with USB HID operations, the U2F/FIDO2 server is not started");
             }
         }
     });

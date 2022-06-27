@@ -20,7 +20,7 @@ use std::ops::Deref;
  * author: nworbnhoj
  */
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Bitmap {
     pub bound: Rectangle,
     tile_size: Point,
@@ -251,8 +251,8 @@ impl From<&Img> for Bitmap {
         };
         let mut mosaic: Vec<Tile> = Vec::new();
 
-        let pixels = Dither::new(BURKES.to_vec()).dither(&image);
-        let mut px_index = 0;
+        let words = Dither::new(BURKES.to_vec()).dither(&image);
+        let mut wd_index = 0;
         let bits_per_word: i16 = BITS_PER_WORD.try_into().unwrap();
         for t in 0..tile_count {
             let t_top = t * tile_height;
@@ -266,15 +266,8 @@ impl From<&Img> for Bitmap {
             for y in t_top..=t_bottom {
                 let mut x = t_left;
                 while x <= t_right {
-                    let mut word: usize = 0;
-                    for w in 0..bits_per_word {
-                        if (x + w) > t_right {
-                            continue;
-                        }
-                        let color = pixels[px_index] as usize;
-                        word = word | (color << w);
-                        px_index += 1;
-                    }
+                    let word = words[wd_index];
+                    wd_index += 1;
                     let anchor = Point::new(x.try_into().unwrap(), y.try_into().unwrap());
                     tile.set_word(anchor, word.try_into().unwrap());
                     x += bits_per_word;
@@ -302,7 +295,7 @@ pub enum PixelType {
  * author: nworbnhoj
  */
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Img {
     pixels: Vec<u8>,
     width: usize,
@@ -360,7 +353,7 @@ impl Img {
         let y_scale = self_height as f32 / height as f32;
         let self_x_base = x_scale * 0.5;
         let self_y_base = y_scale * 0.5;
-        
+
         // Pretabulate horizontal pixel positions
         let mut self_x_tab: Vec<usize> = Vec::with_capacity(width);
         for buf_x in 0..width {
@@ -476,21 +469,29 @@ impl Dither {
             PixelColor::Light
         }
     }
-    pub fn dither(&mut self, image: &Img) -> Vec<PixelColor> {
-        let (width, height, length) = image.size();
+    pub fn dither(&mut self, image: &Img) -> Vec<Word> {
+        let bits_per_word: u32 = BITS_PER_WORD.try_into().unwrap();
+        let (width, height, _) = image.size();
         self.provision(width.try_into().unwrap());
-        let mut pixels: Vec<PixelColor> = Vec::with_capacity(length);
+        let mut words: Vec<Word> = Vec::with_capacity((1 + width / BITS_PER_WORD) * height);
         for y in 0..height {
+            let (mut w, mut word): (Word, Word) = (0, 0);
             for x in 0..width {
-                let pixel = match image.get(x, y) {
+                let color = match image.get(x, y) {
                     Some(grey) => self.pixel(*grey),
                     None => PixelColor::Dark,
                 };
-                pixels.push(pixel);
+                word = word | ((color as u32) << w);
+                w += 1;
+                if w >= bits_per_word {
+                    words.push(word);
+                    (w, word) = (0, 0);
+                }
                 self.next();
             }
+            words.push(word);
         }
-        pixels
+        words
     }
 }
 
