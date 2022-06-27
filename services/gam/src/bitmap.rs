@@ -22,107 +22,87 @@ use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct Bitmap {
+    width: usize,
     pub bound: Rectangle,
-    tile_size: Point,
+    tile_bits: usize,
     mosaic: Vec<Tile>,
 }
 
 impl Bitmap {
     pub fn new(size: Point) -> Self {
-        let bound = Rectangle::new(Point::new(0, 0), size);
-        log::trace!("new Bitmap {:?}", bound);
-
-        let (tile_size, tile_width_words) = Bitmap::tile_spec(size);
-        let tile_height = tile_size.y as usize;
-        let bm_height = (size.y + 1) as usize;
-        let tile_count = match bm_height % tile_height {
-            0 => bm_height / tile_height,
-            _ => bm_height / tile_height + 1,
-        };
-
         let mut mosaic: Vec<Tile> = Vec::new();
-        for y in 0..tile_count {
-            let tl = Point::new(0, (y * tile_height) as i16);
-            let mut br = Point::new(tile_size.x - 1, ((y + 1) * tile_height - 1) as i16);
-            if br.y > size.y {
-                br.y = size.y;
+        let mut tl = Point::new(0, 0);
+        let mut br = Point::new(size.x, 0);
+        let mut tile_bits = 0;
+        while tl.y <= size.y {
+            let mut tile = Tile::new(Rectangle::new(tl, br));
+            let max_bound = tile.max_bound();
+            br = if max_bound.br.y > size.y {
+                size
+            } else {
+                Point::new(size.x, max_bound.br.y)
+            };
+            tile.set_bound(Rectangle::new(tl, br));
+            if tile_bits == 0 {
+                tile_bits = ((br.x - tl.x + 1) * (br.y - tl.y + 1)) as usize;
             }
-            let tile = Tile::new(Rectangle::new(tl, br), tile_width_words as u16);
             mosaic.push(tile);
+            tl = Point::new(0, br.y + 1);
+            br = Point::new(size.x, tl.y);
         }
         Self {
-            bound,
-            tile_size,
+            width: size.x as usize + 1,
+            bound: Rectangle::new(Point::new(0, 0), size),
+            tile_bits, //: (size.x as usize + 1) * (size.y as usize + 1),
             mosaic,
         }
     }
 
     pub fn new_resize(image: &Img, width: usize) -> Self {
         let (img_width, _, _) = image.size();
-        let pixels = image.iter().shrink(img_width, width).collect();
-        let image = Img::new(pixels, width, PixelType::U8);
-        let (img_width, img_height, _) = image.size();
+        let burkes = BURKES.to_vec();
+        let words = image.iter().shrink(img_width, width).dither(&burkes, width);
 
-        let bm_bottom = img_height - 1;
-        let bm_right = img_width - 1;
-        let bm_br = Point::new(bm_right as i16, bm_bottom as i16);
-        let bound = Rectangle::new(Point::new(0, 0), bm_br);
-
-        let (tile_size, tile_width_words) = Bitmap::tile_spec(bm_br);
-        let tile_height: usize = tile_size.y.try_into().unwrap();
-        let tile_count = match img_height % tile_height {
-            0 => img_height / tile_height,
-            _ => img_height / tile_height + 1,
-        };
         let mut mosaic: Vec<Tile> = Vec::new();
 
-        let words = Dither::new(BURKES.to_vec()).dither(&image);
-        let mut wd_index = 0;
-        let bits_per_word: i16 = BITS_PER_WORD.try_into().unwrap();
-        for t in 0..tile_count {
-            let t_top = t * tile_height;
-            let t_left = 0;
-            let t_bottom = min(bm_bottom, (t + 1) * tile_height - 1);
-            let t_right = tile_size.x - 1;
-            let t_tl = Point::new(t_left, t_top.try_into().unwrap());
-            let t_br = Point::new(t_right, t_bottom.try_into().unwrap());
-            let t_bound = Rectangle::new(t_tl, t_br);
-            let mut tile = Tile::new(t_bound, tile_width_words.try_into().unwrap());
-            for y in t_top..=t_bottom {
-                let mut x = t_left;
-                while x <= t_right {
-                    let word = words[wd_index];
-                    wd_index += 1;
-                    let anchor = Point::new(x.try_into().unwrap(), y.try_into().unwrap());
-                    tile.set_word(anchor, word.try_into().unwrap());
-                    x += bits_per_word;
-                }
+        let single_line = Point::new((width - 1).try_into().unwrap(), 0);
+        let mut bound = Rectangle::new(Point::new(0, 0), single_line);
+        let mut tile = Tile::new(bound);
+        let mut blank_tile = true;
+        let (mut x, mut y) = (0, 0);
+        for word in words {
+            tile.set_word(Point::new(x, y), word);
+            blank_tile = false;
+            x += BITS_PER_WORD as i16;
+            if x >= width.try_into().unwrap() {
+                (x, y) = (0, y + 1);
             }
+            if y > tile.max_bound().br.y {
+                mosaic.push(tile);
+                bound = Rectangle::new(
+                    Point::new(x, y),
+                    Point::new((width - 1).try_into().unwrap(), y),
+                );
+                tile = Tile::new(bound);
+                blank_tile = true;
+            }
+        }
+        if !blank_tile {
+            bound.br = Point::new((width - 1).try_into().unwrap(), y - 1);
+            tile.crop(bound);
             mosaic.push(tile);
         }
+
+        bound.tl = Point::new(0, 0);
+        let max = tile.max_bound();
+        let tile_bits = width as i16 * (max.br.y - max.tl.y + 1);
+
         Self {
+            width,
             bound,
-            tile_size,
+            tile_bits: tile_bits.try_into().unwrap(),
             mosaic,
         }
-    }
-
-    fn tile_spec(bm_size: Point) -> (Point, i16) {
-        let bm_width_bits = 1 + bm_size.x as usize;
-        let mut tile_width_bits = bm_width_bits;
-        let tile_width_words = if bm_width_bits > BITS_PER_TILE {
-            log::warn!("Bitmap max width exceeded");
-            tile_width_bits = WORDS_PER_TILE * BITS_PER_WORD;
-            WORDS_PER_TILE
-        } else {
-            match bm_width_bits % BITS_PER_WORD {
-                0 => bm_width_bits / BITS_PER_WORD,
-                _ => bm_width_bits / BITS_PER_WORD + 1,
-            }
-        };
-        let tile_height_bits = WORDS_PER_TILE / tile_width_words;
-        let tile_size = Point::new(tile_width_bits as i16, tile_height_bits as i16);
-        (tile_size, tile_width_words as i16)
     }
 
     #[allow(dead_code)]
@@ -139,10 +119,7 @@ impl Bitmap {
         if self.bound.intersects_point(point) {
             let x = point.x as usize;
             let y = point.y as usize;
-            let tile_width = self.tile_size.x as usize;
-            let tile_height = self.tile_size.y as usize;
-            let tile_size_bits = tile_width * tile_height;
-            (x + y * tile_width) / tile_size_bits
+            (x + y * self.width) / self.tile_bits
         } else {
             log::warn!("Out of bounds {:?}", point);
             0
@@ -164,9 +141,19 @@ impl Bitmap {
         }
         let hull_area = (1 + hull_br.x - hull_tl.x) * (1 + hull_br.y - hull_tl.y);
         if tile_area < hull_area {
-            log::warn!("Bitmap Tile gaps");
+            log::warn!(
+                "Bitmap Tile gaps: tile_area={} hull_area={} {:?}",
+                tile_area,
+                hull_area,
+                mosaic
+            );
         } else if tile_area > hull_area {
-            log::warn!("Bitmap Tile overlap");
+            log::warn!(
+                "Bitmap Tile overlap: tile_area={} hull_area={} {:?}",
+                tile_area,
+                hull_area,
+                mosaic
+            );
         }
         Rectangle::new(hull_tl, hull_br)
     }
@@ -234,6 +221,7 @@ impl Bitmap {
                     y -= 1;
                     b += 1;
                 }
+
                 // rotate the block and write to r90
                 // beginning from top-left, and progressing right in strips, from top to bottom
                 for w in 0..bits_per_word {
@@ -278,8 +266,9 @@ impl From<[Option<Tile>; 6]> for Bitmap {
         }
 
         Self {
+            width: (tile_size.x + 1) as usize,
             bound: Self::hull(&mosaic),
-            tile_size: tile_size,
+            tile_bits: (tile_size.x + 1) as usize * (tile_size.y + 1) as usize,
             mosaic: mosaic,
         }
     }
@@ -399,7 +388,6 @@ impl<'a, I: Iterator<Item = &'a u8>> Shrink<I> {
             in_x_cap.push((in_x).min(max_width));
         }
         let out_x_last = out_width;
-
         Self {
             iter,
             out_width,
@@ -429,7 +417,7 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for Shrink<I> {
     /// pixel is the average of the pixels contained within each intersaction of
     /// vertical and horizontal strips. For example, when in_width = 3 x out_width
     /// each outbound pixel will be the average of 9 pixels in a 3x3 inbound block.
-    /// Note that with a non-integer scale the strips will be of variable width.
+    /// Note that with a non-integer scale the strips will be of variable width ±1.
     fn next(&mut self) -> Option<Self::Item> {
         // if there is no reduction in image size then simple return image as-is
         if self.scale <= 1.0 {
@@ -444,7 +432,7 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for Shrink<I> {
         }
         // take the average of pixels in the horizontal, and then vertical.
         let in_y_cap = (self.scale * self.out_y as f32) as usize;
-        while self.in_y < in_y_cap {
+        while self.in_y <= in_y_cap {
             let mut in_x = 0;
             for (out_x, in_x_cap) in self.in_x_cap.iter().enumerate() {
                 let mut x_total: u16 = 0;
@@ -538,6 +526,8 @@ impl Deref for Img {
     }
 }
 
+// **********************************************************************
+
 /*
  * Dithering involves aplying a threshold to each pixel to round down to Black
  * or up to White. The residual error from this blunt instrument is diffused amongst
@@ -568,66 +558,74 @@ const BURKES: [(isize, isize, i16); 7] = [
     (2, 1, 2),
 ];
 
-struct Dither {
+pub struct Dither<'a, I> {
+    /// iterator over inbound pixels
+    iter: I,
     // the width of the image to be dithered
     width: usize,
     // the error diffusion scheme (dx, dy, multiplier)
-    diffusion: Vec<(isize, isize, i16)>,
+    diffusion: &'a Vec<(isize, isize, i16)>,
     // the sum of the multipliers in the diffusion
     denominator: i16,
     // a circular array of errors representing dy rows of the image,
     err: Vec<i16>,
     // the position in err representing the carry forward error for the current pixel
     origin: usize,
+    next_x: usize,
+    next_y: usize,
 }
 
-impl Dither {
-    const THRESHOLD: i16 = u8::MAX as i16 / 2;
-    pub fn new(diffusion: Vec<(isize, isize, i16)>) -> Self {
+const THRESHOLD: i16 = u8::MAX as i16 / 2;
+
+impl<'a, I: Iterator<Item = u8>> Dither<'a, I> {
+    //    const THRESHOLD: i16 = u8::MAX as i16 / 2; results in:  cannot satisfy `<_ as Iterator>::Item == u8`
+    fn new(iter: I, diffusion: &'a Vec<(isize, isize, i16)>, width: usize) -> Dither<I> {
         let mut denominator: i16 = 0;
-        for (_, _, mul) in &diffusion {
+        for (_, _, mul) in diffusion {
             denominator += mul;
         }
-        Self {
-            width: 0,
-            diffusion,
-            denominator,
-            err: Vec::<i16>::new(),
-            origin: 0,
-        }
-    }
-    fn provision(&mut self, width: usize) {
-        self.width = width;
         let (mut max_dx, mut max_dy) = (0, 0);
-        for (dx, dy, _) in &self.diffusion {
+        for (dx, dy, _) in diffusion {
             max_dx = max(*dx, max_dx);
             max_dy = max(*dy, max_dy);
         }
         let length: usize = width * max_dy as usize + max_dx as usize + 1;
-        self.err = vec![0i16; length];
+
+        Self {
+            iter,
+            width,
+            diffusion,
+            denominator,
+            err: vec![0i16; length],
+            origin: 0,
+            next_x: 0,
+            next_y: 0,
+        }
     }
+
+    #[allow(dead_code)]
+    fn next_xy(&self) -> (usize, usize) {
+        (self.next_x, self.next_y)
+    }
+
     fn index(&self, dx: isize, dy: isize) -> usize {
         let width: isize = self.width.try_into().unwrap();
         let offset: usize = (width * dy + dx).try_into().unwrap();
         let linear: usize = self.origin + offset;
         linear % self.err.len()
     }
-    fn next(&mut self) {
-        self.err[self.origin] = 0;
-        self.origin = self.index(1, 0);
-    }
-    fn get(&self) -> i16 {
+    fn err(&self) -> i16 {
         self.err[self.origin] / self.denominator
     }
     fn carry(&mut self, err: i16) {
-        for (dx, dy, mul) in &self.diffusion {
+        for (dx, dy, mul) in self.diffusion {
             let i = self.index(*dx, *dy);
             self.err[i] += mul * err;
         }
     }
     fn pixel(&mut self, grey: u8) -> PixelColor {
-        let grey: i16 = grey as i16 + self.get();
-        if grey < Dither::THRESHOLD {
+        let grey: i16 = grey as i16 + self.err();
+        if grey < THRESHOLD {
             self.carry(grey);
             PixelColor::Dark
         } else {
@@ -635,31 +633,51 @@ impl Dither {
             PixelColor::Light
         }
     }
-    pub fn dither(&mut self, image: &Img) -> Vec<Word> {
-        let bits_per_word: u32 = BITS_PER_WORD.try_into().unwrap();
-        let (width, height, _) = image.size();
-        self.provision(width.try_into().unwrap());
-        let mut words: Vec<Word> = Vec::with_capacity((1 + width / BITS_PER_WORD) * height);
-        for y in 0..height {
-            let (mut w, mut word): (Word, Word) = (0, 0);
-            for x in 0..width {
-                let color = match image.get(x, y) {
-                    Some(grey) => self.pixel(*grey),
-                    None => PixelColor::Dark,
-                };
-                word = word | ((color as u32) << w);
-                w += 1;
-                if w >= bits_per_word {
-                    words.push(word);
-                    (w, word) = (0, 0);
+}
+
+impl<'a, I: Iterator<Item = u8>> Iterator for Dither<'a, I> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut word = 0;
+        for w in 0..BITS_PER_WORD {
+            match self.iter.next() {
+                Some(grey) => {
+                    let color = self.pixel(grey) as u32;
+                    word = word | (color << w);
                 }
-                self.next();
+                None => {
+                    if w > 0 {
+                        continue;
+                    } else {
+                        return None;
+                    }
+                }
+            };
+
+            // reset and step forward err buffer and next_x coord
+            self.err[self.origin] = 0;
+            self.origin = self.index(1, 0);
+            self.next_x += 1;
+            if self.next_x >= self.width {
+                break;
             }
-            words.push(word);
         }
-        words
+        if self.next_x >= self.width {
+            self.next_x = 0;
+            self.next_y += 1;
+        }
+        Some(word)
     }
 }
+
+pub trait DitherIterator<'a>: Iterator<Item = u8> + Sized {
+    fn dither(self, diffusion: &'a Vec<(isize, isize, i16)>, width: usize) -> Dither<'a, Self> {
+        Dither::new(self, diffusion, width)
+    }
+}
+
+impl<'a, I: Iterator<Item = u8>> DitherIterator<'a> for I {}
 
 #[cfg(test)]
 mod tests {
