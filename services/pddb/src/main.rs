@@ -413,8 +413,16 @@ struct TokenRecord {
     pub alloc_hint: Option<usize>,
     pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
-
-fn main() -> ! {
+fn main () -> ! {
+    let stack_size = 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -542,9 +550,25 @@ fn main() -> ! {
     let mut latest_cache: usize = 0;
     const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
     const HEAP_GC_THRESH: usize = 1500 * 1024; // the largel limit is at 2048kiB, so try cleaning up at 1500k
-    const HEAP_GC_TARGET: usize = 1024 * 1024; // how much to try cleaning out in any one go.
-    const HEAP_INC_THRESH: usize = 256 * 1024; // increase from the default heap size of 512k if we pass this limit
-    let mut heap_increased = false;
+    const HEAP_GC_TARGET: usize = 1300 * 1024; // how much to try cleaning out in any one go.
+    let new_limit = HEAP_LARGER_LIMIT;
+    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+        xous::Limits::HeapMaximum as usize,
+        0,
+        new_limit,
+    ));
+
+    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
+        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+            xous::Limits::HeapMaximum as usize,
+            current_limit,
+            new_limit,
+        ))
+        .unwrap();
+        log::info!("Heap limit increased to: {}", new_limit);
+    } else {
+        panic!("Unsupported syscall!");
+    }
 
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
@@ -634,31 +658,6 @@ fn main() -> ! {
                     let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
                     latest_heap = heap_usage();
                     log::info!("{} pruned, now: {} heap, {} cache", pruned, latest_heap, basis_cache.cache_size())
-                }
-
-                // one-shot increase of heap limit once we pass a threshold
-                // we don't put this at the very top of main because there may be some concurrency issue
-                // if a heap increase is attempted while a lot of new processes are spawning.
-                if (latest_heap > HEAP_INC_THRESH) && !heap_increased {
-                    let new_limit = HEAP_LARGER_LIMIT;
-                    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-                        xous::Limits::HeapMaximum as usize,
-                        0,
-                        new_limit,
-                    ));
-
-                    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
-                        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-                            xous::Limits::HeapMaximum as usize,
-                            current_limit,
-                            new_limit,
-                        ))
-                        .unwrap();
-                        log::info!("Heap limit increased to: {}", new_limit);
-                    } else {
-                        panic!("Unsupported syscall!");
-                    }
-                    heap_increased = true;
                 }
             }
             Opcode::ListBasis => {
