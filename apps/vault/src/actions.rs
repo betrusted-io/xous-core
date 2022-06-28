@@ -456,31 +456,44 @@ impl ActionManager {
                             self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
                         }
                         Err(e) => {
-                            match e.kind() {
-                                std::io::ErrorKind::NotFound => {
-                                    // handle special case of FIDO which is two dicts combined
-                                    if entry.mode == VaultMode::Fido {
-                                        // try the "other" dictionary
+                            self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    match e.kind() {
+                        std::io::ErrorKind::NotFound => {
+                            // handle special case of FIDO which is two dicts combined
+                            if entry.mode == VaultMode::Fido {
+                                // try the "other" dictionary
+                                match self.pddb.borrow().get(crate::ctap::FIDO_CRED_DICT, entry.key_name.as_str().unwrap_or("UTF8-error"),
+                                    None, false, false, None, None::<fn()>
+                                ) {
+                                    Ok(candidate) => {
+                                        let attr = candidate.attributes().expect("couldn't get key attributes");
                                         match self.pddb.borrow()
                                         .delete_key(
                                             crate::ctap::FIDO_CRED_DICT,
                                             entry.key_name.as_str().unwrap_or("UTF8-error"),
-                                            Some(&attr.basis)) {
-                                                Ok(_) => {
-                                                    self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
-                                                    return;
-                                                }
-                                                _ => {}
+                                            Some(&attr.basis)
+                                        ) {
+                                            Ok(_) => {
+                                                self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
+                                            }
+                                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                                         }
                                     }
-                                    self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>);
+                                    Err(e) => {
+                                        self.report_err(t!("vault.error.not_found", xous::LANG), Some(e));
+                                    }
                                 }
-                                _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                            } else {
+                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e));
                             }
                         }
+                        _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                     }
                 }
-                Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
             }
         }
     }
@@ -784,6 +797,7 @@ impl ActionManager {
             }
             VaultMode::Fido => {
                 // first assemble U2F records
+                log::debug!("listing in {}", U2F_APP_DICT);
                 let keylist = match self.pddb.borrow().list_keys(U2F_APP_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
@@ -796,6 +810,7 @@ impl ActionManager {
                         Vec::new()
                     }
                 };
+                log::debug!("list: {:?}", keylist);
                 for key in keylist {
                     match self.pddb.borrow().get(
                         U2F_APP_DICT,
@@ -832,6 +847,7 @@ impl ActionManager {
                         Err(e) => self.report_err("Couldn't access U2F key", Some(e)),
                     }
                 }
+                log::debug!("listing in {}", FIDO_CRED_DICT);
                 let keylist = match self.pddb.borrow().list_keys(FIDO_CRED_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
@@ -844,6 +860,7 @@ impl ActionManager {
                         Vec::new()
                     }
                 };
+                log::debug!("keylist: {:?}", keylist);
                 // now merge in the FIDO2 records
                 for key in keylist {
                     match self.pddb.borrow().get(
