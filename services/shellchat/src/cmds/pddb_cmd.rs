@@ -166,15 +166,15 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     if let Some(dict) = tokens.next() {
                         match self.pddb.list_keys(dict, None) {
                             Ok(list) => {
-                                let checked_len = if list.len() > 6 {
-                                    write!(ret, "First 6 keys of {}:", list.len()).unwrap();
-                                    6
+                                let checked_len = if list.len() > 10 {
+                                    write!(ret, "First 10 keys of {}:", list.len()).unwrap();
+                                    10
                                 } else {
                                     list.len()
                                 };
                                 for i in 0..checked_len {
                                     let sep = if i != checked_len - 1 {
-                                        ", "
+                                        ",\n"
                                     } else {
                                         ""
                                     };
@@ -194,14 +194,14 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     match self.pddb.list_dict(None) {
                         Ok(list) => {
                             let checked_len = if list.len() > 6 {
-                                write!(ret, "First 6 dicts of {}:", list.len()).unwrap();
-                                6
+                                write!(ret, "First 10 dicts of {}:", list.len()).unwrap();
+                                10
                             } else {
                                 list.len()
                             };
                             for i in 0..checked_len {
                                 let sep = if i != checked_len - 1 {
-                                    ", "
+                                    ",\n"
                                 } else {
                                     ""
                                 };
