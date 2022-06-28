@@ -59,9 +59,12 @@ impl Bitmap {
     }
 
     pub fn new_resize(image: &Img, width: usize) -> Self {
-        let (img_width, _, _) = image.size();
         let burkes = BURKES.to_vec();
-        let words = image.iter().shrink(img_width, width).dither(&burkes, width);
+        let words = image
+            .iter()
+            .to_grey(image.px_type)
+            .shrink(image.width, width)
+            .dither(&burkes, width);
 
         let mut mosaic: Vec<Tile> = Vec::new();
 
@@ -274,20 +277,66 @@ impl From<[Option<Tile>; 6]> for Bitmap {
     }
 }
 
-impl From<&Img> for Bitmap {
+impl<'a> From<&Img> for Bitmap {
     fn from(image: &Img) -> Self {
-        let (img_width, _, _) = image.size();
-        Bitmap::new_resize(image, img_width)
+        Bitmap::new_resize(image, image.width)
     }
 }
 
 // **********************************************************************
 
+#[derive(Debug, Clone, Copy)]
 pub enum PixelType {
     U8,
     U8x3,
     U8x4,
 }
+
+/*
+ * Image as a minimal flat buffer of u8; accessible by (x, y)
+ *
+ * author: nworbnhoj
+ */
+
+//#[derive(Debug)]
+pub struct Img {
+    pub pixels: Vec<u8>,
+    pub width: usize,
+    pub px_type: PixelType,
+}
+
+impl Img {
+    pub fn new(pixels: Vec<u8>, width: usize, px_type: PixelType) -> Self {
+        Self {
+            pixels,
+            width,
+            px_type,
+        }
+    }
+    pub fn width(&self) -> usize {
+        self.width
+    }
+    pub fn height(&self) -> usize {
+        match self.px_type {
+            PixelType::U8 => self.pixels.len() / self.width,
+            PixelType::U8x3 => self.pixels.len() / (self.width * 3),
+            _ => {
+                log::warn!("PixelType not implemented");
+                0
+            }
+        }
+    }
+}
+
+impl Deref for Img {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.pixels
+    }
+}
+
+// **********************************************************************
 
 pub struct GreyScale<I> {
     iter: I,
@@ -370,7 +419,7 @@ pub struct Shrink<I> {
     out_x_last: usize,
 }
 
-impl<'a, I: Iterator<Item = &'a u8>> Shrink<I> {
+impl<I: Iterator<Item = u8>> Shrink<I> {
     fn new(iter: I, in_width: usize, out_width: usize) -> Shrink<I> {
         let scale = in_width as f32 / out_width as f32;
         // set up a buffer to average the surrounding pixels
@@ -408,7 +457,7 @@ impl<'a, I: Iterator<Item = &'a u8>> Shrink<I> {
     }
 }
 /// Adaptor Iterator to shrink an image dimensions from in_width to out_width
-impl<'a, I: Iterator<Item = &'a u8>> Iterator for Shrink<I> {
+impl<I: Iterator<Item = u8>> Iterator for Shrink<I> {
     type Item = u8;
 
     /// Shrinks an image from in_width to out_width
@@ -422,7 +471,7 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for Shrink<I> {
         // if there is no reduction in image size then simple return image as-is
         if self.scale <= 1.0 {
             return match self.iter.next() {
-                Some(pixel) => Some(*pixel),
+                Some(pixel) => Some(pixel),
                 None => None,
             };
         }
@@ -439,7 +488,7 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for Shrink<I> {
                 let mut x_div: u16 = 0;
                 while in_x <= *in_x_cap {
                     x_total += match self.iter.next() {
-                        Some(pixel) => *pixel as u16,
+                        Some(pixel) => pixel as u16,
                         None => {
                             self.out_x_last = out_x - 1;
                             0
@@ -467,64 +516,14 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for Shrink<I> {
     }
 }
 
-pub trait ShrinkIterator<'a>: Iterator<Item = &'a u8> + Sized {
+pub trait ShrinkIterator: Iterator<Item = u8> + Sized {
     fn shrink(self, in_width: usize, out_width: usize) -> Shrink<Self> {
         Shrink::new(self, in_width, out_width)
     }
 }
 
-impl<'a, I: Iterator<Item = &'a u8>> ShrinkIterator<'a> for I {}
+impl<I: Iterator<Item = u8>> ShrinkIterator for I {}
 
-// **********************************************************************
-
-/*
- * Image as a minimal flat buffer of grey u8 pixels; accessible by (x, y)
- *
- * author: nworbnhoj
- */
-
-#[derive(Debug)]
-pub struct Img {
-    pub pixels: Vec<u8>,
-    pub width: usize,
-}
-
-impl Img {
-    pub fn new(buf: Vec<u8>, width: usize, px_type: PixelType) -> Self {
-        let px_len = match px_type {
-            PixelType::U8 => buf.len(),
-            PixelType::U8x3 => buf.len() / 3,
-            _ => 0,
-        };
-        let mut pixels: Vec<u8> = Vec::with_capacity(px_len);
-
-        for pixel in buf.iter().to_grey(px_type) {
-            pixels.push(pixel);
-        }
-        Self { pixels, width }
-    }
-    pub fn get(&self, x: usize, y: usize) -> Option<&u8> {
-        let i: usize = (y * self.width) + x;
-        self.pixels.get(i)
-    }
-    pub fn size(&self) -> (usize, usize, usize) {
-        let width: usize = self.width.try_into().unwrap();
-        let length: usize = self.pixels.len().try_into().unwrap();
-        let height: usize = length / width;
-        (width, height, length)
-    }
-    pub fn as_slice(&self) -> &[u8] {
-        self.pixels.as_slice()
-    }
-}
-
-impl Deref for Img {
-    type Target = Vec<u8>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.pixels
-    }
-}
 
 // **********************************************************************
 

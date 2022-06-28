@@ -204,7 +204,7 @@ impl Modals {
             gam::IMG_MODAL_HEIGHT - 2 * BORDER,
         );
 
-        let (w, h, _) = img.size();
+        let (w, h) = (img.width(), img.height());
         let (img_width, img_height) = (w as f32, h as f32);
 
         let portrait_scale = (modal_width as f32 / img_width).min(modal_height as f32 / img_height);
