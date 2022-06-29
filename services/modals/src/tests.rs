@@ -175,19 +175,14 @@ pub fn spawn_test() {
 // https://sequelaencollection.home.blog/2d-chaotic-attractors/
 #[cfg(feature = "ditherpunk")]
 fn clifford() -> Img {
-    // IMW+20, IMW-10 Line (resize + rotate)
-    // IMW-20, IMW-10 OK   ()
-    // IMW+10, IMW+20 Line (resize)
-    // IMH-15 IMW-15 Line (rotate)
-
     // width & height chosen to force resize & rotation
-    const WIDTH: u32 = gam::IMG_MODAL_HEIGHT * 2;
-    const HEIGHT: u32 = gam::IMG_MODAL_WIDTH * 2;
+    const WIDTH: u32 = gam::IMG_MODAL_HEIGHT + 2;
+    const HEIGHT: u32 = gam::IMG_MODAL_WIDTH + 2;
     const X_CENTER: f32 = (WIDTH / 2) as f32;
     const Y_CENTER: f32 = (HEIGHT / 2) as f32;
-    const SCALE: f32 = WIDTH as f32 / 5.1; //70.0;
-    const STEP: u8 = 32;
-    const ITERATIONS: u32 = 400000;
+    const SCALE: f32 = WIDTH as f32 / 5.1;
+    const STEP: u8 = 16;
+    const ITERATIONS: u32 = 200000;
     let mut buf = vec![255u8; (WIDTH * HEIGHT).try_into().unwrap()];
     let (a, b, c, d) = (-2.0, -2.4, 1.1, -0.9);
     let (mut x, mut y): (f32, f32) = (0.0, 0.0);
