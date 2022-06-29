@@ -31,7 +31,8 @@ impl<'a> ShellCmdApi<'a> for Usb {
                 }
                 "debug" => {
                     self.usb_dev.switch_to_core(usb_device_xous::UsbDeviceType::Debug).unwrap();
-                    write!(ret, "USB connected to Debug core").unwrap();
+                    self.usb_dev.debug_usb(Some(false)).unwrap();
+                    write!(ret, "USB connected to Debug core, secrets readable!").unwrap();
                 }
                 "send" => {
                     match self.usb_dev.get_current_core() {

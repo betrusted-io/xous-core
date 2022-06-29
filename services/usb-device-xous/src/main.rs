@@ -112,6 +112,9 @@ fn main() -> ! {
                         // block any rx requests forever
                         fido_listener = Some(msg);
                     }
+                    Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
+                    }),
                     Some(Opcode::Quit) => {
                         break;
                     }
@@ -177,7 +180,7 @@ fn main() -> ! {
     {
         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
         keyboard.write_report(&Vec::<Keyboard>::new()).ok();
-        keyboard.tick().unwrap();
+        keyboard.tick().ok();
     }
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -193,12 +196,25 @@ fn main() -> ! {
     let mut was_suspend = true;
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 usbmgmt.xous_suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                usbmgmt.xous_resume();
+                // resume1 + reset brings us to an initialized state
+                usbmgmt.xous_resume1();
+                #[cfg(any(target_os = "none", target_os = "xous"))]
+                match usb_dev.force_reset() {
+                    Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                    _ => ()
+                };
+                // resume2 brings us to our last application state
+                usbmgmt.xous_resume2();
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
+            }),
+            Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, 1).expect("couldn't return compatibility status")
             }),
             Some(Opcode::U2fRxDeferred) => {
                 if fido_listener_pid.is_none() {
@@ -262,6 +278,7 @@ fn main() -> ! {
                         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                         match keyboard.read_report() {
                             Ok(l) => {
+                                log::info!("keyboard LEDs: {:?}", l);
                                 led_state = l;
                             }
                             Err(e) => log::trace!("KEYB ERR: {:?}", e),
@@ -315,6 +332,20 @@ fn main() -> ! {
                 } else {
                     log::info!("Connecting debug core; disconnecting USB device core");
                     usbmgmt.connect_device_core(false);
+                }
+                xous::return_scalar(msg.sender, 0).unwrap();
+            }),
+            Some(Opcode::EnsureCore) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
+                if core == 1 {
+                    if !usbmgmt.is_device_connected() {
+                        log::info!("Connecting USB device core; disconnecting debug USB core");
+                        usbmgmt.connect_device_core(true);
+                    }
+                } else {
+                    if usbmgmt.is_device_connected() {
+                        log::info!("Connecting debug core; disconnecting USB device core");
+                        usbmgmt.connect_device_core(false);
+                    }
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
@@ -393,11 +424,11 @@ fn main() -> ! {
                     {
                         let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                         keyboard.write_report(&codes).ok();
-                        keyboard.tick().unwrap();
+                        keyboard.tick().ok();
                         tt.sleep_ms(30).ok();
                         if auto_up {
                             keyboard.write_report(&[]).ok(); // this is the key-up
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                         }
                     }
@@ -429,10 +460,10 @@ fn main() -> ! {
                         {
                             let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
                             keyboard.write_report(&codes).ok();
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                             keyboard.write_report(&[]).ok(); // this is the key-up
-                            keyboard.tick().unwrap();
+                            keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
                         }
                         sent += 1;

@@ -608,7 +608,7 @@ fn main() -> ! {
                     if !suspend_requested {
                         // this is harmless, it means a process' execution gate came a bit later than expected, so just ignore and tell it to resume
                         // the execution gate is only requested until *after* a process has checked in and said it is ready to suspend, anyways.
-                        log::warn!("exec gate message received late, ignoring");
+                        log::warn!("exec gate message received late from pid {:?}, ignoring", msg.sender.pid());
                         xous::return_scalar(msg.sender, 0).expect("couldn't return dummy message to unblock execution");
                     } else {
                         gated_pids.push(msg.sender);

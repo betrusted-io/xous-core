@@ -472,9 +472,9 @@ impl<'a> Modal<'a> {
                     self.modify(None, None, false, Some(err_msg.to_str()), false, None);
                 } else {
                     if close {
-                        log::debug!("closing modal");
                         // if it's a "close" button, invoke the GAM to put our box away
                         self.gam.relinquish_focus().unwrap();
+                        xous::yield_slice();
                         break; // don't process any more keys after a close message
                     }
                 }

@@ -56,10 +56,12 @@ pub(crate) struct UxContext {
     /// a putative human-readable name given to the context. The name itself is stored in the TokenManager, not in this struct.
     /// Passed to the TokenManager to compute a trust level; add the app's name to tokens.rs EXPECTED_BOOT_CONTEXTS if you want this to succeed.
     pub app_token: [u32; 4], // shared with the app, can be used for other auths to other servers (e.g. audio codec)
-    /// a token associated with the UxContext, but private to the GAM (not shared with the app). [currently no use for this, just seems like a good idea...]
+    /// a token associated with the UxContext, but private to the GAM (not shared with the app). (used by predictor to set API tokens)
     pub gam_token: [u32; 4],
     /// set to true if keyboard vibrate is turned on
     pub vibe: bool,
+    /// API token for the predictor. Allows our prediction history to be shown only when our context is active.
+    pub pred_token: Option<[u32; 4]>,
 
     /// CID to send ContextEvents
     pub listener: xous::CID,
@@ -157,6 +159,8 @@ impl ContextManager {
                         rawkeys_id: None,
                         vibe: false,
                         imef_menu_mode: false,
+                        // this gets initialized on the first attempt to change predictors, not here
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                 },
@@ -179,6 +183,7 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                         imef_menu_mode: false,
+                        pred_token: None,
                     };
 
                     if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
@@ -207,6 +212,7 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                         imef_menu_mode: false,
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                     // this check gives permissions to password boxes to render inverted text
@@ -235,6 +241,7 @@ impl ContextManager {
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
                         imef_menu_mode: false,
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                 }
@@ -321,8 +328,9 @@ impl ContextManager {
         let mut leaving_visibility: bool = false;
         {
             // using a temp copy of the old focus, check if we need to update any visibility state
-            let maybe_leaving_focused_context = if self.focused_context.is_some() {
-                if let Some(old_context) = self.get_context_by_token(self.focused_context.unwrap()) {
+            let maybe_leaving_focused_context = if let Some(focused_token) = self.focused_context {
+                log::debug!("leaving {:?}", self.tm.lookup_name(&focused_token));
+                if let Some(old_context) = self.get_context_by_token(focused_token) {
                     Some(old_context.clone())
                 } else {
                     None
@@ -330,6 +338,7 @@ impl ContextManager {
             } else {
                 None
             };
+            log::debug!("entering {:?}", self.tm.lookup_name(&token));
             let maybe_new_focus = self.get_context_by_token_mut(token);
             log::trace!("resolving visibility rules");
             if let Some(context) = maybe_new_focus {
@@ -403,12 +412,14 @@ impl ContextManager {
                             },
                         predictor: context.predictor,
                         token: context.gam_token,
+                        predictor_token: context.pred_token,
                     };
+                    log::debug!("context gam token: {:?}, pred token: {:?}", context.gam_token, context.pred_token);
                     self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
                     self.imef_active = true;
                 } else {
                     self.imef_active = false;
-                }
+                };
 
                 // now recompute the drawability of canvases, based on on-screen visibility and trust state
                 recompute_canvases(canvases);
@@ -419,10 +430,10 @@ impl ContextManager {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
             if let Some(context) = maybe_new_focus {
+                self.imef.set_menu_mode(context.imef_menu_mode).expect("couldn't set menu mode");
                 if clear {
                     context.layout.clear(gfx, canvases).expect("can't clear on context activation");
                 }
-                // now update the IMEF area, since we're initialized
                 // note: we may need to skip this call if the context does not utilize a predictor...
                 if context.predictor.is_some() {
                     log::debug!("calling IMEF redraw");
@@ -431,7 +442,6 @@ impl ContextManager {
 
                 // revert the keyboard vibe state
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
-                self.imef.set_menu_mode(context.imef_menu_mode).expect("couldn't set menu mode");
 
                 log::trace!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
@@ -446,6 +456,15 @@ impl ContextManager {
             self.redraw().expect("couldn't redraw the currently focused app");
         }
         Ok(())
+    }
+    pub(crate) fn set_pred_api_token(&mut self, at: ApiToken) {
+        for context in self.contexts.values_mut() {
+            if context.gam_token == at.gam_token {
+                log::debug!("setting {:?} token to {:?}", at.gam_token, at.api_token);
+                context.pred_token = Some(at.api_token);
+                break;
+            }
+        }
     }
     pub(crate) fn revert_focus(&mut self,
         gfx: &graphics_server::Gfx,

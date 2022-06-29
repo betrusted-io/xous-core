@@ -93,10 +93,12 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 fn main () -> ! {
+    #[cfg(not(feature="ditherpunk"))]
+    wrapped_main();
+
     #[cfg(feature="ditherpunk")]
     let stack_size = 1024 * 1024;
-    #[cfg(not(feature="ditherpunk"))]
-    let stack_size = 128 * 1024;
+    #[cfg(feature="ditherpunk")]
     std::thread::Builder::new()
         .stack_size(stack_size)
         .spawn(wrapped_main)
@@ -128,8 +130,13 @@ fn wrapped_main() -> ! {
     // these connections should be established:
     // - GAM
     // - keyrom (for verifying font maps)
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
+        .expect("can't register server");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let sid = xns
+        .register_name(api::SERVER_NAME_GFX, Some(1))
         .expect("can't register server");
 
     draw_boot_logo(&mut display);

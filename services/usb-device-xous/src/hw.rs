@@ -1,8 +1,7 @@
-use susres::{ManagedMem, SuspendResume};
 use usb_device::bus::PollResult;
 use utralib::generated::*;
 use crate::*;
-use core::sync::atomic::{AtomicPtr, Ordering, AtomicUsize, AtomicU16};
+use core::{sync::atomic::{AtomicPtr, Ordering, AtomicUsize, AtomicU16}, mem::size_of};
 use std::sync::{Arc, Mutex};
 use usb_device::{class_prelude::*, Result, UsbDirection};
 use std::collections::BTreeMap;
@@ -25,7 +24,10 @@ pub struct SpinalUsbMgmt {
     csr: AtomicCsr<u32>, // consider using VolatileCell and/or refactory AtomicCsr so it is non-mutable
     usb: AtomicPtr<u8>,
     eps: AtomicPtr<UdcEpStatus>,
-    srmem: ManagedMem<{ utralib::generated::HW_USBDEV_MEM_LEN / core::mem::size_of::<u32>() }>,
+    // can't use the srmem macro because the memory region window is not exactly the size of the memory to be stored.
+    sr_descs: [u32; crate::END_OFFSET as usize / size_of::<u32>()],
+    sr_debug: bool,
+    sr_core: bool,
     regs: SpinalUdcRegs,
     tt: ticktimer_server::Ticktimer,
 }
@@ -49,15 +51,16 @@ impl SpinalUsbMgmt {
                 }
             }
         }
-        log::trace!("frame id: {}", self.regs.frame_id());
+        log::debug!("frame id: {}", self.regs.frame_id());
         log::debug!("usb addr: {}", self.regs.address());
         log::debug!("ints: {:x?}", self.regs.interrupts());
-        log::trace!("halt: 0x{:x?}", self.regs.halt());
-        log::trace!("config: 0x{:x?}", self.regs.config());
-        log::trace!("ramsize: {}", self.regs.ramsize());
+        log::debug!("halt: 0x{:x?}", self.regs.halt());
+        log::debug!("config: 0x{:x?}", self.regs.config());
+        log::debug!("ramsize: {}", self.regs.ramsize());
         assert!(4096 == self.regs.ramsize(), "hardware ramsize parameter does not match our expectations");
     }
     pub fn connect_device_core(&mut self, state: bool) {
+        self.sr_core = state;
         log::trace!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_SELECT_DEVICE));
         self.csr.rmwf(utra::usbdev::USBSELECT_FORCE_RESET, 1);
         // give some time for the host to recognize that we've unplugged before swapping our behavior out
@@ -94,15 +97,43 @@ impl SpinalUsbMgmt {
         }
     }
     pub fn xous_suspend(&mut self) {
+        // log::set_max_level(log::LevelFilter::Debug);
+        // self.print_regs();
+        // the core select state is updated in `connect_device_core`, we don't update it here
+        // but we do record the debug state.
+        self.sr_debug = self.get_disable_debug();
         self.csr.wo(utra::usbdev::EV_PENDING, 0xFFFF_FFFF);
         self.csr.wo(utra::usbdev::EV_ENABLE, 0x0);
-        self.srmem.suspend();
+        // the descriptor window is manually managed because the sr macro does the whole window
+        // it turns out only the bottom 4k is relevant; the actual state registers should be
+        // the naive reset values by right, because we would be entering into this from a
+        // "reset"/disconnected state anyways
+        let ptr = self.usb.load(Ordering::SeqCst) as *const u32;
+        for (index, d) in self.sr_descs.iter_mut().enumerate() {
+            *d = unsafe{ptr.add(index).read_volatile()};
+        }
     }
-    pub fn xous_resume(&mut self) {
-        self.srmem.resume();
+    pub fn xous_resume1(&mut self) {
+        self.regs.clear_all_interrupts();
         let p = self.csr.r(utra::usbdev::EV_PENDING); // this has to be expanded out because AtomicPtr is potentially mutable on read
         self.csr.wo(utra::usbdev::EV_PENDING, p); // clear in case it's pending for some reason
         self.csr.wfo(utra::usbdev::EV_ENABLE_USB, 1);
+
+        let mut cfg = UdcConfig(0);
+        cfg.set_pullup_on(true); // required for proper operation
+        self.regs.set_config(cfg);
+
+        let ptr = self.usb.load(Ordering::SeqCst) as *mut u32;
+        for (index, &s) in self.sr_descs.iter().enumerate() {
+            unsafe{ptr.add(index).write_volatile(s)};
+        }
+        self.regs.clear_all_interrupts();
+        // self.print_regs();
+        // log::set_max_level(log::LevelFilter::Info);
+    }
+    pub fn xous_resume2(&mut self) {
+        self.disable_debug(self.sr_debug);
+        self.connect_device_core(self.sr_core);
     }
     #[allow(dead_code)]
     pub fn descriptor_from_status(&self, ep_status: &UdcEpStatus) -> SpinalUdcDescriptor {
@@ -201,7 +232,9 @@ impl SpinalUsbDevice {
             eps: AtomicPtr::new(unsafe {
                 (self.usb.as_mut_ptr().add(0x00) as *mut UdcEpStatus).as_mut().unwrap()
             }),
-            srmem: ManagedMem::new(self.usb),
+            sr_descs: [0u32; crate::END_OFFSET as usize / size_of::<u32>()],
+            sr_core: false, // device core is not selected by default
+            sr_debug: true, // debug is enabled by default
             regs: self.regs.clone(),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
         }

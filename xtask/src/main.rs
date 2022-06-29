@@ -415,6 +415,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&[
                     "--features", "pddbtest",
                     "--features", "ditherpunk",
+                    "--features", "tracking-alloc",
                 ]), false)?
         }
         Some("hosted-ci") => {

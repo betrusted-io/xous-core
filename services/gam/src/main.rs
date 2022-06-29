@@ -6,6 +6,7 @@ use api::*;
 mod canvas;
 use canvas::*;
 mod tokens;
+use ime_plugin_api::ApiToken;
 use tokens::*;
 mod layouts;
 use layouts::*;
@@ -35,10 +36,12 @@ fn imef_cb(s: String::<4000>) {
     }
 }
 fn main () -> ! {
+    #[cfg(not(feature="ditherpunk"))]
+    wrapped_main();
+
     #[cfg(feature="ditherpunk")]
     let stack_size = 1024 * 1024;
-    #[cfg(not(feature="ditherpunk"))]
-    let stack_size = 128 * 1024;
+    #[cfg(feature="ditherpunk")]
     std::thread::Builder::new()
         .stack_size(stack_size)
         .spawn(wrapped_main)
@@ -442,6 +445,11 @@ fn wrapped_main() -> ! {
                 tokenclaim.token = context_mgr.claim_token(tokenclaim.name.as_str().unwrap());
                 buffer.replace(tokenclaim).unwrap();
             },
+            Some(Opcode::PredictorApiToken) => {
+                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let at = buf.to_original::<ApiToken, _>().unwrap();
+                context_mgr.set_pred_api_token(at);
+            },
             Some(Opcode::TrustedInitDone) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if context_mgr.allow_untrusted_code() {
                     xous::return_scalar(msg.sender, 1).unwrap();
@@ -496,7 +504,10 @@ fn wrapped_main() -> ! {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let inputline = buffer.to_original::<String::<4000>, _>().unwrap();
                 log::debug!("received input line, forwarding on... {}", inputline);
-                context_mgr.forward_input(inputline).expect("couldn't forward input line to focused app");
+                match context_mgr.forward_input(inputline) {
+                    Err(e) => log::warn!("InputLine missed its target {:?}; input ignored", e),
+                    _ => (),
+                }
                 log::debug!("returned from forward_input");
             },
             Some(Opcode::KeyboardEvent) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
@@ -524,7 +535,8 @@ fn wrapped_main() -> ! {
             },
             Some(Opcode::RevertFocusNb) => {
                 match context_mgr.revert_focus(&gfx, &mut canvases) {
-                    _ => log::warn!("failed to revert focus, silent error!"),
+                    Ok(_) => {},
+                    Err(e) => log::warn!("failed to revert focus: {:?}", e),
                 }
             },
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {

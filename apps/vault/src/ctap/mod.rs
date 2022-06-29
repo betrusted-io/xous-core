@@ -22,7 +22,7 @@ mod key_material;
 mod pin_protocol_v1;
 pub mod response;
 pub mod status_code;
-mod storage;
+pub mod storage;
 mod timed_permission;
 
 #[cfg(feature = "with_ctap2_1")]
@@ -121,6 +121,8 @@ pub const ES256_CRED_PARAM: PublicKeyCredentialParameter = PublicKeyCredentialPa
 // - Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIdList)
 // - Some(CredentialProtectionPolicy::UserVerificationRequired)
 const DEFAULT_CRED_PROTECT: Option<CredentialProtectionPolicy> = None;
+
+pub(crate) const FIDO_CRED_DICT: &'static str = "fido.cred";
 
 // This function is adapted from https://doc.rust-lang.org/nightly/src/core/str/mod.rs.html#2110
 // (as of 2020-01-20) and truncates to "max" bytes, not breaking the encoding.
