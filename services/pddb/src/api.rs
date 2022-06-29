@@ -85,82 +85,88 @@ pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWA
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
-    IsMounted,
-    TryMount,
+    IsMounted = 0,
+    TryMount = 1,
 
-    ListBasis,
-    LatestBasis,
+    ListBasis = 2,
+    LatestBasis = 3,
     /// Note that creating a basis does not automatically open it!
-    CreateBasis,
-    OpenBasis,
-    CloseBasis,
+    CreateBasis = 4,
+    OpenBasis = 5,
+    CloseBasis = 6,
     /// warning, the Delete routines have not been well tested
-    DeleteBasis,
-    DeleteKey,
-    DeleteDict,
-    KeyAttributes,
+    DeleteBasis = 7,
+    DeleteKey = 8,
+    DeleteDict = 9,
+    KeyAttributes = 10,
 
     // routines to list available resources
-    KeyCountInDict,
-    GetKeyNameAtIndex,
-    DictCountInBasis,
-    GetDictNameAtIndex,
+    KeyCountInDict = 11,
+    GetKeyNameAtIndex = 12,
+    DictCountInBasis = 13,
+    GetDictNameAtIndex = 14,
 
     /// primary method for accessing the database
-    KeyRequest,
+    KeyRequest = 15,
 
     // pddbkey methods
-    ReadKey,
-    WriteKey,
-    WriteKeyFlush,
+    ReadKey = 16,
+    WriteKey = 17,
+    WriteKeyFlush = 18,
 
     // GC methods
-    PeriodicScrub,
+    PeriodicScrub = 19,
 
     /// drops any connection state associated with a given key
-    KeyDrop,
+    KeyDrop = 20,
 
     /// Menu opcodes
-    MenuListBasis,
+    MenuListBasis = 21,
 
     /// Security state checks
-    IsEfuseSecured,
+    IsEfuseSecured = 22,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 23,
     /// quit the server
-    Quit,
+    Quit = 24,
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    DangerousDebug,
+    DangerousDebug = 25,
+
+    /// This key type could not be decoded
+    InvalidOpcode = u32::MAX as _,
 }
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum PollOp {
-    Poll,
-    Quit,
+    Poll = 0,
+    Quit = 1,
 }
 
 pub type ApiToken = [u32; 3];
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C)]
 pub struct PddbBasisList {
     /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
     pub list: [xous_ipc::String::<BASIS_NAME_LEN>; 63],
     /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
     pub num: u32,
 }
+
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum PddbRequestCode {
-    Create,
-    Open,
-    Close,
-    Delete,
-    NoErr,
-    NotMounted,
-    NoFreeSpace,
-    NotFound,
-    InternalError,
-    AccessDenied,
-    Uninit,
+    Create = 0,
+    Open = 1,
+    Close = 2,
+    Delete = 3,
+    NoErr = 4,
+    NotMounted = 5,
+    NoFreeSpace = 6,
+    NotFound = 7,
+    InternalError = 8,
+    AccessDenied = 9,
+    Uninit = 10,
 }
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -222,26 +228,31 @@ pub(crate) enum PddbRetcode {
     InternalError = 5,
     DiskFull = 6,
 }
+
 /// PddbBuf is a C-representation of a page of memory that's used
 /// to shuttle data for streaming channels. It must be exactly one
 /// page in size, with some overhead specific to the PDDB book-keeping
 /// at the top, and the remainder available for shuttling data.
-///
-/// It does not use rkyv, as the blanket implementation of that tends to
-/// incur too many extra copies an/or zeroing operations.
-#[repr(C, packed)]
+#[repr(C, align(4096))]
 pub(crate) struct PddbBuf {
     /// api token for the given buffer
     pub(crate) token: ApiToken,
-    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
-    pub(crate) position: u64,
-    /// length of the data field
-    pub(crate) len: u16,
     /// a field reserved for the return code
     pub(crate) retcode: PddbRetcode,
-    pub(crate) reserved: u8,
+    reserved: u8,
+    /// length of the data field
+    pub(crate) len: u16,
+    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
+    pub(crate) position: u64,
     pub(crate) data: [u8; 4072],
 }
+
+#[allow(dead_code)]
+/// Ensure that the `PddbBuf` struct is exactly one page big
+const fn _assert_pddbbuf_is_4096_bytes() {
+    unsafe { core::mem::transmute::<_, PddbBuf>([0u8; 4096]); }
+}
+
 impl PddbBuf {
     pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
         // this transforms the slice [u8] into a PddbBuf ref.
@@ -342,8 +353,8 @@ pub struct PddbDangerousDebug {
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum DebugRequest {
-    Dump,
-    Remount,
+    Dump = 0,
+    Remount = 1,
 }
 
 #[cfg(test)]

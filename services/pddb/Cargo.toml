@@ -24,8 +24,8 @@ aes = {path="../aes"}
 root-keys = {path="../root-keys"}
 cipher = "0.4.2"
 bitfield = "0.13.2"
-#aes-gcm-siv = {version = "0.10.3", default-features = false, features = ["alloc"]}
-aes-gcm-siv = {git="https://github.com/rozbb/AEADs.git", branch="update-cipher"}
+# aes-gcm-siv = {version = "0.11.0-pre", default-features = false, features = ["alloc"]}
+aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 llio = {path="../llio"}
 subtle = {version = "2.4.1", default-features = false}
 tts-frontend = {path="../tts"}

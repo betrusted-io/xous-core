@@ -717,8 +717,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     MemoryRange::new(
                         start,
                         // 0-length MemoryRanges are disallowed -- so return 4096 as the minimum in any case, even though it's a lie
-                    if length == 0 { 4096 } else { length }
-                    ).unwrap()
+                        if length == 0 { 4096 } else { length },
+                    )
+                    .unwrap()
                 }));
             }
 
@@ -920,6 +921,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             MemoryManager::with_mut(|mm| mm.update_memory_flags(range, flags))?;
             Ok(xous_kernel::Result::Ok)
         }
+        SysCall::AdjustProcessLimit(index, current, new) => match index {
+            1 => arch::process::Process::with_inner_mut(|p| {
+                if p.mem_heap_max == current {
+                    p.mem_heap_max = new;
+                }
+                Ok(xous_kernel::Result::Scalar2(index, p.mem_heap_max))
+            }),
+            2 => arch::process::Process::with_inner_mut(|p| {
+                if p.mem_heap_size == current && new < p.mem_heap_max {
+                    p.mem_heap_size = new;
+                }
+                Ok(xous_kernel::Result::Scalar2(index, p.mem_heap_size))
+            }),
+            _ => Err(xous_kernel::Error::InvalidLimit),
+        },
         /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
             ss.set_exception_handler(pid, pc, sp)

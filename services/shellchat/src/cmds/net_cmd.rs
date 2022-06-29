@@ -289,6 +289,43 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
                 #[cfg(feature="ditherpunk")]
                 "image" => {
+                    let new_limit = 2048 * 1024;
+                    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+                        xous::Limits::HeapMaximum as usize,
+                        0,
+                        new_limit,
+                    ));
+
+                    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
+                        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+                            xous::Limits::HeapMaximum as usize,
+                            current_limit,
+                            new_limit,
+                        ))
+                        .unwrap();
+                        log::info!("Our new heap is: {}", new_limit);
+                    } else {
+                        panic!("Unsupported syscall!");
+                    }
+
+                    #[cfg(feature="tracking-alloc")]
+                    use tracking_allocator::{
+                        AllocationGroupToken, AllocationRegistry,
+                    };
+                    #[cfg(feature="tracking-alloc")]
+                    use crate::StdoutTracker;
+                    #[cfg(feature="tracking-alloc")]
+                    let mut local_token = {
+                        let _ = AllocationRegistry::set_global_tracker(StdoutTracker{total: core::sync::atomic::AtomicIsize::new(0)})
+                        .expect("no other global tracker should be set yet");
+
+                        AllocationRegistry::enable_tracking();
+                        AllocationGroupToken::register().expect("failed to register allocation group")
+                    };
+
+                    #[cfg(feature="tracking-alloc")]
+                    let local_guard = local_token.enter();
+
                     // use std::io::BufRead; // not implemented yet!
                     if let Some(url) = tokens.next() {
                         match url.split_once('/') {
@@ -410,6 +447,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     } else {
                         write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap();
                     }
+                    #[cfg(feature="tracking-alloc")]
+                    drop(local_guard);
+                    #[cfg(feature="tracking-alloc")]
+                    AllocationRegistry::disable_tracking();
                 }
                 "tls" => {
                     write!(ret, "Work in progress. Please check back later!").unwrap();

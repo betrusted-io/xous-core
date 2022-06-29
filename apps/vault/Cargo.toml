@@ -20,6 +20,8 @@ usb-device-xous = {path="../../services/usb-device-xous"}
 usbd-human-interface-device = "0.2.1"
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
+trng = {path="../../services/trng"}
+susres = {path = "../../services/susres"}
 
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
@@ -35,6 +37,22 @@ ticktimer-server = {path = "../../services/ticktimer-server"}
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 chrono = {version = "0.4.19", default-features = false, features = ["std"]}
 
+# password generation
+passwords = "3.1.9"
+
+# totp
+crypto-mac = "0.11.1"
+sha-1 = "0.9.8"
+hmac = "0.11.0"
+digest = "0.9.0"
+base32 = "0.4.0"
+sha2 = {path="../../services/engine-sha512"}
+sntpc = {version = "0.3.1"}
+net = {path="../../services/net"}
+com_rs-ref = {path = "../../imports/com_rs-ref"}
+
+# testing
+random-pick = {version = "1.2.15", optional = true}
 [dev-dependencies]
 enum-iterator = "0.6.0"
 
@@ -44,4 +62,5 @@ with_ctap1 = ["ctap-crypto/with_ctap1"]
 with_ctap2_1 = []
 autotest = []
 multireset = [] # allows credential reset more than once per boot
-default = ["with_ctap1", "with_ctap2_1"]
+default = ["with_ctap1", "with_ctap2_1", "testing"]
+testing = ["random-pick"]

@@ -109,6 +109,7 @@ mod implementation {
         jtag: jtag::Jtag,
         xns: xous_names::XousNames,
         ticktimer: ticktimer_server::Ticktimer,
+        gam: gam::Gam,
     }
 
     #[allow(dead_code)]
@@ -118,10 +119,11 @@ mod implementation {
             let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to jtag server");
             RootKeys {
                 password_type: None,
-                xns,
                 // must occupy tihs connection for the system to boot properly
                 jtag,
                 ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+                gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
+                xns,
             }
         }
         pub fn suspend(&self) {
@@ -165,12 +167,15 @@ mod implementation {
             Ok(())
         }
         pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.setup_wait", xous::LANG))
         }
         pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, _provision_bbram: bool) -> Result<(), RootkeyResult> {
+            self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", xous::LANG))
         }
         pub fn do_sign_xous(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.init.signing_kernel", xous::LANG))
         }
         pub fn purge_password(&mut self, _ptype: PasswordType) {}
@@ -290,6 +295,24 @@ mod implementation {
                             kwp.result = Some(e);
                         }
                     }
+                }
+            }
+        }
+        fn xous_init_interlock(&self) {
+            loop {
+                if self.xns.trusted_init_done().expect("couldn't query init done status on xous-names") {
+                    break;
+                } else {
+                    log::warn!("trusted init of xous-names not finished, rootkeys is holding off on sensitive operations");
+                    self.ticktimer.sleep_ms(650).expect("couldn't sleep");
+                }
+            }
+            loop {
+                if self.gam.trusted_init_done().expect("couldn't query init done status on GAM") {
+                    break;
+                } else {
+                    log::warn!("trusted init of GAM not finished, rootkeys is holding off on sensitive operations");
+                    self.ticktimer.sleep_ms(650).expect("couldn't sleep");
                 }
             }
         }

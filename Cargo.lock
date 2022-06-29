@@ -35,22 +35,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "aes"
-version = "0.8.1"
-source = "git+https://github.com/rozbb/block-ciphers.git?branch=parblocks-impls#f16732be15633abb059a1fbba20cabe5acee7d18"
-dependencies = [
- "cfg-if 1.0.0",
- "cipher 0.4.3",
- "cpufeatures",
-]
-
-[[package]]
 name = "aes-gcm-siv"
-version = "0.10.3"
-source = "git+https://github.com/rozbb/AEADs.git?branch=update-cipher#2f9297f39e4e12beea9bf8e8f38ea4c5a35a8a9e"
+version = "0.11.0-pre"
+source = "git+https://github.com/RustCrypto/AEADs.git?branch=master#479ae5f8f37d265847da80c4e713597c2c4813ac"
 dependencies = [
  "aead",
- "aes 0.8.1 (git+https://github.com/rozbb/block-ciphers.git?branch=parblocks-impls)",
+ "aes",
  "cipher 0.4.3",
  "ctr",
  "polyval",
@@ -163,6 +153,12 @@ name = "base16ct"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349a06037c7bf932dd7e7d1f653678b2038b9ad46a74102f1fc7bd7872678cce"
+
+[[package]]
+name = "base32"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
 
 [[package]]
 name = "base64"
@@ -752,7 +748,7 @@ dependencies = [
 name = "ctap-crypto"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "arrayref",
  "byteorder",
  "cbc",
@@ -2327,6 +2323,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "passwords"
+version = "3.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5dee744d341c868910c3f97727c610c9ef781fde5a5621f238163dccb7dee5c"
+dependencies = [
+ "random-pick",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2336,7 +2341,7 @@ checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
 name = "pddb"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "aes-gcm-siv",
  "bitfield",
  "bitflags",
@@ -2476,6 +2481,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 
 [[package]]
+name = "proc-macro-hack"
+version = "0.5.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2612,6 +2623,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
  "rand_core 0.5.1",
+]
+
+[[package]]
+name = "random-number"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb9c434a752bd6bde0199f771763c89e4870c2cb159ddafacd19948588477379"
+dependencies = [
+ "proc-macro-hack",
+ "rand 0.8.5",
+ "random-number-macro-impl",
+]
+
+[[package]]
+name = "random-number-macro-impl"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99f50024fe705be34d953ca47f4617ce3a665caa1011f14a48e6a8a6ec911f0f"
+dependencies = [
+ "proc-macro-hack",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "random-pick"
+version = "1.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6239a2a71f5519a5f9f1c97ec04d7dc10292683408e720189ca839f271ba25d2"
+dependencies = [
+ "random-number",
 ]
 
 [[package]]
@@ -2814,7 +2856,7 @@ dependencies = [
 name = "root-keys"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "blowfish 0.8.0",
  "byteorder",
  "cipher 0.4.3",
@@ -3060,6 +3102,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha-1"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99cd6713db3cf16b6c84e06321e049a9b9f699826e16096d23bbcc44d15d51a6"
+dependencies = [
+ "block-buffer 0.9.0",
+ "cfg-if 1.0.0",
+ "cpufeatures",
+ "digest 0.9.0",
+ "opaque-debug",
+]
+
+[[package]]
 name = "sha2"
 version = "0.9.8"
 dependencies = [
@@ -3091,10 +3146,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sharded-slab"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "900fba806f70c630b0a382d0d825e17a0f19fcd059a2ade1ff237bcddf446b31"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
- "aes 0.8.1",
+ "aes",
  "chrono",
  "cipher 0.3.0",
  "codec",
@@ -3133,6 +3197,9 @@ dependencies = [
  "susres",
  "threadpool",
  "ticktimer-server",
+ "tracing",
+ "tracing-subscriber",
+ "tracking-allocator",
  "trng",
  "tts-frontend",
  "usb-device-xous",
@@ -3445,6 +3512,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5516c27b78311c50bf42c071425c560ac799b11c30b31f87e3081965fe5e0180"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
 name = "threadpool"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3528,6 +3604,74 @@ dependencies = [
  "ring",
  "svd2utra",
  "xmas-elf",
+]
+
+[[package]]
+name = "tracing"
+version = "0.1.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a400e31aa60b9d44a52a8ee0343b5b18566b03a8321e0d321f695cf56e940160"
+dependencies = [
+ "cfg-if 1.0.0",
+ "pin-project-lite",
+ "tracing-attributes",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-attributes"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc6b8ad3567499f98a1db7a752b07a7c8c7c7c34c332ec00effb2b0027974b7c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "tracing-core"
+version = "0.1.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7709595b8878a4965ce5e87ebf880a7d39c9afc6837721b21a5a816a8117d921"
+dependencies = [
+ "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-log"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78ddad33d2d10b1ed7eb9d1f518a5674713876e97e5bb9b7345a7984fbb4f922"
+dependencies = [
+ "lazy_static",
+ "log",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-subscriber"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bc28f93baff38037f64e6f43d34cfa1605f27a49c34e8a04c5e78b0babf2596"
+dependencies = [
+ "ansi_term",
+ "sharded-slab",
+ "smallvec",
+ "thread_local",
+ "tracing-core",
+ "tracing-log",
+]
+
+[[package]]
+name = "tracking-allocator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa201e9faf2265fff28d9be73e71bee5fc51fc9b46d1107e2874dec9c75b5e72"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3755,31 +3899,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "valuable"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
+
+[[package]]
 name = "vault"
 version = "0.1.0"
 dependencies = [
  "arrayref",
+ "base32",
  "byteorder",
  "cbor",
  "chrono",
+ "com_rs-ref",
  "content-plugin-api",
+ "crypto-mac",
  "ctap-crypto",
+ "digest 0.9.0",
  "enum-iterator",
  "gam",
  "graphics-server",
  "hex 0.4.3",
+ "hmac 0.11.0",
  "ime-plugin-api",
  "locales",
  "log",
  "log-server",
  "modals",
+ "net",
  "num-derive",
  "num-traits",
+ "passwords",
  "pddb",
  "rand_core 0.6.3",
+ "random-pick",
  "rkyv",
+ "sha-1",
+ "sha2",
+ "sntpc",
  "subtle",
+ "susres",
  "ticktimer-server",
+ "trng",
  "tts-frontend",
  "usb-device-xous",
  "usbd-human-interface-device 0.2.1",

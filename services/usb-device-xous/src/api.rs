@@ -12,6 +12,8 @@ pub(crate) enum Opcode {
     GetLedState,
     /// Switch to a specified device core
     SwitchCores,
+    /// Makes sure a given core is selected
+    EnsureCore,
     /// Check which core is connected
     WhichCore,
     /// Restrict the debug core
@@ -25,6 +27,9 @@ pub(crate) enum Opcode {
     U2fTx,
     /// Blocks the caller, waiting for a U2F message
     U2fRxDeferred,
+
+    /// Query if the HID driver was able to start
+    IsSocCompatible,
 
     /// Handle the USB interrupt
     UsbIrqHandler,

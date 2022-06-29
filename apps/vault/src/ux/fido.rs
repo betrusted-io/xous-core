@@ -7,8 +7,7 @@ use locales::t;
 use crate::ctap::hid::{CtapHid, KeepaliveStatus};
 use usbd_human_interface_device::device::fido::RawFidoMsg;
 use std::io::{Write, Read};
-use chrono::{Utc, DateTime, NaiveDateTime};
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::ux::utc_now;
 
 // conceptual note: this UX conflates both the U2F and the FIDO2 paths.
 // - U2F is a polled implementation, where the state goes from Idle->Prompt->Present
@@ -182,7 +181,7 @@ pub(crate) fn start_fido_ux_thread() {
                                         U2F_APP_DICT,
                                         &app_id_str,
                                         None, true, false,
-                                        Some(256), None::<fn()>
+                                        Some(256), Some(crate::basis_change)
                                     ) {
                                         Ok(mut app_data) => {
                                             let app_attr = app_data.attributes().unwrap();
@@ -279,43 +278,9 @@ pub(crate) fn start_fido_ux_thread() {
                             request_str.push_str(&format!("\n{}{}",
                                 t!("vault.u2f.appinfo.name", xous::LANG), info.name
                             ));
-                            if info.atime == 0 {
-                                request_str.push_str(&format!("\n{}{}",
-                                    t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                    t!("vault.u2f.appinfo.never", xous::LANG)
-                                ));
-                            } else {
-                                let now = utc_now();
-                                let atime = DateTime::<Utc>::from_utc(
-                                    NaiveDateTime::from_timestamp(info.atime as i64, 0),
-                                    Utc
-                                );
-                                if now.signed_duration_since(atime).num_days() > 1 {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_days(),
-                                        t!("vault.u2f.appinfo.days_ago", xous::LANG),
-                                    ));
-                                } else if now.signed_duration_since(atime).num_hours() > 1 {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_hours(),
-                                        t!("vault.u2f.appinfo.hours_ago", xous::LANG),
-                                    ));
-                                } else if now.signed_duration_since(atime).num_minutes() > 1 {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_minutes(),
-                                        t!("vault.u2f.appinfo.minutes_ago", xous::LANG),
-                                    ));
-                                } else {
-                                    request_str.push_str(&format!("\n{}{}{}",
-                                        t!("vault.u2f.appinfo.last_authtime", xous::LANG),
-                                        now.signed_duration_since(atime).num_seconds(),
-                                        t!("vault.u2f.appinfo.seconds_ago", xous::LANG),
-                                    ));
-                                }
-                            }
+                            request_str.push_str(&format!("\n{}",
+                                crate::ux::atime_to_str(info.atime)
+                            ));
                             request_str.push_str(&format!("\n{}{}",
                                 t!("vault.u2f.appinfo.authcount", xous::LANG),
                                 info.count,
@@ -478,6 +443,7 @@ pub(crate) fn start_fido_ux_thread() {
                                     Ok(name) => {
                                         let info = AppInfo {
                                             name: name.content()[0].content.to_string(),
+                                            notes: t!("vault.notes", xous::LANG).to_string(),
                                             id,
                                             ctime: utc_now().timestamp() as u64,
                                             atime: 0,
@@ -491,12 +457,28 @@ pub(crate) fn start_fido_ux_thread() {
                                         }
                                 }
                             };
-                            pddb.delete_key(U2F_APP_DICT, &app_id_str, None).ok();
-                            match pddb.get(
+                            // this get determines which basis the key is in
+                            let basis = match pddb.get(
                                 U2F_APP_DICT,
                                 &app_id_str,
                                 None, true, true,
-                                Some(256), None::<fn()>
+                                Some(256), Some(crate::basis_change)
+                            ) {
+                                Ok(app_data) => {
+                                    let attr = app_data.attributes().expect("couldn't get attributes");
+                                    attr.basis
+                                }
+                                Err(e) => {
+                                    log::error!("error updating app atime: {:?}", e);
+                                    continue;
+                                }
+                            };
+                            pddb.delete_key(U2F_APP_DICT, &app_id_str, Some(&basis)).ok();
+                            match pddb.get(
+                                U2F_APP_DICT,
+                                &app_id_str,
+                                Some(&basis), true, true,
+                                Some(256), Some(crate::basis_change)
                             ) {
                                 Ok(mut app_data) => {
                                     app_data.write(&ser).expect("couldn't update atime");
@@ -528,18 +510,20 @@ pub(crate) fn start_fido_ux_thread() {
 /// hash: app hash in hex string, lowercase
 /// created: decimal number representing epoch of the creation date
 /// last auth: decimal number representing epoch of the last auth time
-struct AppInfo {
-    name: String,
-    id: [u8; 32],
-    ctime: u64,
-    atime: u64,
-    count: u64,
+pub(crate) struct AppInfo {
+    pub name: String,
+    pub id: [u8; 32],
+    pub notes: String,
+    pub ctime: u64,
+    pub atime: u64,
+    pub count: u64,
 }
 
-fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
+pub(crate) fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
     if let Ok(desc_str) = String::from_utf8(descriptor) {
         let mut appinfo = AppInfo {
             name: String::new(),
+            notes: String::new(),
             id: [0u8; 32],
             ctime: 0,
             atime: 0,
@@ -552,6 +536,7 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
                     "name" => {
                         appinfo.name.push_str(data);
                     }
+                    "notes" => appinfo.notes.push_str(data),
                     "id" => {
                         if let Ok(id) = hex::decode(data) {
                             appinfo.id.copy_from_slice(&id);
@@ -584,6 +569,8 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
                         return None;
                     }
                 }
+            } else {
+                log::trace!("invalid line skipped: {:?}", line);
             }
         }
         if appinfo.name.len() > 0
@@ -598,20 +585,12 @@ fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
     }
 }
 
-fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}",
+pub(crate) fn serialize_app_info<'a>(appinfo: &AppInfo) -> Vec::<u8> {
+    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
         "name", appinfo.name,
         "id", hex::encode(appinfo.id),
         "ctime", appinfo.ctime,
         "atime", appinfo.atime,
         "count", appinfo.count,
     ).into_bytes()
-}
-
-/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid target
-fn utc_now() -> DateTime::<Utc> {
-    let now =
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
-    let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
-    DateTime::from_utc(naive, Utc)
 }

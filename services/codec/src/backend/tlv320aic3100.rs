@@ -180,6 +180,7 @@ impl Codec {
         }
     }
     pub fn resume(&mut self) {
+        self.ticktimer.sleep_ms(470).unwrap(); // audio code resume has the lowest priority, it should only resume after most other activities stabilized
         if self.powered_on {
             self.llio.audio_on(true).unwrap(); // this is a blocking scalar
             self.ticktimer.sleep_ms(2).unwrap(); // give the codec a moment to power up before writing to it

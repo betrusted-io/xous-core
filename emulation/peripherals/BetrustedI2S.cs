@@ -92,7 +92,7 @@ namespace Antmicro.Renode.Peripherals.Sound
             this.bufferAddress = memAddr;
             machine.SystemBus.Register(this.audioRam, new BusRangeRegistration(memAddr, memSize));
 
-            CreateRegisters();
+            DefineRegisters();
             IRQ = new GPIO();
             Reset();
         }
@@ -130,7 +130,7 @@ namespace Antmicro.Renode.Peripherals.Sound
             IRQ.Set(rxReady || rxError || txReady || txError);
         }
 
-        private void Start()
+        private void StartTx()
         {
             if(enableTx.Value)
             {
@@ -143,7 +143,11 @@ namespace Antmicro.Renode.Peripherals.Sound
                 encoder.SetBufferingBySamplesCount(maxSamplesCount.Value);
                 encoder.Output = OutputFile;
             }
+            StartTxThread();
+        }
 
+        private void StartRx()
+        {
             if(enableRx.Value)
             {
                 if(InputFile == "")
@@ -154,60 +158,62 @@ namespace Antmicro.Renode.Peripherals.Sound
                 decoder = new PCMDecoder(sampleWidth, sampleFrequency, numberOfChannels, false, this);
                 decoder.LoadFile(InputFile);
             }
-            StartRxTxThread();
+            StartRxThread();
         }
 
         private void Stop()
         {
             encoder?.FlushBuffer();
-            StopRxTxThread();
-            eventStopped.Value = true;
+            StopTxThread();
+            StopRxThread();
+            // eventStopped.Value = true;
             UpdateInterrupts();
         }
 
-        private void StartRxTxThread()
+        private void StartTxThread()
         {
-            if(!enableI2S.Value)
-            {
-                this.Log(LogLevel.Error, "Trying to start aquisition, when peripheral is disabled (ENABLE==0). Will not start");
-                return;
-            }
-            rxTxThread = machine.ObtainManagedThread(ProcessFrames, (int)(sampleFrequency / (maxSamplesCount.Value * samplesPerDoubleWord)));
-            rxTxThread.Start();
+            txThread = machine.ObtainManagedThread(OutputFrames, (int)(sampleFrequency / (maxSamplesCount.Value * samplesPerDoubleWord)));
+            txThread.Start();
         }
 
-        private void StopRxTxThread()
+        private void StartRxThread()
         {
-            if(rxTxThread == null)
+            rxThread = machine.ObtainManagedThread(InputFrames, (int)(sampleFrequency / (maxSamplesCount.Value * samplesPerDoubleWord)));
+            rxThread.Start();
+        }
+
+        private void StopTxThread()
+        {
+            if(txThread == null)
             {
                 this.Log(LogLevel.Debug, "Trying to stop sampling when it is not active");
                 return;
             }
-            rxTxThread.Stop();
-            rxTxThread = null;
+            txThread.Stop();
+            txThread = null;
         }
 
-        private void ProcessFrames()
+        private void StopRxThread()
         {
-            if(enableRx.Value)
+            if(rxThread == null)
             {
-                InputFrames();
+                this.Log(LogLevel.Debug, "Trying to stop sampling when it is not active");
+                return;
             }
-            if(enableTx.Value)
-            {
-                OutputFrames();
-            }
+            rxThread.Stop();
+            rxThread = null;
         }
+
 
         private void OutputFrames()
         {
             var currentPointer = txdPointer.Value;
             // The TXD.PTR register has been copied to internal double-buffers
-            eventTxPointerUpdated.Value = true;
+            // eventTxPointerUpdated.Value = true;
             UpdateInterrupts();
 
             // RxTxMaxCnt denotes number of DoubleWords, we need to calculate samples number
-            for(var samples = 0u; samples < maxSamplesCount.Value * samplesPerDoubleWord; samples++)
+            for(var samples = 0u; samples < writeCount.Value * samplesPerDoubleWord; samples++)
             {
                 var thisSample = machine.SystemBus.ReadDoubleWord(currentPointer + samples * sampleWidth / 8);
                 BitHelper.ClearBits(ref thisSample, (int)sampleWidth, (int)(32 - sampleWidth));
@@ -219,10 +225,10 @@ namespace Antmicro.Renode.Peripherals.Sound
         {
             var currentPointer = rxdPointer.Value;
             // The RXD.PTR register has been copied to internal double-buffers
-            eventRxPointerUpdated.Value = true;
+            // eventRxPointerUpdated.Value = true;
             UpdateInterrupts();
 
-            for(var doubleWords = 0u; doubleWords < maxSamplesCount.Value; doubleWords++)
+            for(var doubleWords = 0u; doubleWords < readCount.Value; doubleWords++)
             {
                 // Double word may consist on many samples when sampleWidth is not equal 32bit
                 uint valueToStore = 0;
@@ -354,7 +360,7 @@ namespace Antmicro.Renode.Peripherals.Sound
             return closest;
         }
 
-        private void CreateRegisters()
+        private void DefineRegisters()
         {
             Registers.EventEnable.Define(this)
                 .WithFlag(0, out interruptEnableRxReady, changeCallback: (_, __) => UpdateInterrupts(), name: "RX_READY")
@@ -374,135 +380,13 @@ namespace Antmicro.Renode.Peripherals.Sound
                 .WithFlag(2, out eventTxReady, FieldMode.WriteOneToClear, name: "TX_READY")
                 .WithFlag(3, out eventTxError, FieldMode.WriteOneToClear, name: "TX_ERROR")
             ;
-            // Registers.TasksStart.Define(this)
-            //         .WithFlag(0, FieldMode.Write, writeCallback: (_, val) => { if(val) Start(); }, name: "TASKS_START")
-            //         .WithReservedBits(1,31);
-            // Registers.TasksStop.Define(this)
-            //         .WithFlag(0, FieldMode.Write, writeCallback: (_, val) => { if(val) Stop(); }, name: "TASKS_STOP")
-            //         .WithReservedBits(1,31);
-            // Registers.EventsRxptrUpdated .Define(this)
-            //         .WithFlag(0, out eventRxPointerUpdated, changeCallback: (_, __) => UpdateInterrupts(), name: "EVENTS_RXPTRUPD")
-            //         .WithReservedBits(1,31);
-            // Registers.EventsStopped.Define(this)
-            //         .WithFlag(0, out eventStopped, changeCallback: (_, __) => UpdateInterrupts(), name: "EVENTS_STOPPED")
-            //         .WithReservedBits(1,31);
-            // Registers.EventsTxptrUpdated.Define(this)
-            //         .WithFlag(0, out eventTxPointerUpdated, changeCallback: (_, __) => UpdateInterrupts(), name: "EVENTS_TXPTRUPD")
-            //         .WithReservedBits(1,31);
-            // Registers.InterruptEnable.Define(this)
-            //         .WithReservedBits(0,1)
-            //         .WithFlag(1, out interruptEnableRxPointerUpdated, name: "RXPTRUPD")
-            //         .WithFlag(2, out interruptEnableStopped, name: "STOPPED")
-            //         .WithReservedBits(3,2)
-            //         .WithFlag(5, out interruptEnableTxPointerUpdated, name: "TXPTRUPD")
-            //         .WithReservedBits(6,25);
-            // Registers.InterruptEnableSet.Define(this)
-            //         .WithReservedBits(0,1)
-            //         .WithFlag(1,
-            //             writeCallback: (_, val) => { interruptEnableRxPointerUpdated.Value |= val; },
-            //             valueProviderCallback: (_) => { return interruptEnableRxPointerUpdated.Value; },
-            //             name: "RXPTRUPD")
-            //         .WithFlag(2,
-            //             writeCallback: (_, val) => { interruptEnableStopped.Value |= val; },
-            //             valueProviderCallback: (_) => { return interruptEnableStopped.Value; },
-            //             name: "STOPPED")
-            //         .WithReservedBits(3,2)
-            //         .WithFlag(5,
-            //             writeCallback: (_, val) => { interruptEnableTxPointerUpdated.Value |= val; },
-            //             valueProviderCallback: (_) => { return interruptEnableTxPointerUpdated.Value; },
-            //             name: "TXPTRUPD")
-            //         .WithReservedBits(6,25);
-            // Registers.InterruptEnableClear.Define(this)
-            //         .WithReservedBits(0,1)
-            //         .WithFlag(1,
-            //             writeCallback: (_, val) => { interruptEnableRxPointerUpdated.Value &= !val; },
-            //             valueProviderCallback: (_) => { return interruptEnableRxPointerUpdated.Value; },
-            //             name: "RXPTRUPD")
-            //         .WithFlag(2,
-            //             writeCallback: (_, val) => { interruptEnableStopped.Value &= !val; },
-            //             valueProviderCallback: (_) => { return interruptEnableStopped.Value; },
-            //             name: "STOPPED")
-            //         .WithReservedBits(3,2)
-            //         .WithFlag(5,
-            //             writeCallback: (_, val) => { interruptEnableTxPointerUpdated.Value &= !val; },
-            //             valueProviderCallback: (_) => { return interruptEnableTxPointerUpdated.Value; },
-            //             name: "TXPTRUPD")
-            //         .WithReservedBits(6,25);
-            // Registers.Enable.Define(this)
-            //         .WithFlag(0, out enableI2S, name: "ENABLE")
-            //         .WithReservedBits(1,31);
-            // Registers.ConfigMode.Define(this)
-            //         .WithValueField(0, 1,
-            //             writeCallback: (_, val) =>
-            //                 {
-            //                     if((Mode)val == Mode.Slave)
-            //                     {
-            //                         //This requires ability to use master device clock configuration and handling alignment / format properly
-            //                         this.Log(LogLevel.Error, "Slave mode unimplemented");
-            //                     }
-            //                 },
-            //             name: "MODE")
-            //         .WithReservedBits(1,31);
-            // Registers.ConfigRxEnable.Define(this)
-            //         .WithFlag(0, out enableRx, name: "RXEN")
-            //         .WithReservedBits(1,31);
-            // Registers.ConfigTxEnable.Define(this, 0x1)
-            //         .WithFlag(0, out enableTx, name: "TXEN")
-            //         .WithReservedBits(1,31);
-            // Registers.ConfigMasterClockEnable.Define(this, 0x1)
-            //         .WithFlag(0, name: "MCKEN")
-            //         .WithReservedBits(1,31);
-            // Registers.ConfigMasterClockFrequency.Define(this, 0x20000000)
-            //         .WithValueField(0, 32, writeCallback: (_, val) => SetMasterClockFrequency(val), name: "MCKFREQ");
-            // Registers.ConfigRatio.Define(this, 0x6)
-            //         .WithValueField(0, 4, writeCallback: (_, val) => SetMasterClockLrckRatio(val), name: "RATIO")
-            //         .WithReservedBits(4,28);
-            // Registers.ConfigSwidth.Define(this, 0x1)
-            //         .WithValueField(0, 2, writeCallback: (_, val) => SetSampleWidth(val), name: "SWIDTH")
-            //         .WithReservedBits(2,30);
-            // Registers.ConfigAlign.Define(this)
-            //         .WithTaggedFlag("ALIGN", 0)
-            //         .WithReservedBits(1, 31);
-            // Registers.ConfigFormat.Define(this)
-            //         .WithTaggedFlag("FORMAT",0)
-            //         .WithReservedBits(1, 31);
-            // Registers.ConfigChannels.Define(this)
-            //         .WithValueField(0, 2,
-            //             writeCallback: (_, val) => { numberOfChannels = (Channels)val == Channels.Stereo ? 2u : 1u;},
-            //             name: "CHANNELS")
-            //         .WithReservedBits(2, 30);
-            // Registers.RxdPointer.Define(this)
-            //         .WithValueField(0, 32, out rxdPointer, name: "PTR");
-            // Registers.TxdPointer.Define(this)
-            //         .WithValueField(0, 32, out txdPointer, name: "PTR");
-            // Registers.RxTxBufferSize.Define(this)
-            //         .WithValueField(0, 14, out maxSamplesCount, name: "MAXCNT")
-            //         .WithReservedBits(14, 18);
-            // Registers.PinSelectMasterClock.Define(this, 0xFFFFFFFF)
-            //         .WithTag("PIN", 0, 5)
-            //         .WithTag("PORT", 5, 1)
-            //         .WithReservedBits(6, 25)
-            //         .WithTaggedFlag("CONNECT", 31);
-            // Registers.PinSelectSCK.Define(this, 0xFFFFFFFF)
-            //         .WithTag("PIN", 0, 5)
-            //         .WithTag("PORT", 5, 1)
-            //         .WithReservedBits(6, 25)
-            //         .WithTaggedFlag("CONNECT", 31);
-            // Registers.PinSelectLRCK.Define(this, 0xFFFFFFFF)
-            //         .WithTag("PIN", 0, 5)
-            //         .WithTag("PORT", 5, 1)
-            //         .WithReservedBits(6, 25)
-            //         .WithTaggedFlag("CONNECT", 31);
-            // Registers.PinSelectSDIN.Define(this, 0xFFFFFFFF)
-            //         .WithTag("PIN", 0, 5)
-            //         .WithTag("PORT", 5, 1)
-            //         .WithReservedBits(6, 25)
-            //         .WithTag("CONNECT", 31, 1);
-            // Registers.PinSelectSDOUT.Define(this, 0xFFFFFFFF)
-            //         .WithValueField(0, 5, name: "PIN")
-            //         .WithValueField(5, 1, name: "PORT")
-            //         .WithReservedBits(6, 25)
-            //         .WithTaggedFlag("CONNECT", 31);
+            Registers.TxCtl.Define32(this)
+                .WithFlag(0, writeCallback: (_, val) => { if (val) StartTx(); }, name: "tx_enable")
+            ;
+
+            Registers.RxCtl.Define32(this)
+                .WithFlag(0, writeCallback: (_, val) => { if (val) StartRx(); }, name: "rx_enable")
+            ;
         }
 
         private IFlagRegisterField enableI2S;
@@ -529,7 +413,8 @@ namespace Antmicro.Renode.Peripherals.Sound
         private uint samplesPerDoubleWord;
         private uint sampleWidth;
 
-        private IManagedThread rxTxThread;
+        private IManagedThread rxThread;
+        private IManagedThread txThread;
         private PCMDecoder decoder;
         private PCMEncoder encoder;
         private AudioRam audioRam;

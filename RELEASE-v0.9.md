@@ -163,15 +163,17 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Add CI test automation facilities - CI infra now drives actual hardware through `expect` scripts, instead of just doing simulation checks
 - Vendor in `getrandom` so we can support a Xous API for the crate, allowing us access some of the more modern rustcrypto APIs. This is necssary for `randcore` 0.6 compatibility. `randcore` 0.5 APIs are retained by integrating them directly into the TRNG object.
 - Update AES API level to 0.8, and cipher dependency to 0.4 (on rootkeys). This was necessary to get CBC support for AES, which is needed for FIDO2. This *should* have no user-facing impact.
-- `vault` app commited as a WIP of an end user authentication management app. It aims to provide FIDO2, TOTP, and stored password DB functions.
+- `vault` app: a user authentication management app is now ready for Alpha testing. It aims to provide FIDO2, TOTP, and stored password DB functions.
   - U2F/FIDO2 are a vendor-in of Google OpenSK's FIDO2 implementation. The code basically passes the CTAP2 test suite (https://github.com/google/CTAP2-test-tool) ("basically passes" in that the timeouts tests fail because they aren't automated to not "press the button" when timeouts are being tested).
   - U2F functions are best supported with UX flow. FIDO2 transactions still trying to figure out what the UX flow is even supposed to be:
     we're lacking actual FIDO2 applications to test against. Some prompts are still just stand-in text.
+  - TOTP integration is thanks to blakesmiths's PoC TOTP code!
+  - Password vault functionality in place
+  - Test routine for adding dozens of TOTP/FIDO records and a hundred passwords added. System tested up to 300 passwords -- no crash observed, but query performance of the PDDB is slow (~8 seconds)
 - Strip out gratuitous use of floating point -- this trims about 100k overall from the memory footprint.
 - Autobacklight feature: selectable feature to automatically raise the backlight when keys are pressed. Thanks to gsora for the feature!
   - More importantly, this adds `crossbeam` into the kernel. This is a somewhat heavyweight item and is not recommended for use in core
     services, but by including it to drive the auto-backlight feature, we get regular code coverage of the condvar pathway.
-
 
 ## Roadmap to 1.0
 

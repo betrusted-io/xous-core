@@ -111,7 +111,7 @@ struct Connection {
     pub max_conns: Option<u32>, // if None, unlimited connections allowed
     pub _allow_authenticate: bool,
     pub _auth_conns: u32,        // number of authenticated connections
-    pub token: Option<[u32; 4]>, // a random number that must be presented to allow for disconnection for single-connection servers
+    pub token: Option<[u32; 4]>, // a random number that must be presented to allow for disconnection
 }
 #[derive(Debug)]
 struct CheckedHashMap {
@@ -129,16 +129,17 @@ impl CheckedHashMap {
         sid: xous::SID,
         max_conns: Option<u32>,
     ) -> Result<(), xous::Error> {
-        let token = if max_conns == Some(1) {
-            // for the special case of 1-connection servers, provision a one-time use token for disconnects
+        let token =
+            // for use with 1-connection servers, provision a one-time use token for disconnects
+            // it will be returned for multi-connection servers as well, but it doesn't have a clear
+            // semantic meaning with multiple connections. However, this exists in particular to
+            // allow clean connect/disconnect in the special case of 1-connection servers that
+            // can be swapped out (such as plugins for IME predictions)
             Some(
                 xous::create_server_id()
                     .expect("couldn't create token")
                     .to_array(),
-            )
-        } else {
-            None
-        };
+            );
         self.map.insert(
             name,
             Connection {
@@ -189,7 +190,7 @@ impl CheckedHashMap {
                 Some(max) => {
                     if entry.current_conns < max {
                         (*entry).current_conns += 1;
-                        (Some(entry.sid), None)
+                        (Some(entry.sid), entry.token)
                     } else {
                         (None, None)
                     }
@@ -197,7 +198,15 @@ impl CheckedHashMap {
                 _ => {
                     // unlimited connections allowed
                     (*entry).current_conns += 1;
-                    (Some(entry.sid), None)
+                    // previously, this did not return an entry.token, but we now do
+                    // because we had to loosen the restriction on the count of connections to
+                    // the IME plugins -- because by essence, a disconnected IME plugin does
+                    // not have its connection table full, and therefore, this would disallow
+                    // root key operations. However, we stil want some control over who
+                    // is allowed to initiate the disconnect, so, we've moved the access
+                    // control to the server itself, thus allowing a permissive policy inside
+                    // xous-names.
+                    (Some(entry.sid), entry.token)
                 }
             }
         } else {
@@ -245,7 +254,10 @@ impl CheckedHashMap {
     pub fn disconnect_with_token(&mut self, name: &XousServerName, token: [u32; 4]) -> bool {
         if let Some(entry) = self.map.get_mut(name) {
             if let Some(old_token) = entry.token {
-                if (token == old_token) && (entry.current_conns == 1) {
+                if token == old_token {
+                    if entry.current_conns != 1 {
+                        log::warn!("disconnect with token used on system with more than one client; this will cause other disconnects to fail");
+                    }
                     (*entry).current_conns = 0;
                     // generate the token -- we should never re-use these!
                     (*entry).token = Some(

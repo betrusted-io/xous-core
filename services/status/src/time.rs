@@ -31,7 +31,7 @@ use num_traits::*;
 // imports for time ux
 use locales::t;
 use chrono::prelude::*;
-use xous::Message;
+use xous::{Message, send_message};
 use gam::modal::*;
 // ntp imports
 use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
@@ -39,8 +39,7 @@ use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::num::ParseIntError;
 
 /// This is a "well known name" used by `libstd` to connect to the time server
-/// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
-/// hence the scope of the name is private to this crate.
+/// Anyone who wants to check if time has been initialized would use this name.
 pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
 
 /// Dictionary for RTC settings.
@@ -246,7 +245,7 @@ pub fn start_time_server() {
             let mut offset_key = offset_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_UTC_OFFSET,
-                None, true, true,
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open UTC offset key");
@@ -254,7 +253,7 @@ pub fn start_time_server() {
             let mut tz_key = tz_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_TZ_OFFSET,
-                None, true, true,
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open TZ offset key");
@@ -272,20 +271,35 @@ pub fn start_time_server() {
             log::debug!("start_tt_ms: {}", start_tt_ms);
             loop {
                 let msg = xous::receive_message(pub_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                let opcode: Option<TimeOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", opcode);
+                match opcode {
                     Some(TimeOp::PddbMountPoll) => {
                         // do nothing, we're mounted now.
                         continue;
                     },
                     Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                         susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                        // resync time on resume
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        // resync time on resume, but give a little time for other processes to clear as this is not urgent
+                        tt.sleep_ms(180).unwrap();
+                        send_message(self_cid,
+                            Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't queue sync request");
                     }),
                     Some(TimeOp::HwSync) => {
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        match llio.get_rtc_secs() {
+                            Ok(val) => {
+                                start_rtc_secs = val;
+                                start_tt_ms = tt.elapsed_ms();
+                            }
+                            Err(e) => {
+                                log::warn!("Error syncing time: {:?}; retrying!", e);
+                                tt.sleep_ms(82).unwrap();
+                                send_message(self_cid,
+                                    Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
+                                ).expect("couldn't queue sync request");
+                            }
+                        }
                     },
                     Some(TimeOp::GetUtcTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         let t =
@@ -533,7 +547,7 @@ pub fn start_time_ux(sid: xous::SID) {
                         let maybe_tz_set_key = tz_set_handle.get(
                             TIME_SERVER_DICT,
                             TIME_SERVER_TZ_OFFSET,
-                            None, false, false,
+                            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
                             None,
                             None::<fn()>
                         ).ok();

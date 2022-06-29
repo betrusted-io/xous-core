@@ -50,6 +50,54 @@ use locales::t;
 #[cfg(feature="tts")]
 use tts_frontend::*;
 
+#[cfg(feature="tracking-alloc")]
+use tracking_allocator::{
+    AllocationGroupId, AllocationTracker, Allocator,
+};
+#[cfg(feature="tracking-alloc")]
+use std::alloc::System;
+#[cfg(feature="tracking-alloc")]
+#[global_allocator]
+static GLOBAL: Allocator<System> = Allocator::system();
+#[cfg(feature="tracking-alloc")]
+use core::sync::atomic::{AtomicIsize, Ordering};
+#[cfg(feature="tracking-alloc")]
+struct StdoutTracker {
+    pub total: AtomicIsize,
+}
+
+#[cfg(feature="tracking-alloc")]
+impl AllocationTracker for StdoutTracker {
+    fn allocated(&self, addr: usize, size: usize, group_id: AllocationGroupId) {
+        // Allocations have all the pertinent information upfront, which you may or may not want to store for further
+        // analysis. Notably, deallocations also know how large they are, and what group ID they came from, so you
+        // typically don't have to store much data for correlating deallocations with their original allocation.
+        self.total.store(self.total.load(Ordering::SeqCst) + size as isize, Ordering::SeqCst);
+        println!(
+            "allocation -> total={} addr=0x{:0x} size={} group_id={:?}",
+            self.total.load(Ordering::SeqCst), addr, size, group_id
+        );
+    }
+
+    fn deallocated(
+        &self,
+        addr: usize,
+        size: usize,
+        source_group_id: AllocationGroupId,
+        current_group_id: AllocationGroupId,
+    ) {
+        // When a deallocation occurs, as mentioned above, you have full access to the address, size of the allocation,
+        // as well as the group ID the allocation was made under _and_ the active allocation group ID.
+        //
+        // This can be useful beyond just the obvious "track how many current bytes are allocated by the group", instead
+        // going further to see the chain of where allocations end up, and so on.
+        self.total.store(self.total.load(Ordering::SeqCst) - size as isize, Ordering::SeqCst);
+        println!(
+            "deallocation -> total={} addr=0x{:0x} size={} source_group_id={:?} current_group_id={:?}",
+            self.total.load(Ordering::SeqCst), addr, size, source_group_id, current_group_id
+        );
+    }
+}
 #[derive(Debug)]
 struct History {
     // the history record
@@ -310,10 +358,12 @@ enum ShellOpcode {
 // nothing prevents the two from being the same, other than naming conventions
 pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_"; // used internally by xous-names
 fn main () -> ! {
-    #[cfg(feature="ditherpunk")]
-    let stack_size = 1024 * 1024;
     #[cfg(not(feature="ditherpunk"))]
-    let stack_size = 128 * 1024;
+    wrapped_main();
+
+    #[cfg(feature="ditherpunk")]
+    let stack_size = 2048 * 1024;
+    #[cfg(feature="ditherpunk")]
     std::thread::Builder::new()
         .stack_size(stack_size)
         .spawn(wrapped_main)
