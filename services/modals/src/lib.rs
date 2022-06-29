@@ -197,38 +197,41 @@ impl Modals {
     pub fn show_image(&self, img: &Img) -> Result<(), xous::Error> {
         self.lock();
         // resize and/or rotate
-        let (modal_width, modal_height) =
-            (gam::IMG_MODAL_WIDTH as f32, gam::IMG_MODAL_HEIGHT as f32);
-        let (w, h, _) = img.size();
+        const BORDER: u32 = 3;
+
+        let (modal_width, modal_height) = (
+            gam::IMG_MODAL_WIDTH - 2 * BORDER,
+            gam::IMG_MODAL_HEIGHT - 2 * BORDER,
+        );
+
+        let (w, h) = (img.width(), img.height());
         let (img_width, img_height) = (w as f32, h as f32);
 
-        let portrait_scale = (modal_width / img_width).min(modal_height / img_height);
-        let landscape_scale = (modal_width / img_height).min(modal_height / img_width);
+        let portrait_scale = (modal_width as f32 / img_width).min(modal_height as f32 / img_height);
+        let landscape_scale =
+            (modal_width as f32 / img_height).min(modal_height as f32 / img_width);
         let mut bm = if portrait_scale >= 1.0 {
+            log::info!("show image as is");
             Bitmap::from(img)
         } else if landscape_scale >= 1.0 {
+            log::info!("rotate image");
             Bitmap::from(img).rotate90()
         } else if portrait_scale >= landscape_scale {
-            let resized = img.resize(
-                (portrait_scale * img_width) as usize,
-                (portrait_scale * img_height) as usize,
-            );
-            Bitmap::from(&resized)
+            log::info!("scale image {}", portrait_scale);
+            Bitmap::new_resize(img, (portrait_scale * img_width) as usize)
         } else {
-            let resized = img.resize(
-                (landscape_scale * img_width) as usize,
-                (landscape_scale * img_height) as usize,
-            );
-            Bitmap::from(&resized).rotate90()
+            log::info!("scale image {} and rotate", landscape_scale);
+            Bitmap::new_resize(img, (landscape_scale * img_width) as usize).rotate90()
         };
-
         let (bm_width, bm_height) = bm.size();
         let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
 
         // center image in modal
         let center = Point::new(
-            ((gam::IMG_MODAL_WIDTH - bm_width) / 2).try_into().unwrap(),
-            ((gam::IMG_MODAL_HEIGHT - bm_height) / 2)
+            (BORDER + (gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2)
+                .try_into()
+                .unwrap(),
+            (BORDER + (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2)
                 .try_into()
                 .unwrap(),
         );

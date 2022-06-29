@@ -1,9 +1,9 @@
 use super::*;
+#[cfg(feature = "ditherpunk")]
+use bitmap::PixelType;
 use gam::*;
 use std::thread;
 use xous_names::XousNames;
-#[cfg(feature = "ditherpunk")]
-use bitmap::PixelType;
 
 const RADIO_TEST: [&'static str; 4] = ["zebra", "cow", "horse", "cat"];
 
@@ -175,25 +175,31 @@ pub fn spawn_test() {
 // https://sequelaencollection.home.blog/2d-chaotic-attractors/
 #[cfg(feature = "ditherpunk")]
 fn clifford() -> Img {
-    const SIZE: u32 = gam::IMG_MODAL_WIDTH - 10;
-    const CENTER: f32 = (SIZE / 2) as f32;
-    const SCALE: f32 = 60.0;
-    let mut buf = vec![255u8; (SIZE * SIZE).try_into().unwrap()];
+    // width & height chosen to force resize & rotation
+    const WIDTH: u32 = gam::IMG_MODAL_HEIGHT + 2;
+    const HEIGHT: u32 = gam::IMG_MODAL_WIDTH + 2;
+    const X_CENTER: f32 = (WIDTH / 2) as f32;
+    const Y_CENTER: f32 = (HEIGHT / 2) as f32;
+    const SCALE: f32 = WIDTH as f32 / 5.1;
+    const STEP: u8 = 16;
+    const ITERATIONS: u32 = 200000;
+    let mut buf = vec![255u8; (WIDTH * HEIGHT).try_into().unwrap()];
     let (a, b, c, d) = (-2.0, -2.4, 1.1, -0.9);
     let (mut x, mut y): (f32, f32) = (0.0, 0.0);
+
     log::info!("generating image");
-    for _ in 0..=400000 { // this takes a couple minutes to run
+    for _ in 0..=ITERATIONS { // this takes a couple minutes to run
         let x1 = f32::sin(a * y) + c * f32::cos(a * x);
         let y1 = f32::sin(b * x) + d * f32::cos(b * y);
         (x, y) = (x1, y1);
-        let (a, b): (u32, u32) = ((x * SCALE + CENTER) as u32, (y * SCALE + CENTER) as u32);
-        let i: usize = (a + SIZE * b).try_into().unwrap();
-        if buf[i] > 0 {
-            buf[i] -= 1;
+        let (a, b): (u32, u32) = ((x * SCALE + X_CENTER) as u32, (y * SCALE + Y_CENTER) as u32);
+        let i: usize = (a + WIDTH * b).try_into().unwrap();
+        if buf[i] >= STEP {
+            buf[i] -= STEP;
         }
     }
     log::info!("done: {:x?}", &buf[..32]);
-    Img::new(buf, SIZE.try_into().unwrap(), PixelType::U8)
+    Img::new(buf, WIDTH.try_into().unwrap(), PixelType::U8)
 }
 
 fn test_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
