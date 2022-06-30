@@ -259,6 +259,10 @@ impl MemoryMapping {
         PID::new((self.satp >> 22 & ((1 << 9) - 1)) as _).unwrap()
     }
 
+    pub fn is_kernel(&self) -> bool {
+        self.get_pid().get() == 1
+    }
+
     /// Set this mapping as the systemwide mapping.
     /// **Note:** This should only be called from an interrupt in the
     /// kernel, which should be mapped into every possible address space.
@@ -288,7 +292,7 @@ impl MemoryMapping {
             );
 
             // Page 1023 is only available to PID1
-            if i == 1023 && self.get_pid().get() != 1 {
+            if i == 1023 && !self.is_kernel() {
                 println!("        <unavailable>");
                 continue;
             }
@@ -872,6 +876,10 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
 }
 
 pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {
+    // Disallow mapping memory outside of user land
+    if ! MemoryMapping::current().is_kernel() && address >= USER_AREA_END {
+        return Err(xous_kernel::Error::OutOfMemory);
+    }
     let virt = address & !0xfff;
     let entry = crate::arch::mem::pagetable_entry(virt).or(Err(xous_kernel::Error::BadAddress))?;
     // let entry = crate::arch::mem::pagetable_entry(virt).or_else(|e| {
