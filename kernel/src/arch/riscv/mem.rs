@@ -638,7 +638,7 @@ pub fn map_page_inner(
 }
 
 /// Get the pagetable entry for a given address, or `Err()` if the address is invalid
-pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous_kernel::Error> {
+pub fn pagetable_entry(addr: usize) -> Result<*mut usize, xous_kernel::Error> {
     if addr & 3 != 0 {
         return Err(xous_kernel::Error::BadAlignment);
     }
@@ -652,9 +652,7 @@ pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous_kernel::E
     if l1_pte & 1 == 0 {
         return Err(xous_kernel::Error::BadAddress);
     }
-    let l0_pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    let entry = unsafe { &mut (*((l0_pt_virt + vpn0 * 4) as *mut usize)) };
-    Ok(entry)
+    Ok((PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE + vpn0 * 4) as *mut usize)
 }
 
 /// Ummap the given page from the specified process table.  Never allocate a new
@@ -670,8 +668,8 @@ pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous_kernel::E
 pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, xous_kernel::Error> {
     let entry = pagetable_entry(virt)?;
 
-    let phys = (*entry >> 10) << 12;
-    *entry = 0;
+    let phys = (unsafe { entry.read_volatile() } >> 10) << 12;
+    unsafe { entry.write_volatile(0) };
     unsafe { flush_mmu() };
 
     Ok(phys)
@@ -687,12 +685,12 @@ pub fn move_page_inner(
     dest_addr: *mut u8,
 ) -> Result<(), xous_kernel::Error> {
     let entry = pagetable_entry(src_addr as usize)?;
-    if *entry & MMUFlags::VALID.bits() == 0 {
+    let previous_entry = unsafe { entry.read_volatile() };
+    if previous_entry & MMUFlags::VALID.bits() == 0 {
         return Err(xous_kernel::Error::BadAddress);
     }
-    let previous_entry = *entry;
     // Invalidate the old entry
-    *entry = 0;
+    unsafe { entry.write_volatile(0) };
     unsafe { flush_mmu() };
 
     dest_space.activate()?;
@@ -715,12 +713,10 @@ pub fn move_page_inner(
 
 /// Determine if a page has been lent.
 pub fn page_is_lent(src_addr: *mut u8) -> bool {
-    let entry = if let Ok(val) = pagetable_entry(src_addr as usize) {
-        val
-    } else {
-        return false;
-    };
-    *entry & MMUFlags::S.bits() != 0
+    pagetable_entry(src_addr as usize).map_or(
+        false,
+        |v| unsafe { v.read_volatile() } & MMUFlags::S.bits() != 0,
+    )
 }
 
 /// Mark the given virtual address as being lent.  If `writable`, clear the
@@ -749,29 +745,31 @@ pub fn lend_page_inner(
 ) -> Result<usize, xous_kernel::Error> {
     //klog!("***lend - src: {:08x} dest: {:08x}***", src_addr as u32, dest_addr as u32);
     let entry = pagetable_entry(src_addr as usize)?;
-    let phys = (*entry >> 10) << 12;
+    let current_entry = unsafe { entry.read_volatile() };
+    let phys = (current_entry >> 10) << 12;
 
     // If we try to share a page that's not ours, that's just wrong.
-    if *entry & MMUFlags::VALID.bits() == 0 {
+    if current_entry & MMUFlags::VALID.bits() == 0 {
         // klog!("Not valid");
         return Err(xous_kernel::Error::ShareViolation);
     }
 
     // If we try to share a page that's already shared, that's a sharing
     // violation.
-    if *entry & MMUFlags::S.bits() != 0 {
+    if current_entry & MMUFlags::S.bits() != 0 {
         // klog!("Already shared");
         return Err(xous_kernel::Error::ShareViolation);
     }
 
     // Strip the `VALID` flag, and set the `SHARED` flag.
-    *entry = (*entry & !MMUFlags::VALID.bits()) | MMUFlags::S.bits();
+    let new_entry = (current_entry & !MMUFlags::VALID.bits()) | MMUFlags::S.bits();
+    unsafe { entry.write_volatile(new_entry) };
 
     // Ensure the change takes effect.
     unsafe { flush_mmu() };
 
     // Mark the page as Writable in new process space if it's writable here.
-    let new_flags = if mutable && (*entry & MMUFlags::W.bits()) != 0 {
+    let new_flags = if mutable && (new_entry & MMUFlags::W.bits()) != 0 {
         MemoryFlags::R | MemoryFlags::W
     } else {
         MemoryFlags::R
@@ -807,30 +805,36 @@ pub fn return_page_inner(
 ) -> Result<usize, xous_kernel::Error> {
     //klog!("***return - src: {:08x} dest: {:08x}***", src_addr as u32, dest_addr as u32);
     let src_entry = pagetable_entry(src_addr as usize)?;
-    let phys = (*src_entry >> 10) << 12;
+    let src_entry_value = unsafe { src_entry.read_volatile() };
+    let phys = (src_entry_value >> 10) << 12;
 
     // If the page is not valid in this program, we can't return it.
-    if *src_entry & MMUFlags::VALID.bits() == 0 {
+    if src_entry_value & MMUFlags::VALID.bits() == 0 {
         return Err(xous_kernel::Error::ShareViolation);
     }
 
     // Mark the page as `Free`, which unmaps it.
-    *src_entry = 0;
+    unsafe { src_entry.write_volatile(0) };
     unsafe { flush_mmu() };
 
     // Switch to the destination address space
     dest_space.activate()?;
     let dest_entry =
         pagetable_entry(dest_addr as usize).expect("page wasn't lent in destination space");
+    let dest_entry_value = unsafe { dest_entry.read_volatile() };
 
     // If the page wasn't marked as `Shared` in the destination address space,
     // treat that as an error.
-    if *dest_entry & MMUFlags::S.bits() == 0 {
+    if dest_entry_value & MMUFlags::S.bits() == 0 {
         panic!("page wasn't shared in destination space");
     }
 
     // Clear the `SHARED` and `PREVIOUSLY-WRITABLE` bits, and set the `VALID` bit.
-    *dest_entry = *dest_entry & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits();
+    unsafe {
+        dest_entry.write_volatile(
+            dest_entry_value & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits(),
+        )
+    };
     unsafe { flush_mmu() };
 
     // Swap back to our previous address space
@@ -887,8 +891,9 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     //     panic!("Page doesn't exist: {:08x}", address);
     //     Err(xous_kernel::Error::BadAddress)
     // })?;
+    let current_entry = unsafe { entry.read_volatile() };
 
-    let flags = *entry & 0x1ff;
+    let flags = current_entry & 0x1ff;
 
     if flags & MMUFlags::VALID.bits() != 0 {
         return Ok(address);
