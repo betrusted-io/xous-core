@@ -328,6 +328,42 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     self.pddb.dbg_dump("std_test3").unwrap();
                     write!(ret, "dumped std_test3\n").unwrap();
 
+                    // creeping extend test
+                    self.pddb.delete_key("wlan.networks", "testkey", None).ok();
+                    let mut testdata = "".to_string();
+                    let mut len = 0;
+                    for i in 0..20 {
+                        let mut testkey = self.pddb.get("wlan.networks", "testkey", None,
+                        false, true, None, None::<fn()>).expect("couldn't make test key");
+                        testdata.push_str(&i.to_string());
+                        // testkey.seek(SeekFrom::Start(0)).ok();
+                        len = testkey.write(testdata.as_bytes()).expect("couldn't write");
+                        // self.pddb.sync().ok();
+                        self.pddb.dbg_remount().unwrap();
+                    }
+                    let mut testkey_rbk = self.pddb.get("wlan.networks", "testkey", None,
+                    false, true, None, None::<fn()>).expect("couldn't make test key");
+                    let mut rbkdata = Vec::<u8>::new();
+                    let rlen = testkey_rbk.read_to_end(&mut rbkdata).expect("couldn't read back");
+                    if len != rlen {
+                        log::info!("failed: written length and read back length of extended key does not match {} vs {}", len, rlen);
+                        log::info!("written: {:x?}", testdata.as_bytes());
+                        log::info!("readback: {:x?}", &rbkdata);
+                    } else {
+                        let mut passed = true;
+                        let wcheck = testdata.as_bytes();
+                        for (&a, &b) in wcheck.iter().zip(rbkdata.iter()) {
+                            if a != b {
+                                log::info!("error: a: {}, b: {}", a, b);
+                                passed = false;
+                            }
+                        }
+                        if passed {
+                            log::info!("extension test passed");
+                        } else {
+                            log::info!("extension test failed");
+                        }
+                    }
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
