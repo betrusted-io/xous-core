@@ -51,6 +51,9 @@ impl RootKeys {
     pub fn get_update_gateware_op(&self) -> u32 {
         Opcode::UxUpdateGateware.to_u32().unwrap()
     }
+    pub fn get_blind_copy_gateware_op(&self) -> u32 {
+        Opcode::UxBlindCopy.to_u32().unwrap()
+    }
     pub fn get_try_selfsign_op(&self) -> u32 {
         Opcode::UxSelfSignXous.to_u32().unwrap()
     }

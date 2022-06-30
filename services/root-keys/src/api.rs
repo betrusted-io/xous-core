@@ -67,6 +67,10 @@ pub(crate) enum Opcode {
     SuspendResume = 32,
 
     Quit = 33,
+
+    /// makes a "blind copy" of the staged gateware. This will destroy root keys,
+    /// but the call will not succeed if the image was provisioned.
+    UxBlindCopy = 34,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
@@ -93,6 +97,8 @@ pub enum RootkeyResult {
     KeyError = 1,
     IntegrityError = 2,
     FlashError = 3,
+    /// enclave is in the wrong state to do the requested operation
+    StateError = 4,
 }
 
 /// AES operation definitions

@@ -591,6 +591,9 @@ fn main() -> ! {
                     Err(RootkeyResult::FlashError) => {
                         modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
                     }
+                    Err(RootkeyResult::StateError) => {
+                        modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
+                    }
                 }
             },
             Some(Opcode::UxTryReboot) => {
@@ -642,6 +645,53 @@ fn main() -> ! {
                 send_message(main_cid,
                     xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
                 ).expect("couldn't initiate dialog box");
+            }
+            Some(Opcode::UxBlindCopy) => {
+                modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("modals error");
+                modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("modals error");
+                match modals.get_radiobutton(t!("rootkeys.blind_update", xous::LANG)) {
+                    Ok(response) => {
+                        if response == t!("rootkeys.gwup.no", xous::LANG) {
+                            continue;
+                        } if response != t!("rootkeys.gwup.yes", xous::LANG) {
+                            log::error!("got unexpected response from radio box: {:?}", response);
+                            continue;
+                        } else {
+                            // just proceed forward!
+                        }
+                    }
+                    _ => {
+                        log::error!("modals error, aborting");
+                        continue;
+                    }
+                }
+
+                let result = keys.do_gateware_provision_uninitialized(&mut rootkeys_modal, main_cid);
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+
+                match result {
+                    Ok(_) => {
+                        modals.show_notification(t!("rootkeys.gwup.finished", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::AlignmentError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::KeyError) => {
+                        // probably a bad password, purge it, so the user can try again
+                        keys.purge_password(PasswordType::Update);
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::IntegrityError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::FlashError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::StateError) => {
+                        modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
+                    }
+                }
             }
             Some(Opcode::UxUpdateGateware) => {
                 // steps:
@@ -808,6 +858,9 @@ fn main() -> ! {
                     Err(RootkeyResult::FlashError) => {
                         modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
                     }
+                    Err(RootkeyResult::StateError) => {
+                        modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
+                    }
                 }
             }
             Some(Opcode::UxSelfSignXous) => {
@@ -882,6 +935,9 @@ fn main() -> ! {
                     }
                     Err(RootkeyResult::FlashError) => {
                         modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::StateError) => {
+                        modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
                     }
                 }
             }
@@ -1087,6 +1143,9 @@ fn main() -> ! {
                     }
                     Err(RootkeyResult::FlashError) => {
                         modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::StateError) => {
+                        modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
                     }
                 }
             }
