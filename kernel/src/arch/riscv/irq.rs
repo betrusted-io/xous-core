@@ -190,7 +190,7 @@ pub extern "C" fn trap_handler(
                 crate::arch::mem::ensure_page_exists_inner(addr)
                     .map(|_new_page| {
                         #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-                        println!("Handing page {:08x} to process", _new_page);
+                        klog!("Handing page {:08x} to process", _new_page);
                         ArchProcess::with_current_mut(|process| {
                             crate::arch::syscall::resume(
                                 current_pid().get() == 1,
@@ -271,7 +271,6 @@ pub extern "C" fn trap_handler(
         // determine if there is an exception handler in this particular program
         // and call that handler if so.
         if let Some(args) = generate_exception_args(&ex) {
-            klog!("Generated exception args -- invoking handler");
             if let Some(handler) = SystemServices::with_mut(|ss| ss.begin_exception_handler(pid)) {
                 klog!("Exception handler for process exists ({:x?})", handler);
                 // If this is the sort of exception that may be able to be handled by
