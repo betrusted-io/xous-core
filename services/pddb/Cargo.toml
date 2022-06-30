@@ -67,7 +67,7 @@ deterministic = []
 ci = []
 # this feature is for text-to-speech support
 tts = []
-# support migration type 1, from version 00.00.01.01 -> 00.00.02.01
+# support migration type 1, from version 00.00.01.01 -> 00.00.02.01, incurs a 42kiB penalty in binary size
 migration1 = []
 # hazardous debug flag decorates any debug paths that might accidentally leak key material
 hazardous-debug = []
