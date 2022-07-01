@@ -39,8 +39,8 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_02_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
-pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
-// pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+// pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
+pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// range for the starting point of a journal number, picked from a random seed
 /// the goal is to reduce info leakage about the age of structures relative to each other

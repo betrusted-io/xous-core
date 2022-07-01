@@ -437,8 +437,21 @@ fn wrapped_main() -> ! {
     // for less-secured user prompts (everything but password entry)
     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
+    // our very own password modal. Password modals are precious and privately owned, to avoid
+    // other processes from crafting them.
+    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    let pw_handle = thread::spawn({
+        move || {
+            password_ux_manager(
+                xous::connect(pddb_sid).unwrap(),
+                pw_sid
+            )
+        }
+    });
+
     // OS-specific PDDB driver
-    let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+    let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
@@ -483,18 +496,6 @@ fn wrapped_main() -> ! {
         hw_testcase(&mut pddb_os);
     }
 
-    // our very own password modal. Password modals are precious and privately owned, to avoid
-    // other processes from crafting them.
-    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
-    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
-    let pw_handle = thread::spawn({
-        move || {
-            password_ux_manager(
-                xous::connect(pddb_sid).unwrap(),
-                pw_sid
-            )
-        }
-    });
     // our menu handler
     let my_cid = xous::connect(pddb_sid).unwrap();
     let _ = thread::spawn({

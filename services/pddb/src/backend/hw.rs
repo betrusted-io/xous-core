@@ -130,10 +130,12 @@ pub(crate) struct PddbOs {
     dna: u64,
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
+    /// connection to the password request manager
+    pw_cid: xous::CID,
 }
 
 impl PddbOs {
-    pub fn new(trngpool: Rc<RefCell<TrngPool>>) -> PddbOs {
+    pub fn new(trngpool: Rc<RefCell<TrngPool>>, pw_cid: xous::CID) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         #[cfg(any(target_os = "none", target_os = "xous"))]
         let pddb = xous::syscall::map_memory(
@@ -175,6 +177,7 @@ impl PddbOs {
             fspace_log_len: 0,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
+            pw_cid,
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -197,6 +200,7 @@ impl PddbOs {
                 fspace_log_len: 0,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
+                pw_cid,
             }
         };
         ret
@@ -1784,6 +1788,14 @@ impl PddbOs {
     /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
     /// at the conclusion of the sweep, but their page use can be accounted for.
     pub(crate) fn pddb_get_additional_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
+        let mut ret = Vec::<([u8; AES_KEYSIZE], String)>::new();
+        if let Some(sys_key) = &self.system_basis_key {
+            ret.push((sys_key.pt, PDDB_DEFAULT_SYSTEM_BASIS.to_string()));
+        } else {
+            log::error!("No default system basis was set up, this should be an illegal condition when requesting FSCB scan!");
+            panic!("No default system basis was set up, this should be an illegal condition when requesting FSCB scan!");
+        }
+        const SWAP_DELAY_MS: usize = 300;
         log::info!("{} basis are open, with the following names:", cache.len());
         for entry in cache {
             log::info!(" - {}", entry.name);
@@ -1791,14 +1803,98 @@ impl PddbOs {
 
         // 0. allow user to cancel out of the operation -- this will abort everything and cause the current
         //    alloc operation to fail
+        let xns = xous_names::XousNames::new().unwrap();
+        let modals = modals::Modals::new(&xns).unwrap();
+        modals.show_notification(t!("pddb.freespace.request", xous::LANG), None).ok();
+        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 1. prompt user to enter any name/password combos for other basis we want to keep
-        // 2. validate the name/password combo
-        // 3. add to the Aes256 return vec
-        // 4. repeat summary print-out
+        let mut request_str = t!("pddb.freespace.enumerate", xous::LANG);
+        while self.yes_no_approval(&modals, request_str) {
+            request_str = t!("pddb.freespace.enumerate_another", xous::LANG); // use a plural for the next request to clarify UX flow
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
-        // for now, do nothing -- just indicate success with a returned empty set
-        Some(Vec::<([u8; AES_KEYSIZE], String)>::new())
+            match modals
+                .alert_builder(t!("pddb.freespace.name", xous::LANG))
+                .field(None, None)
+                .build()
+            {
+                Ok(bname) => {
+                    let name = bname.first().as_str().to_string();
+                    let request = BasisRequestPassword {
+                        db_name: xous_ipc::String::from_str(name.to_string()),
+                        plaintext_pw: None,
+                    };
+                    let mut buf = Buffer::into_buf(request).unwrap();
+                    buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                    let retpass = buf.to_original::<BasisRequestPassword, _>().unwrap();
+                    // 2. validate the name/password combo
+                    let basis_key = self.basis_derive_key(
+                        &name,
+                        retpass.plaintext_pw.unwrap().as_str().unwrap()
+                    );
+                    let maybe_entry = if let Some(basis_map) =
+                    self.pt_scan_key(&basis_key.pt, &name) {
+                        let aad = self.data_aad(&name);
+                        if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
+                            match self.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
+                                Some(_data) => {
+                                    // if the root page decrypts, we accept the password; no further checking is done.
+                                    Some((basis_key.pt, name.to_string()))
+                                },
+                                None => None,
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    // 3. add to the Aes256 return vec
+                    if let Some((key, name)) = maybe_entry {
+                        ret.push((key, name));
+                    } else {
+                        modals.show_notification(t!("pddb.freespace.badpass", xous::LANG), None).ok();
+                        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                    }
+                },
+                _ => return None,
+            };
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+            // 4. repeat summary print-out
+            let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
+            for (_key, name) in ret.iter() {
+                blist.push_str("\n");
+                blist.push_str(name);
+            }
+            modals.show_notification(&blist, None).ok();
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+        }
+        // done!
+        if self.yes_no_approval(&modals, t!("pddb.freespace.finished", xous::LANG)) {
+            Some(ret)
+        } else {
+            None
+        }
+    }
+
+    fn yes_no_approval(&self, modals: &modals::Modals, request: &str) -> bool {
+        modals.add_list(
+            vec![t!("pddb.yes", xous::LANG), t!("pddb.no", xous::LANG)]
+        ).expect("couldn't build confirmation dialog");
+        match modals.get_radiobutton(request) {
+            Ok(response) => {
+                if &response == t!("pddb.yes", xous::LANG) {
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => {
+                log::error!("get approval failed");
+                false
+            },
+        }
     }
 
     /// Derives a 256-bit AES encryption key for a basis given a basis name and its password.
