@@ -214,6 +214,92 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         Err(_) => write!(ret, "Error encountered listing dictionaries").ok().unwrap_or(()),
                     }
                 }
+                #[cfg(feature="pddbtest")]
+                "fscbtest" => {
+                    let checkval = [0u8, 1u8, 2u8, 3u8];
+                    // create a secret basis, put a test key in it
+                    log::info!("create basis");
+                    self.pddb.create_basis("fscbtest").ok();
+                    self.pddb.unlock_basis("fscbtest", None).ok();
+                    log::info!("write test key");
+                    let mut persistence_test = self.pddb.get(
+                        "persistent",
+                        "key1",
+                        None, true, true,
+                        Some(64),
+                        None::<fn()>
+                    ).unwrap();
+                    persistence_test.write(&checkval).unwrap();
+                    self.pddb.sync().ok();
+                    // unmount the test basis
+                    log::info!("unmount basis");
+                    self.pddb.lock_basis("fscbtest").ok();
+
+                    // fill memory with junk
+                    // 128k chunks of junk
+                    const JUNK_CHUNK: usize = 131072;
+                    log::info!("fill junk");
+                    for index in 0..28 { // write ~3 megs of junk, should trigger FSCB unlock at least once...
+                        let mut junk = Vec::<u8>::new();
+                        // 128k chunk of junk
+                        for i in 0..JUNK_CHUNK {
+                            junk.push((i + index) as u8);
+                        }
+                        let junkname = format!("junk{}", index);
+                        match self.pddb.get(
+                            "junk",
+                            &junkname,
+                            None, true, true,
+                            Some(JUNK_CHUNK),
+                            None::<fn()>
+                        ) {
+                            Ok(mut junk_key) => {
+                                match junk_key.write_all(&junk) {
+                                    Ok(_) => {
+                                        log::info!("wrote {} of len {}", junkname, JUNK_CHUNK);
+                                    }
+                                    Err(e) => {
+                                        log::error!("couldn't write {}: {:?}", junkname, e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("couldn't allocate junk key {}: {:?}", junkname, e);
+                            }
+                        }
+
+                    }
+                    // check that secret basis is still there
+                    log::info!("confirm test basis");
+                    self.pddb.unlock_basis("fscbtest", None).ok();
+                    let mut persistence_test = self.pddb.get(
+                        "persistent",
+                        "key1",
+                        None, true, true,
+                        Some(64),
+                        None::<fn()>
+                    ).unwrap();
+                    let mut readback = Vec::<u8>::new();
+                    persistence_test.read_to_end(&mut readback).unwrap();
+                    let mut passing = true;
+                    if readback.len() != checkval.len() {
+                        passing = false;
+                        log::error!("readback length is different: {:x?}, {:x?}", readback, checkval);
+                    }
+                    for (&a, &b) in checkval.iter().zip(readback.iter()) {
+                        if a != b {
+                            passing = false;
+                            log::error!("readback data corruption: {} vs {}", a, b);
+                        }
+                    }
+                    if passing {
+                        log::info!("fscb test passed");
+                        write!(ret, "fscb test passed").ok();
+                    } else {
+                        log::info!("fscb test failed");
+                        write!(ret, "fscb test failed").ok();
+                    }
+                }
                 // note that this feature only works in hosted mode
                 #[cfg(feature="pddbtest")]
                 "test" => {
