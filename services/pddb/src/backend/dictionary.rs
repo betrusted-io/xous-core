@@ -550,6 +550,7 @@ impl DictCacheEntry {
                         kcache.len = (data.len() + offset) as u64;
                     } else if truncate {
                         // discard all whole pages after written+offset, and reset the reserved field to the smaller size.
+                        log::trace!("PageAligned VA components: {}, {}", written, offset);
                         let vpage_end_offset = PageAlignedVa::from((written + offset) as u64);
                         if (vpage_end_offset.as_u64() - kcache.start) > kcache.reserved {
                             for vpage in (vpage_end_offset.as_u64()..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
@@ -644,7 +645,7 @@ impl DictCacheEntry {
                 self.keys.insert(name.to_string(), kcache);
                 self.key_count += 1;
             } else {
-                log::debug!("creating large key");
+                log::debug!("creating large key: {}", data.len());
                 // it didn't fit in the small pool, stick it in the big pool.
                 let reservation = PageAlignedVa::from(
                     if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) > data.len() + offset {
