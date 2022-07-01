@@ -196,6 +196,10 @@ pub(crate) const DK_PER_VPAGE: usize = VPAGE_SIZE / DK_STRIDE; // should be 32 -
 pub(crate) const DICT_VSIZE: u64 = 0xFE_0000;
 /// maximum number of dictionaries in a system
 pub(crate) const DICT_MAXCOUNT: usize = 16383;
+/// default alloc hint, if none is given (needs to be non-zero)
+/// this would be the typical "minimum space" reserved for a key
+/// users are of course allowed to specify something smaller, but it should be non-zero
+pub(crate) const DEFAULT_ALLOC_HINT: usize = 8;
 
 /// This is the format of the Basis as stored on disk
 #[derive(PartialEq, Debug, Default)]
@@ -583,10 +587,14 @@ impl BasisCache {
         // mutate the page table to allocate data while we're accessing the page table. This huge gob of code
         // computes the pages needed. :-/
         let mut pages_needed = 2; // things go badly when no space is available so make sure there's always at least 1 spot
-        let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(0) {
+        let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) {
             data.len() + offset.unwrap_or(0)
         } else {
-            alloc_hint.unwrap_or(0)
+            if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) == 0 { // disallow 0-sized alloc hints, round up to the default size if someone tries 0
+                DEFAULT_ALLOC_HINT
+            } else {
+                alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
+            }
         };
         let reserved_pages = if reserved % VPAGE_SIZE == 0 {
             reserved / VPAGE_SIZE

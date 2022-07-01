@@ -570,7 +570,7 @@ impl DictCacheEntry {
         } else {
             // key does not exist (or was previously erased) -- create one or replace the erased one.
             // try to fit the key in the small pool first
-            if ((data.len() + offset) < SMALL_CAPACITY) && (alloc_hint.unwrap_or(0) < SMALL_CAPACITY) {
+            if ((data.len() + offset) < SMALL_CAPACITY) && (alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) < SMALL_CAPACITY) {
                 log::debug!("creating small key {}", name);
                 // handle the case that we're a brand new dictionary and no small keys have ever been stored before.
                 if self.small_pool.len() == 0 {
@@ -578,8 +578,8 @@ impl DictCacheEntry {
                     self.rebuild_free_pool();
                 }
                 let pool_candidate = self.small_pool_free.pop().expect("Free pool was allocated & rebuilt, but still empty.");
-                let mut reservation = if alloc_hint.unwrap_or(0) > data.len() + offset {
-                    alloc_hint.unwrap_or(0)
+                let mut reservation = if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) > data.len() + offset {
+                    alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
                 } else {
                     data.len() + offset
                 };
@@ -647,8 +647,8 @@ impl DictCacheEntry {
                 log::debug!("creating large key");
                 // it didn't fit in the small pool, stick it in the big pool.
                 let reservation = PageAlignedVa::from(
-                    if alloc_hint.unwrap_or(0) > data.len() + offset {
-                        alloc_hint.unwrap_or(0)
+                    if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) > data.len() + offset {
+                        alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
                     } else {
                         data.len() + offset
                     });
