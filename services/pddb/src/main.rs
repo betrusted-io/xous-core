@@ -842,7 +842,9 @@ fn wrapped_main() -> ! {
                             // create an empty key placeholder
                             let empty: [u8; 0] = [];
                             match basis_cache.key_update(&mut pddb_os,
-                                dict, key, &empty, None, alloc_hint, bname, true
+                                dict, key, &empty, None, alloc_hint, bname,
+                                // don't truncate if we've been given an explicit size hint.
+                                alloc_hint.is_none()
                             ) {
                                 Ok(_) => {},
                                 Err(e) => {
