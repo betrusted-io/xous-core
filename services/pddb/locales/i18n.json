@@ -30,10 +30,10 @@
         "en-tts": "Bad password, or Basis does not exist."
     },
     "pddb.freespace.currentlist": {
-        "en": "The following Bases are enumerated:",
-        "ja": "以下の根拠を列挙します:",
-        "zh": "列举如下依据:",
-        "en-tts": "The following Bases are enumerated:"
+        "en": "The following Bases are enumerated:\n",
+        "ja": "以下の根拠を列挙します:\n",
+        "zh": "列举如下依据:\n",
+        "en-tts": "The following Bases are enumerated:\n"
     },
     "pddb.freespace.finished": {
         "en": "Enumeration terminated.\n\nShall we proceed to generate the free space cache?",
