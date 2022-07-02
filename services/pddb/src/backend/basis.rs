@@ -466,67 +466,56 @@ impl BasisCache {
                             return Ok(0)
                         }
                         // large pool fetch
-                        let mut cur_offset = offset.unwrap_or(0) as u64;
+                        let mut abs_cursor = offset.unwrap_or(0) as u64;
                         let mut blocks_read = 0;
+                        let mut bytes_read = 0;
                         loop {
-                            let start_vpage_addr = ((kcache.start + cur_offset) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
-                            // handle the case of terminating the last block read nicely:
-                            // we can either end because we hit the end of the key data (so the data readback buffer is too large)
-                            let key_endstop = if (kcache.len - cur_offset) < VPAGE_SIZE as u64 {
-                                (kcache.len - cur_offset) as usize + size_of::<JournalType>()
-                            } else {
-                                VPAGE_SIZE + size_of::<JournalType>()
-                            };
-                            // or we can hit the end because we ran out of datareadback buffer
-                            let data_endstop = if (data.len() as u64 - cur_offset) < VPAGE_SIZE as u64 {
-                                (data.len() as u64 - cur_offset) as usize + size_of::<JournalType>()
-                            } else {
-                                VPAGE_SIZE + size_of::<JournalType>()
-                            };
-                            // of the two possible end criteria, pick the nearest one
-                            let endstop = if key_endstop < data_endstop {
-                                key_endstop
-                            } else {
-                                data_endstop
-                            };
-                            log::debug!("reading offset {}->{}/{}:{}", key, cur_offset, endstop, kcache.len);
-                            let mut read_offset = (cur_offset % VPAGE_SIZE as u64) as usize;
+                            let start_vpage_addr = ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+
                             if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
+                                let block_start_pos = (abs_cursor % VPAGE_SIZE as u64) as usize;
                                 assert!(pp.valid(), "v2p returned an invalid page");
                                 let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
                                 if blocks_read != 0 {
-                                    assert!(read_offset == 0, "algorithm error in handling offset data");
+                                    assert!(block_start_pos == 0, "algorithm error in handling offset data");
                                 }
+                                if blocks_read == 0 {
+                                    log::debug!("reading {} abs: {}, block_start: {}, block: {}, data.len:{} kcache.len:{}",
+                                        key, abs_cursor, block_start_pos, blocks_read, data.len(), kcache.len);
+                                } else {
+                                    log::debug!("  reading {} abs: {}, block_start: {}, block: {}, remaining.data:{} kcache.len:{}",
+                                        key, abs_cursor, block_start_pos, blocks_read, data.len() - bytes_read, kcache.len);
+                                }
+                                let data_offset = bytes_read;
                                 for (&src, dst) in
                                 pt_data[
                                     size_of::<JournalType>() // always this fixed offset per block
-                                    + read_offset // this should be 0 after the first block
-                                    ..endstop
-                                ].iter().zip(data[cur_offset as usize..].iter_mut()) {
+                                    + block_start_pos
+                                    ..
+                                ].iter().zip(data[data_offset..].iter_mut()) {
                                     *dst = src;
-                                    cur_offset += 1;
-                                    read_offset += 1;
+                                    // it'd be computationally more efficient to figure out what this should be going into
+                                    // every copy loop, but it's logically easier to think about in this form. Without this
+                                    // check, a user could read past the allocated space for a block...
+                                    if abs_cursor >= kcache.len {
+                                        break;
+                                    }
+                                    abs_cursor += 1;
+                                    bytes_read += 1;
                                 }
                                 blocks_read += 1;
                             } else {
-                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, cur_offset, data.len());
-                                return Ok(cur_offset as usize)
+                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, abs_cursor, data.len());
+                                return Ok(bytes_read as usize)
                             }
-                            // cur_offset won't hit (start + len) if we're hitting an endstop, so the loop won't exit.
-                            // if we hit an endstop, we should exit the read loop.
-                            if endstop != VPAGE_SIZE + size_of::<JournalType>() {
+                            if abs_cursor >= kcache.len {
                                 break;
                             }
-                            // break if we've hit or exceeded our endstop
-                            if read_offset >= endstop {
-                                break;
-                            }
-                            // also exit if we're "just nice", e.g. the size of the data happened to be exactly a multiple of the length of our block size
-                            if cur_offset == kcache.len {
+                            if bytes_read >= data.len() {
                                 break;
                             }
                         }
-                        return Ok(cur_offset as usize)
+                        return Ok(bytes_read as usize)
                     }
 
                 } else {
