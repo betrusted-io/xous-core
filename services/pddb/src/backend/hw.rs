@@ -1809,6 +1809,7 @@ impl PddbOs {
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 1. prompt user to enter any name/password combos for other basis we want to keep
+        let mut summary_displayed = false;
         let mut request_str = t!("pddb.freespace.enumerate", xous::LANG);
         while self.yes_no_approval(&modals, request_str) {
             request_str = t!("pddb.freespace.enumerate_another", xous::LANG); // use a plural for the next request to clarify UX flow
@@ -1862,6 +1863,7 @@ impl PddbOs {
             };
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
             // 4. repeat summary print-out
+            summary_displayed = true;
             let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
             for (_key, name) in ret.iter() {
                 blist.push_str("\n");
@@ -1871,6 +1873,15 @@ impl PddbOs {
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         }
         // done!
+        if !summary_displayed { // no summary is displayed yet when the mount process is entirely skipped
+            let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
+            for (_key, name) in ret.iter() {
+                blist.push_str("\n");
+                blist.push_str(name);
+            }
+            modals.show_notification(&blist, None).ok();
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+        }
         if self.yes_no_approval(&modals, t!("pddb.freespace.finished", xous::LANG)) {
             Some(ret)
         } else {
