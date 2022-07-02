@@ -1756,23 +1756,14 @@ impl PddbOs {
     /// can decline to unlock all the Basis right now, cancelling out of the process, which will
     /// cause the requesting free space sweep to fail.
     pub(crate) fn pddb_generate_used_map(&self, cache: &Vec::<BasisCacheEntry>) -> Option<BinaryHeap<Reverse<u32>>> {
-        if let Some(extra_keys) = self.pddb_get_additional_keys(&cache) {
+        if let Some(all_keys) = self.pddb_get_all_keys(&cache) {
             let mut page_heap = BinaryHeap::new();
-            // 1. check the extra keys, if any
-            for (key, name) in extra_keys {
-                // scan the extra closed basis
+            for (key, name) in all_keys {
+                // scan the disclosed bases
                 if let Some(map) = self.pt_scan_key(&key, &name) {
                     for pp in map.values() {
                         page_heap.push(Reverse(pp.page_number()))
                     }
-                }
-            }
-            // 2. scan through all of the physical pages in our caches, and add them to a binary heap.
-            //    WARNING: this could get really big for a very large filesystem. It's capped at ~100k for
-            //    Precursor's ~100MiB storage increment.
-            for entry in cache {
-                for pp in entry.v2p_map.values() {
-                    page_heap.push(Reverse(pp.page_number()));
                 }
             }
             Some(page_heap)
@@ -1787,7 +1778,7 @@ impl PddbOs {
     /// valid (it'll scan up and stop as soon as one Pte checks out). Note that it then only returns
     /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
     /// at the conclusion of the sweep, but their page use can be accounted for.
-    pub(crate) fn pddb_get_additional_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
+    pub(crate) fn pddb_get_all_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
         const SWAP_DELAY_MS: usize = 300;
         let mut ret = Vec::<([u8; AES_KEYSIZE], String)>::new();
         for entry in cache {
