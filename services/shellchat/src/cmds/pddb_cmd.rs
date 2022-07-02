@@ -215,6 +215,98 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                 }
                 #[cfg(feature="pddbtest")]
+                "largetest" => {
+                    // fill memory with junk
+                    // 128k chunks of junk
+                    const JUNK_CHUNK: usize = 131072;
+                    log::info!("fill junk");
+                    for index in 0..28 { // write ~3 megs of junk, should trigger FSCB unlock at least once...
+                        let mut junk = Vec::<u8>::new();
+                        // 128k chunk of junk
+                        for i in 0..JUNK_CHUNK {
+                            junk.push((i + index) as u8);
+                        }
+                        let junkname = format!("junk{}", index);
+                        match self.pddb.get(
+                            "junk",
+                            &junkname,
+                            None, true, true,
+                            Some(JUNK_CHUNK),
+                            None::<fn()>
+                        ) {
+                            Ok(mut junk_key) => {
+                                match junk_key.write_all(&junk) {
+                                    Ok(_) => {
+                                        log::info!("wrote {} of len {}", junkname, JUNK_CHUNK);
+                                    }
+                                    Err(e) => {
+                                        log::error!("couldn't write {}: {:?}", junkname, e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("couldn't allocate junk key {}: {:?}", junkname, e);
+                            }
+                        }
+                    }
+                    log::info!("check junk");
+                    let mut pass = true;
+                    for index in 0..28 { // write ~3 megs of junk, should trigger FSCB unlock at least once...
+                        let mut junk = Vec::<u8>::new();
+                        // 128k chunk of junk
+                        for i in 0..JUNK_CHUNK {
+                            junk.push((i + index) as u8);
+                        }
+                        let junkname = format!("junk{}", index);
+                        match self.pddb.get(
+                            "junk",
+                            &junkname,
+                            None, false, false,
+                            None,
+                            None::<fn()>
+                        ) {
+                            Ok(mut junk_key) => {
+                                let mut checkbuf = Vec::new();
+                                match junk_key.read_to_end(&mut checkbuf) {
+                                    Ok(len) => {
+                                        log::info!("read back {} bytes", len);
+                                        let mut matched = true;
+                                        let mut errcount = 0;
+                                        for (index, (&a, &b)) in checkbuf.iter().zip(junk.iter()).enumerate() {
+                                            if a != b {
+                                                matched = false;
+                                                if errcount < 16 {
+                                                    log::info!("match failure at {}: a:{}, b:{}", index, a, b);
+                                                }
+                                                errcount += 1;
+                                            }
+                                        }
+                                        if !matched || len != JUNK_CHUNK {
+                                            pass = false;
+                                            log::error!("failed to verify {}", junkname);
+                                        } else {
+                                            log::info!("no errors in {}", junkname);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::error!("couldn't read {}: {:?}", junkname, e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("couldn't access junk key {}: {:?}", junkname, e);
+                            }
+                        }
+                    }
+                    if pass {
+                        write!(ret, "largetest passed").ok();
+                        log::info!("largetest passed");
+                    } else {
+                        write!(ret, "largetest failed").ok();
+                        log::info!("largetest failed");
+                    }
+                }
+                #[cfg(feature="pddbtest")]
                 "fscbtest" => {
                     let checkval = [0u8, 1u8, 2u8, 3u8];
                     // create a secret basis, put a test key in it
@@ -231,6 +323,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     ).unwrap();
                     persistence_test.write(&checkval).unwrap();
                     self.pddb.sync().ok();
+                    self.pddb.dbg_dump("fscb_test1").unwrap();
                     // unmount the test basis
                     log::info!("unmount basis");
                     self.pddb.lock_basis("fscbtest").ok();
@@ -272,6 +365,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     // check that secret basis is still there
                     log::info!("confirm test basis");
                     self.pddb.unlock_basis("fscbtest", None).ok();
+                    self.pddb.dbg_dump("fscb_test2").unwrap();
                     let mut persistence_test = self.pddb.get(
                         "persistent",
                         "key1",
