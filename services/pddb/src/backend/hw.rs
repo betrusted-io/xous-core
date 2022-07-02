@@ -1788,14 +1788,19 @@ impl PddbOs {
     /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
     /// at the conclusion of the sweep, but their page use can be accounted for.
     pub(crate) fn pddb_get_additional_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
+        const SWAP_DELAY_MS: usize = 300;
         let mut ret = Vec::<([u8; AES_KEYSIZE], String)>::new();
+        for entry in cache {
+            ret.push((entry.key.into(), entry.name.to_string()));
+        }
+        /*
         if let Some(sys_key) = &self.system_basis_key {
             ret.push((sys_key.pt, PDDB_DEFAULT_SYSTEM_BASIS.to_string()));
         } else {
             log::error!("No default system basis was set up, this should be an illegal condition when requesting FSCB scan!");
             panic!("No default system basis was set up, this should be an illegal condition when requesting FSCB scan!");
         }
-        const SWAP_DELAY_MS: usize = 300;
+        */
         log::info!("{} basis are open, with the following names:", cache.len());
         for entry in cache {
             log::info!(" - {}", entry.name);
@@ -1808,11 +1813,17 @@ impl PddbOs {
         modals.show_notification(t!("pddb.freespace.request", xous::LANG), None).ok();
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
+        // 0.5 display the Bases that we know
+        let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
+        for (_key, name) in ret.iter() {
+            blist.push_str("\n");
+            blist.push_str(name);
+        }
+        modals.show_notification(&blist, None).ok();
+        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+
         // 1. prompt user to enter any name/password combos for other basis we want to keep
-        let mut summary_displayed = false;
-        let mut request_str = t!("pddb.freespace.enumerate", xous::LANG);
-        while self.yes_no_approval(&modals, request_str) {
-            request_str = t!("pddb.freespace.enumerate_another", xous::LANG); // use a plural for the next request to clarify UX flow
+        while self.yes_no_approval(&modals, t!("pddb.freespace.enumerate_another", xous::LANG)) {
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
             match modals
@@ -1863,7 +1874,6 @@ impl PddbOs {
             };
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
             // 4. repeat summary print-out
-            summary_displayed = true;
             let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
             for (_key, name) in ret.iter() {
                 blist.push_str("\n");
@@ -1873,15 +1883,6 @@ impl PddbOs {
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         }
         // done!
-        if !summary_displayed { // no summary is displayed yet when the mount process is entirely skipped
-            let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
-            for (_key, name) in ret.iter() {
-                blist.push_str("\n");
-                blist.push_str(name);
-            }
-            modals.show_notification(&blist, None).ok();
-            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
-        }
         if self.yes_no_approval(&modals, t!("pddb.freespace.finished", xous::LANG)) {
             Some(ret)
         } else {
