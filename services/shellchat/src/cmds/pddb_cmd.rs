@@ -308,7 +308,10 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 }
                 #[cfg(feature="pddbtest")]
                 "fscbtest" => {
-                    let checkval = [0u8, 1u8, 2u8, 3u8];
+                    let mut checkval = Vec::new();
+                    for index in 0..17_000 {
+                        checkval.push(index as u8);
+                    }
                     // create a secret basis, put a test key in it
                     log::info!("create basis");
                     self.pddb.create_basis("fscbtest").ok();
@@ -318,10 +321,10 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         "persistent",
                         "key1",
                         None, true, true,
-                        Some(64),
+                        None,
                         None::<fn()>
                     ).unwrap();
-                    persistence_test.write(&checkval).unwrap();
+                    persistence_test.write_all(&checkval).unwrap();
                     self.pddb.sync().ok();
                     self.pddb.dbg_dump("fscb_test1").unwrap();
                     // unmount the test basis
@@ -379,11 +382,17 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     if readback.len() != checkval.len() {
                         passing = false;
                         log::error!("readback length is different: {:x?}, {:x?}", readback, checkval);
+                    } else {
+                        log::info!("readback len: 0x{:x}", readback.len());
                     }
-                    for (&a, &b) in checkval.iter().zip(readback.iter()) {
+                    let mut failures = 0;
+                    for (index, (&a, &b)) in checkval.iter().zip(readback.iter()).enumerate() {
                         if a != b {
                             passing = false;
-                            log::error!("readback data corruption: {} vs {}", a, b);
+                            if failures < 64 {
+                                log::error!("readback data corruption at {}: {} vs {}", index, a, b);
+                            }
+                            failures += 1;
                         }
                     }
                     if passing {
