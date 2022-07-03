@@ -414,8 +414,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             run(false, &pkgs,
                 Some(&[
                     "--features", "pddbtest",
+                    "--features", "autobasis", // this will make secret basis tracking synthetic and automated for stress testing
                     "--features", "ditherpunk",
                     "--features", "tracking-alloc",
+                    "--features", "pddb/deterministic",
                 ]), false)?
         }
         Some("hosted-ci") => {
