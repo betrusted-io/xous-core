@@ -653,6 +653,21 @@ impl Pddb {
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
     }
+
+    #[cfg(feature="pddbtest")]
+    pub fn basis_testing(&self, config: &[Option<bool>; 32]) {
+        let mut op = 0;
+        let mut valid = 0;
+        for (index, &c) in config.iter().enumerate() {
+            if let Some(opt) = c {
+                valid |= 1 << index;
+                op |= (if opt {1} else {0}) << index;
+            }
+        }
+        send_message(self.conn,
+            Message::new_scalar(Opcode::BasisTesting.to_usize().unwrap(), op, valid, 0, 0)
+        ).expect("couldn't send basis test message");
+    }
 }
 
 impl Drop for Pddb {

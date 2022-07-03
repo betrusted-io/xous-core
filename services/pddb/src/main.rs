@@ -1245,7 +1245,13 @@ fn wrapped_main() -> ! {
                 match dbg.request {
                     DebugRequest::Dump => {
                         log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
+                        #[cfg(not(feature="autobasis"))]
                         pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
+                        #[cfg(feature="autobasis")]
+                        {
+                            let export_extra = pddb_os.dbg_extra();
+                            pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), Some(&export_extra));
+                        }
                     },
                     DebugRequest::Remount => {
                         log::info!("attempting remount");
@@ -1259,6 +1265,18 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
+            #[cfg(feature="pddbtest")]
+            Opcode::BasisTesting => xous::msg_scalar_unpack!(msg, op, valid, _, _, {
+                let mut config: [Option<bool>; 32] = [None::<bool>; 32];
+                for i in 0..32 {
+                    if ((1 << i) & valid) != 0 {
+                        config[i] = Some(
+                            ((1 << i) & op) != 0
+                        )
+                    }
+                }
+                pddb_os.basis_testing(&mut basis_cache, &config);
+            }),
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
                 send_message(

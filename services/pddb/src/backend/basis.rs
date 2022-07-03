@@ -946,7 +946,7 @@ impl BasisCache {
             }
         } else {
             for basis in self.cache.iter_mut() {
-                log::info!("syncing {}", basis.name);
+                log::debug!("syncing {}", basis.name);
                 basis.sync(hw)?;
             }
         }

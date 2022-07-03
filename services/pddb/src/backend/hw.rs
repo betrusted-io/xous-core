@@ -12,7 +12,7 @@ use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
 use std::collections::HashMap;
-#[cfg(not(feature="deterministic"))]
+#[cfg(any(all(feature="pddbtest", feature="autobasis"), not(feature="deterministic")))]
 use std::collections::HashSet;
 #[cfg(feature="deterministic")]
 use std::collections::BTreeSet;
@@ -46,6 +46,9 @@ pub const KCOM_CT_LEN: usize = 4004;
 
 pub(crate) const WRAPPED_AES_KEYSIZE: usize = AES_KEYSIZE + 8;
 const SCD_VERSION: u32 = 2;
+
+#[cfg(feature="pddbtest")]
+pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 
 #[derive(Zeroize)]
 #[zeroize(drop)]
@@ -132,6 +135,8 @@ pub(crate) struct PddbOs {
     entropy: Rc<RefCell<TrngPool>>,
     /// connection to the password request manager
     pw_cid: xous::CID,
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    testnames: HashSet::<String>,
 }
 
 impl PddbOs {
@@ -178,6 +183,8 @@ impl PddbOs {
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
             pw_cid,
+            #[cfg(all(feature="pddbtest", feature="autobasis"))]
+            testnames: HashSet::new(),
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -201,6 +208,8 @@ impl PddbOs {
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
                 pw_cid,
+                #[cfg(all(feature="pddbtest", feature="autobasis"))]
+                testnames: HashSet::new(),
             }
         };
         ret
@@ -1778,6 +1787,7 @@ impl PddbOs {
     /// valid (it'll scan up and stop as soon as one Pte checks out). Note that it then only returns
     /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
     /// at the conclusion of the sweep, but their page use can be accounted for.
+    #[cfg(not(all(feature="pddbtest", feature="autobasis")))]
     pub(crate) fn pddb_get_all_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
         const SWAP_DELAY_MS: usize = 300;
         let mut ret = Vec::<([u8; AES_KEYSIZE], String)>::new();
@@ -1977,6 +1987,112 @@ impl PddbOs {
             data: okm_data,
         }
     }
+
+    //-------------------------------- TESTING -----------------------------------------
+    // always gated behind a feature flag. Includes routines that are nonsensicle in normal operation at best,
+    // and very dangerous from a security perspective at worst.
+
+    /// basis_testing takes an argument a vector of supplemental test Bases to mount or unmount.
+    /// If the basis does not exist, it is created. This accompanies a warning, because we can't know
+    /// if the intention was to create the basis or just mount it; but for testing, the diagnosis is always
+    /// going to be in the test logs, so it's more direct to print the error here instead of percolating
+    /// it back toward the caller.
+    /// The `Vec` is interpretd as follows:
+    ///   - index of `vec` corresponds to the test basis number.
+    ///   - the `Option<bool>` if `true` means to mount; if `false` means to unmount; None means skip
+    /// The basis always has the naming format of `test#`, where # is the index in the Vec. This allows
+    /// testing routines to selectively write to one basis by designating it as, for example
+    /// `test0`, `test1`, `test2`,...; the password is the same name as the Basis, for simplicity.
+    ///
+    /// The tooling and argument spec on this is deliberately sparse because this routine is meant to
+    /// be only used "if you know what you're doing" and we want to make the arg passing as minimal/easy
+    /// as possible (just a scalar) to cut down on testing overhead.
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    pub(crate) fn basis_testing(&mut self, cache: &mut BasisCache, config: &[Option<bool>; 32]) {
+        for (index, &maybe_op) in config.iter().enumerate() {
+            let name = format!("{}{}", BASIS_TEST_ROOTNAME, index);
+            if let Some(op) = maybe_op {
+                if op { // try to mount the basis, or create it if it does not exist.
+                    self.testnames.insert(name.to_string());
+                    let maybe_basis = cache.basis_unlock(
+                        self, &name, &name, BasisRetentionPolicy::Persist);
+
+                    if maybe_basis.is_some() {
+                        cache.basis_add(maybe_basis.unwrap());
+                    } else {
+                        cache.basis_create(self, &name, &name).expect("couldn't create basis");
+                        let basis = cache.basis_unlock(self, &name, &name, BasisRetentionPolicy::Persist)
+                            .expect("couldn't open just created basis");
+                        cache.basis_add(basis);
+                    }
+                } else {
+                    let blist = cache.basis_list();
+                    if blist.contains(&name) {
+                        match cache.basis_unmount(self, &name) {
+                            Ok(_) => {},
+                            Err(e) => log::error!("error unmounting basis {}: {:?}", name, e),
+                        }
+                    } else {
+                        log::info!("attempted to unmount {} but it does not exist or is already locked", name);
+                    }
+                }
+            }
+        }
+    }
+    /// In testing, we want a way to automatically unlock all known test Bases. This stand-in feature automates that.
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    pub(crate) fn pddb_get_all_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
+        // populate the "known" entries
+        let mut ret = Vec::<([u8; AES_KEYSIZE], String)>::new();
+        for entry in cache {
+            ret.push((entry.key.into(), entry.name.to_string()));
+        }
+
+        // now iterate through the bases that have been enumerated so far, and populate the missing ones.
+        for name in self.testnames.iter() {
+            // if the entry isn't known already, add it
+            // yah, this is O(n^2) awful. yolo!
+            let mut exists = false;
+            for (_key, bname) in ret.iter() {
+                if bname == name {
+                    exists = true;
+                    break;
+                }
+            }
+            if !exists {
+                let basis_key = self.basis_derive_key(
+                    name,
+                    name
+                );
+                ret.push((basis_key.pt, name.to_string()));
+            }
+        }
+        log::info!("for FSCB testing, we auto-unlocked {} bases", ret.len());
+        Some(ret)
+    }
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    pub(crate) fn dbg_extra(&self) -> Vec<KeyExport> {
+        let mut ret = Vec::<KeyExport>::new();
+        for name in self.testnames.iter() {
+            let basis_key = self.basis_derive_key(
+                name,
+                name
+            );
+            let mut basis_name = [0 as u8; 64];
+            for (&src, dst) in name.as_bytes().iter().zip(basis_name.iter_mut()) {
+                *dst = src;
+            }
+            ret.push(KeyExport {
+                basis_name,
+                key: basis_key.data,
+                pt_key: basis_key.pt,
+            });
+        }
+        ret
+    }
+
+    //-------------------------------- MIGRATIONS -----------------------------------------
+    // these are always gated behind feature flags, and disabled in builds once obsolete.
 
     /// legacy key derivation for migrations. This can be removed once the migration is de-supported.
     /// Must be within this structure because it accesses the rootkeys, and we don't want to make that public.
