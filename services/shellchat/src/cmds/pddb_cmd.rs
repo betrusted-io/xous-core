@@ -1,4 +1,5 @@
 use crate::{ShellCmdApi, CommonEnv};
+use pddb::PDDB_A_LEN;
 use xous_ipc::String;
 #[allow(unused_imports)]
 use std::io::{Write, Read, Seek, SeekFrom};
@@ -307,6 +308,261 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                 }
                 #[cfg(feature="pddbtest")]
+                "btest" => {
+                    // This test will:
+                    //   - generate bases iteratively:
+                    //     - populate each with generated keys (at least 2 of each) specified as follows:
+                    //       - small with an explicit basis
+                    //       - large with an implicit basis (tests default basis determination)
+                    //     - close the even basis as we create them (this exercises default basis determination and sets up for the next test)
+                    //     - shove ~128k of "junk" data into the System basis
+                    //   This proceeds until about 75% of the capacity of the disk is used up.
+                    //
+                    // The test will then unlock all the generated Basis, and confirm their contents are intact.
+
+                    // generate Basis until we've either exhausted the limit of our config vector (32 entries),
+                    // or we've filled up "enough" of the space to exercise the FSCB mechanism.
+                    let mut used = 0;
+                    let mut b = 0;
+                    while b < 32 && used < (PDDB_A_LEN as f32 * 0.75) as usize {
+                        let bname = format!("test{}", b);
+                        // create & mount the test basis: this is a condensed function that
+                        // will do either a create/open op or close op on any of 32 bases specified as an array to the argument.
+
+                        // as-coded, this will incrementally open each secret basis and try to write specifically to each newly
+                        // created basis "by name".
+                        let mut config = [None::<bool>; 32];
+                        config[b as usize] = Some(true);
+                        self.pddb.basis_testing(&config);
+                        log::info!("created test basis {}", b);
+
+                        for sub in 0..2 {
+                            let small_key = make_vector(b, VectorType::Small(b + sub));
+                            used += small_key.len();
+                            let sname = format!("small{}", sub);
+                            match self.pddb.get(
+                                "btest",
+                                &sname,
+                                // this uses an explicit specifier
+                                Some(&bname), true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut k) => {
+                                    match k.write_all(&small_key) {
+                                        Ok(_) => (),
+                                        Err(e) => log::error!("small key fill on basis {} failed: {:?}", bname, e),
+                                    }
+                                }
+                                Err(e) => log::error!("small key fill on basis {} failed: {:?}", bname, e),
+                            }
+
+                            let large_key = make_vector(b, VectorType::Large(b + sub));
+                            used += large_key.len();
+                            let lname = format!("large{}", sub);
+                            match self.pddb.get(
+                                "btest",
+                                &lname,
+                                // this uses the "none" specifier -- but should write to the same basis, implicitly as the small one
+                                None, true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut k) => {
+                                    match k.write_all(&large_key) {
+                                        Ok(_) => (),
+                                        Err(e) => log::error!("small key fill on basis {} failed: {:?}", bname, e),
+                                    }
+                                }
+                                Err(e) => log::error!("small key fill on basis {} failed: {:?}", bname, e),
+                            }
+                        }
+                        if b % 2 == 0 {
+                            // unmount every other basis as we create them, just to make things interesting
+                            config[b] = Some(false);
+                            self.pddb.basis_testing(&config);
+                        }
+                        let junk = make_vector(b, VectorType::Junk);
+                        match self.pddb.get(
+                            "junk",
+                            &b.to_string(),
+                            // this uses an explicit specifier
+                            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
+                            None,
+                            None::<fn()>
+                        ) {
+                            Ok(mut k) => {
+                                match k.write_all(&junk) {
+                                    Ok(_) => (),
+                                    Err(e) => log::error!("junk key fill on basis {} failed: {:?}", bname, e),
+                                }
+                            }
+                            Err(e) => log::error!("junk key fill on basis {} failed: {:?}", bname, e),
+                        }
+                        used += junk.len();
+
+                        self.pddb.dbg_dump(&format!("btest{}", b)).unwrap();
+                        let blist = self.pddb.list_basis();
+                        log::info!("Iter {} / Currently open Bases: {:?}", b, blist);
+                        log::info!("Currently used: {} bytes", used);
+                        b += 1;
+                    }
+                    log::info!("-------------- generation complete, now verifying -----------------");
+                    self.pddb.dbg_dump("btest_final").unwrap(); // this will also export all the extra basis keys in this mode
+                    self.pddb.dbg_remount().unwrap();
+
+                    let mut checked = 0;
+                    // this unlocks all the Bases
+                    let mut config = [None::<bool>; 32];
+                    for i in 0..b {
+                        config[i] = Some(true);
+                    }
+                    self.pddb.basis_testing(&config);
+                    let max_b = b;
+
+                    // now iterate through and check the Bases
+                    let mut pass = true;
+                    let mut errcount = 0;
+                    const ERRTHRESH: usize = 32;
+                    for b in 0..max_b {
+                        let bname = format!("test{}", b);
+                        // create & mount the test basis: this is a condensed function that
+                        // will do either a create/open op or close op on any of 32 bases specified as an array to the argument.
+
+                        // as-coded, this will incrementally open each secret basis and try to write specifically to each newly
+                        // created basis "by name".
+                        log::info!("checking basis {}", b);
+
+                        for sub in 0..2 {
+                            let small_key = make_vector(b, VectorType::Small(b + sub));
+                            used += small_key.len();
+                            let sname = format!("small{}", sub);
+                            match self.pddb.get(
+                                "btest",
+                                &sname,
+                                Some(&bname), true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut k) => {
+                                    let mut check = Vec::<u8>::new();
+                                    match k.read_to_end(&mut check) {
+                                        Ok(len) => {
+                                            checked += len;
+                                            if check.len() != small_key.len() {
+                                                pass = false;
+                                                log::error!("small key size mismatch {}:{}:{} - {}->{}",
+                                                    bname, "btest", sname, small_key.len(), check.len()
+                                                );
+                                            } else {
+                                                for (index, (&a, &b)) in check.iter().zip(small_key.iter()).enumerate() {
+                                                    if a != b {
+                                                        pass = false;
+                                                        errcount += 1;
+                                                        if errcount < ERRTHRESH {
+                                                            log::error!("small key data mismatch {}:{}:{} @ {} 0x{:x}->0x{:x}",
+                                                                bname, "btest", sname, index, a, b
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        Err(e) => log::error!("small key check on basis {} failed: {:?}", bname, e),
+                                    }
+                                }
+                                Err(e) => log::error!("small key check on basis {} failed: {:?}", bname, e),
+                            }
+
+                            let large_key = make_vector(b, VectorType::Large(b + sub));
+                            used += large_key.len();
+                            let lname = format!("large{}", sub);
+                            match self.pddb.get(
+                                "btest",
+                                &lname,
+                                Some(&bname), true, true,
+                                None,
+                                None::<fn()>
+                            ) {
+                                Ok(mut k) => {
+                                    let mut check = Vec::<u8>::new();
+                                    match k.read_to_end(&mut check) {
+                                        Ok(len) => {
+                                            checked += len;
+                                            if check.len() != large_key.len() {
+                                                pass = false;
+                                                log::error!("large key size mismatch {}:{}:{} - {}->{}",
+                                                    bname, "btest", sname, large_key.len(), check.len()
+                                                );
+                                            } else {
+                                                for (index, (&a, &b)) in check.iter().zip(large_key.iter()).enumerate() {
+                                                    if a != b {
+                                                        pass = false;
+                                                        errcount += 1;
+                                                        if errcount < ERRTHRESH {
+                                                            log::error!("large key data mismatch {}:{}:{} @ {} 0x{:x}->0x{:x}",
+                                                                bname, "btest", sname, index, a, b
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        Err(e) => log::error!("large key check on basis {} failed: {:?}", bname, e),
+                                    }
+                                }
+                                Err(e) => log::error!("large key fill on basis {} failed: {:?}", bname, e),
+                            }
+                        }
+                        let junk = make_vector(b, VectorType::Junk);
+                        match self.pddb.get(
+                            "junk",
+                            &b.to_string(),
+                            // this uses an explicit specifier
+                            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
+                            None,
+                            None::<fn()>
+                        ) {
+                            Ok(mut k) => {
+                                let mut check = Vec::<u8>::new();
+                                match k.read_to_end(&mut check) {
+                                    Ok(len) => {
+                                        checked += len;
+                                        if check.len() != junk.len() {
+                                            pass = false;
+                                            log::error!("junk key size mismatch {}:{}:{} - {}->{}",
+                                                pddb::PDDB_DEFAULT_SYSTEM_BASIS, "junk", &b.to_string(), junk.len(), check.len()
+                                            );
+                                        } else {
+                                            for (index, (&a, &b)) in check.iter().zip(junk.iter()).enumerate() {
+                                                if a != b {
+                                                    pass = false;
+                                                    errcount += 1;
+                                                    if errcount < ERRTHRESH {
+                                                        log::error!("junk key data mismatch {}:{}:{} @ {} 0x{:x}->0x{:x}",
+                                                            pddb::PDDB_DEFAULT_SYSTEM_BASIS, "junk", &b.to_string(), index, a, b
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    Err(e) => log::error!("junk key check on basis {} failed: {:?}", bname, e),
+                                }                            }
+                            Err(e) => log::error!("junk key fill on basis {} failed: {:?}", bname, e),
+                        }
+                        log::info!("Iter {} of checking", b);
+                        log::info!("Currently checked: {} bytes", checked);
+                    }
+                    if pass {
+                        log::info!("basis stress test passed");
+                        write!(ret, "basis stress test passed").ok();
+                    } else {
+                        log::info!("basis stress test failed: {} errors", errcount);
+                        write!(ret, "basis stress test failed: {} errors", errcount).ok();
+                    }
+                }
+                #[cfg(feature="pddbtest")]
                 "fscbtest" => {
                     let mut checkval = Vec::new();
                     for index in 0..17_000 {
@@ -564,4 +820,49 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         }
         Ok(Some(ret))
     }
+}
+
+enum VectorType {
+    Small(usize),
+    Large(usize),
+    Junk,
+}
+const SMALL_SIZE: usize = 2011;
+const LARGE_SIZE: usize = 28813;
+const JUNK_SIZE: usize = 128 * 1024 - 2;
+fn make_vector(basis_number: usize, vtype: VectorType) -> Vec::<u8> {
+    use rand::prelude::*;
+    use rand_chacha::ChaCha8Rng;
+
+    let mut vector = Vec::<u8>::new();
+    // seed format:
+    // bottom 0xFFFF is reserved for the basis_number
+    // next 0xFFF is resrved for the vector number
+    // 0x8000_0000 when set means small, not set means large
+    let typemod = match vtype {
+        VectorType::Small(n) => 0x1_0000 * (n as u64) + 0x8000_0000,
+        VectorType::Large(n) => 0x1_0000 * (n as u64) + 0x0000_0000,
+        VectorType::Junk => 0x1_0000_000,
+    };
+    let mut rng = ChaCha8Rng::seed_from_u64(basis_number as u64 + typemod);
+    match vtype {
+        VectorType::Small(n) => {
+            // multiply the vector number by some odd value so the vectors are not same-sized
+            for _ in 0..SMALL_SIZE + 7 * n + basis_number {
+                vector.push(rng.gen());
+            }
+        }
+        VectorType::Large(n) => {
+            // multiply the vector number by some odd value so the vectors are not same-sized
+            for _ in 0..LARGE_SIZE + 1117 * n + basis_number {
+                vector.push(rng.gen());
+            }
+        }
+        VectorType::Junk => {
+            for _ in 0..JUNK_SIZE + basis_number {
+                vector.push(rng.gen());
+            }
+        }
+    }
+    vector
 }
