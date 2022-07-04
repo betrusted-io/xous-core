@@ -47,7 +47,7 @@ pub const KCOM_CT_LEN: usize = 4004;
 pub(crate) const WRAPPED_AES_KEYSIZE: usize = AES_KEYSIZE + 8;
 const SCD_VERSION: u32 = 2;
 
-#[cfg(feature="pddbtest")]
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
 pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 
 #[derive(Zeroize)]

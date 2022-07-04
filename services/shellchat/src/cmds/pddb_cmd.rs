@@ -1,4 +1,5 @@
 use crate::{ShellCmdApi, CommonEnv};
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
 use pddb::PDDB_A_LEN;
 use xous_ipc::String;
 #[allow(unused_imports)]
@@ -307,7 +308,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         log::info!("largetest failed");
                     }
                 }
-                #[cfg(feature="pddbtest")]
+                #[cfg(all(feature="pddbtest", feature="autobasis"))]
                 "btest" => {
                     // This test will:
                     //   - generate bases iteratively:
@@ -824,14 +825,19 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     }
 }
 
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
 enum VectorType {
     Small(usize),
     Large(usize),
     Junk,
 }
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
 const SMALL_SIZE: usize = 2011;
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
 const LARGE_SIZE: usize = 28813;
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
 const JUNK_SIZE: usize = 128 * 1024 - 2;
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
 fn make_vector(basis_number: usize, vtype: VectorType) -> Vec::<u8> {
     use rand::prelude::*;
     use rand_chacha::ChaCha8Rng;

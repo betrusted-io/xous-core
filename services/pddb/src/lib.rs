@@ -654,7 +654,7 @@ impl Pddb {
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
     }
 
-    #[cfg(feature="pddbtest")]
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
     pub fn basis_testing(&self, config: &[Option<bool>; 32]) {
         let mut op = 0;
         let mut valid = 0;

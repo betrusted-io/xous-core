@@ -39,7 +39,10 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_02_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
-// pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
+#[cfg(not(any(feature="pddbtest",feature="autobasis",feature="ci")))]
+pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
+#[allow(dead_code)]
+#[cfg(any(feature="pddbtest",feature="autobasis",feature="ci"))]
 pub const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// range for the starting point of a journal number, picked from a random seed
@@ -133,7 +136,7 @@ pub(crate) enum Opcode {
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     DangerousDebug = 25,
-    #[cfg(feature="pddbtest")]
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
     BasisTesting = 26,
 
     /// This key type could not be decoded

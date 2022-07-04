@@ -1265,7 +1265,7 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
-            #[cfg(feature="pddbtest")]
+            #[cfg(all(feature="pddbtest", feature="autobasis"))]
             Opcode::BasisTesting => xous::msg_scalar_unpack!(msg, op, valid, _, _, {
                 let mut config: [Option<bool>; 32] = [None::<bool>; 32];
                 for i in 0..32 {
