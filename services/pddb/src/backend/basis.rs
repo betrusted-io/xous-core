@@ -801,7 +801,7 @@ impl BasisCache {
     pub(crate) fn basis_unlock(&mut self, hw: &mut PddbOs, name: &str, password: &str,
     policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         let basis_key =  hw.basis_derive_key(name, password);
-        if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, name) {
+        if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, &basis_key.data, name) {
             let aad = hw.data_aad(name);
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                 let vpage = match hw.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
@@ -1090,7 +1090,11 @@ pub(crate) struct BasisCacheEntry {
     pub cipher: AesGcmSiv::<Aes256>,
     /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
     pub cipher_ecb: Aes256,
-    /// raw AES key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
+    /// raw AES page table key -- needed because we have to do a low-level PT scan to generate FSCB, and sometimes the key comes from
+    /// a copy cached here, or from one derived solely for the FSCB scan. There is no way to copy an Aes256 record, so, we include
+    /// the raw key because we can copy that. :P so much for semantics.
+    pub pt_key: GenericArray<u8, cipher::consts::U32>,
+    /// raw AES data key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
     pub key: GenericArray<u8, cipher::consts::U32>,
     /// the AAD associated with this Basis
     pub aad: Vec::<u8>,
@@ -1113,7 +1117,7 @@ impl BasisCacheEntry {
     /// If it `lazy` is false, it will populate the dictionary cache and key cache entries, as well as
     /// discover the location of the `large_alloc_ptr`.
     pub(crate) fn mount(hw: &mut PddbOs, name: &str,  key: &BasisKeys, lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
-        if let Some(basis_map) = hw.pt_scan_key(&key.pt, name) {
+        if let Some(basis_map) = hw.pt_scan_key(&key.pt, &key.data, name) {
             let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&key.data));
             let aad = hw.data_aad(name);
             // get the first page, where the basis root is guaranteed to be
@@ -1149,6 +1153,7 @@ impl BasisCacheEntry {
                     dicts: HashMap::<String, DictCacheEntry>::new(),
                     cipher,
                     cipher_ecb: Aes256::new(GenericArray::from_slice(&key.pt)),
+                    pt_key: GenericArray::clone_from_slice(&key.pt),
                     key: GenericArray::clone_from_slice(&key.data),
                     aad,
                     age: basis_root.age,
