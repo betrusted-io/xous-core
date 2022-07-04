@@ -12,7 +12,7 @@ use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
 use std::collections::HashMap;
-#[cfg(not(feature="deterministic"))]
+#[cfg(any(all(feature="pddbtest", feature="autobasis"), not(feature="deterministic")))]
 use std::collections::HashSet;
 #[cfg(feature="deterministic")]
 use std::collections::BTreeSet;
@@ -46,6 +46,9 @@ pub const KCOM_CT_LEN: usize = 4004;
 
 pub(crate) const WRAPPED_AES_KEYSIZE: usize = AES_KEYSIZE + 8;
 const SCD_VERSION: u32 = 2;
+
+#[cfg(all(feature="pddbtest", feature="autobasis"))]
+pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 
 #[derive(Zeroize)]
 #[zeroize(drop)]
@@ -130,10 +133,14 @@ pub(crate) struct PddbOs {
     dna: u64,
     /// reference to a TrngPool object that's shared among all the hardware functions
     entropy: Rc<RefCell<TrngPool>>,
+    /// connection to the password request manager
+    pw_cid: xous::CID,
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    testnames: HashSet::<String>,
 }
 
 impl PddbOs {
-    pub fn new(trngpool: Rc<RefCell<TrngPool>>) -> PddbOs {
+    pub fn new(trngpool: Rc<RefCell<TrngPool>>, pw_cid: xous::CID) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
         #[cfg(any(target_os = "none", target_os = "xous"))]
         let pddb = xous::syscall::map_memory(
@@ -175,6 +182,9 @@ impl PddbOs {
             fspace_log_len: 0,
             dna: llio.soc_dna().unwrap(),
             entropy: trngpool,
+            pw_cid,
+            #[cfg(all(feature="pddbtest", feature="autobasis"))]
+            testnames: HashSet::new(),
         };
         // emulated
         #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -197,6 +207,9 @@ impl PddbOs {
                 fspace_log_len: 0,
                 dna: llio.soc_dna().unwrap(),
                 entropy: trngpool,
+                pw_cid,
+                #[cfg(all(feature="pddbtest", feature="autobasis"))]
+                testnames: HashSet::new(),
             }
         };
         ret
@@ -431,8 +444,8 @@ impl PddbOs {
     /// that also maps to the imposter), the imposter is effectively de-allocated because the FSCB report is inserted directly
     /// into the page table, overwriting the impostor entry in the paget able. On the next mount, this turns into the "trivial conflict"
     /// case, where one page will validate and the other will not.
-    pub(crate) fn pt_scan_key(&self, key: &[u8; AES_KEYSIZE], basis_name: &str) -> Option<HashMap::<VirtAddr, PhysPage>> {
-        let cipher = Aes256::new(&GenericArray::from_slice(key));
+    pub(crate) fn pt_scan_key(&self, pt_key: &[u8; AES_KEYSIZE], data_key: &[u8; AES_KEYSIZE], basis_name: &str) -> Option<HashMap::<VirtAddr, PhysPage>> {
+        let cipher = Aes256::new(&GenericArray::from_slice(pt_key));
         let pt = self.pt_as_slice();
         let mut map = HashMap::<VirtAddr, PhysPage>::new();
         let blank = [0xffu8; aes::BLOCK_SIZE];
@@ -460,7 +473,7 @@ impl PddbOs {
                     pp.set_space_state(SpaceState::Used);
                     // handle conflicting journal versions here
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
-                        let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(key));
+                        let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(data_key));
                         let aad = self.data_aad(basis_name);
                         let prev_data = self.data_decrypt_page(&cipher, &aad, prev_page);
                         let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
@@ -681,8 +694,8 @@ impl PddbOs {
             let ct_to_flash = ciphertext.deref();
             // determine which page we're going to write the ciphertext into
             let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
-            log::info!("picking a random page out of {} pages for fscb", page_search_limit);
             let dest_page = self.entropy.borrow_mut().get_u32() % page_search_limit as u32;
+            log::info!("picking random page {} out of {} pages for fscb", dest_page, page_search_limit);
             // atomicity of the FreeSpace structure is a bit of a tough topic. It's a fairly hefty structure,
             // that runs a risk of corruption as it's being written, if power is lost or the system crashes.
             // However, the guiding principle of this ordering is that it's better to have no FastSpace structure
@@ -723,8 +736,9 @@ impl PddbOs {
 
         // 1. check that the page_heap has enough entries
         let total_used_pages = page_heap.len();
-        let total_free_pages = (PDDB_A_LEN - self.data_phys_base.as_usize()) / PAGE_SIZE;
-        log::info!("page alloc: {} used; {} free", total_used_pages, total_free_pages);
+        let total_pages = (PDDB_A_LEN - self.data_phys_base.as_usize()) / PAGE_SIZE;
+        let total_free_pages = total_pages - total_used_pages;
+        log::info!("page alloc: {} used; {} free; {} total", total_used_pages, total_free_pages, total_pages);
         if total_free_pages == 0 {
             log::warn!("Disk is out of space, no free pages available!");
             // return an empty free_pool vector.
@@ -740,7 +754,7 @@ impl PddbOs {
             // if the page is used, skip it.
             if let Some(Reverse(mp)) = min_used_page {
                 if page_candidate == mp as usize {
-                    log::info!("removing used page from free_pool: {}", mp);
+                    log::debug!("removing used page from free_pool: {}", mp);
                     min_used_page = page_heap.pop();
                     continue;
                 }
@@ -1387,7 +1401,7 @@ impl PddbOs {
         self.fast_space_read();
         self.syskey_ensure();
         if let Some(syskey) = self.system_basis_key.take() {
-            if let Some(sysbasis_map) = self.pt_scan_key(&syskey.pt, PDDB_DEFAULT_SYSTEM_BASIS) {
+            if let Some(sysbasis_map) = self.pt_scan_key(&syskey.pt, &syskey.data, PDDB_DEFAULT_SYSTEM_BASIS) {
                 let aad = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
                 // get the first page, where the basis root is guaranteed to be
                 if let Some(root_page) = sysbasis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
@@ -1752,25 +1766,40 @@ impl PddbOs {
     /// can decline to unlock all the Basis right now, cancelling out of the process, which will
     /// cause the requesting free space sweep to fail.
     pub(crate) fn pddb_generate_used_map(&self, cache: &Vec::<BasisCacheEntry>) -> Option<BinaryHeap<Reverse<u32>>> {
-        if let Some(extra_keys) = self.pddb_get_additional_keys(&cache) {
+        if let Some(all_keys) = self.pddb_get_all_keys(&cache) {
             let mut page_heap = BinaryHeap::new();
-            // 1. check the extra keys, if any
-            for (key, name) in extra_keys {
-                // scan the extra closed basis
-                if let Some(map) = self.pt_scan_key(&key, &name) {
+            let mut page_check = HashSet::new(); // this is just for sanity checking because you can't query a heap
+            for (basis_keys, name) in all_keys {
+                // scan the disclosed bases
+                if let Some(map) = self.pt_scan_key(&basis_keys.pt, &basis_keys.data, &name) {
                     for pp in map.values() {
-                        page_heap.push(Reverse(pp.page_number()))
+                        page_heap.push(Reverse(pp.page_number()));
+                        if !page_check.insert(pp.page_number()) {
+                            log::warn!("double-insert detected of page number {}", pp.page_number());
+                        }
+                    }
+                } else {
+                    log::warn!("pt_scan for basis {} failed, data may be lost", name);
+                }
+            }
+
+
+            // need to incorporate all of the FSCB knowledge into the scan as well, because there could be
+            // cached pages inside "live" Basis that have not been committed to disk. However, it *should* be
+            // the case that any cached allocations came out of the previous FSCB pool, therefore, by merging
+            // in the "used list" from the existing FSCB we should be able to generate an accurate
+            // representation of the actually used pages
+            for pp in self.fspace_cache.iter() {
+                if pp.space_state() == SpaceState::Used || pp.space_state() == SpaceState::MaybeUsed {
+                    if !page_check.insert(pp.page_number()) {
+                        log::info!("FSCB and page table both record this used page: {} (this is normal)", pp.page_number());
+                    } else {
+                        page_heap.push(Reverse(pp.page_number()));
+                        log::info!("FSCB contained {}, but not yet committed to disk; added to page_heap", pp.page_number());
                     }
                 }
             }
-            // 2. scan through all of the physical pages in our caches, and add them to a binary heap.
-            //    WARNING: this could get really big for a very large filesystem. It's capped at ~100k for
-            //    Precursor's ~100MiB storage increment.
-            for entry in cache {
-                for pp in entry.v2p_map.values() {
-                    page_heap.push(Reverse(pp.page_number()));
-                }
-            }
+
             Some(page_heap)
         } else {
             None
@@ -1783,7 +1812,14 @@ impl PddbOs {
     /// valid (it'll scan up and stop as soon as one Pte checks out). Note that it then only returns
     /// a Vec of keys & names, not a BasisCacheEntry -- so it means that the Basis still are "closed"
     /// at the conclusion of the sweep, but their page use can be accounted for.
-    pub(crate) fn pddb_get_additional_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<([u8; AES_KEYSIZE], String)>> {
+    #[cfg(not(all(feature="pddbtest", feature="autobasis")))]
+    pub(crate) fn pddb_get_all_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<(BasisKeys, String)>> {
+        const SWAP_DELAY_MS: usize = 300;
+        // populate the "known" entries
+        let mut ret = Vec::<(BasisKeys, String)>::new();
+        for entry in cache {
+            ret.push((BasisKeys { pt: entry.pt_key.into(), data: entry.key.into() }, entry.name.to_string()));
+        }
         log::info!("{} basis are open, with the following names:", cache.len());
         for entry in cache {
             log::info!(" - {}", entry.name);
@@ -1791,14 +1827,107 @@ impl PddbOs {
 
         // 0. allow user to cancel out of the operation -- this will abort everything and cause the current
         //    alloc operation to fail
+        let xns = xous_names::XousNames::new().unwrap();
+        let modals = modals::Modals::new(&xns).unwrap();
+        modals.show_notification(t!("pddb.freespace.request", xous::LANG), None).ok();
+        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+
+        // 0.5 display the Bases that we know
+        let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
+        for (_key, name) in ret.iter() {
+            blist.push_str("\n");
+            blist.push_str(name);
+        }
+        modals.show_notification(&blist, None).ok();
+        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 1. prompt user to enter any name/password combos for other basis we want to keep
-        // 2. validate the name/password combo
-        // 3. add to the Aes256 return vec
-        // 4. repeat summary print-out
+        while self.yes_no_approval(&modals, t!("pddb.freespace.enumerate_another", xous::LANG)) {
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
-        // for now, do nothing -- just indicate success with a returned empty set
-        Some(Vec::<([u8; AES_KEYSIZE], String)>::new())
+            match modals
+                .alert_builder(t!("pddb.freespace.name", xous::LANG))
+                .field(None, None)
+                .build()
+            {
+                Ok(bname) => {
+                    let name = bname.first().as_str().to_string();
+                    let request = BasisRequestPassword {
+                        db_name: xous_ipc::String::from_str(name.to_string()),
+                        plaintext_pw: None,
+                    };
+                    let mut buf = Buffer::into_buf(request).unwrap();
+                    buf.lend_mut(self.pw_cid, PwManagerOpcode::RequestPassword.to_u32().unwrap()).unwrap();
+                    let retpass = buf.to_original::<BasisRequestPassword, _>().unwrap();
+                    // 2. validate the name/password combo
+                    let basis_key = self.basis_derive_key(
+                        &name,
+                        retpass.plaintext_pw.unwrap().as_str().unwrap()
+                    );
+                    // validate the password by finding the root block of the basis. We rely entirely
+                    // upon the AEAD with key commit to ensure the password is correct.
+                    let maybe_entry = if let Some(basis_map) =
+                    self.pt_scan_key(&basis_key.pt, &basis_key.data, &name) {
+                        let aad = self.data_aad(&name);
+                        if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
+                            match self.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
+                                Some(_data) => {
+                                    // if the root page decrypts, we accept the password; no further checking is done.
+                                    Some((basis_key, name.to_string()))
+                                },
+                                None => None,
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    // 3. add to the Aes256 return vec
+                    if let Some((basis_key, name)) = maybe_entry {
+                        ret.push((basis_key, name));
+                    } else {
+                        modals.show_notification(t!("pddb.freespace.badpass", xous::LANG), None).ok();
+                        self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                    }
+                },
+                _ => return None,
+            };
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+            // 4. repeat summary print-out
+            let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
+            for (_key, name) in ret.iter() {
+                blist.push_str("\n");
+                blist.push_str(name);
+            }
+            modals.show_notification(&blist, None).ok();
+            self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+        }
+        // done!
+        if self.yes_no_approval(&modals, t!("pddb.freespace.finished", xous::LANG)) {
+            Some(ret)
+        } else {
+            None
+        }
+    }
+
+    fn yes_no_approval(&self, modals: &modals::Modals, request: &str) -> bool {
+        modals.add_list(
+            vec![t!("pddb.yes", xous::LANG), t!("pddb.no", xous::LANG)]
+        ).expect("couldn't build confirmation dialog");
+        match modals.get_radiobutton(request) {
+            Ok(response) => {
+                if &response == t!("pddb.yes", xous::LANG) {
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => {
+                log::error!("get approval failed");
+                false
+            },
+        }
     }
 
     /// Derives a 256-bit AES encryption key for a basis given a basis name and its password.
@@ -1878,6 +2007,115 @@ impl PddbOs {
             data: okm_data,
         }
     }
+
+    //-------------------------------- TESTING -----------------------------------------
+    // always gated behind a feature flag. Includes routines that are nonsensicle in normal operation at best,
+    // and very dangerous from a security perspective at worst.
+
+    /// basis_testing takes an argument a vector of supplemental test Bases to mount or unmount.
+    /// If the basis does not exist, it is created. This accompanies a warning, because we can't know
+    /// if the intention was to create the basis or just mount it; but for testing, the diagnosis is always
+    /// going to be in the test logs, so it's more direct to print the error here instead of percolating
+    /// it back toward the caller.
+    /// The `Vec` is interpretd as follows:
+    ///   - index of `vec` corresponds to the test basis number.
+    ///   - the `Option<bool>` if `true` means to mount; if `false` means to unmount; None means skip
+    /// The basis always has the naming format of `test#`, where # is the index in the Vec. This allows
+    /// testing routines to selectively write to one basis by designating it as, for example
+    /// `test0`, `test1`, `test2`,...; the password is the same name as the Basis, for simplicity.
+    ///
+    /// The tooling and argument spec on this is deliberately sparse because this routine is meant to
+    /// be only used "if you know what you're doing" and we want to make the arg passing as minimal/easy
+    /// as possible (just a scalar) to cut down on testing overhead.
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    pub(crate) fn basis_testing(&mut self, cache: &mut BasisCache, config: &[Option<bool>; 32]) {
+        for (index, &maybe_op) in config.iter().enumerate() {
+            let name = format!("{}{}", BASIS_TEST_ROOTNAME, index);
+            if let Some(op) = maybe_op {
+                if op { // try to mount the basis, or create it if it does not exist.
+                    self.testnames.insert(name.to_string());
+                    let maybe_basis = cache.basis_unlock(
+                        self, &name, &name, BasisRetentionPolicy::Persist);
+
+                    if maybe_basis.is_some() {
+                        cache.basis_add(maybe_basis.unwrap());
+                    } else {
+                        cache.basis_create(self, &name, &name).expect("couldn't create basis");
+                        let basis = cache.basis_unlock(self, &name, &name, BasisRetentionPolicy::Persist)
+                            .expect("couldn't open just created basis");
+                        cache.basis_add(basis);
+                    }
+                } else {
+                    let blist = cache.basis_list();
+                    if blist.contains(&name) {
+                        match cache.basis_unmount(self, &name) {
+                            Ok(_) => {},
+                            Err(e) => log::error!("error unmounting basis {}: {:?}", name, e),
+                        }
+                    } else {
+                        log::info!("attempted to unmount {} but it does not exist or is already locked", name);
+                    }
+                }
+            }
+        }
+    }
+    /// In testing, we want a way to automatically unlock all known test Bases. This stand-in feature automates that.
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    pub(crate) fn pddb_get_all_keys<'a>(&'a self, cache: &'a Vec::<BasisCacheEntry>) -> Option<Vec<(BasisKeys, String)>> {
+        // populate the "known" entries
+        let mut ret = Vec::<(BasisKeys, String)>::new();
+        for entry in cache {
+            ret.push((BasisKeys { pt: entry.pt_key.into(), data: entry.key.into() }, entry.name.to_string()));
+        }
+
+        // now iterate through the bases that have been enumerated so far, and populate the missing ones.
+        for name in self.testnames.iter() {
+            // if the entry isn't known already, add it
+            // yah, this is O(n^2) awful. yolo!
+            let mut exists = false;
+            for (_bk, bname) in ret.iter() {
+                if bname == name {
+                    exists = true;
+                    break;
+                }
+            }
+            if !exists {
+                let basis_key = self.basis_derive_key(
+                    name,
+                    name
+                );
+                ret.push((basis_key, name.to_string()));
+            }
+        }
+        log::info!("for FSCB testing, we auto-unlocked {} bases:", ret.len());
+        for (_bk, entry) in ret.iter() {
+            log::info!("  - {}", entry);
+        }
+        Some(ret)
+    }
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    pub(crate) fn dbg_extra(&self) -> Vec<KeyExport> {
+        let mut ret = Vec::<KeyExport>::new();
+        for name in self.testnames.iter() {
+            let basis_key = self.basis_derive_key(
+                name,
+                name
+            );
+            let mut basis_name = [0 as u8; 64];
+            for (&src, dst) in name.as_bytes().iter().zip(basis_name.iter_mut()) {
+                *dst = src;
+            }
+            ret.push(KeyExport {
+                basis_name,
+                key: basis_key.data,
+                pt_key: basis_key.pt,
+            });
+        }
+        ret
+    }
+
+    //-------------------------------- MIGRATIONS -----------------------------------------
+    // these are always gated behind feature flags, and disabled in builds once obsolete.
 
     /// legacy key derivation for migrations. This can be removed once the migration is de-supported.
     /// Must be within this structure because it accesses the rootkeys, and we don't want to make that public.

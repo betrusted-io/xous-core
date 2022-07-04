@@ -395,6 +395,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 false,
             )?
         }
+        Some("pddb-btest") => {
+            generate_app_menus(&Vec::<String>::new());
+            // for hosted runs, compile in the pddb test routines by default...for now.
+            run(false, &hw_pkgs,
+                Some(&[
+                    "--features", "pddbtest",
+                    "--features", "autobasis", // this will make secret basis tracking synthetic and automated for stress testing
+                    "--features", "pddb/deterministic",
+                    "--features", "autobasis-ci",
+                ]), false)?
+        }
         Some("run") => {
             let mut args = env::args();
             args.nth(1);

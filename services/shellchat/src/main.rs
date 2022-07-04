@@ -390,6 +390,12 @@ fn wrapped_main() -> ! {
 
     let mut allow_redraw = true;
     log::trace!("starting main loop");
+
+    #[cfg(feature = "autobasis-ci")]
+    {
+        log::info!("starting autobasis CI launcher");
+        autobasis_launcher(shch_sid);
+    }
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
         log::debug!("got message {:?}", msg);
@@ -447,4 +453,21 @@ fn wrapped_main() -> ! {
     xous::destroy_server(shch_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+#[cfg(feature="autobasis-ci")]
+fn autobasis_launcher(sid: xous::SID) {
+    let _ = std::thread::spawn({
+        let conn = xous::connect(sid).unwrap();
+        move || {
+            let pddb = pddb::Pddb::new();
+            pddb.is_mounted_blocking();
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            tt.sleep_ms(5000).unwrap();
+            let cmd = xous_ipc::String::<4000>::from_str("pddb btest");
+            let buf = Buffer::into_buf(cmd).unwrap();
+            buf.send(conn, ShellOpcode::Line.to_u32().unwrap()).expect("couldn't kick off the CI");
+            log::info!("CI run started");
+        }
+    });
 }

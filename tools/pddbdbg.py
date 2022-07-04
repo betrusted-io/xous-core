@@ -394,7 +394,7 @@ class KeyDescriptor:
             print_len = len(self.data)
             extra = ''
         else:
-            if (PRINTED_FULL == False) and (self.ci_ok == False):
+            if DO_CI_TESTS and (PRINTED_FULL == False) and (self.ci_ok == False):
                 print_len = len(self.data)
                 extra = ''
                 PRINTED_FULL = True

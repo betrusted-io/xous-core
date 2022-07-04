@@ -437,8 +437,21 @@ fn wrapped_main() -> ! {
     // for less-secured user prompts (everything but password entry)
     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
+    // our very own password modal. Password modals are precious and privately owned, to avoid
+    // other processes from crafting them.
+    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    let pw_handle = thread::spawn({
+        move || {
+            password_ux_manager(
+                xous::connect(pddb_sid).unwrap(),
+                pw_sid
+            )
+        }
+    });
+
     // OS-specific PDDB driver
-    let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+    let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
@@ -483,18 +496,6 @@ fn wrapped_main() -> ! {
         hw_testcase(&mut pddb_os);
     }
 
-    // our very own password modal. Password modals are precious and privately owned, to avoid
-    // other processes from crafting them.
-    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
-    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
-    let pw_handle = thread::spawn({
-        move || {
-            password_ux_manager(
-                xous::connect(pddb_sid).unwrap(),
-                pw_sid
-            )
-        }
-    });
     // our menu handler
     let my_cid = xous::connect(pddb_sid).unwrap();
     let _ = thread::spawn({
@@ -841,7 +842,9 @@ fn wrapped_main() -> ! {
                             // create an empty key placeholder
                             let empty: [u8; 0] = [];
                             match basis_cache.key_update(&mut pddb_os,
-                                dict, key, &empty, None, alloc_hint, bname, true
+                                dict, key, &empty, None, alloc_hint, bname,
+                                // don't truncate if we've been given an explicit size hint.
+                                alloc_hint.is_none()
                             ) {
                                 Ok(_) => {},
                                 Err(e) => {
@@ -1242,7 +1245,13 @@ fn wrapped_main() -> ! {
                 match dbg.request {
                     DebugRequest::Dump => {
                         log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
+                        #[cfg(not(feature="autobasis"))]
                         pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
+                        #[cfg(feature="autobasis")]
+                        {
+                            let export_extra = pddb_os.dbg_extra();
+                            pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), Some(&export_extra));
+                        }
                     },
                     DebugRequest::Remount => {
                         log::info!("attempting remount");
@@ -1256,6 +1265,18 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
+            #[cfg(all(feature="pddbtest", feature="autobasis"))]
+            Opcode::BasisTesting => xous::msg_scalar_unpack!(msg, op, valid, _, _, {
+                let mut config: [Option<bool>; 32] = [None::<bool>; 32];
+                for i in 0..32 {
+                    if ((1 << i) & valid) != 0 {
+                        config[i] = Some(
+                            ((1 << i) & op) != 0
+                        )
+                    }
+                }
+                pddb_os.basis_testing(&mut basis_cache, &config);
+            }),
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
                 send_message(
