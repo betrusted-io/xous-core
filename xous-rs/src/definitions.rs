@@ -282,11 +282,6 @@ impl MemoryRange {
     /// so it is imperitive that this only be used to point to valid, page-aligned
     /// ranges.
     pub unsafe fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
-        assert!(
-            addr != 0,
-            "tried to construct a memory range with a null pointer"
-        );
-        assert!(size != 0, "tried to construct a zero-length memory range");
         Ok(MemoryRange {
             addr: MemoryAddress::new(addr).ok_or(Error::BadAddress)?,
             size: MemorySize::new(size).ok_or(Error::BadAddress)?,
@@ -390,10 +385,18 @@ impl core::fmt::Display for MemoryType {
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum Result {
+    // 0
     Ok,
+    // 1
     Error(Error),
+
+    // 2
     MemoryAddress(MemoryAddress),
+
+    // 3
     MemoryRange(MemoryRange),
+
+    // 4
     ReadyThreads(
         usize, /* count */
         usize,
@@ -403,29 +406,43 @@ pub enum Result {
         usize,
         /* pid2 */ usize, /* context2 */
     ),
+
+    // 5
     ResumeProcess,
+
+    // 6
     ServerID(SID),
+
+    // 7
     ConnectionID(CID),
+
+    // 8
     NewServerID(SID, CID),
+
+    // 9
     Message(MessageEnvelope),
+
+    // 10
     ThreadID(TID),
+
+    // 11
     ProcessID(PID),
 
-    /// The requested system call is unimplemented
+    /// 12: The requested system call is unimplemented
     Unimplemented,
 
-    /// The process is blocked and should perform the read() again. This is only
+    /// 13: The process is blocked and should perform the read() again. This is only
     /// ever seen in `Hosted` mode, because when running natively the kernel
     /// simply never schedules the process.
     BlockedProcess,
 
-    /// A scalar with one value
+    /// 14: A scalar with one value
     Scalar1(usize),
 
-    /// A scalar with two values
+    /// 15: A scalar with two values
     Scalar2(usize, usize),
 
-    /// The syscall should be attempted again. This is returned when calling
+    /// 16: The syscall should be attempted again. This is returned when calling
     /// functions such as `try_connect()` and `try_send()` that may block.
     RetryCall,
 
@@ -470,19 +487,19 @@ impl Result {
             Result::Message(me) => {
                 let me_enc = me.to_usize();
                 [
-                    8, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
+                    9, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
                 ]
             }
-            Result::ThreadID(ctx) => [9, *ctx as usize, 0, 0, 0, 0, 0, 0],
-            Result::ProcessID(pid) => [10, pid.get() as _, 0, 0, 0, 0, 0, 0],
-            Result::Unimplemented => [11, 0, 0, 0, 0, 0, 0, 0],
-            Result::BlockedProcess => [12, 0, 0, 0, 0, 0, 0, 0],
-            Result::Scalar1(a) => [13, *a, 0, 0, 0, 0, 0, 0],
-            Result::Scalar2(a, b) => [14, *a, *b, 0, 0, 0, 0, 0],
+            Result::ThreadID(ctx) => [10, *ctx as usize, 0, 0, 0, 0, 0, 0],
+            Result::ProcessID(pid) => [11, pid.get() as _, 0, 0, 0, 0, 0, 0],
+            Result::Unimplemented => [21, 0, 0, 0, 0, 0, 0, 0],
+            Result::BlockedProcess => [13, 0, 0, 0, 0, 0, 0, 0],
+            Result::Scalar1(a) => [14, *a, 0, 0, 0, 0, 0, 0],
+            Result::Scalar2(a, b) => [15, *a, *b, 0, 0, 0, 0, 0],
             Result::NewServerID(sid, cid) => {
                 let s = sid.to_u32();
                 [
-                    15,
+                    8,
                     s.0 as _,
                     s.1 as _,
                     s.2 as _,
