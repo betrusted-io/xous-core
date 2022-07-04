@@ -557,9 +557,11 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     if pass {
                         log::info!("basis stress test passed");
                         write!(ret, "basis stress test passed").ok();
+                        log::info!("CI done");
                     } else {
                         log::info!("basis stress test failed: {} errors", errcount);
                         write!(ret, "basis stress test failed: {} errors", errcount).ok();
+                        log::info!("CI done");
                     }
                 }
                 #[cfg(feature="pddbtest")]

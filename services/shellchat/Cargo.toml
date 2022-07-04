@@ -60,7 +60,11 @@ threadpool = "1.8.1"
 
 # testing rand compatibility - this is chasing the devil, but unfortunately
 # a *lot* of useful packages are chasing this devil.
+# also used in pddb testing
 rand = {version = "0.8.5", features = ["getrandom"]}
+
+# pddb testing
+rand_chacha = {version = "0.3.1", optional = true}
 
 # for ditherpunk testing
 png = {version = "0.17.5", optional = true}
@@ -98,6 +102,8 @@ benchmarks = [] # adds the benchmark routines. Left off normally to free up code
 aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
 pddbtest = []
+autobasis = ["rand_chacha"]
+autobasis-ci = []
 ditherpunk = ["png"]
 tracking-alloc = ["tracking-allocator", "tracing", "tracing-subscriber"]
 default = [] # "debugprint"
