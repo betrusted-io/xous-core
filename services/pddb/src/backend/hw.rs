@@ -694,8 +694,8 @@ impl PddbOs {
             let ct_to_flash = ciphertext.deref();
             // determine which page we're going to write the ciphertext into
             let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
-            log::info!("picking a random page out of {} pages for fscb", page_search_limit);
             let dest_page = self.entropy.borrow_mut().get_u32() % page_search_limit as u32;
+            log::info!("picking random page {} out of {} pages for fscb", dest_page, page_search_limit);
             // atomicity of the FreeSpace structure is a bit of a tough topic. It's a fairly hefty structure,
             // that runs a risk of corruption as it's being written, if power is lost or the system crashes.
             // However, the guiding principle of this ordering is that it's better to have no FastSpace structure
@@ -736,8 +736,9 @@ impl PddbOs {
 
         // 1. check that the page_heap has enough entries
         let total_used_pages = page_heap.len();
-        let total_free_pages = (PDDB_A_LEN - self.data_phys_base.as_usize()) / PAGE_SIZE;
-        log::info!("page alloc: {} used; {} free", total_used_pages, total_free_pages);
+        let total_pages = (PDDB_A_LEN - self.data_phys_base.as_usize()) / PAGE_SIZE;
+        let total_free_pages = total_pages - total_used_pages;
+        log::info!("page alloc: {} used; {} free; {} total", total_used_pages, total_free_pages, total_pages);
         if total_free_pages == 0 {
             log::warn!("Disk is out of space, no free pages available!");
             // return an empty free_pool vector.
@@ -753,7 +754,7 @@ impl PddbOs {
             // if the page is used, skip it.
             if let Some(Reverse(mp)) = min_used_page {
                 if page_candidate == mp as usize {
-                    log::info!("removing used page from free_pool: {}", mp);
+                    log::debug!("removing used page from free_pool: {}", mp);
                     min_used_page = page_heap.pop();
                     continue;
                 }
@@ -1767,11 +1768,15 @@ impl PddbOs {
     pub(crate) fn pddb_generate_used_map(&self, cache: &Vec::<BasisCacheEntry>) -> Option<BinaryHeap<Reverse<u32>>> {
         if let Some(all_keys) = self.pddb_get_all_keys(&cache) {
             let mut page_heap = BinaryHeap::new();
+            let mut page_check = HashSet::new(); // this is just for sanity checking because you can't query a heap
             for (basis_keys, name) in all_keys {
                 // scan the disclosed bases
                 if let Some(map) = self.pt_scan_key(&basis_keys.pt, &basis_keys.data, &name) {
                     for pp in map.values() {
-                        page_heap.push(Reverse(pp.page_number()))
+                        page_heap.push(Reverse(pp.page_number()));
+                        if !page_check.insert(pp.page_number()) {
+                            log::warn!("double-insert detected of page number {}", pp.page_number());
+                        }
                     }
                 } else {
                     log::warn!("pt_scan for basis {} failed, data may be lost", name);
@@ -1784,8 +1789,16 @@ impl PddbOs {
             // the case that any cached allocations came out of the previous FSCB pool, therefore, by merging
             // in the "used list" from the existing FSCB we should be able to generate an accurate
             // representation of the actually used pages
-
-
+            for pp in self.fspace_cache.iter() {
+                if pp.space_state() == SpaceState::Used || pp.space_state() == SpaceState::MaybeUsed {
+                    if !page_check.insert(pp.page_number()) {
+                        log::info!("FSCB and page table both record this used page: {} (this is normal)", pp.page_number());
+                    } else {
+                        page_heap.push(Reverse(pp.page_number()));
+                        log::info!("FSCB contained {}, but not yet committed to disk; added to page_heap", pp.page_number());
+                    }
+                }
+            }
 
             Some(page_heap)
         } else {
