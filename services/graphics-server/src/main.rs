@@ -606,6 +606,20 @@ fn wrapped_main() -> ! {
 
                     xous::return_scalar(msg.sender, duration).expect("couldn't ack test pattern");
                 }),
+                Some(Opcode::Stash) => {
+                    display.stash();
+                    match msg.body { // ack the message if it's a blocking scalar
+                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
+                        _ => ()
+                    }
+                }
+                Some(Opcode::Pop) => {
+                    display.pop();
+                    match msg.body { // ack the message if it's a blocking scalar
+                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
+                        _ => ()
+                    }
+                }
                 Some(Opcode::Quit) => break,
                 None => {
                     log::error!("received opcode scalar that is not handled");

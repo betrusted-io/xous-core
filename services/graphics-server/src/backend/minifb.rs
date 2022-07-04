@@ -20,6 +20,7 @@ const LIGHT_COLOUR: u32 = 0x1B1B19;
 pub struct XousDisplay {
     native_buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
     emulated_buffer: [u32; FB_SIZE],
+    srfb: [u32; FB_SIZE],
     window: Window,
     devboot: bool,
 }
@@ -70,6 +71,7 @@ impl XousDisplay {
             native_buffer,
             window,
             emulated_buffer: [0u32; FB_SIZE],
+            srfb: [0u32; FB_SIZE],
             devboot: true,
         }
     }
@@ -81,6 +83,15 @@ impl XousDisplay {
     }
     pub fn suspend(&self) {}
     pub fn resume(&self) {}
+
+    pub fn stash(&mut self) {
+        self.srfb.copy_from_slice(&self.emulated_buffer);
+    }
+    pub fn pop(&mut self) {
+        self.emulated_buffer.copy_from_slice(&self.srfb);
+        self.redraw();
+        self.update();
+    }
 
     pub fn screen_size(&self) -> Point {
         Point::new(WIDTH as i16, HEIGHT as i16)
