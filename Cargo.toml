@@ -101,7 +101,7 @@ strip = true
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
-#opt-level = 's'  # z,s: Optimize for size instead of performance
+#opt-level = 1  # z,s: Optimize for size instead of performance; 1 for easier debugging
 
 [patch.crates-io]
 xous = {path = "xous-rs"}
