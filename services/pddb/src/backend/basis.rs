@@ -196,6 +196,10 @@ pub(crate) const DK_PER_VPAGE: usize = VPAGE_SIZE / DK_STRIDE; // should be 32 -
 pub(crate) const DICT_VSIZE: u64 = 0xFE_0000;
 /// maximum number of dictionaries in a system
 pub(crate) const DICT_MAXCOUNT: usize = 16383;
+/// default alloc hint, if none is given (needs to be non-zero)
+/// this would be the typical "minimum space" reserved for a key
+/// users are of course allowed to specify something smaller, but it should be non-zero
+pub(crate) const DEFAULT_ALLOC_HINT: usize = 8;
 
 /// This is the format of the Basis as stored on disk
 #[derive(PartialEq, Debug, Default)]
@@ -462,67 +466,56 @@ impl BasisCache {
                             return Ok(0)
                         }
                         // large pool fetch
-                        let mut cur_offset = offset.unwrap_or(0) as u64;
+                        let mut abs_cursor = offset.unwrap_or(0) as u64;
                         let mut blocks_read = 0;
+                        let mut bytes_read = 0;
                         loop {
-                            let start_vpage_addr = ((kcache.start + cur_offset) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
-                            // handle the case of terminating the last block read nicely:
-                            // we can either end because we hit the end of the key data (so the data readback buffer is too large)
-                            let key_endstop = if (kcache.len - cur_offset) < VPAGE_SIZE as u64 {
-                                (kcache.len - cur_offset) as usize + size_of::<JournalType>()
-                            } else {
-                                VPAGE_SIZE + size_of::<JournalType>()
-                            };
-                            // or we can hit the end because we ran out of datareadback buffer
-                            let data_endstop = if (data.len() as u64 - cur_offset) < VPAGE_SIZE as u64 {
-                                (data.len() as u64 - cur_offset) as usize + size_of::<JournalType>()
-                            } else {
-                                VPAGE_SIZE + size_of::<JournalType>()
-                            };
-                            // of the two possible end criteria, pick the nearest one
-                            let endstop = if key_endstop < data_endstop {
-                                key_endstop
-                            } else {
-                                data_endstop
-                            };
-                            log::debug!("reading offset {}->{}/{}:{}", key, cur_offset, endstop, kcache.len);
-                            let mut read_offset = (cur_offset % VPAGE_SIZE as u64) as usize;
+                            let start_vpage_addr = ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+
                             if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
+                                let block_start_pos = (abs_cursor % VPAGE_SIZE as u64) as usize;
                                 assert!(pp.valid(), "v2p returned an invalid page");
                                 let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
                                 if blocks_read != 0 {
-                                    assert!(read_offset == 0, "algorithm error in handling offset data");
+                                    assert!(block_start_pos == 0, "algorithm error in handling offset data");
                                 }
+                                if blocks_read == 0 {
+                                    log::debug!("reading {} abs: {}, block_start: {}, block: {}, data.len:{} kcache.len:{}",
+                                        key, abs_cursor, block_start_pos, blocks_read, data.len(), kcache.len);
+                                } else {
+                                    log::debug!("  reading {} abs: {}, block_start: {}, block: {}, remaining.data:{} kcache.len:{}",
+                                        key, abs_cursor, block_start_pos, blocks_read, data.len() - bytes_read, kcache.len);
+                                }
+                                let data_offset = bytes_read;
                                 for (&src, dst) in
                                 pt_data[
                                     size_of::<JournalType>() // always this fixed offset per block
-                                    + read_offset // this should be 0 after the first block
-                                    ..endstop
-                                ].iter().zip(data[cur_offset as usize..].iter_mut()) {
+                                    + block_start_pos
+                                    ..
+                                ].iter().zip(data[data_offset..].iter_mut()) {
                                     *dst = src;
-                                    cur_offset += 1;
-                                    read_offset += 1;
+                                    // it'd be computationally more efficient to figure out what this should be going into
+                                    // every copy loop, but it's logically easier to think about in this form. Without this
+                                    // check, a user could read past the allocated space for a block...
+                                    if abs_cursor >= kcache.len {
+                                        break;
+                                    }
+                                    abs_cursor += 1;
+                                    bytes_read += 1;
                                 }
                                 blocks_read += 1;
                             } else {
-                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, cur_offset, data.len());
-                                return Ok(cur_offset as usize)
+                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, abs_cursor, data.len());
+                                return Ok(bytes_read as usize)
                             }
-                            // cur_offset won't hit (start + len) if we're hitting an endstop, so the loop won't exit.
-                            // if we hit an endstop, we should exit the read loop.
-                            if endstop != VPAGE_SIZE + size_of::<JournalType>() {
+                            if abs_cursor >= kcache.len {
                                 break;
                             }
-                            // break if we've hit or exceeded our endstop
-                            if read_offset >= endstop {
-                                break;
-                            }
-                            // also exit if we're "just nice", e.g. the size of the data happened to be exactly a multiple of the length of our block size
-                            if cur_offset == kcache.len {
+                            if bytes_read >= data.len() {
                                 break;
                             }
                         }
-                        return Ok(cur_offset as usize)
+                        return Ok(bytes_read as usize)
                     }
 
                 } else {
@@ -583,10 +576,14 @@ impl BasisCache {
         // mutate the page table to allocate data while we're accessing the page table. This huge gob of code
         // computes the pages needed. :-/
         let mut pages_needed = 2; // things go badly when no space is available so make sure there's always at least 1 spot
-        let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(0) {
+        let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) {
             data.len() + offset.unwrap_or(0)
         } else {
-            alloc_hint.unwrap_or(0)
+            if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) == 0 { // disallow 0-sized alloc hints, round up to the default size if someone tries 0
+                DEFAULT_ALLOC_HINT
+            } else {
+                alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
+            }
         };
         let reserved_pages = if reserved % VPAGE_SIZE == 0 {
             reserved / VPAGE_SIZE
@@ -804,7 +801,7 @@ impl BasisCache {
     pub(crate) fn basis_unlock(&mut self, hw: &mut PddbOs, name: &str, password: &str,
     policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         let basis_key =  hw.basis_derive_key(name, password);
-        if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, name) {
+        if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, &basis_key.data, name) {
             let aad = hw.data_aad(name);
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                 let vpage = match hw.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
@@ -949,7 +946,7 @@ impl BasisCache {
             }
         } else {
             for basis in self.cache.iter_mut() {
-                log::info!("syncing {}", basis.name);
+                log::debug!("syncing {}", basis.name);
                 basis.sync(hw)?;
             }
         }
@@ -1093,7 +1090,11 @@ pub(crate) struct BasisCacheEntry {
     pub cipher: AesGcmSiv::<Aes256>,
     /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
     pub cipher_ecb: Aes256,
-    /// raw AES key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
+    /// raw AES page table key -- needed because we have to do a low-level PT scan to generate FSCB, and sometimes the key comes from
+    /// a copy cached here, or from one derived solely for the FSCB scan. There is no way to copy an Aes256 record, so, we include
+    /// the raw key because we can copy that. :P so much for semantics.
+    pub pt_key: GenericArray<u8, cipher::consts::U32>,
+    /// raw AES data key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
     pub key: GenericArray<u8, cipher::consts::U32>,
     /// the AAD associated with this Basis
     pub aad: Vec::<u8>,
@@ -1116,7 +1117,7 @@ impl BasisCacheEntry {
     /// If it `lazy` is false, it will populate the dictionary cache and key cache entries, as well as
     /// discover the location of the `large_alloc_ptr`.
     pub(crate) fn mount(hw: &mut PddbOs, name: &str,  key: &BasisKeys, lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
-        if let Some(basis_map) = hw.pt_scan_key(&key.pt, name) {
+        if let Some(basis_map) = hw.pt_scan_key(&key.pt, &key.data, name) {
             let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&key.data));
             let aad = hw.data_aad(name);
             // get the first page, where the basis root is guaranteed to be
@@ -1152,6 +1153,7 @@ impl BasisCacheEntry {
                     dicts: HashMap::<String, DictCacheEntry>::new(),
                     cipher,
                     cipher_ecb: Aes256::new(GenericArray::from_slice(&key.pt)),
+                    pt_key: GenericArray::clone_from_slice(&key.pt),
                     key: GenericArray::clone_from_slice(&key.data),
                     aad,
                     age: basis_root.age,

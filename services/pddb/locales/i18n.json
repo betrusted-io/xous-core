@@ -1,4 +1,46 @@
 {
+    "pddb.freespace.request": {
+        "en": "⚠ PDDB needs to allocate more free space. ⚠\nIn order to do this safely, you must enumerate all secret Bases now. Any Basis not disclosed could be overwritten.",
+        "ja": "⚠ PDDBは、より多くの空き領域を割り当てる必要があります。⚠\nこれを安全に行うには、今すぐすべてのシークレットベースのロックを解除する必要があります。 ロックされたままのベーシスは上書きされる可能性があります。",
+        "zh": "⚠ PDDB 需要分配更多可用空间。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
+        "en-tts": "⚠ PDDB needs to allocate more free space. ⚠\nIn order to do this safely, you must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
+    },
+    "pddb.freespace.enumerate": {
+        "en": "Enumerate a Basis?",
+        "ja": "根拠を開示しますか？",
+        "zh": "披露依据？",
+        "en-tts": "Enumerate a Basis?"
+    },
+    "pddb.freespace.enumerate_another": {
+        "en": "Enumerate another Basis?",
+        "ja": "別の根拠を開示しますか？",
+        "zh": "披露另一个依据？",
+        "en-tts": "Enumerate another Basis?"
+    },
+    "pddb.freespace.name": {
+        "en": "Enter name of Basis to enumerate:",
+        "ja": "列挙する基準の名前を入力します。",
+        "zh": "输入要枚举的基础名称:",
+        "en-tts": "Enter name of Basis to enumerate:"
+    },
+    "pddb.freespace.badpass": {
+        "en": "Bad password or Basis does not exist.",
+        "ja": "不正なパスワードまたはベーシスが存在しません。",
+        "zh": "密码错误或基础不存在。",
+        "en-tts": "Bad password, or Basis does not exist."
+    },
+    "pddb.freespace.currentlist": {
+        "en": "The following Bases are currently enumerated:\n",
+        "ja": "以下の根拠を列挙します:\n",
+        "zh": "列举如下依据:\n",
+        "en-tts": "The following Bases are currently enumerated:\n"
+    },
+    "pddb.freespace.finished": {
+        "en": "Enumeration terminated.\n\nShall we proceed to generate the free space cache?",
+        "ja": "空き領域キャッシュの生成に進みましょうか。",
+        "zh": "我们要继续生成可用空间缓存吗？",
+        "en-tts": "Enumeration terminated.\n\nShall we proceed to generate the free space cache?"
+    },
     "pddb.okay": {
         "en": "Okay",
         "ja": "OK",

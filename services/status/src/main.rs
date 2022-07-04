@@ -406,8 +406,9 @@ fn wrapped_main() -> ! {
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
-        log::trace!("|status: Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<StatusOpcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(StatusOpcode::EnableAutomaticBacklight) => {
                 *enabled.lock().unwrap() = true;
 
@@ -530,12 +531,16 @@ fn wrapped_main() -> ! {
                     let (latest_activity, period) = llio
                         .activity_instantaneous()
                         .expect("couldn't get CPU activity");
-                    let activity_to_width = ((latest_activity as u64) * 1000u64 * (cpuload_rect.width() as u64 - 4)) / (period as u64 * 1000u64);
+                    let activity_to_width = if period == 0 {
+                        cpuload_rect.width() as i16 - 4
+                    } else {
+                        (((latest_activity as u64) * 1000u64 * (cpuload_rect.width() as u64 - 4)) / (period as u64 * 1000u64)) as i16
+                    };
                     draw_list.push(GamObjectType::Rect(
                         Rectangle::new_coords_with_style(
                             cpuload_rect.tl().x + 2,
                             cpuload_rect.tl().y + 2,
-                            cpuload_rect.tl().x + 2 + activity_to_width as i16,
+                            cpuload_rect.tl().x + 2 + (activity_to_width).min(cpuload_rect.width() as i16 - 4),
                             cpuload_rect.br().y - 2,
                             DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 0))
                     )).unwrap();
@@ -740,6 +745,7 @@ fn wrapped_main() -> ! {
                 if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
+                    // log::set_max_level(log::LevelFilter::Debug);
                     susres.initiate_suspend().expect("couldn't initiate suspend op");
                 }
             },

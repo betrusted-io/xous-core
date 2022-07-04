@@ -503,9 +503,16 @@ impl ContextManager {
         if let Some(token) = self.focused_app() {
             if let Some(context) = self.contexts.get(&token) {
                 log::debug!("redraw msg to {}, id {}", context.listener, context.redraw_id);
-                let ret = xous::send_message(context.listener,
+                let ret = match xous::try_send_message(context.listener,
                     xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
-                ).map(|_| ());
+                ) {
+                    Err(xous::Error::ServerQueueFull) => {
+                        log::warn!("server queue full, redraw skipped");
+                        Ok(())
+                    },
+                    Ok(_r) => Ok(()),
+                    Err(e) => Err(e),
+                };
                 // this delay helps ensure that the previously requested UX redraw has time to complete
                 // in particular, this helps sequence the case where one modal is erased, and the next one is
                 // raised, in quick succession.

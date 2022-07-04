@@ -413,8 +413,16 @@ struct TokenRecord {
     pub alloc_hint: Option<usize>,
     pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
-
-fn main() -> ! {
+fn main () -> ! {
+    let stack_size = 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -429,8 +437,21 @@ fn main() -> ! {
     // for less-secured user prompts (everything but password entry)
     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
+    // our very own password modal. Password modals are precious and privately owned, to avoid
+    // other processes from crafting them.
+    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    let pw_handle = thread::spawn({
+        move || {
+            password_ux_manager(
+                xous::connect(pddb_sid).unwrap(),
+                pw_sid
+            )
+        }
+    });
+
     // OS-specific PDDB driver
-    let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+    let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
@@ -475,18 +496,6 @@ fn main() -> ! {
         hw_testcase(&mut pddb_os);
     }
 
-    // our very own password modal. Password modals are precious and privately owned, to avoid
-    // other processes from crafting them.
-    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
-    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
-    let pw_handle = thread::spawn({
-        move || {
-            password_ux_manager(
-                xous::connect(pddb_sid).unwrap(),
-                pw_sid
-            )
-        }
-    });
     // our menu handler
     let my_cid = xous::connect(pddb_sid).unwrap();
     let _ = thread::spawn({
@@ -542,9 +551,25 @@ fn main() -> ! {
     let mut latest_cache: usize = 0;
     const HEAP_LARGER_LIMIT: usize = 2048 * 1024;
     const HEAP_GC_THRESH: usize = 1500 * 1024; // the largel limit is at 2048kiB, so try cleaning up at 1500k
-    const HEAP_GC_TARGET: usize = 1024 * 1024; // how much to try cleaning out in any one go.
-    const HEAP_INC_THRESH: usize = 256 * 1024; // increase from the default heap size of 512k if we pass this limit
-    let mut heap_increased = false;
+    const HEAP_GC_TARGET: usize = 1300 * 1024; // how much to try cleaning out in any one go.
+    let new_limit = HEAP_LARGER_LIMIT;
+    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+        xous::Limits::HeapMaximum as usize,
+        0,
+        new_limit,
+    ));
+
+    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
+        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+            xous::Limits::HeapMaximum as usize,
+            current_limit,
+            new_limit,
+        ))
+        .unwrap();
+        log::info!("Heap limit increased to: {}", new_limit);
+    } else {
+        panic!("Unsupported syscall!");
+    }
 
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
@@ -634,31 +659,6 @@ fn main() -> ! {
                     let pruned = basis_cache.cache_prune(&mut pddb_os, HEAP_GC_TARGET);
                     latest_heap = heap_usage();
                     log::info!("{} pruned, now: {} heap, {} cache", pruned, latest_heap, basis_cache.cache_size())
-                }
-
-                // one-shot increase of heap limit once we pass a threshold
-                // we don't put this at the very top of main because there may be some concurrency issue
-                // if a heap increase is attempted while a lot of new processes are spawning.
-                if (latest_heap > HEAP_INC_THRESH) && !heap_increased {
-                    let new_limit = HEAP_LARGER_LIMIT;
-                    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-                        xous::Limits::HeapMaximum as usize,
-                        0,
-                        new_limit,
-                    ));
-
-                    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
-                        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-                            xous::Limits::HeapMaximum as usize,
-                            current_limit,
-                            new_limit,
-                        ))
-                        .unwrap();
-                        log::info!("Heap limit increased to: {}", new_limit);
-                    } else {
-                        panic!("Unsupported syscall!");
-                    }
-                    heap_increased = true;
                 }
             }
             Opcode::ListBasis => {
@@ -842,7 +842,9 @@ fn main() -> ! {
                             // create an empty key placeholder
                             let empty: [u8; 0] = [];
                             match basis_cache.key_update(&mut pddb_os,
-                                dict, key, &empty, None, alloc_hint, bname, true
+                                dict, key, &empty, None, alloc_hint, bname,
+                                // don't truncate if we've been given an explicit size hint.
+                                alloc_hint.is_none()
                             ) {
                                 Ok(_) => {},
                                 Err(e) => {
@@ -1243,7 +1245,13 @@ fn main() -> ! {
                 match dbg.request {
                     DebugRequest::Dump => {
                         log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
+                        #[cfg(not(feature="autobasis"))]
                         pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
+                        #[cfg(feature="autobasis")]
+                        {
+                            let export_extra = pddb_os.dbg_extra();
+                            pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), Some(&export_extra));
+                        }
                     },
                     DebugRequest::Remount => {
                         log::info!("attempting remount");
@@ -1257,6 +1265,18 @@ fn main() -> ! {
                     }
                 }
             }
+            #[cfg(all(feature="pddbtest", feature="autobasis"))]
+            Opcode::BasisTesting => xous::msg_scalar_unpack!(msg, op, valid, _, _, {
+                let mut config: [Option<bool>; 32] = [None::<bool>; 32];
+                for i in 0..32 {
+                    if ((1 << i) & valid) != 0 {
+                        config[i] = Some(
+                            ((1 << i) & op) != 0
+                        )
+                    }
+                }
+                pddb_os.basis_testing(&mut basis_cache, &config);
+            }),
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
                 send_message(

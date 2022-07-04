@@ -87,13 +87,13 @@ optional arguments:
   -f, --force           Ignore gitrev version on SoC and try to burn an image anyways
   --bounce              cycle the device through a reset
 ```
-
-You can try reading the first word out of the ROM to see if `usb_update.py` is working correctly.
-It's located at 0x20000008, and it's always `0x665599aa` (this is the Xilinx FPGA bitstream sync word),
+You can try reading the `csr.csv` descriptor out of the ROM to see if `usb_update.py` is working correctly.
+Part of it is located at 0x20277008, and it's always `0x2d2d2d2d` (this is part of a `----` ASCII text header),
 as follows:
 
 ```
-% python3 ./usb_update.py --peek 0x20000008
-0x665599aa
+% python3 ./usb_update.py --peek 0x20277008
+0x2d2d2d2d
 ```
 
+NB: Trivial readout via USB of the gateware is blocked by the USB core now, for security reasons.

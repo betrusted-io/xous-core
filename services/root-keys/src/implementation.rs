@@ -1527,6 +1527,32 @@ impl<'a> RootKeys {
         Ok(())
     }
 
+    /// blind-copy a staged gateware to the boot location. This can only be done if not root keys
+    /// have been initialized. This routine exists just to make the UX flow consistent between
+    /// unprovisioned and provisioned devices.
+    pub(crate) fn do_gateware_provision_uninitialized(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        if self.is_initialized() {
+            return Err(RootkeyResult::StateError);
+        }
+        let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+            0, 100, 10, Some("%"), 0, true, true
+        );
+        progress_action.set_is_password(true);
+        rootkeys_modal.modify(
+            Some(ActionType::Slider(progress_action)),
+            Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+            None, true, None);
+        rootkeys_modal.activate();
+        xous::yield_slice(); // give some time to the GAM to render
+        let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+        pb.set_percentage(1);
+        self.ticktimer.sleep_ms(250).expect("couldn't show final message");
+        self.make_gateware_backup(Some(&mut pb), true)?;
+        pb.set_percentage(100);
+        self.ticktimer.sleep_ms(250).expect("couldn't show final message");
+        Ok(())
+    }
+
     /// copy data from a source region to a destination region, re-encrypting and patching as we go along.
     /// the region/region_base should be specified for the destination oracle
     ///

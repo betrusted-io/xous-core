@@ -11,6 +11,18 @@
         "zh": "输入密码 软件更新 安全含义:至关重要 ",
         "en-tts": "Enter update password. This password is critically important."
     },
+    "rootkeys.blind_update": {
+        "en": "No root keys detected. Shall we copy the staged gateware anyways, overwriting the current image?",
+        "ja": "ルートキーが検出されませんでした。 とにかくステージングされたゲートウェアをコピーして、現在のイメージを上書きしませんか？",
+        "zh": "未检测到根密钥。 我们是否要复制暂存的网关软件，覆盖当前映像？",
+        "en-tts": "No root keys detected. Shall we copy the staged gateware anyways, overwriting the current image?"
+    },
+    "rootkeys.wrong_state": {
+        "en": "System in an unexpected state. Aborting.",
+        "ja": "予期しない状態のシステム。 中止します。",
+        "zh": "系统处于意外状态。 中止。",
+        "en-tts": "System in an unexpected state. Aborting."
+    },
     "rootkeys.already_init": {
         "en": "Root keys already initialized.",
         "ja": "ルートキーはすでに初期化されています。",

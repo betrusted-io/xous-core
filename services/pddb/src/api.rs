@@ -39,8 +39,11 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_02_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
+#[cfg(not(any(feature="pddbtest",feature="autobasis",feature="ci")))]
 pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
-// pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+#[allow(dead_code)]
+#[cfg(any(feature="pddbtest",feature="autobasis",feature="ci"))]
+pub const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// range for the starting point of a journal number, picked from a random seed
 /// the goal is to reduce info leakage about the age of structures relative to each other
@@ -133,6 +136,8 @@ pub(crate) enum Opcode {
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     DangerousDebug = 25,
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    BasisTesting = 26,
 
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
@@ -229,6 +234,7 @@ pub(crate) enum PddbRetcode {
     DiskFull = 6,
 }
 
+pub(crate) const PDDB_BUF_DATA_LEN: usize = 4072;
 /// PddbBuf is a C-representation of a page of memory that's used
 /// to shuttle data for streaming channels. It must be exactly one
 /// page in size, with some overhead specific to the PDDB book-keeping
@@ -244,7 +250,7 @@ pub(crate) struct PddbBuf {
     pub(crate) len: u16,
     /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
     pub(crate) position: u64,
-    pub(crate) data: [u8; 4072],
+    pub(crate) data: [u8; PDDB_BUF_DATA_LEN],
 }
 
 #[allow(dead_code)]

@@ -65,8 +65,12 @@ pub(crate) const CRED_INITAL_SIZE: usize = 512;
 // With P=20 and K=150, we have I=2M which is enough for 500 increments per day for 10 years.
 #[allow(dead_code)] // openSK legacy
 const NUM_PAGES: usize = 20;
-// The limit is based on the performance of the PDDB to get a query response within
-// the compliance time-out limit. Optimization is needed to improve this number!
+
+/// The limit is based on the performance of the PDDB to get a query response within
+/// the compliance time-out limit. Optimization is needed to improve this number!
+///
+/// Note: this might have been fixed with 6f849af2a23e99c98baa4d89ccf07261f4af7854, found
+/// a busy-wait regression in an prerequisites server that would explain the slowdown.
 const MAX_SUPPORTED_RESIDENTIAL_KEYS: usize = 32;
 
 const MAX_PIN_RETRIES: u8 = 8;
