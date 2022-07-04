@@ -88,7 +88,7 @@ impl XousDisplay {
         self.srfb.copy_from_slice(&self.emulated_buffer);
     }
     pub fn pop(&mut self) {
-        self.emulated_buffer.copy_from_slice(&self.srfb);
+        self.emulated_buffer[FB_WIDTH_WORDS*32..].copy_from_slice(&self.srfb[FB_WIDTH_WORDS*32..]);
         self.redraw();
         self.update();
     }

@@ -179,10 +179,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - fuzzer added to push many more corner cases than before -- disk is filled to ~75% capacity with dozens of Bases,
     triggering roughly 4 FSCB ops, and then all Bases and keys are verified to be correct.
 - Optimize GAM performance
-  - context switches that revert to a prior app screen are restored from a stashed bitmap instead of a full redraw. this can cause
-    a slight glitch on the status bar where the wrong time/status is displayed for up to a second after the context swap reverts, but
-    it is a minor trade-off for the main purpose, which is to prevent old menus, contexts, and defacements from "piling up" when an
-    app is blocked due to an exceptional condition being raised (such as the PDDB requesting a full basis unlock to generate the FSCB)
+  - context switches that revert to a prior app screen are restored from a stashed bitmap instead of a full redraw. This
+    prevents old menus, contexts, and defacements from "piling up" when an app is blocked due to an exceptional condition
+    being raised (such as the PDDB requesting a full basis unlock to generate the FSCB)
 
 ## Roadmap to 1.0
 

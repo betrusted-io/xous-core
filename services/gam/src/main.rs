@@ -75,6 +75,7 @@ fn wrapped_main() -> ! {
     let status_canvas = Canvas::new(
         Rectangle::new_coords(
             0, 0, screensize.x,
+            // note: if this gets modified, the "pop" routine in gfx/backend/betrusted.rs also needs to be updated
             gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height") as i16 * 2),
         255, &trng, None, crate::api::CanvasType::Status
     ).expect("couldn't create status canvas");

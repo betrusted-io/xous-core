@@ -114,7 +114,9 @@ impl XousDisplay {
     }
     pub fn pop(&mut self) {
         let fb: &mut [u32] = self.fb.as_slice_mut();
-        fb[..FB_SIZE].copy_from_slice(&self.srfb);
+        // skip copying the status bar, so that the status info is not overwritten by the pop.
+        // this is "fixed" at 32 pixels high (2 * Cjk glyph height hint) per line 79 in gam/src/main.rs
+        fb[FB_WIDTH_WORDS * 32..FB_SIZE].copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..FB_SIZE]);
         self.redraw();
     }
 
