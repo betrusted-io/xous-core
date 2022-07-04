@@ -567,8 +567,6 @@ fn wrapped_main() -> ! {
                         for switchers in authorized_switchers {
                             if let Some(auth_token) = context_mgr.find_app_token_by_name(switchers) {
                                 if auth_token == switchapp.token {
-                                    context_mgr.notify_app_switch(new_app_token)
-                                    .unwrap_or_else(|_| {log::warn!("Application does not recognize focus changes")});
                                     match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
                                         Ok(_) => (),
                                         Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
