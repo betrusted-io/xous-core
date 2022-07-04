@@ -174,6 +174,14 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Autobacklight feature: selectable feature to automatically raise the backlight when keys are pressed. Thanks to gsora for the feature!
   - More importantly, this adds `crossbeam` into the kernel. This is a somewhat heavyweight item and is not recommended for use in core
     services, but by including it to drive the auto-backlight feature, we get regular code coverage of the condvar pathway.
+- Fix PDDB FSCB generation problems
+  - some issue were found in free space cache generation, these are now fixed
+  - fuzzer added to push many more corner cases than before -- disk is filled to ~75% capacity with dozens of Bases,
+    triggering roughly 4 FSCB ops, and then all Bases and keys are verified to be correct.
+- Optimize GAM performance
+  - context switches that revert to a prior app screen are restored from a stashed bitmap instead of a full redraw. This
+    prevents old menus, contexts, and defacements from "piling up" when an app is blocked due to an exceptional condition
+    being raised (such as the PDDB requesting a full basis unlock to generate the FSCB)
 
 ## Roadmap to 1.0
 

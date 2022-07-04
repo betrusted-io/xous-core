@@ -1,6 +1,6 @@
 use crate::api::Point;
 use crate::api::{LINES, WIDTH};
-use susres::{ManagedMem, RegManager, RegOrField, SuspendResume};
+use susres::{RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 use xous::MemoryRange;
 
@@ -13,7 +13,7 @@ const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 pub struct XousDisplay {
     fb: MemoryRange,
     hwfb: MemoryRange,
-    srfb: ManagedMem<{ utralib::generated::HW_MEMLCD_MEM_LEN / core::mem::size_of::<u32>() }>,
+    srfb: [u32; FB_SIZE],
     csr: utralib::CSR<u32>,
     susres: RegManager<{ utra::memlcd::MEMLCD_NUMREGS }>,
 }
@@ -61,7 +61,7 @@ impl XousDisplay {
             hwfb,
             csr: CSR::new(control.as_mut_ptr() as *mut u32),
             susres: RegManager::new(control.as_mut_ptr() as *mut u32),
-            srfb: ManagedMem::new(fb),
+            srfb: [0u32; FB_SIZE],
         };
 
         display.set_clock(CONFIG_CLOCK_FREQUENCY);
@@ -101,18 +101,38 @@ impl XousDisplay {
         )
     }
 
+    pub fn stash(&mut self) {
+        let fb = unsafe{core::slice::from_raw_parts_mut(self.fb.as_mut_ptr() as *mut u32, FB_SIZE)};
+        for lines in 0..FB_LINES {
+            // set the dirty bits prior to stashing the frame buffer
+            fb[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+        }
+        let srfb_ptr = self.srfb.as_mut_ptr() as *mut u32;
+        for (index, &src) in fb.iter().enumerate() {
+            unsafe{srfb_ptr.add(index).write_volatile(src)};
+        }
+    }
+    pub fn pop(&mut self) {
+        let fb: &mut [u32] = self.fb.as_slice_mut();
+        // skip copying the status bar, so that the status info is not overwritten by the pop.
+        // this is "fixed" at 32 pixels high (2 * Cjk glyph height hint) per line 79 in gam/src/main.rs
+        fb[FB_WIDTH_WORDS * 32..FB_SIZE].copy_from_slice(&self.srfb[FB_WIDTH_WORDS * 32..FB_SIZE]);
+        self.redraw();
+    }
+
     pub fn suspend(&mut self) {
         while self.busy() {
             // just wait until any pending FB operations are done
         }
-        let fb: *mut [u32; FB_SIZE] = self.fb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        let fb = unsafe{core::slice::from_raw_parts_mut(self.fb.as_mut_ptr() as *mut u32, FB_SIZE)};
         for lines in 0..FB_LINES {
             // set the dirty bits prior to stashing the frame buffer
-            unsafe {
-                (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
-            }
+            fb[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
         }
-        self.srfb.suspend();
+        let srfb_ptr = self.srfb.as_mut_ptr() as *mut u32;
+        for (index, &src) in fb.iter().enumerate() {
+            unsafe{srfb_ptr.add(index).write_volatile(src)};
+        }
         self.susres.suspend();
 
         let note = crate::sleep_note::LOGO_MAP;
@@ -154,7 +174,8 @@ impl XousDisplay {
     }
     pub fn resume(&mut self) {
         self.susres.resume();
-        self.srfb.resume();
+        let fb: &mut [u32] = self.fb.as_slice_mut();
+        fb[..FB_SIZE].copy_from_slice(&self.srfb);
 
         self.redraw();
     }

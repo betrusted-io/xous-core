@@ -195,7 +195,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 "dictlist" => {
                     match self.pddb.list_dict(None) {
                         Ok(list) => {
-                            let checked_len = if list.len() > 6 {
+                            let checked_len = if list.len() > 10 {
                                 write!(ret, "First 10 dicts of {}:", list.len()).unwrap();
                                 10
                             } else {
@@ -594,7 +594,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     // 128k chunks of junk
                     const JUNK_CHUNK: usize = 131072;
                     log::info!("fill junk");
-                    for index in 0..28 { // write ~3 megs of junk, should trigger FSCB unlock at least once...
+                    for index in 0..17 { // write ~2 megs of junk, should trigger FSCB unlock at least once...
                         let mut junk = Vec::<u8>::new();
                         // 128k chunk of junk
                         for i in 0..JUNK_CHUNK {
