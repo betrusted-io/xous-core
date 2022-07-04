@@ -195,7 +195,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 "dictlist" => {
                     match self.pddb.list_dict(None) {
                         Ok(list) => {
-                            let checked_len = if list.len() > 6 {
+                            let checked_len = if list.len() > 10 {
                                 write!(ret, "First 10 dicts of {}:", list.len()).unwrap();
                                 10
                             } else {
