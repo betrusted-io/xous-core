@@ -2,6 +2,7 @@
 
 pub mod api;
 use api::*;
+#[cfg(feature = "ditherpunk")]
 pub mod tests;
 
 use bit_field::BitField;
@@ -190,6 +191,61 @@ impl Modals {
             .or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
+    }
+
+    /// this blocks until the notification has been acknowledged. It will attempt to render up to 256 bits
+    /// of `data` in bip39 format. Data must conform to the codeable lengths by BIP39, or else the routine
+    /// will return immediately with an `InvalidString` error without showing any dialog box.
+    pub fn show_bip39(
+        &self,
+        caption: Option<&str>,
+        data: &Vec::<u8>,
+    ) -> Result<(), xous::Error> {
+        match data.len() {
+            16 | 20 | 24 | 28 | 32 => (),
+            _ => return Err(xous::Error::InvalidString)
+        }
+        self.lock();
+        let mut bip39_data = [0u8; 32];
+        for (&s, d) in data.iter().zip(bip39_data.iter_mut()) {
+            *d = s;
+        }
+        let spec = ManagedBip39 {
+            token: self.token,
+            caption: if let Some(c) = caption {Some(xous_ipc::String::from_str(c))} else {None},
+            bip39_data,
+            bip39_len: if data.len() <= 32 {data.len() as u32} else {32},
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Bip39.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        Ok(())
+    }
+
+    pub fn input_bip39(
+        &self,
+        prompt: Option<&str>,
+    ) -> Result<Vec::<u8>, xous::Error> {
+        self.lock();
+        let spec = ManagedBip39 {
+            token: self.token,
+            caption: if let Some(c) = prompt {Some(xous_ipc::String::from_str(c))} else {None},
+            bip39_data: [0u8; 32],
+            bip39_len: 0,
+        };
+        let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Bip39Input.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        let result = buf.to_original::<ManagedBip39, _>().or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        if result.bip39_len == 0 {
+            Err(xous::Error::InvalidString)
+        } else {
+            Ok(
+                result.bip39_data[..result.bip39_len as usize].to_vec()
+            )
+        }
     }
 
     /// this blocks until the image has been dismissed.
