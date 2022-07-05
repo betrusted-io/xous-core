@@ -108,6 +108,11 @@ pub(crate) enum Opcode {
     BulkReadFonts,
     RestartBulkRead,
 
+    /// sling the framebuffer into and out of the suspend/resume area, abusing this
+    /// to help accelerate redraws between modal swaps.
+    Stash,
+    Pop,
+
     /// generates a test pattern
     TestPattern,
 

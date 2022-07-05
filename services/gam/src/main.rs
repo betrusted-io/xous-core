@@ -75,6 +75,7 @@ fn wrapped_main() -> ! {
     let status_canvas = Canvas::new(
         Rectangle::new_coords(
             0, 0, screensize.x,
+            // note: if this gets modified, the "pop" routine in gfx/backend/betrusted.rs also needs to be updated
             gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height") as i16 * 2),
         255, &trng, None, crate::api::CanvasType::Status
     ).expect("couldn't create status canvas");
@@ -567,8 +568,6 @@ fn wrapped_main() -> ! {
                         for switchers in authorized_switchers {
                             if let Some(auth_token) = context_mgr.find_app_token_by_name(switchers) {
                                 if auth_token == switchapp.token {
-                                    context_mgr.notify_app_switch(new_app_token)
-                                    .unwrap_or_else(|_| {log::warn!("Application does not recognize focus changes")});
                                     match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
                                         Ok(_) => (),
                                         Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
