@@ -876,6 +876,17 @@ fn build_hw_image(
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
+    // stash any LTO settings applied to the kernel; proper layout of the loader
+    // block depends on the loader being compact and highly optimized.
+    let existing_lto = std::env::var("CARGO_PROFILE_RELEASE_LTO")
+        .map(|v| Some(v))
+        .unwrap_or(None);
+    let existing_codegen_units = std::env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS")
+        .map(|v| Some(v))
+        .unwrap_or(None);
+    // these settings will generate the most compact code (but also the hardest to debug)
+    std::env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
+    std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
     let mut loader = build(
         &["loader"],
         debug,
@@ -884,6 +895,13 @@ fn build_hw_image(
         None,
         loader_features,
     )?;
+    // restore the LTO settings
+    if let Some(existing) = existing_lto {
+        std::env::set_var("CARGO_PROFILE_RELEASE_LTO", existing);
+    }
+    if let Some(existing) = existing_codegen_units {
+        std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
+    }
     loader.push(PathBuf::from("loader"));
 
     let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;

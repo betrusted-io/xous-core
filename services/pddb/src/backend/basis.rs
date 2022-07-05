@@ -268,7 +268,7 @@ impl BasisCache {
         }
         al
     }
-    fn select_basis(&mut self, basis_name: Option<&str>) -> Option<usize> {
+    fn select_basis(&self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
             log::error!("Can't select basis: PDDB is not mounted");
             return None
@@ -895,10 +895,10 @@ impl BasisCache {
         }
         ret
     }
-    pub(crate) fn basis_latest(&mut self) -> Option<String> {
+    pub(crate) fn basis_latest(&self) -> Option<&str> {
         if let Some(basis_index) = self.select_basis(None) {
-            let basis = &mut self.cache[basis_index];
-            Some(basis.name.clone())
+            let basis = &self.cache[basis_index];
+            Some(&basis.name)
         } else {
             None
         }

@@ -139,6 +139,45 @@ pub(crate) enum Opcode {
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     BasisTesting = 26,
 
+    ListBasisStd = 26,
+    CreateBasisStd = 27,
+
+    ListDictStd = 28,
+    ListKeyStd = 29,
+
+    /// libstd equivalent of `KeyRequest`
+    OpenKeyStd = 30,
+
+    /// Read a number of bytes from the current offset.
+    ReadKeyStd = 31,
+
+    /// Write a number of bytes at the current offset
+    WriteKeyStd = 32,
+
+    /// libstd equivalent of `KeyDrop`
+    CloseKeyStd = 34,
+
+    /// Remove a key from the database.
+    DeleteKeyStd = 35,
+
+    /// Return the latest basis. Useful for resolving `::` as a path.
+    LatestBasisStd = 36,
+
+    /// List all keys and dicts under a given colon-delimited path
+    ListPathStd = 37,
+
+    /// Get information about a file path
+    StatPathStd = 38,
+
+    /// Seek a file descriptor
+    SeekKeyStd = 39,
+
+    /// Create a dict
+    CreateDictStd = 40,
+
+    /// Remove an empty dict
+    DeleteDictStd = 41,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
