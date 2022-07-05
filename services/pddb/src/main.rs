@@ -1045,7 +1045,7 @@ fn wrapped_main() -> ! {
             Opcode::DeleteKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
                     mem.offset = None;
-                    if let Err(err) = libstd::delete_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default()) {
+                    if let Err(err) = libstd::delete_key(mem, &mut pddb_os, &mut basis_cache, &mut fd_mapping) {
                         mem.offset = xous::MemoryAddress::new(err as usize);
                     }
                 }
