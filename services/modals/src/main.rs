@@ -36,8 +36,6 @@ use locales::t;
 
 use gam::modal::*;
 #[cfg(feature = "tts")]
-use locales::t;
-#[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
 #[cfg(feature = "tts")]
 const TICK_INTERVAL: u64 = 2500;
