@@ -336,7 +336,6 @@ pub(crate) fn open_key(
             crate::PddbRetcode::AccessDenied
         })?;
 
-
     let mut writer = backing
         .writer(*b"KyOR")
         .ok_or(crate::PddbRetcode::InternalError)?;
@@ -542,7 +541,7 @@ pub(crate) fn delete_key(
     mem: &mut xous::MemoryMessage,
     pddb_os: &mut PddbOs,
     basis_cache: &mut BasisCache,
-    fds: &mut Vec<Option<crate::FileHandle>>,
+    all_fds: &mut std::collections::HashMap<Option<xous::PID>, Vec<Option<FileHandle>>>,
 ) -> Result<(), crate::PddbRetcode> {
     // Convert the memory to a Senres buffer
     let backing = senres::Message::from_mut_slice(mem.buf.as_slice_mut())
@@ -580,14 +579,16 @@ pub(crate) fn delete_key(
             Err(crate::PddbRetcode::UnexpectedEof)
         })?;
 
-    // Mark the entries as deleted in all remaining file handles
-    for fd in fds
-        .iter_mut()
-        .filter(|f| f.is_some())
-        .map(|f| f.as_mut().unwrap())
-    {
-        if fd.basis == basis && fd.key == key && fd.dict == dict {
-            fd.deleted = true;
+    // Mark the entry as deleted in all remaining file handles in the entire system
+    for fds in all_fds.values_mut() {
+        for fd in fds
+            .iter_mut()
+            .filter(|f| f.is_some())
+            .map(|f| f.as_mut().unwrap())
+        {
+            if fd.basis == basis && fd.key == key && fd.dict == dict {
+                fd.deleted = true;
+            }
         }
     }
 
