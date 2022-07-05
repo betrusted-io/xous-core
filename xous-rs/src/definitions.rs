@@ -557,7 +557,11 @@ impl Result {
                 src[4] as _,
             )),
             7 => Result::ConnectionID(src[1] as CID),
-            8 => {
+            8 => Result::NewServerID(
+                SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _),
+                src[5] as _,
+            ),
+            9 => {
                 let sender = src[1];
                 let message = match src[2] {
                     0 => match MemoryMessage::from_usize(src[3], src[4], src[5], src[6], src[7]) {
@@ -585,16 +589,12 @@ impl Result {
                     body: message,
                 })
             }
-            9 => Result::ThreadID(src[1] as TID),
-            10 => Result::ProcessID(PID::new(src[1] as _).unwrap()),
-            11 => Result::Unimplemented,
-            12 => Result::BlockedProcess,
-            13 => Result::Scalar1(src[1]),
-            14 => Result::Scalar2(src[1], src[2]),
-            15 => Result::NewServerID(
-                SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _),
-                src[5] as _,
-            ),
+            10 => Result::ThreadID(src[1] as TID),
+            11 => Result::ProcessID(PID::new(src[1] as _).unwrap()),
+            12 => Result::Unimplemented,
+            13 => Result::BlockedProcess,
+            14 => Result::Scalar1(src[1]),
+            15 => Result::Scalar2(src[1], src[2]),
             16 => Result::RetryCall,
             17 => Result::None,
             18 => Result::MemoryReturned(MemorySize::new(src[1]), MemorySize::new(src[2])),
