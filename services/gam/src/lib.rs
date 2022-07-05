@@ -444,6 +444,66 @@ impl Gam {
         )
         .expect("couldn't set debug level");
     }
+    pub fn bytes_to_bip39(&self, bytes: &Vec::<u8>) -> Result<Vec::<std::string::String>, xous::Error> {
+        match bytes.len() {
+            16 | 20 | 24 | 28 | 32 => (),
+            _ => return Err(xous::Error::InvalidString)
+        }
+        let mut ipc = Bip39Ipc::default();
+        ipc.data[..bytes.len()].copy_from_slice(&bytes);
+        ipc.data_len = bytes.len() as u32;
+        let mut buf = Buffer::into_buf(ipc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::BytestoBip39.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
+        let result = buf.to_original::<Bip39Ipc, _>().unwrap();
+        let mut ret = Vec::<std::string::String>::new();
+        for word in result.words {
+            if let Some(w) = word {
+                ret.push(w.as_str().unwrap().to_string());
+            }
+        }
+        if ret.len() == 0 {
+            Err(xous::Error::InvalidString)
+        } else {
+            Ok(ret)
+        }
+    }
+    pub fn bip39_to_bytes(&self, bip39: &Vec::<std::string::String>) -> Result<Vec::<u8>, xous::Error> {
+        match bip39.len() {
+            12 | 15 | 18 | 21 | 24 => (),
+            _ => return Err(xous::Error::InvalidString)
+        }
+        let mut ipc = Bip39Ipc::default();
+        for (word, slot) in bip39.iter().zip(ipc.words.iter_mut()) {
+            *slot = Some(xous_ipc::String::from_str(word))
+        }
+        let mut buf = Buffer::into_buf(ipc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Bip39toBytes.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
+        let result = buf.to_original::<Bip39Ipc, _>().unwrap();
+        if result.data_len == 0 {
+            Err(xous::Error::InvalidString)
+        } else {
+            Ok(
+                result.data[..result.data_len as usize].to_vec()
+            )
+        }
+    }
+    pub fn bip39_suggestions(&self, start: &str) -> Result<Vec::<std::string::String>, xous::Error> {
+        let mut ipc = Bip39Ipc::default();
+        // we abuse this struct a bit by shoving the lookup phrase into a u8-array...
+        let checked_start = start.as_bytes();
+        ipc.data[..checked_start.len().min(8)].copy_from_slice(&checked_start[..checked_start.len().min(8)]);
+        ipc.data_len = checked_start.len().min(8) as u32;
+        let mut buf = Buffer::into_buf(ipc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Bip39Suggestions.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
+        let result = buf.to_original::<Bip39Ipc, _>().unwrap();
+        let mut suggestions = Vec::<std::string::String>::new();
+        for word in result.words {
+            if let Some(w) = word {
+                suggestions.push(w.as_str().unwrap().to_string())
+            }
+        }
+        Ok(suggestions)
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

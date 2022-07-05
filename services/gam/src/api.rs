@@ -200,6 +200,11 @@ pub(crate) enum Opcode {
     SetDebugLevel = 28,
 
     Quit = 29,
+
+    /// Bip39 operations -- the GAM has the word list, so to avoid duplicating code it offers a conversion service.
+    Bip39toBytes = 30,
+    BytestoBip39 = 31,
+    Bip39Suggestions = 32,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -291,4 +296,11 @@ impl CanvasType {
 pub struct GidRecord {
     pub gid: Gid,
     pub canvas_type: CanvasType,
+}
+
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
+pub struct Bip39Ipc {
+    pub data: [u8; 32],
+    pub data_len: u32,
+    pub words: [Option<xous_ipc::String::<8>>; 24],
 }
