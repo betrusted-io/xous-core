@@ -182,6 +182,18 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - context switches that revert to a prior app screen are restored from a stashed bitmap instead of a full redraw. This
     prevents old menus, contexts, and defacements from "piling up" when an app is blocked due to an exceptional condition
     being raised (such as the PDDB requesting a full basis unlock to generate the FSCB)
+- PDDB support in libstd
+  - Directories are implemented as dicts in the flat namespace
+  - The `:` separator is used between path components
+  - A path that begins with a `:` specifies a basis. That is, the path `example` specifies a dict in the Union basis, while the path `:.System:example` specifies a dict `example` in the basis `.System`.
+  - A path that is only `:` specifies `all bases`, and is used to list the open bases
+  - The path `::` specifies the "default basis", which is the most recently-opened one
+  - Because the path delimiter is `:`, this cannot be used as a string in filenames
+    - Note, however, that the underlying API allows for `:` in filenames, which will confuse the libstd API
+  - It is possible for a "file" and a "directory" with the same name to exist in the same "directory". In this case, the entity will return `true` for both `.is_file()` and `.is_directory()`. In practice this doesn't matter, since there are different calls for working with files and directories.
+  - When deleting a file, it is immediately deleted and all open file handles on the system are now invalid. This is in contrast to other platforms where open file handles still work, or where a file that is open cannot be deleted.
+  - It is not yet possible to create or delete bases using this API.
+  - Libstd support for PDDB is not possible with hosted mode. File operations will write to your local filesystem.
 
 ## Roadmap to 1.0
 
