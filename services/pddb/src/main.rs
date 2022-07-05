@@ -373,6 +373,8 @@ use ux::*;
 mod menu;
 use menu::*;
 
+mod libstd;
+
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod tests;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -413,6 +415,21 @@ struct TokenRecord {
     pub alloc_hint: Option<usize>,
     pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
+
+struct FileHandle {
+    pub dict: String,
+    pub key: String,
+    pub basis: Option<String>,
+    pub alloc_hint: Option<usize>,
+    pub offset: u64,
+    pub length: u64,
+    pub conn: Option<xous::CID>, // callback connection, if one was specified
+
+    /// This is set to `true` when a file is removed in order to prevent
+    /// other operations from functioning.
+    pub deleted: bool,
+}
+
 fn main () -> ! {
     let stack_size = 1024 * 1024;
     std::thread::Builder::new()
@@ -422,6 +439,7 @@ fn main () -> ! {
         .join()
         .unwrap()
 }
+
 fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -457,6 +475,9 @@ fn wrapped_main() -> ! {
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
     let mut token_dict = HashMap::<ApiToken, TokenRecord>::new();
 
+    // Process-indexed map of file descriptors to token records
+    let mut fd_mapping = HashMap::<Option<xous::PID>, Vec<Option<FileHandle>>>::new();
+
     // mount poller thread
     let is_mounted = Arc::new(AtomicBool::new(false));
     let _ = thread::spawn({
@@ -466,7 +487,7 @@ fn wrapped_main() -> ! {
             let poller_sid = xns.register_name(api::SERVER_NAME_PDDB_POLLER, None).expect("can't register server");
             loop {
                 let msg = xous::receive_message(poller_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                match FromPrimitive::from_usize(msg.body.id() & 0xffff) {
                     Some(PollOp::Poll) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         if is_mounted.load(Ordering::SeqCst) {
                             xous::return_scalar(msg.sender, 1).unwrap();
@@ -576,7 +597,8 @@ fn wrapped_main() -> ! {
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidOpcode) {
+        // log::error!("got msg: {:x?}", msg);
+        match FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode) {
             Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -672,6 +694,30 @@ fn wrapped_main() -> ! {
                 list_ipc.num = basis_list.len() as u32;
                 buffer.replace(list_ipc).unwrap();
             }
+            Opcode::ListBasisStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_basis(mem, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+            Opcode::ListPathStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_path(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+            Opcode::StatPathStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::stat_path(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
             Opcode::LatestBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
@@ -683,6 +729,20 @@ fn wrapped_main() -> ! {
                     mgmt.code = PddbRequestCode::NotMounted;
                 }
                 buffer.replace(mgmt).unwrap();
+            }
+            Opcode::LatestBasisStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Some(name) = basis_cache.basis_latest() {
+                        for (src, dest) in name.as_bytes().iter().zip(mem.buf.as_slice_mut().iter_mut()) {
+                            *dest = *src;
+                        }
+                        mem.offset = xous::MemorySize::new(name.len().min(mem.buf.len()));
+                    }
+                }
+            }
+            Opcode::CreateBasisStd => {
+                unimplemented!()
             }
             Opcode::CreateBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -880,6 +940,15 @@ fn wrapped_main() -> ! {
                     break; // if we got here, entry was found, stop searching
                 }
             }
+            Opcode::OpenKeyStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::open_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default()) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+
             Opcode::KeyDrop => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
                 let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
                 if let Some(rec) = token_dict.remove(&token) {
@@ -903,9 +972,26 @@ fn wrapped_main() -> ! {
                     } else {
                         // if there was no/never a connection allocated, there's no connection to remove. do nothing.
                     }
+                    xous::return_scalar(msg.sender, PddbRetcode::Ok as usize).expect("couldn't ack KeyDrop");
+                } else {
+                    xous::return_scalar(msg.sender, PddbRetcode::BasisLost as usize).expect("couldn't ack KeyDrop");
                 }
-                xous::return_scalar(msg.sender, 1).expect("couldn't ack KeyDrop");
             }),
+
+            Opcode::CloseKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if msg.body.scalar_message().is_some() {
+                    let result = libstd::close_key(fd_mapping.entry(msg.sender.pid()).or_default(), fd);
+                    if msg.body.is_blocking() {
+                        if let Err(e) = result {
+                            xous::return_scalar(msg.sender, e as usize)
+                        } else {
+                            xous::return_scalar2(msg.sender, 0, 0)
+                        }.ok();
+                    }
+                }
+            }
+
             Opcode::DeleteKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
@@ -956,6 +1042,14 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
+            Opcode::DeleteKeyStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(err) = libstd::delete_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default()) {
+                        mem.offset = xous::MemoryAddress::new(err as usize);
+                    }
+                }
+            }
             Opcode::DeleteDict => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
@@ -1005,6 +1099,22 @@ fn wrapped_main() -> ! {
                     }
                 }
                 buffer.replace(req).unwrap();
+            }
+            Opcode::DeleteDictStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(err) = libstd::delete_dict(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(err as usize);
+                    }
+                }
+            }
+            Opcode::CreateDictStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(err) = libstd::create_dict(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(err as usize);
+                    }
+                }
             }
             Opcode::KeyAttributes => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -1099,6 +1209,14 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
+            Opcode::ListKeyStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_key(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
             Opcode::DictCountInBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
@@ -1151,6 +1269,14 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
+            Opcode::ListDictStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_dict(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
             Opcode::ReadKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
@@ -1185,6 +1311,31 @@ fn wrapped_main() -> ! {
                 }
                 // we don't nede a "replace" operation because all ops happen in-place
             }
+
+            Opcode::SeekKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let seek_by = (((scalar.arg2 as u32) as u64) << 32) | ((scalar.arg3 as u32) as u64);
+                    let result = libstd::seek_key(scalar.arg1, seek_by, fd_mapping.entry(msg.sender.pid()).or_default(), fd);
+                    if msg.body.is_blocking() {
+                        match result {
+                            Ok(offset) => xous::return_scalar2(msg.sender, offset as usize, (offset >> 32) as usize).ok(),
+                            Err(e) =>xous::return_scalar(msg.sender, e as usize).ok(),
+                        };
+                    }
+                }
+            }
+
+            Opcode::ReadKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::read_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default(), fd) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+
             Opcode::WriteKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
@@ -1219,6 +1370,17 @@ fn wrapped_main() -> ! {
                 // for now, do an expensive sync operation after every write to ensure data integrity
                 basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
             }
+
+            Opcode::WriteKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::write_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default(), fd) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+
             Opcode::WriteKeyFlush => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 match basis_cache.sync(&mut pddb_os, None) {
                     Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
@@ -1229,6 +1391,7 @@ fn wrapped_main() -> ! {
                     }
                 };
             }),
+
             Opcode::MenuListBasis => {
                 let bases = basis_cache.basis_list();
                 let mut note = String::from(t!("pddb.menu.listbasis_response", xous::LANG));
