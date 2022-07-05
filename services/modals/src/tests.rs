@@ -25,22 +25,6 @@ pub fn spawn_test() {
             let modals = Modals::new(&xns).unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
 
-            // -2. bip39 display test
-            let refnum = 0b00000110001101100111100111001010000110110010100010110101110011111101101010011100000110000110101100110110011111100010011100011110u128;
-            let refvec = refnum.to_be_bytes().to_vec();
-            modals.show_bip39(Some("Some bip39 words"), &refvec)
-            .expect("couldn't show bip39 words");
-
-            // -1. bip39 input test
-            log::info!("type these words: alert record income curve mercy tree heavy loan hen recycle mean devote");
-            match modals.input_bip39(Some("Input BIP39 words")) {
-                Ok(data) => {
-                    log::info!("got bip39 input: {:x?}", data);
-                    log::info!("reference: 0x063679ca1b28b5cfda9c186b367e271e");
-                }
-                Err(e) => log::error!("couldn't get input: {:?}", e),
-            }
-
             // 0. multi-modal test
             log::info!(
                 "modal data: {:#?}",
@@ -96,6 +80,22 @@ pub fn spawn_test() {
                 .show_notification("This is a test!", None)
                 .expect("notification failed");
             log::info!("notification test done");
+
+            // 4. bip39 display test
+            let refnum = 0b00000110001101100111100111001010000110110010100010110101110011111101101010011100000110000110101100110110011111100010011100011110u128;
+            let refvec = refnum.to_be_bytes().to_vec();
+            modals.show_bip39(Some("Some bip39 words"), &refvec)
+            .expect("couldn't show bip39 words");
+
+            // 5. bip39 input test
+            log::info!("type these words: alert record income curve mercy tree heavy loan hen recycle mean devote");
+            match modals.input_bip39(Some("Input BIP39 words")) {
+                Ok(data) => {
+                    log::info!("got bip39 input: {:x?}", data);
+                    log::info!("reference: 0x063679ca1b28b5cfda9c186b367e271e");
+                }
+                Err(e) => log::error!("couldn't get input: {:?}", e),
+            }
         }
     });
 
