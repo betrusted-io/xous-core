@@ -280,6 +280,8 @@ impl ActionApi for Bip39Entry {
                 status.push_str(t!("bip39.waiting", xous::LANG));
             } else {
                 status.push_str(t!("bip39.invalid_phrase", xous::LANG));
+                status.push_str("\n");
+                status.push_str(t!("bip39.abort_help", xous::LANG));
             }
         }
         let mut tv = TextView::new(
@@ -341,6 +343,12 @@ impl ActionApi for Bip39Entry {
             }
             '\u{0}' => {
                 // ignore null messages
+            }
+            '\u{14}' => { // F4
+                let ret = Bip39EntryPayload::default(); // return a 0-length entry
+                let buf = Buffer::into_buf(ret).expect("couldn't convert message to payload");
+                buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+                return (None, true)
             }
             '\u{8}' => { // backspace
                 #[cfg(feature="tts")]
