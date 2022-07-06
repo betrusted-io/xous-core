@@ -12,6 +12,7 @@ mod layouts;
 use layouts::*;
 mod contexts;
 use contexts::*;
+mod bip39;
 
 use graphics_server::*;
 use xous_ipc::{Buffer, String};
@@ -614,6 +615,55 @@ fn wrapped_main() -> ! {
                 }
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack self test");
             }),
+            Some(Opcode::Bip39toBytes) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut spec = buffer.to_original::<Bip39Ipc, _>().unwrap();
+                let mut phrase = Vec::<std::string::String>::new();
+                for maybe_word in spec.words {
+                    if let Some(word) = maybe_word {
+                        phrase.push(word.as_str().unwrap().to_string());
+                    }
+                }
+                match bip39::bip39_to_bytes(&phrase) {
+                    Ok(data) => {
+                        spec.data_len = data.len() as u32;
+                        spec.data[..data.len()].copy_from_slice(&data);
+                    }
+                    Err(_) => {
+                        // zero-length data indicates an error
+                        spec.data_len = 0;
+                    }
+                }
+                buffer.replace(spec).unwrap();
+            }
+            Some(Opcode::BytestoBip39) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut spec = buffer.to_original::<Bip39Ipc, _>().unwrap();
+                let data = spec.data[..spec.data_len as usize].to_vec();
+                match bip39::bytes_to_bip39(&data) {
+                    Ok(phrase) => {
+                        for (word, returned) in phrase.iter().zip(spec.words.iter_mut()) {
+                            *returned = Some(xous_ipc::String::from_str(word));
+                        }
+                    }
+                    Err(_) => {
+                        for returned in spec.words.iter_mut() {
+                            *returned = None;
+                        }
+                    }
+                }
+                buffer.replace(spec).unwrap();
+            }
+            Some(Opcode::Bip39Suggestions) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut spec = buffer.to_original::<Bip39Ipc, _>().unwrap();
+                let start = std::str::from_utf8(&spec.data[..spec.data_len as usize]).unwrap_or("");
+                let suggestions = bip39::suggest_bip39(start);
+                for (word, returned) in suggestions.iter().zip(spec.words.iter_mut()) {
+                    *returned = Some(xous_ipc::String::from_str(word));
+                }
+                buffer.replace(spec).unwrap();
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

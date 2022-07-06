@@ -194,6 +194,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - When deleting a file, it is immediately deleted and all open file handles on the system are now invalid. This is in contrast to other platforms where open file handles still work, or where a file that is open cannot be deleted.
   - It is not yet possible to create or delete bases using this API.
   - Libstd support for PDDB is not possible with hosted mode. File operations will write to your local filesystem.
+- BIP39 wordlist handling
+  - Display of BIP39 words from a `[u8]`
+  - Input of BIP39 words into a `[u8]`, with validation and dynamic lookup/autocomplete of words
 
 ## Roadmap to 1.0
 
