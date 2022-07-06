@@ -210,6 +210,10 @@ impl Message {
         }
     }
 
+    pub fn is_scalar(&self) -> bool {
+        !self.has_memory()
+    }
+
     pub fn memory(&self) -> Option<&MemoryRange> {
         self.memory_message().map(|msg| &msg.buf)
     }

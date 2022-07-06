@@ -1924,6 +1924,51 @@ pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
         }
     })
 }
+
+/// Reply to the message, if one exists, and receive the next one.
+/// If no message exists, delegate the call to `receive_syscall()`.
+pub fn reply_and_receive_next(
+    server: SID,
+    msg: &mut Option<MessageEnvelope>,
+) -> core::result::Result<(), crate::Error> {
+    if let Some(envelope) = msg.take() {
+        // If the message inside is nonblocking, then there's nothing to return.
+        // Delegate reception to the `receive_message()` call
+        if !envelope.body.is_blocking() {
+            *msg = Some(receive_message(server)?);
+            return Ok(());
+        }
+
+        let args = if let Some(mem) = envelope.body.memory_message() {
+            mem.to_usize()
+        } else if let Some(scalar) = envelope.body.scalar_message() {
+            scalar.to_usize()
+        } else {
+            panic!("unrecognized message type")
+        };
+        let call = SysCall::ReplyAndReceiveNext(
+            envelope.sender,
+            args[0],
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+        );
+        match rsyscall(call) {
+            Ok(crate::Result::Message(envelope)) => {
+                *msg = Some(envelope);
+                Ok(())
+            }
+            Ok(crate::Result::Error(e)) => Err(e),
+            _ => Err(crate::Error::InternalError),
+        }
+    } else {
+        // No waiting message -- call the existing `receive_message()` function
+        *msg = Some(receive_message(server)?);
+        Ok(())
+    }
+}
+
 /* https://github.com/betrusted-io/xous-core/issues/90
 static EXCEPTION_HANDLER: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 fn handle_exception(exception_type: usize, arg1: usize, arg2: usize) -> isize {
