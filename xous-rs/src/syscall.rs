@@ -475,6 +475,44 @@ pub enum SysCall {
     /// Return five scalars to the sender
     ReturnScalar5(MessageSender, usize, usize, usize, usize, usize),
 
+    /// Return a message with the given Message ID and the provided parameters,
+    /// and listen for another message on the server ID that sent this message.
+    /// This call is meant to be used in the main loop of a server in order to
+    /// reduce latency when that server is called frequently.
+    ///
+    /// This call works on both `MemoryMessages` and `BlockingScalars`, and does
+    /// not distinguish between the two from the API.
+    ///
+    /// ## Arguments
+    ///
+    ///     * **MessageSender**: This is the `sender` from the message envelope.
+    ///                         It is a unique ID that identifies this message,
+    ///                         as well as the server it came from.
+    ///
+    /// The remaining arguments depend on whether the message was a `BlockingScalar`
+    /// message or a `MemoryMessage`. Note that this function should NOT be called
+    /// on non-blocking messages such as `Send` or `Scalar`.
+    ///
+    /// ## Returns
+    ///
+    /// * **Message**: A valid message from the queue
+    ///
+    /// # Errors
+    ///
+    /// * **ServerNotFound**: The given SID is not active or has terminated
+    /// * **ProcessNotFound**: The parent process terminated when we were getting ready
+    ///                        to block. This is an internal error.
+    /// * **BlockedProcess**: When running in Hosted mode, this indicates that this
+    ///                       thread is blocking.
+    ReplyAndReceiveNext(
+        MessageSender, /* ID if the sender that sent this message */
+        usize,         /* Return code to the caller */
+        usize,         /* arg1 (BlockingScalar) or the memory address (MemoryMesage) */
+        usize,         /* arg2 (BlockingScalar) or the memory length (MemoryMesage) */
+        usize,         /* arg3 (BlockingScalar) or the memory offset (MemoryMesage) */
+        usize,         /* arg4 (BlockingScalar) or the memory valid (MemoryMesage) */
+    ),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -522,6 +560,7 @@ pub enum SysCallNumber {
     #[cfg(feature = "v2p")]
     VirtToPhys = 39,
     ReturnScalar5 = 40,
+    ReplyAndReceiveNext = 41,
     Invalid,
 }
 
@@ -569,6 +608,7 @@ impl SysCallNumber {
             #[cfg(feature = "v2p")]
             39 => VirtToPhys,
             40 => ReturnScalar5,
+            41 => ReplyAndReceiveNext,
             _ => Invalid,
         }
     }
@@ -806,6 +846,17 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::ReplyAndReceiveNext(sender, result, arg1, arg2, arg3, arg4) => [
+                SysCallNumber::ReturnMemory as usize,
+                sender.to_usize(),
+                *result,
+                *arg1,
+                *arg2,
+                *arg3,
+                *arg4,
+                0,
+            ],
+
             SysCall::CreateThread(init) => {
                 crate::arch::thread_to_args(SysCallNumber::CreateThread as usize, init)
             }
@@ -1030,6 +1081,9 @@ impl SysCall {
                 MemorySize::new(a4),
                 MemorySize::new(a5),
             ),
+            SysCallNumber::ReplyAndReceiveNext => {
+                SysCall::ReplyAndReceiveNext(MessageSender::from_usize(a1), a2, a3, a4, a5, a6)
+            }
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
