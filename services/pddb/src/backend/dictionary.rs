@@ -60,7 +60,7 @@ pub(crate) struct DictCacheEntry {
     /// copy of our AAD, for convenience
     pub(crate) aad: Vec::<u8>,
     /// ticktimer reference, for managing atimes
-    pub(crate) tt: ticktimer_server::Ticktimer,
+    pub(crate) created: std::time::Instant,
 }
 impl DictCacheEntry {
     pub fn new(dict: Dictionary, index: usize, aad: &Vec<u8>) -> DictCacheEntry {
@@ -82,7 +82,7 @@ impl DictCacheEntry {
             small_pool: Vec::<KeySmallPool>::new(),
             small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
             aad: my_aad,
-            tt: ticktimer_server::Ticktimer::new().unwrap(),
+            created: std::time::Instant::now(),
         }
     }
     /// Populates cache entries, reporting the maximum extent of large alloc data seen so far.
@@ -160,7 +160,7 @@ impl DictCacheEntry {
                             descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
                             clean: true,
                             data: None,
-                            atime: self.tt.elapsed_ms(),
+                            atime: self.created.elapsed().as_millis() as u64,
                         };
                         let kname = std::str::from_utf8(&keydesc.name.data[..keydesc.name.len as usize]).expect("key is not valid utf-8");
                         let key_exists_and_valid =
@@ -263,7 +263,7 @@ impl DictCacheEntry {
                                 descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
                                 clean: true,
                                 data: None,
-                                atime: self.tt.elapsed_ms(),
+                                atime: self.created.elapsed().as_millis() as u64,
                             };
                             self.keys.insert(kname.to_string(), kcache);
                             self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &kname);
@@ -374,7 +374,7 @@ impl DictCacheEntry {
         self.clean = false;
         if self.ensure_key_entry(hw, v2p_map, cipher, name) {
             let kcache = self.keys.get_mut(name).expect("Entry was assured, but then not there!");
-            kcache.set_atime(self.tt.elapsed_ms());
+            kcache.set_atime(self.created.elapsed().as_millis() as u64);
             kcache.clean = false;
             // the update isn't going to fit in the reserved space, remove it, and re-insert it with an entirely new entry.
             if kcache.reserved < (data.len() + offset) as u64 {
@@ -640,7 +640,7 @@ impl DictCacheEntry {
                         clean: false,
                         data: alloc_data
                     })),
-                    atime: self.tt.elapsed_ms(),
+                    atime: self.created.elapsed().as_millis() as u64,
                 };
                 self.keys.insert(name.to_string(), kcache);
                 self.key_count += 1;
@@ -669,7 +669,7 @@ impl DictCacheEntry {
                     descriptor_index,
                     clean: false,
                     data: None, // no caching implemented yet for large keys
-                    atime: self.tt.elapsed_ms(),
+                    atime: self.created.elapsed().as_millis() as u64,
                 };
                 self.keys.insert(name.to_string(), kcache);
                 self.key_count += 1;

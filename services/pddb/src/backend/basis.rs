@@ -332,7 +332,7 @@ impl BasisCache {
                 small_pool: Vec::<KeySmallPool>::new(),
                 small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
                 aad: my_aad,
-                tt: ticktimer_server::Ticktimer::new().unwrap(),
+                created: std::time::Instant::now(),
             };
             log::debug!("adding dictionary {}", name);
             basis.dicts.insert(String::from(name), dict_cache);
