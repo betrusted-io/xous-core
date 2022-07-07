@@ -7,6 +7,73 @@ use ring::signature::Ed25519KeyPair;
 const DEVKEY_PATH: &str = "devkey/dev.key";
 const LOADER_VERSION: u32 = 1;
 
+use std::process::Command;
+use std::convert::{From, Into, TryInto};
+
+struct SemVer {
+    maj: u16,
+    min: u16,
+    rev: u16,
+    extra: u16,
+    commit: u32,
+}
+impl SemVer {
+    pub fn new() -> Self {
+        let output = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(["/C", "git describe --tags"])
+                .output()
+                .expect("failed to execute process")
+        } else {
+            Command::new("sh")
+                .arg("-c")
+                .arg("git describe --tags")
+                .output()
+                .expect("failed to execute process")
+        };
+        let gitver = output.stdout;
+        let semver = String::from_utf8_lossy(&gitver);
+        let ver: Vec<&str> = semver.strip_prefix('v')
+            .expect("semver does not start with 'v'!")
+            .split(['.', '-']).collect();
+        SemVer {
+            maj: u16::from_str_radix(ver[0], 10).expect("error parsing semver"),
+            min: u16::from_str_radix(ver[1], 10).expect("error parsing semver"),
+            rev: u16::from_str_radix(ver[2], 10).expect("error parsing semver"),
+            extra: if ver.len() == 5 {
+                    u16::from_str_radix(ver[3], 10).expect("error parsing semver")
+                } else {0}, // special case when the tag is totally clean
+            commit: u32::from_str_radix(
+                ver[ver.len() - 1]
+                .trim_end()
+                .strip_prefix('g')
+                .expect("gitrev malformed"), 16
+            ).expect("error parsing semver"),
+        }
+    }
+}
+impl From::<[u8; 12]> for SemVer {
+    fn from(bytes: [u8; 12]) -> SemVer {
+        SemVer {
+            maj: u16::from_le_bytes(bytes[0..2].try_into().unwrap()),
+            min: u16::from_le_bytes(bytes[2..4].try_into().unwrap()),
+            rev: u16::from_le_bytes(bytes[4..6].try_into().unwrap()),
+            extra: u16::from_le_bytes(bytes[6..8].try_into().unwrap()),
+            commit: u32::from_le_bytes(bytes[8..12].try_into().unwrap()),
+        }
+    }
+}
+impl Into::<[u8; 12]> for SemVer {
+    fn into(self) -> [u8; 12] {
+        let mut ser = [0u8; 12];
+        ser[0..2].copy_from_slice(&self.maj.to_le_bytes());
+        ser[2..4].copy_from_slice(&self.min.to_le_bytes());
+        ser[4..6].copy_from_slice(&self.rev.to_le_bytes());
+        ser[6..8].copy_from_slice(&self.extra.to_le_bytes());
+        ser[8..12].copy_from_slice(&self.commit.to_le_bytes());
+        ser
+    }
+}
 fn image_sign<S, T>(
     input: &S,
     output: &T,
@@ -21,6 +88,8 @@ where
     let mut source_file = std::fs::File::open(input)?;
     let mut dest_file = std::fs::File::create(output)?;
     source_file.read_to_end(&mut source)?;
+    let semver: [u8; 12] = SemVer::new().into();
+    source.append(&mut semver.to_vec());
     for &b in LOADER_VERSION.to_le_bytes().iter() {
         source.push(b);
     }
