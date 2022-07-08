@@ -21,6 +21,7 @@ mod submenu;
 mod actions;
 mod totp;
 mod prereqs;
+mod vendor_commands;
 
 use locales::t;
 
@@ -158,7 +159,7 @@ const ERR_TIMEOUT_MS: usize = 5000;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -201,7 +202,12 @@ fn main() -> ! {
                         Ok(msg) => {
                             log::trace!("FIDO listener got message: {:?}", msg);
                             let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                            let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
+                            let reply = match ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state) {
+                                ctap::hid::send::CTAPHIDResponse::StandardCommand(iter) => iter,
+                                ctap::hid::send::CTAPHIDResponse::VendorCommand(cmd, cid, payload) => {
+                                    vendor_commands::handle_vendor_command(cmd, cid, payload)
+                                }
+                            };
                             // This block handles sending packets.
                             for pkt_reply in reply {
                                 let mut reply = RawFidoMsg::default();
