@@ -3608,6 +3608,7 @@ dependencies = [
  "ring",
  "svd2utra",
  "xmas-elf",
+ "xous-semver",
 ]
 
 [[package]]
@@ -4358,6 +4359,12 @@ dependencies = [
  "xous",
  "xous-ipc 0.9.7",
 ]
+
+[[package]]
+name = "xous-semver"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ecd1a30e0deeb6dd362cb68bec34104d1d91ae7eb02d76beb237d880a44dc77"
 
 [[package]]
 name = "xous-tts-backend"

@@ -10,6 +10,10 @@ use std::{
     process::Command,
 };
 
+// This is the minimum Xous version required to read a PDDB backup generated
+// by the current kernel revision.
+const MIN_XOUS_VERSION: &str = "v0.9.8-791";
+
 type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
@@ -947,6 +951,8 @@ fn build_hw_image(
             loaderkey_file.as_str(),
             "--loader-output",
             loader_bin.to_str().unwrap(),
+            "--min-xous-ver",
+            MIN_XOUS_VERSION,
         ])
         .status()?;
     if !status.success() {
@@ -984,6 +990,8 @@ fn build_hw_image(
             kernelkey_file.as_str(),
             "--kernel-output",
             xous_img_path.to_str().unwrap(),
+            "--min-xous-ver",
+            MIN_XOUS_VERSION,
             // "--defile",
         ])
         .status()?;
