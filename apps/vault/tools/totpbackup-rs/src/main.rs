@@ -191,6 +191,8 @@ impl std::fmt::Display for ProgramError {
 impl std::error::Error for ProgramError {}
 
 const OKAY_CANARY: &[u8] = &[0xca, 0xfe, 0xba, 0xbe];
+const PRECURSOR_VENDOR_ID: u16 = 0x1209;
+const PRECURSOR_PRODUCT_ID: u16 = 0x3613;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let wp: WithPositional = argh::from_env();
@@ -201,7 +203,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut precursor: Option<&hidapi::DeviceInfo> = None;
     for i in dl {
-        if i.product_string().unwrap() == "Precursor" {
+        println!("{:x?}", i);
+        if i.product_id() == PRECURSOR_PRODUCT_ID && i.vendor_id() == PRECURSOR_VENDOR_ID {
             precursor = Some(i);
             break;
         }
