@@ -106,9 +106,10 @@ be considered insecure/untrusted.
 
 The EC FW has a versioning block, appended to the end of the firmware. This block is included in the "actual firmware length" for the purposes of hashing and signature checks. The block contains the following data, aligned to the very end of firmware:
 ```
-FW_LEN-0x54:  [u8;32] = SHA512/256 hash of the gateware
-FW_LEN-0x34:  [u8;32] = SHA512/256 hash of the loader+firmware
-FW_LEN-0x14:  [u8;16] = SemVer serialized structure
+FW_LEN-0x58:  [u8;32] = SHA512/256 hash of the gateware
+FW_LEN-0x38:  [u8;32] = SHA512/256 hash of the loader+firmware
+FW_LEN-0x18:  [u8;16] = SemVer serialized structure
+FW_LEN-0x8:   u32     = firmware control page version number (currently 1)
 FW_LEN-0x4:   u32     = FW_LEN
 FW_LEN
 ```
