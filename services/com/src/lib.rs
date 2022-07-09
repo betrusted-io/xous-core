@@ -413,6 +413,29 @@ impl Com {
         }
     }
 
+    /// Reads a page of data out of the EC, starting at address `addr`. Always reads 256 bytes.
+    /// The address is in absolute addressing in the EC space, which means this routine, rather
+    /// deliberately, could be used to also read RAM and CSRs in the EC...
+    pub fn flash_verify(&mut self, addr: u32, page: &mut [u8; 256]) -> Result<(), xous::Error> {
+        if !self.ec_acquired {
+            return Err(xous::Error::AccessDenied)
+        }
+        let flashop = api::FlashRecord {
+            id: self.ec_lock_id.unwrap(),
+            op: api::FlashOp::Verify(addr, [0u8; 256])
+        };
+        let mut buf = Buffer::into_buf(flashop).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::FlashOp.to_u32().unwrap()).expect("couldn't send flash program command");
+        let ret = buf.to_original::<api::FlashOp, _>().unwrap();
+        match ret {
+            FlashOp::Verify(_a, d) => {
+                page.copy_from_slice(&d);
+                Ok(())
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
+
     pub fn wlan_set_on(&mut self) -> Result<xous::Result, xous::Error> {
         send_message(
             self.conn,
