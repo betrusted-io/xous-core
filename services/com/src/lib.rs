@@ -642,11 +642,6 @@ impl Com {
                             rxlen = Some(maybe_rxlen as u16);
                         }
                     }
-                } else {
-                    // Trip an error if we had an invalid interrupt. This should force the caller
-                    // to re-initialize the interrupt subsystem.
-                    log::warn!("Invalid interrupt set");
-                    return Err(xous::Error::Timeout);
                 }
                 mask_bit <<= 1;
             }
