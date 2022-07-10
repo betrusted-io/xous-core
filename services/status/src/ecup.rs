@@ -181,7 +181,6 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 const WF200_HASH_LEN: usize = 0x48; // this is actually hash + signature + keyset
 
                 let ec_reported_rev = com.get_ec_sw_tag().unwrap(); // fetch the purported rev from the EC. We take it at face value.
-                log::info!("EC reported rev: {:?}", ec_reported_rev);
 
                 let mut did_something = false;
                 let package = unsafe{ core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, xous::EC_FW_PKG_LEN as usize)};
@@ -260,7 +259,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                         continue;
                     }
                 } else {
-                    log::info!("EC Autoupdate check found that EC rev {:?} is newer or same as update rev {:?}; no update done", ec_reported_rev, pkg_ver);
+                    log::info!("EC Autoupdate check found that EC rev {} is newer or same as update rev {}; no update done", ec_reported_rev.to_string(), pkg_ver.to_string());
                 }
 
                 let package = unsafe{ core::slice::from_raw_parts(wf_package.as_ptr() as *const u8, xous::EC_WF200_PKG_LEN as usize)};
