@@ -9,6 +9,7 @@ mod kbdmenu;
 use kbdmenu::*;
 mod app_autogen;
 mod time;
+mod ecup;
 
 use com::api::*;
 use core::fmt::Write;
@@ -135,6 +136,7 @@ fn wrapped_main() -> ! {
     // we want this started really early, because it sanity checks the RTC and a bunch of other stuff.
     time::start_time_server();
 
+    // ------------------ acquire the status canvas GID
     let xns = xous_names::XousNames::new().unwrap();
     // 1 connection exactly -- from the GAM to set our canvas GID
     let status_gam_getter = xns
@@ -158,12 +160,9 @@ fn wrapped_main() -> ! {
     }
     xous::destroy_server(status_gam_getter).unwrap();
 
+    // ------------------ lay out our public API infrastructure
     // ok, now that we have a GID, we can continue on with our merry way
     let status_gid: Gid = Gid::new(canvas_gid);
-    log::trace!("|status: my canvas {:?}", status_gid);
-
-    log::debug!("|status: registering GAM|status thread");
-
      // allow only one connection, from keyboard to us.
     let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(1)).unwrap();
     // create a connection for callback hooks
@@ -177,7 +176,10 @@ fn wrapped_main() -> ! {
             pump_thread(pump_conn as _, pump_run);
         }
     });
+    // used to show notifications, e.g. can't sleep while power is engaged.
+    let modals = modals::Modals::new(&xns).unwrap();
 
+    // ------------------ render initial graphical display, so we don't seem broken on boot
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
@@ -271,6 +273,7 @@ fn wrapped_main() -> ! {
     log::trace!("status redraw## initial");
     gam.redraw().unwrap(); // initial boot redraw
 
+    // ------------------------ measure current security state and adjust messaging
     let sec_notes = Arc::new(Mutex::new(HashMap::new()));
     let mut last_sec_note_index = 0;
     let mut last_sec_note_size = 0;
@@ -280,6 +283,47 @@ fn wrapped_main() -> ! {
             t!("secnote.usb_unlock", xous::LANG).to_string(),
         );
     }
+
+    // ------------------------ check firmware status and apply updates
+    // in debug mode, anyone could, in theory, connect to and trigger an EC update, given this permissive policy.
+    #[cfg(feature="dbg-ecupdate")]
+    let ecup_sid = xns.register_name("__ECUP server__", None).unwrap(); // do not change name, it is referred to in shellchat
+    #[cfg(not(feature="dbg-ecupdate"))]
+    let ecup_sid = xous::create_server().unwrap(); // totally private in this mode
+    let _ = thread::spawn({
+        move || {
+            ecup::ecupdate_thread(ecup_sid);
+        }
+    });
+    let ecup_conn = xous::connect(ecup_sid).unwrap();
+    // check & automatically apply any EC updates
+    let mut needs_reboot = false;
+    match send_message(ecup_conn,
+        Message::new_blocking_scalar(ecup::UpdateOp::UpdateAuto.to_usize().unwrap(), 0, 0, 0, 0)
+    ).expect("couldn't send auto update command") {
+        xous::Result::Scalar1(r) => {
+            match FromPrimitive::from_usize(r) {
+                Some(ecup::UpdateResult::AutoDone) => {
+                    // question: do we want to put something there that confirms that the reported EC firmware
+                    // at this point matches the intended update? we /could/ do that, but if it fails then how?
+                    needs_reboot = true;
+                    // restore interrupts and connection manager
+                    llio.com_event_enable(true).ok();
+                    netmgr.reset();
+                    netmgr.connection_manager_run().ok();
+                }
+                Some(ecup::UpdateResult::NothingToDo) => log::info!("EC update check: nothing to do, firmware is up to date."),
+                Some(ecup::UpdateResult::Abort) => {
+                    modals.show_notification(t!("ecup.abort", xous::LANG), None).unwrap();
+                }
+                // note: invalid package triggers a pop-up in the update procedure, so we don't need to pop one up here.
+                Some(ecup::UpdateResult::PackageInvalid) => log::error!("EC firmware package did not validate"),
+                None => log::error!("invalid return code from EC update check"),
+            }
+        }
+        _ => log::error!("Invalid return type from UpdateAuto"),
+    }
+
     let keys = Arc::new(Mutex::new(
         root_keys::RootKeys::new(&xns, None)
             .expect("couldn't connect to root_keys to query initialization state"),
@@ -319,7 +363,11 @@ fn wrapped_main() -> ! {
         });
     };
     sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string()); // this is the default app on boot
+    if needs_reboot {
+        modals.show_notification(t!("ecup.please_reboot", xous::LANG), None).unwrap();
+    }
 
+    // --------------------------- graphical loop timing
     let mut stats_phase: usize = 0;
 
     let charger_pump_interval = 180;
@@ -336,6 +384,7 @@ fn wrapped_main() -> ! {
     let mut battstats_phase = true;
     let mut secnotes_force_redraw = false;
 
+    // --------------------------- sync to COM
     // the EC gets reset by the Net crate on boot to ensure that the state machines are synced up
     // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
     // the status bar reads "booting up..." during this period.
@@ -348,17 +397,16 @@ fn wrapped_main() -> ! {
     com.req_batt_stats()
         .expect("Can't get battery stats from COM");
 
-    // spawn a time UX manager thread
+    // --------------------------- spawn a time UX manager thread
     let time_sid = xous::create_server().unwrap();
     let time_cid = xous::connect(time_sid).unwrap();
     time::start_time_ux(time_sid);
     // this is used by the main loop to get the localtime to show on the status bar
     let mut localtime = llio::LocalTime::new();
+
+    // ---------------------------- build menus
     // used to hide time when the PDDB is not mounted
     let pddb_poller = pddb::PddbMountPoller::new();
-
-    // used to show notifications, e.g. can't sleep while power is engaged.
-    let modals = modals::Modals::new(&xns).unwrap();
 
     log::debug!("starting main menu thread");
     let main_menu_sid = xous::create_server().unwrap();
@@ -386,8 +434,18 @@ fn wrapped_main() -> ! {
     });
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
 
+    // ---------------------- final cleanup before entering main loop
     #[cfg(any(target_os = "none", target_os = "xous"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
+
+    // spawn a thread to auto-mount the PDDB
+    let _ = thread::spawn({
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            tt.sleep_ms(4000).unwrap(); // a brief pause, to allow the other startup bits to finish running
+            pddb::Pddb::new().try_mount();
+        }
+    });
 
     // Automatic backlight-related variables.
     kbd.register_observer(

@@ -36,6 +36,11 @@ chrono = {version = "0.4.19", default-features = false, features = ["std"]}
 sntpc = {version = "0.3.1"} #, features = ["log"]
 crossbeam = "0.8.1"
 
+sha2 = {path="../engine-sha512"}
+digest = "0.9.0"
+xous-semver = "0.1.2"
+com_rs-ref = {path = "../../imports/com_rs-ref"}
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 
@@ -48,5 +53,6 @@ debugprint = []
 braille = [] # used for braille mode, so console isn't overwhelmed with status
 tts = []
 # default = ["debugprint"] # "debugprint"
-default = []
+dbg-ecupdate = []
 ditherpunk = []
+default = []

@@ -1,4 +1,40 @@
 {
+    "ecup.invalid": {
+        "ja": "ECファームウェアパッケージが破損しているか無効です: ",
+        "en": "EC firmware package is corrupted or invalid: ",
+        "zh": "固件包已损坏或无效: ",
+        "en-tts": "EC firmware package is corrupted or invalid: "
+    },
+    "ecup.abort": {
+        "ja": "エラーのため更新が中止されました！ (EC)",
+        "en": "EC update aborted due to error!",
+        "zh": "更新因错误而中止！(EC)",
+        "en-tts": "EC update aborted due to error!"
+    },
+    "ecup.erasing": {
+        "ja": "消去...",
+        "en": "Erasing...",
+        "zh": "擦除...",
+        "en-tts": "Erasing..."
+    },
+    "ecup.writing": {
+        "ja": "書き込み...",
+        "en": "Writing...",
+        "zh": "写作...",
+        "en-tts": "Writing..."
+    },
+    "ecup.please_reboot": {
+        "ja": "USBロードのアップデートが適用されました：できるだけ早く再起動してください...",
+        "en": "USB-loaded update was applied: please reboot at your earliest convenience...",
+        "zh": "已应用 USB 加载更新：请尽早重启...",
+        "en-tts": "USB-loaded update was applied: please reboot at your earliest convenience..."
+    },
+    "ecup.resetting": {
+        "ja": "ECのリセット",
+        "en": "Resetting EC...",
+        "zh": "重置 EC",
+        "en-tts": "Resetting EC..."
+    },
     "stats.measuring": {
         "ja": "測定...",
         "en": "Measuring...",
