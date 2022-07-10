@@ -162,6 +162,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 // this doesn't follow the usual "suspender" pattern. In fact, we don't do anything special on suspend;
                 // however, on resume, check with the EC and see where the link state ended up.
                 let (res_linkstate, _res_dhcpstate) = com.wlan_sync_state().unwrap();
+                wifi_stats_cache = com.wlan_status().unwrap();
                 match res_linkstate {
                     LinkState::Connected => {
                         match wifi_state {
