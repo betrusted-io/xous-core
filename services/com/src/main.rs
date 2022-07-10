@@ -559,11 +559,11 @@ fn main() -> ! {
                                 }
                                 com.txrx(ComState::FLASH_UNLOCK.verb);
                             },
-                            api::FlashOp::Verify(&addr, data) => {
+                            api::FlashOp::Verify(addr, data) => {
                                 if ec_tag >= u32::from_be_bytes(ComState::FLASH_VERIFY.apilevel) {
                                     com.txrx(ComState::FLASH_VERIFY.verb);
-                                    com.txrx((addr >> 16) as u16);
-                                    com.txrx(addr as u16);
+                                    com.txrx((*addr >> 16) as u16);
+                                    com.txrx(*addr as u16);
 
                                     for word in data.chunks_mut(2) {
                                         let read = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)).to_le_bytes();
@@ -585,7 +585,7 @@ fn main() -> ! {
                 }
                 match flash_op.op {
                     api::FlashOp::Verify(_a, data) => {
-                        log::info!("verify returning {:x?}", &data[..32]);
+                        log::debug!("verify returning {:x?}", &data[..32]);
                         buffer.replace(flash_op).expect("couldn't return result on FlashOp");
                     }
                     _ => {

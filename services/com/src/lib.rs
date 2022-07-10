@@ -12,6 +12,7 @@ use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
 
 pub use com_rs_ref::serdes::Ipv4Conf;
+use xous_semver::SemVer;
 
 /// mapping of the callback function to the library user
 /// this exists in the library user's memory space, so we can have up to one
@@ -136,17 +137,18 @@ impl Com {
         }
     }
 
-    /// this is the rev of the firmware, as (maj, min, rev, +commit)
-    pub fn get_ec_sw_tag(&self) -> Result<(u8, u8, u8, u8), Error> {
+    /// this is the rev of the firmware
+    pub fn get_ec_sw_tag(&self) -> Result<SemVer, Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::EcSwTag.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar1(rev) = response {
-            Ok((
-                ((rev >> 24) & 0xff) as u8,
-                ((rev >> 16) & 0xff) as u8,
-                ((rev >> 8) & 0xff) as u8,
-                ((rev >> 0) & 0xff) as u8,
-            ))
+            Ok(SemVer {
+                maj: ((rev >> 24) & 0xff) as u16,
+                min: ((rev >> 16) & 0xff) as u16,
+                rev: ((rev >> 8) & 0xff) as u16,
+                extra: ((rev >> 0) & 0xff) as u16,
+                commit: None,
+            })
         } else {
             panic!("unexpected return value: {:#?}", response);
         }
@@ -426,8 +428,8 @@ impl Com {
         };
         let mut buf = Buffer::into_buf(flashop).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::FlashOp.to_u32().unwrap()).expect("couldn't send flash program command");
-        let ret = buf.to_original::<api::FlashOp, _>().unwrap();
-        match ret {
+        let ret = buf.to_original::<api::FlashRecord, _>().unwrap();
+        match ret.op {
             FlashOp::Verify(_a, d) => {
                 page.copy_from_slice(&d);
                 Ok(())
@@ -640,6 +642,11 @@ impl Com {
                             rxlen = Some(maybe_rxlen as u16);
                         }
                     }
+                } else {
+                    // Trip an error if we had an invalid interrupt. This should force the caller
+                    // to re-initialize the interrupt subsystem.
+                    log::warn!("Invalid interrupt set");
+                    return Err(xous::Error::Timeout);
                 }
                 mask_bit <<= 1;
             }
