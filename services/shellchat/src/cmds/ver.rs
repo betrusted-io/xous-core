@@ -12,7 +12,7 @@ impl<'a> ShellCmdApi<'a> for Ver {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "ver options: ec, wf200, soc, dna, xous";
+        let helpstring = "ver [ec] [wf200] [soc] [dna] [xous] [ecreset]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -22,9 +22,9 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     let (rev, dirty) = env.com.get_ec_git_rev().unwrap();
                     let dirtystr = if dirty { "dirty" } else { "clean" };
                     write!(ret, "EC gateware commit: {:x}, {}\n", rev, dirtystr).unwrap();
-                    let (maj, min, rev, commit) = env.com.get_ec_sw_tag().unwrap();
-                    log::info!("{}VER.EC,{},{},{},{},{}", xous::BOOKEND_START, maj, min, rev, commit, xous::BOOKEND_END);
-                    write!(ret, "EC sw tag: {}.{}.{}+{}", maj, min, rev, commit).unwrap();
+                    let ec_ver = env.com.get_ec_sw_tag().unwrap();
+                    log::info!("{}VER.EC,{},{},{},{},{}", xous::BOOKEND_START, ec_ver.maj, ec_ver.min, ec_ver.rev, ec_ver.extra, xous::BOOKEND_END);
+                    write!(ret, "EC sw tag: {}", ec_ver.to_string()).unwrap();
                 }
                 "wf200" => {
                     let (maj, min, rev) = env.com.get_wf200_fw_rev().unwrap();
@@ -41,6 +41,13 @@ impl<'a> ShellCmdApi<'a> for Ver {
                 "xous" => {
                     write!(ret, "Xous version: {}", env.ticktimer.get_version()).unwrap();
                     log::info!("{}VER.XOUS,{},{}", xous::BOOKEND_START, env.ticktimer.get_version(), xous::BOOKEND_END);
+                }
+                "ecreset" => {
+                    env.llio.ec_reset().unwrap();
+                    env.ticktimer.sleep_ms(4000).unwrap();
+                    env.com.link_reset().unwrap();
+                    env.com.reseed_ec_trng().unwrap();
+                    write!(ret, "EC has been reset, and new firmware loaded.").unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

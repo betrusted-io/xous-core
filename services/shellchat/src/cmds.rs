@@ -90,7 +90,10 @@ mod ver;      use ver::*;
 //mod audio;    use audio::*; // this command is currently contra-indicated with PDDB, as the test audio currently overlaps the PDDB space. We'll fix this eventually, but for now, let's switch to PDDB mode.
 mod backlight; use backlight::*;
 mod accel;    use accel::*;
-mod ecup;     use ecup::*;
+#[cfg(feature="dbg-ecupdate")]
+mod ecup;
+#[cfg(feature="dbg-ecupdate")]
+use ecup::*;
 mod trng_cmd; use trng_cmd::*;
 mod console;  use console::*;
 //mod memtest;  use memtest::*;
@@ -133,6 +136,7 @@ pub struct CmdEnv {
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
     //audio_cmd: Audio,
+    #[cfg(feature="dbg-ecupdate")]
     ecup_cmd: EcUpdate,
     trng_cmd: TrngCmd,
     //memtest_cmd: Memtest,
@@ -157,7 +161,7 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-        let mut common = CommonEnv {
+        let common = CommonEnv {
             llio: llio::Llio::new(&xns),
             com: com::Com::new(&xns).expect("could't connect to COM"),
             ticktimer,
@@ -175,7 +179,6 @@ impl CmdEnv {
         let aes = Aes::new(&xns, &mut common);
         #[cfg(feature="benchmarks")]
         let engine = Engine::new(&xns, &mut common);
-        let ecup = EcUpdate::new(&mut common);
         //let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
@@ -185,8 +188,8 @@ impl CmdEnv {
         let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };
         log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);
-        let (maj, min, rev, commit) = common.com.get_ec_sw_tag().unwrap();
-        log::info!("EC sw tag: {}.{}.{}+{}", maj, min, rev, commit);
+        let ec_ver = common.com.get_ec_sw_tag().unwrap();
+        log::info!("EC sw tag: {}", ec_ver.to_string());
         let (maj, min, rev) = common.com.get_wf200_fw_rev().unwrap();
         log::info!("WF200 fw rev {}.{}.{}", maj, min, rev);
 
@@ -203,7 +206,8 @@ impl CmdEnv {
             vibe_cmd: Vibe::new(),
             ssid_cmd: Ssid::new(),
             //audio_cmd: Audio::new(&xns),
-            ecup_cmd: ecup,
+            #[cfg(feature="dbg-ecupdate")]
+            ecup_cmd: EcUpdate::new(),
             trng_cmd: TrngCmd::new(),
             //memtest_cmd: memtest,
             keys_cmd: Keys::new(&xns),
@@ -248,6 +252,7 @@ impl CmdEnv {
             //&mut self.audio_cmd,
             &mut backlight_cmd,
             &mut accel_cmd,
+            #[cfg(feature="dbg-ecupdate")]
             &mut self.ecup_cmd,
             &mut self.trng_cmd,
             &mut console_cmd,

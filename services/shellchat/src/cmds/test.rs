@@ -660,6 +660,16 @@ impl<'a> ShellCmdApi<'a> for Test {
                         Err(e) => log::error!("couldn't get input: {:?}", e),
                     }
                 }
+                "ecup" => {
+                    let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
+                    xous::send_message(ecup_conn,
+                        xous::Message::new_blocking_scalar(
+                            3, // hard coded to match UpdateOp
+                            0, 0, 0, 0
+                        )
+                    ).unwrap();
+                    write!(ret, "\nDid EC auto update command").unwrap();
+                }
                 _ => {
                     () // do nothing
                 }
