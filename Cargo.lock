@@ -462,6 +462,7 @@ dependencies = [
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",
+ "xous-semver",
 ]
 
 [[package]]
@@ -472,13 +473,13 @@ source = "git+https://github.com/betrusted-io/com_rs?branch=main#4a53c95b56407b8
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=4a53c95b56407b8ad518b8c5ab6a361aae5dfaa1#4a53c95b56407b8ad518b8c5ab6a361aae5dfaa1"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=891bdd3ca8e41f81510d112483e178aea3e3a921#891bdd3ca8e41f81510d112483e178aea3e3a921"
 
 [[package]]
 name = "com_rs-ref"
 version = "0.1.0"
 dependencies = [
- "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs.git?rev=4a53c95b56407b8ad518b8c5ab6a361aae5dfaa1)",
+ "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs.git?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
 ]
 
 [[package]]
@@ -2105,6 +2106,7 @@ dependencies = [
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",
+ "xous-semver",
 ]
 
 [[package]]
@@ -3347,8 +3349,10 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "com",
+ "com_rs-ref",
  "content-plugin-api",
  "crossbeam",
+ "digest 0.9.0",
  "gam",
  "graphics-server",
  "keyboard",
@@ -3363,6 +3367,7 @@ dependencies = [
  "pddb",
  "rkyv",
  "root-keys",
+ "sha2",
  "sntpc",
  "susres",
  "ticktimer-server",
@@ -3372,6 +3377,7 @@ dependencies = [
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",
+ "xous-semver",
 ]
 
 [[package]]
@@ -4362,9 +4368,9 @@ dependencies = [
 
 [[package]]
 name = "xous-semver"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ecd1a30e0deeb6dd362cb68bec34104d1d91ae7eb02d76beb237d880a44dc77"
+checksum = "6ed3278bb4e7be4895c1c597434e5269f7357ffb800ebc644f0398bb008a15ad"
 
 [[package]]
 name = "xous-tts-backend"
