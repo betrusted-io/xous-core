@@ -10,8 +10,6 @@ use num_traits::*;
 use std::io::Read;
 use std::collections::{HashMap, HashSet};
 use crate::ComIntSources;
-#[cfg(any(target_os = "none", target_os = "xous"))]
-use locales::t;
 
 #[allow(dead_code)]
 const BOOT_POLL_INTERVAL_MS: usize = 4_758; // a slightly faster poll during boot so we acquire wifi faster once PDDB is mounted
@@ -66,26 +64,20 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
     let self_cid = xous::connect(sid).unwrap();
     // give the system some time to boot before trying to run a check on the EC minimum version, as it is in reset on boot
     tt.sleep_ms(POLL_INTERVAL_MS).unwrap();
-    #[cfg(any(target_os = "none", target_os = "xous"))]
-    let modals = modals::Modals::new(&xns).unwrap();
 
     // check that the EC rev meets the minimum version for this service to function
     // otherwise, we could crash the EC before it can update itself.
-    let (maj, min, rev, commits) = com.get_ec_sw_tag().unwrap();
-    let ec_rev = (maj as u32) << 24 | (min as u32) << 16 | (rev as u32) << 8 | commits as u32;
+    let ec_rev = com.get_ec_sw_tag().unwrap();
     let rev_ok = ec_rev >= MIN_EC_REV;
-    #[cfg(any(target_os = "none", target_os = "xous"))] // don't show this pop-up in hosted mode, it's just annoying and not helpful
     if !rev_ok {
-        log::warn!("EC firmware is too old to interoperate with the connec tion manager.");
-        let mut note = String::from(t!("net.ec_rev_old", xous::LANG));
-        note.push_str(&format!("\n\n{}{}.{}.{}+{}", t!("net.ec_current_rev", xous::LANG), maj, min, rev, commits));
-        modals.show_notification(&note, None).unwrap();
+        log::warn!("EC rev {} is incompatible with connection manager", ec_rev.to_string());
     }
 
     let run = Arc::new(AtomicBool::new(rev_ok));
     let pumping = Arc::new(AtomicBool::new(false));
     let mut mounted = false;
     let current_interval = Arc::new(AtomicU32::new(BOOT_POLL_INTERVAL_MS as u32));
+    let mut intervals_without_activity = 0;
     let mut wifi_stats_cache: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
     let mut status_subscribers = HashMap::<xous::CID, WifiStateSubscription>::new();
     let mut wifi_state = WifiState::Unknown;
@@ -318,8 +310,27 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 let interval = current_interval.load(Ordering::SeqCst) as u32;
                 if activity_interval.fetch_add(interval, Ordering::SeqCst) > interval {
                     log::info!("wlan activity interval timeout");
+                    intervals_without_activity += 1;
                     if rev_ok {
                         mounted = true;
+
+                        // heuristic to catch sync problems in the state machine: the cache won't get updated if the EC reset itself otherwise
+                        if intervals_without_activity > 3 { // we'd expect at least an ARP or something...
+                            wifi_stats_cache = com.wlan_status().unwrap();
+                            if wifi_stats_cache.link_state != com_rs_ref::LinkState::Connected {
+                                log::info!("Link state mismatch: moving state to disconnected");
+                                wifi_state = WifiState::Disconnected;
+                                ssid_list.clear();
+                                com.set_ssid_scanning(true).unwrap();
+                                scan_state = SsidScanState::Scanning;
+                            } else if wifi_stats_cache.ipv4.dhcp != com_rs_ref::DhcpState::Bound {
+                                log::info!("DHCP state mismatch: moving state to disconnected");
+                                wifi_state = WifiState::Disconnected;
+                                ssid_list.clear();
+                                com.set_ssid_scanning(true).unwrap();
+                                scan_state = SsidScanState::Scanning;
+                            }
+                        }
 
                         if last_wifi_state == WifiState::Connected && wifi_state != WifiState::Connected {
                             log::debug!("sending disconnect update to subscribers");
@@ -354,6 +365,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                             }
                                         } else {
                                             // no SSIDs available, scan again
+                                            log::info!("No SSIDs found, restarting SSID scan...");
                                             com.set_ssid_scanning(true).unwrap();
                                             scan_state = SsidScanState::Scanning;
                                         }
@@ -386,6 +398,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     netmgr.reset(); // this can result in a suspend failure, but the suspend timeout is currently set long enough to accommodate this possibility
                                     wifi_state = WifiState::Disconnected;
                                     if scan_state == SsidScanState::Idle {
+                                        ssid_list.clear();
                                         com.set_ssid_scanning(true).unwrap();
                                         scan_state = SsidScanState::Scanning;
                                     }
@@ -406,6 +419,8 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         }
                     }
                     last_wifi_state = wifi_state;
+                } else {
+                    intervals_without_activity = 0;
                 }
 
                 if wifi_state == WifiState::Connected {

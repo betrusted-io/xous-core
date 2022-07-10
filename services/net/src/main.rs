@@ -141,6 +141,7 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.push(ComIntSources::WlanSsidScanUpdate);
     com_int_list.push(ComIntSources::WlanSsidScanFinished);
     com_int_list.push(ComIntSources::WfxErr);
+    com_int_list.push(ComIntSources::Invalid);
 }
 
 fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
@@ -1132,6 +1133,13 @@ fn main() -> ! {
                                         }
                                     }
                                 }
+                                ComIntSources::Invalid => {
+                                    com.ints_ack(&com_int_list); // ack everything that's pending
+                                    // re-enable the interrupts as we intended
+                                    let mut ena_list: Vec<ComIntSources> = vec![];
+                                    set_com_ints(&mut ena_list);
+                                    com.ints_enable(&ena_list);
+                                }
                                 _ => {
                                     log::debug!("Unhandled: {:?}", pending);
                                 }
@@ -1841,6 +1849,15 @@ fn main() -> ! {
                 }
             }),
             Some(Opcode::Reset) => {
+                // ack any pending ints
+                com_int_list.clear();
+                com.ints_get_active(&mut com_int_list).ok();
+                com.ints_ack(&com_int_list);
+                // re-enable the interrupts as we intended
+                set_com_ints(&mut com_int_list);
+                com.ints_enable(&com_int_list);
+                com_int_list.clear();
+
                 // note: ARP cache isn't reset
                 iface.routes_mut().remove_default_ipv4_route();
                 dns_allclear_hook.notify();
