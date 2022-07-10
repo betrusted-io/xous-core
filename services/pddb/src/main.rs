@@ -525,17 +525,6 @@ fn wrapped_main() -> ! {
             pddb_menu(my_cid);
         }
     });
-    // spawn a delayed mount command, shortly after boot. There's too much going on at boot, and it blocks other things from coming up.
-    let _ = thread::spawn({
-        let my_cid = my_cid.clone();
-        move || {
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            tt.sleep_ms(4000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing
-            send_message(my_cid,
-                Message::new_blocking_scalar(Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)
-            ).expect("couldn't send mount request");
-        }
-    });
     // a thread to trigger period scrubbing of the PDDB
     let scrub_run = Arc::new(AtomicBool::new(false));
     let _ = thread::spawn({
