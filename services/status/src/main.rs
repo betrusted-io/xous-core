@@ -323,6 +323,13 @@ fn wrapped_main() -> ! {
         }
         _ => log::error!("Invalid return type from UpdateAuto"),
     }
+    #[cfg(not(feature="dbg-ecupdate"))]
+    { // if we're not debugging, quit the updater thread -- might as well free up the memory and connections if nobody will ever use it again.
+        send_message(ecup_conn,
+            Message::new_blocking_scalar(ecup::UpdateOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't quit updater thread");
+        unsafe{xous::disconnect(ecup_conn).ok()};
+    }
 
     let keys = Arc::new(Mutex::new(
         root_keys::RootKeys::new(&xns, None)

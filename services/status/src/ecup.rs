@@ -340,6 +340,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
             },
             Some(UpdateOp::Quit) => {
                 log::info!("quitting updater thread");
+                xous::return_scalar(msg.sender, 1).unwrap();
                 break;
             },
             None => {
