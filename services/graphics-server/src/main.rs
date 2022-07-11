@@ -472,7 +472,11 @@ fn wrapped_main() -> ! {
                         .expect("couldn't ack that bulk read pointer was reset");
                 }),
                 Some(Opcode::BulkReadFonts) => {
-                    let fontlen = fontmap::FONT_TOTAL_LEN as u32 + 8;
+                    // this also needs to reflect in root-keys/src/implementation.rs @ sign_loader()
+                    let fontlen = fontmap::FONT_TOTAL_LEN as u32
+                        + 16  // minver
+                        + 16  // current ver
+                        + 8;  // sig ver + len
                     let mut buf = unsafe {
                         Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                     };

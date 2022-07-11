@@ -31,6 +31,16 @@ where
     let semver: [u8; 16] = SemVer::from_git()
         .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?
         .into();
+    // extra data appended here needs to be reflected in two places in Xous:
+    // 1. root-keys/src/implementation.rs @ sign-loader()
+    // 2. graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
+    // This is because memory ownership is split between two crates for performance reasons:
+    // the direct memory page of fonts belongs to the graphics server, to avoid having to send
+    // a message on every font lookup. However, the keys reside in root-keys, so therefore,
+    // a bulk read operation has to shuttle font data back to the root-keys crate. Of course,
+    // the appended metadata is in the font region, so, this data has to be shuttled back.
+    // The graphics server is also entirely naive to how much cryptographic data is in the font
+    // region, and I think it's probably better for it to stay that way.
     source.append(&mut minver_bytes.to_vec());
     source.append(&mut semver.to_vec());
     for &b in LOADER_VERSION.to_le_bytes().iter() {

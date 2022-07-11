@@ -1410,8 +1410,8 @@ impl<'a> RootKeys {
         pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
         pb.rebase_subtask_percentage(35, 85);
         let (loader_sig, loader_len) = self.sign_loader(&keypair, Some(&mut pb));
-        log::debug!("loader signature: {:x?}", loader_sig.to_bytes());
-        log::debug!("loader len: {} bytes", loader_len);
+        log::info!("loader signature: {:x?}", loader_sig.to_bytes());
+        log::info!("loader len: {} bytes", loader_len);
 
         // commit the signatures
         pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
@@ -1912,6 +1912,9 @@ impl<'a> RootKeys {
             xous::LOADER_CODE_LEN
             - SIGBLOCK_SIZE
             + graphics_server::fontmap::FONT_TOTAL_LEN as u32
+            // these also need to be updated in graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
+            + 16 // for the minimum compatible semver
+            + 16 // for the current semver
             + 8; // two u32 words are appended to the end, which repeat the "version" and "length" fields encoded in the signature block
 
         // this is a huge hash, so, get a hardware hasher, even if it means waiting for it
