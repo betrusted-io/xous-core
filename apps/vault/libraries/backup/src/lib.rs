@@ -42,9 +42,9 @@ impl TryFrom<cbor::Value> for HashAlgorithms {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TotpEntry {
-    pub step_seconds: u32,
+    pub step_seconds: u64,
     pub shared_secret: String,
-    pub digit_count: u64,
+    pub digit_count: u32,
     pub algorithm: HashAlgorithms,
     pub name: String,
 }
@@ -80,12 +80,12 @@ impl TryFrom<cbor::Value> for TotpEntry {
 
         let step_seconds = extract_unsigned(step_seconds.unwrap())?;
         let shared_secret = extract_string(shared_secret.unwrap())?;
-        let digit_count = extract_unsigned(digit_count.unwrap())?;
+        let digit_count = extract_unsigned(digit_count.unwrap())? as u32;
         let algorithm: HashAlgorithms = algorithm.unwrap().try_into()?;
         let name = extract_string(name.unwrap())?;
 
         Ok(TotpEntry {
-            step_seconds: step_seconds as u32,
+            step_seconds,
             shared_secret,
             digit_count,
             algorithm,
