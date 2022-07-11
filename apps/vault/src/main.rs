@@ -22,6 +22,7 @@ mod actions;
 mod totp;
 mod prereqs;
 mod vendor_commands;
+mod storage;
 
 use locales::t;
 
