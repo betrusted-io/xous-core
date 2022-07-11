@@ -325,6 +325,7 @@ fn wrapped_main() -> ! {
     }
     #[cfg(not(feature="dbg-ecupdate"))]
     { // if we're not debugging, quit the updater thread -- might as well free up the memory and connections if nobody will ever use it again.
+    // this frees up 40k runtime RAM + 1 connection in the status thread.
         send_message(ecup_conn,
             Message::new_blocking_scalar(ecup::UpdateOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't quit updater thread");
