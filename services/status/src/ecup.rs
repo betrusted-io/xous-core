@@ -267,7 +267,7 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 let package = unsafe{ core::slice::from_raw_parts(wf_package.as_ptr() as *const u8, xous::EC_WF200_PKG_LEN as usize)};
                 let mut run_wf200_update = false;
                 // check to see if we need to do an update. For the WF200, we can only say if the hash is *different*, we don't know if it's newer
-                // we assume if it's different, we meant toupdate it.
+                // we assume if it's different, we meant to update it.
                 if ec_reported_rev >= MIN_EC_VER_WITH_HASHES {
                     let mut ver_wf200_raw = [0u8; 256];
                     match com.flash_verify(
@@ -281,15 +281,17 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                         }
                         _ => {}
                     }
-                    // NOTE: this means we *always* assume there is a staged WF200 update, even if it didn't
-                    // change from the previous revision -- otherwise a "PackageInvalid" error will be thrown.
-                    // so the USB updater script should always copy over the WF200 package whenever there's an EC update,
-                    // because we must have it in order to make sure the version on the device is in sync with the intended version.
-                    if package[CTRL_PAGE_LEN as usize..CTRL_PAGE_LEN as usize + WF200_HASH_LEN] != ver_wf200_raw[..WF200_HASH_LEN] {
-                        run_wf200_update = true;
-                        log::info!("wf200 rev is different");
-                        log::info!("package : {:x?}", &package[CTRL_PAGE_LEN as usize..CTRL_PAGE_LEN as usize + WF200_HASH_LEN]);
-                        log::info!("readback: {:x?}", &ver_wf200_raw[..WF200_HASH_LEN]);
+                    // do a shallow check to see if the firmware magic word 'KEYS' is in the location. The intention is that we would
+                    // not even try to run the update if nothing valid has been staged and the location would read as 0xFFFFFFFF.
+                    if package[CTRL_PAGE_LEN as usize..CTRL_PAGE_LEN as usize + 4] == [0x4b, 0x45, 0x59, 0x53] {
+                        if package[CTRL_PAGE_LEN as usize..CTRL_PAGE_LEN as usize + WF200_HASH_LEN] != ver_wf200_raw[..WF200_HASH_LEN] {
+                            run_wf200_update = true;
+                            log::info!("wf200 rev is different");
+                            log::info!("package : {:x?}", &package[CTRL_PAGE_LEN as usize..CTRL_PAGE_LEN as usize + WF200_HASH_LEN]);
+                            log::info!("readback: {:x?}", &ver_wf200_raw[..WF200_HASH_LEN]);
+                        }
+                    } else {
+                        log::warn!("Staged WF200 magic number is incorrect, refusing to perform any updates");
                     }
                 } else {
                     // ancient version of EC, must run all the updates if any update was run before on the GW
