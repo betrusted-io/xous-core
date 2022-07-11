@@ -5,7 +5,8 @@ use keywrap::*;
 pub use oracle::FpgaKeySource;
 
 use utralib::generated::*;
-use crate::api::*;
+use xous::BACKUP_OFFSET;
+use crate::{api::*, backups};
 use core::num::NonZeroUsize;
 use num_traits::*;
 
@@ -2331,5 +2332,16 @@ impl<'a> RootKeys {
             &patch_data,
             self.gateware().len() as u32 - 4
         ).expect("couldn't patch update prompt");
+    }
+    pub fn read_backup_header(&mut self) -> Option<backups::BackupHeader> {
+        let kernel = self.kernel();
+        let backup = &kernel[BACKUP_OFFSET as usize..BACKUP_OFFSET as usize + size_of::<backups::BackupHeader>()];
+        let mut header = backups::BackupHeader::default();
+        header.as_mut().copy_from_slice(backup);
+        if header.version == backups::BACKUP_VERSION {
+            Some(header)
+        } else {
+            None
+        }
     }
 }

@@ -3,6 +3,8 @@
 
 mod api;
 use api::*;
+mod backups;
+
 use xous::{msg_scalar_unpack, send_message, msg_blocking_scalar_unpack};
 #[cfg(feature = "policy-menu")]
 use xous_ipc::String;
@@ -1198,6 +1200,42 @@ fn main() -> ! {
             Some(Opcode::SetPromptForUpdate) => msg_scalar_unpack!(msg, state, _, _, _, {
                 keys.set_prompt_for_update(if state == 1 {true} else {false});
             }),
+            Some(Opcode::ShouldRestore) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let maybe_header = keys.read_backup_header();
+                let mut ret = BackupHeaderIpc::default();
+                if let Some(header) = maybe_header {
+                    let mut data = [0u8; core::mem::size_of::<backups::BackupHeader>()];
+                    data.copy_from_slice(header.as_ref());
+                    ret.data = Some(data);
+                }
+                buf.replace(ret).unwrap();
+            }
+            Some(Opcode::CreateBackup) => {
+                keys.set_ux_password_type(Some(PasswordType::Update));
+                password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
+                rootkeys_modal.modify(
+                    Some(ActionType::TextEntry(password_action.clone())),
+                    Some(t!("rootkeys.get_update_password_backup", xous::LANG)), false,
+                    None, true, None
+                );
+                #[cfg(feature="tts")]
+                tts.tts_blocking(t!("rootkeys.get_update_password_backup", xous::LANG)).unwrap();
+                log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                rootkeys_modal.activate();
+            }
+            Some(Opcode::UxUpdateGwPasswordReturn) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+                keys.set_ux_password_type(None);
+
+                // check if the entered password is valid.
+                
+            }
             Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
                 // dummy test for now
                 xous::return_scalar(msg.sender, 1234).unwrap();

@@ -3,6 +3,7 @@
 
 pub mod api;
 use api::*;
+pub mod backups;
 
 pub mod key2bits;
 
@@ -99,6 +100,34 @@ impl RootKeys {
             Message::new_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
             0, 0, 0, 0)
         ).expect("couldn't send message to root keys");
+    }
+
+    pub fn do_create_backup_ux_flow(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::CreateBackup.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+    pub fn do_restore_backup_ux_flow(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::DoRestore.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+    /// Returns the raw, unchecked restore header. Further checking may be done at the restore point,
+    /// but the purpose of this is to just decide if we should even try to initiate a restore.
+    pub fn get_restore_header(&self) -> Result<Option<backups::BackupHeader>, xous::Error> {
+        let alloc = BackupHeaderIpc::default();
+        let mut buf = Buffer::into_buf(alloc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::ShouldRestore.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let ret = buf.to_original::<BackupHeaderIpc, _>().unwrap();
+        if let Some(d) = ret.data {
+            let mut header = backups::BackupHeader::default();
+            header.copy_from_slice(&d);
+            Ok(Some(header))
+        } else {
+            Ok(None)
+        }
     }
 
     /// this will return the version number, but always report the commit as None.

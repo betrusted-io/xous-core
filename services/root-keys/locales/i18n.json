@@ -206,8 +206,14 @@
     "rootkeys.get_update_password": {
         "en": "⚠ Critical password request ⚠\nEnter the 'SYSTEM UPDATE' passphrase. This authorizes a system update.",
         "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。これでシステムアップデートが許可されます。",
-        "zh": "输入密码 软件更新 安全含义:至关重要 ",
+        "zh": "⚠ 关键密码请求⚠\n输入“系统更新”密码。 这将授权系统更新。",
         "en-tts": "Enter update password, in order to authorize a gateware update."
+    },
+    "rootkeys.get_update_password_backup": {
+        "en": "⚠ Critical password request ⚠\nEnter the 'SYSTEM UPDATE' passphrase. This authorizes a backup to be created.",
+        "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。これにより、バックアップの作成が許可されます。",
+        "zh": "⚠ 关键密码请求⚠\n输入“系统更新”密码。 这将授权创建备份。",
+        "en-tts": "Enter update password, in order to authorize a backup."
     },
     "rootkeys.gwup.finished": {
         "en": "Gateware update finished.\n\nReboot by inserting a paperclip into the small hole on the lower right at your earliest convenience.",

@@ -82,6 +82,14 @@ pub(crate) enum Opcode {
     ShouldPromptForUpdate = 37,
     /// Set the "don't bother me again for an update"
     SetPromptForUpdate = 38,
+    /// Create a backup block (including UX flow that discloses our AES key!)
+    CreateBackup = 39,
+    UxCreateBackupPwReturn = 40,
+    /// Query if a backup exists to be restored
+    ShouldRestore = 41,
+    UxShouldRestorePwReturn = 42,
+    /// Perform the restore operation (including UX to acquire the AES key)
+    DoRestore = 43,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
@@ -195,6 +203,8 @@ use std::error::Error;
 impl Error for KeywrapError {}
 
 use std::fmt;
+
+use crate::backups;
 impl fmt::Display for KeywrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
@@ -219,4 +229,17 @@ pub (crate) struct KeyWrapper {
     pub result: Option<KeywrapError>,
     // used by the unwrap side
     pub expected_len: u32,
+}
+
+// the BackupHeader type is serialized into u8 before going through rkyv.
+// a bit inefficient but convenient, because we need an Option<> of the
+// BackupHeader and not the header itself.
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub (crate) struct BackupHeaderIpc {
+    pub data: Option<[u8; core::mem::size_of::<backups::BackupHeader>()]>,
+}
+impl Default for BackupHeaderIpc {
+    fn default() -> Self {
+        BackupHeaderIpc { data: None::<[u8; core::mem::size_of::<backups::BackupHeader>()]> }
+    }
 }

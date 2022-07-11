@@ -2863,6 +2863,7 @@ name = "root-keys"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "aes-gcm-siv",
  "blowfish 0.8.0",
  "byteorder",
  "cipher 0.4.3",
@@ -2885,6 +2886,7 @@ dependencies = [
  "rkyv",
  "sha2",
  "spinor",
+ "subtle",
  "susres",
  "ticktimer-server",
  "trng",
