@@ -407,8 +407,8 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
         }
         prog_addr += 1024;
         progress_ctr += 1;
-        if (progress_ctr % 6) == 0 {
-            log::info!("{} prog update 0x{:08x} 6*8 pages", name, prog_addr);
+        if (progress_ctr % 4) == 0 {
+            log::info!("{} prog update 0x{:08x} 4*8 pages", name, prog_addr);
             modals.update_progress(prog_addr).unwrap();
         }
     }
