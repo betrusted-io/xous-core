@@ -434,6 +434,7 @@ fn main() -> ! {
 
     let mut reboot_initiated = false;
     let mut aes_sender: Option<xous::MessageSender> = None;
+    let mut backup_header: Option<backups::BackupHeader> = None;
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
         log::debug!("message: {:?}", msg);
@@ -1201,7 +1202,7 @@ fn main() -> ! {
                 keys.set_prompt_for_update(if state == 1 {true} else {false});
             }),
             Some(Opcode::ShouldRestore) => {
-                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut buf = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let maybe_header = keys.read_backup_header();
                 let mut ret = BackupHeaderIpc::default();
                 if let Some(header) = maybe_header {
@@ -1212,6 +1213,16 @@ fn main() -> ! {
                 buf.replace(ret).unwrap();
             }
             Some(Opcode::CreateBackup) => {
+                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let ipc = buf.to_original::<BackupHeaderIpc, _>().unwrap();
+                if let Some(d) = ipc.data {
+                    let mut header = backups::BackupHeader::default();
+                    header.as_mut().copy_from_slice(&d);
+                    backup_header = Some(header);
+                } else {
+                    log::error!("Create backup was called, but no header data was provided");
+                    continue;
+                }
                 keys.set_ux_password_type(Some(PasswordType::Update));
                 password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
@@ -1224,7 +1235,7 @@ fn main() -> ! {
                 log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 rootkeys_modal.activate();
             }
-            Some(Opcode::UxUpdateGwPasswordReturn) => {
+            Some(Opcode::UxCreateBackupPwReturn) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
@@ -1234,7 +1245,50 @@ fn main() -> ! {
                 keys.set_ux_password_type(None);
 
                 // check if the entered password is valid.
-                
+                if let Some((fpga_key, keyrom)) = keys.get_backup_key() {
+                    // this gets shown in an "insecure" modal but -- we're expatriating this data anyways, so meh?
+                    modals.show_bip39(Some(t!("rootkeys.backup_key", xous::LANG)), &fpga_key.0.to_vec()).ok();
+                    // let the user confirm the key, or skip it. YOLO!
+                    loop {
+                        modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
+                        log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        match modals.get_radiobutton(t!("rootkeys.backup_verify", xous::LANG)) {
+                            Ok(response) => {
+                                if response == t!("rootkeys.confirm.yes", xous::LANG) {
+                                    match modals.input_bip39(Some(t!("rootkeys.backup_key_enter", xous::LANG))) {
+                                        Ok(verify) => {
+                                            if &verify == &fpga_key.0 {
+                                                modals.show_notification(t!("rootkeys.backup_key_match", xous::LANG), None).ok();
+                                            } else {
+                                                modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &fpga_key.0.to_vec()).ok();
+                                            }
+                                        }
+                                        _ => {
+                                            modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &fpga_key.0.to_vec()).ok();
+                                        }
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                            _ => break,
+                        }
+                    }
+                    // now write out the backup
+                    let backup_ct = backups::create_backup(fpga_key, backup_header.unwrap(), keyrom);
+                    // this final statement has a take/unwrap to set backup_header back to None
+                    match keys.write_backup(backup_header.take().unwrap(), backup_ct) {
+                        Ok(_) => {
+                            modals.show_notification(t!("rootkeys.backup_staged", xous::LANG), None).ok();
+                        }
+                        Err(_) => {
+                            modals.show_notification(t!("rootkeys.backup_staging_error", xous::LANG), None).ok();
+                        }
+                    }
+                } else {
+                    modals.show_notification(t!("rootkeys.backup_badpass", xous::LANG), None).ok();
+                }
             }
             Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
                 // dummy test for now

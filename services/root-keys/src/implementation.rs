@@ -2344,4 +2344,96 @@ impl<'a> RootKeys {
             None
         }
     }
+    pub fn get_backup_key(&mut self) -> Option<(backups::BackupKey, backups::KeyRomExport)> {
+        // make sure the system is sane
+        self.xous_init_interlock();
+
+        // derive signing key
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if pcache.hashed_update_pw_valid == 0 {
+            self.purge_password(PasswordType::Update);
+            log::error!("no password was set going into the update routine");
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("key: {:x?}", pcache.hashed_update_pw);
+            log::debug!("valid: {}", pcache.hashed_update_pw_valid);
+
+            return None;
+        }
+        let mut keypair_bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] = [0; ed25519_dalek::KEYPAIR_LENGTH];
+        let enc_signing_key = self.read_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
+        for (key, (&enc_key, &pw)) in
+        keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
+        .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
+            *key = enc_key ^ pw;
+        }
+        self.compute_key_rollback(&mut keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("keypair privkey (after anti-rollback): {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+        for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
+        .zip(self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
+            *key = src;
+        }
+        // Keypair zeroizes the secret key on drop.
+        let keypair = Keypair::from_bytes(&keypair_bytes).ok()?;
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("keypair privkey (after anti-rollback + conversion): {:x?}", keypair.secret.to_bytes());
+
+        // check if the keypair is valid by signing and verifying a short message
+        let test_data = "whiskey made me do it";
+        let test_sig = keypair.sign(test_data.as_bytes());
+        match keypair.verify(&test_data.as_bytes(), &test_sig) {
+            Ok(_) => {
+                for (&src, dst) in self.read_key_256(KeyRomLocs::FPGA_KEY).iter().zip(pcache.fpga_key.iter_mut()) {
+                    *dst = src;
+                }
+                log::debug!("fpga key (encrypted): {:x?}", &pcache.fpga_key);
+                for (fkey, &pw) in pcache.fpga_key.iter_mut().zip(pcache.hashed_update_pw.iter()) {
+                    *fkey = *fkey ^ pw;
+                }
+                pcache.fpga_key_valid = 1;
+                // copy the plaintext FPGA key into the backup key structure, which implements the zeroize trait.
+                let mut bkey = backups::BackupKey::default();
+                bkey.0.copy_from_slice(&pcache.fpga_key);
+                // copy the key rom into the backup keyrom structure, which implements the zeroize trait.
+                let mut backup_rom = backups::KeyRomExport::default();
+                for i in 0..256 {
+                    self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, i);
+                    backup_rom.0[i as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
+                }
+                // we're done with the password now, clear all the temps
+                self.purge_password(PasswordType::Update);
+                for b in keypair_bytes.iter_mut() {
+                    *b = 0;
+                }
+                self.purge_sensitive_data();
+                Some((bkey, backup_rom))
+            },
+            Err(e) => {
+                log::warn!("update password was not connect ({:?})", e);
+                self.purge_password(PasswordType::Update);
+                for b in keypair_bytes.iter_mut() {
+                    *b = 0;
+                }
+                None
+            }
+        }
+    }
+    pub fn write_backup(&mut self, mut header: backups::BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+        header.op = backups::BackupOp::Backup;  // set the "we're backing up" flag
+        self.spinor.patch(
+            self.kernel(),
+            self.kernel_base(),
+            header.as_ref(),
+            xous::BACKUP_OFFSET
+        ).map_err(|_| xous::Error::InternalError)?;
+
+        self.spinor.patch(
+            self.kernel(),
+            self.kernel_base(),
+            backup_ct.as_ref(),
+            xous::BACKUP_OFFSET + size_of::<backups::BackupHeader>() as u32
+        ).map_err(|_| xous::Error::InternalError)?;
+
+        Ok(())
+    }
 }

@@ -1,4 +1,52 @@
 {
+    "rootkeys.backup_key": {
+        "en": "This is your backup key:\nWRITE IT DOWN, KEEP IT SECRET.",
+        "ja": "これがバックアップキーです：\n書き留めて、秘密にしてください。",
+        "zh": "这是您的备份密钥：\n写下来，保密。",
+        "en-tts": "This is your backup key:\nWRITE IT DOWN, KEEP IT SECRET."
+    },
+    "rootkeys.backup_verify": {
+        "en": "Would you like to verify that you wrote the backup key down correctly by re-entering it now?",
+        "ja": "今すぐ再入力して、バックアップキーを正しく書き留めたことを確認しますか？",
+        "zh": "您想通过现在重新输入来验证您是否正确记下了备份密钥吗？",
+        "en-tts": "Would you like to verify that you wrote the backup key down correctly by re-entering it now?"
+    },
+    "rootkeys.backup_badpass": {
+        "en": "Password incorrect. Aborting backup!",
+        "ja": "正しくないパスワード。 バックアップを中止します！",
+        "zh": "密码错误。 中止备份！",
+        "en-tts": "Password incorrect. Aborting backup!"
+    },
+    "rootkeys.backup_key_enter": {
+        "en": "Please enter your backup key now:",
+        "ja": "今すぐバックアップキーを入力してください：",
+        "zh": "请立即输入您的备份密钥：",
+        "en-tts": "Please enter your backup key now:"
+    },
+    "rootkeys.backup_key_match": {
+        "en": "Backup key entered correctly!",
+        "ja": "バックアップキーが正しく入力されました！",
+        "zh": "备份密钥输入正确！",
+        "en-tts": "Backup key entered correctly!"
+    },
+    "rootkeys.backup_key_mismatch": {
+        "en": "Backup key did not match.\n\nThis is your backup key, again:",
+        "ja": "バックアップキーが一致しませんでした。\n\nこれもバックアップキーです：",
+        "zh": "备份密钥不匹配。\n\n这是您的备份密钥，再次：",
+        "en-tts": "Backup key did not match. This is your backup key, again:"
+    },
+    "rootkeys.backup_staged": {
+        "en": "Backup data is prepared. You may now connect to a host computer and download the backup data bundle.",
+        "ja": "バックアップデータを用意します。 これで、ホストコンピューターに接続して、バックアップデータバンドルをダウンロードできます。",
+        "zh": "备份数据已准备好。 您现在可以连接到主机并下载备份数据包。",
+        "en-tts": "Backup data is prepared. You may now connect to a host computer and download the backup data bundle."
+    },
+    "rootkeys.backup_staging_error": {
+        "en": "Internal error performing backup. Process aborted.",
+        "ja": "バックアップの実行中に内部エラーが発生しました。 プロセスが中止されました。",
+        "zh": "执行备份的内部错误。 进程中止。",
+        "en-tts": "Internal error performing backup. Process aborted."
+    },
     "rootkeys.bootpass": {
         "en": "Create a PIN code for device unlock.",
         "ja": "デバイスのロックを解除するためのPINコードを作成します。",

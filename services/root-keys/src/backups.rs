@@ -11,13 +11,19 @@ const BACKUP_AAD: &'static str = "PDDB backup v0.1.0";
 
 #[derive(Zeroize, Default)]
 #[zeroize(drop)]
-pub(crate) struct BackupKey([u8;32]);
+pub(crate) struct BackupKey(pub [u8;32]);
 
 #[derive(Zeroize)]
 #[zeroize(drop)]
-pub(crate) struct KeyRomExport([u32; 256]);
+pub(crate) struct KeyRomExport(pub [u32; 256]);
+impl Default for KeyRomExport {
+    fn default() -> Self {
+        KeyRomExport([0u32; 256])
+    }
+}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum BackupOp {
     /// backup and restore can be manipulated by the OS without updating the ciphertext
     Backup,
@@ -27,6 +33,7 @@ pub enum BackupOp {
 }
 
 #[repr(C, align(8))]
+#[derive(Copy, Clone)]
 pub struct BackupHeader {
     pub version: u32,
     // the `ver`s are all serialized SemVers. To be done by the caller.

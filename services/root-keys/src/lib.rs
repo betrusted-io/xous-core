@@ -102,11 +102,13 @@ impl RootKeys {
         ).expect("couldn't send message to root keys");
     }
 
-    pub fn do_create_backup_ux_flow(&self) {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::CreateBackup.to_usize().unwrap(),
-            0, 0, 0, 0)
-        ).expect("couldn't send message to root keys");
+    pub fn do_create_backup_ux_flow(&self, metadata: backups::BackupHeader) {
+        let mut alloc = BackupHeaderIpc::default();
+        let mut data = [0u8; core::mem::size_of::<backups::BackupHeader>()];
+        data.copy_from_slice(metadata.as_ref());
+        alloc.data = Some(data);
+        let mut buf = Buffer::into_buf(alloc).unwrap();
+        buf.send(self.conn, Opcode::CreateBackup.to_u32().unwrap()).unwrap();
     }
     pub fn do_restore_backup_ux_flow(&self) {
         send_message(self.conn,
