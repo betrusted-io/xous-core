@@ -13,7 +13,7 @@ use num_traits::*;
 
 // Derived from https://github.com/blakesmith/xous-core/blob/xtotp-time/apps/xtotp/src/main.rs
 #[derive(Clone, Copy)]
-pub(crate) enum TotpAlgorithm {
+pub enum TotpAlgorithm {
     HmacSha1,
     HmacSha256,
     HmacSha512,
