@@ -182,8 +182,8 @@ impl CmdEnv {
         //let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
-        let (maj, min, rev, extra, gitrev) = common.llio.soc_gitrev().unwrap();
-        log::info!("SoC git rev {}.{}.{}+{} commit {:x}", maj, min, rev, extra, gitrev);
+        let soc_ver = common.llio.soc_gitrev().unwrap();
+        log::info!("SoC git rev {}", soc_ver.to_string());
         log::info!("SoC DNA: 0x{:x}", common.llio.soc_dna().unwrap());
         let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };

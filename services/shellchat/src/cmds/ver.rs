@@ -31,9 +31,9 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "Wf200 fw rev {}.{}.{}", maj, min, rev).unwrap();
                 }
                 "soc" => {
-                    let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
-                    write!(ret, "SoC git rev {}.{}.{}+{}, commit {:x}", maj, min, rev, extra, gitrev).unwrap();
-                    log::info!("{}VER.SOC,{},{},{},{},{}", xous::BOOKEND_START, maj, min, rev, gitrev, xous::BOOKEND_END);
+                    let soc_rev = env.llio.soc_gitrev().unwrap();
+                    write!(ret, "SoC git rev {}", soc_rev.to_string()).unwrap();
+                    log::info!("{}VER.SOC,{},{},{},{},{}", xous::BOOKEND_START, soc_rev.maj, soc_rev.min, soc_rev.rev, soc_rev.extra, xous::BOOKEND_END);
                 }
                 "dna" => {
                     write!(ret, "SoC silicon DNA: 0x{:x}", env.llio.soc_dna().unwrap()).unwrap();

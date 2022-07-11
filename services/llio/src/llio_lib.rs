@@ -3,6 +3,7 @@ use xous_ipc::Buffer;
 use num_traits::{ToPrimitive, FromPrimitive};
 use core::sync::atomic::Ordering;
 use crate::api::*;
+use xous_semver::SemVer;
 
 use core::sync::atomic::AtomicU32;
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
@@ -284,18 +285,18 @@ impl Llio {
             Err(xous::Error::InternalError)
         }
     }
-    pub fn soc_gitrev(&self) -> Result<(u8, u8, u8, u8, u32), xous::Error> {
+    pub fn soc_gitrev(&self) -> Result<SemVer, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::InfoGit.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar2(val1, val2) = response {
             Ok(
-                (
-                    ((val1 >> 24) as u8), // major
-                    ((val1 >> 16) as u8), // minor
-                    ((val1 >> 8) as u8),  // rev
-                    (val1 >> 0) as u8,    // gitextra
-                    val2 as u32  // gitrev
-                )
+                SemVer {
+                    maj: (val1 >> 24) as u16,
+                    min: (val1 >> 16) as u16,
+                    rev: (val1 >> 8) as u16,
+                    extra: (val1 >> 0) as u16,
+                    commit: Some(val2 as u32),
+                }
             )
         } else {
             log::error!("LLIO: unexpected return value: {:#?}", response);

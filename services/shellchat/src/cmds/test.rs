@@ -508,8 +508,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                                     }
                                 }
                                 write!(ret, "CHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",).unwrap();
-                                let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
-                                write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
+                                let soc_ver = env.llio.soc_gitrev().unwrap();
+                                write!(ret, "Version {}\n", soc_ver.to_string()).unwrap();
                                 log::info!("finished status update");
                                 break;
                             }

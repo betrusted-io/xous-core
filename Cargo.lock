@@ -1900,6 +1900,7 @@ dependencies = [
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",
+ "xous-semver",
 ]
 
 [[package]]
@@ -3843,6 +3844,7 @@ dependencies = [
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",
+ "xous-semver",
 ]
 
 [[package]]
