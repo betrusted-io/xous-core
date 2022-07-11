@@ -22,11 +22,11 @@ pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 trng = {path="../../services/trng"}
 susres = {path = "../../services/susres"}
-
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
 ctap-crypto = {path = "libraries/crypto"}
 cbor = {path = "libraries/cbor"}
+backup = {path = "libraries/backup"}
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
