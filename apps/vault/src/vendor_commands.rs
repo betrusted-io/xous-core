@@ -1,16 +1,10 @@
-use cbor::{destructure_cbor_map, reader::DecoderError};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use cbor::reader::DecoderError;
+use core::convert::TryFrom;
 use locales::t;
-use pddb::Pddb;
-use std::{time::{SystemTime, UNIX_EPOCH}, io::Write};
-
-const VAULT_TOTP_DICT: &'static str = "vault.totp";
-/// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
-const VAULT_TOTP_ALLOC_HINT: usize = 256;
 
 use crate::{
-    actions::{TotpRecord, serialize_totp},
-    ctap::hid::{send::HidPacketIterator, ChannelID, CtapHid, Message},
+    ctap::hid::{send::HidPacketIterator, ChannelID, Message},
+    storage::TotpRecord,
 };
 
 // Vault-specific command to upload TOTP codes
@@ -24,7 +18,6 @@ pub fn handle_vendor_command(
 ) -> HidPacketIterator {
     log::debug!("got vendor command: {}, payload: {:?}", cmd, payload);
     let xns = xous_names::XousNames::new().unwrap();
-    let mut trng = trng::Trng::new(&xns).unwrap();
 
     let payload = match cmd {
         COMMAND_BENCHMARK => Message {
@@ -32,7 +25,7 @@ pub fn handle_vendor_command(
             cmd: cmd,
             payload: handle_benchmark(),
         },
-        COMMAND_RESTORE_TOTP_CODES => match handle_restore(payload, &mut trng) {
+        COMMAND_RESTORE_TOTP_CODES => match handle_restore(payload, &xns) {
             Ok(payload) => Message {
                 cid: channel_id,
                 cmd: cmd,
@@ -53,8 +46,7 @@ fn handle_benchmark() -> Vec<u8> {
 #[derive(Debug)]
 enum RestoreError {
     CborError(DecoderError),
-    NotAnArray,
-    NotAMap,
+    CborConversionError(backup::CborConversionError),
     PddbError(std::io::Error),
 }
 
@@ -64,64 +56,38 @@ impl From<DecoderError> for RestoreError {
     }
 }
 
-fn handle_restore(data: Vec<u8>, trng: &mut trng::Trng) -> Result<Vec<u8>, RestoreError> {
-    // Unmarshal bytes to cbor map
+impl From<backup::CborConversionError> for RestoreError {
+    fn from(cbe: backup::CborConversionError) -> Self {
+        RestoreError::CborConversionError(cbe)
+    }
+}
+
+fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>, RestoreError> {
+    let mut storage = crate::storage::Manager::new(xns);
+
     let c = cbor::read(&data)?;
 
-    let array_c = match c {
-        cbor::Value::Array(array) => array,
-        _ => return Err(RestoreError::NotAnArray),
-    };
+    let data = backup::TotpEntries::try_from(c)?;
 
-    let pddb = Pddb::new();
-
-    for elem in array_c {
-        let rawmap = match elem {
-            cbor::Value::Map(m) => m,
-            _ => return Err(RestoreError::NotAMap),
-        };
-
-        destructure_cbor_map! {
-            let {
-                1 => step_seconds,
-                2 => shared_secret,
-                3 => digit_count,
-                4 => algorithm,
-                5 => name,
-            } = rawmap;
-        }
-
+    for elem in data.0 {
         let totp = TotpRecord {
             version: 1,
-            name: extract_string(name.unwrap()).unwrap(),
-            secret: extract_string(shared_secret.unwrap()).unwrap(),
-            algorithm: crate::totp::TotpAlgorithm::HmacSha1,
-            digits: extract_unsigned(digit_count.unwrap()).unwrap() as u32,
-            timestep: extract_unsigned(step_seconds.unwrap()).unwrap(),
-            ctime: utc_now().timestamp() as u64,
+            name: elem.name,
+            secret: elem.shared_secret,
+            algorithm: match elem.algorithm {
+                backup::HashAlgorithms::SHA1 => crate::totp::TotpAlgorithm::HmacSha1,
+                backup::HashAlgorithms::SHA256 => crate::totp::TotpAlgorithm::HmacSha256,
+                backup::HashAlgorithms::SHA512 => crate::totp::TotpAlgorithm::HmacSha512,
+            },
+            digits: elem.digit_count,
+            timestep: elem.step_seconds,
+            ctime: 0, // Will be filled in later by storage::new_totp_record();
             notes: t!("vault.notes", xous::LANG).to_string(),
         };
 
-        let ser = serialize_totp(&totp);
-        let guid = gen_guid(trng);
-        log::debug!("storing into guid: {}", guid);
-        match pddb.get(
-            VAULT_TOTP_DICT,
-            &guid,
-            None,
-            true,
-            true,
-            Some(VAULT_TOTP_ALLOC_HINT),
-            Some(crate::basis_change),
-        ) {
-            Ok(mut data) => match data.write(&ser) {
-                Ok(len) => log::debug!("wrote {} bytes", len),
-                Err(e) => return Err(RestoreError::PddbError(e))
-            },
-            Err(e) => return Err(RestoreError::PddbError(e)),
-        }
-        log::debug!("syncing...");
-        pddb.sync().ok();
+        storage
+            .new_totp_record(totp)
+            .map_err(|err| RestoreError::PddbError(err))?;
     }
 
     Ok(vec![0xca, 0xfe, 0xba, 0xbe])
@@ -134,46 +100,4 @@ fn error_message(cid: ChannelID, error_code: u8) -> Message {
         cmd: 0x3F, // COMMAND_ERROR
         payload: vec![error_code],
     }
-}
-
-#[derive(Debug)]
-enum CborConversionError {
-    BadCbor,
-    UnknownAlgorithm(u64),
-}
-
-fn extract_unsigned(cbor_value: cbor::Value) -> Result<u64, CborConversionError> {
-    match cbor_value {
-        cbor::Value::KeyValue(cbor::KeyType::Unsigned(unsigned)) => Ok(unsigned),
-        _ => Err(CborConversionError::BadCbor),
-    }
-}
-
-fn extract_byte_string(cbor_value: cbor::Value) -> Result<Vec<u8>, CborConversionError> {
-    match cbor_value {
-        cbor::Value::KeyValue(cbor::KeyType::ByteString(byte_string)) => Ok(byte_string),
-        _ => Err(CborConversionError::BadCbor),
-    }
-}
-
-fn extract_string(cbor_value: cbor::Value) -> Result<String, CborConversionError> {
-    match cbor_value {
-        cbor::Value::KeyValue(cbor::KeyType::TextString(string)) => Ok(string),
-        _ => Err(CborConversionError::BadCbor),
-    }
-}
-
-/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid target
-fn utc_now() -> DateTime<Utc> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before Unix epoch");
-    let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
-    DateTime::from_utc(naive, Utc)
-}
-
-fn gen_guid(trng: &mut trng::Trng) -> String {
-    let mut guid = [0u8; 16];
-    trng.fill_bytes(&mut guid);
-    hex::encode(guid)
 }
