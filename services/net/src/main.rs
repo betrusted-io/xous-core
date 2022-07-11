@@ -1861,6 +1861,20 @@ fn main() -> ! {
                 // note: ARP cache isn't reset
                 iface.routes_mut().remove_default_ipv4_route();
                 dns_allclear_hook.notify();
+
+                send_message(
+                    cm_cid,
+                    Message::new_scalar( // this has to be non-blocking to avoid deadlock: reset can be called from inside connection_manager
+                        connection_manager::ConnectionManagerOpcode::EcReset
+                            .to_usize()
+                            .unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .expect("couldn't send EcReset message");
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {

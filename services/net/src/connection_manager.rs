@@ -29,6 +29,7 @@ pub(crate) enum ConnectionManagerOpcode {
     FetchSsidList,
     ComInt,
     SuspendResume,
+    EcReset,
     Quit,
 }
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -177,12 +178,6 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 // it's not clear to me how we get into this state, so let's be conservative and just leave the link and restart things.
                                 com.wlan_leave().expect("couldn't issue leave command"); // leave the previous config to reset state
                                 netmgr.reset();
-                                wifi_state = WifiState::Disconnected;
-                                if scan_state == SsidScanState::Idle {
-                                    com.set_ssid_scanning(true).unwrap();
-                                    scan_state = SsidScanState::Scanning;
-                                    scan_count = 0; // we only set scan_count to 0 on resumes because we can't be sure what our previous state was
-                                }
                                 send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                             }
                         }
@@ -206,13 +201,6 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                 for &sub in status_subscribers.keys() {
                                     let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
                                     buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
-                                }
-                                wifi_state = WifiState::Disconnected;
-                                // kick off an SSID scan
-                                if scan_state == SsidScanState::Idle {
-                                    com.set_ssid_scanning(true).unwrap();
-                                    scan_state = SsidScanState::Scanning;
-                                    scan_count = 0; // we only set scan_count to 0 on resumes because we can't be sure what our previous state was
                                 }
                             }
                             WifiState::Error => {
@@ -319,18 +307,13 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         if intervals_without_activity > 3 { // we'd expect at least an ARP or something...
                             wifi_stats_cache = com.wlan_status().unwrap();
                             if wifi_stats_cache.link_state != com_rs_ref::LinkState::Connected {
-                                log::info!("Link state mismatch: moving state to disconnected");
-                                wifi_state = WifiState::Disconnected;
-                                ssid_list.clear();
-                                com.set_ssid_scanning(true).unwrap();
-                                scan_state = SsidScanState::Scanning;
+                                log::info!("Link state mismatch: moving state to disconnected ({:?})", wifi_stats_cache.link_state);
+                                netmgr.reset();
                             } else if wifi_stats_cache.ipv4.dhcp != com_rs_ref::DhcpState::Bound {
-                                log::info!("DHCP state mismatch: moving state to disconnected");
-                                wifi_state = WifiState::Disconnected;
-                                ssid_list.clear();
-                                com.set_ssid_scanning(true).unwrap();
-                                scan_state = SsidScanState::Scanning;
+                                log::info!("DHCP state mismatch: moving state to disconnected ({:?})", wifi_stats_cache.ipv4.dhcp);
+                                netmgr.reset();
                             }
+                            intervals_without_activity = 0;
                         }
 
                         if last_wifi_state == WifiState::Connected && wifi_state != WifiState::Connected {
@@ -386,23 +369,12 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                     log::debug!("got Retry on connect");
                                     com.wlan_leave().expect("couldn't issue leave command"); // leave the previous config to reset state
                                     netmgr.reset();
-                                    wifi_state = WifiState::Disconnected;
-                                    if scan_state == SsidScanState::Idle {
-                                        com.set_ssid_scanning(true).unwrap();
-                                        scan_state = SsidScanState::Scanning;
-                                    }
                                     send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                                 }
                                 WifiState::Error => {
                                     log::debug!("got error on connect, resetting wifi chip");
                                     com.wifi_reset().expect("couldn't reset the wf200 chip");
                                     netmgr.reset(); // this can result in a suspend failure, but the suspend timeout is currently set long enough to accommodate this possibility
-                                    wifi_state = WifiState::Disconnected;
-                                    if scan_state == SsidScanState::Idle {
-                                        ssid_list.clear();
-                                        com.set_ssid_scanning(true).unwrap();
-                                        scan_state = SsidScanState::Scanning;
-                                    }
                                     send_message(self_cid, Message::new_scalar(ConnectionManagerOpcode::Poll.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
                                 }
                                 WifiState::Connected => {
@@ -490,6 +462,16 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
             }),
             Some(ConnectionManagerOpcode::Stop) => msg_scalar_unpack!(msg, _, _, _, _, {
                 run.store(false, Ordering::SeqCst);
+            }),
+            Some(ConnectionManagerOpcode::EcReset) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // this opcode is used by other processes to inform us that the net link was reset by something other than us.
+                // (e.g. an update)
+                wifi_state = WifiState::Disconnected;
+                ssid_list.clear();
+                com.set_ssid_scanning(true).unwrap();
+                scan_state = SsidScanState::Scanning;
+                intervals_without_activity = 0;
+                scan_count = 0;
             }),
             Some(ConnectionManagerOpcode::Quit) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 send_message(run_cid, Message::new_blocking_scalar(PumpOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't tell Pump to quit");

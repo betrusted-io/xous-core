@@ -297,7 +297,7 @@ fn wrapped_main() -> ! {
     });
     let ecup_conn = xous::connect(ecup_sid).unwrap();
     // check & automatically apply any EC updates
-    let mut needs_reboot = false;
+    let mut ec_updated = false;
     match send_message(ecup_conn,
         Message::new_blocking_scalar(ecup::UpdateOp::UpdateAuto.to_usize().unwrap(), 0, 0, 0, 0)
     ).expect("couldn't send auto update command") {
@@ -306,7 +306,7 @@ fn wrapped_main() -> ! {
                 Some(ecup::UpdateResult::AutoDone) => {
                     // question: do we want to put something there that confirms that the reported EC firmware
                     // at this point matches the intended update? we /could/ do that, but if it fails then how?
-                    needs_reboot = true;
+                    ec_updated = true;
                     // restore interrupts and connection manager
                     llio.com_event_enable(true).ok();
                     netmgr.reset();
@@ -363,8 +363,10 @@ fn wrapped_main() -> ! {
         });
     };
     sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string()); // this is the default app on boot
-    if needs_reboot {
-        modals.show_notification(t!("ecup.please_reboot", xous::LANG), None).unwrap();
+    // dubious if we need to show this notification.
+    if ec_updated {
+        netmgr.reset(); // have to do this to get the net manager stack into a known state after reset
+        modals.show_notification(t!("ecup.update_applied", xous::LANG), None).unwrap();
     }
 
     // --------------------------- graphical loop timing

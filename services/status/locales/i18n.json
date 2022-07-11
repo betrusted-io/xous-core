@@ -13,21 +13,21 @@
     },
     "ecup.erasing": {
         "ja": "消去...",
-        "en": "Erasing...",
+        "en": "EC Autoupdate\n\nErasing",
         "zh": "擦除...",
-        "en-tts": "Erasing..."
+        "en-tts": "EC Autoupdate\n\nErasing"
     },
     "ecup.writing": {
         "ja": "書き込み...",
-        "en": "Writing...",
+        "en": "EC Autoupdate\n\nWriting",
         "zh": "写作...",
-        "en-tts": "Writing..."
+        "en-tts": "EC Autoupdate\n\nWriting"
     },
-    "ecup.please_reboot": {
-        "ja": "USBロードのアップデートが適用されました：できるだけ早く再起動してください...",
-        "en": "USB-loaded update was applied: please reboot at your earliest convenience...",
-        "zh": "已应用 USB 加载更新：请尽早重启...",
-        "en-tts": "USB-loaded update was applied: please reboot at your earliest convenience..."
+    "ecup.update_applied": {
+        "ja": "USBロードのアップデートが適用されました.",
+        "en": "An EC update was successfully applied!",
+        "zh": "已应用 USB 加载更新.",
+        "en-tts": "An EC update was successfully applied!"
     },
     "ecup.resetting": {
         "ja": "ECのリセット",

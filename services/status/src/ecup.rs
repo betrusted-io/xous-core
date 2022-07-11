@@ -233,7 +233,8 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                             llio.com_event_enable(false).ok();
                             susres.set_suspendable(false).unwrap(); // block suspend/resume operations
                             if !do_update(&mut com, &modals, package, CTRL_PAGE_LEN, EC_GATEWARE_BASE,
-                            EC_GATEWARE_LEN, "EC gateware") {
+                            EC_GATEWARE_LEN,
+                            "gateware") {
                                 xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
                                 continue;
                             }
@@ -245,7 +246,8 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                             llio.com_event_enable(false).ok();
                             susres.set_suspendable(false).unwrap(); // block suspend/resume operations
                             if !do_update(&mut com, &modals, package, EC_GATEWARE_LEN + CTRL_PAGE_LEN,
-                            EC_FIRMWARE_BASE, length - (EC_GATEWARE_LEN), "EC firmware") {
+                            EC_FIRMWARE_BASE, length - (EC_GATEWARE_LEN),
+                            "firmware") {
                                 xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
                                 continue;
                             }
@@ -302,7 +304,8 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                         let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
                         susres.set_suspendable(false).unwrap(); // block suspend/resume operations
                         if !do_update(&mut com, &modals, package, CTRL_PAGE_LEN,
-                        WF200_FIRMWARE_BASE, length, "WF200") {
+                        WF200_FIRMWARE_BASE, length,
+                        "WF200") {
                             xous::return_scalar(msg.sender, UpdateResult::Abort.to_usize().unwrap()).unwrap();
                             continue;
                         }
@@ -374,7 +377,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
     // program
     log::info!("init progress: {:x}->{:x}", pkg_offset, pkg_offset + image_len);
     modals.start_progress(
-        &format!("{}\n({})", t!("ecup.writing", xous::LANG), name),
+        &format!("{} {}...", t!("ecup.writing", xous::LANG), name),
         flash_start, flash_start + image_len, flash_start).unwrap();
     // divide into 1k chunks and send over
     let exact_chunks = package[pkg_offset as usize..(pkg_offset + image_len) as usize].chunks_exact(1024);
@@ -398,7 +401,7 @@ fn do_update(com: &mut com::Com, modals: &Modals, package: &[u8], pkg_offset: u3
         if com.flash_program(prog_addr, pages).unwrap() == false {
             modals.finish_progress().unwrap();
             modals.show_notification(
-                &format!("{}\n({})", t!("ecup.abort", xous::LANG), name), None
+                &format!("{} {}...", t!("ecup.abort", xous::LANG), name), None
             ).unwrap();
             return false;
         }
