@@ -21,6 +21,7 @@ use tts_frontend::*;
 use locales::t;
 use std::format;
 use std::str;
+use std::convert::TryInto;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation;
@@ -320,6 +321,14 @@ mod implementation {
                 }
             }
         }
+        pub fn staged_semver(&self) -> SemVer {
+            SemVer{maj: 0, min: 0, rev: 0, extra: 0, commit: None}
+        }
+        pub fn try_nokey_soc_update(&mut self, _rootkeys_modal: &mut Modal, _main_cid: xous::CID) -> bool {
+            false
+        }
+        pub fn should_prompt_for_update(&self) -> bool {true}
+        pub fn set_prompt_for_update(&self, _state: bool) {}
     }
 }
 
@@ -1164,6 +1173,30 @@ fn main() -> ! {
                 } else {
                     xous::return_scalar(msg.sender, 2).expect("couldn't send return value");
                 }
+            }),
+            Some(Opcode::StagedSemver) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let staged_semver: [u8; 16] = keys.staged_semver().into();
+                xous::return_scalar2(msg.sender,
+                    u32::from_le_bytes(staged_semver[0..4].try_into().unwrap()) as usize,
+                    u32::from_le_bytes(staged_semver[4..8].try_into().unwrap()) as usize,
+                ).expect("couldn't send return value");
+            }),
+            Some(Opcode::TryNoKeySocUpdate) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.try_nokey_soc_update(&mut rootkeys_modal, main_cid) {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+            Some(Opcode::ShouldPromptForUpdate) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.should_prompt_for_update() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+            Some(Opcode::SetPromptForUpdate) => msg_scalar_unpack!(msg, state, _, _, _, {
+                keys.set_prompt_for_update(if state == 1 {true} else {false});
             }),
             Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
                 // dummy test for now

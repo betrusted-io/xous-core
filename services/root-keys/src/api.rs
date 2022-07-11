@@ -69,8 +69,19 @@ pub(crate) enum Opcode {
     Quit = 33,
 
     /// makes a "blind copy" of the staged gateware. This will destroy root keys,
-    /// but the call will not succeed if the image was provisioned.
+    /// but the call will not succeed if the image was provisioned. This has
+    /// an explicit user approval step.
     UxBlindCopy = 34,
+    /// report the semver of the staged gateware
+    StagedSemver = 35,
+    /// A zero-touch version of UxBlindCopy.
+    /// Run an update of a staged gateware that is newer. Will silently fail if
+    /// root keys exist, or if the staged gateware is invalid.
+    TryNoKeySocUpdate = 36,
+    /// Query if the "don't bother me again for an update" flag is set
+    ShouldPromptForUpdate = 37,
+    /// Set the "don't bother me again for an update"
+    SetPromptForUpdate = 38,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]

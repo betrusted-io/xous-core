@@ -298,6 +298,7 @@ fn wrapped_main() -> ! {
     let ecup_conn = xous::connect(ecup_sid).unwrap();
     // check & automatically apply any EC updates
     let mut ec_updated = false;
+    let mut soc_updated = false;
     match send_message(ecup_conn,
         Message::new_blocking_scalar(ecup::UpdateOp::UpdateAuto.to_usize().unwrap(), 0, 0, 0, 0)
     ).expect("couldn't send auto update command") {
@@ -324,8 +325,8 @@ fn wrapped_main() -> ! {
         _ => log::error!("Invalid return type from UpdateAuto"),
     }
     #[cfg(not(feature="dbg-ecupdate"))]
-    { // if we're not debugging, quit the updater thread -- might as well free up the memory and connections if nobody will ever use it again.
-    // this frees up 40k runtime RAM + 1 connection in the status thread.
+    { // if we're not debugging, quit the updater thread -- might as well free up the memory and connections if the thread is not callable
+    // this frees up 28-40k runtime RAM + 1 connection in the status thread.
         send_message(ecup_conn,
             Message::new_blocking_scalar(ecup::UpdateOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't quit updater thread");
@@ -336,11 +337,23 @@ fn wrapped_main() -> ! {
         root_keys::RootKeys::new(&xns, None)
             .expect("couldn't connect to root_keys to query initialization state"),
     ));
+    let staged_sv = keys.lock().unwrap().staged_semver().ok();
     if !keys.lock().unwrap().is_initialized().unwrap() {
         sec_notes.lock().unwrap().insert(
             "secnotes.no_keys".to_string(),
             t!("secnote.no_keys", xous::LANG).to_string(),
         );
+        if let Some(staged) = staged_sv {
+            let soc = llio.soc_gitrev().expect("error querying SoC gitrev; this is fatal");
+            if staged > soc { // we have a staged update, and no root keys. Just try to do the update.
+                if keys.lock().unwrap().try_nokey_soc_update() {
+                    log::info!("No-touch SoC update successful");
+                    soc_updated = true;
+                } else {
+                    log::info!("No-touch SoC update was called, but then aborted");
+                }
+            }
+        }
     } else {
         log::info!("checking gateware signature...");
         thread::spawn({
@@ -369,12 +382,35 @@ fn wrapped_main() -> ! {
                 }
             }
         });
+        if let Some(staged) = staged_sv {
+            let soc = llio.soc_gitrev().expect("error querying SoC gitrev; this is fatal");
+            if staged > soc {
+                if keys.lock().unwrap().prompt_for_update() {
+                    // prompt to apply the update
+                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("socup.ignore", xous::LANG)).expect("couldn't build radio item list");
+                    match modals.get_radiobutton(t!("socup.candidate", xous::LANG)) {
+                        Ok(response) => {
+                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                keys.lock().unwrap().do_update_gw_ux_flow();
+                                soc_updated = true;
+                            } else if response.as_str() == t!("socup.ignore", xous::LANG) {
+                                keys.lock().unwrap().set_update_prompt(false);
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        }
     };
     sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string()); // this is the default app on boot
-    // dubious if we need to show this notification.
     if ec_updated {
         netmgr.reset(); // have to do this to get the net manager stack into a known state after reset
-        modals.show_notification(t!("ecup.update_applied", xous::LANG), None).unwrap();
+    }
+    if soc_updated {
+        log::info!("Soc update was triggered, UX flow should be running now...");
     }
 
     // --------------------------- graphical loop timing

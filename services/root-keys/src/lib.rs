@@ -8,6 +8,7 @@ pub mod key2bits;
 
 use xous::{CID, send_message, Message};
 use xous_ipc::Buffer;
+use xous_semver::SemVer;
 use num_traits::*;
 use std::convert::TryInto;
 
@@ -84,6 +85,85 @@ impl RootKeys {
             log::error!("unexpected return value: {:#?}", response);
             Err(xous::Error::InternalError)
         }
+    }
+
+    pub fn do_update_gw_ux_flow(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::UxUpdateGateware.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+
+    pub fn do_init_keys_ux_flow(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+
+    /// this will return the version number, but always report the commit as None.
+    /// The 32-bit commit ref isn't useful in version comparisons, it's more to assist
+    /// maintainer debug. Including this would convert this from a scalar message to
+    /// a memory message.
+    ///
+    /// Returns `xous::Error::InvalidString` if the staged area is blank.
+    pub fn staged_semver(&self) -> Result<SemVer, xous::Error> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::StagedSemver.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).map_err(|_| xous::Error::InternalError)? {
+            xous::Result::Scalar2(a, b) => {
+                let mut raw_ver = [0u8; 16];
+                // this takes advantage of our knowledge of the internal structure of a semver binary record
+                // namely, the last two words are for the commit and if they are zero they end up as None.
+                raw_ver[0..4].copy_from_slice(&(a as u32).to_le_bytes());
+                raw_ver[4..8].copy_from_slice(&(b as u32).to_le_bytes());
+                // here, we do the check to see if the gateware area was *blank* in which case, we'd get an all-FF's version
+                if raw_ver[0..4] == [0xffu8; 4] {
+                    Err(xous::Error::InvalidString)
+                } else {
+                    Ok(raw_ver.into())
+                }
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
+
+    /// This function will try to perform a gateware update under the assumption that there are no root keys.
+    /// It will "silently fail" (i.e. return false but not panic) if any of numerous conditions/checks are not met.
+    pub fn try_nokey_soc_update(&self) -> bool {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::TryNoKeySocUpdate.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(r)) => {
+                if r != 0 { true } else { false }
+            }
+            _ => false
+        }
+    }
+
+    /// returns `true` if we should prompt the user for an update
+    pub fn prompt_for_update(&self) -> bool {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ShouldPromptForUpdate.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(r)) => {
+                if r != 0 { true } else { false }
+            }
+            _ => false
+        }
+    }
+
+    /// sets the should prompt for user update to the given status
+    pub fn set_update_prompt(&self, should_prompt: bool) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetPromptForUpdate.to_usize().unwrap(),
+                if should_prompt { 1 } else { 0 },
+                0, 0, 0
+            )
+        ).expect("couldn't set update prompt");
     }
 
     /// this will check the signature on the gateware.

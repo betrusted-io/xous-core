@@ -11,6 +11,7 @@ use num_traits::*;
 
 use gam::modal::{Modal, Slider, ProgressBar, ActionType};
 use locales::t;
+use xous_semver::SemVer;
 
 use crate::bcrypt::*;
 use crate::api::PasswordType;
@@ -2253,5 +2254,82 @@ impl<'a> RootKeys {
 
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
+    }
+
+    pub fn staged_semver(&self) -> SemVer {
+        let staging_meta = self.fetch_gw_metadata(GatewareRegion::Staging);
+        let tag_str = std::str::from_utf8(&staging_meta.tag_str[..staging_meta.tag_len as usize]).unwrap_or("v0.0.0-1");
+        SemVer::from_str(tag_str).unwrap_or(SemVer{maj: 0, min: 0, rev: 0, extra: 0, commit: None})
+    }
+
+    /// Attempt to apply an update with the following assumptions:
+    ///    1. No root keys exist.
+    ///    2. The staged update is newer than the current update.
+    ///
+    /// If any of these assumptions fail, return false. Do not crash or panic.
+    ///
+    /// The main utility of this function is to simplify the out of the box experience
+    /// before root keys have been added.
+    pub fn try_nokey_soc_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> bool {
+        if self.is_initialized() {
+            log::warn!("No-touch update attempted, but keys are initialized. Aborting.");
+            return false;
+        }
+        let staged_sv = self.staged_semver();
+
+        // the semver check *should* be done already, but we check the gateware as written
+        // to FLASH and not what's reported from the `llio`. The condition at which these are
+        // inconsistent is someone has applied the update but did not do the "cold boot" to
+        // force a reload of the SoC. In this case, do not keep applying the same update over
+        // and over again. We also do this because we skip all UX interaction in this flow,
+        // unlike the UxBlindUpdate call, which has an explicit approval step in it.
+        let soc_meta = self.fetch_gw_metadata(GatewareRegion::Boot);
+        let tag_str = std::str::from_utf8(&soc_meta.tag_str[..soc_meta.tag_len as usize]).unwrap_or("v0.0.0-1");
+        let soc_sv = SemVer::from_str(tag_str).unwrap_or(SemVer{maj: 0, min: 0, rev: 0, extra: 0, commit: None});
+        if staged_sv > soc_sv {
+            let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+            0, 100, 10, Some("%"), 0, true, true
+            );
+            progress_action.set_is_password(true);
+            rootkeys_modal.modify(
+                Some(ActionType::Slider(progress_action)),
+                Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+                None, true, None);
+            rootkeys_modal.activate();
+            xous::yield_slice(); // give some time to the GAM to render
+            let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+            pb.set_percentage(1);
+            self.ticktimer.sleep_ms(250).expect("couldn't show final message");
+            let ret = self.make_gateware_backup(Some(&mut pb), true).is_ok();
+            pb.set_percentage(100);
+            self.ticktimer.sleep_ms(250).expect("couldn't show final message");
+            // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+            rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+            ret
+        } else {
+            log::warn!("No-touch update attempted, but the staged version is not newer than the existing version. Aborting.");
+            false
+        }
+    }
+    pub fn should_prompt_for_update(&mut self) -> bool {
+        let soc_region = self.gateware();
+        if u32::from_le_bytes(soc_region[soc_region.len() - 4..].try_into().unwrap()) == 0xFFFF_FFFF {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn set_prompt_for_update(&mut self, state: bool) {
+        let patch_data = if state {
+            [0xffu8; 4]
+        } else {
+            [0x0u8; 4]
+        };
+        self.spinor.patch(
+            self.gateware(),
+            self.gateware_base(),
+            &patch_data,
+            self.gateware().len() as u32 - 4
+        ).expect("couldn't patch update prompt");
     }
 }

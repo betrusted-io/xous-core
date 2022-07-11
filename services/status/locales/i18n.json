@@ -1,4 +1,16 @@
 {
+    "socup.candidate": {
+        "ja": "ゲートウェアの更新候補が見つかりました。\n\n適用する必要がありますか？",
+        "en": "An update candidate for the SoC was found.\n\nShould we apply it?",
+        "zh": "找到了网关软件的更新候选者。\n\n我们应该应用它吗？",
+        "en-tts": "An update candidate for the SoC was found.\n\nShould we apply it?"
+    },
+    "socup.ignore": {
+        "ja": "この更新を無視する",
+        "en": "Ignore this update",
+        "zh": "忽略此更新",
+        "en-tts": "Ignore this update"
+    },
     "ecup.invalid": {
         "ja": "ECファームウェアパッケージが破損しているか無効です: ",
         "en": "EC firmware package is corrupted or invalid: ",

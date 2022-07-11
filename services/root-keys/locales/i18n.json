@@ -210,10 +210,10 @@
         "en-tts": "Enter update password, in order to authorize a gateware update."
     },
     "rootkeys.gwup.finished": {
-        "en": "Gateware update finished.\nReboot at your earliest convenience.",
+        "en": "Gateware update finished.\n\nReboot by inserting a paperclip into the small hole on the lower right at your earliest convenience.",
         "ja": "ゲートウェアアップデートが終了しました。ご都合の良い時に再起動してください。",
         "zh": "更新完成重启应用",
-        "en-tts": "Gateware update finished. Reboot at your earliest convenience."
+        "en-tts": "Gateware update finished. Reboot by inserting a paperclip into the small hole on the lower right at your earliest convenience."
     },
     "rootkeys.bbram.confirm": {
         "en": "Connect provisioning helper, then press enter. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for details.",
