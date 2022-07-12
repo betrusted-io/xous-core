@@ -21,6 +21,7 @@ use gam::{MenuItem, MenuPayload};
 use tts_frontend::*;
 
 use locales::t;
+use core::ops::Deref;
 use std::format;
 use std::str;
 use std::convert::TryInto;
@@ -99,6 +100,7 @@ mod implementation {
     use aes::Aes256;
     use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
     use std::convert::TryInto;
+    use crate::UpdateType;
 
     #[derive(Debug, Copy, Clone)]
     #[allow(dead_code)]
@@ -173,7 +175,7 @@ mod implementation {
             self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.setup_wait", xous::LANG))
         }
-        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, _provision_bbram: bool) -> Result<(), RootkeyResult> {
+        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, _updatetype: UpdateType) -> Result<(), RootkeyResult> {
             self.xous_init_interlock();
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", xous::LANG))
         }
@@ -340,7 +342,7 @@ fn main() -> ! {
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -434,11 +436,12 @@ fn main() -> ! {
 
     let mut reboot_initiated = false;
     let mut aes_sender: Option<xous::MessageSender> = None;
-    let mut backup_header: Option<backups::BackupHeader> = None;
+    let mut backup_header: Option<BackupHeader> = None;
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
-        log::debug!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 keys.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -591,6 +594,7 @@ fn main() -> ! {
                 match result {
                     Ok(_) => {
                         log::info!("going to into reboot arc");
+                        keys.pddb_recycle(); // we have brand new root keys from e.g. a factory reset -- recycle the PDDB, as it is no longer mountable.
                         send_message(main_cid,
                             xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
                         ).expect("couldn't initiate dialog box");
@@ -852,7 +856,7 @@ fn main() -> ! {
                 }
                 keys.set_ux_password_type(None);
 
-                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, false);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, UpdateType::Regular);
                 // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
@@ -1138,7 +1142,7 @@ fn main() -> ! {
             }
             Some(Opcode::UxBbramRun) => {
                 keys.set_ux_password_type(None);
-                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, true);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, UpdateType::BbramProvision);
                 // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
@@ -1206,7 +1210,7 @@ fn main() -> ! {
                 let maybe_header = keys.read_backup_header();
                 let mut ret = BackupHeaderIpc::default();
                 if let Some(header) = maybe_header {
-                    let mut data = [0u8; core::mem::size_of::<backups::BackupHeader>()];
+                    let mut data = [0u8; core::mem::size_of::<BackupHeader>()];
                     data.copy_from_slice(header.as_ref());
                     ret.data = Some(data);
                 }
@@ -1216,7 +1220,7 @@ fn main() -> ! {
                 let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let ipc = buf.to_original::<BackupHeaderIpc, _>().unwrap();
                 if let Some(d) = ipc.data {
-                    let mut header = backups::BackupHeader::default();
+                    let mut header = BackupHeader::default();
                     header.as_mut().copy_from_slice(&d);
                     backup_header = Some(header);
                 } else {
@@ -1250,21 +1254,26 @@ fn main() -> ! {
                     modals.show_bip39(Some(t!("rootkeys.backup_key", xous::LANG)), &fpga_key.0.to_vec()).ok();
                     // let the user confirm the key, or skip it. YOLO!
                     loop {
-                        modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
-                        modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("modals error");
                         log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         match modals.get_radiobutton(t!("rootkeys.backup_verify", xous::LANG)) {
                             Ok(response) => {
-                                if response == t!("rootkeys.confirm.yes", xous::LANG) {
+                                if response == t!("rootkeys.gwup.yes", xous::LANG) {
                                     match modals.input_bip39(Some(t!("rootkeys.backup_key_enter", xous::LANG))) {
                                         Ok(verify) => {
+                                            log::debug!("got bip39 verification: {:x?}", verify);
                                             if &verify == &fpga_key.0 {
+                                                log::debug!("verify succeeded");
                                                 modals.show_notification(t!("rootkeys.backup_key_match", xous::LANG), None).ok();
+                                                break;
                                             } else {
+                                                log::debug!("verify failed");
                                                 modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &fpga_key.0.to_vec()).ok();
                                             }
                                         }
                                         _ => {
+                                            log::debug!("bip39 verification aborted");
                                             modals.show_bip39(Some(t!("rootkeys.backup_key_mismatch", xous::LANG)), &fpga_key.0.to_vec()).ok();
                                         }
                                     }
@@ -1280,7 +1289,7 @@ fn main() -> ! {
                     // this final statement has a take/unwrap to set backup_header back to None
                     match keys.write_backup(backup_header.take().unwrap(), backup_ct) {
                         Ok(_) => {
-                            modals.show_notification(t!("rootkeys.backup_staged", xous::LANG), None).ok();
+                            modals.show_notification(t!("rootkeys.backup_staged", xous::LANG), Some("https://github.com/betrusted-io/betrusted-wiki/wiki/Backups")).ok();
                         }
                         Err(_) => {
                             modals.show_notification(t!("rootkeys.backup_staging_error", xous::LANG), None).ok();
@@ -1290,6 +1299,165 @@ fn main() -> ! {
                     modals.show_notification(t!("rootkeys.backup_badpass", xous::LANG), None).ok();
                 }
             }
+            Some(Opcode::DoRestore) => {
+                // check to see if the device was already initialized. If so, warn the user.
+                if keys.is_initialized() {
+                    modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
+                    modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
+                    log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    match modals.get_radiobutton(t!("rootkeys.restore_already_init", xous::LANG)) {
+                        Ok(response) => {
+                            if response == t!("rootkeys.confirm.no", xous::LANG) {
+                                modals.show_notification(t!("rootkeys.restore_abort", xous::LANG), None).ok();
+                                continue;
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                // try the '0' key and skip key entry (developers will not have burned an AES key)
+                if let Ok((mut header, ct)) = keys.read_backup() {
+                    if header.op != BackupOp::Restore {
+                        log::warn!("Header op was not Restore. Aborting!");
+                        modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
+                        continue;
+                    }
+                    let mut restore_key = backups::BackupKey::default(); // default is the 0 key
+                    // trial restore from 0 key to see if we can skip password entry.
+                    if backups::restore_backup(&restore_key, &ct).is_none() {
+                        // the '0' key didn't work. get the key from the user
+                        match modals.input_bip39(Some(t!("rootkeys.backup_key_enter", xous::LANG))) {
+                            Ok(key) => {
+                                restore_key.0.copy_from_slice(&key);
+                            }
+                            _ => {
+                                // key entry failed, aborting.
+                                modals.show_notification(t!("rootkeys.restore_badpass", xous::LANG), None).ok();
+                            }
+                        }
+                    } else {
+                        // notify of zero key
+                        modals.show_notification(t!("rootkeys.restore_zero_key", xous::LANG), None).ok();
+                    }
+                    // actual restore
+                    if let Some(pt) = backups::restore_backup(&restore_key, &ct) {
+                        // everything should match except for the op.
+                        header.op = pt.header.op;
+                        // now check that the two records are identical
+                        if pt.deref() != header.deref() {
+                            modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
+                            continue;
+                        }
+                        let mut restore_rom = backups::KeyRomExport::default();
+                        restore_rom.0.copy_from_slice(&pt.keyrom);
+
+                        // We have a bit of a conundrum in terms of restoring the key, because it can mismatch what's in
+                        // the target restore hardware. Here is how it gets resolved:
+                        //  - (dev state) If we booted with zero key, we leave it zero key
+                        //  - (restore to blank device) If we booted with zero key, and the image is non-zero key,
+                        //    We re-encrypt to the zero key that corresponds to the current device,
+                        //    and show a warning that the FPGA key / backup key needs to be set
+                        //    as a separate step.
+                        //  - (restore to keyed device) If we booted with a non-zero key, this means someone had primed a
+                        //    SoC image with an encrypted key to start with, or we are restoring to a bootable device that
+                        //    has been keyed. This probably means e-fuses or BBRAM was burned. We check that the booted
+                        //    image matches the provided backup key, and then encrypt to that key.
+                        //
+                        // Either way, the flow at this point is similar to doing a gateware update, in that
+                        // the source image to apply is a zero-key image in the staging area.
+                        if keys.is_zero_key() == Some(true) {
+                            // zeroize the restore key to match the device state
+                            // (we don't need it anymore, now that the backup has been decrypted!)
+                            restore_key.0.copy_from_slice(&[0u8; 32]);
+                            // also zeroize the copy in the key rom. It *could* be set from the previous FPGA config,
+                            // but, since this FPGA we're going to will have the 0-key, we wipe so the state is consistent.
+                            restore_rom.0[0..8].copy_from_slice(&[0u32; 8]);
+                        }
+                        if restore_key.0 == [0u8; 32] {
+                            modals.show_notification(t!("rootkeys.restore_needs_keyburn", xous::LANG), None).ok();
+                        }
+                        // this will setup the pepper so we can request a password
+                        keys.setup_restore_init(restore_key, restore_rom);
+
+                        // get the update password, so we can encrypt the FPGA key to it.
+                        keys.set_ux_password_type(Some(PasswordType::Update));
+                        password_action.set_action_opcode(Opcode::UxDoRestorePwReturn.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::TextEntry(password_action.clone())),
+                            Some(t!("rootkeys.get_update_password_restore", xous::LANG)), false,
+                            None, true, None
+                        );
+                        #[cfg(feature="tts")]
+                        tts.tts_blocking(t!("rootkeys.get_update_password_restore", xous::LANG)).unwrap();
+                        log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        rootkeys_modal.activate();
+                    } else {
+                        // decryption error
+                        modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
+                    }
+                } else {
+                    log::error!("internal error: couldn't read out the restore region");
+                }
+            }
+            Some(Opcode::UxDoRestorePwReturn) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+                keys.set_ux_password_type(None);
+
+                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid,
+                    UpdateType::Restore
+                );
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+
+                log::info!("set_ux_password result: {:?}", result);
+                // clear all the state, re-enable suspend/resume
+                keys.finish_key_init();
+
+                match result {
+                    Ok(_) => {
+                        keys.erase_backup();
+                        log::info!("going to into reboot arc");
+                        send_message(main_cid,
+                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't initiate dialog box");
+                    }
+                    Err(RootkeyResult::AlignmentError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::KeyError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::IntegrityError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::FlashError) => {
+                        modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
+                    }
+                    Err(RootkeyResult::StateError) => {
+                        modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
+                    }
+                }
+            }
+            Some(Opcode::EraseBackupBlock) => {
+                keys.erase_backup();
+            }
+            Some(Opcode::IsZeroKey) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let query = keys.is_zero_key();
+                if let Some(q) = query {
+                    if q {
+                        xous::return_scalar2(msg.sender, 1, 1).ok();
+                    } else {
+                        xous::return_scalar2(msg.sender, 0, 1).ok();
+                    }
+                } else {
+                    xous::return_scalar2(msg.sender, 0, 0).ok();
+                }
+            }),
             Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
                 // dummy test for now
                 xous::return_scalar(msg.sender, 1234).unwrap();

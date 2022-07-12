@@ -3,7 +3,6 @@
 
 pub mod api;
 use api::*;
-pub mod backups;
 
 pub mod key2bits;
 
@@ -87,6 +86,21 @@ impl RootKeys {
             Err(xous::Error::InternalError)
         }
     }
+    pub fn is_zero_key(&self) -> Result<Option<bool>, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsZeroKey.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send IsZeroKey check message");
+        if let xous::Result::Scalar2(result, valid) = response {
+            if valid != 0 {
+                if result != 0 {return Ok(Some(true))} else {return Ok(Some(false))}
+            } else {
+                Ok(None)
+            }
+        } else {
+            log::error!("unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
 
     pub fn do_update_gw_ux_flow(&self) {
         send_message(self.conn,
@@ -102,12 +116,12 @@ impl RootKeys {
         ).expect("couldn't send message to root keys");
     }
 
-    pub fn do_create_backup_ux_flow(&self, metadata: backups::BackupHeader) {
+    pub fn do_create_backup_ux_flow(&self, metadata: BackupHeader) {
         let mut alloc = BackupHeaderIpc::default();
-        let mut data = [0u8; core::mem::size_of::<backups::BackupHeader>()];
+        let mut data = [0u8; core::mem::size_of::<BackupHeader>()];
         data.copy_from_slice(metadata.as_ref());
         alloc.data = Some(data);
-        let mut buf = Buffer::into_buf(alloc).unwrap();
+        let buf = Buffer::into_buf(alloc).unwrap();
         buf.send(self.conn, Opcode::CreateBackup.to_u32().unwrap()).unwrap();
     }
     pub fn do_restore_backup_ux_flow(&self) {
@@ -116,15 +130,21 @@ impl RootKeys {
             0, 0, 0, 0)
         ).expect("couldn't send message to root keys");
     }
+    pub fn do_erase_backup(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::EraseBackupBlock.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
     /// Returns the raw, unchecked restore header. Further checking may be done at the restore point,
     /// but the purpose of this is to just decide if we should even try to initiate a restore.
-    pub fn get_restore_header(&self) -> Result<Option<backups::BackupHeader>, xous::Error> {
+    pub fn get_restore_header(&self) -> Result<Option<BackupHeader>, xous::Error> {
         let alloc = BackupHeaderIpc::default();
         let mut buf = Buffer::into_buf(alloc).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::ShouldRestore.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let ret = buf.to_original::<BackupHeaderIpc, _>().unwrap();
         if let Some(d) = ret.data {
-            let mut header = backups::BackupHeader::default();
+            let mut header = BackupHeader::default();
             header.copy_from_slice(&d);
             Ok(Some(header))
         } else {

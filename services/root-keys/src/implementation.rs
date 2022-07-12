@@ -5,7 +5,7 @@ use keywrap::*;
 pub use oracle::FpgaKeySource;
 
 use utralib::generated::*;
-use xous::BACKUP_OFFSET;
+use xous::KERNEL_BACKUP_OFFSET;
 use crate::{api::*, backups};
 use core::num::NonZeroUsize;
 use num_traits::*;
@@ -70,6 +70,13 @@ struct PasswordCache {
     hashed_update_pw_valid: u32,
     fpga_key: [u8; 32],
     fpga_key_valid: u32,
+}
+
+#[derive(Eq, PartialEq)]
+pub(crate) enum UpdateType {
+    Regular,
+    BbramProvision,
+    Restore,
 }
 
 #[repr(C)]
@@ -490,6 +497,33 @@ impl<'a> RootKeys {
             }
         }
     }
+    pub fn is_zero_key(&self) -> Option<bool> {
+        if let Some(secured) = self.is_efuse_secured() {
+            if !secured {
+                if self.fpga_key_source() == FpgaKeySource::Efuse {
+                    match self.jtag.efuse_fetch() {
+                        Ok(record) => {
+                            if record.key == [0u8; 32] {
+                                Some(true) // yep, we booted from this and it's 0.
+                            } else {
+                                log::warn!("Efuse key was set, and we're booting from it, but the readback protection was NOT enabled. The key is not secured.");
+                                Some(false) // we booted from this, and we can definitively say it's not 0 (but also, we could read it out!!!)
+                            }
+                        }
+                        _ => None // error fetching key. can't say anything
+                    }
+                } else {
+                    None // booting from BBRAM. maybe it's zero, but we can't read BBRAM keys.
+                }
+            } else {
+                // this is borderline. Someone bothered to burn the readback protection fuses.
+                // we can't prove it's not zero, but for purposes of updates and provisioning, we should treat it as non-zero.
+                Some(false)
+            }
+        } else {
+            None // couldn't read anything, so we can't be sure
+        }
+    }
     pub fn is_jtag_working(&self) -> bool {
         if self.jtag.get_id().unwrap() == jtag::XCS750_IDCODE {
             true
@@ -789,7 +823,30 @@ impl<'a> RootKeys {
             *keyword = self.trng.get_u32().expect("couldn't get random number");
         }
     }
+    pub fn setup_restore_init(&mut self, key: backups::BackupKey, rom: backups::KeyRomExport) {
+        self.xous_init_interlock();
+        // block suspend/resume ops during security-sensitive operations
+        self.susres.set_suspendable(false).expect("couldn't block suspend/resume");
 
+        // populate the staging area, in particular we are interested in the "pepper" so passwords work correctly.
+        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[..256]
+        .copy_from_slice(&rom.0);
+
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        // copy the plaintext FPGA key to the pcache
+        pcache.fpga_key.copy_from_slice(&key.0);
+        pcache.fpga_key_valid = 1;
+
+        // stage the plaintext FPGA key into the keyrom area for encryption by the key_init routine.
+        self.sensitive_data.borrow_mut().as_slice_mut::<u8>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 32]
+            .copy_from_slice(&key.0);
+    }
+
+    /// used to recycle a PDDB after a key init event
+    pub fn pddb_recycle(&mut self) {
+        // erase the page table, which should effectively trigger a reformat on the next boot
+        self.spinor.bulk_erase(xous::PDDB_LOC, 512 * 1024).expect("couldn't erase page table");
+    }
     /// Core of the key initialization routine. Requires a `progress_modal` dialog box that has been set
     /// up with the appropriate notification messages by the UX layer, and a `Slider` type action which
     /// is used to report the progress of the initialization routine. We assume the `Slider` box is set
@@ -821,7 +878,13 @@ impl<'a> RootKeys {
     /// (a mutable operation). We can't bind `sensitive_slice` to `self.sensitive_data.borrow_mut().as_slice_mut::<u32>()`
     /// because this creates a temporary that has the wrong lifetime, and thus, we have to embed that terrible piece
     /// of unmaintainable syntax all over the place in the code below to solve this problem.
-    pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+    ///
+    /// If `restore` is `Some`, don't generate keys, but restore from backup. The key provided to this routine
+    /// is *always* the correct key for the FPGA to boot from. The entry in the KeyRom will be adjusted accordingly.
+    pub fn do_key_init(&mut self,
+        rootkeys_modal: &mut Modal,
+        main_cid: xous::CID,
+    ) -> Result<(), RootkeyResult> {
         self.xous_init_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
 
@@ -1099,7 +1162,11 @@ impl<'a> RootKeys {
         }
     }
 
-    pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, provision_bbram: bool) -> Result<(), RootkeyResult> {
+    pub fn do_gateware_update(&mut self,
+        rootkeys_modal: &mut Modal,
+        main_cid: xous::CID,
+        update_type: UpdateType,
+    ) -> Result<(), RootkeyResult> {
         // make sure the system is sane
         self.xous_init_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
@@ -1119,55 +1186,161 @@ impl<'a> RootKeys {
         let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
         pb.set_percentage(1);
 
-        // decrypt the FPGA key using the stored password
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
-        if pcache.hashed_update_pw_valid == 0 && self.is_initialized() {
-            self.purge_password(PasswordType::Update);
-            log::error!("no password was set going into the update routine");
-            #[cfg(feature = "hazardous-debug")]
-            log::debug!("key: {:x?}", pcache.hashed_update_pw);
-            log::debug!("valid: {}", pcache.hashed_update_pw_valid);
-
-            return Err(RootkeyResult::KeyError);
-        }
-        for (&src, dst) in self.read_key_256(KeyRomLocs::FPGA_KEY).iter().zip(pcache.fpga_key.iter_mut()) {
-            *dst = src;
-        }
-        log::debug!("fpga key (encrypted): {:x?}", &pcache.fpga_key);
-        for (fkey, &pw) in pcache.fpga_key.iter_mut().zip(pcache.hashed_update_pw.iter()) {
-            *fkey = *fkey ^ pw;
-        }
-        pcache.fpga_key_valid = 1;
-        #[cfg(feature = "hazardous-debug")]
-        log::debug!("fpga key (reconstituted): {:x?}", &pcache.fpga_key);
-
-        // derive signing key
         let mut keypair_bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] = [0; ed25519_dalek::KEYPAIR_LENGTH];
-        let enc_signing_key = self.read_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
-        #[cfg(feature = "hazardous-debug")]
-        log::debug!("encrypted root privkey: {:x?}", enc_signing_key);
-        for (key, (&enc_key, &pw)) in
-        keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
-        .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
-            *key = enc_key ^ pw;
-        }
-        #[cfg(feature = "hazardous-debug")]
-        log::debug!("decrypted root privkey: {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
-        // derived_sk now holds the "Root" secret key. It needs to be hashed (MAX_ROLLBACK_LIMIT - GLOBAL_ROLLBACK) times to get the current signing key.
-        self.compute_key_rollback(&mut keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
-        // now populate the public key portion. that's just in the plain.
-        // note that this would have been updated in the case of an update to GLOBAL_ROLLBACK -- the purpose of
-        // this routine is to sign software in the current rollback count, not to increment the rollback count
-        for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
-        .zip(self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
-            *key = src;
+        let mut old_key = [0u8; 32];
+        if update_type == UpdateType::Restore {
+            // ASSUME:
+            //   - the sensitive_data has been set up correctly
+            //   - sensitive_data's FPGA_KEY is a *plaintext* version of the FPGA key
+            //   - the pcache.fpga_key also contains a *plaintext* version of the FPGA key
+            // Note: these are handled by the `setup_restore_init()` routine.
+
+            //------ test that the restore provided password is valid for the source keyrom block
+            // derive signing key
+            if pcache.hashed_update_pw_valid == 0 {
+                self.purge_password(PasswordType::Update);
+                log::error!("no password was set going into the update routine");
+                #[cfg(feature = "hazardous-debug")]
+                log::debug!("key: {:x?}", pcache.hashed_update_pw);
+                log::debug!("valid: {}", pcache.hashed_update_pw_valid);
+
+                return Err(RootkeyResult::KeyError);
+            }
+            let mut enc_signing_key = [0u8; 32];
+            enc_signing_key.copy_from_slice(
+                &self.sensitive_data.borrow().as_slice::<u8>()
+                [KeyRomLocs::SELFSIGN_PRIVKEY as usize * size_of::<u32>()..
+                KeyRomLocs::SELFSIGN_PRIVKEY as usize * size_of::<u32>() + 32]
+            );
+            for (key, (&enc_key, &pw)) in
+            keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
+            .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
+                *key = enc_key ^ pw;
+            }
+            self.compute_key_rollback(&mut keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("keypair privkey (after anti-rollback): {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+            // read in the public key from the staged data
+            keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].copy_from_slice(
+                &self.sensitive_data.borrow().as_slice::<u8>()
+                [KeyRomLocs::SELFSIGN_PUBKEY as usize * size_of::<u32>()..
+                KeyRomLocs::SELFSIGN_PUBKEY as usize * size_of::<u32>() + 32]
+            );
+            // Keypair zeroizes the secret key on drop.
+            let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("keypair privkey (after anti-rollback + conversion): {:x?}", keypair.secret.to_bytes());
+
+            // check if the keypair is valid by signing and verifying a short message
+            let test_data = "whiskey made me do it";
+            let test_sig = keypair.sign(test_data.as_bytes());
+            match keypair.verify(&test_data.as_bytes(), &test_sig) {
+                Ok(_) => (),
+                Err(e) => {
+                    log::warn!("update password was not connect ({:?})", e);
+                    self.purge_password(PasswordType::Update);
+                    for b in keypair_bytes.iter_mut() {
+                        *b = 0;
+                    }
+                    return Err(RootkeyResult::KeyError);
+                }
+            }
+
+            //------ test that the provided encryption key can actually decrypt the boot image
+            // this ensures that we don't brick the FPGA in case something weird happened with a difference
+            // between the backup FPGA's keying state, and the destination device's keying state.
+            // we do this by creating an oracle that can decrypt the boot gateware using the provided key.
+            // if we can create the oracle, it means we were able to decrypt the first little bit of the boot image
+            // and we're good to go!
+            match BitstreamOracle::new(
+                &pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
+                Ok(_o) => log::debug!("Provided restore key could also decrypt the boot image."),
+                Err(e) => {
+                    log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
+                    self.purge_password(PasswordType::Update);
+                    return Err(e);
+                }
+            };
+            old_key.copy_from_slice(&pcache.fpga_key);
+
+            // now encrypt the FPGA key for the Keyrom in-place to the provided password
+            for (word, hashed_pass) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
+            .zip(pcache.hashed_update_pw.chunks(4).into_iter()) {
+                *word = *word ^ u32::from_be_bytes(hashed_pass.try_into().unwrap());
+            }
+
+            pb.set_percentage(3);
+        } else { // regular and bbram flow
+            // decrypt the FPGA key using the stored password
+            if pcache.hashed_update_pw_valid == 0 && self.is_initialized() {
+                self.purge_password(PasswordType::Update);
+                log::error!("no password was set going into the update routine");
+                #[cfg(feature = "hazardous-debug")]
+                log::debug!("key: {:x?}", pcache.hashed_update_pw);
+                log::debug!("valid: {}", pcache.hashed_update_pw_valid);
+
+                return Err(RootkeyResult::KeyError);
+            }
+            for (&src, dst) in self.read_key_256(KeyRomLocs::FPGA_KEY).iter().zip(pcache.fpga_key.iter_mut()) {
+                *dst = src;
+            }
+            log::debug!("fpga key (encrypted): {:x?}", &pcache.fpga_key);
+            for (fkey, &pw) in pcache.fpga_key.iter_mut().zip(pcache.hashed_update_pw.iter()) {
+                *fkey = *fkey ^ pw;
+            }
+            pcache.fpga_key_valid = 1;
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("fpga key (reconstituted): {:x?}", &pcache.fpga_key);
+
+            // derive signing key
+            let enc_signing_key = self.read_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("encrypted root privkey: {:x?}", enc_signing_key);
+            for (key, (&enc_key, &pw)) in
+            keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
+            .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
+                *key = enc_key ^ pw;
+            }
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("decrypted root privkey: {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+            // derived_sk now holds the "Root" secret key. It needs to be hashed (MAX_ROLLBACK_LIMIT - GLOBAL_ROLLBACK) times to get the current signing key.
+            self.compute_key_rollback(&mut keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
+            // now populate the public key portion. that's just in the plain.
+            // note that this would have been updated in the case of an update to GLOBAL_ROLLBACK -- the purpose of
+            // this routine is to sign software in the current rollback count, not to increment the rollback count
+            for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
+            .zip(self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
+                *key = src;
+            }
+
+            // stage the keyrom data for patching
+            self.populate_sensitive_data();
+            if update_type == UpdateType::BbramProvision {
+                pb.set_percentage(3);
+                if self.is_initialized() {
+                    // make a backup copy of the old key, so we can use it to decrypt the gateware before re-encrypting it
+                    old_key.copy_from_slice(&pcache.fpga_key);
+                }
+                self.replace_fpga_key();
+
+                // we transmit the BBRAM key at this point -- because if there's going to be a failure,
+                // we'd rather know it now before moving on. Three copies are sent to provide some
+                // check on the integrity of the key.
+                log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+                log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+                log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+                log::info!("{}", crate::CONSOLE_SENTINEL);
+            } else {
+                old_key.copy_from_slice(&pcache.fpga_key);
+            };
         }
         #[cfg(feature = "hazardous-debug")]
         log::debug!("anti-rollback privkey: {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
         #[cfg(feature = "hazardous-debug")]
         log::debug!("trying to make a keypair from {:x?}", keypair_bytes);
         // Keypair zeroizes on drop
-        let keypair: Option<Keypair> = if provision_bbram && !self.is_initialized() {
+        let keypair: Option<Keypair> = if (update_type == UpdateType::BbramProvision) && !self.is_initialized() {
             // don't try to derive signing keys if we're doing BBRAM provisioning on an otherwise blank device
             None
         } else {
@@ -1177,39 +1350,15 @@ impl<'a> RootKeys {
         #[cfg(feature = "hazardous-debug")]
         log::debug!("keypair privkey (after anti-rollback): {:x?}", keypair.as_ref().unwrap().secret.to_bytes());
 
-        // stage the keyrom data for patching
-        self.populate_sensitive_data();
-        let mut old_key_storage: [u8; 32] = [0; 32];
-        let old_key = if provision_bbram {
-            pb.set_percentage(3);
-            if self.is_initialized() {
-                // make a backup copy of the old key, so we can use it to decrypt the gateware before re-encrypting it
-                for (&src, dst) in pcache.fpga_key.iter().zip(old_key_storage.iter_mut()) {
-                    *dst = src;
-                }
-            }
-            self.replace_fpga_key();
-
-            // we transmit the BBRAM key at this point -- because if there's going to be a failure,
-            // we'd rather know it now before moving on. Three copies are sent to provide some
-            // check on the integrity of the key.
-            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
-            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
-            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
-            log::info!("{}", crate::CONSOLE_SENTINEL);
-            &old_key_storage
-        } else {
-            &pcache.fpga_key
-        };
-
         pb.set_percentage(4);
         log::debug!("making destination oracle");
         let mut dst_oracle =
         match BitstreamOracle::new(
-        old_key,
-        &pcache.fpga_key,
-        self.gateware(),
-        self.gateware_base()) {
+            &old_key,
+            &pcache.fpga_key,
+            self.gateware(),
+            self.gateware_base())
+        {
             Ok(o) => o,
             Err(e) => {
                 self.purge_password(PasswordType::Update);
@@ -1218,26 +1367,30 @@ impl<'a> RootKeys {
             }
         };
 
-        let next_progress = if provision_bbram {
+        let mut next_progress = if update_type == UpdateType::BbramProvision {
             pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
-            pb.rebase_subtask_percentage(5, 30);
+            pb.rebase_subtask_percentage(5, 25);
             self.make_gateware_backup(Some(&mut pb), false)?;
-            30
+            25
         } else {
             10
         };
         log::debug!("destination oracle success");
-        if provision_bbram {
+        if update_type == UpdateType::BbramProvision {
             dst_oracle.set_target_key_type(FpgaKeySource::Bbram);
         } else {
             let keysource = dst_oracle.get_original_key_type();
             dst_oracle.set_target_key_type(keysource);
         }
-        pb.set_percentage(6);
+        pb.set_percentage(next_progress);
+        next_progress += 2;
         // updates are always encrypted with the null key.
         let dummy_key: [u8; 32] = [0; 32];
         log::debug!("making source oracle");
-        let mut src_oracle = match BitstreamOracle::new(&dummy_key, &pcache.fpga_key, self.staging(), self.staging_base()) {
+        let mut src_oracle = match BitstreamOracle::new(
+            &dummy_key, &pcache.fpga_key,
+            self.staging(), self.staging_base())
+        {
             Ok(o) => o,
             Err(e) => {
                 log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
@@ -1263,26 +1416,46 @@ impl<'a> RootKeys {
 
         // verify that the patch worked
         pb.update_text(t!("rootkeys.init.verifying_gateware", xous::LANG));
-        pb.rebase_subtask_percentage(60, 90);
+        pb.rebase_subtask_percentage(60, 75);
         log::debug!("making verification oracle");
-        let verify_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
+        let verify_oracle = match BitstreamOracle::new(
+            &pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()
+        ) {
             Ok(o) => o,
             Err(e) => {
                 log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
                 return Err(e);
             }
         };
-
         self.verify_gateware(&verify_oracle, Some(&mut pb))?;
 
-        pb.set_percentage(92);
+        pb.set_percentage(76);
 
         // commit signatures
         let keypair = if let Some(kp) = keypair {
-            pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+            pb.update_text(t!("rootkeys.init.signing_gateware", xous::LANG));
             let (gateware_sig, gateware_len) = self.sign_gateware(&kp);
             log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
             self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+
+            // sign the kernel
+            pb.update_text(t!("rootkeys.init.signing_kernel", xous::LANG));
+            pb.set_percentage(80);
+            let (kernel_sig, kernel_len) = self.sign_kernel(&kp);
+
+            // sign the loader
+            pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
+            pb.rebase_subtask_percentage(85, 92);
+            let (loader_sig, loader_len) = self.sign_loader(&kp, Some(&mut pb));
+
+            // commit the signatures
+            pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+            self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
+            log::debug!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
+            pb.set_percentage(93);
+            self.commit_signature(kernel_sig, kernel_len, SignatureType::Kernel)?;
+            pb.set_percentage(94);
+
             // pass the kp back into the original variable. keypair does not implement copy...for good reasons.
             Some(kp)
         } else {
@@ -1298,7 +1471,7 @@ impl<'a> RootKeys {
         for b in keypair_bytes.iter_mut() {
             *b = 0;
         }
-        for b in old_key_storage.iter_mut() {
+        for b in old_key.iter_mut() {
             *b = 0;
         }
         // ed25519 keypair zeroizes on drop
@@ -1309,11 +1482,16 @@ impl<'a> RootKeys {
             if !self.verify_gateware_self_signature() {
                 return Err(RootkeyResult::IntegrityError);
             }
+            // as a sanity check, check the kernel self signature
+            if !self.verify_selfsign_kernel(true) {
+                log::error!("kernel signature failed to verify, probably should not try to reboot!");
+                return Err(RootkeyResult::IntegrityError);
+            }
         }
 
         pb.set_percentage(100);
 
-        if provision_bbram {
+        if update_type == UpdateType::BbramProvision {
             self.ticktimer.sleep_ms(500).unwrap();
             // this will kick off the programming
             log::info!("BURN_NOW");
@@ -2100,7 +2278,14 @@ impl<'a> RootKeys {
             *dst = src;
         }
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
-        let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
+        let sig = match Signature::from_bytes(&sig_rec.signature) {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("Signature malformed: {:?}", e);
+                log::debug!("Raw bytes: {:x?}", &sig_rec.signature);
+                return false;
+            }
+        };
         log::debug!("sig_rec ({}): {:x?}", sig_rec.signed_len, sig_rec.signature);
         log::debug!("sig: {:x?}", sig.to_bytes());
         log::debug!("pubkey: {:x?}", pubkey.to_bytes());
@@ -2259,8 +2444,16 @@ impl<'a> RootKeys {
 
     pub fn staged_semver(&self) -> SemVer {
         let staging_meta = self.fetch_gw_metadata(GatewareRegion::Staging);
-        let tag_str = std::str::from_utf8(&staging_meta.tag_str[..staging_meta.tag_len as usize]).unwrap_or("v0.0.0-1");
-        SemVer::from_str(tag_str).unwrap_or(SemVer{maj: 0, min: 0, rev: 0, extra: 0, commit: None})
+        if staging_meta.magic == 0x6174656d {
+            let tag_str = std::str::from_utf8(&staging_meta.tag_str[..(staging_meta.tag_len as usize).min(64)]).unwrap_or("v0.0.0-1");
+            SemVer::from_str(tag_str).unwrap_or(SemVer{maj: 0, min: 0, rev: 0, extra: 2, commit: None})
+        } else if staging_meta.magic == 0xFFFF_FFFF {
+            log::debug!("metadata blank");
+            SemVer{maj: 0xFFFF, min: 0xFFFF, rev: 0xFFFF, extra: 0xFFFF, commit: None}
+        } else {
+            log::debug!("metadata corrupted: {:?}", staging_meta);
+            SemVer{maj: 0, min: 0, rev: 0, extra: 3, commit: None}
+        }
     }
 
     /// Attempt to apply an update with the following assumptions:
@@ -2333,12 +2526,12 @@ impl<'a> RootKeys {
             self.gateware().len() as u32 - 4
         ).expect("couldn't patch update prompt");
     }
-    pub fn read_backup_header(&mut self) -> Option<backups::BackupHeader> {
+    pub fn read_backup_header(&mut self) -> Option<BackupHeader> {
         let kernel = self.kernel();
-        let backup = &kernel[BACKUP_OFFSET as usize..BACKUP_OFFSET as usize + size_of::<backups::BackupHeader>()];
-        let mut header = backups::BackupHeader::default();
+        let backup = &kernel[KERNEL_BACKUP_OFFSET as usize..KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()];
+        let mut header = BackupHeader::default();
         header.as_mut().copy_from_slice(backup);
-        if header.version == backups::BACKUP_VERSION {
+        if header.version == BACKUP_VERSION {
             Some(header)
         } else {
             None
@@ -2418,22 +2611,43 @@ impl<'a> RootKeys {
             }
         }
     }
-    pub fn write_backup(&mut self, mut header: backups::BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
-        header.op = backups::BackupOp::Backup;  // set the "we're backing up" flag
+    pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+        header.op = BackupOp::Backup;  // set the "we're backing up" flag
+
+        // condense the data into a single block, to reduce read/write cycles on the block
+        let mut block = [0u8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()];
+        block[..size_of::<BackupHeader>()].copy_from_slice(header.as_ref());
+        block[size_of::<BackupHeader>()..].copy_from_slice(backup_ct.as_ref());
         self.spinor.patch(
             self.kernel(),
             self.kernel_base(),
-            header.as_ref(),
-            xous::BACKUP_OFFSET
+            &block,
+            xous::KERNEL_BACKUP_OFFSET
         ).map_err(|_| xous::Error::InternalError)?;
-
-        self.spinor.patch(
-            self.kernel(),
-            self.kernel_base(),
-            backup_ct.as_ref(),
-            xous::BACKUP_OFFSET + size_of::<backups::BackupHeader>() as u32
-        ).map_err(|_| xous::Error::InternalError)?;
-
         Ok(())
+    }
+    pub fn read_backup(&mut self) -> Result<(BackupHeader, backups::BackupDataCt), xous::Error> {
+        let mut header = BackupHeader::default();
+        let mut ct = backups::BackupDataCt::default();
+        header.as_mut().copy_from_slice(
+            &self.kernel()[
+                xous::KERNEL_BACKUP_OFFSET as usize ..
+                xous::KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()
+        ]);
+        ct.as_mut().copy_from_slice(
+        &self.kernel()[
+            xous::KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()..
+            xous::KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()
+        ]);
+        Ok((header, ct))
+    }
+    pub fn erase_backup(&mut self) {
+        let blank = [0xffu8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()];
+        self.spinor.patch(
+            self.kernel(),
+            self.kernel_base(),
+            &blank,
+            xous::KERNEL_BACKUP_OFFSET
+        ).expect("couldn't erase backup region");
     }
 }

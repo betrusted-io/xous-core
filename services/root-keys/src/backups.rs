@@ -5,8 +5,8 @@ use aes_gcm_siv::{AesGcmSiv, Nonce, Key, Tag};
 use aes_gcm_siv::aead::{Aead, NewAead, Payload};
 use aes::Aes256;
 use subtle::ConstantTimeEq;
+use crate::{BackupHeader, BackupOp};
 
-pub const BACKUP_VERSION: u32 = 0x00_01_00_00;
 const BACKUP_AAD: &'static str = "PDDB backup v0.1.0";
 
 #[derive(Zeroize, Default)]
@@ -19,61 +19,6 @@ pub(crate) struct KeyRomExport(pub [u32; 256]);
 impl Default for KeyRomExport {
     fn default() -> Self {
         KeyRomExport([0u32; 256])
-    }
-}
-
-#[repr(u32)]
-#[derive(Copy, Clone)]
-pub enum BackupOp {
-    /// backup and restore can be manipulated by the OS without updating the ciphertext
-    Backup,
-    Restore,
-    /// This is the value that's kept inside the BackupDataPt
-    Archive,
-}
-
-#[repr(C, align(8))]
-#[derive(Copy, Clone)]
-pub struct BackupHeader {
-    pub version: u32,
-    // the `ver`s are all serialized SemVers. To be done by the caller.
-    pub xous_ver: [u8; 16],
-    pub soc_ver: [u8; 16],
-    pub ec_ver: [u8; 16],
-    pub wf200_ver: [u8; 16],
-    pub timestamp: u64,
-    pub _reserved: [u8; 64],
-    pub op: BackupOp,
-}
-impl Default for BackupHeader {
-    fn default() -> Self {
-        BackupHeader {
-            version: BACKUP_VERSION,
-            xous_ver: [0u8; 16],
-            soc_ver: [0u8; 16],
-            ec_ver: [0u8; 16],
-            wf200_ver: [0u8; 16],
-            timestamp: 0,
-            _reserved: [0u8; 64],
-            op: BackupOp::Archive,
-        }
-    }
-}
-impl Deref for BackupHeader {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        unsafe {
-            core::slice::from_raw_parts(self as *const BackupHeader as *const u8, size_of::<BackupHeader>())
-                as &[u8]
-        }
-    }
-}
-impl DerefMut for BackupHeader {
-    fn deref_mut(&mut self) -> &mut [u8] {
-        unsafe {
-            core::slice::from_raw_parts_mut(self as *mut BackupHeader as *mut u8, size_of::<BackupHeader>())
-                as &mut [u8]
-        }
     }
 }
 
@@ -231,8 +176,8 @@ pub(crate) fn create_backup(
 /// It is up to the caller to validate if the plaintext header matches the decrypted
 /// version embedded in the return data.
 pub(crate) fn restore_backup(
-    key: BackupKey,
-    backup: BackupDataCt
+    key: &BackupKey,
+    backup: &BackupDataCt
 ) -> Option<BackupDataPt> {
     let (kenc, kcom) = kcom_func(&key.0, &backup.commit_nonce);
     let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&kenc.0));

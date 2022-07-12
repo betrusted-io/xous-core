@@ -17,6 +17,42 @@
         "zh": "密码错误。 中止备份！",
         "en-tts": "Password incorrect. Aborting backup!"
     },
+    "rootkeys.restore_badpass": {
+        "en": "BIP-39 entry was not valid. Aborting restore!",
+        "ja": "BIP-39エントリが無効でした。 復元を中止します！",
+        "zh": "BIP-39 条目无效。 中止恢复！",
+        "en-tts": "BIP-39 entry was not valid. Aborting restore!"
+    },
+    "rootkeys.restore_abort": {
+        "en": "Aborting restore!",
+        "ja": "復元を中止します！",
+        "zh": "中止恢复！",
+        "en-tts": "Aborting restore!"
+    },
+    "rootkeys.restore_zero_key": {
+        "en": "Note: your backup was encrypted with the '0' key. Skipping password entry.\nThis is normal for developers.\n\nUsers should burn BBRAM or eFuse key for secure backups!",
+        "ja": "注：バックアップは「0」キーで暗号化されています。 パスワード入力をスキップします。\n\n安全なバックアップのためにBBRAMまたはeFuseキーを焼きます！",
+        "zh": "注意：您的备份是使用“0”密钥加密的。 跳过密码输入。\n\n刻录 BBRAM 或 eFuse 密钥以进行安全备份！",
+        "en-tts": "Note: your backup was encrypted with the '0' key. Skipping password entry.\n\nBurn BBRAM or eFuse key for secure backups!"
+    },
+    "rootkeys.restore_needs_keyburn": {
+        "en": "Note: Restoring to a device that booted from a 'Zero Key'.\n\nAfter the restore, you will need to set a brand new backup key. Until then, your backup key will be the insecure Zero Key!",
+        "ja": "注：ゼロキーから起動したデバイスに復元します。\n\n復元後、新しいバックアップキーを設定する必要があります。 それまでは、バックアップキーは0キーになります。",
+        "zh": "注意：还原到从零密钥启动的设备。\n\n还原后，您需要设置一个全新的备份密钥。 在那之前，您的备份密钥将是 0 密钥！",
+        "en-tts": "Note: Restoring to a device that booted from a zero key.\n\nAfter the restore, you will need to set a brand new backup key. Until then, your backup key will be the 0 key!"
+    },
+    "rootkeys.restore_corrupt": {
+        "en": "Restore record is corrupted. Aborting restore!",
+        "ja": "復元レコードが破損しています。 復元を中止します！",
+        "zh": "还原记录已损坏。 中止恢复！",
+        "en-tts": "Restore record is corrupted. Aborting restore!"
+    },
+    "rootkeys.restore_already_init": {
+        "en": "Device has already been initialized. A restore will overwrite all data, and potentially fail if your device is locked to a different backup key.\n\nProceed?",
+        "ja": "デバイスはすでに初期化されています。 復元するとすべてのデータが上書きされ、デバイスが別のバックアップキーにロックされていると失敗する可能性があります。\n \n続行しますか？",
+        "zh": "设备已经初始化。 还原将覆盖所有数据，如果您的设备被锁定到不同的备份密钥，则可能会失败。\n\n是否继续？",
+        "en-tts": "Device has already been initialized. A restore will overwrite all data, and potentially fail if your device is locked to a different backup key.\n\nProceed?"
+    },
     "rootkeys.backup_key_enter": {
         "en": "Please enter your backup key now:",
         "ja": "今すぐバックアップキーを入力してください：",
@@ -36,7 +72,7 @@
         "en-tts": "Backup key did not match. This is your backup key, again:"
     },
     "rootkeys.backup_staged": {
-        "en": "Backup data is prepared. You may now connect to a host computer and download the backup data bundle.",
+        "en": "Backup data is prepared.\nConnect to a host computer by USB, and download the backup data bundle.\nScan the QR code for instructions:",
         "ja": "バックアップデータを用意します。 これで、ホストコンピューターに接続して、バックアップデータバンドルをダウンロードできます。",
         "zh": "备份数据已准备好。 您现在可以连接到主机并下载备份数据包。",
         "en-tts": "Backup data is prepared. You may now connect to a host computer and download the backup data bundle."
@@ -112,6 +148,12 @@
         "ja": "カーネルへを署名中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "签名内核 可能还要等一下 不要重置或睡眠! ",
         "en-tts": "Signing kernel. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.signing_gateware": {
+        "en": "Signing gateware. This takes a few minutes. Do not reset or sleep!",
+        "ja": "ゲートウェアへを署名中です。これには数分かかります。リセットやスリープはしないでください。",
+        "zh": "备份比特流 可能还要等一下 不要重置或睡眠! ",
+        "en-tts": "Signing gateware. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.backup_gateware": {
         "en": "Backing up gateware. This takes a few minutes. Do not reset or sleep!",
@@ -262,6 +304,12 @@
         "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。これにより、バックアップの作成が許可されます。",
         "zh": "⚠ 关键密码请求⚠\n输入“系统更新”密码。 这将授权创建备份。",
         "en-tts": "Enter update password, in order to authorize a backup."
+    },
+    "rootkeys.get_update_password_restore": {
+        "en": "⚠ Critical password request ⚠\nEnter the 'SYSTEM UPDATE' passphrase. This authorizes a restore to proceed.",
+        "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。これにより、バックアップの作成が許可されます。",
+        "zh": "⚠ 关键密码请求⚠\n输入“系统更新”密码。 这将授权创建备份。",
+        "en-tts": "Enter update password, in order to authorize a restore to proceed."
     },
     "rootkeys.gwup.finished": {
         "en": "Gateware update finished.\n\nReboot by inserting a paperclip into the small hole on the lower right at your earliest convenience.",

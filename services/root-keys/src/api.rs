@@ -1,3 +1,6 @@
+use core::ops::{Deref, DerefMut};
+use core::mem::size_of;
+
 pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manager_";
 #[allow(dead_code)]
 pub(crate) const SIG_VERSION: u32 = 1;
@@ -87,9 +90,13 @@ pub(crate) enum Opcode {
     UxCreateBackupPwReturn = 40,
     /// Query if a backup exists to be restored
     ShouldRestore = 41,
-    UxShouldRestorePwReturn = 42,
     /// Perform the restore operation (including UX to acquire the AES key)
-    DoRestore = 43,
+    DoRestore = 42,
+    UxDoRestorePwReturn = 43,
+    /// A check to see if the zero-key was used on boot
+    IsZeroKey = 44,
+    /// Erase the backup block
+    EraseBackupBlock = 45,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
@@ -204,7 +211,6 @@ impl Error for KeywrapError {}
 
 use std::fmt;
 
-use crate::backups;
 impl fmt::Display for KeywrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
@@ -236,10 +242,67 @@ pub (crate) struct KeyWrapper {
 // BackupHeader and not the header itself.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub (crate) struct BackupHeaderIpc {
-    pub data: Option<[u8; core::mem::size_of::<backups::BackupHeader>()]>,
+    pub data: Option<[u8; core::mem::size_of::<BackupHeader>()]>,
 }
 impl Default for BackupHeaderIpc {
     fn default() -> Self {
-        BackupHeaderIpc { data: None::<[u8; core::mem::size_of::<backups::BackupHeader>()]> }
+        BackupHeaderIpc { data: None::<[u8; core::mem::size_of::<BackupHeader>()]> }
+    }
+}
+
+pub const BACKUP_VERSION: u32 = 0x00_01_00_00;
+
+#[repr(u32)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum BackupOp {
+    /// This is the value that's kept inside the BackupDataPt
+    Archive = 0,
+    /// backup and restore can be manipulated by the OS without updating the ciphertext
+    Backup = 1,
+    Restore = 2,
+}
+
+#[repr(C, align(8))]
+#[derive(Copy, Clone, Debug)]
+pub struct BackupHeader {
+    pub version: u32,
+    // the `ver`s are all serialized SemVers. To be done by the caller.
+    pub xous_ver: [u8; 16],
+    pub soc_ver: [u8; 16],
+    pub ec_ver: [u8; 16],
+    pub wf200_ver: [u8; 16],
+    pub timestamp: u64,
+    pub _reserved: [u8; 64],
+    pub op: BackupOp,
+}
+impl Default for BackupHeader {
+    fn default() -> Self {
+        BackupHeader {
+            version: BACKUP_VERSION,
+            xous_ver: [0u8; 16],
+            soc_ver: [0u8; 16],
+            ec_ver: [0u8; 16],
+            wf200_ver: [0u8; 16],
+            timestamp: 0,
+            _reserved: [0u8; 64],
+            op: BackupOp::Archive,
+        }
+    }
+}
+impl Deref for BackupHeader {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const BackupHeader as *const u8, size_of::<BackupHeader>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for BackupHeader {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut BackupHeader as *mut u8, size_of::<BackupHeader>())
+                as &mut [u8]
+        }
     }
 }
