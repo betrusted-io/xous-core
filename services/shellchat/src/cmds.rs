@@ -190,8 +190,8 @@ impl CmdEnv {
         log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);
         let ec_ver = common.com.get_ec_sw_tag().unwrap();
         log::info!("EC sw tag: {}", ec_ver.to_string());
-        let (maj, min, rev) = common.com.get_wf200_fw_rev().unwrap();
-        log::info!("WF200 fw rev {}.{}.{}", maj, min, rev);
+        let wf_ver = common.com.get_wf200_fw_rev().unwrap();
+        log::info!("WF200 fw rev {}.{}.{}", wf_ver.maj, wf_ver.min, wf_ver.rev);
 
 
         CmdEnv {

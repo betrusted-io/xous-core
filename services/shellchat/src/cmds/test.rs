@@ -181,8 +181,8 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     let (x, y, z, id) = env.com.gyro_read_blocking().unwrap();
                     log::info!("{}|GYRO|{}|{}|{}|{}|", SENTINEL, x, y, z, id);
-                    let (wf_maj, wf_min, wf_rev) = env.com.get_wf200_fw_rev().unwrap();
-                    log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_maj, wf_min, wf_rev);
+                    let wf_rev = env.com.get_wf200_fw_rev().unwrap();
+                    log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_rev.maj, wf_rev.min, wf_rev.rev);
                     let (ec_rev, ec_dirty) =  env.com.get_ec_git_rev().unwrap();
                     log::info!("{}|ECREV|{:x}|{:?}|", SENTINEL, ec_rev, ec_dirty);
                     let morestats = env.com.get_more_stats().unwrap();

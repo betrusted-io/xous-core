@@ -27,8 +27,8 @@ impl<'a> ShellCmdApi<'a> for Ver {
                     write!(ret, "EC sw tag: {}", ec_ver.to_string()).unwrap();
                 }
                 "wf200" => {
-                    let (maj, min, rev) = env.com.get_wf200_fw_rev().unwrap();
-                    write!(ret, "Wf200 fw rev {}.{}.{}", maj, min, rev).unwrap();
+                    let wf_ver = env.com.get_wf200_fw_rev().unwrap();
+                    write!(ret, "Wf200 fw rev {}.{}.{}", wf_ver.maj, wf_ver.min, wf_ver.rev).unwrap();
                 }
                 "soc" => {
                     let soc_rev = env.llio.soc_gitrev().unwrap();
