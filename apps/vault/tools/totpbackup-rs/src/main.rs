@@ -72,7 +72,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut precursor: Option<&hidapi::DeviceInfo> = None;
     for i in dl {
-        println!("{:x?}", i);
         if i.product_id() == PRECURSOR_PRODUCT_ID && i.vendor_id() == PRECURSOR_VENDOR_ID {
             precursor = Some(i);
             break;
@@ -86,7 +85,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let device = ctaphid::Device::connect(&ha, precursor.unwrap())?;
 
     match argument {
-        CLIAction::Backup(_) => todo!(),
+        CLIAction::Backup(path) => {
+            let bd = device.vendor_command(ctaphid::command::VendorCommand::H42, &vec![])?;
+
+            let json = unmarshal_backup_data(bd)?;
+
+            std::fs::write(path, json)?;
+
+            Ok(())
+        },
         CLIAction::Restore(path) => {
             let hbf = read_human_backup_file(&path)?;
             let vcres = device.vendor_command(ctaphid::command::VendorCommand::H41, &hbf)?;
@@ -106,4 +113,12 @@ fn read_human_backup_file(path: &str) -> Result<Vec<u8>, Box<dyn Error>> {
     let backup_json: backup::TotpEntries = serde_json::from_reader(f)?;
 
     Ok(backup_json.bytes())
+}
+
+fn unmarshal_backup_data(data: Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
+    let raw_cbor = cbor::read(&data).unwrap();
+
+    let data: backup::TotpEntries = raw_cbor.try_into()?;
+
+    Ok(serde_json::ser::to_vec(&data).unwrap())
 }
