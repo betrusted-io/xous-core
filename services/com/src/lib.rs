@@ -110,11 +110,19 @@ impl Com {
         }
     }
 
-    pub fn get_wf200_fw_rev(&self) -> Result<(u8, u8, u8), xous::Error> {
+    pub fn get_wf200_fw_rev(&self) -> Result<SemVer, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::Wf200Rev.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar1(rev) = response {
-            Ok(((rev >> 16) as u8, (rev >> 8) as u8, rev as u8))
+            Ok(
+                SemVer {
+                    maj: ((rev >> 16) & 0xFF) as u16,
+                    min: ((rev >> 8) & 0xFF) as u16,
+                    rev: (rev & 0xFF) as u16,
+                    extra: 0,
+                    commit: None
+                }
+            )
         } else {
             panic!("unexpected return value: {:#?}", response);
         }
