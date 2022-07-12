@@ -249,6 +249,8 @@ mod implementation {
         // write 0 into the register to clear it
         spinor.csr.wfo(utra::spinor::WDATA_WDATA, 0);
         flash_wrcr2(&mut spinor.csr, 0x800);
+        spinor.csr.wfo(utra::spinor::WDATA_WDATA, 0);
+        flash_wrcr2(&mut spinor.csr, 0x0400_0800);
 
         xous::try_send_message(spinor.handler_conn,
             xous::Message::new_scalar(Opcode::EccError.to_usize().unwrap(),
