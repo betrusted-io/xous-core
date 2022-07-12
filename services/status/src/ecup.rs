@@ -73,19 +73,23 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    let ec_package = xous::syscall::map_memory(
+    let mut ec_package = xous::syscall::map_memory(
         None,
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    let wf_package = xous::syscall::map_memory(
+    for d in ec_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF } // simulate blank flash
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let mut wf_package = xous::syscall::map_memory(
         None,
         None,
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    for d in wf_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF }
 
     loop {
         let msg = xous::receive_message(sid).unwrap();
@@ -188,6 +192,10 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
                 // the semver *could* be bogus at this point, but we'll validate the package (which contains the semver) before we use it.
                 // however, this check is much less computationally expensive than the package validation.
                 let length = u32::from_le_bytes(package[0x28..0x2c].try_into().unwrap());
+                if length == 0xffff_ffff { // nothing was staged at all
+                    xous::return_scalar(msg.sender, UpdateResult::PackageInvalid.to_usize().unwrap()).unwrap();
+                    continue;
+                }
                 let semver_bytes = &package[0x1000 + length as usize - SEMVER_OFFSET..0x1000 + length as usize - SEMVER_OFFSET + SEMVER_LEN];
                 let pkg_ver = SemVer::from(&semver_bytes[..16].try_into().unwrap());
                 if pkg_ver > ec_reported_rev {

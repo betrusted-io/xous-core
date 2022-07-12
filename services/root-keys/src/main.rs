@@ -48,6 +48,12 @@ pub enum GatewareRegion {
     Staging,
 }
 
+#[derive(Eq, PartialEq)]
+pub(crate) enum UpdateType {
+    Regular,
+    BbramProvision,
+    Restore,
+}
 
 /// An "easily" parseable metadata structure in flash. There's nothing that guarantees the authenticity
 /// of the metadata in and of itself, other than the digital signature that wraps the entire gateware record.
@@ -101,6 +107,8 @@ mod implementation {
     use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
     use std::convert::TryInto;
     use crate::UpdateType;
+    use xous_semver::SemVer;
+    use crate::backups;
 
     #[derive(Debug, Copy, Clone)]
     #[allow(dead_code)]
@@ -135,6 +143,7 @@ mod implementation {
         }
         pub fn resume(&self) {
         }
+        pub fn pddb_recycle(&self) {}
 
         pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>) {
             log::info!("policy updated: {:?}", policy);
@@ -333,6 +342,24 @@ mod implementation {
         }
         pub fn should_prompt_for_update(&self) -> bool {true}
         pub fn set_prompt_for_update(&self, _state: bool) {}
+        pub fn write_backup(&mut self, header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+            log::info!("backup header: {:?}", header);
+            log::info!("backup ciphertext: {:x?}", backup_ct.as_ref());
+            Ok(())
+        }
+        pub fn read_backup(&mut self) -> Result<(BackupHeader, backups::BackupDataCt), xous::Error> {
+            Err(xous::Error::InternalError)
+        }
+        pub fn erase_backup(&mut self) {}
+        pub fn read_backup_header(&mut self) -> Option<BackupHeader> {
+            None
+        }
+        pub fn get_backup_key(&mut self) -> Option<(backups::BackupKey, backups::KeyRomExport)> {
+            None
+        }
+        pub fn is_zero_key(&self) -> Option<bool> { Some(true) }
+        pub fn setup_restore_init(&mut self, _key: backups::BackupKey, _rom: backups::KeyRomExport) {
+        }
     }
 }
 

@@ -254,6 +254,7 @@ pub const BACKUP_VERSION: u32 = 0x00_01_00_00;
 
 #[repr(u32)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[allow(dead_code)]
 pub enum BackupOp {
     /// This is the value that's kept inside the BackupDataPt
     Archive = 0,

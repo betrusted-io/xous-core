@@ -31,7 +31,7 @@ use aes::Aes256;
 use aes::cipher::{KeyInit, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 
-use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
+use crate::{SignatureResult, GatewareRegion, MetadataInFlash, UpdateType};
 
 use root_keys::key2bits::*;
 
@@ -70,13 +70,6 @@ struct PasswordCache {
     hashed_update_pw_valid: u32,
     fpga_key: [u8; 32],
     fpga_key_valid: u32,
-}
-
-#[derive(Eq, PartialEq)]
-pub(crate) enum UpdateType {
-    Regular,
-    BbramProvision,
-    Restore,
 }
 
 #[repr(C)]
