@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use cbor::{self, cbor_array_vec, cbor_key_int, cbor_map, cbor_unsigned, destructure_cbor_map};
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +8,17 @@ pub enum CborConversionError {
     BadCbor,
     UnknownAlgorithm(u64),
 }
+
+impl Display for CborConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CborConversionError::BadCbor => write!(f, "bad cbor"),
+            CborConversionError::UnknownAlgorithm(algo) => write!(f, "unknown algorithm {}", algo),
+        }
+    }
+}
+
+impl std::error::Error for CborConversionError {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HashAlgorithms {
