@@ -67,7 +67,7 @@ impl Bip39Entry {
 const NUM_RECCOS: i16 = 5;
 const AESTHETIC_GAP: i16 = 5;
 const STYLE_OVERRIDE: GlyphStyle = GlyphStyle::Bold;
-const ACCEPTED_WORD_LINES: i16 = 4;
+const ACCEPTED_WORD_LINES: i16 = 5; // all 0's key requires 5 lines (abandon abandon abandon....art)
 const STATUS_LINES: i16 = 3;
 
 impl ActionApi for Bip39Entry {
