@@ -84,6 +84,12 @@
         "zh": "请挂载 PDDB 并重试。",
         "en-tts": "Please mount the PDDB and try again."
     },
+    "secnote.zero_key": {
+        "en": " FPGA key (aka 'Backup Key') is zero",
+        "ja": "FPGAキーはゼロです",
+        "zh": "FPGA 密钥为零",
+        "en-tts": "FPGA key is zero"
+    },
     "secnote.usb_unlock": {
         "en": " USB unlocked",
         "ja": "USBロック解除",
@@ -209,6 +215,12 @@
         "ja": "リブート",
         "zh": "重启",
         "en-tts": "Reboot"
+    },
+    "mainmenu.prep_backup": {
+        "en": "Prepare for backup...",
+        "ja": "バックアップの準備...",
+        "zh": "准备备份...",
+        "en-tts": "Prepare for backup..."
     },
     "mainmenu.closemenu": {
         "en": "Close menu",

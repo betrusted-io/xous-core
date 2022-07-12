@@ -12,6 +12,7 @@ mod time;
 mod ecup;
 
 use com::api::*;
+use root_keys::api::BackupOp;
 use core::fmt::Write;
 use num_traits::*;
 use xous::{msg_scalar_unpack, send_message, Message, CID};
@@ -34,6 +35,12 @@ use std::thread;
 
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 const SERVER_NAME_STATUS: &str = "_Status_";
+/// How long a backup header should persist before it is automatically deleted.
+/// The interval is picked to be long enough for a user to have ample time to get the backup,
+/// (even with multiple retries due to e.g. some hardware problem or logistical issue)
+/// but not so long that we're likely to have expired compatibility revision data
+/// in the header metadata. Initially, it's set at one day until it is automatically deleted.
+const BACKUP_EXPIRATION_HOURS: i64 = 24;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum StatusOpcode {
@@ -58,6 +65,9 @@ pub(crate) enum StatusOpcode {
 
     /// Set the keyboard map
     SetKeyboard,
+
+    /// Prepare for a backup
+    PrepareBackup,
 
     /// Tells keyboard watching thread that a new keypress happened.
     Keypress,
@@ -337,24 +347,61 @@ fn wrapped_main() -> ! {
         root_keys::RootKeys::new(&xns, None)
             .expect("couldn't connect to root_keys to query initialization state"),
     ));
-    let staged_sv = keys.lock().unwrap().staged_semver().ok();
+
+    // check for backups after EC updates, but before we check for gateware updates
+    let mut backup_time: Option<DateTime::<Utc>> = None;
+    let mut restore_running = false;
+    match keys.lock().unwrap().get_restore_header() {
+        Ok(Some(header)) => {
+            match header.op {
+                BackupOp::Restore => {
+                    keys.lock().unwrap().do_restore_backup_ux_flow();
+                    restore_running = true;
+                }
+                BackupOp::Backup => {
+                    // once we have unlocked the PDDB and know our timezone, we'll compare the embedded timestamp to
+                    // our current time, and delete the backup if it's too old.
+                    backup_time = Some(
+                        chrono::DateTime::<Utc>::from_utc(
+                            NaiveDateTime::from_timestamp(header.timestamp as i64, 0),
+                            chrono::offset::Utc
+                        )
+                    );
+                }
+                _ => log::warn!("backup record was found, but it has an improper operation field: {:?}", header.op),
+            }
+        }
+        _ => {}, // no backup header found, continue with boot
+    }
+
+    // check for gateware updates
+    let staged_sv = match keys.lock().unwrap().staged_semver() {
+        Ok(sv) => {
+            log::info!("Stage gateware version: {:?}", sv);
+            Some(sv)
+        },
+        Err(xous::Error::InvalidString) => {log::info!("No staged gateware found; metadata is blank"); None},
+        _ => {log::error!("Internal error reading staged gateware semantic version"); None},
+    };
     if !keys.lock().unwrap().is_initialized().unwrap() {
         sec_notes.lock().unwrap().insert(
             "secnotes.no_keys".to_string(),
             t!("secnote.no_keys", xous::LANG).to_string(),
         );
-        if let Some(staged) = staged_sv {
-            let soc = llio.soc_gitrev().expect("error querying SoC gitrev; this is fatal");
-            if staged > soc { // we have a staged update, and no root keys. Just try to do the update.
-                if keys.lock().unwrap().try_nokey_soc_update() {
-                    log::info!("No-touch SoC update successful");
-                    soc_updated = true;
-                } else {
-                    log::info!("No-touch SoC update was called, but then aborted");
+        if !restore_running {
+            if let Some(staged) = staged_sv {
+                let soc = llio.soc_gitrev().expect("error querying SoC gitrev; this is fatal");
+                if staged > soc { // we have a staged update, and no root keys. Just try to do the update.
+                    if keys.lock().unwrap().try_nokey_soc_update() {
+                        log::info!("No-touch SoC update successful");
+                        soc_updated = true;
+                    } else {
+                        log::info!("No-touch SoC update was called, but then aborted");
+                    }
                 }
             }
         }
-    } else {
+    } else if !restore_running {
         log::info!("checking gateware signature...");
         thread::spawn({
             let clone = Arc::clone(&sec_notes);
@@ -481,6 +528,21 @@ fn wrapped_main() -> ! {
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
 
     // ---------------------- final cleanup before entering main loop
+    // add a security note if we're booting with a "zero key"
+    match keys.lock().unwrap().is_zero_key().expect("couldn't query zero key status") {
+        Some(q) => match q {
+            true => {
+                sec_notes.lock().unwrap().insert(
+                    "secnote.zero_key".to_string(),
+                    t!("secnote.zero_key", xous::LANG).to_string(),
+                );
+            },
+            false => {},
+        }
+        None => {
+            {} // could be bbram, could be an error. could be keys are secured and disabled for readout. could be disabled-readout zero keys!
+        }
+    }
     #[cfg(any(target_os = "none", target_os = "xous"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
 
@@ -741,6 +803,13 @@ fn wrapped_main() -> ! {
                             timestr
                         )
                         .unwrap();
+                        if let Some(bt) = backup_time {
+                            let since_backup = dt.signed_duration_since(bt);
+                            if since_backup.num_hours().abs() > BACKUP_EXPIRATION_HOURS {
+                                keys.lock().unwrap().do_erase_backup();
+                                backup_time = None;
+                            }
+                        }
                     } else {
                         if pddb_poller.is_mounted_nonblocking() {
                             write!(
@@ -898,7 +967,16 @@ fn wrapped_main() -> ! {
                 *run_lock = false;
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
-
+            Some(StatusOpcode::PrepareBackup) => {
+                let mut metadata = root_keys::api::BackupHeader::default();
+                metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);
+                metadata.xous_ver = ticktimer.get_version_semver().into();
+                metadata.soc_ver = llio.soc_gitrev().unwrap().into();
+                metadata.wf200_ver = com.get_wf200_fw_rev().unwrap().into();
+                metadata.ec_ver = com.get_ec_sw_tag().unwrap().into();
+                metadata.op = BackupOp::Backup;
+                keys.lock().unwrap().do_create_backup_ux_flow(metadata);
+            }
             Some(StatusOpcode::Quit) => {
                 break;
             }
