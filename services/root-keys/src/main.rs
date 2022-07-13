@@ -360,6 +360,8 @@ mod implementation {
         pub fn is_zero_key(&self) -> Option<bool> { Some(true) }
         pub fn setup_restore_init(&mut self, _key: backups::BackupKey, _rom: backups::KeyRomExport) {
         }
+        pub fn is_dont_ask_set(&self) -> bool {false}
+        pub fn set_dont_ask(&self) {}
     }
 }
 
@@ -464,6 +466,7 @@ fn main() -> ! {
     let mut reboot_initiated = false;
     let mut aes_sender: Option<xous::MessageSender> = None;
     let mut backup_header: Option<BackupHeader> = None;
+    let mut deferred_response: Option<xous::MessageSender> = None;
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
@@ -507,6 +510,12 @@ fn main() -> ! {
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
+                match msg.body {
+                    xous::Message::BlockingScalar(_) => {
+                        deferred_response = Some(msg.sender);
+                    }
+                    _ => (),
+                }
                 if false { // short-circuit for testing subroutines
                     let _success = keys.test(&mut rootkeys_modal, main_cid);
 
@@ -515,7 +524,9 @@ fn main() -> ! {
                     send_message(main_cid,
                         xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
                     ).expect("couldn't initiate dialog box");
-
+                    if let Some(dr) = deferred_response.take() {
+                        xous::return_scalar(dr, 0).unwrap();
+                    }
                     continue;
                 } else {
                     // overall flow:
@@ -538,17 +549,35 @@ fn main() -> ! {
                         #[cfg(feature="tts")]
                         tts.tts_blocking(t!("rootkeys.already_init", xous::LANG)).unwrap();
                         keys.set_ux_password_type(None);
+                        if let Some(dr) = deferred_response.take() {
+                            xous::return_scalar(dr, 0).unwrap();
+                        }
                         continue;
                     } else {
                         modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
                         modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
+                        if deferred_response.is_some() {
+                            modals.add_list_item(t!("rootkeys.confirm.dont_ask", xous::LANG)).expect("modals error");
+                        }
                         log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         match modals.get_radiobutton(t!("rootkeys.confirm", xous::LANG)) {
                             Ok(response) => {
                                 if response == t!("rootkeys.confirm.no", xous::LANG) {
+                                    if let Some(dr) = deferred_response.take() {
+                                        xous::return_scalar(dr, 0).unwrap();
+                                    }
+                                    continue;
+                                } else if response == t!("rootkeys.confirm.dont_ask", xous::LANG) {
+                                    keys.set_dont_ask_init();
+                                    if let Some(dr) = deferred_response.take() {
+                                        xous::return_scalar(dr, 0).unwrap();
+                                    }
                                     continue;
                                 } else if response != t!("rootkeys.confirm.yes", xous::LANG) {
                                     log::error!("Got unexpected response: {:?}", response);
+                                    if let Some(dr) = deferred_response.take() {
+                                        xous::return_scalar(dr, 0).unwrap();
+                                    }
                                     continue;
                                 } else {
                                     // do nothing, this is the forward path
@@ -641,6 +670,9 @@ fn main() -> ! {
                     Err(RootkeyResult::StateError) => {
                         modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
                     }
+                }
+                if let Some(dr) = deferred_response.take() {
+                    xous::return_scalar(dr, 0).unwrap();
                 }
             },
             Some(Opcode::UxTryReboot) => {
@@ -741,6 +773,12 @@ fn main() -> ! {
                 }
             }
             Some(Opcode::UxUpdateGateware) => {
+                match msg.body {
+                    xous::Message::BlockingScalar(_) => {
+                        deferred_response = Some(msg.sender);
+                    }
+                    _ => (),
+                }
                 // steps:
                 //  - check update signature "Inspecting gateware update, this will take a moment..."
                 //  - if no signature found: "No valid update found! (ok -> exit out)"
@@ -757,6 +795,9 @@ fn main() -> ! {
                     _ => {
                         modals.dynamic_notification_close().expect("modals error");
                         modals.show_notification(t!("rootkeys.gwup.no_update_found", xous::LANG), None).expect("modals error");
+                        if let Some(dr) = deferred_response.take() {
+                            xous::return_scalar(dr, 0).unwrap();
+                        }
                         continue;
                     }
                 };
@@ -803,7 +844,13 @@ fn main() -> ! {
                             skip_confirmation = true;
                         }
                     }
-                    _ => {log::error!("get_radiobutton failed"); continue;}
+                    _ => {
+                        log::error!("get_radiobutton failed");
+                        if let Some(dr) = deferred_response.take() {
+                            xous::return_scalar(dr, 0).unwrap();
+                        }
+                        continue;
+                    }
                 }
                 if !skip_confirmation {
                     modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("modals error");
@@ -811,9 +858,15 @@ fn main() -> ! {
                     match modals.get_radiobutton(t!("rootkeys.gwup.proceed_confirm", xous::LANG)) {
                         Ok(response) => {
                             if response == t!("rootkeys.gwup.no", xous::LANG) {
+                                if let Some(dr) = deferred_response.take() {
+                                    xous::return_scalar(dr, 0).unwrap();
+                                }
                                 continue;
                             } if response != t!("rootkeys.gwup.yes", xous::LANG) {
                                 log::error!("got unexpected response from radio box: {:?}", response);
+                                if let Some(dr) = deferred_response.take() {
+                                    xous::return_scalar(dr, 0).unwrap();
+                                }
                                 continue;
                             } else {
                                 // just proceed forward!
@@ -821,6 +874,9 @@ fn main() -> ! {
                         }
                         _ => {
                             log::error!("modals error, aborting");
+                            if let Some(dr) = deferred_response.take() {
+                                xous::return_scalar(dr, 0).unwrap();
+                            }
                             continue;
                         }
                     }
@@ -908,6 +964,9 @@ fn main() -> ! {
                     Err(RootkeyResult::StateError) => {
                         modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
                     }
+                }
+                if let Some(dr) = deferred_response.take() {
+                    xous::return_scalar(dr, 0).unwrap();
                 }
             }
             Some(Opcode::UxSelfSignXous) => {
@@ -1483,6 +1542,13 @@ fn main() -> ! {
                     }
                 } else {
                     xous::return_scalar2(msg.sender, 0, 0).ok();
+                }
+            }),
+            Some(Opcode::IsDontAskSet) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.is_dont_ask_init_set() {
+                    xous::return_scalar(msg.sender, 1).ok();
+                } else {
+                    xous::return_scalar(msg.sender, 0).ok();
                 }
             }),
             Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {

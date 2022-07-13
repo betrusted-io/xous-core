@@ -2499,13 +2499,16 @@ impl<'a> RootKeys {
         }
     }
     pub fn should_prompt_for_update(&mut self) -> bool {
-        let soc_region = self.gateware();
-        if u32::from_le_bytes(soc_region[soc_region.len() - 4..].try_into().unwrap()) == 0xFFFF_FFFF {
+        let soc_region = self.staging();
+        let status = u32::from_le_bytes(soc_region[soc_region.len() - 4..].try_into().unwrap());
+        log::info!("prompt for update: {:x?}", status);
+        if status == 0xFFFF_FFFF {
             true
         } else {
             false
         }
     }
+    /// the update prompt is reset every time you stage a new update
     pub fn set_prompt_for_update(&mut self, state: bool) {
         let patch_data = if state {
             [0xffu8; 4]
@@ -2513,11 +2516,28 @@ impl<'a> RootKeys {
             [0x0u8; 4]
         };
         self.spinor.patch(
+            self.staging(),
+            self.staging_base(),
+            &patch_data,
+            self.staging().len() as u32 - 4
+        ).expect("couldn't patch update prompt");
+    }
+    pub fn is_dont_ask_init_set(&mut self) -> bool {
+        let soc_region = self.gateware();
+        let status = u32::from_le_bytes(soc_region[soc_region.len() - 4..].try_into().unwrap());
+        log::info!("prompt for root key init: {:x?}", status);
+        // just check the first byte, although a full word is written for the flag
+        status != 0xffff_ffff
+    }
+    /// this is reset every time the gateware is updated. That's rather intentional, if someone
+    /// *is* updating their gateware and they haven't initialized root keys...maybe they should?
+    pub fn set_dont_ask_init(&mut self) {
+        self.spinor.patch(
             self.gateware(),
             self.gateware_base(),
-            &patch_data,
-            self.gateware().len() as u32 - 4
-        ).expect("couldn't patch update prompt");
+            &[0u8; 4],
+            self.gateware().len() as u32 - 4,
+        ).expect("couldn't erase backup region");
     }
     pub fn read_backup_header(&mut self) -> Option<BackupHeader> {
         let kernel = self.kernel();
