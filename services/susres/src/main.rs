@@ -615,7 +615,7 @@ fn main() -> ! {
                     }
                 },
                 Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
-                    //log::trace!("suspendready with token {}", token);
+                    log::debug!("SuspendReady with token {}", token);
                     if !suspend_requested {
                         log::error!("received a SuspendReady message when a suspend wasn't pending from token {}", token);
                         continue;
@@ -642,7 +642,7 @@ fn main() -> ! {
                     for sub in suspend_subscribers.iter() {
                         if sub.order == current_op_order {
                             if !sub.ready_to_suspend {
-                                log::trace!("  -> NOT READY: {}", sub.token);
+                                log::debug!("  -> NOT READY token: {}", sub.token);
                                 all_ready = false;
                                 break;
                             }
@@ -656,7 +656,7 @@ fn main() -> ! {
                         susres_hw.do_suspend(false);
 
                         // ---- power turns off ----
-                        // ---- time passes while we are asleep ----
+                        // ---- time passes while we are off. The FPGA is powered off; all registers are lost, but RAM is retained. ----
                         // ---- omg power came back! ---
 
                         // when do_suspend() returns, it means we've resumed
@@ -731,13 +731,12 @@ fn main() -> ! {
                 },
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {
-                        log::info!("suspend call has timed out, forcing a suspend");
                         // record which tokens had not reported in
                         for sub in suspend_subscribers.iter_mut() {
                             sub.failed_to_suspend = !sub.ready_to_suspend;
                         }
                         timeout_pending = false;
-                        log::warn!("Suspend timed out, forcing an unclean suspend");
+                        log::warn!("Suspend timed out, forcing an unclean suspend at stage {:?}", current_op_order);
                         for sub in suspend_subscribers.iter() {
                             if sub.order == current_op_order {
                                 if !sub.ready_to_suspend {
@@ -746,7 +745,7 @@ fn main() -> ! {
                                     // a list of PID->tokens. Tokens are assigned in the order that the registration happens
                                     // to the susres server. Empirically, this list is generally stable for every build,
                                     // and is guaranteed to be stable across a single cold boot.
-                                    log::warn!("  -> NOT READY: {}", sub.token);
+                                    log::warn!("  -> NOT READY TOKEN: {}", sub.token);
                                 }
                             }
                         }
