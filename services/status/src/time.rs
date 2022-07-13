@@ -190,7 +190,9 @@ pub fn start_time_server() {
                     break;
                 }
                 let msg = xous::receive_message(pub_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                let op: Option<TimeOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", op);
+                match op {
                     Some(TimeOp::PddbMountPoll) => {
                         tt.sleep_ms(330).unwrap();
                         if temp < 10 {

@@ -12,10 +12,10 @@ pub struct Trng {
 }
 impl Trng {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns
             .request_connection_blocking(api::SERVER_NAME_TRNG)
             .expect("Can't connect to TRNG server");
-        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         Ok(Trng {
             conn,
             error_sid: None,
