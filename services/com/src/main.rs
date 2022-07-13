@@ -425,8 +425,9 @@ fn main() -> ! {
     trace!("starting main loop");
     loop {
         let mut msg = xous::receive_message(com_sid).unwrap();
-        trace!("Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
                 com.txrx(0); // suppress interrupts on suspend
