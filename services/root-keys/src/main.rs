@@ -558,8 +558,10 @@ fn main() -> ! {
                         modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
                         if deferred_response.is_some() {
                             modals.add_list_item(t!("rootkeys.confirm.dont_ask", xous::LANG)).expect("modals error");
+                            log::info!("{}ROOTKEY.INITQ3,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        } else {
+                            log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         }
-                        log::info!("{}ROOTKEY.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                         match modals.get_radiobutton(t!("rootkeys.confirm", xous::LANG)) {
                             Ok(response) => {
                                 if response == t!("rootkeys.confirm.no", xous::LANG) {
