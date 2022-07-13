@@ -509,7 +509,7 @@ fn main() -> ! {
             }),
 
             // UX flow opcodes
-            Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
+            Some(Opcode::UxTryInitKeys) => {
                 match msg.body {
                     xous::Message::BlockingScalar(_) => {
                         deferred_response = Some(msg.sender);
@@ -602,7 +602,7 @@ fn main() -> ! {
                     log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
-            }),
+            },
             Some(Opcode::UxInitBootPasswordReturn) => {
                 // assume:
                 //   - setup_key_init has also been called (exactly once, before anything happens)
