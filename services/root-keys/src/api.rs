@@ -97,6 +97,8 @@ pub(crate) enum Opcode {
     IsZeroKey = 44,
     /// Erase the backup block
     EraseBackupBlock = 45,
+    /// Checks to see if "don't ask me about updates" is set
+    IsDontAskSet = 46,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]

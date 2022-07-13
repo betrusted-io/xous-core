@@ -291,10 +291,10 @@ impl Llio {
         if let xous::Result::Scalar2(val1, val2) = response {
             Ok(
                 SemVer {
-                    maj: (val1 >> 24) as u16,
-                    min: (val1 >> 16) as u16,
-                    rev: (val1 >> 8) as u16,
-                    extra: (val1 >> 0) as u16,
+                    maj: ((val1 >> 24) & 0xff) as u16,
+                    min: ((val1 >> 16) & 0xff) as u16,
+                    rev: ((val1 >> 8) & 0xff) as u16,
+                    extra: ((val1 >> 0) & 0xff) as u16,
                     commit: Some(val2 as u32),
                 }
             )

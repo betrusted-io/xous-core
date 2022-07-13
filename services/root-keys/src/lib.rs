@@ -101,6 +101,17 @@ impl RootKeys {
             Err(xous::Error::InternalError)
         }
     }
+    pub fn is_dont_ask_set(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsDontAskSet.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send IsDontAsk check message");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {return Ok(true)} else {return Ok(false)}
+        } else {
+            log::error!("unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
 
     pub fn do_update_gw_ux_flow(&self) {
         send_message(self.conn,
@@ -108,10 +119,16 @@ impl RootKeys {
             0, 0, 0, 0)
         ).expect("couldn't send message to root keys");
     }
+    pub fn do_update_gw_ux_flow_blocking(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::UxUpdateGateware.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
 
     pub fn do_init_keys_ux_flow(&self) {
         send_message(self.conn,
-            Message::new_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
+            Message::new_blocking_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
             0, 0, 0, 0)
         ).expect("couldn't send message to root keys");
     }

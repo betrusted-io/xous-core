@@ -294,7 +294,51 @@ fn wrapped_main() -> ! {
         );
     }
 
+    // --------------------------- spawn a time UX manager thread
+    let time_sid = xous::create_server().unwrap();
+    let time_cid = xous::connect(time_sid).unwrap();
+    time::start_time_ux(time_sid);
+    // this is used by the main loop to get the localtime to show on the status bar
+    let mut localtime = llio::LocalTime::new();
+
+    // ---------------------------- connect to the com & root keys server (prereq for menus)
+    let keys = Arc::new(Mutex::new(
+        root_keys::RootKeys::new(&xns, None)
+            .expect("couldn't connect to root_keys to query initialization state"),
+    ));
+    let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
+
+    // ---------------------------- build menus
+    // used to hide time when the PDDB is not mounted
+    let pddb_poller = pddb::PddbMountPoller::new();
+    // these menus stake a claim on some security-sensitive connections; occupy them upstream of trying to do an update
+    log::debug!("starting main menu thread");
+    let main_menu_sid = xous::create_server().unwrap();
+    let status_cid = xous::connect(status_sid).unwrap();
+    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
+    create_app_menu(xous::connect(status_sid).unwrap());
+    let kbd_mgr = xous::create_server().unwrap();
+    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
+    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+
+    // ---------------------------- Automatic backlight-related variables.
+    // must be upstream of the update check, because we need to occupy the keyboard
+    // server slot to prevent e.g. a keyboard logger from taking our passwords!
+    kbd.register_observer(
+        SERVER_NAME_STATUS,
+        StatusOpcode::Keypress.to_u32().unwrap() as usize,
+    );
+
+    let enabled = Arc::new(Mutex::new(false));
+    let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
+
+    let rx = Box::new(rx);
+
+    let thread_already_running = Arc::new(Mutex::new(false));
+    let thread_conn = xous::connect(status_sid).unwrap();
+
     // ------------------------ check firmware status and apply updates
+    // all security sensitive servers must be occupied at this point in time.
     // in debug mode, anyone could, in theory, connect to and trigger an EC update, given this permissive policy.
     #[cfg(feature="dbg-ecupdate")]
     let ecup_sid = xns.register_name("__ECUP server__", None).unwrap(); // do not change name, it is referred to in shellchat
@@ -343,11 +387,6 @@ fn wrapped_main() -> ! {
         unsafe{xous::disconnect(ecup_conn).ok()};
     }
 
-    let keys = Arc::new(Mutex::new(
-        root_keys::RootKeys::new(&xns, None)
-            .expect("couldn't connect to root_keys to query initialization state"),
-    ));
-
     // check for backups after EC updates, but before we check for gateware updates
     let mut backup_time: Option<DateTime::<Utc>> = None;
     let mut restore_running = false;
@@ -377,7 +416,7 @@ fn wrapped_main() -> ! {
     // check for gateware updates
     let staged_sv = match keys.lock().unwrap().staged_semver() {
         Ok(sv) => {
-            log::info!("Stage gateware version: {:?}", sv);
+            log::info!("Staged gateware version: {:?}", sv);
             Some(sv)
         },
         Err(xous::Error::InvalidString) => {log::info!("No staged gateware found; metadata is blank"); None},
@@ -399,6 +438,9 @@ fn wrapped_main() -> ! {
                         log::info!("No-touch SoC update was called, but then aborted");
                     }
                 }
+            }
+            if !keys.lock().unwrap().is_dont_ask_set().unwrap_or(false) {
+                keys.lock().unwrap().do_init_keys_ux_flow();
             }
         }
     } else if !restore_running {
@@ -440,7 +482,7 @@ fn wrapped_main() -> ! {
                     match modals.get_radiobutton(t!("socup.candidate", xous::LANG)) {
                         Ok(response) => {
                             if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
-                                keys.lock().unwrap().do_update_gw_ux_flow();
+                                keys.lock().unwrap().do_update_gw_ux_flow_blocking();
                                 soc_updated = true;
                             } else if response.as_str() == t!("socup.ignore", xous::LANG) {
                                 keys.lock().unwrap().set_update_prompt(false);
@@ -482,7 +524,6 @@ fn wrapped_main() -> ! {
     // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
     // the status bar reads "booting up..." during this period.
     log::debug!("syncing with COM");
-    let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
     com.ping(0).unwrap(); // this will block until the COM is ready to take events
     com.hook_batt_stats(battstats_cb)
         .expect("|status: couldn't hook callback for events from COM");
@@ -490,26 +531,7 @@ fn wrapped_main() -> ! {
     com.req_batt_stats()
         .expect("Can't get battery stats from COM");
 
-    // --------------------------- spawn a time UX manager thread
-    let time_sid = xous::create_server().unwrap();
-    let time_cid = xous::connect(time_sid).unwrap();
-    time::start_time_ux(time_sid);
-    // this is used by the main loop to get the localtime to show on the status bar
-    let mut localtime = llio::LocalTime::new();
-
-    // ---------------------------- build menus
-    // used to hide time when the PDDB is not mounted
-    let pddb_poller = pddb::PddbMountPoller::new();
-
-    log::debug!("starting main menu thread");
-    let main_menu_sid = xous::create_server().unwrap();
-    let status_cid = xous::connect(status_sid).unwrap();
-    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
-    create_app_menu(xous::connect(status_sid).unwrap());
-    let kbd_mgr = xous::create_server().unwrap();
-    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
-    let kbd = keyboard::Keyboard::new(&xns).unwrap();
-
+    // ---------------------- final cleanup before entering main loop
     log::debug!("subscribe to wifi updates");
     netmgr.wifi_state_subscribe(cb_cid, StatusOpcode::WifiStats.to_u32().unwrap()).unwrap();
     let mut wifi_status: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
@@ -527,7 +549,6 @@ fn wrapped_main() -> ! {
     });
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
 
-    // ---------------------- final cleanup before entering main loop
     // add a security note if we're booting with a "zero key"
     match keys.lock().unwrap().is_zero_key().expect("couldn't query zero key status") {
         Some(q) => match q {
@@ -554,20 +575,6 @@ fn wrapped_main() -> ! {
             pddb::Pddb::new().try_mount();
         }
     });
-
-    // Automatic backlight-related variables.
-    kbd.register_observer(
-        SERVER_NAME_STATUS,
-        StatusOpcode::Keypress.to_u32().unwrap() as usize,
-    );
-
-    let enabled = Arc::new(Mutex::new(false));
-    let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
-
-    let rx = Box::new(rx);
-
-    let thread_already_running = Arc::new(Mutex::new(false));
-    let thread_conn = xous::connect(status_sid).unwrap();
 
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {

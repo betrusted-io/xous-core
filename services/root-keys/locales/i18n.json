@@ -114,7 +114,7 @@
         "en-tts": "Root keys already initialized."
     },
     "rootkeys.confirm": {
-        "en": "This will initialize the root keys on your Precursor device.\n\nYou will be prompted for two passwords:\n\t1. Device unlock PIN code\n\t2. System update passphrase.\n\nAre you ready?",
+        "en": "🔐Create passwords for your Precursor device🔐\n\nYou will be prompted for two passwords:\n\t1. Device unlock PIN code\n\t2. System update passphrase.\n\nAre you ready?",
         "ja": "これにより、Precursorデバイスのルートキーが初期化されます。\n\n2つのパスワードの入力を求められます。\n\t1.デバイスのロック解除PINコード\n\t2.システムアップデートパスフレーズ。\n\n準備はいいですか？",
         "zh": "仅当您准备好信 任此设备时才 应继续",
         "en-tts": "You should only proceed with this operation if you are ready to trust this device."
@@ -130,6 +130,12 @@
         "ja": "まだです、多分後で。",
         "zh": "我先检查一下,稍后再试",
         "en-tts": "I'll try again after inspecting my device."
+    },
+    "rootkeys.confirm.dont_ask": {
+        "en": "Stop bothering me; I know what I'm doing.",
+        "ja": "二度と気にしないで",
+        "zh": "不要再打扰我了",
+        "en-tts": "Stop bothering me; I know what I'm doing."
     },
     "rootkeys.setup_wait": {
         "en": "Initializing keys. This takes a few minutes. Do not reset or sleep!",
