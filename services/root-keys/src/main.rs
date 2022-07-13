@@ -360,8 +360,8 @@ mod implementation {
         pub fn is_zero_key(&self) -> Option<bool> { Some(true) }
         pub fn setup_restore_init(&mut self, _key: backups::BackupKey, _rom: backups::KeyRomExport) {
         }
-        pub fn is_dont_ask_set(&self) -> bool {false}
-        pub fn set_dont_ask(&self) {}
+        pub fn is_dont_ask_init_set(&self) -> bool {false}
+        pub fn set_dont_ask_init(&self) {}
     }
 }
 
