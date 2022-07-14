@@ -14,11 +14,6 @@ const VAULT_TOTP_ALLOC_HINT: usize = 128;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
 
-pub struct Manager {
-    pddb: pddb::Pddb,
-    trng: trng::Trng,
-}
-
 #[derive(Debug)]
 pub enum Error {
     IoError(std::io::Error),
@@ -44,6 +39,37 @@ impl From<PasswordSerializationError> for Error {
     }
 }
 
+pub struct Manager {
+    pddb: pddb::Pddb,
+    trng: trng::Trng,
+}
+
+pub trait StorageContent: Into<Vec::<u8>> + TryFrom<Vec::<u8>> {
+    fn settings(&self) -> ContentPDDBSettings;
+
+    fn set_ctime(&mut self, value: u64);
+}
+
+#[derive(Clone)]
+pub struct ContentPDDBSettings {
+    dict: String,
+    alloc_hint: Option<usize>,
+}
+
+pub enum ContentKind {
+    TOTP,
+    Password,
+}
+
+impl ContentKind {
+    fn settings(&self) -> ContentPDDBSettings {
+        match self {
+            ContentKind::TOTP => TotpRecord::default().settings(),
+            ContentKind::Password => PasswordRecord::default().settings(),
+        }
+    }
+}
+
 impl Manager {
     pub fn new(xns: &xous_names::XousNames) -> Manager {
         Manager {
@@ -59,7 +85,7 @@ impl Manager {
     }
 
     fn pddb_store(
-        &mut self,
+        &self,
         payload: &[u8],
         dict: &str,
         key_name: &str,
@@ -83,7 +109,7 @@ impl Manager {
         }
     }
 
-    fn pddb_get(&mut self, dict: &str, key_name: &str) -> Result<Vec<u8>, Error> {
+    fn pddb_get(&self, dict: &str, key_name: &str) -> Result<Vec<u8>, Error> {
         match self.pddb.get(
             dict,
             key_name,
@@ -102,7 +128,7 @@ impl Manager {
         }
     }
 
-    fn basis_for_key(&mut self, dict: &str, key_name: &str) -> Result<String, Error> {
+    fn basis_for_key(&self, dict: &str, key_name: &str) -> Result<String, Error> {
         match self.pddb.get(
             dict,
             key_name,
@@ -118,6 +144,26 @@ impl Manager {
                 .basis),
             Err(e) => return Err(Error::IoError(e)),
         }
+    }
+
+    pub fn new_record<T: StorageContent>(
+        &mut self,
+        record: T,
+        basis: Option<String>,
+    ) -> Result<(), Error> {
+        let mut record = record;
+        let settings = record.settings();
+        record.set_ctime(utc_now().timestamp() as u64);
+        let serialized_record: Vec<u8> = record.into();
+        let guid = self.gen_guid();
+
+        self.pddb_store(
+            &serialized_record,
+            &settings.dict,
+            &guid,
+            settings.alloc_hint,
+            basis,
+        )
     }
 
     pub fn new_totp_record(
@@ -159,7 +205,28 @@ impl Manager {
         .into()
     }
 
-    pub fn all_totp(&mut self) -> Result<Vec<TotpRecord>, Error> {
+    pub fn all<T: StorageContent>(&self, kind: ContentKind) -> Result<Vec<T>, Error> {
+        let settings = kind.settings();
+
+        let keylist = self.pddb.list_keys(&settings.dict, None)?;
+
+        let mut ret = vec![];
+
+        for key in keylist {
+            let record = match T::try_from(self.pddb_get(&settings.dict, &key)?) {
+                Ok(record) => record,
+                Err(error) => match error {
+                    _ => todo!(),
+                }
+            };
+
+            ret.push(record);
+        }
+
+        Ok(ret)
+    }
+
+    pub fn all_totp(&self) -> Result<Vec<TotpRecord>, Error> {
         let keylist = self.pddb.list_keys(VAULT_TOTP_DICT, None)?;
 
         let mut ret = vec![];
@@ -172,7 +239,7 @@ impl Manager {
         Ok(ret)
     }
 
-    pub fn all_passwords(&mut self) -> Result<Vec<PasswordRecord>, Error> {
+    pub fn all_passwords(&self) -> Result<Vec<PasswordRecord>, Error> {
         let keylist = self.pddb.list_keys(VAULT_PASSWORD_DICT, None)?;
 
         let mut ret = vec![];
@@ -185,12 +252,12 @@ impl Manager {
         Ok(ret)
     }
 
-    pub fn totp(&mut self, key_name: &str) -> Result<TotpRecord, Error> {
+    pub fn totp(&self, key_name: &str) -> Result<TotpRecord, Error> {
         TotpRecord::try_from(self.pddb_get(VAULT_TOTP_DICT, key_name)?)
             .map_err(|error| Error::TotpSerError(error))
     }
 
-    pub fn password(&mut self, key_name: &str) -> Result<PasswordRecord, Error> {
+    pub fn password(&self, key_name: &str) -> Result<PasswordRecord, Error> {
         PasswordRecord::try_from(self.pddb_get(VAULT_PASSWORD_DICT, key_name)?)
             .map_err(|error| Error::PasswordSerError(error))
     }
@@ -203,14 +270,14 @@ impl Manager {
         self.new_totp_record(record, Some(basis))
     }
 
-    pub fn delete_totp(&mut self, key_name: &str) -> Result<(), Error> {
+    pub fn delete_totp(&self, key_name: &str) -> Result<(), Error> {
         let basis = self.basis_for_key(VAULT_TOTP_DICT, key_name)?;
         self.pddb
             .delete_key(VAULT_TOTP_DICT, key_name, Some(&basis))
             .map_err(|error| Error::IoError(error))
     }
 
-    pub fn delete_password(&mut self, key_name: &str) -> Result<(), Error> {
+    pub fn delete_password(&self, key_name: &str) -> Result<(), Error> {
         let basis = self.basis_for_key(VAULT_PASSWORD_DICT, key_name)?;
         self.pddb
             .delete_key(VAULT_PASSWORD_DICT, key_name, Some(&basis))
@@ -218,6 +285,7 @@ impl Manager {
     }
 }
 
+#[derive(Default)]
 pub struct TotpRecord {
     pub version: u32,
     // as base32, RFC4648 no padding
@@ -238,6 +306,19 @@ pub enum TOTPSerializationError {
     BadCtime,
     BadTimestep,
     MalformedInput,
+}
+
+impl StorageContent for TotpRecord {
+    fn settings(&self) -> ContentPDDBSettings {
+        ContentPDDBSettings {
+            dict: VAULT_TOTP_DICT.to_string(),
+            alloc_hint: Some(VAULT_TOTP_ALLOC_HINT),
+        }
+    }
+
+    fn set_ctime(&mut self, value: u64) {
+        self.ctime = value;
+    }
 }
 
 impl TryFrom<Vec<u8>> for TotpRecord {
@@ -352,6 +433,7 @@ pub enum PasswordSerializationError {
     BadAtime,
 }
 
+#[derive(Default)]
 pub struct PasswordRecord {
     pub version: u32,
     pub description: String,
@@ -361,6 +443,19 @@ pub struct PasswordRecord {
     pub ctime: u64,
     pub atime: u64,
     pub count: u64,
+}
+
+impl StorageContent for PasswordRecord {
+    fn settings(&self) -> ContentPDDBSettings {
+        ContentPDDBSettings {
+            dict: VAULT_PASSWORD_DICT.to_string(),
+            alloc_hint: Some(VAULT_TOTP_ALLOC_HINT),
+        }
+    }
+
+    fn set_ctime(&mut self, value: u64) {
+        self.ctime = value;
+    }
 }
 
 impl TryFrom<Vec<u8>> for PasswordRecord {
