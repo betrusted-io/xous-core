@@ -2891,6 +2891,7 @@ dependencies = [
  "ticktimer-server",
  "trng",
  "tts-frontend",
+ "usb-device-xous",
  "utralib",
  "xous",
  "xous-ipc 0.9.7",

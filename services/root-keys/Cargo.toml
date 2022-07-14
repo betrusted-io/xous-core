@@ -48,6 +48,7 @@ tts-frontend = {path="../tts"}
 # aes-gcm-siv = {version = "0.11.0-pre", default-features = false, features = ["alloc"]}
 aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 subtle = {version = "2.4.1", default-features = false}
+usb-device-xous = {path="../usb-device-xous"}
 
 # private keys
 #sha2 = {version = "0.9.5", default-features = false, features = []}

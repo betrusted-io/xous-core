@@ -473,7 +473,7 @@ fn wrapped_main() -> ! {
         });
         if let Some(staged) = staged_sv {
             let soc = llio.soc_gitrev().expect("error querying SoC gitrev; this is fatal");
-            if staged > soc {
+            if (staged > soc) && !soc_updated { // if the soc was updated, we should reboot before we try this
                 if keys.lock().unwrap().prompt_for_update() {
                     // prompt to apply the update
                     modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");

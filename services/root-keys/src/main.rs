@@ -1278,6 +1278,10 @@ fn main() -> ! {
             }),
             Some(Opcode::TryNoKeySocUpdate) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.try_nokey_soc_update(&mut rootkeys_modal, main_cid) {
+                    // this will unblock the status thread, but also pop up our reboot flow
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't initiate dialog box");
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
                     xous::return_scalar(msg.sender, 0).unwrap();
@@ -1377,6 +1381,9 @@ fn main() -> ! {
                     // this final statement has a take/unwrap to set backup_header back to None
                     match keys.write_backup(backup_header.take().unwrap(), backup_ct) {
                         Ok(_) => {
+                            let usbd = usb_device_xous::UsbHid::new();
+                            usbd.switch_to_core(usb_device_xous::UsbDeviceType::Debug).unwrap();
+                            usbd.debug_usb(Some(false)).unwrap();
                             modals.show_notification(t!("rootkeys.backup_staged", xous::LANG), Some("https://github.com/betrusted-io/betrusted-wiki/wiki/Backups")).ok();
                         }
                         Err(_) => {
