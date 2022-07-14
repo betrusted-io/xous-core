@@ -213,13 +213,7 @@ impl Manager {
         let mut ret = vec![];
 
         for key in keylist {
-            let record = match T::try_from(self.pddb_get(&settings.dict, &key)?) {
-                Ok(record) => record,
-                Err(error) => match error {
-                    _ => todo!(),
-                }
-            };
-
+            let record = T::try_from(self.pddb_get(&settings.dict, &key)?)?;
             ret.push(record);
         }
 
