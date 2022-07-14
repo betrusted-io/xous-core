@@ -1278,11 +1278,11 @@ fn main() -> ! {
             }),
             Some(Opcode::TryNoKeySocUpdate) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.try_nokey_soc_update(&mut rootkeys_modal, main_cid) {
-                    // this will unblock the status thread, but also pop up our reboot flow
                     send_message(main_cid,
                         xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
                     ).expect("couldn't initiate dialog box");
-                    xous::return_scalar(msg.sender, 1).unwrap();
+                    // the status flow remains blocked "forever", but that's ok -- we should be rebooting.
+                    // xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }

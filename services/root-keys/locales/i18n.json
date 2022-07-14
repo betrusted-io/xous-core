@@ -192,10 +192,10 @@
         "en-tts": "Unplug the charging cable so I can reboot!"
     },
     "rootkeys.init.finished": {
-        "en": "Rebooting now...   ",
+        "en": "Rebooting now...\n\nIf the system shows a 'No valid keys' error or hangs, insert a paperclip into the hole in the lower right hand edge and plug in power to reload the FPGA bitstream.",
         "ja": "再起動中...",
         "zh": "准备重启...  ",
-        "en-tts": "Rebooting now."
+        "en-tts": "Rebooting now...\n\nIf the system shows a 'No valid keys' error or hangs, insert a paperclip into the hole in the lower right hand edge and plug in power to reload the FPGA bitstream."
     },
     "rootkeys.init.fail_verify": {
         "en": "Verification failed, aborting!",
