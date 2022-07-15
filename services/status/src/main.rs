@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod mainmenu;
+use keyboard::KeyMap;
 use mainmenu::*;
 mod appmenu;
 use appmenu::*;
@@ -12,7 +13,7 @@ mod time;
 mod ecup;
 
 use com::api::*;
-use root_keys::api::BackupOp;
+use root_keys::api::{BackupOp, BackupKeyboardLayout};
 use core::fmt::Write;
 use num_traits::*;
 use xous::{msg_scalar_unpack, send_message, Message, CID};
@@ -396,6 +397,11 @@ fn wrapped_main() -> ! {
                 BackupOp::Restore => {
                     keys.lock().unwrap().do_restore_backup_ux_flow();
                     restore_running = true;
+                    // set the keyboard layout according to the restore record.
+                    let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
+                    let map: KeyMap = map_deserialize.into();
+                    log::info!("Keyboard layout set to {:?} by restore process.", map);
+                    kbd.set_keymap(map).ok();
                 }
                 BackupOp::Backup => {
                     // once we have unlocked the PDDB and know our timezone, we'll compare the embedded timestamp to
@@ -976,12 +982,16 @@ fn wrapped_main() -> ! {
             },
             Some(StatusOpcode::PrepareBackup) => {
                 let mut metadata = root_keys::api::BackupHeader::default();
+                // note: default() should set the language correctly by default since it's a systemwide constant
                 metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);
                 metadata.xous_ver = ticktimer.get_version_semver().into();
                 metadata.soc_ver = llio.soc_gitrev().unwrap().into();
                 metadata.wf200_ver = com.get_wf200_fw_rev().unwrap().into();
                 metadata.ec_ver = com.get_ec_sw_tag().unwrap().into();
                 metadata.op = BackupOp::Backup;
+                let map = kbd.get_keymap().expect("couldn't get key mapping");
+                let map_serialize: BackupKeyboardLayout = map.into();
+                metadata.kbd_layout = map_serialize.into();
                 keys.lock().unwrap().do_create_backup_ux_flow(metadata);
             }
             Some(StatusOpcode::Quit) => {
