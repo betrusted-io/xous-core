@@ -2876,6 +2876,7 @@ dependencies = [
  "graphics-server",
  "hex 0.4.3",
  "jtag",
+ "keyboard",
  "llio",
  "locales",
  "log",
