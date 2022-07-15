@@ -264,6 +264,7 @@ pub enum BackupOp {
     /// backup and restore can be manipulated by the OS without updating the ciphertext
     Backup = 1,
     Restore = 2,
+    RestoreDna = 3,
 }
 
 #[repr(u32)]
@@ -367,7 +368,8 @@ pub struct BackupHeader {
     pub timestamp: u64,
     pub language: [u8; 4],
     pub kbd_layout: [u8; 4],
-    pub _reserved: [u8; 56],
+    pub dna: [u8; 8],
+    pub _reserved: [u8; 48],
     pub op: BackupOp,
 }
 impl Default for BackupHeader {
@@ -381,7 +383,8 @@ impl Default for BackupHeader {
             timestamp: 0,
             language: BackupLanguage::default().into(), // this is "correct by default"
             kbd_layout: BackupKeyboardLayout::default().into(), // this has to be adjusted
-            _reserved: [0u8; 56],
+            dna: [0u8; 8],
+            _reserved: [0u8; 48],
             op: BackupOp::Archive,
         }
     }

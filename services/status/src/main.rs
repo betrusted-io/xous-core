@@ -395,6 +395,12 @@ fn wrapped_main() -> ! {
         Ok(Some(header)) => {
             match header.op {
                 BackupOp::Restore => {
+                    { /* remove this check once the restore process for this case is complete */
+                        let backup_dna = u64::from_le_bytes(header.dna);
+                        if backup_dna != llio.soc_dna().unwrap() {
+                            panic!("Backups to new devices not yet supported: add DNA re-encryption flow");
+                        }
+                    }
                     keys.lock().unwrap().do_restore_backup_ux_flow();
                     restore_running = true;
                     // set the keyboard layout according to the restore record.
@@ -402,6 +408,14 @@ fn wrapped_main() -> ! {
                     let map: KeyMap = map_deserialize.into();
                     log::info!("Keyboard layout set to {:?} by restore process.", map);
                     kbd.set_keymap(map).ok();
+                }
+                BackupOp::RestoreDna => {
+                    unimplemented!();
+                    // need to call a PDDB function that does the DNA upgrade.
+                    // this is also the 'churn' function that's been on the to-do list, btw, just called with the same DNA as before.
+
+                    // once this step is done & successful, we have to erase the backup block to avoid re-doing this flow
+                    keys.lock().unwrap().do_erase_backup();
                 }
                 BackupOp::Backup => {
                     // once we have unlocked the PDDB and know our timezone, we'll compare the embedded timestamp to
@@ -989,6 +1003,7 @@ fn wrapped_main() -> ! {
                 metadata.wf200_ver = com.get_wf200_fw_rev().unwrap().into();
                 metadata.ec_ver = com.get_ec_sw_tag().unwrap().into();
                 metadata.op = BackupOp::Backup;
+                metadata.dna = llio.soc_dna().unwrap().to_le_bytes();
                 let map = kbd.get_keymap().expect("couldn't get key mapping");
                 let map_serialize: BackupKeyboardLayout = map.into();
                 metadata.kbd_layout = map_serialize.into();

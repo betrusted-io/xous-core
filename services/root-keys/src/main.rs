@@ -1523,7 +1523,18 @@ fn main() -> ! {
 
                 match result {
                     Ok(_) => {
-                        keys.erase_backup();
+                        let (mut header, ct) = keys.read_backup()
+                        .expect("Internal error: we're doing a backup, but somehow the backup record has disappeared on us!");
+                        if u64::from_le_bytes(header.dna) == llio.soc_dna().unwrap() {
+                            // we're restoring to the same device, we're done!
+                            keys.erase_backup();
+                        } else {
+                            // one more step...have to re-encrypt the PDDB's basis to the new device's DNA.
+                            // we'll handle this *after* the reboot, because we may need a newer SoC version, etc.
+                            header.op = BackupOp::RestoreDna;
+                            keys.write_backup(header, ct)
+                            .expect("Couldn't set flag for restore with new DNA: some data loss will occur.");
+                        }
                         log::info!("going to into reboot arc");
                         send_message(main_cid,
                             xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
