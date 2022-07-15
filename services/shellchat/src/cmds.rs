@@ -184,7 +184,7 @@ impl CmdEnv {
         // print our version info
         let soc_ver = common.llio.soc_gitrev().unwrap();
         log::info!("SoC git rev {}", soc_ver.to_string());
-        log::info!("SoC DNA: 0x{:x}", common.llio.soc_dna().unwrap());
+        log::info!("{}PDDB.DNA,{:x},{}", xous::BOOKEND_START, common.llio.soc_dna().unwrap(), xous::BOOKEND_END);
         let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };
         log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);
