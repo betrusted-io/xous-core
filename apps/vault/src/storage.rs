@@ -44,7 +44,7 @@ pub struct Manager {
     trng: trng::Trng,
 }
 
-pub trait StorageContent: Into<Vec::<u8>> + TryFrom<Vec::<u8>> {
+pub trait StorageContent: Into<Vec<u8>> + TryFrom<Vec<u8>> {
     fn settings(&self) -> ContentPDDBSettings;
 
     fn set_ctime(&mut self, value: u64);
@@ -166,46 +166,10 @@ impl Manager {
         )
     }
 
-    pub fn new_totp_record(
-        &mut self,
-        record: TotpRecord,
-        basis: Option<String>,
-    ) -> Result<(), Error> {
-        let mut record = record;
-        record.ctime = utc_now().timestamp() as u64;
-        let serialized_record: Vec<u8> = record.into();
-        let guid = self.gen_guid();
-
-        self.pddb_store(
-            &serialized_record,
-            VAULT_TOTP_DICT,
-            &guid,
-            Some(VAULT_TOTP_ALLOC_HINT),
-            basis,
-        )
-    }
-
-    pub fn new_password_record(
-        &mut self,
-        record: PasswordRecord,
-        basis: Option<String>,
-    ) -> Result<(), Error> {
-        let mut record = record;
-        record.ctime = utc_now().timestamp() as u64;
-        let serialized_record: Vec<u8> = record.into();
-        let guid = self.gen_guid();
-
-        self.pddb_store(
-            &serialized_record,
-            VAULT_PASSWORD_DICT,
-            &guid,
-            Some(VAULT_TOTP_ALLOC_HINT),
-            basis,
-        )
-        .into()
-    }
-
-    pub fn all<T: StorageContent>(&self, kind: ContentKind) -> Result<Vec<T>, Error> {
+    pub fn all<T: StorageContent>(&self, kind: ContentKind) -> Result<Vec<T>, Error>
+    where
+        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
+    {
         let settings = kind.settings();
 
         let keylist = self.pddb.list_keys(&settings.dict, None)?;
@@ -220,62 +184,51 @@ impl Manager {
         Ok(ret)
     }
 
-    pub fn all_totp(&self) -> Result<Vec<TotpRecord>, Error> {
-        let keylist = self.pddb.list_keys(VAULT_TOTP_DICT, None)?;
+    pub fn get_record<T: StorageContent>(
+        &self,
+        kind: ContentKind,
+        key_name: &str,
+    ) -> Result<T, Error>
+    where
+        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
+    {
+        let settings = kind.settings();
+        let t = T::try_from(self.pddb_get(&settings.dict, key_name)?)?;
 
-        let mut ret = vec![];
-
-        for key in keylist {
-            let record = TotpRecord::try_from(self.pddb_get(VAULT_TOTP_DICT, &key)?)?;
-            ret.push(record);
-        }
-
-        Ok(ret)
+        Ok(t)
     }
 
-    pub fn all_passwords(&self) -> Result<Vec<PasswordRecord>, Error> {
-        let keylist = self.pddb.list_keys(VAULT_PASSWORD_DICT, None)?;
+    pub fn update<T: StorageContent>(
+        &mut self,
+        kind: ContentKind,
+        key_name: &str,
+        record: T,
+    ) -> Result<(), Error>
+    where
+        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
+    {
+        let settings = kind.settings();
 
-        let mut ret = vec![];
-
-        for key in keylist {
-            let record = PasswordRecord::try_from(self.pddb_get(VAULT_PASSWORD_DICT, &key)?)?;
-            ret.push(record);
-        }
-
-        Ok(ret)
-    }
-
-    pub fn totp(&self, key_name: &str) -> Result<TotpRecord, Error> {
-        TotpRecord::try_from(self.pddb_get(VAULT_TOTP_DICT, key_name)?)
-            .map_err(|error| Error::TotpSerError(error))
-    }
-
-    pub fn password(&self, key_name: &str) -> Result<PasswordRecord, Error> {
-        PasswordRecord::try_from(self.pddb_get(VAULT_PASSWORD_DICT, key_name)?)
-            .map_err(|error| Error::PasswordSerError(error))
-    }
-
-    pub fn update_totp(&mut self, key_name: &str, record: TotpRecord) -> Result<(), Error> {
-        let basis = self.basis_for_key(VAULT_TOTP_DICT, key_name)?;
+        let basis = self.basis_for_key(&settings.dict, key_name)?;
         self.pddb
-            .delete_key(VAULT_TOTP_DICT, key_name, Some(&basis))?;
+            .delete_key(&settings.dict, key_name, Some(&basis))?;
 
-        self.new_totp_record(record, Some(basis))
+        self.new_record(record, Some(basis))
     }
 
-    pub fn delete_totp(&self, key_name: &str) -> Result<(), Error> {
-        let basis = self.basis_for_key(VAULT_TOTP_DICT, key_name)?;
-        self.pddb
-            .delete_key(VAULT_TOTP_DICT, key_name, Some(&basis))
-            .map_err(|error| Error::IoError(error))
-    }
+    pub fn delete<T: StorageContent>(
+        &mut self,
+        kind: ContentKind,
+        key_name: &str,
+    ) -> Result<(), Error>
+    where
+        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
+    {
+        let settings = kind.settings();
 
-    pub fn delete_password(&self, key_name: &str) -> Result<(), Error> {
-        let basis = self.basis_for_key(VAULT_PASSWORD_DICT, key_name)?;
+        let basis = self.basis_for_key(&settings.dict, key_name)?;
         self.pddb
-            .delete_key(VAULT_PASSWORD_DICT, key_name, Some(&basis))
-            .map_err(|error| Error::IoError(error))
+            .delete_key(&settings.dict, key_name, Some(&basis)).map_err(|error| Error::IoError(error))
     }
 }
 
