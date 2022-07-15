@@ -71,6 +71,12 @@
         "zh": "备份密钥不匹配。\n\n这是您的备份密钥，再次：",
         "en-tts": "Backup key did not match. This is your backup key, again:"
     },
+    "rootkeys.backup_prepwait": {
+        "en": "Preparing backup state...",
+        "ja": "バックアップの準備中...",
+        "zh": "正在准备备份...",
+        "en-tts": "Preparing backup state..."
+    },
     "rootkeys.backup_staged": {
         "en": "Backup data is prepared.\nConnect to a host computer by USB, and download the backup data bundle.\nScan the QR code for instructions:",
         "ja": "バックアップデータを用意します。 これで、ホストコンピューターに接続して、バックアップデータバンドルをダウンロードできます。",

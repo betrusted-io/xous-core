@@ -371,7 +371,7 @@ fn main() -> ! {
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -947,7 +947,11 @@ fn main() -> ! {
 
                 match result {
                     Ok(_) => {
-                        modals.show_notification(t!("rootkeys.gwup.finished", xous::LANG), None).expect("modals error");
+                        send_message(main_cid,
+                            xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't initiate dialog box");
+                        // just do the reboot now.
+                        // modals.show_notification(t!("rootkeys.gwup.finished", xous::LANG), None).expect("modals error");
                     }
                     Err(RootkeyResult::AlignmentError) => {
                         modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
@@ -1381,9 +1385,13 @@ fn main() -> ! {
                     // this final statement has a take/unwrap to set backup_header back to None
                     match keys.write_backup(backup_header.take().unwrap(), backup_ct) {
                         Ok(_) => {
+                            // this switchover takes a couple seconds, give some user feedback
+                            modals.dynamic_notification(Some(t!("rootkeys.backup_prepwait", xous::LANG)), None).ok();
                             let usbd = usb_device_xous::UsbHid::new();
                             usbd.switch_to_core(usb_device_xous::UsbDeviceType::Debug).unwrap();
                             usbd.debug_usb(Some(false)).unwrap();
+                            modals.dynamic_notification_close().ok();
+                            // there will be a bit of a pause while the QR text renders, but we'll have to fix that with other optimizations...
                             modals.show_notification(t!("rootkeys.backup_staged", xous::LANG), Some("https://github.com/betrusted-io/betrusted-wiki/wiki/Backups")).ok();
                         }
                         Err(_) => {

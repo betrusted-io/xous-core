@@ -131,6 +131,7 @@ pub enum RootkeyResult {
 
 /// AES operation definitions
 pub use cipher::{BlockCipher, consts::U16};
+use keyboard::KeyMap;
 use zeroize::Zeroize;
 
 /// 128-bit AES block
@@ -265,6 +266,95 @@ pub enum BackupOp {
     Restore = 2,
 }
 
+#[repr(u32)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[allow(dead_code)]
+pub enum BackupLanguage {
+    En = 0,
+    EnTts = 1,
+    Ja = 2,
+    Zh = 3,
+}
+impl Default for BackupLanguage {
+    fn default() -> Self {
+        match xous::LANG {
+            "en" => BackupLanguage::En,
+            "en-tts" => BackupLanguage::EnTts,
+            "ja" => BackupLanguage::Ja,
+            "zh" => BackupLanguage::Zh,
+            _ => BackupLanguage::En,
+        }
+    }
+}
+impl From::<BackupLanguage> for [u8; 4] {
+    fn from(l: BackupLanguage) -> [u8; 4] {
+        (l as u32).to_le_bytes()
+    }
+}
+#[repr(u32)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[allow(dead_code)]
+/// We keep a separate version of this for serialization/deserialization because
+/// we need to handle "unknown/undefined" layouts in a different way from the keyboard
+/// crate. Plus this helps avoid a dependency on the keyboard crate as well.
+pub enum BackupKeyboardLayout {
+    Qwerty = 0,
+    Dvorak = 1,
+    Qwertz = 2,
+    Azerty = 3,
+    Braille = 4,
+    Hangul = 5,
+    // codes above 16384 are reserved for user layouts
+}
+impl From::<KeyMap> for BackupKeyboardLayout {
+    fn from(map: KeyMap) -> BackupKeyboardLayout {
+        match map {
+            KeyMap::Qwerty => BackupKeyboardLayout::Qwerty,
+            KeyMap::Azerty => BackupKeyboardLayout::Azerty,
+            KeyMap::Dvorak => BackupKeyboardLayout::Dvorak,
+            KeyMap::Qwertz => BackupKeyboardLayout::Qwertz,
+            KeyMap::Braille => BackupKeyboardLayout::Braille,
+            KeyMap::Undefined => BackupKeyboardLayout::Qwerty,
+        }
+    }
+}
+impl Into::<KeyMap> for BackupKeyboardLayout {
+    fn into(self) -> KeyMap {
+        match self {
+            BackupKeyboardLayout::Qwerty => KeyMap::Qwerty,
+            BackupKeyboardLayout::Braille => KeyMap::Braille,
+            BackupKeyboardLayout::Dvorak => KeyMap::Dvorak,
+            BackupKeyboardLayout::Qwertz => KeyMap::Qwertz,
+            BackupKeyboardLayout::Azerty => KeyMap::Azerty,
+            BackupKeyboardLayout::Hangul => KeyMap::Undefined,
+        }
+    }
+}
+impl Default for BackupKeyboardLayout {
+    fn default() -> Self {
+        BackupKeyboardLayout::Qwerty
+    }
+}
+impl From::<BackupKeyboardLayout> for [u8; 4] {
+    fn from(l: BackupKeyboardLayout) -> [u8; 4] {
+        (l as u32).to_le_bytes()
+    }
+}
+impl From::<[u8; 4]> for BackupKeyboardLayout {
+    fn from(b: [u8; 4]) -> BackupKeyboardLayout {
+        let code = u32::from_le_bytes(b);
+        match code {
+            0 => BackupKeyboardLayout::Qwerty,
+            1 => BackupKeyboardLayout::Dvorak,
+            2 => BackupKeyboardLayout::Qwertz,
+            3 => BackupKeyboardLayout::Azerty,
+            4 => BackupKeyboardLayout::Braille,
+            5 => BackupKeyboardLayout::Hangul,
+            _ => BackupKeyboardLayout::Qwerty,
+        }
+    }
+}
+
 #[repr(C, align(8))]
 #[derive(Copy, Clone, Debug)]
 pub struct BackupHeader {
@@ -275,7 +365,9 @@ pub struct BackupHeader {
     pub ec_ver: [u8; 16],
     pub wf200_ver: [u8; 16],
     pub timestamp: u64,
-    pub _reserved: [u8; 64],
+    pub language: [u8; 4],
+    pub kbd_layout: [u8; 4],
+    pub _reserved: [u8; 56],
     pub op: BackupOp,
 }
 impl Default for BackupHeader {
@@ -287,7 +379,9 @@ impl Default for BackupHeader {
             ec_ver: [0u8; 16],
             wf200_ver: [0u8; 16],
             timestamp: 0,
-            _reserved: [0u8; 64],
+            language: BackupLanguage::default().into(), // this is "correct by default"
+            kbd_layout: BackupKeyboardLayout::default().into(), // this has to be adjusted
+            _reserved: [0u8; 56],
             op: BackupOp::Archive,
         }
     }

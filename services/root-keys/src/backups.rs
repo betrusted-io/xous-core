@@ -162,6 +162,12 @@ pub(crate) fn create_backup(
         }
     ).expect("couldn't encrypt data");
 
+    log::debug!("commit_nonce: {:?}", &kcom_nonce);
+    log::debug!("commit_nonce: {:x?}", &kcom_nonce);
+    log::debug!("commit_key: {:?}", &kcom.0);
+    log::debug!("commit_key: {:x?}", &kcom.0);
+    log::debug!("header {}, ptlen {}, ctlen {}", size_of::<BackupHeader>(), size_of::<BackupDataPt>(), size_of::<BackupDataCt>());
+
     // copy to a ciphertext record
     let mut backup_ct = BackupDataCt::default();
     backup_ct.nonce.copy_from_slice(&nonce);

@@ -49,6 +49,7 @@ tts-frontend = {path="../tts"}
 aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 subtle = {version = "2.4.1", default-features = false}
 usb-device-xous = {path="../usb-device-xous"}
+keyboard = {path="../keyboard"}
 
 # private keys
 #sha2 = {version = "0.9.5", default-features = false, features = []}
