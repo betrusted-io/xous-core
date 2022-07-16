@@ -201,7 +201,7 @@ mod implementation {
 
         pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
         pub fn finish_key_init(&mut self) {}
-        pub fn verify_gateware_self_signature(&mut self) -> bool {
+        pub fn verify_gateware_self_signature(&mut self, _pk: Option::<&PublicKey>) -> bool {
             true
         }
         pub fn test(&mut self, _rootkeys_modal: &mut Modal, _main_cid: xous::CID) -> Result<(), RootkeyResult> {
