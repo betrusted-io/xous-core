@@ -514,7 +514,13 @@ impl Com {
         buf.lend_mut(self.conn, Opcode::WlanGetConfig.to_u32().expect("WlanGetConfig failed")).or(Err(xous::Error::InternalError))?;
         let response = buf.to_original().expect("Couldn't convert WlanGetConfig buffer");
         let config = Ipv4Conf::decode_u16(&response);
-        Ok(config)
+        if (config.mac[0] & 0xFE) == 0x01 ||
+        (config.addr[0] & 0xF0) == 0xE0 {
+            // something is wrong with the COM; probably the link is being reset or not in a proper state.
+            Err(xous::Error::BadAddress)
+        } else {
+            Ok(config)
+        }
     }
 
     pub fn wlan_debug(&self) -> Result<WlanDebug, xous::Error> {

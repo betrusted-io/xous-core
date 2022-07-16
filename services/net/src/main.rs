@@ -251,7 +251,21 @@ fn main() -> ! {
     let routes = Routes::new(BTreeMap::new());
 
     // build the device
-    let hw_config = com.wlan_get_config().expect("couldn't fetch initial wifi MAC");
+    let hw_config = match com.wlan_get_config() {
+        Ok(config) => config,
+        Err(e) => {
+            log::error!("Something is wrong with the EC, got {:?} when requesting a MAC address. Trying our best to bodge through it.", e);
+            Ipv4Conf {
+                dhcp: com_rs_ref::DhcpState::Invalid,
+                mac: [2, 2, 4, 5, 6, 2],
+                addr: [169, 254, 0, 2], // link local address
+                gtwy: [169, 254, 0, 1], // something bogus
+                mask: [255, 255, 0, 0,],
+                dns1: [1, 1, 1, 1],
+                dns2: [8, 8, 8, 8],
+            }
+        }
+    };
     log::debug!("My MAC address is: {:x?}", hw_config.mac);
     let device = device::NetPhy::new(&xns);
     // needed by ICMP to determine if we should compute checksums
@@ -1046,9 +1060,14 @@ fn main() -> ! {
                                 ComIntSources::WlanIpConfigUpdate => {
                                     // right now the WLAN implementation only does IPV4. So IPV6 compatibility ends here.
                                     // if IPV6 gets added to the EC/COM bus, ideally this is one of a couple spots in Xous that needs a tweak.
-                                    let config = com
-                                        .wlan_get_config()
-                                        .expect("couldn't retrieve updated ipv4 config");
+                                    let config = match com
+                                    .wlan_get_config() {
+                                        Ok(config) => config,
+                                        Err(e) => {
+                                            log::error!("WLAN config interrupt was bogus. EC is probably updating? Ignoring. Error: {:?}", e);
+                                            continue;
+                                        }
+                                    };
                                     log::info!("Network config acquired: {:?}", config);
                                     log::info!("{}NET.OK,{:?},{}",
                                         xous::BOOKEND_START,

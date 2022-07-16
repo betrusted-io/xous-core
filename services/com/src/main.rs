@@ -1014,7 +1014,8 @@ fn main() -> ! {
                     multicast is self.mac[0] & 0x1 == 1 -> this gets set when 0xDDDD or 0xDEAD is transmitted as EC is in reset
                     broadcast is 0xFF's -> this is unlikely to be sent, it only is sent if the EC won't configure at all
                 */
-                prealloc[1] &= 0xFF_FE; // this ensures the "safety" of a reported MAC, even if the EC is broken and avoiding system panic (issue #152)
+                // punting this to the lib side of things, so we can return an error and not just a bogus value.
+                // prealloc[1] &= 0xFF_FE; // this ensures the "safety" of a reported MAC, even if the EC is broken and avoiding system panic (issue #152)
                 buffer.replace(prealloc).expect("couldn't return result on FlashOp");
             }
             Some(Opcode::WlanFetchPacket) => {
