@@ -391,13 +391,16 @@ fn wrapped_main() -> ! {
     // check for backups after EC updates, but before we check for gateware updates
     let mut backup_time: Option<DateTime::<Utc>> = None;
     let mut restore_running = false;
-    match keys.lock().unwrap().get_restore_header() {
+    let restore_header = keys.lock().unwrap().get_restore_header();
+    match restore_header {
         Ok(Some(header)) => {
             match header.op {
                 BackupOp::Restore => {
                     { /* remove this check once the restore process for this case is complete */
                         let backup_dna = u64::from_le_bytes(header.dna);
                         if backup_dna != llio.soc_dna().unwrap() {
+                            log::info!("backup_dna is 0x{:x}", backup_dna);
+                            log::info!("reported dna is 0x{:x}", llio.soc_dna().unwrap());
                             panic!("Backups to new devices not yet supported: add DNA re-encryption flow");
                         }
                     }
