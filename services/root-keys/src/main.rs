@@ -1264,7 +1264,7 @@ fn main() -> ! {
 
             Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.is_initialized() {
-                    if keys.verify_gateware_self_signature() {
+                    if keys.verify_gateware_self_signature(None) {
                         xous::return_scalar(msg.sender, 1).expect("couldn't send return value");
                     } else {
                         xous::return_scalar(msg.sender, 0).expect("couldn't send return value");

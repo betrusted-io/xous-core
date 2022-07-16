@@ -1484,7 +1484,7 @@ impl<'a> RootKeys {
                 }
                 _ => PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid")
             };
-            if !self.verify_gateware_self_signature(&pubkey) {
+            if !self.verify_gateware_self_signature(Some(&pubkey)) {
                 return Err(RootkeyResult::IntegrityError);
             }
             // as a sanity check, check the kernel self signature
@@ -2271,8 +2271,14 @@ impl<'a> RootKeys {
     }
 
     /// This is a fast check on the gateware meant to be called on boot just to confirm that we're using a self-signed gateware
-    pub fn verify_gateware_self_signature(&mut self, pubkey: &PublicKey) -> bool {
+    pub fn verify_gateware_self_signature(&mut self, maybe_pubkey: Option<&PublicKey>) -> bool {
         log::info!("verifying gateware self signature");
+        let local_pk = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid");
+        let pubkey = if let Some(pk) = maybe_pubkey {
+            pk
+        } else {
+            &local_pk
+        };
         // read the public key directly out of the keyrom
         let gateware_region = self.gateware();
 
