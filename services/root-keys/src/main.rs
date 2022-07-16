@@ -109,6 +109,7 @@ mod implementation {
     use crate::UpdateType;
     use xous_semver::SemVer;
     use crate::backups;
+    use ed25519_dalek::PublicKey;
 
     #[derive(Debug, Copy, Clone)]
     #[allow(dead_code)]
