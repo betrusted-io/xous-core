@@ -48,10 +48,10 @@
         "en-tts": "Restore record is corrupted. Aborting restore!"
     },
     "rootkeys.restore_already_init": {
-        "en": "Device has already been initialized. A restore will overwrite all data, and potentially fail if your device is locked to a different backup key.\n\nProceed?",
+        "en": "Device has already been initialized. A restore will overwrite root keys, and potentially fail if your device is locked to a different backup key.\n\nProceed?",
         "ja": "デバイスはすでに初期化されています。 復元するとすべてのデータが上書きされ、デバイスが別のバックアップキーにロックされていると失敗する可能性があります。\n \n続行しますか？",
         "zh": "设备已经初始化。 还原将覆盖所有数据，如果您的设备被锁定到不同的备份密钥，则可能会失败。\n\n是否继续？",
-        "en-tts": "Device has already been initialized. A restore will overwrite all data, and potentially fail if your device is locked to a different backup key.\n\nProceed?"
+        "en-tts": "Device has already been initialized. A restore will overwrite root keys, and potentially fail if your device is locked to a different backup key.\n\nProceed?"
     },
     "rootkeys.backup_key_enter": {
         "en": "Please enter your backup key now:",

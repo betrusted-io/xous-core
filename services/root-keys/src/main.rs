@@ -371,7 +371,7 @@ fn main() -> ! {
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -1404,6 +1404,7 @@ fn main() -> ! {
             }
             Some(Opcode::DoRestore) => {
                 // check to see if the device was already initialized. If so, warn the user.
+                deferred_response = Some(msg.sender);
                 if keys.is_initialized() {
                     modals.add_list_item(t!("rootkeys.confirm.yes", xous::LANG)).expect("modals error");
                     modals.add_list_item(t!("rootkeys.confirm.no", xous::LANG)).expect("modals error");
@@ -1412,6 +1413,9 @@ fn main() -> ! {
                         Ok(response) => {
                             if response == t!("rootkeys.confirm.no", xous::LANG) {
                                 modals.show_notification(t!("rootkeys.restore_abort", xous::LANG), None).ok();
+                                if let Some(sender) = deferred_response {
+                                    xous::return_scalar(sender, 1).ok();
+                                }
                                 continue;
                             }
                         }
@@ -1419,10 +1423,14 @@ fn main() -> ! {
                     }
                 }
                 // try the '0' key and skip key entry (developers will not have burned an AES key)
+                let mut showed_zero_key_notice = false;
                 if let Ok((mut header, ct)) = keys.read_backup() {
                     if header.op != BackupOp::Restore {
                         log::warn!("Header op was not Restore. Aborting!");
                         modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
+                        if let Some(sender) = deferred_response {
+                            xous::return_scalar(sender, 1).ok();
+                        }
                         continue;
                     }
                     let mut restore_key = backups::BackupKey::default(); // default is the 0 key
@@ -1441,14 +1449,18 @@ fn main() -> ! {
                     } else {
                         // notify of zero key
                         modals.show_notification(t!("rootkeys.restore_zero_key", xous::LANG), None).ok();
+                        showed_zero_key_notice = true;
                     }
                     // actual restore
                     if let Some(pt) = backups::restore_backup(&restore_key, &ct) {
                         // everything should match except for the op.
                         header.op = pt.header.op;
                         // now check that the two records are identical
-                        if pt.deref() != header.deref() {
+                        if pt.header.deref() != header.deref() {
                             modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
+                            if let Some(sender) = deferred_response {
+                                xous::return_scalar(sender, 1).ok();
+                            }
                             continue;
                         }
                         let mut restore_rom = backups::KeyRomExport::default();
@@ -1477,7 +1489,9 @@ fn main() -> ! {
                             restore_rom.0[0..8].copy_from_slice(&[0u32; 8]);
                         }
                         if restore_key.0 == [0u8; 32] {
-                            modals.show_notification(t!("rootkeys.restore_needs_keyburn", xous::LANG), None).ok();
+                            if !showed_zero_key_notice {
+                                modals.show_notification(t!("rootkeys.restore_needs_keyburn", xous::LANG), None).ok();
+                            }
                         }
                         // this will setup the pepper so we can request a password
                         keys.setup_restore_init(restore_key, restore_rom);
@@ -1539,26 +1553,43 @@ fn main() -> ! {
                         send_message(main_cid,
                             xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
                         ).expect("couldn't initiate dialog box");
+                        // don't unblock the caller if we go to the reboot arc
                     }
                     Err(RootkeyResult::AlignmentError) => {
                         modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
+                        if let Some(sender) = deferred_response {
+                            xous::return_scalar(sender, 1).ok();
+                        }
                     }
                     Err(RootkeyResult::KeyError) => {
                         modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
+                        if let Some(sender) = deferred_response {
+                            xous::return_scalar(sender, 1).ok();
+                        }
                     }
                     Err(RootkeyResult::IntegrityError) => {
                         modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
+                        if let Some(sender) = deferred_response {
+                            xous::return_scalar(sender, 1).ok();
+                        }
                     }
                     Err(RootkeyResult::FlashError) => {
                         modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
+                        if let Some(sender) = deferred_response {
+                            xous::return_scalar(sender, 1).ok();
+                        }
                     }
                     Err(RootkeyResult::StateError) => {
                         modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
+                        if let Some(sender) = deferred_response {
+                            xous::return_scalar(sender, 1).ok();
+                        }
                     }
                 }
             }
             Some(Opcode::EraseBackupBlock) => {
                 keys.erase_backup();
+                xous::return_scalar(msg.sender, 1).ok();
             }
             Some(Opcode::IsZeroKey) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let query = keys.is_zero_key();

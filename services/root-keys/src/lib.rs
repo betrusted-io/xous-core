@@ -143,13 +143,13 @@ impl RootKeys {
     }
     pub fn do_restore_backup_ux_flow(&self) {
         send_message(self.conn,
-            Message::new_scalar(Opcode::DoRestore.to_usize().unwrap(),
+            Message::new_blocking_scalar(Opcode::DoRestore.to_usize().unwrap(),
             0, 0, 0, 0)
         ).expect("couldn't send message to root keys");
     }
     pub fn do_erase_backup(&self) {
         send_message(self.conn,
-            Message::new_scalar(Opcode::EraseBackupBlock.to_usize().unwrap(),
+            Message::new_blocking_scalar(Opcode::EraseBackupBlock.to_usize().unwrap(),
             0, 0, 0, 0)
         ).expect("couldn't send message to root keys");
     }

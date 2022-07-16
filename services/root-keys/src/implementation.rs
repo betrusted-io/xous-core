@@ -740,6 +740,17 @@ impl<'a> RootKeys {
         }
         key
     }
+    /// Reads a 256-bit key at a given index offset
+    fn read_staged_key_256(&mut self, index: u8) -> [u8; 32] {
+        let mut key: [u8; 32] = [0; 32];
+        for (addr, word) in key.chunks_mut(4).into_iter().enumerate() {
+            let keyword = self.sensitive_data.borrow().as_slice::<u32>()[index as usize + addr];
+            for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
+                *dst = byte;
+            }
+        }
+        key
+    }
 
     /// Returns the `salt` needed for the `bcrypt` routine.
     /// This routine handles the special-case of being unitialized: in that case, we need to get
@@ -1200,12 +1211,7 @@ impl<'a> RootKeys {
 
                 return Err(RootkeyResult::KeyError);
             }
-            let mut enc_signing_key = [0u8; 32];
-            enc_signing_key.copy_from_slice(
-                &self.sensitive_data.borrow().as_slice::<u8>()
-                [KeyRomLocs::SELFSIGN_PRIVKEY as usize * size_of::<u32>()..
-                KeyRomLocs::SELFSIGN_PRIVKEY as usize * size_of::<u32>() + 32]
-            );
+            let enc_signing_key = self.read_staged_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
             for (key, (&enc_key, &pw)) in
             keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
             .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
@@ -1215,11 +1221,11 @@ impl<'a> RootKeys {
             #[cfg(feature = "hazardous-debug")]
             log::debug!("keypair privkey (after anti-rollback): {:x?}", &keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH]);
             // read in the public key from the staged data
-            keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].copy_from_slice(
-                &self.sensitive_data.borrow().as_slice::<u8>()
-                [KeyRomLocs::SELFSIGN_PUBKEY as usize * size_of::<u32>()..
-                KeyRomLocs::SELFSIGN_PUBKEY as usize * size_of::<u32>() + 32]
-            );
+            for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
+            .zip(self.read_staged_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
+                *key = src;
+            }
+            log::info!("keypair_bytes {:x?}", keypair_bytes);
             // Keypair zeroizes the secret key on drop.
             let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
             #[cfg(feature = "hazardous-debug")]
@@ -1472,7 +1478,13 @@ impl<'a> RootKeys {
         // check signatures
         if keypair.is_some() {
             pb.set_percentage(96);
-            if !self.verify_gateware_self_signature() {
+            let pubkey = match update_type {
+                UpdateType::Restore => {
+                    PublicKey::from_bytes(&self.read_staged_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid")
+                }
+                _ => PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid")
+            };
+            if !self.verify_gateware_self_signature(&pubkey) {
                 return Err(RootkeyResult::IntegrityError);
             }
             // as a sanity check, check the kernel self signature
@@ -2259,10 +2271,9 @@ impl<'a> RootKeys {
     }
 
     /// This is a fast check on the gateware meant to be called on boot just to confirm that we're using a self-signed gateware
-    pub fn verify_gateware_self_signature(&mut self) -> bool {
+    pub fn verify_gateware_self_signature(&mut self, pubkey: &PublicKey) -> bool {
         log::info!("verifying gateware self signature");
         // read the public key directly out of the keyrom
-        let pubkey = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid");
         let gateware_region = self.gateware();
 
         let mut sig_region: [u8; core::mem::size_of::<SignatureInFlash>()] = [0; core::mem::size_of::<SignatureInFlash>()];
