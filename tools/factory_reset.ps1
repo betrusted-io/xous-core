@@ -46,4 +46,3 @@ Remove-Item loader.bin
 
 Write-Output "Please insert a paperclip in the hard reset hole in the lower right hand corner to ensure the new FPGA gateware is loaded."
 Write-Output "After inserting the paperclip you will need to apply power via USB to boot."
-Write-Output "IMPORTANT: you must run 'ecup auto' to update the EC with the staged firmware objects."

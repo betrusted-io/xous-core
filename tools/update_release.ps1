@@ -46,5 +46,4 @@ Remove-Item loader.bin
 Remove-Item soc_csr.bin
 
 Write-Output "Please insert a paperclip into the hole in the lower right hand corner to force a full reset."
-Write-Output "IMPORTANT: you must select 'Install gateware update' on the Precursor device to update the SoC."
-Write-Output "IMPORTANT: you must also run 'ecup auto' to update the EC with the staged firmware objects."
+Write-output "Follow the on-device instructions to finalize the update process."
