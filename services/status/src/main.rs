@@ -998,6 +998,9 @@ fn wrapped_main() -> ! {
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
             Some(StatusOpcode::PrepareBackup) => {
+                // sync the PDDB to disk prior to making backups
+                let pddb = pddb::Pddb::new();
+                pddb.sync().expect("couldn't synchronize PDDB to disk");
                 let mut metadata = root_keys::api::BackupHeader::default();
                 // note: default() should set the language correctly by default since it's a systemwide constant
                 metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);
