@@ -1123,7 +1123,8 @@ impl<'a> RootKeys {
         dst_oracle.clear();
 
         // as a sanity check, check the kernel self signature
-        let ret = if !self.verify_selfsign_kernel(false) {
+        let pubkey = PublicKey::from_bytes(&public_key).expect("public key was not valid");
+        let ret = if !self.verify_selfsign_kernel(Some(&pubkey)) {
             log::error!("kernel signature failed to verify, probably should not try to reboot!");
             Err(RootkeyResult::IntegrityError)
         } else {
@@ -1490,7 +1491,7 @@ impl<'a> RootKeys {
                 return Err(RootkeyResult::IntegrityError);
             }
             // as a sanity check, check the kernel self signature
-            if !self.verify_selfsign_kernel(true) {
+            if !self.verify_selfsign_kernel(Some(&pubkey)) {
                 log::error!("kernel signature failed to verify, probably should not try to reboot!");
                 return Err(RootkeyResult::IntegrityError);
             }
@@ -1609,7 +1610,7 @@ impl<'a> RootKeys {
         pb.set_percentage(92);
 
         // as a sanity check, check the kernel self signature
-        let ret = if !self.verify_selfsign_kernel(true) {
+        let ret = if !self.verify_selfsign_kernel(None) {
             log::error!("kernel signature failed to verify, probably should not try to reboot!");
             Err(RootkeyResult::IntegrityError)
         } else {
@@ -2225,27 +2226,14 @@ impl<'a> RootKeys {
     }
 
     /// the public key must already be in the cache -- this version is used by the init routine, before the keys are written
-    pub fn verify_selfsign_kernel(&mut self, is_system_initialized: bool) -> bool {
-        let mut key: [u8; 32] = [0; 32];
-        if !is_system_initialized {
-            if self.sensitive_data.borrow_mut().as_slice::<u32>()[KeyRomLocs::CONFIG as usize] & keyrom_config::INITIALIZED.ms(1) == 0 {
-                log::warn!("key cache was not initialized, can't verify the kernel with our self-signing key");
-                return false;
-            }
-
-            // read the public key directly out of the keyrom
-            log::debug!("reading public key from cached area");
-            for (word, &keyword) in key.chunks_mut(4).into_iter()
-            .zip(self.sensitive_data.borrow_mut().as_slice::<u32>()[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter()) {
-                for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
-                    *dst = byte;
-                }
-            }
+    pub fn verify_selfsign_kernel(&mut self, maybe_pubkey: Option<&PublicKey>) -> bool {
+        let local_pk = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid");
+        let pubkey = if let Some(pk) = maybe_pubkey {
+            pk
         } else {
-            key = self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY);
-        }
-        log::debug!("pubkey as reconstituted: {:x?}", key);
-        let pubkey = PublicKey::from_bytes(&key).expect("public key was not valid");
+            &local_pk
+        };
+        log::debug!("pubkey as reconstituted: {:x?}", pubkey);
 
         let kernel_region = self.kernel();
         let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
