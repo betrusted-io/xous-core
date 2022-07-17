@@ -534,145 +534,148 @@ def main():
         print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.9 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
-    vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
-    pc_usb.ping_wdt()
-    print("Halting CPU.")
-    pc_usb.poke(vexdbg_addr, 0x00020000)
-
     LANGUAGE = {
         0: "en",
         1: "en-tts",
         2: "ja",
         3: "zh",
     }
-    with open("backup.pddb", "rb") as backup_file:
-        backup = bytearray(backup_file.read())
-
-        i = 0
-        print("Backup protocol version: 0x{:08x}".format(int.from_bytes(backup[i:i+4], 'little')))
-        i += 4
-        print("Xous version: {}".format(bytes_to_semverstr(backup[i:i+16])))
-        backup_xous_ver = SemVer(backup[i:i+16])
-        i += 16
-        print("SOC version: {}".format(bytes_to_semverstr(backup[i:i+16])))
-        i += 16
-        print("EC version: {}".format(bytes_to_semverstr(backup[i:i+16])))
-        i += 16
-        print("WF200 version: {}".format(bytes_to_semverstr(backup[i:i+16])))
-        i += 16
-        i += 4 # padding because align=8
-        ts = int.from_bytes(backup[i:i+8], 'little') / 1000
-        print("Timestamp: {} / {}".format(ts, datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
-        i += 8
-        lcode = int.from_bytes(backup[i:i+4], 'little')
-        print("Language code: {}".format(lcode))
-        if lcode < len(LANGUAGE):
-            language = LANGUAGE[lcode]
-        else:
-            language = "en"
-        i += 4
-        print("Keyboard layout code: {}".format(int.from_bytes(backup[i:i+4], 'little')))
-        i += 4
-        print("DNA: 0x{:x}".format(int.from_bytes(backup[i:i+8], 'little')))
-        i += 8
-        i += 48 # reserved
-
-        backup[i:i+4] = (2).to_bytes(4, 'little')
-        op = int.from_bytes(backup[i:i+4], 'little')
-        print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
-        assert(op==2)
-
-        # now try to download all the artifacts and check their versions
-        # this list should visit kernels in order from newest to oldest.
-        # TODO: once the 0.9.9 release is tagged, 'latest-ci' should be dropped;
-        # for now latest-ci is the only version that would be new enough to support restores.
-        URL_LIST = [
-            'https://ci.betrusted.io/latest-ci/',
-            'https://ci.betrusted.io/releases/v0.9.8/',
-            'https://ci.betrusted.io/releases/v0.9.7/'
-        ]
-
-        attempt = 0
-        while attempt < len(URL_LIST):
-            # first try the stable branch and see if it meets the version requirement
-            print("Downloading candidate restore kernel...")
-            candidate_kernel = requests.get(URL_LIST[attempt] + 'xous-' + language + '.img').content
-            if int.from_bytes(candidate_kernel[:4], 'little') != 1:
-                print("Downloaded kernel image has unexpected signature version. Trying the next image.")
-                attempt += 1
-                continue
-            kern_len = int.from_bytes(candidate_kernel[4:8], 'little') + 0x1000
-            if len(candidate_kernel) != kern_len:
-                print("Downloaded kernel has the wrong length. Trying the next image.")
-                attempt += 1
-                continue
-            minver_loc = kern_len - 4 - 4 - 16 - 16 # length, sigver, current semver, then minver
-            curver_loc = kern_len - 4 - 4 - 16
-            min_compat_kernel = SemVer(candidate_kernel[minver_loc:minver_loc + 16])
-            if min_compat_kernel.ord() > backup_xous_ver.ord():
-                print("Downloaded kernel is too new for the backup, trying an older version...")
-                attempt += 1
-                continue
-            # alright, we should now be at a base URL where everything is a match. We skip checking
-            # the rest of the versions because it "should" be an ensemble.
-            curver = SemVer(candidate_kernel[curver_loc:curver_loc + 16])
-            print("Found viable kernel!")
-            kernel = candidate_kernel
-            print("Downloading loader...")
-            loader = requests.get(URL_LIST[attempt] + 'loader.bin').content
-            print("Downloading gateware...")
-            soc_csr = requests.get(URL_LIST[attempt] + 'soc_csr.bin').content
-            print("Downloading embedded controller...")
-            ec_fw = requests.get(URL_LIST[attempt] + 'ec_fw.bin').content
-            print("Downloading wf200...")
-            wf200 = requests.get(URL_LIST[attempt] + 'wf200_fw.bin').content
-            break
-        print("The restore process takes about 30 minutes on a computer with an optimal USB stack (most Intel PC & Rpi), and about 2.5 hours on one with a buggy USB stack (most Macs & AMD PC).")
-        if False == single_yes_or_no_question("Proceed with copying restore data from Xous release {}? ".format(curver.as_str())):
-            print("Abort by user request.")
-            exit(0)
-
-        worklist = [
-            ['erase', "Disabling boot by erasing loader...", locs['LOC_LOADER'][0], 1024 * 256],
-            ['prog', "Uploading kernel", locs['LOC_KERNEL'][0], kernel],
-            ['prog', "Uploading EC", locs['LOC_EC'][0], ec_fw],
-            ['prog', "Uploading wf200", locs['LOC_WF200'][0], wf200],
-            ['prog', "Uploading gateware", locs['LOC_STAGING'][0], soc_csr],
-            ['prog', "Uploading PDDB", locs['LOC_PDDB'][0] - 0x1000, backup], # the PDDB file has a 4096-byte prefix
-            ['prog', "Restoring loader", locs['LOC_LOADER'][0], loader],
-        ]
-        for work in worklist:
-            success = False
-            while success == False:
-                try:
-                    print(work[1])
-                    if work[0] == 'erase':
-                        #print("pretend erase {}".format(work[2]))
-                        pc_usb.erase_region(work[2], work[3])
-                        success = True
-                    else:
-                        #print("prentend upload: {}".format(work[2]))
-                        pc_usb.flash_program(work[2], work[3], verify=False)
-                        success = True
-                except:
-                    print("Error encountered while {}".format(work[1]))
-                    print("Try reseating the USB connection.")
-                    if False == single_yes_or_no_question("Try again? "):
-                        print("Abort by user request. System may not be bootable, but you can try again later.")
-                        exit(0)
-
-        print("Restore finished copying objects.\nYou will need to reboot by inserting a paperclip in the hole in the lower right hand side,\nand follow on-screen instructions")
-
-    print("Resuming CPU.")
-    pc_usb.poke(vexdbg_addr, 0x02000000)
-
-    print("Resetting SOC...")
     try:
-        pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
-    except usb.core.USBError:
-        pass # we expect an error because we reset the SOC and that includes the USB core
+        with open("backup.pddb", "rb") as backup_file:
+            backup = bytearray(backup_file.read())
 
-    # print("If you need to run more commands, please unplug and re-plug your device in, as the Precursor USB core was just reset")
+            i = 0
+            print("Backup protocol version: 0x{:08x}".format(int.from_bytes(backup[i:i+4], 'little')))
+            i += 4
+            print("Xous version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+            backup_xous_ver = SemVer(backup[i:i+16])
+            i += 16
+            print("SOC version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+            i += 16
+            print("EC version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+            i += 16
+            print("WF200 version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+            i += 16
+            i += 4 # padding because align=8
+            ts = int.from_bytes(backup[i:i+8], 'little') / 1000
+            print("Timestamp: {} / {}".format(ts, datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
+            i += 8
+            lcode = int.from_bytes(backup[i:i+4], 'little')
+            print("Language code: {}".format(lcode))
+            if lcode < len(LANGUAGE):
+                language = LANGUAGE[lcode]
+            else:
+                language = "en"
+            i += 4
+            print("Keyboard layout code: {}".format(int.from_bytes(backup[i:i+4], 'little')))
+            i += 4
+            print("DNA: 0x{:x}".format(int.from_bytes(backup[i:i+8], 'little')))
+            i += 8
+            i += 48 # reserved
+
+            backup[i:i+4] = (2).to_bytes(4, 'little')
+            op = int.from_bytes(backup[i:i+4], 'little')
+            print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
+            assert(op==2)
+
+            # now try to download all the artifacts and check their versions
+            # this list should visit kernels in order from newest to oldest.
+            # TODO: once the 0.9.9 release is tagged, 'latest-ci' should be dropped;
+            # for now latest-ci is the only version that would be new enough to support restores.
+            URL_LIST = [
+                'https://ci.betrusted.io/latest-ci/',
+                'https://ci.betrusted.io/releases/v0.9.8/',
+                'https://ci.betrusted.io/releases/v0.9.7/'
+            ]
+
+            attempt = 0
+            while attempt < len(URL_LIST):
+                # first try the stable branch and see if it meets the version requirement
+                print("Downloading candidate restore kernel...")
+                candidate_kernel = requests.get(URL_LIST[attempt] + 'xous-' + language + '.img').content
+                if int.from_bytes(candidate_kernel[:4], 'little') != 1:
+                    print("Downloaded kernel image has unexpected signature version. Trying the next image.")
+                    attempt += 1
+                    continue
+                kern_len = int.from_bytes(candidate_kernel[4:8], 'little') + 0x1000
+                if len(candidate_kernel) != kern_len:
+                    print("Downloaded kernel has the wrong length. Trying the next image.")
+                    attempt += 1
+                    continue
+                minver_loc = kern_len - 4 - 4 - 16 - 16 # length, sigver, current semver, then minver
+                curver_loc = kern_len - 4 - 4 - 16
+                min_compat_kernel = SemVer(candidate_kernel[minver_loc:minver_loc + 16])
+                if min_compat_kernel.ord() > backup_xous_ver.ord():
+                    print("Downloaded kernel is too new for the backup, trying an older version...")
+                    attempt += 1
+                    continue
+                # alright, we should now be at a base URL where everything is a match. We skip checking
+                # the rest of the versions because it "should" be an ensemble.
+                curver = SemVer(candidate_kernel[curver_loc:curver_loc + 16])
+                print("Found viable kernel!")
+                kernel = candidate_kernel
+                print("Downloading loader...")
+                loader = requests.get(URL_LIST[attempt] + 'loader.bin').content
+                print("Downloading gateware...")
+                soc_csr = requests.get(URL_LIST[attempt] + 'soc_csr.bin').content
+                print("Downloading embedded controller...")
+                ec_fw = requests.get(URL_LIST[attempt] + 'ec_fw.bin').content
+                print("Downloading wf200...")
+                wf200 = requests.get(URL_LIST[attempt] + 'wf200_fw.bin').content
+                break
+            print("The restore process takes about 30 minutes on a computer with an optimal USB stack (most Intel PC & Rpi), and about 2.5 hours on one with a buggy USB stack (most Macs & AMD PC).")
+            if False == single_yes_or_no_question("Proceed with copying restore data from Xous release {}? ".format(curver.as_str())):
+                print("Abort by user request.")
+                exit(0)
+
+            vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
+            pc_usb.ping_wdt()
+            print("Halting CPU.")
+            pc_usb.poke(vexdbg_addr, 0x00020000)
+
+            worklist = [
+                ['erase', "Disabling boot by erasing loader...", locs['LOC_LOADER'][0], 1024 * 256],
+                ['prog', "Uploading kernel", locs['LOC_KERNEL'][0], kernel],
+                ['prog', "Uploading EC", locs['LOC_EC'][0], ec_fw],
+                ['prog', "Uploading wf200", locs['LOC_WF200'][0], wf200],
+                ['prog', "Uploading gateware", locs['LOC_STAGING'][0], soc_csr],
+                ['prog', "Uploading PDDB", locs['LOC_PDDB'][0] - 0x1000, backup], # the PDDB file has a 4096-byte prefix
+                ['prog', "Restoring loader", locs['LOC_LOADER'][0], loader],
+            ]
+            for work in worklist:
+                success = False
+                while success == False:
+                    try:
+                        print(work[1])
+                        if work[0] == 'erase':
+                            #print("pretend erase {}".format(work[2]))
+                            pc_usb.erase_region(work[2], work[3])
+                            success = True
+                        else:
+                            #print("prentend upload: {}".format(work[2]))
+                            pc_usb.flash_program(work[2], work[3], verify=False)
+                            success = True
+                    except:
+                        print("Error encountered while {}".format(work[1]))
+                        print("Try reseating the USB connection.")
+                        if False == single_yes_or_no_question("Try again? "):
+                            print("Abort by user request. System may not be bootable, but you can try again later.")
+                            exit(0)
+
+            print("Restore finished copying objects.\nYou will need to reboot by inserting a paperclip in the hole in the lower right hand side,\nand follow on-screen instructions")
+
+            print("Resuming CPU.")
+            pc_usb.poke(vexdbg_addr, 0x02000000)
+
+            print("Resetting SOC...")
+            try:
+                pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
+            except usb.core.USBError:
+                pass # we expect an error because we reset the SOC and that includes the USB core
+    except:
+        print("`backup.pddb` could not be opened. Aborting.")
+        exit(1)
+
 
 if __name__ == "__main__":
     main()
