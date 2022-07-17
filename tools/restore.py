@@ -573,7 +573,7 @@ def main():
         i += 4
         print("Keyboard layout code: {}".format(int.from_bytes(backup[i:i+4], 'little')))
         i += 4
-        print("DNA: 0x{}".format(int.from_bytes(backup[i:i+8], 'little')))
+        print("DNA: 0x{:x}".format(int.from_bytes(backup[i:i+8], 'little')))
         i += 8
         i += 48 # reserved
 
@@ -627,6 +627,7 @@ def main():
             print("Downloading wf200...")
             wf200 = requests.get(URL_LIST[attempt] + 'wf200_fw.bin').content
             break
+        print("The restore process takes about 30 minutes on a computer with an optimal USB stack (most Intel PC & Rpi), and about 2.5 hours on one with a buggy USB stack (most Macs & AMD PC).")
         if False == single_yes_or_no_question("Proceed with copying restore data from Xous release {}? ".format(curver.as_str())):
             print("Abort by user request.")
             exit(0)
