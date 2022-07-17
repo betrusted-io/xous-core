@@ -1465,6 +1465,14 @@ impl<'a> RootKeys {
         pb.set_percentage(95);
         src_oracle.clear();
         dst_oracle.clear();
+        // make a backup copy of the public key before we purge it. Pubkey is...public, so that's fine!
+        let pubkey = match update_type {
+            UpdateType::Restore => {
+                log::info!("Restore process is verifying using staged public key");
+                PublicKey::from_bytes(&self.read_staged_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid")
+            }
+            _ => PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid")
+        };
         self.purge_sensitive_data();
         self.spinor.set_staging_write_protect(false).expect("couldn't un-protect the staging area");
         for b in keypair_bytes.iter_mut() {
@@ -1478,13 +1486,6 @@ impl<'a> RootKeys {
         // check signatures
         if keypair.is_some() {
             pb.set_percentage(96);
-            let pubkey = match update_type {
-                UpdateType::Restore => {
-                    log::info!("Restore process is verifying using staged public key");
-                    PublicKey::from_bytes(&self.read_staged_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid")
-                }
-                _ => PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid")
-            };
             if !self.verify_gateware_self_signature(Some(&pubkey)) {
                 return Err(RootkeyResult::IntegrityError);
             }
@@ -2273,14 +2274,12 @@ impl<'a> RootKeys {
 
     /// This is a fast check on the gateware meant to be called on boot just to confirm that we're using a self-signed gateware
     pub fn verify_gateware_self_signature(&mut self, maybe_pubkey: Option<&PublicKey>) -> bool {
-        log::info!("Verifying gateware called with pubkey {:?}", maybe_pubkey);
         let local_pk = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid");
         let pubkey = if let Some(pk) = maybe_pubkey {
             pk
         } else {
             &local_pk
         };
-        log::info!("Finally decided to use public key {:?}", pubkey);
         // read the signature directly out of the keyrom
         let gateware_region = self.gateware();
 
