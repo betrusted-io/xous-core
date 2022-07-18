@@ -163,9 +163,14 @@ pub fn spawn_test() {
             */
             #[cfg(feature = "ditherpunk")]
             {
-                let img = clifford();
+                const BORDER: u32 = 3;
+                let modal_size = gam::Point::new(
+                    (gam::IMG_MODAL_WIDTH - 2 * BORDER).try_into().unwrap(), 
+                    (gam::IMG_MODAL_HEIGHT - 2 * BORDER).try_into().unwrap()
+                );
+                let bm = gam::Bitmap::from_img(&clifford(), Some(modal_size));
                 log::info!("showing image");
-                modals.show_image(&img).expect("show image modal failed");
+                modals.show_image(bm).expect("show image modal failed");
                 log::info!("image modal test done");
             }
         }
@@ -188,7 +193,8 @@ fn clifford() -> Img {
     let (mut x, mut y): (f32, f32) = (0.0, 0.0);
 
     log::info!("generating image");
-    for _ in 0..=ITERATIONS { // this takes a couple minutes to run
+    for _ in 0..=ITERATIONS {
+        // this takes a couple minutes to run
         let x1 = f32::sin(a * y) + c * f32::cos(a * x);
         let y1 = f32::sin(b * x) + d * f32::cos(b * y);
         (x, y) = (x1, y1);
