@@ -104,7 +104,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
             notes: t!("vault.notes", xous::LANG).to_string(),
         };
 
-        storage.new_totp_record(totp, None)?
+        storage.new_record(totp, None)?
     }
 
     Ok(vec![0xca, 0xfe, 0xba, 0xbe])
@@ -113,7 +113,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
 fn handle_backup(xns: &xous_names::XousNames) -> Result<Vec<u8>, BackupError> {
     let mut storage = crate::storage::Manager::new(xns);
 
-    let totp_codes = storage.all_totp()?;
+    let totp_codes: Vec<crate::storage::TotpRecord> = storage.all(crate::storage::ContentKind::TOTP)?;
 
     let mut ret = vec![];
 
@@ -126,6 +126,7 @@ fn handle_backup(xns: &xous_names::XousNames) -> Result<Vec<u8>, BackupError> {
                 crate::totp::TotpAlgorithm::HmacSha1 => backup::HashAlgorithms::SHA1,
                 crate::totp::TotpAlgorithm::HmacSha256 => backup::HashAlgorithms::SHA256,
                 crate::totp::TotpAlgorithm::HmacSha512 => backup::HashAlgorithms::SHA512,
+                _ => panic!("invalid algorithm")
             },
             name: raw_code.name,
         });
