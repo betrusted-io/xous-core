@@ -190,6 +190,25 @@ fn wrapped_main() -> ! {
     // used to show notifications, e.g. can't sleep while power is engaged.
     let modals = modals::Modals::new(&xns).unwrap();
 
+    // ------------------ start a 'gutter' thread to handle incoming events while we go through the boot/autoupdate process
+    let gutter = thread::spawn({
+        let gutter_sid = status_sid.clone();
+        move || {
+            loop {
+                let msg = xous::receive_message(gutter_sid).unwrap();
+                let opcode: Option<StatusOpcode> = FromPrimitive::from_usize(msg.body.id());
+                log::info!("Guttering {:?}", opcode);
+                match opcode {
+                    Some(StatusOpcode::Quit) => {
+                        xous::return_scalar(msg.sender, 1).ok();
+                        break;
+                    }
+                    _ => () // ignore everything else.
+                }
+            }
+        }
+    });
+
     // ------------------ render initial graphical display, so we don't seem broken on boot
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
@@ -396,6 +415,12 @@ fn wrapped_main() -> ! {
         Ok(Some(header)) => {
             match header.op {
                 BackupOp::Restore => {
+                    // set the keyboard layout according to the restore record.
+                    let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
+                    let map: KeyMap = map_deserialize.into();
+                    log::info!("Keyboard layout set to {:?} by restore process.", map);
+                    kbd.set_keymap(map).ok();
+
                     let backup_dna = u64::from_le_bytes(header.dna);
                     if backup_dna != llio.soc_dna().unwrap() {
                         log::info!("This will be a two-stage restore because this is to a new device.");
@@ -405,11 +430,6 @@ fn wrapped_main() -> ! {
                     keys.lock().unwrap().do_restore_backup_ux_flow();
                     // if the DNA matches the backup, the backup header is automatically erased.
                     restore_running = true;
-                    // set the keyboard layout according to the restore record.
-                    let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
-                    let map: KeyMap = map_deserialize.into();
-                    log::info!("Keyboard layout set to {:?} by restore process.", map);
-                    kbd.set_keymap(map).ok();
                 }
                 BackupOp::RestoreDna => {
                     let pddb = pddb::Pddb::new();
@@ -530,6 +550,13 @@ fn wrapped_main() -> ! {
     if soc_updated {
         log::info!("Soc update was triggered, UX flow should be running now...");
     }
+    // now that all the auto-update interaction is done, exit the gutter server. From
+    // this point forward, messages will pile up in the status queue, until the main loop starts.
+    send_message(cb_cid, Message::new_blocking_scalar(
+        StatusOpcode::Quit.to_usize().unwrap(),
+        0, 0, 0, 0,)
+    ).expect("couldn't exit the gutter server");
+    gutter.join().expect("status boot gutter server did not exit gracefully");
 
     // --------------------------- graphical loop timing
     let mut stats_phase: usize = 0;
@@ -1022,6 +1049,7 @@ fn wrapped_main() -> ! {
                 keys.lock().unwrap().do_create_backup_ux_flow(metadata);
             }
             Some(StatusOpcode::Quit) => {
+                xous::return_scalar(msg.sender, 1).ok();
                 break;
             }
             None => {
