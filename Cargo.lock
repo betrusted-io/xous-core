@@ -3679,20 +3679,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "totpbackup-rs"
-version = "0.1.0"
-dependencies = [
- "argh",
- "backup",
- "cbor",
- "ctaphid",
- "hex 0.4.3",
- "hidapi",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "tracing"
 version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4042,6 +4028,20 @@ dependencies = [
  "xous",
  "xous-ipc 0.9.7",
  "xous-names",
+]
+
+[[package]]
+name = "vaultbackup-rs"
+version = "0.1.0"
+dependencies = [
+ "argh",
+ "backup",
+ "cbor",
+ "ctaphid",
+ "hex 0.4.3",
+ "hidapi",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
