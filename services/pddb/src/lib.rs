@@ -628,6 +628,24 @@ impl Pddb {
             panic!("Internal error: wrong return code for is_efuse_secured()");
         }
     }
+    /// Rekey the PDDB. This can be a very long-running blocking operation that will definitely.
+    /// interrupt normal user flow.
+    pub fn rekey_pddb(&self, op: PddbRekeyOp) -> Result<()> {
+        let mut buf = Buffer::into_buf(op)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::RekeyPddb.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())?;
+        let result = buf.to_original::<PddbRekeyOp, _>()
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        match result {
+            PddbRekeyOp::Success => Ok(()),
+            PddbRekeyOp::AuthFail => Err(Error::new(ErrorKind::PermissionDenied, "Permission error")),
+            PddbRekeyOp::UserAbort => Err(Error::new(ErrorKind::Interrupted, "User aborted operation")),
+            PddbRekeyOp::InternalError => Err(Error::new(ErrorKind::Other, "Xous internal error")),
+            PddbRekeyOp::VerifyFail => Err(Error::new(ErrorKind::InvalidData, "Data verification error while rekeying")),
+            _ => Err(Error::new(ErrorKind::Unsupported, "Return code was never set")),
+        }
+    }
     /// Triggers a dump of the PDDB to host disk
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {

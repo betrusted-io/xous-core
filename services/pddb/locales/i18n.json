@@ -1,9 +1,33 @@
 {
+    "pddb.rekey.keys": {
+        "en": "Generating encryption mappings...",
+        "ja": "暗号化マッピングの生成...",
+        "zh": "生成加密映射...",
+        "en-tts": "Generating encryption mappings..."
+    },
+    "pddb.rekey.running": {
+        "en": "Rekeying the database...",
+        "ja": "データベースのキーの再生成...",
+        "zh": "重新加密数据库...",
+        "en-tts": "Rekeying the database..."
+    },
+    "pddb.rekey.fastspace": {
+        "en": "Regenerating free space cache...",
+        "ja": "空き領域キャッシュの再生成...",
+        "zh": "重新生成可用空间缓存...",
+        "en-tts": "Regenerating free space cache..."
+    },
     "pddb.freespace.request": {
         "en": "⚠ PDDB needs to allocate more free space. ⚠\nIn order to do this safely, you must enumerate all secret Bases now. Any Basis not disclosed could be overwritten.",
         "ja": "⚠ PDDBは、より多くの空き領域を割り当てる必要があります。⚠\nこれを安全に行うには、今すぐすべてのシークレットベースのロックを解除する必要があります。 ロックされたままのベーシスは上書きされる可能性があります。",
         "zh": "⚠ PDDB 需要分配更多可用空间。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
         "en-tts": "⚠ PDDB needs to allocate more free space. ⚠\nIn order to do this safely, you must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
+    },
+    "pddb.rekey.request": {
+        "en": "⚠ PDDB needs to be keyed to this device. ⚠\nIn order to do this safely, you must enumerate all secret Bases now. Any Basis not disclosed could be overwritten.",
+        "ja": "⚠ PDDBのキーを再入力する必要があります. ⚠\nこれを安全に行うには、今すぐすべてのシークレットベースのロックを解除する必要があります。 ロックされたままのベーシスは上書きされる可能性があります。",
+        "zh": "⚠ PDDB 需要重新加密。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
+        "en-tts": "⚠ PDDB needs to be keyed to this device. ⚠\nIn order to do this safely, you must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
     },
     "pddb.freespace.enumerate": {
         "en": "Enumerate a Basis?",
@@ -40,6 +64,12 @@
         "ja": "空き領域キャッシュの生成に進みましょうか。",
         "zh": "我们要继续生成可用空间缓存吗？",
         "en-tts": "Enumeration terminated.\n\nShall we proceed to generate the free space cache?"
+    },
+    "pddb.rekey.finished": {
+        "en": "Enumeration terminated.\n\nShall we proceed to rekeying?",
+        "ja": "キーの再生成に進みましょう?",
+        "zh": "继续重新加密？",
+        "en-tts": "Enumeration terminated.\n\nShall we proceed to rekeying?"
     },
     "pddb.okay": {
         "en": "Okay",

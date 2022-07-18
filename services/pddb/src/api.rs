@@ -76,6 +76,26 @@ pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
 #[allow(dead_code)]
 pub(crate) const FSCB_FILL_UNCERTAINTY: f32 = 0.1;
 
+/// This is a number that represents a fraction out of 255 that is the chance of a given
+/// block of unused data being recycled with noise. (So 26 would be roughly a 10% chance).
+/// This is an optimization that makes PDDB migrations/restores faster, while maintaining
+/// some amount of deniability. The higher the chance of rekey, the better the deniability.
+///
+/// If you set the REKEY_CHANCE to 0, then after a migration or rekey operation,
+/// exactly the set of data that is used will have its ciphertext changed, which is a precise
+/// leak of the amount of information in the PDDB.
+///
+/// If you set REKEY_CHANCE to 256 or greater, then, every block is mutated, regardless of
+/// the usage state of the PDDB, and full deniability is preserved. However, this will cause
+/// the rekey operation to always take about a half hour, even if the PDDB is basically empty.
+///
+/// The initial 10% threshold gives us sufficient deniability for e.g. small secrets like
+/// passwords, TOTP tokens, U2F keys while incurring just a couple extra minutes overhead.
+/// However it would probably not be sufficient if you routinely use the PDDB to store
+/// large objects like images, audio, or large blocks of text.
+#[allow(dead_code)]
+pub(crate) const FAST_REKEY_CHANCE: u32 = 26;
+
 #[allow(dead_code)]
 pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 // this isn't an "official" basis, but it is used for the AAD for encrypting the FastSpace structure
@@ -177,6 +197,9 @@ pub(crate) enum Opcode {
 
     /// Remove an empty dict
     DeleteDictStd = 41,
+
+    /// Rekey the PDDB
+    RekeyPddb = 42,
 
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
@@ -386,6 +409,46 @@ impl PddbKeyAttrIpc {
             code: PddbRequestCode::NoErr,
         }
     }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
+pub enum PddbRekeyOp {
+    /// rekeys the a restored PDDB to the current device DNA using the "fast" method.
+    /// The "fast" method is significantly faster on PDDBs with a small amount of data, but
+    /// it will leak information on the amount of data in the PDDB, in a manner that can be
+    /// trivially recovered by doing comparative ciphertext analysis between the backup and
+    /// the current database image. *Some* amount of chaffe data is written, but only a
+    /// small amount.
+    FromDnaFast(u64),
+    /// same as the above, but blank space is also turned over, guaranteeing the deniability
+    /// of stored data even if an attacker has the previous backup copy of the PDDB.
+    FromDnaSafe(u64),
+    /// Basically the same as FromDnaSafe, but doing a self-to-self "safe" rekey
+    Churn,
+    /*
+    // skip this implementation for now. This opcode fits generally into this code flow,
+    // but requires some rework of the UX to actually acquire the old and new passwords.
+    // this UX work is off-topic from the mission of getting backup restoration done,
+    // but the potential to integrate the password rotation scheme into this function is
+    // noted here for future efforts.
+    //
+    /// Requests a single secret basis to have its password changed. This will reveal the size
+    /// of the Basis if the attacker has a before-and-after image of the PDDB.
+    /// Recommended to call `Churn` after this operation is done for optimal safety.
+    ///
+    /// Note: changing the password on the .System basis is a different flow. The
+    /// system basis keys are encrypted directly by the rootkeys enclave, so changing
+    /// its password requires calling a routine in root_keys (that does not exist
+    /// at this current time).
+    ChangePass(xous_ipc::String<BASIS_NAME_LEN>),
+    */
+
+    /// Return codes
+    Success,
+    AuthFail,
+    UserAbort,
+    VerifyFail,
+    InternalError,
 }
 
 /// Debugging commands, available only in hosted mode

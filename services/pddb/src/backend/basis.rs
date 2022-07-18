@@ -268,6 +268,9 @@ impl BasisCache {
         }
         al
     }
+    pub(crate) fn rekey(&self, hw: &mut PddbOs, op: PddbRekeyOp) -> PddbRekeyOp {
+        hw.pddb_rekey(op, &self.cache)
+    }
     fn select_basis(&self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
             log::error!("Can't select basis: PDDB is not mounted");
