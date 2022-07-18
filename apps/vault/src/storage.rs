@@ -186,7 +186,7 @@ impl Manager {
 
     pub fn get_record<T: StorageContent>(
         &self,
-        kind: ContentKind,
+        kind: &ContentKind,
         key_name: &str,
     ) -> Result<T, Error>
     where
@@ -200,7 +200,7 @@ impl Manager {
 
     pub fn update<T: StorageContent>(
         &mut self,
-        kind: ContentKind,
+        kind: &ContentKind,
         key_name: &str,
         record: T,
     ) -> Result<(), Error>
@@ -216,13 +216,11 @@ impl Manager {
         self.new_record(record, Some(basis))
     }
 
-    pub fn delete<T: StorageContent>(
+    pub fn delete(
         &mut self,
         kind: ContentKind,
         key_name: &str,
     ) -> Result<(), Error>
-    where
-        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
     {
         let settings = kind.settings();
 
