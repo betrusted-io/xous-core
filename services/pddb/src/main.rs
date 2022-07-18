@@ -1390,6 +1390,12 @@ fn wrapped_main() -> ! {
                 }
                 modals.show_notification(&note, None).expect("couldn't show basis list");
             },
+            Opcode::RekeyPddb => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let rekey_op = buffer.to_original::<PddbRekeyOp, _>().unwrap();
+                let result = basis_cache.rekey(&mut pddb_os, rekey_op);
+                buffer.replace(result).unwrap();
+            }
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -1507,7 +1513,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(target_os = "none", target_os = "xous", feature="test-rekey"))]
         {
             log::debug!("PDDB did not mount; requesting format");
             modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
@@ -1576,7 +1582,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 false
             }
         }
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(not(any(target_os = "none", target_os = "xous", feature="test-rekey")))]
         {
             pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
             let _ = xous::send_message(time_resetter,

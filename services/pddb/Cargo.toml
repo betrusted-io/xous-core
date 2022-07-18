@@ -75,4 +75,5 @@ tts = []
 migration1 = []
 # hazardous debug flag decorates any debug paths that might accidentally leak key material
 hazardous-debug = []
+test-rekey = []
 default = ["mbbb"]

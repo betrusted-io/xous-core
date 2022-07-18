@@ -15,6 +15,8 @@ VPAGE_SIZE = 4064
 MBBB_PAGES = 10
 DO_CI_TESTS = True
 VERSION = 0x02_01
+DNA=0
+#DNA=0x1_0000_0000
 
 # build a table mapping all non-printable characters to None
 NOPRINT_TRANS_TABLE = {
@@ -138,7 +140,7 @@ def keycommit_decrypt(key, aad, pp_data):
         raise Exception(ValueError)
     return pt_data
 
-def basis_aad(name, version=VERSION, dna=0):
+def basis_aad(name, version=VERSION, dna=DNA):
     name_bytes = bytearray(name, 'utf-8')
     # name_bytes += bytearray(([0] * (Basis.MAX_NAME_LEN - len(name))))
     name_bytes += version.to_bytes(4, 'little')
@@ -757,7 +759,7 @@ class Fscb:
                 logging.warning("Duplicate journal number found:\n   {} (in table)\n   {} (incoming)".format(cur_pp.as_str(), pp.as_str()))
 
     # this is the "AAD" used to encrypt the FastSpace
-    def aad(version=VERSION, dna=0):
+    def aad(version=VERSION, dna=DNA):
         return bytearray([46, 70, 97, 115, 116, 83, 112, 97, 99, 101]) + version.to_bytes(4, 'little') + dna.to_bytes(8, 'little')
 
 class SpaceUpdate:
