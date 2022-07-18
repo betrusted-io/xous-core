@@ -302,7 +302,7 @@ impl ActionApi for Bip39Entry {
         let can_move_downwards = !(self.suggestion_index.get() + 1 == NUM_RECCOS);
         let can_move_upwards =  !(self.suggestion_index.get() - 1 < 0);
 
-        log::info!("key_action: {}", k);
+        // log::debug!("key_action: {}", k);
         match k {
             '∴' | '\u{d}' => {
                 if self.user_input.len() == 0 {
