@@ -1226,7 +1226,8 @@ impl<'a> RootKeys {
             .zip(self.read_staged_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
                 *key = src;
             }
-            log::info!("keypair_bytes {:x?}", keypair_bytes);
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("keypair_bytes {:x?}", keypair_bytes);
             // Keypair zeroizes the secret key on drop.
             let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
             #[cfg(feature = "hazardous-debug")]
