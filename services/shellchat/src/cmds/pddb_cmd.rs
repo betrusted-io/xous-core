@@ -216,6 +216,19 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         Err(_) => write!(ret, "Error encountered listing dictionaries").ok().unwrap_or(()),
                     }
                 }
+                #[cfg(feature="test-rekey")]
+                "rekey" => {
+                    let old_dna = if let Some(dna_str) = tokens.next() {
+                        dna_str.parse::<u64>().unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    log::info!("rekey result: {:?}", self.pddb.rekey_pddb(pddb::PddbRekeyOp::FromDnaFast(old_dna)));
+                }
+                #[cfg(feature="pddbtest")]
+                "dump" => {
+                    self.pddb.dbg_dump("full").unwrap();
+                }
                 #[cfg(feature="pddbtest")]
                 "largetest" => {
                     // fill memory with junk
