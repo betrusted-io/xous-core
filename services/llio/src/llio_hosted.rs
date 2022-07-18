@@ -21,6 +21,9 @@ impl Llio {
     pub fn gpio_int_pending(&self, ) -> u32 { 0x0 }
     pub fn gpio_int_ena(&self, _d: u32) {}
     pub fn set_uart_mux(&self, _mux: UartType) {}
+    #[cfg(feature="test-rekey")]
+    pub fn get_info_dna(&self, ) ->  (usize, usize) { (0, 1) }
+    #[cfg(not(feature="test-rekey"))]
     pub fn get_info_dna(&self, ) ->  (usize, usize) { (0, 0) }
     pub fn get_info_git(&self, ) ->  (usize, usize) { (0, 0) }
     pub fn get_info_platform(&self, ) ->  (usize, usize) { (0, 0) }
