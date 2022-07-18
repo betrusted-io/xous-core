@@ -413,6 +413,7 @@ fn wrapped_main() -> ! {
     let restore_header = keys.lock().unwrap().get_restore_header();
     match restore_header {
         Ok(Some(header)) => {
+            log::info!("Restore header op: {:?}", header.op);
             match header.op {
                 BackupOp::Restore => {
                     // set the keyboard layout according to the restore record.

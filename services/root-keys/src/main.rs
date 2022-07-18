@@ -344,6 +344,14 @@ mod implementation {
         pub fn should_prompt_for_update(&self) -> bool {true}
         pub fn set_prompt_for_update(&self, _state: bool) {}
         pub fn write_backup(&mut self, header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+            header.op = BackupOp::Backup;
+            log::info!("backup header: {:?}", header);
+            log::info!("backup ciphertext: {:x?}", backup_ct.as_ref());
+            Ok(())
+        }
+        pub fn write_restore_dna(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+            header.op = BackupOp::RestoreDna;
+            log::info!("write restore_dna called");
             log::info!("backup header: {:?}", header);
             log::info!("backup ciphertext: {:x?}", backup_ct.as_ref());
             Ok(())
@@ -1541,13 +1549,15 @@ fn main() -> ! {
                         let (mut header, ct) = keys.read_backup()
                         .expect("Internal error: we're doing a backup, but somehow the backup record has disappeared on us!");
                         if u64::from_le_bytes(header.dna) == llio.soc_dna().unwrap() {
+                            log::info!("erasing backup block");
                             // we're restoring to the same device, we're done!
                             keys.erase_backup();
                         } else {
+                            log::info!("DNA is not the same; setting flag to trigger RestoreDna flow");
                             // one more step...have to re-encrypt the PDDB's basis to the new device's DNA.
                             // we'll handle this *after* the reboot, because we may need a newer SoC version, etc.
-                            header.op = BackupOp::RestoreDna;
-                            keys.write_backup(header, ct)
+                            header.op = BackupOp::RestoreDna; // it gets set inside the call too; could lose this line but testing is painful on this flow.
+                            keys.write_restore_dna(header, ct)
                             .expect("Couldn't set flag for restore with new DNA: some data loss will occur.");
                         }
                         log::info!("going to into reboot arc");

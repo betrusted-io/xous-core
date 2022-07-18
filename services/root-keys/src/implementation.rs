@@ -2652,6 +2652,21 @@ impl<'a> RootKeys {
         ).map_err(|_| xous::Error::InternalError)?;
         Ok(())
     }
+    pub fn write_restore_dna(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+        header.op = BackupOp::RestoreDna; // set the "restore DNA" flag
+
+        // condense the data into a single block, to reduce read/write cycles on the block
+        let mut block = [0u8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()];
+        block[..size_of::<BackupHeader>()].copy_from_slice(header.as_ref());
+        block[size_of::<BackupHeader>()..].copy_from_slice(backup_ct.as_ref());
+        self.spinor.patch(
+            self.kernel(),
+            self.kernel_base(),
+            &block,
+            xous::KERNEL_BACKUP_OFFSET
+        ).map_err(|_| xous::Error::InternalError)?;
+        Ok(())
+    }
     pub fn read_backup(&mut self) -> Result<(BackupHeader, backups::BackupDataCt), xous::Error> {
         let mut header = BackupHeader::default();
         let mut ct = backups::BackupDataCt::default();
