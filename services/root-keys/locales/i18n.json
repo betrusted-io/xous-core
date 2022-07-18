@@ -29,6 +29,12 @@
         "zh": "中止恢复！",
         "en-tts": "Aborting restore!"
     },
+    "rootkeys.try_again": {
+        "en": "Try again?",
+        "ja": "再試行？",
+        "zh": "再试一次？",
+        "en-tts": "Try again?"
+    },
     "rootkeys.restore_zero_key": {
         "en": "Note: your backup was encrypted with the '0' key. Skipping password entry.\nThis is normal for developers.\n\nUsers should burn BBRAM or eFuse key for secure backups!",
         "ja": "注：バックアップは「0」キーで暗号化されています。 パスワード入力をスキップします。\n\n安全なバックアップのためにBBRAMまたはeFuseキーを焼きます！",

@@ -1533,11 +1533,11 @@ fn main() -> ! {
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                 log::info!("set_ux_password result: {:?}", result);
-                // clear all the state, re-enable suspend/resume
-                keys.finish_key_init();
-
                 match result {
                     Ok(_) => {
+                        // clear all the state, re-enable suspend/resume
+                        keys.finish_key_init();
+
                         let (mut header, ct) = keys.read_backup()
                         .expect("Internal error: we're doing a backup, but somehow the backup record has disappeared on us!");
                         if u64::from_le_bytes(header.dna) == llio.soc_dna().unwrap() {
@@ -1557,6 +1557,9 @@ fn main() -> ! {
                         // don't unblock the caller if we go to the reboot arc
                     }
                     Err(RootkeyResult::AlignmentError) => {
+                        // clear all the state, re-enable suspend/resume
+                        keys.finish_key_init();
+
                         modals.show_notification(t!("rootkeys.init.fail_alignment", xous::LANG), None).expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
@@ -1564,23 +1567,63 @@ fn main() -> ! {
                     }
                     Err(RootkeyResult::KeyError) => {
                         modals.show_notification(t!("rootkeys.init.fail_key", xous::LANG), None).expect("modals error");
-                        if let Some(sender) = deferred_response {
-                            xous::return_scalar(sender, 1).ok();
+                        modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("modals error");
+                        modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("modals error");
+                        match modals.get_radiobutton(t!("rootkeys.try_again", xous::LANG)) {
+                            Ok(response) => {
+                                if response == t!("rootkeys.gwup.no", xous::LANG) {
+                                    // clear all the state, re-enable suspend/resume
+                                    keys.finish_key_init();
+
+                                    if let Some(dr) = deferred_response.take() {
+                                        xous::return_scalar(dr, 1).unwrap();
+                                    }
+                                    continue;
+                                } else if response == t!("rootkeys.gwup.yes", xous::LANG) {
+                                    // get the update password, so we can encrypt the FPGA key to it.
+                                    keys.set_ux_password_type(Some(PasswordType::Update));
+                                    password_action.set_action_opcode(Opcode::UxDoRestorePwReturn.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::TextEntry(password_action.clone())),
+                                        Some(t!("rootkeys.get_update_password_restore", xous::LANG)), false,
+                                        None, true, None
+                                    );
+                                    #[cfg(feature="tts")]
+                                    tts.tts_blocking(t!("rootkeys.get_update_password_restore", xous::LANG)).unwrap();
+                                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                    rootkeys_modal.activate();
+                                } else {
+                                    // clear all the state, re-enable suspend/resume
+                                    keys.finish_key_init();
+
+                                    log::error!("get_radiobutton had an unexpected response: {:?}", response);
+                                }
+                            }
+                            _ => log::error!("get_radiobutton failed"),
                         }
                     }
                     Err(RootkeyResult::IntegrityError) => {
+                        // clear all the state, re-enable suspend/resume
+                        keys.finish_key_init();
+
                         modals.show_notification(t!("rootkeys.init.fail_verify", xous::LANG), None).expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
                         }
                     }
                     Err(RootkeyResult::FlashError) => {
+                        // clear all the state, re-enable suspend/resume
+                        keys.finish_key_init();
+
                         modals.show_notification(t!("rootkeys.init.fail_burn", xous::LANG), None).expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
                         }
                     }
                     Err(RootkeyResult::StateError) => {
+                        // clear all the state, re-enable suspend/resume
+                        keys.finish_key_init();
+
                         modals.show_notification(t!("rootkeys.wrong_state", xous::LANG), None).expect("modals error");
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();

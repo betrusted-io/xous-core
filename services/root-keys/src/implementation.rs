@@ -173,6 +173,7 @@ pub(crate) struct RootKeys {
     xns: xous_names::XousNames,
     jtag: jtag::Jtag,
     fake_key: [u8; 32], // a base set of random numbers used to respond to invalid keyloc requests in AES operations
+    restore_running: bool,
 }
 
 impl<'a> RootKeys {
@@ -267,6 +268,7 @@ impl<'a> RootKeys {
             xns,
             jtag,
             fake_key,
+            restore_running: false,
         };
         /*
         // dumps the key enclave -- in a format for Renode integration. Or if you just wanted to steal all the keys.
@@ -757,7 +759,7 @@ impl<'a> RootKeys {
     /// salt from a staging area, and not our KEYROM. However, `setup_key_init` must be called
     /// first to ensure that the staging area has a valid salt.
     fn get_salt(&mut self) -> [u8; 16] {
-        if !self.is_initialized() {
+        if !self.is_initialized() || self.restore_running {
             // we're not initialized, use the salt that should already be in the staging area
             let mut key: [u8; 16] = [0; 16];
             for (word, &keyword) in key.chunks_mut(4).into_iter()
@@ -844,6 +846,8 @@ impl<'a> RootKeys {
         // stage the plaintext FPGA key into the keyrom area for encryption by the key_init routine.
         self.sensitive_data.borrow_mut().as_slice_mut::<u8>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 32]
             .copy_from_slice(&key.0);
+
+        self.restore_running = true;
     }
 
     /// used to recycle a PDDB after a key init event
@@ -2437,6 +2441,8 @@ impl<'a> RootKeys {
 
         // now purge the keyrom copy and other temporaries
         self.purge_sensitive_data();
+        // reset this flag to false in case this was called at the end of a restore op; harmless if it's already false.
+        self.restore_running = false;
 
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
