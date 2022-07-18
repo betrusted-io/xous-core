@@ -396,15 +396,14 @@ fn wrapped_main() -> ! {
         Ok(Some(header)) => {
             match header.op {
                 BackupOp::Restore => {
-                    { /* remove this check once the restore process for this case is complete */
-                        let backup_dna = u64::from_le_bytes(header.dna);
-                        if backup_dna != llio.soc_dna().unwrap() {
-                            log::info!("backup_dna is 0x{:x}", backup_dna);
-                            log::info!("reported dna is 0x{:x}", llio.soc_dna().unwrap());
-                            panic!("Backups to new devices not yet supported: add DNA re-encryption flow");
-                        }
+                    let backup_dna = u64::from_le_bytes(header.dna);
+                    if backup_dna != llio.soc_dna().unwrap() {
+                        log::info!("This will be a two-stage restore because this is to a new device.");
+                        log::info!("backup_dna is 0x{:x}", backup_dna);
+                        log::info!("reported dna is 0x{:x}", llio.soc_dna().unwrap());
                     }
                     keys.lock().unwrap().do_restore_backup_ux_flow();
+                    // if the DNA matches the backup, the backup header is automatically erased.
                     restore_running = true;
                     // set the keyboard layout according to the restore record.
                     let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
@@ -413,12 +412,19 @@ fn wrapped_main() -> ! {
                     kbd.set_keymap(map).ok();
                 }
                 BackupOp::RestoreDna => {
-                    unimplemented!();
-                    // need to call a PDDB function that does the DNA upgrade.
-                    // this is also the 'churn' function that's been on the to-do list, btw, just called with the same DNA as before.
-
-                    // once this step is done & successful, we have to erase the backup block to avoid re-doing this flow
-                    keys.lock().unwrap().do_erase_backup();
+                    let pddb = pddb::Pddb::new();
+                    let backup_dna = u64::from_le_bytes(header.dna);
+                    match pddb.rekey_pddb(pddb::PddbRekeyOp::FromDnaFast(backup_dna)) {
+                        Ok(_) => {
+                            // once this step is done & successful, we have to erase the backup block to avoid re-doing this flow
+                            keys.lock().unwrap().do_erase_backup();
+                            log::info!("Rekey of PDDB to current device completed successfully")
+                        },
+                        Err(e) => {
+                            modals.show_notification(&format!("{}{:?}", t!("rekey.fail", xous::LANG), e), None).ok();
+                            log::error!("Backup was aborted. Reason: {:?}", e);
+                        }
+                    }
                 }
                 BackupOp::Backup => {
                     // once we have unlocked the PDDB and know our timezone, we'll compare the embedded timestamp to

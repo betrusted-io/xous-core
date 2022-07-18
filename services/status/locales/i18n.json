@@ -5,6 +5,12 @@
         "zh": "找到了网关软件的更新候选者。\n\n我们应该应用它吗？",
         "en-tts": "An update candidate for the SoC was found.\n\nShould we apply it?"
     },
+    "rekey.fail": {
+        "ja": "キーの再生成に失敗しました。再起動して再試行してください。\n理由：",
+        "en": "Rekey operation failed, please reboot and try again.\n Reason: ",
+        "zh": "重新生成密钥操作失败，请重新启动并重试。\n原因：",
+        "en-tts": "Rekey operation failed, please reboot and try again.\nReason: "
+    },
     "socup.ignore": {
         "ja": "この更新を無視する",
         "en": "Ignore this update",

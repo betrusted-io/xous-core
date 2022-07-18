@@ -55,4 +55,5 @@ tts = []
 # default = ["debugprint"] # "debugprint"
 dbg-ecupdate = []
 ditherpunk = []
+test-rekey = []
 default = []
