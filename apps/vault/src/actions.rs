@@ -13,7 +13,7 @@ use chrono::{Utc, DateTime, NaiveDateTime};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::cell::RefCell;
 
-use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT};
+use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage::{self, StorageContent}};
 use crate::{VaultMode, SelectedEntry};
 
 use crate::fido::U2F_APP_DICT;
@@ -147,6 +147,7 @@ pub(crate) fn start_actions_thread(
 
 struct ActionManager {
     modals: modals::Modals,
+    storage: RefCell<storage::Manager>,
     trng: RefCell::<trng::Trng>,
     mode: Arc::<Mutex::<VaultMode>>,
     item_list: Arc::<Mutex::<Vec::<ListItem>>>,
@@ -164,9 +165,12 @@ impl ActionManager {
         action_active: Arc::<AtomicBool>
     ) -> ActionManager {
         let xns = xous_names::XousNames::new().unwrap();
+        let storage_manager = storage::Manager::new(&xns);
+
         let mc = (*mode.lock().unwrap()).clone();
         ActionManager {
             modals: modals::Modals::new(&xns).unwrap(),
+            storage: RefCell::new(storage_manager),
             trng: RefCell::new(trng::Trng::new(&xns).unwrap()),
             mode_cache: mc,
             mode,
@@ -326,37 +330,24 @@ impl ActionManager {
                         maybe_password
                     };
                 }
-                let record = PasswordRecord {
+                let record = storage::PasswordRecord {
                     version: VAULT_PASSWORD_REC_VERSION,
                     description,
                     username,
                     password,
                     notes: t!("vault.notes", xous::LANG).to_string(),
-                    ctime: utc_now().timestamp() as u64,
+                    ctime: 0,
                     atime: 0,
                     count: 0,
                 };
-                let ser = serialize_password(&record);
-                let guid = self.gen_guid();
-                log::debug!("storing into guid: {}", guid);
-                match self.pddb.borrow().get(
-                    VAULT_PASSWORD_DICT,
-                    &guid,
-                    None, true, true,
-                    Some(VAULT_ALLOC_HINT), Some(crate::basis_change)
-                ) {
-                    Ok(mut data) => {
-                        match data.write(&ser) {
-                            Ok(len) => log::debug!("wrote {} bytes", len),
-                            Err(e) => {log::error!("internal error");
-                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))},
-                        }
-                    }
-                    Err(e) => { log::error!("internal error");
-                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))},
-                }
-                log::debug!("syncing...");
-                self.pddb.borrow().sync().ok();
+
+                match self.storage.borrow_mut().new_record(record, None) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        log::error!("internal error");
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                    },
+                };
             }
             VaultMode::Fido => {
                 self.report_err(t!("vault.error.add_fido2", xous::LANG), None::<std::io::Error>);
@@ -401,303 +392,201 @@ impl ActionManager {
                 };
                 let validated_secret = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &ss_vec);
                 // time, hash, etc. are all the "expected defaults" -- if you want to change them, edit the record after entering it.
-                let totp = TotpRecord {
+                let totp = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
                     name: description,
                     secret: validated_secret,
                     algorithm: TotpAlgorithm::HmacSha1,
                     digits: 6,
                     timestep: 30,
-                    ctime: utc_now().timestamp() as u64,
+                    ctime: 0, 
                     notes: t!("vault.notes", xous::LANG).to_string(),
                 };
-                let ser = serialize_totp(&totp);
-                let guid = self.gen_guid();
-                log::debug!("storing into guid: {}", guid);
-                match self.pddb.borrow().get(
-                    VAULT_TOTP_DICT,
-                    &guid,
-                    None, true, true,
-                    Some(VAULT_TOTP_ALLOC_HINT), Some(crate::basis_change)
-                ) {
-                    Ok(mut data) => {
-                        match data.write(&ser) {
-                            Ok(len) => log::debug!("wrote {} bytes", len),
-                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
-                        }
-                    }
-                    Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
-                }
-                log::debug!("syncing...");
-                self.pddb.borrow().sync().ok();
+
+                match self.storage.borrow_mut().new_record(totp, None) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        log::error!("internal error");
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                    },
+                };
             }
         }
     }
 
     pub(crate) fn menu_delete(&mut self, entry: SelectedEntry) {
         if self.yes_no_approval(&format!("{}\n{}", t!("vault.delete.confirm", xous::LANG), entry.description)) {
-            let dict = match entry.mode {
-                VaultMode::Password => VAULT_PASSWORD_DICT,
-                VaultMode::Fido => crate::fido::U2F_APP_DICT,
-                VaultMode::Totp => VAULT_TOTP_DICT,
+            let choice = match entry.mode {
+                VaultMode::Password => Some(storage::ContentKind::Password),
+                VaultMode::Totp => Some(storage::ContentKind::TOTP),
+                VaultMode::Fido => None,
             };
-            // first "get" the key, to resolve exactly what basis the key is in. This is because `delete_key()` will
-            // only look in the most recently unlocked secret basis, it won't automatically descend into the database
-            // and try to cull something willy-nilly.
-            match self.pddb.borrow().get(dict, entry.key_name.as_str().unwrap_or("UTF8-error"),
-                None, false, false, None, None::<fn()>
-            ) {
-                Ok(candidate) => {
-                    let attr = candidate.attributes().expect("couldn't get key attributes");
-                    match self.pddb.borrow().delete_key(dict,
-                        entry.key_name.as_str().unwrap_or("UTF8-error"),
-                        Some(&attr.basis)) {
-                        Ok(_) => {
-                            self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
-                        }
-                        Err(e) => {
-                            self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e));
-                        }
-                    }
-                }
-                Err(e) => {
-                    match e.kind() {
-                        std::io::ErrorKind::NotFound => {
-                            // handle special case of FIDO which is two dicts combined
-                            if entry.mode == VaultMode::Fido {
-                                // try the "other" dictionary
-                                match self.pddb.borrow().get(crate::ctap::FIDO_CRED_DICT, entry.key_name.as_str().unwrap_or("UTF8-error"),
-                                    None, false, false, None, None::<fn()>
-                                ) {
-                                    Ok(candidate) => {
-                                        let attr = candidate.attributes().expect("couldn't get key attributes");
-                                        match self.pddb.borrow()
-                                        .delete_key(
-                                            crate::ctap::FIDO_CRED_DICT,
-                                            entry.key_name.as_str().unwrap_or("UTF8-error"),
-                                            Some(&attr.basis)
-                                        ) {
-                                            Ok(_) => {
-                                                self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
-                                            }
-                                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
-                                        }
-                                    }
-                                    Err(e) => {
-                                        self.report_err(t!("vault.error.not_found", xous::LANG), Some(e));
-                                    }
-                                }
-                            } else {
-                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e));
+
+            if choice.is_none() {
+                // we're dealing with FIDO stuff, use the custom code path
+                match self.pddb.borrow().get(crate::ctap::FIDO_CRED_DICT, entry.key_name.as_str().unwrap_or("UTF8-error"),
+                    None, false, false, None, None::<fn()>
+                ) {
+                    Ok(candidate) => {
+                        let attr = candidate.attributes().expect("couldn't get key attributes");
+                        match self.pddb.borrow()
+                        .delete_key(
+                            crate::ctap::FIDO_CRED_DICT,
+                            entry.key_name.as_str().unwrap_or("UTF8-error"),
+                            Some(&attr.basis)
+                        ) {
+                            Ok(_) => {
+                                self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok();
                             }
+                            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
                         }
-                        _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                    }
+                     Err(e) => {
+                        self.report_err(t!("vault.error.not_found", xous::LANG), Some(e));
                     }
                 }
+            }
+
+            // we're deleting either a password, ora a totp
+            match self.storage.borrow_mut().delete(choice.unwrap(), entry.key_name.as_str().unwrap_or("UTF-8 error")) {
+                Ok(_) => self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok().unwrap(),
+                Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
             }
         }
     }
 
     pub(crate) fn menu_edit(&mut self, entry: SelectedEntry) {
-        let dict = match entry.mode {
-            VaultMode::Password => VAULT_PASSWORD_DICT,
-            VaultMode::Fido => crate::fido::U2F_APP_DICT,
-            VaultMode::Totp => VAULT_TOTP_DICT,
+        let choice = match entry.mode {
+            VaultMode::Password => Some(storage::ContentKind::Password),
+            VaultMode::Totp => Some(storage::ContentKind::TOTP),
+            VaultMode::Fido => None,
         };
-        match entry.mode {
-            VaultMode::Password => {
-                let maybe_update = match self.pddb.borrow().get(
-                    dict, entry.key_name.as_str().unwrap(), None,
-                    false, false, None, Some(crate::basis_change)
+
+        if choice.is_none() {
+            let dict = VAULT_TOTP_DICT;
+            // at the moment only U2F records are supported for editing. The FIDO2 stuff is done with a different record
+            // storage format that's a bit funkier to edit.
+            let maybe_update = match self.pddb.borrow().get(
+                dict, entry.key_name.as_str().unwrap(), None,
+                false, false, None, Some(crate::basis_change)
+            ) {
+                Ok(mut record) => {
+                    // resolve the basis of the key, so that we are editing it "in place"
+                    let attr = record.attributes().expect("couldn't get key attributes");
+                    let mut data = Vec::<u8>::new();
+                    let maybe_update = match record.read_to_end(&mut data) {
+                        Ok(_len) => {
+                            if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
+                                let edit_data = self.modals
+                                    .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                                    .field(Some(ai.name), Some(name_validator))
+                                    .field(Some(ai.notes), Some(name_validator))
+                                    .field(Some(hex::encode(ai.id)), None)
+                                    .build().expect("modals error in edit");
+                                ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
+                                ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
+                                ai.atime = 0;
+                                ai
+                            } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); return }
+                        }
+                        Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return }
+                    };
+                    Some((maybe_update, attr.basis))
+                }
+                Err(e) => {
+                    match e.kind() {
+                        std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.fido2", xous::LANG), None::<std::io::Error>),
+                        _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                    }
+                    return
+                }
+            };
+            if let Some((update, basis)) = maybe_update {
+                self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
+                .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
+                match self.pddb.borrow().get(
+                    dict, entry.key_name.as_str().unwrap(), Some(&basis),
+                    false, true, Some(VAULT_ALLOC_HINT),
+                    Some(crate::basis_change)
                 ) {
                     Ok(mut record) => {
-                        // resolve the basis of the key, so that we are editing it "in place"
-                        let attr = record.attributes().expect("couldn't get key attributes");
-                        let mut data = Vec::<u8>::new();
-                        let maybe_update = match record.read_to_end(&mut data) {
-                            Ok(_len) => {
-                                if let Some(mut pw) = deserialize_password(data) {
-                                    let edit_data = self.modals
-                                        .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                        .field(Some(pw.description), Some(name_validator))
-                                        .field(Some(pw.username), Some(name_validator))
-                                        .field(Some(pw.password), Some(name_validator))
-                                        .field(Some(pw.notes), Some(name_validator))
-                                        .build().expect("modals error in edit");
-                                    pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
-                                    pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
-                                    pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
-                                    pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
-                                    pw.atime = utc_now().timestamp() as u64;
-                                    pw
-                                } else { log::error!("record error");
-                                    self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); return }
-                            }
-                            Err(e) => { log::error!("internal error"); self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return }
-                        };
-                        Some((maybe_update, attr.basis))
+                        let ser = crate::fido::serialize_app_info(&update);
+                        record.write(&ser).unwrap_or_else(|e| {
+                            self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
                     }
-                    Err(e) => {
-                        match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::error!("not found");
-                                self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>)
-                            },
-                            _ => {
-                                log::error!("internal error");
-                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))
-                            },
-                        }
-                        None
+                    Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                }
+            }
+            self.pddb.borrow().sync().ok();
+            return;
+        }
+
+        let choice = choice.unwrap();
+        let key_name =  entry.key_name.as_str().unwrap();
+        let mut storage = self.storage.borrow_mut();
+
+        let maybe_edited = match choice {
+            storage::ContentKind::TOTP => {
+                let mut pw: storage::TotpRecord =  match storage.get_record(&choice, key_name) {
+                    Ok(record) => record,
+                    Err(error) => {
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                        return;
                     }
                 };
-                if let Some((update, basis)) = maybe_update {
-                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
-                    .unwrap_or_else(|e| {log::error!("internal error");
-                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))});
-                    match self.pddb.borrow().get(
-                        dict, entry.key_name.as_str().unwrap(), Some(&basis),
-                        false, true, Some(VAULT_ALLOC_HINT),
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let ser = serialize_password(&update);
-                            record.write(&ser)
-                            .unwrap_or_else(|e| {
-                                log::error!("internal error");
-                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
-                        }
-                        Err(e) => {
-                            log::error!("internal error");
-                            self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e))
-                        },
-                    }
+
+                let alg: String = pw.algorithm.into();
+                let edit_data = self.modals
+                    .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                    .field(Some(pw.name), Some(name_validator))
+                    .field(Some(pw.secret), Some(name_validator))
+                    .field(Some(pw.notes), Some(name_validator))
+                    .field(Some(pw.timestep.to_string()), Some(name_validator))
+                    .field(Some(alg), Some(name_validator))
+                    .field(Some(pw.digits.to_string()), Some(name_validator))
+                    .build().expect("modals error in edit");
+                pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
+                pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
+                pw.notes = edit_data.content()[2].content.as_str().unwrap().to_string();
+                if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str().unwrap(), 10) {
+                    pw.timestep = t;
                 }
-                self.pddb.borrow().sync().ok();
-            }
-            VaultMode::Fido => {
-                // at the moment only U2F records are supported for editing. The FIDO2 stuff is done with a different record
-                // storage format that's a bit funkier to edit.
-                let maybe_update = match self.pddb.borrow().get(
-                    dict, entry.key_name.as_str().unwrap(), None,
-                    false, false, None, Some(crate::basis_change)
-                ) {
-                    Ok(mut record) => {
-                        // resolve the basis of the key, so that we are editing it "in place"
-                        let attr = record.attributes().expect("couldn't get key attributes");
-                        let mut data = Vec::<u8>::new();
-                        let maybe_update = match record.read_to_end(&mut data) {
-                            Ok(_len) => {
-                                if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
-                                    let edit_data = self.modals
-                                        .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                        .field(Some(ai.name), Some(name_validator))
-                                        .field(Some(ai.notes), Some(name_validator))
-                                        .field(Some(hex::encode(ai.id)), None)
-                                        .build().expect("modals error in edit");
-                                    ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
-                                    ai.notes = edit_data.content()[1].content.as_str().unwrap().to_string();
-                                    ai.atime = utc_now().timestamp() as u64;
-                                    ai
-                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); return }
-                            }
-                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return }
-                        };
-                        Some((maybe_update, attr.basis))
-                    }
-                    Err(e) => {
-                        match e.kind() {
-                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.fido2", xous::LANG), None::<std::io::Error>),
-                            _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
-                        }
-                        return
+                if let Ok(alg) = TotpAlgorithm::try_from(edit_data.content()[4].content.as_str().unwrap()) {
+                    pw.algorithm = alg;
+                }
+                if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str().unwrap(), 10) {
+                    pw.digits = d;
+                }
+
+                storage.update(&choice, key_name, pw)
+            },
+            storage::ContentKind::Password => {
+                let mut pw: storage::PasswordRecord =  match storage.get_record(&choice, key_name) {
+                    Ok(record) => record,
+                    Err(error) => {
+                        self.report_err(t!("vault.error.internal_error", xous::LANG), Some(error));
+                        return;
                     }
                 };
-                if let Some((update, basis)) = maybe_update {
-                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
-                    .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
-                    match self.pddb.borrow().get(
-                        dict, entry.key_name.as_str().unwrap(), Some(&basis),
-                        false, true, Some(VAULT_ALLOC_HINT),
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let ser = crate::fido::serialize_app_info(&update);
-                            record.write(&ser).unwrap_or_else(|e| {
-                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
-                        }
-                        Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
-                    }
-                }
-                self.pddb.borrow().sync().ok();
-            }
-            VaultMode::Totp => {
-                let maybe_update = match self.pddb.borrow().get(
-                    dict, entry.key_name.as_str().unwrap(), None,
-                    false, false, None, Some(crate::basis_change)
-                ) {
-                    Ok(mut record) => {
-                        // resolve the basis of the key, so that we are editing it "in place"
-                        let attr = record.attributes().expect("couldn't get key attributes");
-                        let mut data = Vec::<u8>::new();
-                        let maybe_update = match record.read_to_end(&mut data) {
-                            Ok(_len) => {
-                                if let Some(mut pw) = deserialize_totp(data) {
-                                    let alg: String = pw.algorithm.into();
-                                    let edit_data = self.modals
-                                        .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                        .field(Some(pw.name), Some(name_validator))
-                                        .field(Some(pw.secret), Some(name_validator))
-                                        .field(Some(pw.notes), Some(name_validator))
-                                        .field(Some(pw.timestep.to_string()), Some(name_validator))
-                                        .field(Some(alg), Some(name_validator))
-                                        .field(Some(pw.digits.to_string()), Some(name_validator))
-                                        .build().expect("modals error in edit");
-                                    pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
-                                    pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
-                                    pw.notes = edit_data.content()[2].content.as_str().unwrap().to_string();
-                                    if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str().unwrap(), 10) {
-                                        pw.timestep = t;
-                                    }
-                                    if let Ok(alg) = TotpAlgorithm::try_from(edit_data.content()[4].content.as_str().unwrap()) {
-                                        pw.algorithm = alg;
-                                    }
-                                    if let Ok(d) = u32::from_str_radix(edit_data.content()[5].content.as_str().unwrap(), 10) {
-                                        pw.digits = d;
-                                    }
-                                    pw
-                                } else { self.report_err(t!("vault.error.record_error", xous::LANG), None::<std::io::Error>); return }
-                            }
-                            Err(e) => { self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return }
-                        };
-                        Some((maybe_update, attr.basis))
-                    }
-                    Err(e) => {
-                        match e.kind() {
-                            std::io::ErrorKind::NotFound => self.report_err(t!("vault.error.not_found", xous::LANG), None::<std::io::Error>),
-                            _ => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
-                        }
-                        return
-                    }
-                };
-                if let Some((update, basis)) = maybe_update {
-                    self.pddb.borrow().delete_key(dict, entry.key_name.as_str().unwrap(), Some(&basis))
-                    .unwrap_or_else(|e| self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)));
-                    match self.pddb.borrow().get(
-                        dict, entry.key_name.as_str().unwrap(), Some(&basis),
-                        false, true, Some(VAULT_ALLOC_HINT),
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let ser = serialize_totp(&update);
-                            record.write(&ser).unwrap_or_else(|e| {
-                                self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); 0});
-                        }
-                        Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
-                    }
-                }
-                self.pddb.borrow().sync().ok();
-            }
+
+                let edit_data = self.modals
+                    .alert_builder(t!("vault.edit_dialog", xous::LANG))
+                    .field(Some(pw.description), Some(name_validator))
+                    .field(Some(pw.username), Some(name_validator))
+                    .field(Some(pw.password), Some(name_validator))
+                    .field(Some(pw.notes), Some(name_validator))
+                    .build().expect("modals error in edit");
+                pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
+                pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
+                pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
+                pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
+                storage.update(&choice, key_name, pw)
+           },
+        };
+
+        match maybe_edited {
+            Ok(_) => {},
+            Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
         }
     }
 
@@ -720,11 +609,6 @@ impl ActionManager {
         }
     }
 
-    fn gen_guid(&self) -> String {
-        let mut guid = [0u8; 16];
-        self.trng.borrow_mut().fill_bytes(&mut guid);
-        hex::encode(guid)
-    }
 
     /// Populate the display list with data from the PDDB. Limited by total available RAM; probably
     /// would stop working if you have over 500-1k records with the current heap limits.
@@ -1046,6 +930,8 @@ impl ActionManager {
         // for each database, populate up to TARGET_ENTRIES
         // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
         // --- passwords ---
+        // TODO(gsora): we gotta figure out how to remove the pddb dep when testing feature is not
+        // enabled
         let pws = self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None).unwrap_or(Vec::new());
         if pws.len() < TARGET_ENTRIES_PW {
             let extra_count = TARGET_ENTRIES_PW - pws.len();
@@ -1065,35 +951,22 @@ impl ActionManager {
                     strict: true,
                 };
                 let password = pg.generate_one().unwrap();
-                let record = PasswordRecord {
+                let record = storage::PasswordRecord {
                     version: VAULT_PASSWORD_REC_VERSION,
                     description,
                     username,
                     password,
                     notes,
-                    ctime: utc_now().timestamp() as u64,
+                    ctime: 0,
                     atime: 0,
                     count: 0,
                 };
-                let ser = serialize_password(&record);
-                let guid = self.gen_guid();
-                match self.pddb.borrow().get(
-                    VAULT_PASSWORD_DICT,
-                    &guid,
-                    None, true, true,
-                    Some(VAULT_ALLOC_HINT), Some(crate::basis_change)
-                ) {
-                    Ok(mut data) => {
-                        match data.write(&ser) {
-                            Ok(len) => {
-                                log::debug!("pw wrote {} bytes", len);
-                                self.modals.dynamic_notification_update(Some(&format!("pw entry {}, {} bytes", index, len)), None).ok();
-                            },
-                            Err(e) => log::error!("PW Error: {:?}", e),
-                        }
-                    }
+
+                match self.storage.borrow_mut().new_record(record, None) {
+                    Ok(_) => {},
                     Err(e) => log::error!("PW Error: {:?}", e),
-                }
+                };
+
             }
         }
         // --- U2F + FIDO ---
@@ -1113,7 +986,7 @@ impl ActionManager {
                     name,
                     id,
                     notes,
-                    ctime: utc_now().timestamp() as u64,
+                    ctime: 0,
                     atime: 0,
                     count: 0,
                 };
@@ -1189,7 +1062,7 @@ impl ActionManager {
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let mut secret_bytes = [0u8; 10];
                 self.trng.borrow_mut().fill_bytes(&mut secret_bytes);
-                let record = TotpRecord {
+                let record = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
                     secret: base32::encode(base32::Alphabet::RFC4648 { padding: false }, &secret_bytes),
                     name,
@@ -1197,30 +1070,16 @@ impl ActionManager {
                     notes,
                     digits: 6,
                     timestep: 30,
-                    ctime: utc_now().timestamp() as u64,
+                    ctime: 0,
                 };
-                let ser = serialize_totp(&record);
-                let guid = self.gen_guid();
-                match self.pddb.borrow().get(
-                    VAULT_TOTP_DICT,
-                    &guid,
-                    None, true, true,
-                    Some(VAULT_TOTP_ALLOC_HINT), Some(crate::basis_change)
-                ) {
-                    Ok(mut data) => {
-                        match data.write(&ser) {
-                            Ok(len) => {
-                                self.modals.dynamic_notification_update(Some(&format!("totp entry {}, {} bytes", index, len)), None).ok();
-                                log::debug!("totp wrote {} bytes", len);
-                            },
-                            Err(e) => log::error!("TOTP Error: {:?}", e),
-                        }
-                    }
-                    Err(e) => log::error!("TOTP Error: {:?}", e),
-                }
+
+                match self.storage.borrow_mut().new_record(record, None) {
+                    Ok(_) => {},
+                    Err(e) => log::error!("PW Error: {:?}", e),
+                };
             }
             // specific TOTP entry with a known shared secret for testing
-            let record = TotpRecord {
+            let record = storage::TotpRecord {
                 version: VAULT_TOTP_REC_VERSION,
                 secret: "I65VU7K5ZQL7WB4E".to_string(),
                 name: "totp@authenticationtest.com".to_string(),
@@ -1228,27 +1087,14 @@ impl ActionManager {
                 notes: "Predefined test".to_string(),
                 digits: 6,
                 timestep: 30,
-                ctime: utc_now().timestamp() as u64,
+                ctime: 0,
             };
-            let ser = serialize_totp(&record);
-            let guid = self.gen_guid();
-            match self.pddb.borrow().get(
-                VAULT_TOTP_DICT,
-                &guid,
-                None, true, true,
-                Some(VAULT_TOTP_ALLOC_HINT), Some(crate::basis_change)
-            ) {
-                Ok(mut data) => {
-                    match data.write(&ser) {
-                        Ok(len) => {
-                            self.modals.dynamic_notification_update(Some(&format!("totp entry hardcoded, {} bytes", len)), None).ok();
-                            log::debug!("totp wrote {} bytes", len);
-                        },
-                        Err(e) => log::error!("TOTP Error: {:?}", e),
-                    }
-                }
-                Err(e) => log::error!("TOTP Error: {:?}", e),
-            }
+
+            match self.storage.borrow_mut().new_record(record, None) {
+                Ok(_) => {},
+                Err(e) => log::error!("PW Error: {:?}", e),
+            };
+
         }
         self.modals.dynamic_notification_update(Some("Syncing PDDB..."), None).ok();
         self.pddb.borrow().sync().ok();
@@ -1473,10 +1319,3 @@ pub(crate) fn deserialize_totp(data: Vec::<u8>) -> Option<TotpRecord> {
     }
 }
 
-/// because we don't get Utc::now, as the crate checks your architecture and xous is not recognized as a valid target
-fn utc_now() -> DateTime::<Utc> {
-    let now =
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("system time before Unix epoch");
-    let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
-    DateTime::from_utc(naive, Utc)
-}
