@@ -85,6 +85,7 @@ impl Deref for StaticCryptoData {
 #[derive(Eq, PartialEq)]
 enum DnaMode {
     Normal,
+    Churn,
     Migration,
 }
 #[derive(Zeroize)]
@@ -685,7 +686,7 @@ impl PddbOs {
         aad.extend_from_slice(PDDB_FAST_SPACE_SYSTEM_BASIS.as_bytes());
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         match self.dna_mode {
-            DnaMode::Normal => aad.extend_from_slice(&self.dna.to_le_bytes()),
+            DnaMode::Normal | DnaMode::Churn => aad.extend_from_slice(&self.dna.to_le_bytes()),
             DnaMode::Migration => aad.extend_from_slice(&self.migration_dna.to_le_bytes()),
         }
     }
@@ -1237,7 +1238,7 @@ impl PddbOs {
         aad.extend_from_slice(&name.as_bytes());
         aad.extend_from_slice(&PDDB_VERSION.to_le_bytes());
         match self.dna_mode {
-            DnaMode::Normal => aad.extend_from_slice(&self.dna.to_le_bytes()),
+            DnaMode::Normal | DnaMode::Churn => aad.extend_from_slice(&self.dna.to_le_bytes()),
             DnaMode::Migration => aad.extend_from_slice(&self.migration_dna.to_le_bytes()),
         }
         aad
@@ -1854,6 +1855,7 @@ impl PddbOs {
                 log::info!("migrating from dna 0x{:x} -> 0x{:x}", self.migration_dna, self.dna);
                 self.fast_space_read(); // we hawe to re-read the FSCB, because it would have failed previously with lots of warnings
             },
+            PddbRekeyOp::Churn => self.dna_mode = DnaMode::Churn,
             _ => (),
         };
 
@@ -2113,6 +2115,7 @@ impl PddbOs {
             match self.dna_mode {
                 DnaMode::Normal => t!("pddb.freespace.request", xous::LANG),
                 DnaMode::Migration => t!("pddb.rekey.request", xous::LANG),
+                DnaMode::Churn => t!("pddb.churn.request", xous::LANG),
             },
             None).ok();
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
@@ -2194,6 +2197,7 @@ impl PddbOs {
             match self.dna_mode {
                 DnaMode::Normal => t!("pddb.freespace.finished", xous::LANG),
                 DnaMode::Migration => t!("pddb.rekey.finished", xous::LANG),
+                DnaMode::Churn => t!("pddb.churn.finished", xous::LANG),
         }) {
             Some(ret)
         } else {

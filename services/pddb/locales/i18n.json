@@ -29,6 +29,12 @@
         "zh": "⚠ PDDB 需要重新加密。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
         "en-tts": "⚠ PDDB needs to be keyed to this device. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
     },
+    "pddb.churn.request": {
+        "en": "⚠ PDDB `churn` requested. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten.",
+        "ja": "⚠ PDDBの「チャーン」が要求されました。 ⚠\nこれを安全に行うには、今すぐすべてのシークレットベースのロックを解除する必要があります。 ロックされたままのベーシスは上書きされる可能性があります。",
+        "zh": "⚠ 请求 PDDB `churn`。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
+        "en-tts": "⚠ PDDB `churn` requested. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
+    },
     "pddb.freespace.enumerate": {
         "en": "Enumerate a Basis?",
         "ja": "根拠を開示しますか？",
@@ -70,6 +76,12 @@
         "ja": "キーの再生成に進みましょう?",
         "zh": "继续重新加密？",
         "en-tts": "Enumeration finished.\n\nShall we proceed to rekeying?"
+    },
+    "pddb.churn.finished": {
+        "en": "Enumeration finished.\n\nShall we proceed to churning? This process takes about 20 minutes.",
+        "ja": "列挙が終了しました。\n\n攪拌に進みましょうか？ このプロセスには約20分かかります。",
+        "zh": "枚举完成。\n\n我们要继续搅拌吗？ 这个过程大约需要 20 分钟。",
+        "en-tts": "Enumeration finished.\n\nShall we proceed to churning? This process takes about 20 minutes."
     },
     "pddb.okay": {
         "en": "Okay",
