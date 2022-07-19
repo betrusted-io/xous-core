@@ -1932,7 +1932,7 @@ impl PddbOs {
             let pddb_data_len = PDDB_A_LEN - self.data_phys_base.as_usize();
             let pddb_data_pages = pddb_data_len / PAGE_SIZE;
             let pagetable: &[u8] = &self.pddb_mr.as_slice()[..pddb_data_pages * size_of::<Pte>()];
-            log::info!("page table of len 0x{:x}", pagetable.len());
+            log::info!("Derived page table of len 0x{:x}", pagetable.len());
             let entries_per_page = PAGE_SIZE / size_of::<Pte>();
             modals.start_progress(t!("pddb.rekey.running", xous::LANG), 0, (pddb_data_pages * size_of::<Pte>()) as u32, 0).ok();
             for (chunk_enum, page) in pagetable.chunks(PAGE_SIZE).enumerate() {
@@ -1951,7 +1951,7 @@ impl PddbOs {
                     let ppn = (chunk_start_ppn + index) as u32;
                     chunk_len += size_of::<Pte>();
                     if let Some(&keyname) = pagemap.get(&ppn) {
-                        log::info!("re-encrypt page {} of {}", ppn, keyname);
+                        log::debug!("re-encrypt page {} of {}", ppn, keyname);
                         let ciphers = keymap.get(keyname).expect("How do we have a mapping to a key that we don't have?");
                         // ok, we know the physical page table number, and thus the page location, and the keys. we can
                         // now do the following:
@@ -1986,7 +1986,7 @@ impl PddbOs {
                             &ciphers.data_key,
                             &ciphers.aad_incoming,
                             &PhysPage(ppn)) {
-                                log::info!("...as basis root page...");
+                                log::debug!("...as basis root page...");
                                 self.data_encrypt_and_patch_page_with_commit(
                                     &ciphers.data_key,
                                     &ciphers.aad_local,
@@ -2011,7 +2011,7 @@ impl PddbOs {
                             _ => continue, // don't rekey blanks for all other ops
                         };
                         if (self.trng_u8() as u32) < blank_rekey_chance {
-                            log::info!("re-noising unused page {}", ppn);
+                            log::debug!("re-noising unused page {}", ppn);
                             let mut noise = [0u8; PAGE_SIZE];
                             self.trng_slice(&mut noise);
                             self.patch_data(&noise, ppn * PAGE_SIZE as u32);
