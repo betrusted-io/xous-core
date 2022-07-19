@@ -91,10 +91,10 @@
         "en-tts": "Please mount the PDDB and try again."
     },
     "secnote.zero_key": {
-        "en": " FPGA key (aka 'Backup Key') is zero",
-        "ja": "FPGAキーはゼロです",
-        "zh": "FPGA 密钥为零",
-        "en-tts": "FPGA key is zero"
+        "en": " Backup key not set",
+        "ja": "Backupキーはゼロです",
+        "zh": "Backup 密钥为零",
+        "en-tts": "Backup key not set"
     },
     "secnote.usb_unlock": {
         "en": " USB unlocked",
@@ -115,10 +115,10 @@
         "en-tts": "Invalid key state"
     },
     "secnote.no_keys": {
-        "en": " Root keys uninitialized",
+        "en": " No device keys",
         "ja": "ルートキーは未初期化",
         "zh": "密钥未初始化",
-        "en-tts": "Root keys unitialized"
+        "en-tts": "No device keys"
     },
     "secnote.allclear": {
         "en": " No security warnings",
@@ -163,10 +163,10 @@
         "en-tts": "🔇"
     },
     "mainmenu.init_keys": {
-        "en": "Initialize root keys",
+        "en": "Create device keys",
         "ja": "ルートキーの初期化",
         "zh": "设置根密码",
-        "en-tts": "Initialize root keys"
+        "en-tts": "Create device keys"
     },
     "mainmenu.provision_gateware": {
         "en": "Install gateware update",
