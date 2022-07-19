@@ -163,10 +163,10 @@
         "en-tts": "🔇"
     },
     "mainmenu.init_keys": {
-        "en": "Create device keys",
+        "en": "Setup passwords...",
         "ja": "ルートキーの初期化",
         "zh": "设置根密码",
-        "en-tts": "Create device keys"
+        "en-tts": "Setup passwords..."
     },
     "mainmenu.provision_gateware": {
         "en": "Install gateware update",
