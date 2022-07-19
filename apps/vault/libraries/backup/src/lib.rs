@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum CborConversionError {
     BadCbor,
     UnknownAlgorithm(u64),
+    UnknownPayloadType(u8),
 }
 
 impl Display for CborConversionError {
@@ -14,6 +15,7 @@ impl Display for CborConversionError {
         match self {
             CborConversionError::BadCbor => write!(f, "bad cbor"),
             CborConversionError::UnknownAlgorithm(algo) => write!(f, "unknown algorithm {}", algo),
+            CborConversionError::UnknownPayloadType(pt) => write!(f, "unknown payload type {}", pt),
         }
     }
 }
@@ -133,11 +135,202 @@ impl TryFrom<cbor::Value> for TotpEntries {
     type Error = CborConversionError;
 }
 
-impl TotpEntries {
-    pub fn bytes(&self) -> Vec<u8> {
+impl From<&TotpEntries> for Vec<u8> {
+    fn from(te: &TotpEntries) -> Self {
         let mut ret = vec![];
-        cbor::write(self.into(), &mut ret);
+        let te_cbor: cbor::Value = te.into();
+        cbor::write(te_cbor, &mut ret);
         ret
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordEntry {
+    pub description: String,
+    pub username: String,
+    pub password: String,
+    pub notes: String,
+}
+
+impl From<PasswordEntry> for cbor::Value {
+    fn from(te: PasswordEntry) -> Self {
+        cbor_map! {
+            cbor_key_int!(1) => te.description,
+            cbor_key_int!(2) => te.username,
+            cbor_key_int!(3) => te.password,
+            cbor_key_int!(4) => te.notes,
+        }
+    }
+}
+
+impl TryFrom<cbor::Value> for PasswordEntry {
+    fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
+        let rawmap = match value {
+            cbor::Value::Map(m) => m,
+            _ => return Err(CborConversionError::BadCbor),
+        };
+
+        destructure_cbor_map! {
+            let {
+                1 => description,
+                2 => username,
+                3 => password,
+                4 => notes,
+            } = rawmap;
+        }
+
+        let description = extract_string(description.unwrap())?;
+        let username = extract_string(username.unwrap())?;
+        let password = extract_string(password.unwrap())?;
+        let notes = extract_string(notes.unwrap())?;
+
+        Ok(PasswordEntry {
+            description,
+            username,
+            password,
+            notes,
+        })
+    }
+
+    type Error = CborConversionError;
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PasswordEntries(pub Vec<PasswordEntry>);
+
+impl From<&PasswordEntries> for cbor::Value {
+    fn from(te: &PasswordEntries) -> Self {
+        cbor_array_vec!(te.0.clone())
+    }
+}
+
+impl From<&PasswordEntries> for Vec<u8> {
+    fn from(te: &PasswordEntries) -> Self {
+        let mut ret = vec![];
+        let te_cbor: cbor::Value = te.into();
+        cbor::write(te_cbor, &mut ret);
+        ret
+    }
+}
+
+impl TryFrom<cbor::Value> for PasswordEntries {
+    fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
+        let raw = extract_array(value)?;
+        let mut ret = vec![];
+
+        for e in raw {
+            ret.push(e.try_into().unwrap())
+        }
+
+        Ok(Self(ret))
+    }
+
+    type Error = CborConversionError;
+}
+
+pub enum DataPacket {
+    Password(PasswordEntries),
+    TOTP(TotpEntries),
+}
+
+impl DataPacket {
+    fn type_to_int(&self) -> u64 {
+        match self {
+            DataPacket::Password(_) => 1,
+            DataPacket::TOTP(_) => 2,
+        }
+    }
+}
+
+impl From<DataPacket> for Vec<u8> {
+    fn from(dp: DataPacket) -> Self {
+        let mut ret = vec![];
+        let te_cbor: cbor::Value = dp.into();
+        cbor::write(te_cbor, &mut ret);
+        ret
+    }
+}
+
+impl From<DataPacket> for cbor::Value {
+    fn from(dp: DataPacket) -> Self {
+        let dpt = dp.type_to_int();
+        match dp {
+            DataPacket::Password(ref p) => {
+                cbor_map! {
+                    cbor_key_int!(1) => dpt,
+                    cbor_key_int!(2) => p,
+                }
+            }
+            DataPacket::TOTP(ref t) => {
+                cbor_map! {
+                    cbor_key_int!(1) => dpt,
+                    cbor_key_int!(2) => t,
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<cbor::Value> for DataPacket {
+    fn try_from(value: cbor::Value) -> Result<Self, Self::Error> {
+        let rawmap = match value {
+            cbor::Value::Map(m) => m,
+            _ => return Err(CborConversionError::BadCbor),
+        };
+
+        destructure_cbor_map! {
+            let {
+                1 => data_packet_type,
+                2 => shared_secret,
+            } = rawmap;
+        }
+
+        let data_packet_type = extract_unsigned(data_packet_type.unwrap())?;
+        let shared_secret = shared_secret.unwrap();
+        let dp = match data_packet_type {
+            1 => {
+                // DataPacket::Password
+                let pes: PasswordEntries = shared_secret.try_into()?;
+                DataPacket::Password(pes)
+            }
+            2 => {
+                // DataPacket::TOTP
+                let pes: TotpEntries = shared_secret.try_into()?;
+                DataPacket::TOTP(pes)
+            }
+            others => panic!(
+                "cannot convert from data packet type {} from cbor::Value!",
+                others
+            ),
+        };
+
+        Ok(dp)
+    }
+
+    type Error = CborConversionError;
+}
+
+pub enum PayloadType {
+    TOTP,
+    Password,
+}
+
+impl From<&PayloadType> for u8 {
+    fn from(t: &PayloadType) -> u8 {
+        match t {
+            PayloadType::TOTP => 1,
+            PayloadType::Password => 2,
+        }
+    }
+}
+
+impl From<Vec<u8>> for PayloadType {
+    fn from(u: Vec<u8>) -> PayloadType {
+        match u[0] {
+            1 => PayloadType::TOTP,
+            2 => PayloadType::Password,
+            _ => PayloadType::TOTP,
+        }
     }
 }
 
