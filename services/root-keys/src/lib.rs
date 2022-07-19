@@ -153,6 +153,12 @@ impl RootKeys {
             0, 0, 0, 0)
         ).expect("couldn't send message to root keys");
     }
+    pub fn do_reset_dont_ask_init(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ResetDontAsk.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
     /// Returns the raw, unchecked restore header. Further checking may be done at the restore point,
     /// but the purpose of this is to just decide if we should even try to initiate a restore.
     pub fn get_restore_header(&self) -> Result<Option<BackupHeader>, xous::Error> {

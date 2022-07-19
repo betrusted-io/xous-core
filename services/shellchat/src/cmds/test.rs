@@ -581,6 +581,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                         wifi_tries += 1;
                     }
 
+                    log::info!("Resetting the don't ask flag for initializing root keys");
+                    let pddb = pddb::Pddb::new();
+                    pddb.reset_dont_ask_init();
+
                     AUDIO_OQC.store(true, Ordering::Relaxed);
                     self.freq = 659.25;
                     self.left_play = true;

@@ -2302,6 +2302,9 @@ impl PddbOs {
         }
     }
 
+    pub(crate) fn reset_dont_ask_init(&self) {
+        self.rootkeys.do_reset_dont_ask_init();
+    }
     //-------------------------------- TESTING -----------------------------------------
     // always gated behind a feature flag. Includes routines that are nonsensicle in normal operation at best,
     // and very dangerous from a security perspective at worst.

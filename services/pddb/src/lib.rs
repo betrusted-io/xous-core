@@ -628,6 +628,13 @@ impl Pddb {
             panic!("Internal error: wrong return code for is_efuse_secured()");
         }
     }
+    /// Reset the "don't ask to init root keys" flag. Used primarily by the OQC test routine to reset this in case
+    /// a worker accidentally set it during testing.
+    pub fn reset_dont_ask_init(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ResetDontAskInit.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send ResetDontAskInit");
+    }
     /// Rekey the PDDB. This can be a very long-running blocking operation that will definitely.
     /// interrupt normal user flow.
     pub fn rekey_pddb(&self, op: PddbRekeyOp) -> Result<()> {

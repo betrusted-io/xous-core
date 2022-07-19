@@ -99,6 +99,8 @@ pub(crate) enum Opcode {
     EraseBackupBlock = 45,
     /// Checks to see if "don't ask me about updates" is set
     IsDontAskSet = 46,
+    /// Resets the dont ask bit. Mainly for use by the OQC testing routine
+    ResetDontAsk = 47,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]

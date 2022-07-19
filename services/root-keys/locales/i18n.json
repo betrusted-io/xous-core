@@ -126,10 +126,10 @@
         "en-tts": "Device keys already initialized."
     },
     "rootkeys.confirm": {
-        "en": "🔐 Create passwords for Precursor 🔐\n\nYou will be prompted for two passwords:\n\t1. Device unlock PIN code\n\t2. Root passphrase.\n\nAre you ready?",
+        "en": "🔐 Setup passwords for Precursor 🔐\n\nYou will be prompted for two passwords:\n\t1. Device unlock PIN code\n\t2. Root passphrase.\n\nAre you ready?",
         "ja": "これにより、Precursorデバイスのルートキーが初期化されます。\n\n2つのパスワードの入力を求められます。\n\t1.デバイスのロック解除PINコード\n\t2.システムアップデートパスフレーズ。\n\n準備はいいですか？",
         "zh": "仅当您准备好信 任此设备时才 应继续",
-        "en-tts": "Create passwords for Precursor. You will create two passwords, a PIN code, and a root password."
+        "en-tts": "Setup passwords for Precursor. You will create two passwords, a PIN code, and a root password."
     },
     "rootkeys.confirm.yes": {
         "en": "I'm ready!",

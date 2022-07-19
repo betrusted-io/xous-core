@@ -2552,6 +2552,14 @@ impl<'a> RootKeys {
             self.gateware().len() as u32 - 4,
         ).expect("couldn't erase backup region");
     }
+    pub fn reset_dont_ask_init(&mut self) {
+        self.spinor.patch(
+            self.gateware(),
+            self.gateware_base(),
+            &[0xffu8; 4],
+            self.gateware().len() as u32 - 4,
+        ).expect("couldn't erase backup region");
+    }
     pub fn read_backup_header(&mut self) -> Option<BackupHeader> {
         let kernel = self.kernel();
         let backup = &kernel[KERNEL_BACKUP_OFFSET as usize..KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()];

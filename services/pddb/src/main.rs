@@ -1396,6 +1396,10 @@ fn wrapped_main() -> ! {
                 let result = basis_cache.rekey(&mut pddb_os, rekey_op);
                 buffer.replace(result).unwrap();
             }
+            Opcode::ResetDontAskInit => {
+                pddb_os.reset_dont_ask_init();
+                xous::return_scalar(msg.sender, 1).ok();
+            }
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

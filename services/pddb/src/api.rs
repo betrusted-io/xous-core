@@ -201,6 +201,9 @@ pub(crate) enum Opcode {
     /// Rekey the PDDB
     RekeyPddb = 42,
 
+    /// Reset "don't ask to init root keys" flag - pass-through to root keys object - for end of OQC test
+    ResetDontAskInit = 43,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }

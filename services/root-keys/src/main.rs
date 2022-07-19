@@ -371,6 +371,7 @@ mod implementation {
         }
         pub fn is_dont_ask_init_set(&self) -> bool {false}
         pub fn set_dont_ask_init(&self) {}
+        pub fn reset_dont_ask_init(&mut self) {}
     }
 }
 
@@ -1663,6 +1664,10 @@ fn main() -> ! {
                 } else {
                     xous::return_scalar(msg.sender, 0).ok();
                 }
+            }),
+            Some(Opcode::ResetDontAsk) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                keys.reset_dont_ask_init();
+                xous::return_scalar(msg.sender, 1).ok();
             }),
             Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
                 // dummy test for now
