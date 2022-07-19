@@ -23,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn]";
         #[cfg(feature="pddbtest")]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete]\n[test]";
 
@@ -215,6 +215,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                         Err(_) => write!(ret, "Error encountered listing dictionaries").ok().unwrap_or(()),
                     }
+                }
+                "churn" => {
+                    write!(ret, "Churn result code: {:?}", self.pddb.rekey_pddb(pddb::PddbRekeyOp::Churn)).ok();
                 }
                 #[cfg(feature="test-rekey")]
                 "rekey" => {
