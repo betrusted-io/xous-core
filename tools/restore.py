@@ -580,10 +580,8 @@ def main():
 
             # now try to download all the artifacts and check their versions
             # this list should visit kernels in order from newest to oldest.
-            # TODO: once the 0.9.9 release is tagged, 'latest-ci' should be dropped;
-            # for now latest-ci is the only version that would be new enough to support restores.
             URL_LIST = [
-                'https://ci.betrusted.io/latest-ci/',
+                'https://ci.betrusted.io/releases/v0.9.9/',
                 'https://ci.betrusted.io/releases/v0.9.8/',
                 'https://ci.betrusted.io/releases/v0.9.7/'
             ]
