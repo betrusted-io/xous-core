@@ -307,6 +307,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         if intervals_without_activity > 3 { // we'd expect at least an ARP or something...
                             wifi_stats_cache = com.wlan_status().unwrap();
                             if wifi_stats_cache.link_state != com_rs_ref::LinkState::Connected {
+                                if wifi_stats_cache.link_state == com_rs_ref::LinkState::WFXError {
+                                    log::info!("WFX chipset error detected, resetting WF200");
+                                    com.wifi_reset().expect("couldn't reset the wf200 chip");
+                                }
                                 log::info!("Link state mismatch: moving state to disconnected ({:?})", wifi_stats_cache.link_state);
                                 netmgr.reset();
                             } else if wifi_stats_cache.ipv4.dhcp != com_rs_ref::DhcpState::Bound {
