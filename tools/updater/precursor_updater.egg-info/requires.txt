@@ -1,0 +1,8 @@
+requests
+pyusb
+progressbar2
+csv
+hashlib
+
+[:python_version < "3.8"]
+importlib-metadata
