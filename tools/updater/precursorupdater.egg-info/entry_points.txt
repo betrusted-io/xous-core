@@ -1,2 +1,2 @@
 [console_scripts]
-my-script = precursorupdater.precursorupdater:main
+precursorupdater = precursorupdater:main

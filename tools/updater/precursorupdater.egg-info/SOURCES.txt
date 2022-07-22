@@ -1,8 +1,8 @@
 LICENSE
 README.md
-pyproject.toml
 setup.py
 precursorupdater/__init__.py
+precursorupdater/__main__.py
 precursorupdater/precursorupdater.py
 precursorupdater.egg-info/PKG-INFO
 precursorupdater.egg-info/SOURCES.txt
