@@ -7,7 +7,7 @@ with open('README.md') as f:
 
 setup(
     name="precursorupdater",
-    version="0.0.3",
+    version="0.0.4",
     author="bunnie",
     description="Precursor USB Updater",
     long_description=long_description,
@@ -28,7 +28,7 @@ setup(
         "Topic :: System :: Hardware",
         "Topic :: System :: Hardware :: Universal Serial Bus (USB)",
     ],
-    packages=find_packages(),
+    packages=["precursorupdater"],
     install_requires=[
         "requests >= 2",
         "pyusb >= 1",
