@@ -28,7 +28,7 @@ setup(
         "Topic :: System :: Hardware",
         "Topic :: System :: Hardware :: Universal Serial Bus (USB)",
     ],
-    packages=["precursorupdater"],
+    packages=find_packages(),
     install_requires=[
         "requests >= 2",
         "pyusb >= 1",
