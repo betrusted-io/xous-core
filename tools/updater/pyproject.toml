@@ -3,11 +3,11 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "precursor_updater"
+name = "precursorupdater"
 authors = [
     {name="bunnie"}
 ]
-version = "0.0.6"
+version = "0.0.1"
 description = "Precursor USB Updater"
 license = { file="LICENSE" }
 readme = "README.md"
@@ -32,7 +32,7 @@ classifiers = [
 "Bug Tracker" = "https://github.com/betrusted-io/xous-core/issues"
 
 [tools.setuptools]
-packages = ["precursor_updater"]
+packages = ["precursorupdater"]
 
 [project.scripts]
-my-script = "precursor_updater:main"
+my-script = "precursorupdater.precursorupdater:main"
