@@ -1,4 +1,2 @@
-
-        [console_scripts]
-        precursorupdater=precursorupdater:main
-    
+[console_scripts]
+precursorupdater = precursorupdater:main

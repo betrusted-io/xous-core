@@ -216,7 +216,10 @@ perform the Xous firmware upgrade. This requires running manual update commands,
     - The new terms are less pedantic but hopefully more intuitive
 
 ## New in 0.9.10
-Just getting started!
+- Host-side updates are now simplified.
+  - There is just one script to run on all platforms: `precursorupdater`
+  - The old factory_reset.[sh,ps1] and update_ci scripts are now deprecated, and will be permanently removed next release.
+  - `precursorupdater` is [published to PyPi](https://pypi.org/project/precursorupdater/) with the help of neutralinsomniac to sort out the packaging issues via #204. Thank you!
 
 ## Roadmap to 1.0
 

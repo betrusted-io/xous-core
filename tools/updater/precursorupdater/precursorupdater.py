@@ -120,7 +120,7 @@ def get_usb_interface(config=False, peek=None, override_csr=None, force=False):
     return (locs, pc_usb)
 
 def main():
-    parser = argparse.ArgumentParser(description="Precursor USB Updater v2")
+    parser = argparse.ArgumentParser(description="Precursor USB Updater v2", prog="python3 -m precursorupdater")
     parser.add_argument(
         "-b", "--bleeding-edge", required=False, help="Update to bleeding-edge CI build", action='store_true'
     )
