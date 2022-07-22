@@ -4,12 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "precursor_updater"
-version = "0.0.1"
-dependencies = [
-    "requests",
-    "pyusb",
-    "progressbar2",
-    "csv",
-    "hashlib",
-    'importlib-metadata; python_version<"3.8"',
+authors = [
+    {name="bunnie"}
 ]
+version = "0.0.5"
+description = "Precursor USB Updater"
+license = { file="LICENSE" }
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "requests >= 2",
+    "pyusb >= 1",
+    "progressbar2 >= 3",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Topic :: System :: Hardware",
+    "Topic :: System :: Hardware :: Universal Serial Bus (USB)",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/betrusted-io/betrusted-wiki/wiki/Updating-Your-Device"
+"Bug Tracker" = "https://github.com/betrusted-io/xous-core/issues"
