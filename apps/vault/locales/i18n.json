@@ -54,10 +54,10 @@
         "en-tts": "Basis does not exist. Or maybe wrong password?"
     },
     "vault.error.mount_pddb": {
-        "en": "PDDB not mounted. Please init root keys and then init PDDB.",
+        "en": "PDDB not mounted. Please setup passwords, and then format the PDDB.",
         "ja": "PDDBがマウントされていません。 ルートキーを初期化してから、PDDBを初期化してください。",
         "zh": "未安装 PDDB。 请初始化根密钥，然后初始化 PDDB。",
-        "en-tts": "PDDB not mounted. Please init rootkeys and then init PDDB."
+        "en-tts": "PDDB not mounted. Please setup passwords and then format the PDDB."
     },
     "vault.error.time_init": {
         "en": "Please set the time.",
