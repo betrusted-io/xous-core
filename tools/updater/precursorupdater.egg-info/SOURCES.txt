@@ -1,0 +1,14 @@
+LICENSE
+README.md
+pyproject.toml
+setup.py
+precursorupdater/__init__.py
+precursorupdater/precursorupdater.py
+precursorupdater.egg-info/PKG-INFO
+precursorupdater.egg-info/SOURCES.txt
+precursorupdater.egg-info/dependency_links.txt
+precursorupdater.egg-info/entry_points.txt
+precursorupdater.egg-info/requires.txt
+precursorupdater.egg-info/top_level.txt
+precursorupdater/precursorusb/__init__.py
+precursorupdater/precursorusb/precursorusb.py
