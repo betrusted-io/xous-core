@@ -36,6 +36,6 @@ setup(
     ],
     entry_points="""
         [console_scripts]
-        precursorupdater=precursorupdater.precursorupdater:main
+        precursorupdater=precursorupdater:main
     """,
 )

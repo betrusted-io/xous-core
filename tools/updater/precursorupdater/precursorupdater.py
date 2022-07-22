@@ -4,10 +4,13 @@ import argparse
 import usb.core
 import usb.util
 from datetime import datetime
+from progressbar.bar import ProgressBar
 import requests
 
-from .precursorusb import PrecursorUsb
-from progressbar.bar import ProgressBar
+try:
+    from .precursorusb import PrecursorUsb
+except ImportError:
+    from precursorusb import PrecursorUsb
 
 QR_CODE = """
 
