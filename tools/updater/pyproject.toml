@@ -7,7 +7,7 @@ name = "precursor_updater"
 authors = [
     {name="bunnie"}
 ]
-version = "0.0.5"
+version = "0.0.6"
 description = "Precursor USB Updater"
 license = { file="LICENSE" }
 readme = "README.md"
@@ -30,3 +30,9 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/betrusted-io/betrusted-wiki/wiki/Updating-Your-Device"
 "Bug Tracker" = "https://github.com/betrusted-io/xous-core/issues"
+
+[tools.setuptools]
+packages = ["precursor_updater"]
+
+[project.scripts]
+my-script = "precursor_updater:main"
