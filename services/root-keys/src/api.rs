@@ -192,20 +192,18 @@ impl AesOp {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq, Copy, Clone)]
 pub enum KeywrapError {
-    /// Input is too big.
-    TooBig = 0,
-    /// Input is too small.
-    TooSmall = 1,
-    /// Ciphertext has invalid padding.
-    Unpadded = 2,
-    /// The ciphertext is not valid for the expected length.
-    InvalidExpectedLen = 3,
-    /// The ciphertext couldn't be authenticated.
-    AuthenticationFailed = 4,
+    InvalidDataSize,
+    InvalidKekSize,
+    InvalidOutputSize,
+    IntegrityCheckFailed,
+    /// this is a bodge to return an error code that upgrades from a faulty early version of AES-KWP
+    /// only works for 256-bit keys, but that is also all we used.
+    /// The return tuple is: (unwrapped key, correctly wrapped key)
+    UpgradeToNew(([u8; 32], [u8; 40])),
 }
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize, Eq, PartialEq)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum KeyWrapOp {
     Wrap = 0,
     Unwrap = 1,
@@ -219,18 +217,21 @@ use std::fmt;
 impl fmt::Display for KeywrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            KeywrapError::TooBig => f.write_str("Input too big"),
-            KeywrapError::TooSmall => f.write_str("Input too small"),
-            KeywrapError::Unpadded => f.write_str("Padding error"),
-            KeywrapError::InvalidExpectedLen => f.write_str("Invalid expected lengthr"),
-            KeywrapError::AuthenticationFailed => f.write_str("Authentication failed"),
+            KeywrapError::InvalidDataSize => f.write_str("Invalid data size"),
+            KeywrapError::InvalidKekSize => f.write_str("Invalid key size"),
+            KeywrapError::InvalidOutputSize => f.write_str("Invalid output size"),
+            KeywrapError::IntegrityCheckFailed => f.write_str("Authentication failed"),
+            KeywrapError::UpgradeToNew((_k, _wk)) => f.write_str("Legacy migration detected! New wrapped key transmitted to caller"),
         }
     }
 }
 
 pub(crate) const MAX_WRAP_DATA: usize = 2048;
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
-#[zeroize(drop)]
+/// Note regression in v0.9.9: we had to return an array type in the KeywrapError enum that
+/// has a signature for an array that is 40 bytes long, which is bigger than Rust's devire
+/// can deal with. So, unfortunately, the result of this does *not* get zeroized on drop :(
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+// #[zeroize(drop)]
 pub (crate) struct KeyWrapper {
     pub data: [u8; MAX_WRAP_DATA + 8],
     // used to specify the length of the data used in the fixed-length array above

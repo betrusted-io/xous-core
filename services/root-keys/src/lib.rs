@@ -335,25 +335,25 @@ impl RootKeys {
             // but the intention of this API is to wrap crypto keys -- not bulk data. So for simplicity
             // we're going to limit the size of wrapped data to 2kiB (typically it's envisioned you're
             // wrapping data on the order of 32-512 bytes)
-            return Err(KeywrapError::TooBig)
+            return Err(KeywrapError::InvalidDataSize)
         }
         if !self.ensure_aes_password() {
-            return Err(KeywrapError::AuthenticationFailed);
+            return Err(KeywrapError::IntegrityCheckFailed);
         }
         let mut alloc = KeyWrapper {
             data: [0u8; MAX_WRAP_DATA + 8],
             len: input.len() as u32,
             key_index: self.key_index.to_u8().unwrap(),
             op: KeyWrapOp::Wrap,
-            result: Some(KeywrapError::AuthenticationFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
+            result: Some(KeywrapError::IntegrityCheckFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
             // this field is ignored on the Wrap side
             expected_len: 0,
         };
         for (&src, dst) in input.iter().zip(alloc.data.iter_mut()) {
             *dst = src;
         }
-        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::AuthenticationFailed))?;
-        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::AuthenticationFailed))?;
+        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::IntegrityCheckFailed))?;
+        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::IntegrityCheckFailed))?;
         let ret = buf.to_original::<KeyWrapper, _>().unwrap();
         match ret.result {
             None => { // no error, proceed
@@ -366,32 +366,34 @@ impl RootKeys {
     }
     pub fn unwrap_key(&self, wrapped: &[u8], expected_len: usize) -> Result<Vec<u8>, KeywrapError> {
         if wrapped.len() > api::MAX_WRAP_DATA + 8 {
-            return Err(KeywrapError::TooBig)
+            return Err(KeywrapError::InvalidDataSize)
         }
         if !self.ensure_aes_password() {
-            return Err(KeywrapError::AuthenticationFailed);
+            return Err(KeywrapError::IntegrityCheckFailed);
         }
         let mut alloc = KeyWrapper {
             data: [0u8; MAX_WRAP_DATA + 8],
             len: wrapped.len() as u32,
             key_index: self.key_index.to_u8().unwrap(),
             op: KeyWrapOp::Unwrap,
-            result: Some(KeywrapError::AuthenticationFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
+            result: Some(KeywrapError::IntegrityCheckFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
             expected_len: expected_len as u32,
         };
         for (&src, dst) in wrapped.iter().zip(alloc.data.iter_mut()) {
             *dst = src;
         }
-        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::AuthenticationFailed))?;
-        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::AuthenticationFailed))?;
+        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::IntegrityCheckFailed))?;
+        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::IntegrityCheckFailed))?;
         let ret = buf.to_original::<KeyWrapper, _>().unwrap();
+        // note: this return vector (which may contain a key) is not zeroized on drop anymore due to a
+        // regression correlated to a fix to a crypto algorithm. This was pushed as a hotfix for v0.9.9.
         match ret.result {
             None => { // no error, proceed
                 if ret.len as usize != expected_len {
                     // The key wrapper will return a vector that is rounded to the nearest 8-bytes, with
                     // a zero-pad on the excess data. Ensure that the zero-pad is intact before lopping it off.
                     if (ret.len as usize) < expected_len {
-                        Err(KeywrapError::InvalidExpectedLen)
+                        Err(KeywrapError::InvalidOutputSize)
                     } else {
                         let mut all_zeroes = true;
                         for &d in ret.data[expected_len..ret.len as usize].iter() {
@@ -403,7 +405,7 @@ impl RootKeys {
                         if all_zeroes {
                             Ok(ret.data[..expected_len as usize].to_vec(),)
                         } else {
-                            Err(KeywrapError::InvalidExpectedLen)
+                            Err(KeywrapError::InvalidDataSize)
                         }
                     }
                 } else {
@@ -411,6 +413,10 @@ impl RootKeys {
                 }
             }
             Some(err) => {
+                // note: the error message may contain a plaintext copy of the key that is not
+                // zeroized on drop. However, it only happens in the case of a migration from
+                // a legacy version (pre v0.9.8) PDDB, by the time this matters it should be
+                // a non-issue.
                 Err(err)
             }
         }

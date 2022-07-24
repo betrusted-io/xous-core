@@ -572,6 +572,7 @@ impl PddbOs {
         self.rootkeys.clear_password(AesRootkeyType::User0);
     }
     pub (crate) fn try_login(&mut self) -> PasswordState {
+        use root_keys::api::KeywrapError;
         if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
             let scd = self.static_crypto_data_get();
             if scd.version == 0xFFFF_FFFF { // system is in the blank state
@@ -581,56 +582,93 @@ impl PddbOs {
                 log::error!("Version mismatch for keystore, declaring database as uninitialized");
                 return PasswordState::Uninit;
             }
-            match self.rootkeys.unwrap_key(&scd.system_key_pt, AES_KEYSIZE) {
-                Ok(mut syskey_pt) => {
-                    match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
-                        Ok(mut syskey) => {
-                            let cipher = Aes256::new(GenericArray::from_slice(&syskey_pt));
-                            self.cipher_ecb = Some(cipher);
-                            let mut system_key_pt: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
-                            // copy over the pt key only after we've unwrapped and decrypted the data key
-                            for (&src, dst) in syskey_pt.iter().zip(system_key_pt.iter_mut()) {
-                                *dst = src;
-                            }
-                            // copy over the data key
-                            let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
-                            for (&src, dst) in syskey.iter().zip(system_key.iter_mut()) {
-                                *dst = src;
-                            }
+            // prep a migration structure, in case it is required. Bit of history:
+            //
+            // Turns out that the keywrap implementation we found does not work. It does not generate
+            // results that match the NIST test vectors at
+            // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/kwtestvectors.zip
+            //
+            // The `aes_kw` functions in the RustCrypto library do create matching results.
+            // However, back when the PDDB was written, this crate didn't exist (the first commit
+            // to `aes_kw` was Jan 2022, the PDDB was started back in October 2021, and around
+            // the time I searched for an aes-kw implementation, the `aes_kw` code was just pushed
+            // at 0.1.0, and not registering in Google).
+            //
+            // Ah well. Better we caught it now than later! This structure here prepares for
+            // a potential migration in case we are told we need to do that. The main regression
+            // we now suffer is that the key return structure is not zeroized on drop automatically,
+            // because we are using a fancy compound enum and our version of zeroize is ancient
+            // due to interpedencies with other crypto crates.
+            let mut new_crypto_keys = StaticCryptoData::default();
+            new_crypto_keys.version = scd.version;
+            new_crypto_keys.system_key_pt.copy_from_slice(&scd.system_key_pt);
+            new_crypto_keys.system_key.copy_from_slice(&scd.system_key);
+            new_crypto_keys.salt_base.copy_from_slice(&scd.salt_base);
 
-                            self.system_basis_key = Some(
-                                BasisKeys {
-                                    data: system_key,
-                                    pt: system_key_pt,
-                                }
-                            );
-                            // erase the old vector completely
-                            let nuke = syskey.as_mut_ptr();
-                            for i in 0..syskey.len() {
-                                unsafe{nuke.add(i).write_volatile(0)};
-                            }
-                            let nuke = syskey_pt.as_mut_ptr();
-                            for i in 0..syskey_pt.len() {
-                                unsafe{nuke.add(i).write_volatile(0)};
-                            }
-                            PasswordState::Correct
-                        }
-                        Err(e) => {
-                            // the PT key is still lingering on this arm, make sure we get rid of that
-                            let nuke = syskey_pt.as_mut_ptr();
-                            for i in 0..syskey_pt.len() {
-                                unsafe{nuke.add(i).write_volatile(0)};
-                            }
-                            log::error!("Couldn't unwrap our system key: {:?}", e);
-                            PasswordState::Incorrect
-                        }
+            // now try to populate our keys, and prep a migration if necessary
+            let mut syskey_pt = [0u8; 32];
+            let mut syskey = [0u8; 32];
+            let mut keys_updated = false;
+            match self.rootkeys.unwrap_key(&scd.system_key_pt, AES_KEYSIZE) {
+                Ok(skpt) => syskey_pt.copy_from_slice(&skpt),
+                Err(e) => match e {
+                    KeywrapError::UpgradeToNew((key, upgrade)) => {
+                        log::warn!("pt key migration required");
+                        syskey_pt.copy_from_slice(&key);
+                        new_crypto_keys.system_key_pt.copy_from_slice(&upgrade);
+                        keys_updated = true;
+                    }
+                    _ => {
+                        log::error!("Couldn't unwrap our system key: {:?}", e);
+                        return PasswordState::Incorrect;
                     }
                 }
-                Err(e) => {
-                    log::error!("Couldn't unwrap our system key: {:?}", e);
-                    PasswordState::Incorrect
+            }
+            match self.rootkeys.unwrap_key(&scd.system_key, AES_KEYSIZE) {
+                Ok(sk) => syskey.copy_from_slice(&sk),
+                Err(e) => match e {
+                    KeywrapError::UpgradeToNew((key, upgrade)) => {
+                        log::warn!("data key migration required");
+                        syskey.copy_from_slice(&key);
+                        new_crypto_keys.system_key.copy_from_slice(&upgrade);
+                        keys_updated = true;
+                    }
+                    _ => {
+                        log::error!("Couldn't unwrap our system key: {:?}", e);
+                        return PasswordState::Incorrect;
+                    }
                 }
             }
+            if keys_updated {
+                log::warn!("Migration event from incorrectly wrapped key");
+                self.patch_keys(new_crypto_keys.deref(), 0);
+            }
+
+            let cipher = Aes256::new(GenericArray::from_slice(&syskey_pt));
+            self.cipher_ecb = Some(cipher);
+            let mut system_key_pt: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+            // copy over the pt key only after we've unwrapped and decrypted the data key
+            system_key_pt.copy_from_slice(&syskey_pt);
+            // copy over the data key
+            let mut system_key: [u8; AES_KEYSIZE] = [0; AES_KEYSIZE];
+            system_key.copy_from_slice(&syskey);
+
+            self.system_basis_key = Some(
+                BasisKeys {
+                    data: system_key,
+                    pt: system_key_pt,
+                }
+            );
+            // erase the plaintext keys
+            let nuke = syskey.as_mut_ptr();
+            for i in 0..syskey.len() {
+                unsafe{nuke.add(i).write_volatile(0)};
+            }
+            let nuke = syskey_pt.as_mut_ptr();
+            for i in 0..syskey_pt.len() {
+                unsafe{nuke.add(i).write_volatile(0)};
+            }
+            PasswordState::Correct
         } else {
             PasswordState::Correct
         }

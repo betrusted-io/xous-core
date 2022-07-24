@@ -421,10 +421,12 @@ impl<'a> RootKeys {
         self.compute_key_rollback(&mut key);
         #[cfg(feature = "hazardous-debug")]
         log::debug!("root user key (anti-rollback): {:x?}", key);
-        let keywrapper = Aes256KeyWrap::new(&key);
+        use aes_kw::Kek;
+        use aes_kw::KekAes256;
+        let keywrapper: KekAes256 = Kek::from(key);
         match kwp.op {
             KeyWrapOp::Wrap => {
-                match keywrapper.encapsulate(&kwp.data[..kwp.len as usize]) {
+                match keywrapper.wrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
                     Ok(wrapped) => {
                         for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
                             *dst = src;
@@ -435,21 +437,70 @@ impl<'a> RootKeys {
                         kwp.expected_len = wrapped.len() as u32;
                     }
                     Err(e) => {
-                        kwp.result = Some(e);
+                        kwp.result = Some(match e {
+                            aes_kw::Error::IntegrityCheckFailed => KeywrapError::IntegrityCheckFailed,
+                            aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                            aes_kw::Error::InvalidKekSize { size } => {
+                                log::info!("invalid size {}", size); // weird. can't name this _size
+                                KeywrapError::InvalidKekSize
+                            },
+                            aes_kw::Error::InvalidOutputSize { expected } => {
+                                log::info!("invalid output size {}", expected);
+                                KeywrapError::InvalidOutputSize
+                            },
+                        });
                     }
                 }
             }
             KeyWrapOp::Unwrap => {
-                match keywrapper.decapsulate(&kwp.data[..kwp.len as usize], kwp.expected_len as usize) {
-                    Ok(unwrapped) => {
-                        for (&src, dst) in unwrapped.iter().zip(kwp.data.iter_mut()) {
+                match keywrapper.unwrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
+                    Ok(wrapped) => {
+                        for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
                             *dst = src;
                         }
-                        kwp.len = unwrapped.len() as u32;
+                        kwp.len = wrapped.len() as u32;
                         kwp.result = None;
+                        // this is an un-used field but...why not?
+                        kwp.expected_len = wrapped.len() as u32;
                     }
                     Err(e) => {
-                        kwp.result = Some(e);
+                        kwp.result = Some(match e {
+                            aes_kw::Error::IntegrityCheckFailed => {
+                                // try the legacy version, if it unwraps, send back the key + an error that indicates the caller needs to update their version
+                                let legacy_kw = Aes256KeyWrap::new(&key);
+                                match legacy_kw.decapsulate(&kwp.data[..kwp.len as usize], kwp.expected_len as usize) {
+                                    Ok(unwrapped) => {
+                                        for (&src, dst) in unwrapped.iter().zip(kwp.data.iter_mut()) {
+                                            *dst = src;
+                                        }
+                                        kwp.len = unwrapped.len() as u32;
+                                        // hand the caller back a new version of the wrapped key that meets NIST specs.
+                                        let corrected = keywrapper.wrap_with_padding_vec(&unwrapped).expect("couldn't convert to correct version of AES keywrapping");
+                                        let mut upgrade = [0u8; 40];
+                                        assert!(corrected.len() == 40, "Correctly wrapped key has a different length than the legacy wrapped key");
+                                        upgrade.copy_from_slice(&corrected);
+
+                                        let mut unwrapped_key = [0u8; 32];
+                                        assert!(kwp.len == 32, "Unwrapped key from legacy version of algorithm has the wrong length");
+                                        unwrapped_key.copy_from_slice(&unwrapped);
+                                        log::warn!("Keywrap from incorrect version of algorithm; sending message to correct the problem");
+                                        KeywrapError::UpgradeToNew((unwrapped_key, upgrade))
+                                    }
+                                    Err(e) => {
+                                        e
+                                    }
+                                }
+                            },
+                            aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                            aes_kw::Error::InvalidKekSize { size } => {
+                                log::info!("invalid size {}", size); // weird. can't name this _size
+                                KeywrapError::InvalidKekSize
+                            },
+                            aes_kw::Error::InvalidOutputSize { expected } => {
+                                log::info!("invalid output size {}", expected);
+                                KeywrapError::InvalidOutputSize
+                            },
+                        });
                     }
                 }
             }
