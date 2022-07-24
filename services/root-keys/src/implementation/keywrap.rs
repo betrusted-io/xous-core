@@ -17,6 +17,23 @@
 /// This is a NIST-blessed construction. Other than that, AES Key Wrap is inefficient
 /// and is generally not very useful.
 
+/// Turns out that this implementation does not seem to work. It does not generate
+/// results that match the NIST test vectors at
+/// https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/kwtestvectors.zip
+///
+/// The `aes_kw` functions in the RustCrypto library do create matching results.
+/// However, back when the PDDB was written, this crate didn't exist (the first commit
+/// to `aes_kw` was Jan 2022, the PDDB was started back in October 2021, and around
+/// the time I searched for an aes-kw implementation, the `aes_kw` code was just pushed
+/// at 0.1.0, and not registering in Google).
+///
+/// Ah well. Better we caught it now than later! Unfortunately, this vendored-in
+/// implementation has to stick around for a while, because we need it to do migrations
+/// from the wrong version to the working version. I don't think this implementation
+/// may necessarily be insecure -- it seems /very close/ to the spec, maybe just a
+/// problem with how the block counter is incremented between rounds -- but it is still
+/// not compliant, so, we should migrate away from it!
+
 use aes::cipher::generic_array::GenericArray;
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
