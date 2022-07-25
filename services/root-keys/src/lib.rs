@@ -8,6 +8,7 @@ pub mod key2bits;
 
 use xous::{CID, send_message, Message};
 use xous_ipc::Buffer;
+use xous_semver::SemVer;
 use num_traits::*;
 use std::convert::TryInto;
 
@@ -84,6 +85,159 @@ impl RootKeys {
             log::error!("unexpected return value: {:#?}", response);
             Err(xous::Error::InternalError)
         }
+    }
+    pub fn is_zero_key(&self) -> Result<Option<bool>, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsZeroKey.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send IsZeroKey check message");
+        if let xous::Result::Scalar2(result, valid) = response {
+            if valid != 0 {
+                if result != 0 {return Ok(Some(true))} else {return Ok(Some(false))}
+            } else {
+                Ok(None)
+            }
+        } else {
+            log::error!("unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn is_dont_ask_set(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsDontAskSet.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send IsDontAsk check message");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {return Ok(true)} else {return Ok(false)}
+        } else {
+            log::error!("unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn do_update_gw_ux_flow(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::UxUpdateGateware.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+    pub fn do_update_gw_ux_flow_blocking(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::UxUpdateGateware.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+
+    pub fn do_init_keys_ux_flow(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+
+    pub fn do_create_backup_ux_flow(&self, metadata: BackupHeader) {
+        let mut alloc = BackupHeaderIpc::default();
+        let mut data = [0u8; core::mem::size_of::<BackupHeader>()];
+        data.copy_from_slice(metadata.as_ref());
+        alloc.data = Some(data);
+        let buf = Buffer::into_buf(alloc).unwrap();
+        buf.send(self.conn, Opcode::CreateBackup.to_u32().unwrap()).unwrap();
+    }
+    pub fn do_restore_backup_ux_flow(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::DoRestore.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+    pub fn do_erase_backup(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::EraseBackupBlock.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+    pub fn do_reset_dont_ask_init(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ResetDontAsk.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send message to root keys");
+    }
+    /// Returns the raw, unchecked restore header. Further checking may be done at the restore point,
+    /// but the purpose of this is to just decide if we should even try to initiate a restore.
+    pub fn get_restore_header(&self) -> Result<Option<BackupHeader>, xous::Error> {
+        let alloc = BackupHeaderIpc::default();
+        let mut buf = Buffer::into_buf(alloc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::ShouldRestore.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let ret = buf.to_original::<BackupHeaderIpc, _>().unwrap();
+        if let Some(d) = ret.data {
+            let mut header = BackupHeader::default();
+            header.copy_from_slice(&d);
+            Ok(Some(header))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// this will return the version number, but always report the commit as None.
+    /// The 32-bit commit ref isn't useful in version comparisons, it's more to assist
+    /// maintainer debug. Including this would convert this from a scalar message to
+    /// a memory message.
+    ///
+    /// Returns `xous::Error::InvalidString` if the staged area is blank.
+    pub fn staged_semver(&self) -> Result<SemVer, xous::Error> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::StagedSemver.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).map_err(|_| xous::Error::InternalError)? {
+            xous::Result::Scalar2(a, b) => {
+                let mut raw_ver = [0u8; 16];
+                // this takes advantage of our knowledge of the internal structure of a semver binary record
+                // namely, the last two words are for the commit and if they are zero they end up as None.
+                raw_ver[0..4].copy_from_slice(&(a as u32).to_le_bytes());
+                raw_ver[4..8].copy_from_slice(&(b as u32).to_le_bytes());
+                // here, we do the check to see if the gateware area was *blank* in which case, we'd get an all-FF's version
+                if raw_ver[0..4] == [0xffu8; 4] {
+                    Err(xous::Error::InvalidString)
+                } else {
+                    Ok(raw_ver.into())
+                }
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
+
+    /// This function will try to perform a gateware update under the assumption that there are no root keys.
+    /// It will "silently fail" (i.e. return false but not panic) if any of numerous conditions/checks are not met.
+    pub fn try_nokey_soc_update(&self) -> bool {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::TryNoKeySocUpdate.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(r)) => {
+                if r != 0 { true } else { false }
+            }
+            _ => false
+        }
+    }
+
+    /// returns `true` if we should prompt the user for an update
+    pub fn prompt_for_update(&self) -> bool {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ShouldPromptForUpdate.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(r)) => {
+                if r != 0 { true } else { false }
+            }
+            _ => false
+        }
+    }
+
+    /// sets the should prompt for user update to the given status
+    pub fn set_update_prompt(&self, should_prompt: bool) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetPromptForUpdate.to_usize().unwrap(),
+                if should_prompt { 1 } else { 0 },
+                0, 0, 0
+            )
+        ).expect("couldn't set update prompt");
     }
 
     /// this will check the signature on the gateware.
@@ -181,25 +335,25 @@ impl RootKeys {
             // but the intention of this API is to wrap crypto keys -- not bulk data. So for simplicity
             // we're going to limit the size of wrapped data to 2kiB (typically it's envisioned you're
             // wrapping data on the order of 32-512 bytes)
-            return Err(KeywrapError::TooBig)
+            return Err(KeywrapError::InvalidDataSize)
         }
         if !self.ensure_aes_password() {
-            return Err(KeywrapError::AuthenticationFailed);
+            return Err(KeywrapError::IntegrityCheckFailed);
         }
         let mut alloc = KeyWrapper {
             data: [0u8; MAX_WRAP_DATA + 8],
             len: input.len() as u32,
             key_index: self.key_index.to_u8().unwrap(),
             op: KeyWrapOp::Wrap,
-            result: Some(KeywrapError::AuthenticationFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
+            result: Some(KeywrapError::IntegrityCheckFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
             // this field is ignored on the Wrap side
             expected_len: 0,
         };
         for (&src, dst) in input.iter().zip(alloc.data.iter_mut()) {
             *dst = src;
         }
-        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::AuthenticationFailed))?;
-        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::AuthenticationFailed))?;
+        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::IntegrityCheckFailed))?;
+        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::IntegrityCheckFailed))?;
         let ret = buf.to_original::<KeyWrapper, _>().unwrap();
         match ret.result {
             None => { // no error, proceed
@@ -212,32 +366,34 @@ impl RootKeys {
     }
     pub fn unwrap_key(&self, wrapped: &[u8], expected_len: usize) -> Result<Vec<u8>, KeywrapError> {
         if wrapped.len() > api::MAX_WRAP_DATA + 8 {
-            return Err(KeywrapError::TooBig)
+            return Err(KeywrapError::InvalidDataSize)
         }
         if !self.ensure_aes_password() {
-            return Err(KeywrapError::AuthenticationFailed);
+            return Err(KeywrapError::IntegrityCheckFailed);
         }
         let mut alloc = KeyWrapper {
             data: [0u8; MAX_WRAP_DATA + 8],
             len: wrapped.len() as u32,
             key_index: self.key_index.to_u8().unwrap(),
             op: KeyWrapOp::Unwrap,
-            result: Some(KeywrapError::AuthenticationFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
+            result: Some(KeywrapError::IntegrityCheckFailed), // initialize to a default value that throws an error if it wasn't modified by the recipient
             expected_len: expected_len as u32,
         };
         for (&src, dst) in wrapped.iter().zip(alloc.data.iter_mut()) {
             *dst = src;
         }
-        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::AuthenticationFailed))?;
-        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::AuthenticationFailed))?;
+        let mut buf = Buffer::into_buf(alloc).or(Err(KeywrapError::IntegrityCheckFailed))?;
+        buf.lend_mut(self.conn, Opcode::AesKwp.to_u32().unwrap()).or(Err(KeywrapError::IntegrityCheckFailed))?;
         let ret = buf.to_original::<KeyWrapper, _>().unwrap();
+        // note: this return vector (which may contain a key) is not zeroized on drop anymore due to a
+        // regression correlated to a fix to a crypto algorithm. This was pushed as a hotfix for v0.9.9.
         match ret.result {
             None => { // no error, proceed
                 if ret.len as usize != expected_len {
                     // The key wrapper will return a vector that is rounded to the nearest 8-bytes, with
                     // a zero-pad on the excess data. Ensure that the zero-pad is intact before lopping it off.
                     if (ret.len as usize) < expected_len {
-                        Err(KeywrapError::InvalidExpectedLen)
+                        Err(KeywrapError::InvalidOutputSize)
                     } else {
                         let mut all_zeroes = true;
                         for &d in ret.data[expected_len..ret.len as usize].iter() {
@@ -249,7 +405,7 @@ impl RootKeys {
                         if all_zeroes {
                             Ok(ret.data[..expected_len as usize].to_vec(),)
                         } else {
-                            Err(KeywrapError::InvalidExpectedLen)
+                            Err(KeywrapError::InvalidDataSize)
                         }
                     }
                 } else {
@@ -257,6 +413,10 @@ impl RootKeys {
                 }
             }
             Some(err) => {
+                // note: the error message may contain a plaintext copy of the key that is not
+                // zeroized on drop. However, it only happens in the case of a migration from
+                // a legacy version (pre v0.9.8) PDDB, by the time this matters it should be
+                // a non-issue.
                 Err(err)
             }
         }

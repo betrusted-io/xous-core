@@ -52,6 +52,8 @@ pub(crate) enum FlashOp {
     /// Address + up to 4 pages. page 0 is at address, page 1 is at address + 256, etc.
     /// Pages stored as None are skipped, yet the address pointer is still incremented.
     Program(u32, [Option<[u8; 256]>; 4]),
+    /// Read a data at the `u32` address specified.
+    Verify(u32, [u8; 256]),
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) enum FlashResult {
@@ -317,6 +319,7 @@ pub enum ComIntSources {
     Disconnect,
     Connect,
     WfxErr,
+    IntErr,
     Invalid,
 }
 impl From<u16> for ComIntSources {
@@ -332,6 +335,7 @@ impl From<u16> for ComIntSources {
             com_rs_ref::INT_WLAN_DISCONNECT => ComIntSources::Disconnect,
             com_rs_ref::INT_WLAN_CONNECT_EVENT => ComIntSources::Connect,
             com_rs_ref::INT_WLAN_WFX_ERR => ComIntSources::WfxErr,
+            com_rs_ref::INT_INVALID => ComIntSources::IntErr,
             _ => ComIntSources::Invalid,
         }
     }
@@ -349,6 +353,7 @@ impl From<ComIntSources> for u16 {
             ComIntSources::Connect => com_rs_ref::INT_WLAN_CONNECT_EVENT,
             ComIntSources::Disconnect => com_rs_ref::INT_WLAN_DISCONNECT,
             ComIntSources::WfxErr => com_rs_ref::INT_WLAN_WFX_ERR,
+            ComIntSources::IntErr => com_rs_ref::INT_INVALID,
             ComIntSources::Invalid => 0,
         }
     }

@@ -1,5 +1,5 @@
 use clap::{crate_version, App, Arg};
-use std::io::{Read, Write};
+use std::io::{Read, Write, ErrorKind, Error};
 use std::path::Path;
 
 use ring::signature::Ed25519KeyPair;
@@ -7,11 +7,14 @@ use ring::signature::Ed25519KeyPair;
 const DEVKEY_PATH: &str = "devkey/dev.key";
 const LOADER_VERSION: u32 = 1;
 
+use xous_semver::SemVer;
+
 fn image_sign<S, T>(
     input: &S,
     output: &T,
     private_key: &pem::Pem,
     defile: bool,
+    minver: &Option<SemVer>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
@@ -21,6 +24,25 @@ where
     let mut source_file = std::fs::File::open(input)?;
     let mut dest_file = std::fs::File::create(output)?;
     source_file.read_to_end(&mut source)?;
+
+    // Append version information to the binary. Appending it here means it is part
+    // of the signed bundle.
+    let minver_bytes = if let Some(mv) = minver {mv.into()} else {[0u8; 16]};
+    let semver: [u8; 16] = SemVer::from_git()
+        .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?
+        .into();
+    // extra data appended here needs to be reflected in two places in Xous:
+    // 1. root-keys/src/implementation.rs @ sign-loader()
+    // 2. graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
+    // This is because memory ownership is split between two crates for performance reasons:
+    // the direct memory page of fonts belongs to the graphics server, to avoid having to send
+    // a message on every font lookup. However, the keys reside in root-keys, so therefore,
+    // a bulk read operation has to shuttle font data back to the root-keys crate. Of course,
+    // the appended metadata is in the font region, so, this data has to be shuttled back.
+    // The graphics server is also entirely naive to how much cryptographic data is in the font
+    // region, and I think it's probably better for it to stay that way.
+    source.append(&mut minver_bytes.to_vec());
+    source.append(&mut semver.to_vec());
     for &b in LOADER_VERSION.to_le_bytes().iter() {
         source.push(b);
     }
@@ -122,11 +144,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("kernel output image"),
         )
         .arg(
+            Arg::with_name("min-xous-ver")
+                .long("min-xous-ver")
+                .help("Minimum Xous version for cross-compatibility")
+                .value_name("min xous ver")
+                .takes_value(true)
+                .default_value("v0.9.8-790")
+                .required(true),
+        )
+        .arg(
             Arg::with_name("defile").help(
                 "patch the resulting image, to create a test file to catch signature failure",
             ),
         )
         .get_matches();
+
+    let minver = if let Some(minver_str) = matches.value_of("min-xous-ver") {
+        Some(
+            SemVer::from_str(minver_str)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "Minimum version semver format incorrect"))?
+        )
+    } else {
+        None
+    };
 
     // Sign the loader, if an output file was specified
     if let Some(loader_output) = matches.value_of("loader-output") {
@@ -148,6 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &loader_output,
             &loader_pkey,
             matches.is_present("defile"),
+            &minver,
         )?;
     }
 
@@ -170,6 +211,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &kernel_output,
             &kernel_pkey,
             matches.is_present("defile"),
+            &minver,
         )?;
     }
     Ok(())

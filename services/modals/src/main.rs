@@ -831,6 +831,7 @@ fn wrapped_main() -> ! {
 
                         response.replace(spec).unwrap();
                         op = RendererState::None;
+                        token_lock = next_lock(&mut work_queue);
                     } else {
                         log::error!("Ux routine returned but no origin was recorded");
                         panic!("Ux routine returned but no origin was recorded");

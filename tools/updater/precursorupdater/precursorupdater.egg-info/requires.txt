@@ -1,0 +1,3 @@
+requests>=2
+pyusb>=1
+progressbar2>=3

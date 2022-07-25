@@ -67,7 +67,7 @@ impl Bip39Entry {
 const NUM_RECCOS: i16 = 5;
 const AESTHETIC_GAP: i16 = 5;
 const STYLE_OVERRIDE: GlyphStyle = GlyphStyle::Bold;
-const ACCEPTED_WORD_LINES: i16 = 4;
+const ACCEPTED_WORD_LINES: i16 = 5; // all 0's key requires 5 lines (abandon abandon abandon....art)
 const STATUS_LINES: i16 = 3;
 
 impl ActionApi for Bip39Entry {
@@ -280,6 +280,8 @@ impl ActionApi for Bip39Entry {
                 status.push_str(t!("bip39.waiting", xous::LANG));
             } else {
                 status.push_str(t!("bip39.invalid_phrase", xous::LANG));
+                status.push_str("\n");
+                status.push_str(t!("bip39.abort_help", xous::LANG));
             }
         }
         let mut tv = TextView::new(
@@ -300,7 +302,7 @@ impl ActionApi for Bip39Entry {
         let can_move_downwards = !(self.suggestion_index.get() + 1 == NUM_RECCOS);
         let can_move_upwards =  !(self.suggestion_index.get() - 1 < 0);
 
-        log::info!("key_action: {}", k);
+        // log::debug!("key_action: {}", k);
         match k {
             '∴' | '\u{d}' => {
                 if self.user_input.len() == 0 {
@@ -341,6 +343,12 @@ impl ActionApi for Bip39Entry {
             }
             '\u{0}' => {
                 // ignore null messages
+            }
+            '\u{14}' => { // F4
+                let ret = Bip39EntryPayload::default(); // return a 0-length entry
+                let buf = Buffer::into_buf(ret).expect("couldn't convert message to payload");
+                buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+                return (None, true)
             }
             '\u{8}' => { // backspace
                 #[cfg(feature="tts")]

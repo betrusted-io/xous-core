@@ -14,6 +14,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use xous_semver::SemVer;
 
 // republish this so we can decode the icmpv4 error codes
 pub use smoltcp::wire::Icmpv4DstUnreachable;
@@ -25,7 +26,10 @@ pub const AP_DICT_NAME: &'static str = "wlan.networks";
 
 #[allow(dead_code)]
 /// minimum revision required for compatibility with Net crate
-pub const MIN_EC_REV: u32 = 0x00_09_06_00;
+pub const MIN_EC_REV: SemVer = SemVer {
+    maj: 0, min: 9, rev: 6, extra: 0,
+    commit: None,
+};
 
 /// Dispatch opcodes to the Net crate main loop.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

@@ -56,6 +56,7 @@ impl Susres {
     pub fn getop_suspend(&self) -> u32 { Opcode::SuspendRequest.to_u32().unwrap() }
 
     pub fn new_without_hook(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES)?;
         Ok(Susres {
             conn,

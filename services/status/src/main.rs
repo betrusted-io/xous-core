@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod mainmenu;
+use keyboard::KeyMap;
 use mainmenu::*;
 mod appmenu;
 use appmenu::*;
@@ -9,8 +10,10 @@ mod kbdmenu;
 use kbdmenu::*;
 mod app_autogen;
 mod time;
+mod ecup;
 
 use com::api::*;
+use root_keys::api::{BackupOp, BackupKeyboardLayout};
 use core::fmt::Write;
 use num_traits::*;
 use xous::{msg_scalar_unpack, send_message, Message, CID};
@@ -33,6 +36,12 @@ use std::thread;
 
 const SERVER_NAME_STATUS_GID: &str = "_Status bar GID receiver_";
 const SERVER_NAME_STATUS: &str = "_Status_";
+/// How long a backup header should persist before it is automatically deleted.
+/// The interval is picked to be long enough for a user to have ample time to get the backup,
+/// (even with multiple retries due to e.g. some hardware problem or logistical issue)
+/// but not so long that we're likely to have expired compatibility revision data
+/// in the header metadata. Initially, it's set at one day until it is automatically deleted.
+const BACKUP_EXPIRATION_HOURS: i64 = 24;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum StatusOpcode {
@@ -57,6 +66,9 @@ pub(crate) enum StatusOpcode {
 
     /// Set the keyboard map
     SetKeyboard,
+
+    /// Prepare for a backup
+    PrepareBackup,
 
     /// Tells keyboard watching thread that a new keypress happened.
     Keypress,
@@ -135,6 +147,7 @@ fn wrapped_main() -> ! {
     // we want this started really early, because it sanity checks the RTC and a bunch of other stuff.
     time::start_time_server();
 
+    // ------------------ acquire the status canvas GID
     let xns = xous_names::XousNames::new().unwrap();
     // 1 connection exactly -- from the GAM to set our canvas GID
     let status_gam_getter = xns
@@ -158,12 +171,9 @@ fn wrapped_main() -> ! {
     }
     xous::destroy_server(status_gam_getter).unwrap();
 
+    // ------------------ lay out our public API infrastructure
     // ok, now that we have a GID, we can continue on with our merry way
     let status_gid: Gid = Gid::new(canvas_gid);
-    log::trace!("|status: my canvas {:?}", status_gid);
-
-    log::debug!("|status: registering GAM|status thread");
-
      // allow only one connection, from keyboard to us.
     let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(1)).unwrap();
     // create a connection for callback hooks
@@ -177,7 +187,29 @@ fn wrapped_main() -> ! {
             pump_thread(pump_conn as _, pump_run);
         }
     });
+    // used to show notifications, e.g. can't sleep while power is engaged.
+    let modals = modals::Modals::new(&xns).unwrap();
 
+    // ------------------ start a 'gutter' thread to handle incoming events while we go through the boot/autoupdate process
+    let gutter = thread::spawn({
+        let gutter_sid = status_sid.clone();
+        move || {
+            loop {
+                let msg = xous::receive_message(gutter_sid).unwrap();
+                let opcode: Option<StatusOpcode> = FromPrimitive::from_usize(msg.body.id());
+                log::info!("Guttering {:?}", opcode);
+                match opcode {
+                    Some(StatusOpcode::Quit) => {
+                        xous::return_scalar(msg.sender, 1).ok();
+                        break;
+                    }
+                    _ => () // ignore everything else.
+                }
+            }
+        }
+    });
+
+    // ------------------ render initial graphical display, so we don't seem broken on boot
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
@@ -271,6 +303,7 @@ fn wrapped_main() -> ! {
     log::trace!("status redraw## initial");
     gam.redraw().unwrap(); // initial boot redraw
 
+    // ------------------------ measure current security state and adjust messaging
     let sec_notes = Arc::new(Mutex::new(HashMap::new()));
     let mut last_sec_note_index = 0;
     let mut last_sec_note_size = 0;
@@ -280,16 +313,187 @@ fn wrapped_main() -> ! {
             t!("secnote.usb_unlock", xous::LANG).to_string(),
         );
     }
+
+    // --------------------------- spawn a time UX manager thread
+    let time_sid = xous::create_server().unwrap();
+    let time_cid = xous::connect(time_sid).unwrap();
+    time::start_time_ux(time_sid);
+    // this is used by the main loop to get the localtime to show on the status bar
+    let mut localtime = llio::LocalTime::new();
+
+    // ---------------------------- connect to the com & root keys server (prereq for menus)
     let keys = Arc::new(Mutex::new(
         root_keys::RootKeys::new(&xns, None)
             .expect("couldn't connect to root_keys to query initialization state"),
     ));
+    let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
+
+    // ---------------------------- build menus
+    // used to hide time when the PDDB is not mounted
+    let pddb_poller = pddb::PddbMountPoller::new();
+    // these menus stake a claim on some security-sensitive connections; occupy them upstream of trying to do an update
+    log::debug!("starting main menu thread");
+    let main_menu_sid = xous::create_server().unwrap();
+    let status_cid = xous::connect(status_sid).unwrap();
+    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
+    create_app_menu(xous::connect(status_sid).unwrap());
+    let kbd_mgr = xous::create_server().unwrap();
+    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
+    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+
+    // ---------------------------- Automatic backlight-related variables.
+    // must be upstream of the update check, because we need to occupy the keyboard
+    // server slot to prevent e.g. a keyboard logger from taking our passwords!
+    kbd.register_observer(
+        SERVER_NAME_STATUS,
+        StatusOpcode::Keypress.to_u32().unwrap() as usize,
+    );
+
+    let enabled = Arc::new(Mutex::new(false));
+    let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
+
+    let rx = Box::new(rx);
+
+    let thread_already_running = Arc::new(Mutex::new(false));
+    let thread_conn = xous::connect(status_sid).unwrap();
+
+    // ------------------------ check firmware status and apply updates
+    // all security sensitive servers must be occupied at this point in time.
+    // in debug mode, anyone could, in theory, connect to and trigger an EC update, given this permissive policy.
+    #[cfg(feature="dbg-ecupdate")]
+    let ecup_sid = xns.register_name("__ECUP server__", None).unwrap(); // do not change name, it is referred to in shellchat
+    #[cfg(not(feature="dbg-ecupdate"))]
+    let ecup_sid = xous::create_server().unwrap(); // totally private in this mode
+    let _ = thread::spawn({
+        move || {
+            ecup::ecupdate_thread(ecup_sid);
+        }
+    });
+    let ecup_conn = xous::connect(ecup_sid).unwrap();
+    // check & automatically apply any EC updates
+    let mut ec_updated = false;
+    let mut soc_updated = false;
+    match send_message(ecup_conn,
+        Message::new_blocking_scalar(ecup::UpdateOp::UpdateAuto.to_usize().unwrap(), 0, 0, 0, 0)
+    ).expect("couldn't send auto update command") {
+        xous::Result::Scalar1(r) => {
+            match FromPrimitive::from_usize(r) {
+                Some(ecup::UpdateResult::AutoDone) => {
+                    // question: do we want to put something there that confirms that the reported EC firmware
+                    // at this point matches the intended update? we /could/ do that, but if it fails then how?
+                    ec_updated = true;
+                    // restore interrupts and connection manager
+                    llio.com_event_enable(true).ok();
+                    netmgr.reset();
+                    netmgr.connection_manager_run().ok();
+                }
+                Some(ecup::UpdateResult::NothingToDo) => log::info!("EC update check: nothing to do, firmware is up to date."),
+                Some(ecup::UpdateResult::Abort) => {
+                    modals.show_notification(t!("ecup.abort", xous::LANG), None).unwrap();
+                }
+                // note: invalid package triggers a pop-up in the update procedure, so we don't need to pop one up here.
+                Some(ecup::UpdateResult::PackageInvalid) => log::error!("EC firmware package did not validate"),
+                None => log::error!("invalid return code from EC update check"),
+            }
+        }
+        _ => log::error!("Invalid return type from UpdateAuto"),
+    }
+    #[cfg(not(feature="dbg-ecupdate"))]
+    { // if we're not debugging, quit the updater thread -- might as well free up the memory and connections if the thread is not callable
+    // this frees up 28-40k runtime RAM + 1 connection in the status thread.
+        send_message(ecup_conn,
+            Message::new_blocking_scalar(ecup::UpdateOp::Quit.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't quit updater thread");
+        unsafe{xous::disconnect(ecup_conn).ok()};
+    }
+
+    // check for backups after EC updates, but before we check for gateware updates
+    let mut backup_time: Option<DateTime::<Utc>> = None;
+    let mut restore_running = false;
+    let restore_header = keys.lock().unwrap().get_restore_header();
+    match restore_header {
+        Ok(Some(header)) => {
+            log::info!("Restore header op: {:?}", header.op);
+            match header.op {
+                BackupOp::Restore => {
+                    // set the keyboard layout according to the restore record.
+                    let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
+                    let map: KeyMap = map_deserialize.into();
+                    log::info!("Keyboard layout set to {:?} by restore process.", map);
+                    kbd.set_keymap(map).ok();
+
+                    let backup_dna = u64::from_le_bytes(header.dna);
+                    if backup_dna != llio.soc_dna().unwrap() {
+                        log::info!("This will be a two-stage restore because this is to a new device.");
+                        log::info!("backup_dna is 0x{:x}", backup_dna);
+                        log::info!("reported dna is 0x{:x}", llio.soc_dna().unwrap());
+                    }
+                    keys.lock().unwrap().do_restore_backup_ux_flow();
+                    // if the DNA matches the backup, the backup header is automatically erased.
+                    restore_running = true;
+                }
+                BackupOp::RestoreDna => {
+                    let pddb = pddb::Pddb::new();
+                    let backup_dna = u64::from_le_bytes(header.dna);
+                    match pddb.rekey_pddb(pddb::PddbRekeyOp::FromDnaFast(backup_dna)) {
+                        Ok(_) => {
+                            // once this step is done & successful, we have to erase the backup block to avoid re-doing this flow
+                            keys.lock().unwrap().do_erase_backup();
+                            log::info!("Rekey of PDDB to current device completed successfully")
+                        },
+                        Err(e) => {
+                            modals.show_notification(&format!("{}{:?}", t!("rekey.fail", xous::LANG), e), None).ok();
+                            log::error!("Backup was aborted. Reason: {:?}", e);
+                        }
+                    }
+                }
+                BackupOp::Backup => {
+                    // once we have unlocked the PDDB and know our timezone, we'll compare the embedded timestamp to
+                    // our current time, and delete the backup if it's too old.
+                    backup_time = Some(
+                        chrono::DateTime::<Utc>::from_utc(
+                            NaiveDateTime::from_timestamp(header.timestamp as i64, 0),
+                            chrono::offset::Utc
+                        )
+                    );
+                }
+                _ => log::warn!("backup record was found, but it has an improper operation field: {:?}", header.op),
+            }
+        }
+        _ => {}, // no backup header found, continue with boot
+    }
+
+    // check for gateware updates
+    let staged_sv = match keys.lock().unwrap().staged_semver() {
+        Ok(sv) => {
+            log::info!("Staged gateware version: {:?}", sv);
+            Some(sv)
+        },
+        Err(xous::Error::InvalidString) => {log::info!("No staged gateware found; metadata is blank"); None},
+        _ => {log::error!("Internal error reading staged gateware semantic version"); None},
+    };
     if !keys.lock().unwrap().is_initialized().unwrap() {
         sec_notes.lock().unwrap().insert(
             "secnotes.no_keys".to_string(),
             t!("secnote.no_keys", xous::LANG).to_string(),
         );
-    } else {
+        if !restore_running {
+            if let Some(staged) = staged_sv {
+                let soc = llio.soc_gitrev().expect("error querying SoC gitrev; this is fatal");
+                if staged > soc { // we have a staged update, and no root keys. Just try to do the update.
+                    if keys.lock().unwrap().try_nokey_soc_update() {
+                        log::info!("No-touch SoC update successful");
+                        soc_updated = true;
+                    } else {
+                        log::info!("No-touch SoC update was called, but then aborted");
+                    }
+                }
+            }
+            if !keys.lock().unwrap().is_dont_ask_set().unwrap_or(false) {
+                keys.lock().unwrap().do_init_keys_ux_flow();
+            }
+        }
+    } else if !restore_running {
         log::info!("checking gateware signature...");
         thread::spawn({
             let clone = Arc::clone(&sec_notes);
@@ -317,9 +521,45 @@ fn wrapped_main() -> ! {
                 }
             }
         });
+        if let Some(staged) = staged_sv {
+            let soc = llio.soc_gitrev().expect("error querying SoC gitrev; this is fatal");
+            if (staged > soc) && !soc_updated { // if the soc was updated, we should reboot before we try this
+                if keys.lock().unwrap().prompt_for_update() {
+                    // prompt to apply the update
+                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("socup.ignore", xous::LANG)).expect("couldn't build radio item list");
+                    match modals.get_radiobutton(t!("socup.candidate", xous::LANG)) {
+                        Ok(response) => {
+                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                keys.lock().unwrap().do_update_gw_ux_flow_blocking();
+                                soc_updated = true;
+                            } else if response.as_str() == t!("socup.ignore", xous::LANG) {
+                                keys.lock().unwrap().set_update_prompt(false);
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        }
     };
     sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string()); // this is the default app on boot
+    if ec_updated {
+        netmgr.reset(); // have to do this to get the net manager stack into a known state after reset
+    }
+    if soc_updated {
+        log::info!("Soc update was triggered, UX flow should be running now...");
+    }
+    // now that all the auto-update interaction is done, exit the gutter server. From
+    // this point forward, messages will pile up in the status queue, until the main loop starts.
+    send_message(cb_cid, Message::new_blocking_scalar(
+        StatusOpcode::Quit.to_usize().unwrap(),
+        0, 0, 0, 0,)
+    ).expect("couldn't exit the gutter server");
+    gutter.join().expect("status boot gutter server did not exit gracefully");
 
+    // --------------------------- graphical loop timing
     let mut stats_phase: usize = 0;
 
     let charger_pump_interval = 180;
@@ -336,11 +576,11 @@ fn wrapped_main() -> ! {
     let mut battstats_phase = true;
     let mut secnotes_force_redraw = false;
 
+    // --------------------------- sync to COM
     // the EC gets reset by the Net crate on boot to ensure that the state machines are synced up
     // this takes a few seconds, so we have a dead-wait here. This is a good spot for it because
     // the status bar reads "booting up..." during this period.
     log::debug!("syncing with COM");
-    let mut com = com::Com::new(&xns).expect("|status: can't connect to COM");
     com.ping(0).unwrap(); // this will block until the COM is ready to take events
     com.hook_batt_stats(battstats_cb)
         .expect("|status: couldn't hook callback for events from COM");
@@ -348,27 +588,7 @@ fn wrapped_main() -> ! {
     com.req_batt_stats()
         .expect("Can't get battery stats from COM");
 
-    // spawn a time UX manager thread
-    let time_sid = xous::create_server().unwrap();
-    let time_cid = xous::connect(time_sid).unwrap();
-    time::start_time_ux(time_sid);
-    // this is used by the main loop to get the localtime to show on the status bar
-    let mut localtime = llio::LocalTime::new();
-    // used to hide time when the PDDB is not mounted
-    let pddb_poller = pddb::PddbMountPoller::new();
-
-    // used to show notifications, e.g. can't sleep while power is engaged.
-    let modals = modals::Modals::new(&xns).unwrap();
-
-    log::debug!("starting main menu thread");
-    let main_menu_sid = xous::create_server().unwrap();
-    let status_cid = xous::connect(status_sid).unwrap();
-    let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
-    create_app_menu(xous::connect(status_sid).unwrap());
-    let kbd_mgr = xous::create_server().unwrap();
-    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
-    let kbd = keyboard::Keyboard::new(&xns).unwrap();
-
+    // ---------------------- final cleanup before entering main loop
     log::debug!("subscribe to wifi updates");
     netmgr.wifi_state_subscribe(cb_cid, StatusOpcode::WifiStats.to_u32().unwrap()).unwrap();
     let mut wifi_status: WlanStatus = WlanStatus::from_ipc(WlanStatusIpc::default());
@@ -386,22 +606,32 @@ fn wrapped_main() -> ! {
     });
     log::info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
 
+    // add a security note if we're booting with a "zero key"
+    match keys.lock().unwrap().is_zero_key().expect("couldn't query zero key status") {
+        Some(q) => match q {
+            true => {
+                sec_notes.lock().unwrap().insert(
+                    "secnote.zero_key".to_string(),
+                    t!("secnote.zero_key", xous::LANG).to_string(),
+                );
+            },
+            false => {},
+        }
+        None => {
+            {} // could be bbram, could be an error. could be keys are secured and disabled for readout. could be disabled-readout zero keys!
+        }
+    }
     #[cfg(any(target_os = "none", target_os = "xous"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
 
-    // Automatic backlight-related variables.
-    kbd.register_observer(
-        SERVER_NAME_STATUS,
-        StatusOpcode::Keypress.to_u32().unwrap() as usize,
-    );
-
-    let enabled = Arc::new(Mutex::new(false));
-    let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
-
-    let rx = Box::new(rx);
-
-    let thread_already_running = Arc::new(Mutex::new(false));
-    let thread_conn = xous::connect(status_sid).unwrap();
+    // spawn a thread to auto-mount the PDDB
+    let _ = thread::spawn({
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            tt.sleep_ms(4000).unwrap(); // a brief pause, to allow the other startup bits to finish running
+            pddb::Pddb::new().try_mount();
+        }
+    });
 
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
@@ -637,6 +867,13 @@ fn wrapped_main() -> ! {
                             timestr
                         )
                         .unwrap();
+                        if let Some(bt) = backup_time {
+                            let since_backup = dt.signed_duration_since(bt);
+                            if since_backup.num_hours().abs() > BACKUP_EXPIRATION_HOURS {
+                                keys.lock().unwrap().do_erase_backup();
+                                backup_time = None;
+                            }
+                        }
                     } else {
                         if pddb_poller.is_mounted_nonblocking() {
                             write!(
@@ -794,8 +1031,26 @@ fn wrapped_main() -> ! {
                 *run_lock = false;
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
-
+            Some(StatusOpcode::PrepareBackup) => {
+                // sync the PDDB to disk prior to making backups
+                let pddb = pddb::Pddb::new();
+                pddb.sync().expect("couldn't synchronize PDDB to disk");
+                let mut metadata = root_keys::api::BackupHeader::default();
+                // note: default() should set the language correctly by default since it's a systemwide constant
+                metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);
+                metadata.xous_ver = ticktimer.get_version_semver().into();
+                metadata.soc_ver = llio.soc_gitrev().unwrap().into();
+                metadata.wf200_ver = com.get_wf200_fw_rev().unwrap().into();
+                metadata.ec_ver = com.get_ec_sw_tag().unwrap().into();
+                metadata.op = BackupOp::Backup;
+                metadata.dna = llio.soc_dna().unwrap().to_le_bytes();
+                let map = kbd.get_keymap().expect("couldn't get key mapping");
+                let map_serialize: BackupKeyboardLayout = map.into();
+                metadata.kbd_layout = map_serialize.into();
+                keys.lock().unwrap().do_create_backup_ux_flow(metadata);
+            }
             Some(StatusOpcode::Quit) => {
+                xous::return_scalar(msg.sender, 1).ok();
                 break;
             }
             None => {

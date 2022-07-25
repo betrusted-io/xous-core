@@ -141,6 +141,7 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.push(ComIntSources::WlanSsidScanUpdate);
     com_int_list.push(ComIntSources::WlanSsidScanFinished);
     com_int_list.push(ComIntSources::WfxErr);
+    com_int_list.push(ComIntSources::Invalid);
 }
 
 fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
@@ -250,7 +251,21 @@ fn main() -> ! {
     let routes = Routes::new(BTreeMap::new());
 
     // build the device
-    let hw_config = com.wlan_get_config().expect("couldn't fetch initial wifi MAC");
+    let hw_config = match com.wlan_get_config() {
+        Ok(config) => config,
+        Err(e) => {
+            log::error!("Something is wrong with the EC, got {:?} when requesting a MAC address. Trying our best to bodge through it.", e);
+            Ipv4Conf {
+                dhcp: com_rs_ref::DhcpState::Invalid,
+                mac: [2, 2, 4, 5, 6, 2],
+                addr: [169, 254, 0, 2], // link local address
+                gtwy: [169, 254, 0, 1], // something bogus
+                mask: [255, 255, 0, 0,],
+                dns1: [1, 1, 1, 1],
+                dns2: [8, 8, 8, 8],
+            }
+        }
+    };
     log::debug!("My MAC address is: {:x?}", hw_config.mac);
     let device = device::NetPhy::new(&xns);
     // needed by ICMP to determine if we should compute checksums
@@ -1045,9 +1060,14 @@ fn main() -> ! {
                                 ComIntSources::WlanIpConfigUpdate => {
                                     // right now the WLAN implementation only does IPV4. So IPV6 compatibility ends here.
                                     // if IPV6 gets added to the EC/COM bus, ideally this is one of a couple spots in Xous that needs a tweak.
-                                    let config = com
-                                        .wlan_get_config()
-                                        .expect("couldn't retrieve updated ipv4 config");
+                                    let config = match com
+                                    .wlan_get_config() {
+                                        Ok(config) => config,
+                                        Err(e) => {
+                                            log::error!("WLAN config interrupt was bogus. EC is probably updating? Ignoring. Error: {:?}", e);
+                                            continue;
+                                        }
+                                    };
                                     log::info!("Network config acquired: {:?}", config);
                                     log::info!("{}NET.OK,{:?},{}",
                                         xous::BOOKEND_START,
@@ -1131,6 +1151,13 @@ fn main() -> ! {
                                             log::error!("Got RxReady interrupt but no packet length specified!");
                                         }
                                     }
+                                }
+                                ComIntSources::Invalid => {
+                                    com.ints_ack(&com_int_list); // ack everything that's pending
+                                    // re-enable the interrupts as we intended
+                                    let mut ena_list: Vec<ComIntSources> = vec![];
+                                    set_com_ints(&mut ena_list);
+                                    com.ints_enable(&ena_list);
                                 }
                                 _ => {
                                     log::debug!("Unhandled: {:?}", pending);
@@ -1841,9 +1868,32 @@ fn main() -> ! {
                 }
             }),
             Some(Opcode::Reset) => {
+                // ack any pending ints
+                com_int_list.clear();
+                com.ints_get_active(&mut com_int_list).ok();
+                com.ints_ack(&com_int_list);
+                // re-enable the interrupts as we intended
+                set_com_ints(&mut com_int_list);
+                com.ints_enable(&com_int_list);
+                com_int_list.clear();
+
                 // note: ARP cache isn't reset
                 iface.routes_mut().remove_default_ipv4_route();
                 dns_allclear_hook.notify();
+
+                send_message(
+                    cm_cid,
+                    Message::new_scalar( // this has to be non-blocking to avoid deadlock: reset can be called from inside connection_manager
+                        connection_manager::ConnectionManagerOpcode::EcReset
+                            .to_usize()
+                            .unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .expect("couldn't send EcReset message");
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {

@@ -29,6 +29,8 @@ locales = {path = "../../locales"}
 # for automatic SSID management and AP list storage
 pddb = {path = "../pddb"}
 
+xous-semver = "0.1.2"
+
 [dependencies.smoltcp]
 # some historical notes for development on branches in the future
 # path = "../../../smoltcp"

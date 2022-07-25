@@ -190,7 +190,9 @@ pub fn start_time_server() {
                     break;
                 }
                 let msg = xous::receive_message(pub_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                let op: Option<TimeOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", op);
+                match op {
                     Some(TimeOp::PddbMountPoll) => {
                         tt.sleep_ms(330).unwrap();
                         if temp < 10 {
@@ -204,8 +206,25 @@ pub fn start_time_server() {
                     Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                         susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                         // resync time on resume
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        let mut count = 0;
+                        loop {
+                            match llio.get_rtc_secs() {
+                                Ok(secs) => {
+                                    start_rtc_secs = secs;
+                                    start_tt_ms = tt.elapsed_ms();
+                                    break;
+                                }
+                                Err(e) => {
+                                    log::warn!("RTC read yielded error; retrying: {:?}", e);
+                                    tt.sleep_ms(850).unwrap();
+                                    count += 1;
+                                    if count > 5 {
+                                        // this should be a panic, I think, not an abort.
+                                        panic!("Couldn't sync time on resume. Something went wrong with the RTC hardware.");
+                                    }
+                                }
+                            }
+                        }
                     }),
                     Some(TimeOp::HwSync) => {
                         start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");

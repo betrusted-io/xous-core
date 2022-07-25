@@ -66,10 +66,16 @@
         "en-tts": "Start typing..."
     },
     "bip39.invalid_phrase": {
-        "en": "Phrase is not valid",
-        "ja": "フレーズが無効です",
-        "zh": "短语无效",
-        "en-tts": "Phrase is not valid"
+        "en": "\tPhrase is not valid",
+        "ja": "\tフレーズが無効です",
+        "zh": "\t短语无效",
+        "en-tts": "\tPhrase is not valid"
+    },
+    "bip39.abort_help": {
+        "en": "Press F4 to abort entry",
+        "ja": "F4を押して入力を中止します",
+        "zh": "按 F4 中止输入",
+        "en-tts": "Press F4 to abort entry"
     },
     "bip39.valid_phrase": {
         "en": "Valid input:",

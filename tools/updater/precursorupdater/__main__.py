@@ -1,0 +1,3 @@
+import precursorupdater
+
+precursorupdater.main()

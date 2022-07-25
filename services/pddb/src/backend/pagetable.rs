@@ -112,6 +112,16 @@ impl Pte {
             None
         }
     }
+    /// Normally you should be using pt_patch_mapping(), which generates a new nonce every
+    /// time the entry is patched. However, this function is provided for "bulk" operations
+    /// such as migrations where we violate the abstractions to improve performance.
+    pub fn re_nonce(&mut self, entropy: Rc<RefCell<TrngPool>>) {
+        let nonce_u32 = entropy.borrow_mut().get_u32();
+        self.nonce = nonce_u32.to_le_bytes();
+        let pte_data = self.deref();
+        let checksum = murmur3_32(&pte_data[..12], nonce_u32);
+        self.checksum = checksum.to_le_bytes();
+    }
 }
 impl Deref for Pte {
     type Target = [u8];

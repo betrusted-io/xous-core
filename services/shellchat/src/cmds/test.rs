@@ -181,8 +181,8 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     let (x, y, z, id) = env.com.gyro_read_blocking().unwrap();
                     log::info!("{}|GYRO|{}|{}|{}|{}|", SENTINEL, x, y, z, id);
-                    let (wf_maj, wf_min, wf_rev) = env.com.get_wf200_fw_rev().unwrap();
-                    log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_maj, wf_min, wf_rev);
+                    let wf_rev = env.com.get_wf200_fw_rev().unwrap();
+                    log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_rev.maj, wf_rev.min, wf_rev.rev);
                     let (ec_rev, ec_dirty) =  env.com.get_ec_git_rev().unwrap();
                     log::info!("{}|ECREV|{:x}|{:?}|", SENTINEL, ec_rev, ec_dirty);
                     let morestats = env.com.get_more_stats().unwrap();
@@ -508,8 +508,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                                     }
                                 }
                                 write!(ret, "CHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",).unwrap();
-                                let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
-                                write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
+                                let soc_ver = env.llio.soc_gitrev().unwrap();
+                                write!(ret, "Version {}\n", soc_ver.to_string()).unwrap();
                                 log::info!("finished status update");
                                 break;
                             }
@@ -580,6 +580,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                         wifi_tries += 1;
                     }
+
+                    log::info!("Resetting the don't ask flag for initializing root keys");
+                    let pddb = pddb::Pddb::new();
+                    pddb.reset_dont_ask_init();
 
                     AUDIO_OQC.store(true, Ordering::Relaxed);
                     self.freq = 659.25;
@@ -659,6 +663,16 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                         Err(e) => log::error!("couldn't get input: {:?}", e),
                     }
+                }
+                "ecup" => {
+                    let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
+                    xous::send_message(ecup_conn,
+                        xous::Message::new_blocking_scalar(
+                            3, // hard coded to match UpdateOp
+                            0, 0, 0, 0
+                        )
+                    ).unwrap();
+                    write!(ret, "\nDid EC auto update command").unwrap();
                 }
                 _ => {
                     () // do nothing

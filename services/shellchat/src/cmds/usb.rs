@@ -103,7 +103,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                 }
                 "unlock" => {
                     self.usb_dev.restrict_debug_access(false).unwrap();
-                    write!(ret, "USB debug port unlocked: all secrets are readable via USB!").unwrap();
+                    write!(ret, "USB debug port unlocked: portions of the device are readable via USB!").unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

@@ -12,6 +12,7 @@ use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
 
 pub use com_rs_ref::serdes::Ipv4Conf;
+use xous_semver::SemVer;
 
 /// mapping of the callback function to the library user
 /// this exists in the library user's memory space, so we can have up to one
@@ -109,11 +110,19 @@ impl Com {
         }
     }
 
-    pub fn get_wf200_fw_rev(&self) -> Result<(u8, u8, u8), xous::Error> {
+    pub fn get_wf200_fw_rev(&self) -> Result<SemVer, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::Wf200Rev.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar1(rev) = response {
-            Ok(((rev >> 16) as u8, (rev >> 8) as u8, rev as u8))
+            Ok(
+                SemVer {
+                    maj: ((rev >> 16) & 0xFF) as u16,
+                    min: ((rev >> 8) & 0xFF) as u16,
+                    rev: (rev & 0xFF) as u16,
+                    extra: 0,
+                    commit: None
+                }
+            )
         } else {
             panic!("unexpected return value: {:#?}", response);
         }
@@ -136,17 +145,18 @@ impl Com {
         }
     }
 
-    /// this is the rev of the firmware, as (maj, min, rev, +commit)
-    pub fn get_ec_sw_tag(&self) -> Result<(u8, u8, u8, u8), Error> {
+    /// this is the rev of the firmware
+    pub fn get_ec_sw_tag(&self) -> Result<SemVer, Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::EcSwTag.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar1(rev) = response {
-            Ok((
-                ((rev >> 24) & 0xff) as u8,
-                ((rev >> 16) & 0xff) as u8,
-                ((rev >> 8) & 0xff) as u8,
-                ((rev >> 0) & 0xff) as u8,
-            ))
+            Ok(SemVer {
+                maj: ((rev >> 24) & 0xff) as u16,
+                min: ((rev >> 16) & 0xff) as u16,
+                rev: ((rev >> 8) & 0xff) as u16,
+                extra: ((rev >> 0) & 0xff) as u16,
+                commit: None,
+            })
         } else {
             panic!("unexpected return value: {:#?}", response);
         }
@@ -413,6 +423,29 @@ impl Com {
         }
     }
 
+    /// Reads a page of data out of the EC, starting at address `addr`. Always reads 256 bytes.
+    /// The address is in absolute addressing in the EC space, which means this routine, rather
+    /// deliberately, could be used to also read RAM and CSRs in the EC...
+    pub fn flash_verify(&mut self, addr: u32, page: &mut [u8; 256]) -> Result<(), xous::Error> {
+        if !self.ec_acquired {
+            return Err(xous::Error::AccessDenied)
+        }
+        let flashop = api::FlashRecord {
+            id: self.ec_lock_id.unwrap(),
+            op: api::FlashOp::Verify(addr, [0u8; 256])
+        };
+        let mut buf = Buffer::into_buf(flashop).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::FlashOp.to_u32().unwrap()).expect("couldn't send flash program command");
+        let ret = buf.to_original::<api::FlashRecord, _>().unwrap();
+        match ret.op {
+            FlashOp::Verify(_a, d) => {
+                page.copy_from_slice(&d);
+                Ok(())
+            }
+            _ => Err(xous::Error::InternalError)
+        }
+    }
+
     pub fn wlan_set_on(&mut self) -> Result<xous::Result, xous::Error> {
         send_message(
             self.conn,
@@ -481,7 +514,13 @@ impl Com {
         buf.lend_mut(self.conn, Opcode::WlanGetConfig.to_u32().expect("WlanGetConfig failed")).or(Err(xous::Error::InternalError))?;
         let response = buf.to_original().expect("Couldn't convert WlanGetConfig buffer");
         let config = Ipv4Conf::decode_u16(&response);
-        Ok(config)
+        if (config.mac[0] & 0xFE) == 0x01 ||
+        (config.addr[0] & 0xF0) == 0xE0 {
+            // something is wrong with the COM; probably the link is being reset or not in a proper state.
+            Err(xous::Error::BadAddress)
+        } else {
+            Ok(config)
+        }
     }
 
     pub fn wlan_debug(&self) -> Result<WlanDebug, xous::Error> {
