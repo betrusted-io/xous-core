@@ -50,22 +50,32 @@ def main():
 
     parser = argparse.ArgumentParser(description="Debug Backup Images")
     parser.add_argument(
-        "-p", "--pin", required=True, help="unlock PIN", type=str,
+        "-p", "--pin", help="Unlock PIN", type=str,
     )
     parser.add_argument(
-        "--backup-key", required=False, help="Backup key as BIP-39 words", type=str, default="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+        "--backup-key", help="Backup key as BIP-39 words", type=str, default="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
     )
     parser.add_argument(
-        "--basis", required=False, type=str, help="Extra Bases to unlock, as `name:pass`. Each additional basis requires another --basis separator. Note that : is not legal to use in a Basis name.", action="append", nargs="+"
+        "--basis", type=str, help="Extra Bases to unlock, as `name:pass`. Each additional basis requires another --basis separator. Note that : is not legal to use in a Basis name.", action="append", nargs="+"
     )
     parser.add_argument(
-        "--loglevel", required=False, help="set logging level (INFO/DEBUG/WARNING/ERROR)", type=str, default="INFO",
+        "--loglevel", help="set logging level (INFO/DEBUG/WARNING/ERROR)", type=str, default="INFO",
     )
     parser.add_argument(
         "-d", "--dump", help="Print data records in detail", action="store_true"
     )
+    parser.add_argument(
+        "--hosted", help="Analyze a hosted mode PDDB image.", action="store_true"
+    )
+    parser.add_argument(
+        "-f", "--file", help="Input file (defaults to backup.pddb).", type=str, default="backup.pddb"
+    )
 
     args = parser.parse_args()
+    if args.hosted == False and args.pin == None:
+        print("Unlock PIN argument is required, please specified with `-p [pin]`")
+        exit(0)
+
     numeric_level = getattr(logging, args.loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % args.loglevel)
@@ -89,122 +99,131 @@ def main():
     key = Bip39MnemonicDecoder().Decode(mnemonic)
     logging.debug("Using backup key: 0x{}".format(key.hex()))
 
-    with open("backup.pddb", "rb") as backup_file:
+    with open(args.file, "rb") as backup_file:
         global VERSION
         SYSTEM_BASIS = ".System"
         VERSION = 0x201.to_bytes(4, 'little') # update this manually here if the PDDB version gets bumped :P
         AAD = b"PDDB backup v0.1.0"
         backup = backup_file.read()
-        PT_HEADER_LEN = 4 + 16 * 4 + 4 + 8 + 64 + 4 + 4 # ignore the pt header
-        NONCE_LEN = 12
-        CT_LEN = PT_HEADER_LEN + 1024 + 64
-        TAG_LEN = 16
-        COMMIT_NONCE_LEN = 32
-        COMMIT_LEN = 32
-        offset = PT_HEADER_LEN
-        nonce = backup[offset:offset+NONCE_LEN]
-        offset += NONCE_LEN
-        ct = backup[offset:offset+CT_LEN]
-        offset += CT_LEN
-        mac = backup[offset:offset+TAG_LEN]
-        offset += TAG_LEN
-        commit_nonce = backup[offset:offset+COMMIT_NONCE_LEN]
-        offset += COMMIT_NONCE_LEN
-        commit = backup[offset:offset+COMMIT_LEN]
+        if args.hosted == False:
+            PT_HEADER_LEN = 4 + 16 * 4 + 4 + 8 + 64 + 4 + 4 # ignore the pt header
+            NONCE_LEN = 12
+            CT_LEN = PT_HEADER_LEN + 1024 + 64
+            TAG_LEN = 16
+            COMMIT_NONCE_LEN = 32
+            COMMIT_LEN = 32
+            offset = PT_HEADER_LEN
+            nonce = backup[offset:offset+NONCE_LEN]
+            offset += NONCE_LEN
+            ct = backup[offset:offset+CT_LEN]
+            offset += CT_LEN
+            mac = backup[offset:offset+TAG_LEN]
+            offset += TAG_LEN
+            commit_nonce = backup[offset:offset+COMMIT_NONCE_LEN]
+            offset += COMMIT_NONCE_LEN
+            commit = backup[offset:offset+COMMIT_LEN]
 
-        h_enc = SHA512.new(truncate="256")
-        h_enc.update(key)
-        h_enc.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]))
-        h_enc.update(commit_nonce)
-        k_enc = h_enc.digest()
+            h_enc = SHA512.new(truncate="256")
+            h_enc.update(key)
+            h_enc.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x01]))
+            h_enc.update(commit_nonce)
+            k_enc = h_enc.digest()
 
-        h_com = SHA512.new(truncate="256")
-        h_com.update(key)
-        h_com.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x02]))
-        h_com.update(commit_nonce)
-        k_com_derived = h_com.digest()
-        logging.debug('kcom_stored:  ' + binascii.hexlify(commit).decode('utf-8'))
-        logging.debug('kcom_derived: ' + binascii.hexlify(k_com_derived).decode('utf-8'))
+            h_com = SHA512.new(truncate="256")
+            h_com.update(key)
+            h_com.update(bytes([0x43, 0x6f, 0x6, 0xd6, 0xd, 0x69, 0x74, 0x01, 0x02]))
+            h_com.update(commit_nonce)
+            k_com_derived = h_com.digest()
+            logging.debug('kcom_stored:  ' + binascii.hexlify(commit).decode('utf-8'))
+            logging.debug('kcom_derived: ' + binascii.hexlify(k_com_derived).decode('utf-8'))
 
-        if k_com_derived != commit:
-            logging.error("Key commitment is incorrect")
-            exit(1)
+            if k_com_derived != commit:
+                logging.error("Key commitment is incorrect")
+                exit(1)
 
-        cipher = AES_GCM_SIV(k_enc, nonce)
-        try:
-            pt_data = cipher.decrypt(ct + mac, AAD)
-        except:
-            logging.error("Ciphertext did not pass AES-GCM-SIV validation")
-            exit(1)
+            cipher = AES_GCM_SIV(k_enc, nonce)
+            try:
+                pt_data = cipher.decrypt(ct + mac, AAD)
+            except:
+                logging.error("Ciphertext did not pass AES-GCM-SIV validation")
+                exit(1)
 
-        i = 0
-        logging.info("Backup version: 0x{:08x}".format(int.from_bytes(pt_data[i:i+4], 'little')))
-        i += 4
-        logging.info("Xous version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
-        i += 16
-        logging.info("SOC version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
-        i += 16
-        logging.info("EC version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
-        i += 16
-        logging.info("WF200 version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
-        i += 16
-        i += 4 # padding because align=8
-        ts = int.from_bytes(pt_data[i:i+8], 'little') / 1000
-        logging.info("Timestamp: {} / {}".format(ts, datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
-        i += 8
-        logging.info("Language code: {}".format(int.from_bytes(pt_data[i:i+4], 'little')))
-        i += 4
-        logging.info("Keyboard layout code: {}".format(int.from_bytes(pt_data[i:i+4], 'little')))
-        i += 4
-        logging.info("DNA: 0x{:x}".format(int.from_bytes(pt_data[i:i+8], 'little')))
-        dna = pt_data[i:i+8]
-        dna_int = int.from_bytes(dna, 'little')
-        i += 8
-        i += 48 # reserved
-        op = int.from_bytes(pt_data[i:i+4], 'little')
-        logging.info("Stored Backup Opcode: {}".format(op))
-        i += 8 # padding because align=8
+            i = 0
+            logging.info("Backup version: 0x{:08x}".format(int.from_bytes(pt_data[i:i+4], 'little')))
+            i += 4
+            logging.info("Xous version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
+            i += 16
+            logging.info("SOC version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
+            i += 16
+            logging.info("EC version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
+            i += 16
+            logging.info("WF200 version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
+            i += 16
+            i += 4 # padding because align=8
+            ts = int.from_bytes(pt_data[i:i+8], 'little') / 1000
+            logging.info("Timestamp: {} / {}".format(ts, datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
+            i += 8
+            logging.info("Language code: {}".format(int.from_bytes(pt_data[i:i+4], 'little')))
+            i += 4
+            logging.info("Keyboard layout code: {}".format(int.from_bytes(pt_data[i:i+4], 'little')))
+            i += 4
+            logging.info("DNA: 0x{:x}".format(int.from_bytes(pt_data[i:i+8], 'little')))
+            dna = pt_data[i:i+8]
+            dna_int = int.from_bytes(dna, 'little')
+            i += 8
+            i += 48 # reserved
+            op = int.from_bytes(pt_data[i:i+4], 'little')
+            logging.info("Stored Backup Opcode: {}".format(op))
+            i += 8 # padding because align=8
 
-        keyrom = pt_data[i:i+1024]
-        user_key_enc = get_key(40, keyrom, 32)
-        pepper = get_key(248, keyrom, 16)
-        pepper[0] = pepper[0] ^ 1 # encodes the "boot" password type into the pepper
+            keyrom = pt_data[i:i+1024]
+            user_key_enc = get_key(40, keyrom, 32)
+            pepper = get_key(248, keyrom, 16)
+            pepper[0] = pepper[0] ^ 1 # encodes the "boot" password type into the pepper
 
-        # acquire and massage the password so that we can decrypt the encrypted user key
-        boot_pw = args.pin
-        boot_pw_array = [0] * 73
-        pw_len = 0
-        for b in bytes(boot_pw.encode('utf-8')):
-            boot_pw_array[pw_len] = b
-            pw_len += 1
-        pw_len += 1 # null terminate, so even the null password is one character long
-        bcrypter = bcrypt.BCrypt()
-        # logging.debug("{}".format(boot_pw_array[:pw_len]))
-        logging.debug("user_key_enc: {}".format(list(user_key_enc)))
-        logging.debug("salt: {}".format(list(pepper)))
-        hashed_pw = bcrypter.crypt_raw(boot_pw_array[:pw_len], pepper, 7)
-        logging.debug("hashed_pw: {}".format(list(hashed_pw)))
-        hasher = SHA512.new(truncate="256")
-        hasher.update(hashed_pw)
-        user_pw = hasher.digest()
-
-        user_key = []
-        for (a, b) in zip(user_key_enc, user_pw):
-            user_key += [a ^ b]
-        logging.debug("user_key: {}".format(user_key))
-
-        rollback_limit = 255 - int.from_bytes(keyrom[254 * 4 : 254 * 4 + 4], 'little')
-        logging.info("rollback limit: {}".format(rollback_limit))
-        for i in range(rollback_limit):
+            # acquire and massage the password so that we can decrypt the encrypted user key
+            boot_pw = args.pin
+            boot_pw_array = [0] * 73
+            pw_len = 0
+            for b in bytes(boot_pw.encode('utf-8')):
+                boot_pw_array[pw_len] = b
+                pw_len += 1
+            pw_len += 1 # null terminate, so even the null password is one character long
+            bcrypter = bcrypt.BCrypt()
+            # logging.debug("{}".format(boot_pw_array[:pw_len]))
+            logging.debug("user_key_enc: {}".format(list(user_key_enc)))
+            logging.debug("salt: {}".format(list(pepper)))
+            hashed_pw = bcrypter.crypt_raw(boot_pw_array[:pw_len], pepper, 7)
+            logging.debug("hashed_pw: {}".format(list(hashed_pw)))
             hasher = SHA512.new(truncate="256")
-            hasher.update(bytes(user_key))
-            user_key = hasher.digest()
+            hasher.update(hashed_pw)
+            user_pw = hasher.digest()
 
-        logging.debug("hashed_key: {}".format(list(user_key)))
+            user_key = []
+            for (a, b) in zip(user_key_enc, user_pw):
+                user_key += [a ^ b]
+            logging.debug("user_key: {}".format(user_key))
 
-        pddb = backup[4096:]
-        PDDB_A_LEN = 0x620_0000
-        pt_len = (PDDB_A_LEN // 0x1000) * 16
+            rollback_limit = 255 - int.from_bytes(keyrom[254 * 4 : 254 * 4 + 4], 'little')
+            logging.info("rollback limit: {}".format(rollback_limit))
+            for i in range(rollback_limit):
+                hasher = SHA512.new(truncate="256")
+                hasher.update(bytes(user_key))
+                user_key = hasher.digest()
+
+            logging.debug("hashed_key: {}".format(list(user_key)))
+
+            pddb = backup[4096:]
+        else:
+            dna_int = 0
+            user_key = bytes([0] * 32)
+            pddb = backup
+
+        pddb_len = len(pddb)
+        pddb_size_pages = pddb_len // PAGE_SIZE
+        logging.info("Database size: 0x{:x}".format(pddb_len))
+
+        pt_len = pddb_size_pages * 16
         static_crypto_data = pddb[pt_len:pt_len + 0x1000]
         scd_ver = int.from_bytes(static_crypto_data[:4], 'little')
         if scd_ver != 2:
@@ -223,7 +242,6 @@ def main():
         logging.debug("key_data {}".format(key_data))
         keys = {}
         keys[SYSTEM_BASIS] = [key_pt, key_data]
-
 
         for name, pw in basis_credentials.items():
             bname_copy = [0]*64
@@ -256,9 +274,6 @@ def main():
         # data_aad = SYSTEM_BASIS + PDDB_VERSION + dna
 
         # now that we have the credentials, extract the baseline image
-        pddb_len = len(pddb)
-        pddb_size_pages = pddb_len // PAGE_SIZE
-        logging.info("Database size: 0x{:x}".format(pddb_len))
 
         mbbb_offset = pddb_size_pages * Pte.PTE_LEN + PAGE_SIZE * KEY_PAGES
         if mbbb_offset & (PAGE_SIZE - 1) != 0:
