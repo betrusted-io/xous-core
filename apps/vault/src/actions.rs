@@ -1293,7 +1293,7 @@ pub(crate) fn totp_ss_validator(input: TextEntryPayload) -> Option<xous_ipc::Str
 }
 pub(crate) fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
     let proposed_name = input.as_str();
-    if proposed_name.contains('\n') { // the '\n' is reserved as the delimiter to end the name field
+    if proposed_name.contains(['\n',':']) { // the '\n' is reserved as the delimiter to end the name field, and ':' is the path separator
         Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", xous::LANG)))
     } else {
         None
