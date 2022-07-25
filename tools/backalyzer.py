@@ -68,7 +68,7 @@ def main():
         "--hosted", help="Analyze a hosted mode PDDB image.", action="store_true"
     )
     parser.add_argument(
-        "-f", "--file", help="Input file (defaults to backup.pddb).", type=str, default="backup.pddb"
+        "-f", "--file", help="Input file (defaults to backup.pddb; note that hosted is in pddb-images/hosted.bin).", type=str, default="backup.pddb"
     )
 
     args = parser.parse_args()
