@@ -45,6 +45,8 @@ def main():
     global PAGE_SIZE
     global VPAGE_SIZE
     MAX_DICTS = 16384
+    # this is for an older set of CI tests from the pddbg.py script, that are not set up for this implementation
+    set_ci_tests_flag(False)
 
     parser = argparse.ArgumentParser(description="Debug Backup Images")
     parser.add_argument(
@@ -58,6 +60,9 @@ def main():
     )
     parser.add_argument(
         "--loglevel", required=False, help="set logging level (INFO/DEBUG/WARNING/ERROR)", type=str, default="INFO",
+    )
+    parser.add_argument(
+        "-d", "--dump", help="Print data records in detail", action="store_true"
     )
 
     args = parser.parse_args()
@@ -85,8 +90,9 @@ def main():
     logging.debug("Using backup key: 0x{}".format(key.hex()))
 
     with open("backup.pddb", "rb") as backup_file:
-        SYSTEM_BASIS = b".System"
-        PDDB_VERSION = 0x201.to_bytes(4, 'little') # update this manually here if the PDDB version gets bumped :P
+        global VERSION
+        SYSTEM_BASIS = ".System"
+        VERSION = 0x201.to_bytes(4, 'little') # update this manually here if the PDDB version gets bumped :P
         AAD = b"PDDB backup v0.1.0"
         backup = backup_file.read()
         PT_HEADER_LEN = 4 + 16 * 4 + 4 + 8 + 64 + 4 + 4 # ignore the pt header
@@ -216,7 +222,7 @@ def main():
         logging.debug("key_pt {}".format(key_pt))
         logging.debug("key_data {}".format(key_data))
         keys = {}
-        keys['.System'] = [key_pt, key_data]
+        keys[SYSTEM_BASIS] = [key_pt, key_data]
 
 
         for name, pw in basis_credentials.items():
@@ -280,22 +286,20 @@ def main():
         logging.debug("Data: 0x{:x}".format(img_index))
         data = pddb[img_index:]
 
+        # iterate through found Bases and print their contents
         for name, key in keys.items():
             if name in tables:
                 logging.info("Basis '{}', key_pt: {}, key_data: {}".format(name, key[0].hex(), key[1].hex()))
                 v2p_table = tables[name][0]
                 p2v_table = tables[name][1]
-                # v2p_table[0xfe0fe0] = 0x1200* 0x100
 
                 basis_data = bytearray()
                 pp_start = v2p_table[VPAGE_SIZE]
-                # print("pp_start: {:x}".format(pp_start))
                 pp_data = data[pp_start:pp_start + PAGE_SIZE]
                 try:
                     pt_data = keycommit_decrypt(key[1], basis_aad(name, dna=dna_int), pp_data)
                     basis_data.extend(bytearray(pt_data))
                     logging.debug("decrypted vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
-                    # print([hex(x) for x in basis_data[:256]])
                     basis = Basis(basis_data)
                     logging.info(basis.as_str())
 
@@ -311,71 +315,12 @@ def main():
                     if dicts_found != basis.num_dicts:
                         logging.error("Expected {} dictionaries, only found {}; searched {}".format(basis.num_dicts, dicts_found, dict_index))
 
-                    logging.info(" Dictionaries: ")
-                    for bdict in basis_dicts.values():
-                        logging.info(bdict.as_str())
-
-                    for bdict in basis_dicts.values():
-                        logging.info("==================================================================")
-                        logging.info("Dict {}".format(bdict.as_str()))
+                    if args.dump:
+                        for bdict in basis_dicts.values():
+                            logging.info(bdict.as_str())
 
                 except ValueError:
                     logging.error("couldn't decrypt basis root vpage @ {:x} ppage @ {:x}".format(VPAGE_SIZE, v2p_table[VPAGE_SIZE]))
-
-
-
-
-
-        # INFO:root_keys::implementation: pw: a, salt: [187, 174, 50, 20, 242, 60, 232, 34, 102, 172, 228, 51, 131, 21, 250, 2] (services\root-keys\src\implementation.rs:698)
-        # INFO:root_keys::implementation: hashed_pw: [115, 198, 244, 53, 109, 213, 137, 82, 182, 170, 10, 46, 17, 117, 175, 42, 179, 60, 9, 238, 104, 66, 199, 143] (services\root-keys\src\implementation.rs:700)
-        # INFO:root_keys::implementation: bcrypt cost: 7 time: 666ms (services\root-keys\src\implementation.rs:702)
-        # INFO:root_keys::implementation: root user key_enc: [8, 40, 241, 188, 179, 66, 205, 83, 237, 99, 54, 179, 131, 178, 105, 178, 163, 131, 208, 202, 167, 153, 226, 63, 255, 245, 63, 43, 10, 43, 102, 193] (services\root-keys\src\implementation.rs:405)
-        # INFO:root_keys::implementation: root user pw: [7, 166, 166, 123, 234, 15, 26, 164, 93, 8, 110, 52, 136, 211, 111, 187, 12, 106, 243, 154, 226, 207, 203, 28, 89, 6, 95, 110, 102, 108, 221, 239] (services\root-keys\src\implementation.rs:406)
-        # INFO:root_keys::implementation: root user key: [15, 142, 87, 199, 89, 77, 215, 247, 176, 107, 88, 135, 11, 97, 6, 9, 175, 233, 35, 80, 69, 86, 41, 35, 166, 243, 96, 69, 108, 71, 187, 46] (services\root-keys\src\implementation.rs:423)
-        # INFO:root_keys::implementation: root user key (anti-rollback): [113, 227, 211, 48, 222, 183, 93, 94, 212, 86, 127, 203, 43, 125, 76, 117, 10, 249, 161, 96, 84, 206, 90, 170, 26, 207, 205, 203, 122, 177, 77, 171] (services\root-keys\src\implementation.rs:427)
-        # INFO:root_keys::implementation: decap key: [113, 227, 211, 48, 222, 183, 93, 94, 212, 86, 127, 203, 43, 125, 76, 117, 10, 249, 161, 96, 84, 206, 90, 170, 26, 207, 205, 203, 122, 177, 77, 171] (services\root-keys\src\implementation.rs:447)
-        # INFO:root_keys::implementation: decap input: [23, 79, 17, 217, 14, 128, 111, 119, 202, 244, 176, 30, 97, 197, 122, 201, 185, 36, 64, 229, 230, 66, 53, 107, 135, 71, 77, 9, 107, 201, 141, 217, 142, 232, 62, 64, 4, 39, 89, 138] / len 40 expected_len 32 (services\root-keys\src\implementation.rs:448)
-        # INFO:root_keys::implementation: uwrapped: [5, 34, 117, 252, 137, 19, 29, 131, 64, 99, 195, 103, 228, 67, 165, 53, 179, 207, 169, 87, 232, 122, 52, 219, 202, 54, 210, 9, 233, 198, 38, 34] (services\root-keys\src\implementation.rs:451)
-        # INFO:root_keys::implementation: root user key_enc: [8, 40, 241, 188, 179, 66, 205, 83, 237, 99, 54, 179, 131, 178, 105, 178, 163, 131, 208, 202, 167, 153, 226, 63, 255, 245, 63, 43, 10, 43, 102, 193] (services\root-keys\src\implementation.rs:405)
-        # INFO:root_keys::implementation: root user pw: [7, 166, 166, 123, 234, 15, 26, 164, 93, 8, 110, 52, 136, 211, 111, 187, 12, 106, 243, 154, 226, 207, 203, 28, 89, 6, 95, 110, 102, 108, 221, 239] (services\root-keys\src\implementation.rs:406)
-        # INFO:root_keys::implementation: root user key: [15, 142, 87, 199, 89, 77, 215, 247, 176, 107, 88, 135, 11, 97, 6, 9, 175, 233, 35, 80, 69, 86, 41, 35, 166, 243, 96, 69, 108, 71, 187, 46] (services\root-keys\src\implementation.rs:423)
-        # INFO:root_keys::implementation: root user key (anti-rollback): [113, 227, 211, 48, 222, 183, 93, 94, 212, 86, 127, 203, 43, 125, 76, 117, 10, 249, 161, 96, 84, 206, 90, 170, 26, 207, 205, 203, 122, 177, 77, 171] (services\root-keys\src\implementation.rs:427)
-        # INFO:root_keys::implementation: decap key: [113, 227, 211, 48, 222, 183, 93, 94, 212, 86, 127, 203, 43, 125, 76, 117, 10, 249, 161, 96, 84, 206, 90, 170, 26, 207, 205, 203, 122, 177, 77, 171] (services\root-keys\src\implementation.rs:447)
-        # INFO:root_keys::implementation: decap input: [150, 23, 244, 163, 140, 35, 103, 135, 2, 199, 211, 225, 18, 89, 202, 168, 22, 229, 21, 183, 75, 217, 25, 164, 134, 193, 60, 181, 200, 247, 29, 113, 107, 112, 210, 100, 59, 244, 231, 135] / len 40 expected_len 32 (services\root-keys\src\implementation.rs:448)
-        # INFO:root_keys::implementation: uwrapped: [115, 16, 142, 156, 135, 208, 18, 140, 194, 122, 179, 87, 211, 176, 49, 32, 249, 16, 131, 133, 46, 219, 81, 125, 238, 63, 26, 127, 163, 45, 88, 16] (services\root-keys\src\implementation.rs:451)
-
-        # python bcrypt is...trying to be too fancy. we just want a raw function, but this thing
-        # wraps stuff up so it's in some format that I guess is "standard" for password files. but why...
-        #bcrypt_salt = b'$2b$07$' + base64.b64encode(pepper)
-        # the boot_pw here needs to be byte-wise inserted into an all-0 array of length 72
-        #hashed_pw_str = bcrypt.hashpw(bytes(boot_pw, 'utf-8'), bcrypt_salt)
-
-        #print(hashed_pw_str)
-        #print(hashed_pw_str.split(b'$')[3])
-        #hashed_pw = base64.b64decode(hashed_pw_str.split(b'$')[3])
-        #print("hashed pw: {} len:{}".format(hashed_pw.hex(), len(hashed_pw)))
-
-        # INFO:pddb::backend::hw: creating salt (services\pddb\src\backend\hw.rs:2247)
-        # INFO:pddb::backend::hw: salt: [121, 176, 9, 67, 182, 238, 202, 42, 169, 251, 25, 48, 238, 22, 232, 180] (services\pddb\src\backend\hw.rs:2267)
-        # INFO:pddb::backend::hw: password: "test" (services\pddb\src\backend\hw.rs:2268)
-        # INFO:pddb::backend::bcrypt: cost 7 (services\pddb\src\backend\bcrypt.rs:47)
-        # INFO:pddb::backend::bcrypt: salt [121, 176, 9, 67, 182, 238, 202, 42, 169, 251, 25, 48, 238, 22, 232, 180] (services\pddb\src\backend\bcrypt.rs:48)
-        # INFO:pddb::backend::bcrypt: pt_copy [116, 101, 115, 116, 0] (services\pddb\src\backend\bcrypt.rs:49)
-        # INFO:pddb::backend::bcrypt: output [127, 123, 245, 19, 160, 172, 201, 121, 134, 177, 237, 252, 187, 34, 13, 176, 107, 185, 24, 63, 89, 28, 74, 207] (services\pddb\src\backend\bcrypt.rs:79)
-        # INFO:pddb::backend::hw: hashed_password: [127, 123, 245, 19, 160, 172, 201, 121, 134, 177, 237, 252, 187, 34, 13, 176, 107, 185, 24, 63, 89, 28, 74, 207] (services\pddb\src\backend\hw.rs:2270)
-        # INFO:pddb::backend::hw: derived bcrypt password in 747ms (services\pddb\src\backend\hw.rs:2272)
-
-        # INFO:root_keys::implementation: salt: [149, 12, 9, 231, 191, 61, 190, 215, 117, 183, 104, 89, 14, 26, 168, 74] (services\root-keys\src\implementation.rs:689)
-        # INFO:root_keys::implementation: pw: "a" (services\root-keys\src\implementation.rs:690)
-        # INFO:root_keys::implementation: hashed_pw: [108, 20, 51, 147, 158, 84, 12, 74, 1, 112, 35, 107, 63, 72, 141, 214, 21, 119, 230, 22, 165, 239, 96, 127] (services\root-keys\src\implementation.rs:692)
-
-        # INFO:root_keys::implementation: salt: [150, 12, 9, 231, 191, 61, 190, 215, 117, 183, 104, 89, 14, 26, 168, 74] (services\root-keys\src\implementation.rs:684)
-        # INFO:root_keys::implementation: hashed_pw: [103, 141, 7, 34, 227, 109, 40, 253, 84, 47, 92, 240, 152, 27, 135, 227, 102, 183, 83, 124, 185, 1, 73, 107] (services\root-keys\src\implementation.rs:693)
-
-        # if i could get the 24-byte bcrypt raw password out of this, i'd then send this into a sha512/256 hash,
-        # and then XOR that result with the user_key to get the true plaintext user_key
-
-        # this user_key would then be used with the key wrapping algorithm to decrypt the PDDB's wrapped_key_pt and wrapped_key_data.
 
 if __name__ == "__main__":
     main()
