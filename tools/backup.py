@@ -495,7 +495,7 @@ def main():
     else:
         with open("backup.pddb", "wb") as file:
             start_addr = locs['LOC_PDDB'][0] - 0x1000
-            total_length = locs['LOC_EC'][0] - locs['LOC_PDDB'][0] + 0x1000
+            total_length = locs['LOC_WF200'][0] - locs['LOC_PDDB'][0] + 0x1000
             progress = ProgressBar(min_value=0, max_value=total_length, prefix='Backing up ').start()
             block_size = 4096
             amount_read = 0
