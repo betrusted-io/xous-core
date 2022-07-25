@@ -658,7 +658,7 @@ impl VaultUx {
                         let mut data = Vec::<u8>::new();
                         match record.read_to_end(&mut data) {
                             Ok(_len) => {
-                                if let Some(mut pw) = crate::actions::deserialize_password(data) {
+                                if let Some(mut pw) = storage::PasswordRecord::try_from(data).ok() {
                                     match self.usb_dev.send_str(&pw.password) {
                                         Ok(_) => {
                                             pw.count += 1;
@@ -716,7 +716,7 @@ impl VaultUx {
                     Some(crate::basis_change)
                 ) {
                     Ok(mut record) => {
-                        let ser = crate::actions::serialize_password(&updated_pw);
+                        let ser: Vec<u8> = storage::PasswordRecord::into(updated_pw);
                         match record.write(&ser) {
                             Ok(_) => {}
                             Err(e) => {

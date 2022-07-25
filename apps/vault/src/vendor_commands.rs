@@ -140,7 +140,7 @@ fn handle_backup(
     xns: &xous_names::XousNames,
     payload_type: Vec<u8>,
 ) -> Result<Vec<u8>, BackupError> {
-    let mut storage = crate::storage::Manager::new(xns);
+    let storage = crate::storage::Manager::new(xns);
 
     let payload_type: backup::PayloadType = backup::PayloadType::from(payload_type);
 

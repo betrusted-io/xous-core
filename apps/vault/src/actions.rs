@@ -9,11 +9,9 @@ use xous_ipc::Buffer;
 use locales::t;
 use std::io::{Write, Read};
 use passwords::PasswordGenerator;
-use chrono::{Utc, DateTime, NaiveDateTime};
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::cell::RefCell;
 
-use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage::{self, StorageContent}};
+use crate::{ux::{ListItem, deserialize_app_info}, ctap::FIDO_CRED_DICT, storage};
 use crate::{VaultMode, SelectedEntry};
 
 use crate::fido::U2F_APP_DICT;
@@ -23,34 +21,10 @@ pub(crate) const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 pub(crate) const VAULT_TOTP_DICT: &'static str = "vault.totp";
 /// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
 pub(crate) const VAULT_ALLOC_HINT: usize = 256;
-pub(crate) const VAULT_TOTP_ALLOC_HINT: usize = 128;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
 const SWAP_DELAY_MS: usize = 300;
-
-pub(crate) struct PasswordRecord {
-    pub version: u32,
-    pub description: String,
-    pub username: String,
-    pub password: String,
-    pub notes: String,
-    pub ctime: u64,
-    pub atime: u64,
-    pub count: u64,
-}
-
-pub(crate) struct TotpRecord {
-    pub version: u32,
-    // as base32, RFC4648 no padding
-    pub secret: String,
-    pub name: String,
-    pub algorithm: TotpAlgorithm,
-    pub notes: String,
-    pub digits: u32,
-    pub timestep: u64,
-    pub ctime: u64,
-}
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum ActionOp {
@@ -647,7 +621,7 @@ impl ActionManager {
                             let mut data = Vec::<u8>::new();
                             match record.read_to_end(&mut data) {
                                 Ok(_len) => {
-                                    if let Some(pw) = deserialize_password(data) {
+                                    if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
                                         let extra = format!("{}; {}{}",
                                             crate::ux::atime_to_str(pw.atime),
                                             t!("vault.u2f.appinfo.authcount", xous::LANG),
@@ -810,7 +784,7 @@ impl ActionManager {
                             let mut data = Vec::<u8>::new();
                             match record.read_to_end(&mut data) {
                                 Ok(_len) => {
-                                    if let Some(totp) = deserialize_totp(data) {
+                                    if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
                                         let alg: String = totp.algorithm.into();
                                         let extra = format!("{}:{}:{}:{}", totp.secret, totp.digits, totp.timestep, alg);
                                         let desc = format!("{}", totp.name);
@@ -935,7 +909,7 @@ impl ActionManager {
         let pws = self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None).unwrap_or(Vec::new());
         if pws.len() < TARGET_ENTRIES_PW {
             let extra_count = TARGET_ENTRIES_PW - pws.len();
-            for index in 0..extra_count {
+            for _index in 0..extra_count {
                 let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
                 let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
                 let username = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
@@ -1056,7 +1030,7 @@ impl ActionManager {
         let totp = self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None).unwrap_or(Vec::new());
         if totp.len() < TARGET_ENTRIES {
             let extra = TARGET_ENTRIES - totp.len();
-            for index in 0..extra {
+            for _index in 0..extra {
                 let names = random_pick::pick_multiple_from_slice(&words, &weights, 3);
                 let name = format!("{} {} {}", names[0], names[1], names[2]);
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
@@ -1156,166 +1130,3 @@ fn length_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
         _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_number", xous::LANG))),
     }
 }
-
-pub(crate) fn serialize_password<'a>(record: &PasswordRecord) -> Vec::<u8> {
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
-        "version", record.version,
-        "description", record.description,
-        "username", record.username,
-        "password", record.password,
-        "notes", record.notes,
-        "ctime", record.ctime,
-        "atime", record.atime,
-        "count", record.count,
-    ).into_bytes()
-}
-
-pub(crate) fn deserialize_password(data: Vec::<u8>) -> Option<PasswordRecord> {
-    if let Ok(desc_str) = String::from_utf8(data) {
-        let mut pr = PasswordRecord {
-            version: 0,
-            description: String::new(),
-            username: String::new(),
-            password: String::new(),
-            notes: String::new(),
-            ctime: 0,
-            atime: 0,
-            count: 0
-        };
-        let lines = desc_str.split('\n');
-        for line in lines {
-            if let Some((tag, data)) = line.split_once(':') {
-                match tag {
-                    "version" => {
-                        if let Ok(ver) = u32::from_str_radix(data, 10) {
-                            pr.version = ver
-                        } else {
-                            log::warn!("ver error");
-                            return None;
-                        }
-                    }
-                    "description" => pr.description.push_str(data),
-                    "username" => pr.username.push_str(data),
-                    "password" => pr.password.push_str(data),
-                    "notes" => pr.notes.push_str(data),
-                    "ctime" => {
-                        if let Ok(ctime) = u64::from_str_radix(data, 10) {
-                            pr.ctime = ctime;
-                        } else {
-                            log::warn!("ctime error");
-                            return None;
-                        }
-                    }
-                    "atime" => {
-                        if let Ok(atime) = u64::from_str_radix(data, 10) {
-                            pr.atime = atime;
-                        } else {
-                            log::warn!("atime error");
-                            return None;
-                        }
-                    }
-                    "count" => {
-                        if let Ok(count) = u64::from_str_radix(data, 10) {
-                            pr.count = count;
-                        } else {
-                            log::warn!("count error");
-                            return None;
-                        }
-                    }
-                    _ => {
-                        log::warn!("unexpected tag {} encountered parsing password info, ignoring", tag);
-                    }
-                }
-            } else {
-                log::trace!("invalid line skipped: {:?}", line);
-            }
-        }
-        Some(pr)
-    } else {
-        None
-    }
-}
-
-pub(crate) fn serialize_totp<'a>(record: &TotpRecord) -> Vec::<u8> {
-    let ta: String = record.algorithm.into();
-    format!("{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
-        "version", record.version,
-        "secret", record.secret,
-        "name", record.name,
-        "algorithm", ta,
-        "notes", record.notes,
-        "digits", record.digits,
-        "timestep", record.timestep,
-        "ctime", record.ctime,
-    ).into_bytes()
-}
-
-pub(crate) fn deserialize_totp(data: Vec::<u8>) -> Option<TotpRecord> {
-    if let Ok(desc_str) = String::from_utf8(data) {
-        let mut pr = TotpRecord {
-            version: 0,
-            secret: String::new(),
-            name: String::new(),
-            algorithm: TotpAlgorithm::HmacSha1,
-            notes: String::new(),
-            digits: 0,
-            ctime: 0,
-            timestep: 0,
-        };
-        let lines = desc_str.split('\n');
-        for line in lines {
-            if let Some((tag, data)) = line.split_once(':') {
-                match tag {
-                    "version" => {
-                        if let Ok(ver) = u32::from_str_radix(data, 10) {
-                            pr.version = ver
-                        } else {
-                            log::warn!("ver error");
-                            return None;
-                        }
-                    }
-                    "secret" => pr.secret.push_str(data),
-                    "name" => pr.name.push_str(data),
-                    "algorithm" => pr.algorithm = match TotpAlgorithm::try_from(data) {
-                        Ok(a) => a,
-                        Err(_) => return None
-                    },
-                    "notes" => pr.notes.push_str(data),
-                    "digits" => {
-                        if let Ok(digits) = u32::from_str_radix(data, 10) {
-                            pr.digits = digits;
-                        } else {
-                            log::warn!("digits error");
-                            return None;
-                        }
-                    }
-                    "ctime" => {
-                        if let Ok(ctime) = u64::from_str_radix(data, 10) {
-                            pr.ctime = ctime;
-                        } else {
-                            log::warn!("ctime error");
-                            return None;
-                        }
-                    }
-                    "timestep" => {
-                        if let Ok(timestep) = u64::from_str_radix(data, 10) {
-                            pr.timestep = timestep;
-                        } else {
-                            log::warn!("timestep error");
-                            return None;
-                        }
-                    }
-                    _ => {
-                        log::warn!("unexpected tag {} encountered parsing TOTP info, ignoring", tag);
-                    }
-                }
-            } else {
-                log::trace!("invalid line skipped: {:?}", line);
-            }
-        }
-        Some(pr)
-    } else {
-        None
-    }
-}
-

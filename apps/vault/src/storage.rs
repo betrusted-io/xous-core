@@ -8,8 +8,6 @@ use std::{
 
 const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 const VAULT_TOTP_DICT: &'static str = "vault.totp";
-/// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
-const VAULT_ALLOC_HINT: usize = 256;
 const VAULT_TOTP_ALLOC_HINT: usize = 128;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
@@ -273,7 +271,7 @@ impl TryFrom<Vec<u8>> for TotpRecord {
         let desc_str = String::from_utf8(value).or(Err(TOTPSerializationError::MalformedInput))?;
 
         let mut pr = TotpRecord {
-            version: 0,
+            version: VAULT_TOTP_REC_VERSION,
             secret: String::new(),
             name: String::new(),
             algorithm: crate::totp::TotpAlgorithm::HmacSha1,
@@ -411,7 +409,7 @@ impl TryFrom<Vec<u8>> for PasswordRecord {
             String::from_utf8(data).or(Err(PasswordSerializationError::MalformedInput))?;
 
         let mut pr = PasswordRecord {
-            version: 0,
+            version: VAULT_PASSWORD_REC_VERSION,
             description: String::new(),
             username: String::new(),
             password: String::new(),
