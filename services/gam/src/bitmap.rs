@@ -2,7 +2,11 @@ use core::cmp::{max, min};
 use graphics_server::api::*;
 use graphics_server::PixelColor;
 use std::convert::TryInto;
+use std::io::Read;
 use std::ops::Deref;
+
+mod decode_png;
+pub use decode_png::*;
 
 /*
  * The basic idea is to define a Bitmap as a variable mosaic of Sized Tiles.
@@ -53,22 +57,65 @@ impl Bitmap {
         Self {
             width: size.x as usize + 1,
             bound: Rectangle::new(Point::new(0, 0), size),
-            tile_bits, //: (size.x as usize + 1) * (size.y as usize + 1),
+            tile_bits,
             mosaic,
         }
     }
 
-    pub fn new_resize(image: &Img, width: usize) -> Self {
+    pub fn from_img(img: &Img, fit: Option<Point>) -> Self {
+        Bitmap::from_iter(
+            img.iter().cloned(),
+            img.px_type,
+            Point::new(
+                img.width().try_into().unwrap(),
+                img.height().try_into().unwrap(),
+            ),
+            fit,
+        )
+    }
+
+    pub fn from_png<R: Read>(png: &mut DecodePng<R>, fit: Option<Point>) -> Self {
+        // Png Colortypes: 0=Grey, 2=Rgb, 3=Palette, 4=GreyAlpha, 6=Rgba.
+        let px_type = match (png.color_type(), png.bit_depth()) {
+            (0, 1 | 2 | 4 | 8) => PixelType::U8,
+            (0, 16) => PixelType::U16,
+            (2, 8) => PixelType::U8x3,
+            (2, 16) => PixelType::U16x3,
+            (3, 1 | 2 | 4 | 8) => PixelType::U8,
+            (4, 8) => PixelType::U8x2,
+            (4, 16) => PixelType::U16x2,
+            (6, 8) => PixelType::U8x4,
+            (6, 16) => PixelType::U16x4,
+            (_, _) => PixelType::U8, // Error
+        };
+        let px_size = Point::new(
+            png.width().try_into().unwrap(),
+            png.height().try_into().unwrap(),
+        );
+        Bitmap::from_iter(png, px_type, px_size, fit)
+    }
+
+    pub fn from_iter<I: Iterator<Item = u8>>(
+        bytes: I,
+        px_type: PixelType,
+        px_size: Point,
+        fit: Option<Point>,
+    ) -> Self {
         let burkes = BURKES.to_vec();
-        let words = image
-            .iter()
-            .to_grey(image.px_type)
-            .shrink(image.width, width)
-            .dither(&burkes, width);
+        let from_width: usize = px_size.x.try_into().unwrap();
+        let (rotate, to_width) = match fit {
+            Some(fit) => Self::fit(px_size, fit),
+            None => (false, from_width),
+        };
+        let words = bytes
+            .to_grey(px_type)
+            .shrink(from_width, to_width)
+            .dither(&burkes, to_width);
 
         let mut mosaic: Vec<Tile> = Vec::new();
 
-        let single_line = Point::new((width - 1).try_into().unwrap(), 0);
+        let to_width:i16 = to_width.try_into().unwrap();
+        let single_line = Point::new(to_width - 1, 0);
         let mut bound = Rectangle::new(Point::new(0, 0), single_line);
         let mut tile = Tile::new(bound);
         let mut blank_tile = true;
@@ -77,34 +124,58 @@ impl Bitmap {
             tile.set_word(Point::new(x, y), word);
             blank_tile = false;
             x += BITS_PER_WORD as i16;
-            if x >= width.try_into().unwrap() {
+            if x >= to_width {
                 (x, y) = (0, y + 1);
             }
             if y > tile.max_bound().br.y {
                 mosaic.push(tile);
-                bound = Rectangle::new(
-                    Point::new(x, y),
-                    Point::new((width - 1).try_into().unwrap(), y),
-                );
+                if y > px_size.y { break; }
+                bound = Rectangle::new(Point::new(x, y), Point::new(to_width - 1, y));
                 tile = Tile::new(bound);
                 blank_tile = true;
             }
+
         }
         if !blank_tile {
-            bound.br = Point::new((width - 1).try_into().unwrap(), y - 1);
+            bound.br = Point::new(to_width - 1, y - 1);
             tile.crop(bound);
             mosaic.push(tile);
         }
 
         bound.tl = Point::new(0, 0);
         let max = tile.max_bound();
-        let tile_bits = width as i16 * (max.br.y - max.tl.y + 1);
+        let tile_bits = to_width * (max.br.y - max.tl.y + 1);
 
-        Self {
-            width,
+        let mut bm = Self {
+            width: to_width.try_into().unwrap(),
             bound,
             tile_bits: tile_bits.try_into().unwrap(),
             mosaic,
+        };
+
+        if rotate {
+            bm.rotate90();
+        }
+        bm
+    }
+
+    fn fit(from: Point, into: Point) -> (bool, usize) {
+        let (from_x, from_y) = (from.x as f32, from.y as f32);
+        let (into_x, into_y) = (into.x as f32, into.y as f32);
+        let portrait_scale = (into_x / from_x).min(into_y / from_y);
+        let landscape_scale = (into_x / from_y).min(into_y / from_x);
+        if portrait_scale >= 1.0 {
+            log::info!("show image as is");
+            (false, from.x.try_into().unwrap())
+        } else if landscape_scale >= 1.0 {
+            log::info!("rotate image");
+            (true, from.x.try_into().unwrap())
+        } else if portrait_scale >= landscape_scale {
+            log::info!("scale image {}", portrait_scale);
+            (false, (portrait_scale * from_x) as usize)
+        } else {
+            log::info!("scale image {} and rotate", landscape_scale);
+            (true, (landscape_scale * from_x) as usize)
         }
     }
 
@@ -279,7 +350,7 @@ impl From<[Option<Tile>; 6]> for Bitmap {
 
 impl<'a> From<&Img> for Bitmap {
     fn from(image: &Img) -> Self {
-        Bitmap::new_resize(image, image.width)
+        Bitmap::from_img(image, None)
     }
 }
 
@@ -288,8 +359,13 @@ impl<'a> From<&Img> for Bitmap {
 #[derive(Debug, Clone, Copy)]
 pub enum PixelType {
     U8,
+    U8x2,
     U8x3,
     U8x4,
+    U16,
+    U16x2,
+    U16x3,
+    U16x4,
 }
 
 /*
@@ -343,13 +419,13 @@ pub struct GreyScale<I> {
     px_type: PixelType,
 }
 
-impl<'a, I: Iterator<Item = &'a u8>> GreyScale<I> {
+impl<I: Iterator<Item = u8>> GreyScale<I> {
     fn new(iter: I, px_type: PixelType) -> GreyScale<I> {
         Self { iter, px_type }
     }
 }
 
-impl<'a, I: Iterator<Item = &'a u8>> Iterator for GreyScale<I> {
+impl<I: Iterator<Item = u8>> Iterator for GreyScale<I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -360,7 +436,7 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for GreyScale<I> {
         const BLACK: u32 = R + G + B;
         match self.px_type {
             PixelType::U8 => match self.iter.next() {
-                Some(gr) => Some(*gr),
+                Some(gr) => Some(gr),
                 None => None,
             },
             PixelType::U8x3 => {
@@ -368,9 +444,9 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for GreyScale<I> {
                 let g = self.iter.next();
                 let b = self.iter.next();
                 if r.is_some() && g.is_some() && b.is_some() {
-                    let grey_r = R * *r.unwrap() as u32;
-                    let grey_g = G * *g.unwrap() as u32;
-                    let grey_b = B * *b.unwrap() as u32;
+                    let grey_r = R * r.unwrap() as u32;
+                    let grey_g = G * g.unwrap() as u32;
+                    let grey_b = B * b.unwrap() as u32;
                     let grey: u8 = ((grey_r + grey_g + grey_b) / BLACK).try_into().unwrap();
                     Some(grey)
                 } else {
@@ -378,21 +454,21 @@ impl<'a, I: Iterator<Item = &'a u8>> Iterator for GreyScale<I> {
                 }
             }
             _ => {
-                log::warn!("unsupported PixelType");
+                log::warn!("unsupported PixelType {:?}", self.px_type);
                 None
             }
         }
     }
 }
 
-pub trait GreyScaleIterator<'a>: Iterator<Item = &'a u8> + Sized {
+pub trait GreyScaleIterator: Iterator<Item = u8> + Sized {
     /// converts pixels of PixelType to u8 greyscale
     fn to_grey(self, px_type: PixelType) -> GreyScale<Self> {
         GreyScale::new(self, px_type)
     }
 }
 
-impl<'a, I: Iterator<Item = &'a u8>> GreyScaleIterator<'a> for I {}
+impl<I: Iterator<Item = u8>> GreyScaleIterator for I {}
 
 // **********************************************************************
 
@@ -523,7 +599,6 @@ pub trait ShrinkIterator: Iterator<Item = u8> + Sized {
 }
 
 impl<I: Iterator<Item = u8>> ShrinkIterator for I {}
-
 
 // **********************************************************************
 

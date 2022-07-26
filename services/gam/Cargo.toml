@@ -33,6 +33,8 @@ locales = {path = "../../locales"}
 tts-frontend = {path="../tts"}
 
 qrcode = { version = "0.12", default-features = false }
+miniz_oxide = "0.4.4"
+# pix = "0.13"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
