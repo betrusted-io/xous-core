@@ -42,10 +42,10 @@ mod color_type;
 use color_type::*;
 
 // These may be adjusted to tune the heap requirement.
-// Probably better for PNG_BUFFER = 2-3x IDAT_BUFFER
+// Probably better for INFLATED_BUFFER = 2-3x IDAT_BUFFER
 // TODO benchmarking speed vs heap
 const IDAT_BUFFER_LENGTH: usize = 256;
-const PNG_BUFFER_LENGTH: usize = 1024;
+const INFLATED_BUFFER_LENGTH: usize = 1024;
 
 pub struct DecodePng<R: Read> {
     reader: R,
@@ -75,7 +75,7 @@ pub struct DecodePng<R: Read> {
     // state of the miniz oxide inflation
     inflate_state: InflateState,
     // fields to buffer inflated bytes waiting to be unfiltered
-    inflated: [u8; PNG_BUFFER_LENGTH],
+    inflated: [u8; INFLATED_BUFFER_LENGTH],
     inflated_length: usize,
     inflated_index: usize,
 }
@@ -112,9 +112,9 @@ impl<R: Read> DecodePng<R> {
             idat_buffer: Vec::with_capacity(IDAT_BUFFER_LENGTH),
             inflate_state: InflateState::new(DataFormat::Zlib),
             //inflate_state: InflateState::new_boxed(DataFormat::Zlib),
-            inflated: [0u8; PNG_BUFFER_LENGTH],
+            inflated: [0u8; INFLATED_BUFFER_LENGTH],
             inflated_length: 0,
-            inflated_index: PNG_BUFFER_LENGTH,
+            inflated_index: INFLATED_BUFFER_LENGTH,
         };
         png.check_signature()?;
         png.parse_header()?;
