@@ -77,7 +77,8 @@ impl Bitmap {
     pub fn from_png<R: Read>(png: &mut DecodePng<R>, fit: Option<Point>) -> Self {
         // Png Colortypes: 0=Grey, 2=Rgb, 3=Palette, 4=GreyAlpha, 6=Rgba.
         let px_type = match (png.color_type(), png.bit_depth()) {
-            (0, 1 | 2 | 4 | 8) => PixelType::U8,
+            (0, 1 | 2 | 4) => PixelType::U0, // Unsupported
+            (0, 8) => PixelType::U8,
             (0, 16) => PixelType::U16,
             (2, 8) => PixelType::U8x3,
             (2, 16) => PixelType::U16x3,
@@ -86,7 +87,7 @@ impl Bitmap {
             (4, 16) => PixelType::U16x2,
             (6, 8) => PixelType::U8x4,
             (6, 16) => PixelType::U16x4,
-            (_, _) => PixelType::U8, // Error
+            (_, _) => PixelType::U0, // Invalid combination
         };
         let px_size = Point::new(
             png.width().try_into().unwrap(),
@@ -114,7 +115,7 @@ impl Bitmap {
 
         let mut mosaic: Vec<Tile> = Vec::new();
 
-        let to_width:i16 = to_width.try_into().unwrap();
+        let to_width: i16 = to_width.try_into().unwrap();
         let single_line = Point::new(to_width - 1, 0);
         let mut bound = Rectangle::new(Point::new(0, 0), single_line);
         let mut tile = Tile::new(bound);
@@ -129,12 +130,13 @@ impl Bitmap {
             }
             if y > tile.max_bound().br.y {
                 mosaic.push(tile);
-                if y > px_size.y { break; }
+                if y > px_size.y {
+                    break;
+                }
                 bound = Rectangle::new(Point::new(x, y), Point::new(to_width - 1, y));
                 tile = Tile::new(bound);
                 blank_tile = true;
             }
-
         }
         if !blank_tile {
             bound.br = Point::new(to_width - 1, y - 1);
@@ -358,6 +360,7 @@ impl<'a> From<&Img> for Bitmap {
 
 #[derive(Debug, Clone, Copy)]
 pub enum PixelType {
+    U0, // Error
     U8,
     U8x2,
     U8x3,
@@ -395,7 +398,13 @@ impl Img {
     pub fn height(&self) -> usize {
         match self.px_type {
             PixelType::U8 => self.pixels.len() / self.width,
+            PixelType::U8x2 => self.pixels.len() / (self.width * 2),
             PixelType::U8x3 => self.pixels.len() / (self.width * 3),
+            PixelType::U8x4 => self.pixels.len() / (self.width * 4),
+            PixelType::U16 => self.pixels.len() / (self.width * 2),
+            PixelType::U16x2 => self.pixels.len() / (self.width * 4),
+            PixelType::U16x3 => self.pixels.len() / (self.width * 6),
+            PixelType::U16x4 => self.pixels.len() / (self.width * 8),
             _ => {
                 log::warn!("PixelType not implemented");
                 0
@@ -429,35 +438,90 @@ impl<I: Iterator<Item = u8>> Iterator for GreyScale<I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // chromatic coversion from RGB to Greyscale
-        const R: u32 = 2126;
-        const G: u32 = 7152;
-        const B: u32 = 722;
-        const BLACK: u32 = R + G + B;
         match self.px_type {
             PixelType::U8 => match self.iter.next() {
                 Some(gr) => Some(gr),
+                None => None,
+            },
+            PixelType::U8x2 => match self.iter.next() {
+                Some(gr) => {
+                    let _alpha = self.iter.next();
+                    Some(gr)
+                }
                 None => None,
             },
             PixelType::U8x3 => {
                 let r = self.iter.next();
                 let g = self.iter.next();
                 let b = self.iter.next();
-                if r.is_some() && g.is_some() && b.is_some() {
-                    let grey_r = R * r.unwrap() as u32;
-                    let grey_g = G * g.unwrap() as u32;
-                    let grey_b = B * b.unwrap() as u32;
-                    let grey: u8 = ((grey_r + grey_g + grey_b) / BLACK).try_into().unwrap();
-                    Some(grey)
-                } else {
-                    None
+                grey(r, g, b)
+            }
+            PixelType::U8x4 => {
+                let r = self.iter.next();
+                let g = self.iter.next();
+                let b = self.iter.next();
+                let _alpha = self.iter.next();
+                grey(r, g, b)
+            }
+            PixelType::U16 => match self.iter.next() {
+                Some(gr) => {
+                    let _lower_bits = self.iter.next();
+                    Some(gr)
                 }
+                None => None,
+            },
+            PixelType::U16x2 => match self.iter.next() {
+                Some(gr) => {
+                    let _lower_bits = self.iter.next();
+                    let _alpha = self.iter.next();
+                    let _alpha = self.iter.next();
+                    Some(gr)
+                }
+                None => None,
+            },
+            PixelType::U16x3 => {
+                let r = self.iter.next();
+                let _lower_bits = self.iter.next();
+                let g = self.iter.next();
+                let _lower_bits = self.iter.next();
+                let b = self.iter.next();
+                let _lower_bits = self.iter.next();
+                grey(r, g, b)
+            }
+            PixelType::U16x4 => {
+                let r = self.iter.next();
+                let _lower_bits = self.iter.next();
+                let g = self.iter.next();
+                let _lower_bits = self.iter.next();
+                let b = self.iter.next();
+                let _lower_bits = self.iter.next();
+                let _alpha = self.iter.next();
+                let _lower_bits = self.iter.next();
+                grey(r, g, b)
             }
             _ => {
                 log::warn!("unsupported PixelType {:?}", self.px_type);
                 None
             }
         }
+    }
+}
+
+
+// chromatic coversion from RGB to Greyscale
+fn grey(r: Option<u8>, g: Option<u8>, b: Option<u8>) -> Option<u8> {
+    const R: u32 = 2126;
+    const G: u32 = 7152;
+    const B: u32 = 722;
+    const BLACK: u32 = R + G + B;
+    if r.is_some() && g.is_some() && b.is_some() {
+        let grey_r = R * r.unwrap() as u32;
+        let grey_g = G * g.unwrap() as u32;
+        let grey_b = B * b.unwrap() as u32;
+        let grey: u8 = ((grey_r + grey_g + grey_b) / BLACK).try_into().unwrap();
+        Some(grey)
+    } else {
+        None
     }
 }
 
