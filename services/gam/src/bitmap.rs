@@ -82,7 +82,7 @@ impl Bitmap {
             (0, 16) => PixelType::U16,
             (2, 8) => PixelType::U8x3,
             (2, 16) => PixelType::U16x3,
-            (3, 1 | 2 | 4 | 8) => PixelType::U8,
+            (3, 1 | 2 | 4 | 8) => PixelType::U0, // Unsupported
             (4, 8) => PixelType::U8x2,
             (4, 16) => PixelType::U16x2,
             (6, 8) => PixelType::U8x4,
