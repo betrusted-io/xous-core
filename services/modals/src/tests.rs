@@ -137,30 +137,6 @@ pub fn spawn_test() {
             log::info!("qrcode test done");
 
             // 5. test image - because it reads a local file, only makes sense on hosted mode
-            /*
-             Note there are stack allocation challenges with crates `png_encode` and `jpg`
-
-             png = {version = "0.17.5", optional = true}
-             -------------------------------------------
-             let decoder = png::Decoder::new(file);
-             let mut reader = decoder.read_info().expect("failed to read png info");
-             let mut buf = vec![0; reader.output_buffer_size()];
-             let info = reader.next_frame(&mut buf).expect("failed to decode png");
-             let width: usize = info.width.try_into().unwrap();
-             let img = Img::new(buf, width);
-
-             jpeg-decoder = {version = "0.2.6", optional = true}
-             ---------------------------------------------------
-             let mut decoder = jpeg_decoder::Decoder::new(file);
-             decoder
-                 .scale(Modals::MODAL_WIDTH as u16, Modals::MODAL_HEIGHT as u16)
-                 .expect("failed to scale jpeg");
-             let _reader = decoder.read_info().expect("failed to read png info");
-             let pixels = decoder.decode().expect("failed to decode jpeg image");
-             let info = decoder.info().unwrap();
-             let width: usize = info.width.try_into().unwrap();
-             let img = Img::new(pixels, width);
-            */
             #[cfg(feature = "ditherpunk")]
             {
                 const BORDER: u32 = 3;
