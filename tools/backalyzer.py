@@ -243,6 +243,7 @@ def main():
         keys = {}
         keys[SYSTEM_BASIS] = [key_pt, key_data]
 
+        # extract the secret basis keys
         for name, pw in basis_credentials.items():
             bname_copy = [0]*64
             plaintext_pw = [0]*73
@@ -281,7 +282,6 @@ def main():
         logging.info("MBBB: 0x{:x}".format(mbbb_offset))
 
         img_index = 0
-        tables = decode_pagetable(pddb, pddb_size_pages, keys, pddb[mbbb_offset:mbbb_offset + MBBB_PAGES * PAGE_SIZE])
         img_index += pddb_size_pages * Pte.PTE_LEN
         if img_index & (PAGE_SIZE - 1) != 0:
             img_index = (img_index + PAGE_SIZE) & 0xFFFF_F000
@@ -300,6 +300,7 @@ def main():
 
         logging.debug("Data: 0x{:x}".format(img_index))
         data = pddb[img_index:]
+        tables = decode_pagetable(pddb, pddb_size_pages, keys, pddb[mbbb_offset:mbbb_offset + MBBB_PAGES * PAGE_SIZE], dna=dna_int, data=data)
 
         # iterate through found Bases and print their contents
         for name, key in keys.items():
