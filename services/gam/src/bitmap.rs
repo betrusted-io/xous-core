@@ -165,9 +165,10 @@ impl Bitmap {
         };
 
         if rotate {
-            bm.rotate90();
+            bm.rotate90()
+        } else {
+            bm
         }
-        bm
     }
 
     fn fit(from: Point, into: Point) -> (bool, usize) {
