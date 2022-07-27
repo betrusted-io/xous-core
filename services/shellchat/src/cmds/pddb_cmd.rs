@@ -217,7 +217,12 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     }
                 }
                 "churn" => {
+                    write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
                     write!(ret, "Churn result code: {:?}", self.pddb.rekey_pddb(pddb::PddbRekeyOp::Churn)).ok();
+                }
+                "flush" => {
+                    write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
+                    write!(ret, "Flush result code: {:?}", self.pddb.flush_space_update()).ok();
                 }
                 #[cfg(feature="test-rekey")]
                 "rekey" => {
