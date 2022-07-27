@@ -532,12 +532,25 @@ fn wrapped_main() -> ! {
         let scrub_run = scrub_run.clone();
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
+            let mut flush_interval = 0;
+            const ARBITRARY_INTERVAL_MS: usize = 12_513;
+            const PERIODIC_FLUSH_MS: usize = 86_400_000; // one day
             loop {
-                tt.sleep_ms(12_513).unwrap(); // arbitrary interval, but trying to avoid "round" numbers of seconds to interleave periodic tasks
+                tt.sleep_ms(ARBITRARY_INTERVAL_MS).unwrap(); // arbitrary interval, but trying to avoid "round" numbers of seconds to interleave periodic tasks
+                flush_interval += ARBITRARY_INTERVAL_MS;
                 if scrub_run.load(Ordering::SeqCst) {
-                    send_message(my_cid,
-                        Message::new_scalar(Opcode::PeriodicScrub.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't send mount request");
+                    if flush_interval > PERIODIC_FLUSH_MS {
+                        // this runs once a day, and skips the scrub request when it runs
+                        flush_interval = 0;
+                        send_message(my_cid,
+                            Message::new_blocking_scalar(Opcode::FlushSpaceUpdate.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't send flush request");
+                    } else {
+                        // this is what actually runs every interval, to a first order
+                        send_message(my_cid,
+                            Message::new_scalar(Opcode::PeriodicScrub.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't send scrub request");
+                    }
                 }
             }
         }
@@ -1395,6 +1408,10 @@ fn wrapped_main() -> ! {
                 let rekey_op = buffer.to_original::<PddbRekeyOp, _>().unwrap();
                 let result = basis_cache.rekey(&mut pddb_os, rekey_op);
                 buffer.replace(result).unwrap();
+            }
+            Opcode::FlushSpaceUpdate => {
+                pddb_os.fast_space_flush();
+                xous::return_scalar(msg.sender, 1).ok();
             }
             Opcode::ResetDontAskInit => {
                 pddb_os.reset_dont_ask_init();

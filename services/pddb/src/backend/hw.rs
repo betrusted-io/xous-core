@@ -499,24 +499,51 @@ impl PddbOs {
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
                         let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(data_key));
                         let aad = self.data_aad(basis_name);
-                        let prev_data = self.data_decrypt_page(&cipher, &aad, prev_page);
-                        let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
-                        if let Some(new_d) = new_data {
-                            if let Some(prev_d) = prev_data {
-                                let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
-                                let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
-                                if new_j > prev_j {
+                        if pte.vaddr() != VirtAddr::new(VPAGE_SIZE as u64).unwrap() {
+                            // handle case that there is a conflict in data areas
+                            let prev_data = self.data_decrypt_page(&cipher, &aad, prev_page);
+                            let new_data = self.data_decrypt_page(&cipher, &aad, &pp);
+                            if let Some(new_d) = new_data {
+                                if let Some(prev_d) = prev_data {
+                                    let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
+                                    let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
+                                    if new_j > prev_j {
+                                        map.insert(pte.vaddr(), pp);
+                                    } else if new_j == prev_j {
+                                        log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
+                                    }
+                                } else {
+                                    self.resolve_pp_journal(&mut pp);
+                                    // prev data was bogus anyways, replace with the new entry
                                     map.insert(pte.vaddr(), pp);
-                                } else if new_j == prev_j {
-                                    log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
                                 }
                             } else {
-                                self.resolve_pp_journal(&mut pp);
-                                // prev data was bogus anyways, replace with the new entry
-                                map.insert(pte.vaddr(), pp);
+                                // new data is bogus, ignore it
+                                log::warn!("conflicting PTE found, but data is bogus: v{:x?}:p{:x?}", pte.vaddr(), prev_page);
                             }
                         } else {
-                            // new data is bogus, ignore it
+                            // handle case that there is a conflict in root structure
+                            let prev_data = self.data_decrypt_page_with_commit(data_key, &aad, prev_page);
+                            let new_data = self.data_decrypt_page_with_commit(data_key, &aad, &pp);
+                            if let Some(new_d) = new_data {
+                                if let Some(prev_d) = prev_data {
+                                    let prev_j = JournalType::from_le_bytes(prev_d[..size_of::<JournalType>()].try_into().unwrap());
+                                    let new_j = JournalType::from_le_bytes(new_d[..size_of::<JournalType>()].try_into().unwrap());
+                                    if new_j > prev_j {
+                                        map.insert(pte.vaddr(), pp);
+                                    } else if new_j == prev_j {
+                                        log::error!("Found duplicate blocks with same journal age, picking arbitrary block and moving on...");
+                                    }
+                                } else {
+                                    self.resolve_pp_journal(&mut pp);
+                                    // prev data was bogus anyways, replace with the new entry
+                                    map.insert(pte.vaddr(), pp);
+                                }
+                            } else {
+                                // new data is bogus, ignore it
+                                // new data is bogus, ignore it
+                                log::warn!("conflicting basis root found, but data is bogus: v{:x?}:p{:x?}", pte.vaddr(), prev_page);
+                            }
                         }
                     } else {
                         self.resolve_pp_journal(&mut pp);
@@ -759,8 +786,7 @@ impl PddbOs {
             let ct_to_flash = ciphertext.deref();
             // determine which page we're going to write the ciphertext into
             let page_search_limit = FSCB_PAGES - ((PageAlignedPa::from(ciphertext.len()).as_usize() / PAGE_SIZE) - 1);
-            let dest_page = self.entropy.borrow_mut().get_u32() % page_search_limit as u32;
-            log::info!("picking random page {} out of {} pages for fscb", dest_page, page_search_limit);
+            let dest_page_start = self.entropy.borrow_mut().get_u32() % page_search_limit as u32;
             // atomicity of the FreeSpace structure is a bit of a tough topic. It's a fairly hefty structure,
             // that runs a risk of corruption as it's being written, if power is lost or the system crashes.
             // However, the guiding principle of this ordering is that it's better to have no FastSpace structure
@@ -768,14 +794,27 @@ impl PddbOs {
             // FastSpace structure + stale SpaceUpdates. In particular a stale SpaceUpdate would lead the system
             // to conclude that some pages are free when they aren't. Thus, we prefer to completely erase the
             // FSCB region before committing the updated version.
+            let patch_data = [&nonce_array, ct_to_flash].concat();
+            assert!(patch_data.len() % PAGE_SIZE == 0); // should be guaranteed by design, if not, throw an error during early testing.
+            let dest_page_end = dest_page_start + (patch_data.len() / PAGE_SIZE) as u32;
+            log::info!("picking random pages [{}-{}) out of {} pages for fscb", dest_page_start, dest_page_end, page_search_limit);
             { // this is where we begin the "it would be bad if we lost power about now" code region
-                // erase the entire fscb area
-                let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE];
-                for offset in 0..FSCB_PAGES {
-                    self.patch_fscb(&blank_sector, (offset * PAGE_SIZE) as u32);
+                let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE]; // prep a "blank" page for the loop
+                for offset in 0..FSCB_PAGES as u32 {
+                    if offset >= dest_page_start && offset < dest_page_end {
+                        // patch the FSCB data in when we find it, and skip on later iterations that are within the page range of the FSCB
+                        if offset == dest_page_start {
+                            self.patch_fscb(&patch_data, dest_page_start * PAGE_SIZE as u32);
+                        } else {
+                            // skip, because we already patched it in the first page we hit
+                        }
+                    } else {
+                        // erase all the other pages in hte FSCB
+                        self.patch_fscb(&blank_sector, offset * PAGE_SIZE as u32);
+                    }
                 }
                 // commit the fscb data
-                self.patch_fscb(&[&nonce_array, ct_to_flash].concat(), dest_page * PAGE_SIZE as u32);
+                log::info!("patch data len: {}", patch_data.len());
             } // end "it would be bad if we lost power now" region
 
             // note: this function should be followed up by a fast_space_read() to regenerate the temporary
@@ -953,7 +992,8 @@ impl PddbOs {
                                 }
                             },
                             Err(e) => {
-                                log::warn!("FSCB data was found, but it did not decrypt correctly. Ignoring FSCB record. Error: {:?}", e)
+                                log::warn!("FSCB data was found, but it did not decrypt correctly. Ignoring FSCB record. Error: {:?}", e);
+                                log::info!("FSCB nonce: {:?}, aad: {:?}, len: {}, msg: {:?}", Nonce::from_slice(&fscb_slice[page_start..page_start + size_of::<Nonce>()]), &aad, fscb_buf.len(), &fscb_buf);
                             }
                         }
                     }
@@ -998,7 +1038,8 @@ impl PddbOs {
                                     self.fspace_cache.replace(pp);
                                 }
                             } else {
-                                log::warn!("Strange...we have a journal entry for a free space page that isn't already in our cache. Guru meditation: {:?}", pp);
+                                // this happens when the FSCB is flushed, and then a page is deleted.
+                                log::debug!("Journal entry for a free space page that isn't already in our cache {:?}", pp);
                                 self.fspace_cache.insert(pp);
                             }
                         }
@@ -1249,26 +1290,33 @@ impl PddbOs {
                 // log regenration is faster & less intrusive than fastspace regeneration, and we would have
                 // to do this more often. So we have a separate path for this outcome.
                 log::warn!("FastSpace alloc forced by lack of log space");
-                let mut fast_space = FastSpace {
-                    free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
-                };
-                for pp in fast_space.free_pool.iter_mut() {
-                    pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
-                }
-                // regenerate from the existing fast space cache
-                for (&src, dst) in self.fspace_cache.iter().zip(fast_space.free_pool.iter_mut()) {
-                    *dst = src;
-                }
-                // write just commits a new record to disk, but doesn't update our internal data cache
-                // this also clears the fast space log.
-                self.fast_space_write(&fast_space);
-                // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is fully in sync
-                self.fast_space_read();
-                // this will locate the next fast space log point.
-                self.fast_space_ensure_next_log();
+                self.fast_space_flush();
                 true
             }
         }
+    }
+    /// This is a "fast" flush that expires all the PDDB SpaceUpdate journal
+    pub(crate) fn fast_space_flush(&mut self) {
+        let mut fast_space = FastSpace {
+            free_pool: [PhysPage(0); FASTSPACE_FREE_POOL_LEN],
+        };
+        for pp in fast_space.free_pool.iter_mut() {
+            pp.set_journal(self.trng_u8() % FSCB_JOURNAL_RAND_RANGE)
+        }
+        // regenerate from the existing fast space cache
+        for (&src, dst) in self.fspace_cache.iter().zip(fast_space.free_pool.iter_mut()) {
+            *dst = src;
+        }
+        log::info!("SpaceUpdate flush with {} pages", fast_space.free_pool.len());
+        let start = self.timestamp_now();
+        // write just commits a new record to disk, but doesn't update our internal data cache
+        // this also clears the fast space log.
+        self.fast_space_write(&fast_space);
+        // this will re-read back in the data, shuffle the alloc order a bit, and ensure the data cache is fully in sync
+        self.fast_space_read();
+        // this will locate the next fast space log point.
+        self.fast_space_ensure_next_log();
+        log::info!("Flush took {}ms", self.timestamp_now() - start);
     }
 
     pub(crate) fn data_aad(&self, name: &str) -> Vec::<u8> {
@@ -1398,11 +1446,12 @@ impl PddbOs {
     /// `data` includes the journal entry on top.
     /// The data passed in must be exactly one vpage plus the journal entry minus the length of the commit structure (64 bytes),
     /// which is 4004 bytes total
+    /// This function increments the journal and re-nonces the structure.
     pub(crate) fn data_encrypt_and_patch_page_with_commit(&self, key: &[u8], aad: &[u8], data: &mut [u8], pp: &PhysPage) {
         assert!(data.len() == KCOM_CT_LEN, "did not get a key-commit sized region to patch");
         // updates the journal type
         let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
-        for (&src, dst) in j.to_le_bytes().iter().zip(data[..size_of::<JournalType>()].iter_mut()) { *dst = src; }
+        data[..size_of::<JournalType>()].copy_from_slice(&j.to_le_bytes());
         // gets the AES-GCM-SIV nonce
         let nonce = self.nonce_gen();
         // makes a nonce for the key commit

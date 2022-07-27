@@ -635,6 +635,13 @@ impl Pddb {
             Message::new_blocking_scalar(Opcode::ResetDontAskInit.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't send ResetDontAskInit");
     }
+    /// Flush the `SpaceUpdate` journal. SpaceUpdates will leak the last couple hundred or so free space operations,
+    /// so periodically flushing this is needed to restore deniability.
+    pub fn flush_space_update(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::FlushSpaceUpdate.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send FlushSpaceUpdate");
+    }
     /// Rekey the PDDB. This can be a very long-running blocking operation that will definitely.
     /// interrupt normal user flow.
     pub fn rekey_pddb(&self, op: PddbRekeyOp) -> Result<()> {
