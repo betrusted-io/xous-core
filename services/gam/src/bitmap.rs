@@ -1,21 +1,3 @@
-use core::cmp::{max, min};
-use graphics_server::api::*;
-use graphics_server::PixelColor;
-use std::convert::TryInto;
-use std::io::Read;
-use std::ops::Deref;
-
-mod img;
-pub use img::*;
-mod decode_png;
-pub use decode_png::*;
-mod greyscale;
-pub use greyscale::*;
-mod shrink;
-pub use shrink::*;
-mod dither;
-pub use dither::*;
-
 /*
  * The basic idea is to define a Bitmap as a variable mosaic of Sized Tiles.
  *
@@ -31,6 +13,25 @@ pub use dither::*;
  *
  * author: nworbnhoj
  */
+
+use std::cmp::{max, min};
+use std::convert::TryInto;
+use std::io::Read;
+use std::ops::Deref;
+
+use graphics_server::api::*;
+use graphics_server::PixelColor;
+
+mod img;
+pub use img::*;
+mod decode_png;
+pub use decode_png::*;
+mod greyscale;
+pub use greyscale::*;
+mod shrink;
+pub use shrink::*;
+mod dither;
+pub use dither::*;
 
 #[derive(Debug)]
 pub struct Bitmap {
@@ -364,9 +365,7 @@ impl<'a> From<&Img> for Bitmap {
     }
 }
 
-
 // **********************************************************************
-
 
 #[cfg(test)]
 mod tests {
