@@ -73,7 +73,7 @@ pub struct DecodePng<R: Read> {
     idat_remaining: u32,
     idat_buffer: Vec<u8>,
     // state of the miniz oxide inflation
-    inflate_state: InflateState,
+    inflate_state: Box<InflateState>,
     // fields to buffer inflated bytes waiting to be unfiltered
     inflated: [u8; INFLATED_BUFFER_LENGTH],
     inflated_length: usize,
@@ -110,8 +110,7 @@ impl<R: Read> DecodePng<R> {
             prior_px: vec![0u8, 0],
             idat_remaining: 0,
             idat_buffer: Vec::with_capacity(IDAT_BUFFER_LENGTH),
-            inflate_state: InflateState::new(DataFormat::Zlib),
-            //inflate_state: InflateState::new_boxed(DataFormat::Zlib),
+            inflate_state: InflateState::new_boxed(DataFormat::Zlib),
             inflated: [0u8; INFLATED_BUFFER_LENGTH],
             inflated_length: 0,
             inflated_index: INFLATED_BUFFER_LENGTH,
