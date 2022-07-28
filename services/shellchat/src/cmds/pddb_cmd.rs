@@ -137,6 +137,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                     if val.len() > 0 {
                                         match key.write(&val.as_bytes()[..val.len()]) {
                                             Ok(len) => {
+                                                self.pddb.sync().ok();
                                                 write!(ret, "Wrote {} bytes to {}:{}", len, dict, keyname).ok();
                                             }
                                             Err(e) => {
