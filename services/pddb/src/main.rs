@@ -760,7 +760,10 @@ fn wrapped_main() -> ! {
                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                         if let Some(pw) = ret.plaintext_pw {
                             match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8")) {
-                                Ok(_) => mgmt.code = PddbRequestCode::NoErr,
+                                Ok(_) => {
+                                    log::info!("{}PDDB.CREATEOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
+                                    mgmt.code = PddbRequestCode::NoErr
+                                },
                                 _ => mgmt.code = PddbRequestCode::InternalError,
                             }
                         } else {
@@ -794,8 +797,10 @@ fn wrapped_main() -> ! {
                                 ) {
                                     basis_cache.basis_add(basis);
                                     finished = true;
+                                    log::info!("{}PDDB.UNLOCKOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
                                     mgmt.code = PddbRequestCode::NoErr;
                                 } else {
+                                    log::info!("{}PDDB.BADPASS,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
                                     modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
                                     modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
                                     match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {

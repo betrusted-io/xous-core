@@ -4,6 +4,7 @@ use pddb::PDDB_A_LEN;
 use xous_ipc::String;
 #[allow(unused_imports)]
 use std::io::{Write, Read, Seek, SeekFrom};
+use core::fmt::Write as FmtWrite;
 
 pub struct PddbCmd {
     pddb: pddb::Pddb,
@@ -20,7 +21,6 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     cmd_api!(pddb); // inserts boilerplate for command API
 
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        use core::fmt::Write;
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
         let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn]";
@@ -115,6 +115,36 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                             }
                                         }
                                         _ => write!(ret, "Error encountered reading {}:{}", dict, keyname).unwrap()
+                                    }
+                                }
+                                _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
+                            }
+                        } else {
+                            write!(ret, "Query is of form 'dict:key'").unwrap();
+                        }
+                    } else {
+                        write!(ret, "Missing query of form 'dict:key'").unwrap();
+                    }
+                }
+                "write" => {
+                    if let Some(descriptor) = tokens.next() {
+                        if let Some((dict, keyname)) = descriptor.split_once(':') {
+                            match self.pddb.get(dict, keyname, None,
+                                true, true, Some(256), None::<fn()>) {
+                                Ok(mut key) => {
+                                    let mut val = String::<1024>::new();
+                                    join_tokens(&mut val, &mut tokens);
+                                    if val.len() > 0 {
+                                        match key.write(&val.as_bytes()[..val.len()]) {
+                                            Ok(len) => {
+                                                write!(ret, "Wrote {} bytes to {}:{}", len, dict, keyname).ok();
+                                            }
+                                            Err(e) => {
+                                                write!(ret, "Error writing {}:{}: {:?}", dict, keyname, e).ok();
+                                            }
+                                        }
+                                    } else {
+                                        write!(ret, "Created an empty key {}:{}", dict, keyname).ok();
                                     }
                                 }
                                 _ => write!(ret, "{}:{} not found or other error", dict, keyname).unwrap()
@@ -894,4 +924,14 @@ fn make_vector(basis_number: usize, vtype: VectorType) -> Vec::<u8> {
         }
     }
     vector
+}
+
+fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+    for (i, tok) in tokens.enumerate() {
+        if i == 0 {
+            write!(buf, "{}", tok).unwrap();
+        } else {
+            write!(buf, " {}", tok).unwrap();
+        }
+    }
 }
