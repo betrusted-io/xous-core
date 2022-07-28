@@ -278,6 +278,10 @@ impl Bitmap {
         for tile in self.mosaic.as_mut_slice() {
             tile.translate(offset);
         }
+        self.bound.tl.x += offset.x;
+        self.bound.tl.y += offset.y;
+        self.bound.br.x += offset.x;
+        self.bound.br.y += offset.y;
     }
 
     pub fn rotate90(&mut self) -> Self {

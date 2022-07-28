@@ -10,7 +10,7 @@ use gam::*;
 use num_traits::*;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
-use std::cmp::min;
+use std::cmp::max;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -203,10 +203,10 @@ impl Modals {
         // center image in modal
         const BORDER: u32 = 3;
         let margin = Point::new(
-            (BORDER + min(0,(gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2))
+            (BORDER + max(0, (gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2))
                 .try_into()
                 .unwrap(),
-            (BORDER + min(0, (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2))
+            (BORDER + max(0, (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2))
                 .try_into()
                 .unwrap(),
         );
