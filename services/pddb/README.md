@@ -1,6 +1,8 @@
 # PDDB
 
-Documentation for the PDDB can be found in the headers of the source files:
+Please refer to the Xous Book for the [authoratative documentation on the PDDB](https://betrusted.io/xous-book/ch09-00-pddb-overview.html).
+
+Alternatively, documentation for the PDDB can be found in the headers of the source files:
 
 - [main.rs](src/main.rs) contains a glossary, project overview, threat model, auditor's notes, and goals.
 - [basis.rs](src/backend/basis.rs) gives details on how the data is organized in
