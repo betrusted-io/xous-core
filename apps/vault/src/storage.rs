@@ -167,8 +167,10 @@ impl Manager {
         )
     }
 
-    pub fn all<T: StorageContent + std::default::Default>(&self, kind: ContentKind) -> Result<Vec<T>, Error>
-    {
+    pub fn all<T: StorageContent + std::default::Default>(
+        &self,
+        kind: ContentKind,
+    ) -> Result<Vec<T>, Error> {
         let settings = kind.settings();
 
         let keylist = self.pddb.list_keys(&settings.dict, None)?;
@@ -188,8 +190,7 @@ impl Manager {
         &self,
         kind: &ContentKind,
         key_name: &str,
-    ) -> Result<T, Error>
-    {
+    ) -> Result<T, Error> {
         let settings = kind.settings();
         let mut record = T::default();
         record.from_vec(self.pddb_get(&settings.dict, &key_name)?)?;
@@ -202,8 +203,7 @@ impl Manager {
         kind: &ContentKind,
         key_name: &str,
         record: &mut dyn StorageContent,
-    ) -> Result<(), Error>
-    {
+    ) -> Result<(), Error> {
         let settings = kind.settings();
 
         let basis = self.basis_for_key(&settings.dict, key_name)?;
