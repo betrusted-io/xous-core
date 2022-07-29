@@ -42,10 +42,13 @@ pub struct Manager {
     trng: trng::Trng,
 }
 
-pub trait StorageContent: Into<Vec<u8>> + TryFrom<Vec<u8>> {
+pub trait StorageContent {
     fn settings(&self) -> ContentPDDBSettings;
 
     fn set_ctime(&mut self, value: u64);
+
+    fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error>;
+    fn to_vec(&self) -> Vec<u8>;
 }
 
 #[derive(Clone)]
@@ -144,15 +147,15 @@ impl Manager {
         }
     }
 
-    pub fn new_record<T: StorageContent>(
+    pub fn new_record(
         &mut self,
-        record: T,
+        record: &mut dyn StorageContent,
         basis: Option<String>,
     ) -> Result<(), Error> {
         let mut record = record;
         let settings = record.settings();
         record.set_ctime(utc_now().timestamp() as u64);
-        let serialized_record: Vec<u8> = record.into();
+        let serialized_record: Vec<u8> = record.to_vec();
         let guid = self.gen_guid();
 
         self.pddb_store(
@@ -164,9 +167,7 @@ impl Manager {
         )
     }
 
-    pub fn all<T: StorageContent>(&self, kind: ContentKind) -> Result<Vec<T>, Error>
-    where
-        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
+    pub fn all<T: StorageContent + std::default::Default>(&self, kind: ContentKind) -> Result<Vec<T>, Error>
     {
         let settings = kind.settings();
 
@@ -175,35 +176,33 @@ impl Manager {
         let mut ret = vec![];
 
         for key in keylist {
-            let record = T::try_from(self.pddb_get(&settings.dict, &key)?)?;
+            let mut record = T::default();
+            record.from_vec(self.pddb_get(&settings.dict, &key)?)?;
             ret.push(record);
         }
 
         Ok(ret)
     }
 
-    pub fn get_record<T: StorageContent>(
+    pub fn get_record<T: StorageContent + std::default::Default>(
         &self,
         kind: &ContentKind,
         key_name: &str,
     ) -> Result<T, Error>
-    where
-        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
     {
         let settings = kind.settings();
-        let t = T::try_from(self.pddb_get(&settings.dict, key_name)?)?;
+        let mut record = T::default();
+        record.from_vec(self.pddb_get(&settings.dict, &key_name)?)?;
 
-        Ok(t)
+        Ok(record)
     }
 
-    pub fn update<T: StorageContent>(
+    pub fn update(
         &mut self,
         kind: &ContentKind,
         key_name: &str,
-        record: T,
+        record: &mut dyn StorageContent,
     ) -> Result<(), Error>
-    where
-        Error: From<<T as TryFrom<Vec<u8>>>::Error>,
     {
         let settings = kind.settings();
 
@@ -211,20 +210,16 @@ impl Manager {
         self.pddb
             .delete_key(&settings.dict, key_name, Some(&basis))?;
 
-        self.new_record(record, Some(basis))
+        self.new_record(&mut *record, Some(basis))
     }
 
-    pub fn delete(
-        &mut self,
-        kind: ContentKind,
-        key_name: &str,
-    ) -> Result<(), Error>
-    {
+    pub fn delete(&mut self, kind: ContentKind, key_name: &str) -> Result<(), Error> {
         let settings = kind.settings();
 
         let basis = self.basis_for_key(&settings.dict, key_name)?;
         self.pddb
-            .delete_key(&settings.dict, key_name, Some(&basis)).map_err(|error| Error::IoError(error))
+            .delete_key(&settings.dict, key_name, Some(&basis))
+            .map_err(|error| Error::IoError(error))
     }
 }
 
@@ -261,6 +256,96 @@ impl StorageContent for TotpRecord {
 
     fn set_ctime(&mut self, value: u64) {
         self.ctime = value;
+    }
+
+    fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error> {
+        let desc_str = String::from_utf8(data).or(Err(TOTPSerializationError::MalformedInput))?;
+
+        let mut pr = TotpRecord::default();
+
+        let lines = desc_str.split('\n');
+        for line in lines {
+            if let Some((tag, data)) = line.split_once(':') {
+                match tag {
+                    "version" => {
+                        if let Ok(ver) = u32::from_str_radix(data, 10) {
+                            pr.version = ver
+                        } else {
+                            log::warn!("ver error");
+                            return Err(TOTPSerializationError::BadVersion)?;
+                        }
+                    }
+                    "secret" => pr.secret.push_str(data),
+                    "name" => pr.name.push_str(data),
+                    "algorithm" => {
+                        pr.algorithm = match crate::totp::TotpAlgorithm::try_from(data) {
+                            Ok(a) => a,
+                            Err(_) => return Err(TOTPSerializationError::BadAlgorithm)?,
+                        }
+                    }
+                    "notes" => pr.notes.push_str(data),
+                    "digits" => {
+                        if let Ok(digits) = u32::from_str_radix(data, 10) {
+                            pr.digits = digits;
+                        } else {
+                            log::warn!("digits error");
+                            return Err(TOTPSerializationError::BadDigitsAmount)?;
+                        }
+                    }
+                    "ctime" => {
+                        if let Ok(ctime) = u64::from_str_radix(data, 10) {
+                            pr.ctime = ctime;
+                        } else {
+                            log::warn!("ctime error");
+                            return Err(TOTPSerializationError::BadCtime)?;
+                        }
+                    }
+                    "timestep" => {
+                        if let Ok(timestep) = u64::from_str_radix(data, 10) {
+                            pr.timestep = timestep;
+                        } else {
+                            log::warn!("timestep error");
+                            return Err(TOTPSerializationError::BadTimestep)?;
+                        }
+                    }
+                    _ => {
+                        log::warn!(
+                            "unexpected tag {} encountered parsing TOTP info, ignoring",
+                            tag
+                        );
+                    }
+                }
+            } else {
+                log::trace!("invalid line skipped: {:?}", line);
+            }
+        }
+
+        *self = pr;
+
+        Ok(())
+    }
+    fn to_vec(&self) -> Vec<u8> {
+        let ta: String = self.algorithm.into();
+        format!(
+            "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
+            "version",
+            self.version,
+            "secret",
+            self.secret,
+            "name",
+            self.name,
+            "algorithm",
+            ta,
+            "notes",
+            self.notes,
+            "digits",
+            self.digits,
+            "timestep",
+            self.timestep,
+            "ctime",
+            self.ctime,
+        )
+        .into_bytes()
     }
 }
 
@@ -398,6 +483,90 @@ impl StorageContent for PasswordRecord {
 
     fn set_ctime(&mut self, value: u64) {
         self.ctime = value;
+    }
+
+    fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error> {
+        let desc_str =
+            String::from_utf8(data).or(Err(PasswordSerializationError::MalformedInput))?;
+
+        let mut pr = PasswordRecord::default();
+
+        let lines = desc_str.split('\n');
+        for line in lines {
+            if let Some((tag, data)) = line.split_once(':') {
+                match tag {
+                    "version" => {
+                        if let Ok(ver) = u32::from_str_radix(data, 10) {
+                            pr.version = ver
+                        } else {
+                            log::warn!("ver error");
+                            return Err(PasswordSerializationError::BadVersion)?;
+                        }
+                    }
+                    "description" => pr.description.push_str(data),
+                    "username" => pr.username.push_str(data),
+                    "password" => pr.password.push_str(data),
+                    "notes" => pr.notes.push_str(data),
+                    "ctime" => {
+                        if let Ok(ctime) = u64::from_str_radix(data, 10) {
+                            pr.ctime = ctime;
+                        } else {
+                            log::warn!("ctime error");
+                            return Err(PasswordSerializationError::BadCtime)?;
+                        }
+                    }
+                    "atime" => {
+                        if let Ok(atime) = u64::from_str_radix(data, 10) {
+                            pr.atime = atime;
+                        } else {
+                            log::warn!("atime error");
+                            return Err(PasswordSerializationError::BadAtime)?;
+                        }
+                    }
+                    "count" => {
+                        if let Ok(count) = u64::from_str_radix(data, 10) {
+                            pr.count = count;
+                        } else {
+                            log::warn!("count error");
+                            return Err(PasswordSerializationError::BadCount)?;
+                        }
+                    }
+                    _ => {
+                        log::warn!(
+                            "unexpected tag {} encountered parsing password info, ignoring",
+                            tag
+                        );
+                    }
+                }
+            } else {
+                log::trace!("invalid line skipped: {:?}", line);
+            }
+        }
+
+        *self = pr;
+        Ok(())
+    }
+    fn to_vec(&self) -> Vec<u8> {
+        format!(
+            "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
+            "version",
+            self.version,
+            "description",
+            self.description,
+            "username",
+            self.username,
+            "password",
+            self.password,
+            "notes",
+            self.notes,
+            "ctime",
+            self.ctime,
+            "atime",
+            self.atime,
+            "count",
+            self.count,
+        )
+        .into_bytes()
     }
 }
 

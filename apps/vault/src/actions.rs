@@ -304,7 +304,7 @@ impl ActionManager {
                         maybe_password
                     };
                 }
-                let record = storage::PasswordRecord {
+                let mut record = storage::PasswordRecord {
                     version: VAULT_PASSWORD_REC_VERSION,
                     description,
                     username,
@@ -315,7 +315,7 @@ impl ActionManager {
                     count: 0,
                 };
 
-                match self.storage.borrow_mut().new_record(record, None) {
+                match self.storage.borrow_mut().new_record(&mut record, None) {
                     Ok(_) => (),
                     Err(error) => {
                         log::error!("internal error");
@@ -366,7 +366,7 @@ impl ActionManager {
                 };
                 let validated_secret = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &ss_vec);
                 // time, hash, etc. are all the "expected defaults" -- if you want to change them, edit the record after entering it.
-                let totp = storage::TotpRecord {
+                let mut totp = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
                     name: description,
                     secret: validated_secret,
@@ -377,7 +377,7 @@ impl ActionManager {
                     notes: t!("vault.notes", xous::LANG).to_string(),
                 };
 
-                match self.storage.borrow_mut().new_record(totp, None) {
+                match self.storage.borrow_mut().new_record(&mut totp, None) {
                     Ok(_) => (),
                     Err(error) => {
                         log::error!("internal error");
@@ -532,7 +532,7 @@ impl ActionManager {
                     pw.digits = d;
                 }
 
-                storage.update(&choice, key_name, pw)
+                storage.update(&choice, key_name, &mut pw)
             },
             storage::ContentKind::Password => {
                 let mut pw: storage::PasswordRecord =  match storage.get_record(&choice, key_name) {
@@ -554,7 +554,7 @@ impl ActionManager {
                 pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
                 pw.password = edit_data.content()[2].content.as_str().unwrap().to_string();
                 pw.notes = edit_data.content()[3].content.as_str().unwrap().to_string();
-                storage.update(&choice, key_name, pw)
+                storage.update(&choice, key_name, &mut pw)
            },
         };
 

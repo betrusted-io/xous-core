@@ -97,7 +97,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
     match data {
         backup::DataPacket::TOTP(totp_entries) => {
             for elem in totp_entries.0 {
-                let totp = TotpRecord {
+                let mut totp = TotpRecord {
                     version: 1,
                     name: elem.name,
                     secret: elem.shared_secret,
@@ -112,12 +112,12 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
                     notes: t!("vault.notes", xous::LANG).to_string(),
                 };
 
-                storage.new_record(totp, None)?;
+                storage.new_record(&mut totp, None)?;
             }
         }
         backup::DataPacket::Password(password_entries) => {
             for elem in password_entries.0 {
-                let password = PasswordRecord {
+                let mut password = PasswordRecord {
                     version: 1,
                     description: elem.description,
                     username: elem.username,
@@ -128,7 +128,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
                     atime: 0,
                 };
 
-                storage.new_record(password, None)?;
+                storage.new_record(&mut password, None)?;
             }
         }
     };
