@@ -225,6 +225,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - periodic flush of FSCB SpaceUpdate records added to restore deniability
   - Shellchat commands for flush, sync, and write added to the pddb subcommand
   - `backalyzer` script added to analyze backups. Useful for debug & recovery of data.
+  - Fixed aes-keywrap bug - OG library was faulty; swapped in one that passes NIST test vectors & added transparent migration.
 
 ## Roadmap to 1.0
 
