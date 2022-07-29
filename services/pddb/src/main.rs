@@ -534,7 +534,7 @@ fn wrapped_main() -> ! {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let mut flush_interval = 0;
             const ARBITRARY_INTERVAL_MS: usize = 12_513;
-            const PERIODIC_FLUSH_MS: usize = 86_400_000; // one day
+            const PERIODIC_FLUSH_MS: usize = 1000 * 60 * 60 * 18 - 5555; // every 18 hours less ~5 seconds to try and stagger the process off of other periodics
             loop {
                 tt.sleep_ms(ARBITRARY_INTERVAL_MS).unwrap(); // arbitrary interval, but trying to avoid "round" numbers of seconds to interleave periodic tasks
                 flush_interval += ARBITRARY_INTERVAL_MS;
