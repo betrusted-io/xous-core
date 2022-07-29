@@ -198,10 +198,10 @@
         "en-tts": "Symbols"
     },
     "vault.illegal_char": {
-        "en": "Entries may not contain a newline character.",
-        "ja": "エントリに改行文字を含めることはできません。",
-        "zh": "条目可能不包含换行符。",
-        "en-tts": "Entries may not contain a newline character."
+        "en": "Entries may not contain ':', or a newline character.",
+        "ja": "エントリに「：」または改行文字を含めることはできません。",
+        "zh": "条目不得包含 ':' 或换行符。",
+        "en-tts": "Entries may not contain ':', or a newline character."
     },
     "vault.illegal_number": {
         "en": "Please enter a number from 1-128",

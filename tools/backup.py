@@ -428,6 +428,9 @@ def main():
     parser.add_argument(
         "--peek", required=False, help="Inspect an address", type=auto_int, metavar=('ADDR')
     )
+    parser.add_argument(
+        "--output", help="Output file name", type=str, default="backup.pddb"
+    )
     args = parser.parse_args()
 
     dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
@@ -493,9 +496,9 @@ def main():
     if args.peek:
         pc_usb.peek(args.peek + flash_region, display=True)
     else:
-        with open("backup.pddb", "wb") as file:
+        with open(args.output, "wb") as file:
             start_addr = locs['LOC_PDDB'][0] - 0x1000
-            total_length = locs['LOC_EC'][0] - locs['LOC_PDDB'][0] + 0x1000
+            total_length = locs['LOC_WF200'][0] - locs['LOC_PDDB'][0] + 0x1000
             progress = ProgressBar(min_value=0, max_value=total_length, prefix='Backing up ').start()
             block_size = 4096
             amount_read = 0

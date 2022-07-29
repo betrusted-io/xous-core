@@ -1601,6 +1601,7 @@ impl BasisCacheEntry {
     pub(crate) fn basis_sync(&mut self, hw: &mut PddbOs) {
         self.last_sync = Some(hw.timestamp_now());
         if !self.clean {
+            self.age += 1;
             let basis_root = BasisRoot {
                 magic: PDDB_MAGIC,
                 version: PDDB_VERSION,
@@ -1611,18 +1612,19 @@ impl BasisCacheEntry {
             let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
                 .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
             assert!(pp.valid(), "basis page was invalid");
+            log::debug!("{} before-sync journal: {}", self.name, self.journal);
             let journal_bytes = self.journal.to_le_bytes(); // journal gets bumped by the patching function now
             let slice_iter =
                 journal_bytes.iter() // journal rev
                 .chain(basis_root.as_ref().iter());
             let mut block = [0 as u8; KCOM_CT_LEN];
-            for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(block[..size_of::<JournalType>()].iter_mut()) {
-                *dst = src;
-            }
             for (&src, dst) in slice_iter.zip(block.iter_mut()) {
                 *dst = src;
             }
             hw.data_encrypt_and_patch_page_with_commit(self.key.as_slice(), &self.aad, &mut block, &pp);
+            // read back the incremented journal state
+            self.journal = u32::from_le_bytes(block[..4].try_into().unwrap());
+            log::debug!("{} after-sync journal: {}", self.name, self.journal);
             self.clean = true;
         }
     }

@@ -180,7 +180,7 @@ impl ActionManager {
             VaultMode::Password => {
                 let description = match self.modals
                     .alert_builder(t!("vault.newitem.name", xous::LANG))
-                    .field(None, Some(name_validator))
+                    .field(None, Some(password_validator))
                     .build()
                 {
                     Ok(text) => {
@@ -191,7 +191,7 @@ impl ActionManager {
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let username = match self.modals
                     .alert_builder(t!("vault.newitem.username", xous::LANG))
-                    .field(None, Some(name_validator))
+                    .field(None, Some(password_validator))
                     .build()
                 {
                     Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
@@ -248,7 +248,7 @@ impl ActionManager {
                 while !approved {
                     let maybe_password = match self.modals
                         .alert_builder(t!("vault.newitem.password", xous::LANG))
-                        .field(Some(password), Some(name_validator))
+                        .field(Some(password), Some(password_validator))
                         .build()
                     {
                         Ok(text) => {
@@ -329,7 +329,7 @@ impl ActionManager {
             VaultMode::Totp => {
                 let description = match self.modals
                     .alert_builder(t!("vault.newitem.name", xous::LANG))
-                    .field(None, Some(name_validator))
+                    .field(None, Some(password_validator))
                     .build()
                 {
                     Ok(text) => {
@@ -453,8 +453,8 @@ impl ActionManager {
                             if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
                                 let edit_data = self.modals
                                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                    .field(Some(ai.name), Some(name_validator))
-                                    .field(Some(ai.notes), Some(name_validator))
+                                    .field(Some(ai.name), Some(password_validator))
+                                    .field(Some(ai.notes), Some(password_validator))
                                     .field(Some(hex::encode(ai.id)), None)
                                     .build().expect("modals error in edit");
                                 ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
@@ -512,12 +512,12 @@ impl ActionManager {
                 let alg: String = pw.algorithm.into();
                 let edit_data = self.modals
                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                    .field(Some(pw.name), Some(name_validator))
-                    .field(Some(pw.secret), Some(name_validator))
-                    .field(Some(pw.notes), Some(name_validator))
-                    .field(Some(pw.timestep.to_string()), Some(name_validator))
-                    .field(Some(alg), Some(name_validator))
-                    .field(Some(pw.digits.to_string()), Some(name_validator))
+                    .field(Some(pw.name), Some(password_validator))
+                    .field(Some(pw.secret), Some(password_validator))
+                    .field(Some(pw.notes), Some(password_validator))
+                    .field(Some(pw.timestep.to_string()), Some(password_validator))
+                    .field(Some(alg), Some(password_validator))
+                    .field(Some(pw.digits.to_string()), Some(password_validator))
                     .build().expect("modals error in edit");
                 pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
                 pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
@@ -545,10 +545,10 @@ impl ActionManager {
 
                 let edit_data = self.modals
                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                    .field(Some(pw.description), Some(name_validator))
-                    .field(Some(pw.username), Some(name_validator))
-                    .field(Some(pw.password), Some(name_validator))
-                    .field(Some(pw.notes), Some(name_validator))
+                    .field(Some(pw.description), Some(password_validator))
+                    .field(Some(pw.username), Some(password_validator))
+                    .field(Some(pw.password), Some(password_validator))
+                    .field(Some(pw.notes), Some(password_validator))
                     .build().expect("modals error in edit");
                 pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
                 pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
@@ -1113,7 +1113,15 @@ pub(crate) fn totp_ss_validator(input: TextEntryPayload) -> Option<xous_ipc::Str
 }
 pub(crate) fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
     let proposed_name = input.as_str();
-    if proposed_name.contains('\n') { // the '\n' is reserved as the delimiter to end the name field
+    if proposed_name.contains(['\n',':']) { // the '\n' is reserved as the delimiter to end the name field, and ':' is the path separator
+        Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", xous::LANG)))
+    } else {
+        None
+    }
+}
+pub(crate) fn password_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+    let proposed_name = input.as_str();
+    if proposed_name.contains(['\n']) { // the '\n' is reserved as the delimiter to end the name field
         Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", xous::LANG)))
     } else {
         None

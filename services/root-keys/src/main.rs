@@ -93,8 +93,6 @@ pub struct MetadataInFlash {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
-    mod keywrap;
-    use keywrap::*;
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
     use gam::modal::{Modal, Slider};
@@ -283,10 +281,12 @@ mod implementation {
             }
         }
         pub fn kwp_op(&mut self, kwp: &mut KeyWrapper) {
-            let keywrapper = Aes256KeyWrap::new(&[0u8; 32]);
+            use aes_kw::Kek;
+            use aes_kw::KekAes256;
+            let keywrapper: KekAes256 = Kek::from([0u8; 32]);
             match kwp.op {
                 KeyWrapOp::Wrap => {
-                    match keywrapper.encapsulate(&kwp.data[..kwp.len as usize]) {
+                    match keywrapper.wrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
                         Ok(wrapped) => {
                             for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
                                 *dst = src;
@@ -297,21 +297,45 @@ mod implementation {
                             kwp.expected_len = wrapped.len() as u32;
                         }
                         Err(e) => {
-                            kwp.result = Some(e);
+                            kwp.result = Some(match e {
+                                aes_kw::Error::IntegrityCheckFailed => KeywrapError::IntegrityCheckFailed,
+                                aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                                aes_kw::Error::InvalidKekSize { size } => {
+                                    log::info!("invalid size {}", size); // weird. can't name this _size
+                                    KeywrapError::InvalidKekSize
+                                },
+                                aes_kw::Error::InvalidOutputSize { expected } => {
+                                    log::info!("invalid output size {}", expected);
+                                    KeywrapError::InvalidOutputSize
+                                },
+                            });
                         }
                     }
                 }
                 KeyWrapOp::Unwrap => {
-                    match keywrapper.decapsulate(&kwp.data[..kwp.len as usize], kwp.expected_len as usize) {
-                        Ok(unwrapped) => {
-                            for (&src, dst) in unwrapped.iter().zip(kwp.data.iter_mut()) {
+                    match keywrapper.unwrap_with_padding_vec(&kwp.data[..kwp.len as usize]) {
+                        Ok(wrapped) => {
+                            for (&src, dst) in wrapped.iter().zip(kwp.data.iter_mut()) {
                                 *dst = src;
                             }
-                            kwp.len = unwrapped.len() as u32;
+                            kwp.len = wrapped.len() as u32;
                             kwp.result = None;
+                            // this is an un-used field but...why not?
+                            kwp.expected_len = wrapped.len() as u32;
                         }
                         Err(e) => {
-                            kwp.result = Some(e);
+                            kwp.result = Some(match e {
+                                aes_kw::Error::IntegrityCheckFailed => KeywrapError::IntegrityCheckFailed,
+                                aes_kw::Error::InvalidDataSize => KeywrapError::InvalidDataSize,
+                                aes_kw::Error::InvalidKekSize { size } => {
+                                    log::info!("invalid size {}", size); // weird. can't name this _size
+                                    KeywrapError::InvalidKekSize
+                                },
+                                aes_kw::Error::InvalidOutputSize { expected } => {
+                                    log::info!("invalid output size {}", expected);
+                                    KeywrapError::InvalidOutputSize
+                                },
+                            });
                         }
                     }
                 }

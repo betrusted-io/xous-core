@@ -220,14 +220,16 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - There is just one script to run on all platforms: `precursorupdater`
   - The old factory_reset.[sh,ps1] and update_ci scripts are now deprecated, and will be permanently removed next release.
   - `precursorupdater` is [published to PyPi](https://pypi.org/project/precursorupdater/) with the help of neutralinsomniac to sort out the packaging issues via #204. Thank you!
+- PDDB fixes:
+  - root structure journal age bug fixed & pushed as hotfix to v0.9.9
+  - periodic flush of FSCB SpaceUpdate records added to restore deniability
+  - Shellchat commands for flush, sync, and write added to the pddb subcommand
+  - `backalyzer` script added to analyze backups. Useful for debug & recovery of data.
+  - Fixed aes-keywrap bug - OG library was faulty; swapped in one that passes NIST test vectors & added transparent migration.
 
 ## Roadmap to 1.0
 
-The items that are still missing before we can hit a 1.0 release include:
-- [x] PDDB (plausibly deniable database): a key/value store that is the equivalent of a "filesystem" for Xous
-- [x] Networking capabilities: a simple (think UDP-only) network stack
-- Password changes in the `rootkey` context
-- Post-boot loadable applications. We currently have modularized integrated applications, but no notion of a disk-loadable application. Still not sure if this is a feature we want, though, given that Xous is supposed to be a single-purpose tool and not a general OS.
-- Further integration of drivers into `libstd`
-- Maybe a functional USB device stack??
 - Lots of testing and bug fixes
+- Understanding what the gap is to get TLS working
+- Fixing performance issues in `pddb`
+- Refactoring `modals` to not have N^2 space growth with feature set

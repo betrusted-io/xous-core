@@ -204,6 +204,9 @@ pub(crate) enum Opcode {
     /// Reset "don't ask to init root keys" flag - pass-through to root keys object - for end of OQC test
     ResetDontAskInit = 43,
 
+    /// Flush the SpaceUpdate log, restoring deniability
+    FlushSpaceUpdate = 44,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
