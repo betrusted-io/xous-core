@@ -381,6 +381,9 @@ mod tests;
 #[allow(unused_imports)]
 use tests::*;
 
+#[cfg(feature="pddb-flamegraph")]
+mod profiling;
+
 use num_traits::*;
 use xous::{send_message, Message, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
@@ -663,6 +666,8 @@ fn wrapped_main() -> ! {
                         latest_cache = basis_cache.cache_size();
                         log::info!("PDDB post-mount caching stats: {} heap, {} cache", latest_heap, latest_cache);
                         scrub_run.store(true, Ordering::SeqCst);
+                        #[cfg(feature="pddb-flamegraph")]
+                        profiling::do_query_work();
                     }
                 }
             }),

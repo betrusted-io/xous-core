@@ -382,6 +382,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "renode-bypass"]),
             )?;
         }
+        Some("pddb-flamegraph") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = pddb_dev_pkgs.to_vec();
+            // add pkgs required for functional testing. Quite a bit. :-/
+            pkgs.push("llio");
+            pkgs.push("root-keys");
+            pkgs.push("jtag");
+            pkgs.push("com");
+            pkgs.push("gam");
+            pkgs.push("net");
+            pkgs.push("dns");
+            pkgs.push("graphics-server");
+            pkgs.push("modals");
+            pkgs.push("keyboard");
+            pkgs.push("ime-frontend");
+            pkgs.push("ime-plugin-shell");
+            pkgs.push("status");
+            pkgs.push("usb-device-xous");
+            generate_app_menus(&vec![]);
+            run(false, &pkgs,
+                Some(&[
+                    "--features", "pddbtest",
+                    "--features", "pddb-flamegraph",
+                ]), false)?
+
+        }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
             renode_image(false, &aestest_pkgs, &[], None, None)?
