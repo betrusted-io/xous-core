@@ -80,4 +80,4 @@ hazardous-debug = []
 test-rekey = []
 # routines to help with performance profiling of the PDDB in hosted mode
 pddb-flamegraph = ["hex"]
-default = ["mbbb", "pddb-flamegraph"]
+default = ["mbbb"]
