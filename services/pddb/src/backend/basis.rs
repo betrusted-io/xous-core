@@ -143,7 +143,7 @@ use aes_gcm_siv::{
 use aes::Aes256;
 use aes::cipher::generic_array::GenericArray;
 use std::iter::IntoIterator;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use std::cmp::Reverse;
 use std::cmp::Ordering;
@@ -381,8 +381,8 @@ impl BasisCache {
         }
         dict_set
     }
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<HashSet::<String>> {
-        let mut merge_list = HashSet::<String>::new();
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<BTreeSet::<String>> {
+        let mut merge_list = BTreeSet::<String>::new();
         let mut found_dict = false;
         if basis_name.is_some() {
             if let Some(basis_index) = self.select_basis(basis_name) {

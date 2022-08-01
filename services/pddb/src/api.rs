@@ -125,7 +125,7 @@ pub(crate) enum Opcode {
 
     // routines to list available resources
     KeyCountInDict = 11,
-    GetKeyNameAtIndex = 12,
+    // GetKeyNameAtIndex = 12, // superceded by ListKeyV2
     DictCountInBasis = 13,
     GetDictNameAtIndex = 14,
 
@@ -206,6 +206,9 @@ pub(crate) enum Opcode {
 
     /// Flush the SpaceUpdate log, restoring deniability
     FlushSpaceUpdate = 44,
+
+    /// Optimized key listing
+    ListKeyV2 = 45,
 
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
@@ -289,9 +292,19 @@ pub struct PddbKeyRequest {
     pub result: PddbRequestCode,
 }
 
+pub(crate) const MAX_PDDBKLISTLEN: usize = 4064;
+/// A structure for requesting a token to access a particular key/value pair
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub (crate) struct PddbKeyList {
+    pub token: [u32; 4],
+    pub data: [u8; MAX_PDDBKLISTLEN],
+    pub retcode: PddbRetcode,
+    pub end: bool,
+}
+
 /// Return codes for Read/Write API calls to the main server
 #[repr(u8)]
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) enum PddbRetcode {
     Uninit = 0,
     Ok = 1,

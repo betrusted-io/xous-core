@@ -5,7 +5,7 @@ use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use aes_gcm_siv::Aes256GcmSiv;
-use std::collections::{HashMap, BinaryHeap, HashSet};
+use std::collections::{HashMap, BinaryHeap, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
 use std::cmp::{Ordering, Reverse};
@@ -196,7 +196,7 @@ impl DictCacheEntry {
     }
     /// merges the list of keys in this dict cache entry into a merge_list.
     /// The `merge_list` is used because keys are presented as a union across all open basis.
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, merge_list: &mut HashSet<String>) {
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, merge_list: &mut BTreeSet<String>) {
         // ensure that the key cache is filled
         if self.keys.len() < self.key_count as usize {
             self.fill(hw, v2p_map, cipher);
