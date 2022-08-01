@@ -1301,7 +1301,7 @@ fn wrapped_main() -> ! {
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
                         let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
-                        log::debug!("read (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
+                        log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
                         match basis_cache.key_read(&mut pddb_os,
                             &rec.dict, &rec.key,
                             &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
