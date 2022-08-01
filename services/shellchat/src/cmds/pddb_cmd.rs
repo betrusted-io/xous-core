@@ -244,7 +244,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                                 }
                             }
                         }
-                        Err(_) => write!(ret, "Error encountered listing dictionaries").ok().unwrap_or(()),
+                        Err(e) => write!(ret, "Error encountered listing dictionaries: {:?}", e).ok().unwrap_or(()),
                     }
                 }
                 "churn" => {
