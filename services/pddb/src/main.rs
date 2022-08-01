@@ -1172,6 +1172,7 @@ fn wrapped_main() -> ! {
                         Some(list)
                     }
                     Err(e) => {
+                        key_token = None;
                         match e.kind() {
                             std::io::ErrorKind::NotFound => req.code = PddbRequestCode::NotFound,
                             _ => req.code = PddbRequestCode::InternalError,
@@ -1237,7 +1238,7 @@ fn wrapped_main() -> ! {
             Opcode::DictCountInBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
-                if key_token.is_some() {
+                if dict_token.is_some() {
                     req.code = PddbRequestCode::AccessDenied;
                     buffer.replace(req).unwrap();
                     continue;
