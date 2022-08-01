@@ -1883,7 +1883,7 @@ impl PddbOs {
     pub(crate) fn pddb_generate_used_map(&self, cache: &Vec::<BasisCacheEntry>) -> Option<BinaryHeap<Reverse<u32>>> {
         if let Some(all_keys) = self.pddb_get_all_keys(&cache) {
             let mut page_heap = BinaryHeap::new();
-            let mut page_check = HashSet::new(); // this is just for sanity checking because you can't query a heap
+            let mut page_check = std::collections::HashSet::new(); // this is just for sanity checking because you can't query a heap
             for (basis_keys, name) in all_keys {
                 // scan the disclosed bases
                 if let Some(map) = self.pt_scan_key(&basis_keys.pt, &basis_keys.data, &name) {
@@ -1907,7 +1907,7 @@ impl PddbOs {
             for pp in self.fspace_cache.iter() {
                 if pp.space_state() == SpaceState::Used || pp.space_state() == SpaceState::MaybeUsed {
                     if !page_check.insert(pp.page_number()) {
-                        log::info!("FSCB and page table both record this used page: {} (this is normal)", pp.page_number());
+                        log::debug!("FSCB and page table both record this used page: {} (this is normal)", pp.page_number());
                     } else {
                         page_heap.push(Reverse(pp.page_number()));
                         log::info!("FSCB contained {}, but not yet committed to disk; added to page_heap", pp.page_number());
