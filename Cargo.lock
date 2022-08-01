@@ -2366,6 +2366,7 @@ dependencies = [
  "cipher 0.4.3",
  "digest 0.9.0",
  "gam",
+ "hex 0.4.3",
  "hkdf",
  "llio",
  "locales",
