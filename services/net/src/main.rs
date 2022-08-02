@@ -37,7 +37,7 @@ use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 use crate::device::NetPhy;
 
 use core::num::NonZeroU64;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU16, Ordering};
 use smoltcp::socket::{
     TcpSocket, TcpSocketBuffer, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
 };
@@ -50,6 +50,9 @@ use std::cmp::Ordering as CmpOrdering;
 
 // 0 indicates no address is currently assigned
 pub static IPV4_ADDRESS: AtomicU32 = AtomicU32::new(0);
+// stash the MAC address for inserstion as a loopback target. Coded as big-end bytes.
+pub static MAC_ADDRESS_LSB: AtomicU32 = AtomicU32::new(0);
+pub static MAC_ADDRESS_MSB: AtomicU16 = AtomicU16::new(0);
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
 const MAX_DELAY_THREADS: u32 = 9;
@@ -64,7 +67,12 @@ where
             .iter_mut()
             .next()
             .expect("trouble updating ipv4 addresses in routing table");
-        *dest = IpCidr::Ipv4(cidr);
+        if *dest.address().as_bytes() != [127, 0, 0, 1] {
+            log::info!("updating to address {:?}", cidr);
+            *dest = IpCidr::Ipv4(cidr);
+        } else {
+            log::info!("not updating loopback address");
+        }
     });
 }
 
@@ -184,7 +192,7 @@ fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -255,7 +263,10 @@ fn main() -> ! {
 
     // --------------- other link storage -------------
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
-    let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
+    let ip_addrs = [
+        IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0),
+        IpCidr::new(IpAddress::v4(127, 0, 0, 1), 8)
+    ];
     let routes = Routes::new(BTreeMap::new());
 
     // build the device
@@ -275,7 +286,9 @@ fn main() -> ! {
         }
     };
     log::debug!("My MAC address is: {:x?}", hw_config.mac);
-    let device = device::NetPhy::new(&xns);
+    MAC_ADDRESS_LSB.store(u32::from_be_bytes(hw_config.mac[2..6].try_into().unwrap()), Ordering::SeqCst);
+    MAC_ADDRESS_MSB.store(u16::from_be_bytes(hw_config.mac[0..2].try_into().unwrap()), Ordering::SeqCst);
+    let device = device::NetPhy::new(&xns, net_cid);
     // needed by ICMP to determine if we should compute checksums
     let device_caps = device.capabilities();
     let medium = device.capabilities().medium;
@@ -395,7 +408,9 @@ fn main() -> ! {
                 }
             }
         }
-        match FromPrimitive::from_usize(msg.body.id() & 0xffff) {
+        let op = FromPrimitive::from_usize(msg.body.id() & 0xffff);
+        log::debug!("{:?}", op);
+        match op {
             Some(Opcode::Ping) => {
                 log::debug!("Ping");
                 let mut buf = unsafe {
@@ -1196,8 +1211,32 @@ fn main() -> ! {
                     }
                 }
             }
+            Some(Opcode::LoopbackRx) => msg_scalar_unpack!(msg, rxlen, _, _, _, {
+                match iface.device_mut().push_rx_avail(rxlen as u16) {
+                    None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
+                    Some(_) => log::warn!("Got more packets, but smoltcp didn't drain them in time"),
+                }
+                match xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                ) {
+                    Ok(_) => {}
+                    Err(xous::Error::ServerQueueFull) => {
+                        log::warn!("Our net queue runneth over, packets will be dropped.");
+                    }
+                    Err(e) => {
+                        log::error!("Unhandled error sending NetPump to self: {:?}", e);
+                    }
+                }
+            }),
             Some(Opcode::NetPump) => msg_scalar_unpack!(msg, wup_hi, wup_lo, _, _, {
-                log::debug!("NetPump");
+                log::trace!("NetPump");
                 // assume: if wup_hi/wup_lo == 0, then the wakeup is from a non-timer thread
                 let wakeup: u64 = (wup_hi as u64) << 32 | (wup_lo as u64);
                 if wakeup != 0 {
@@ -1213,7 +1252,7 @@ fn main() -> ! {
                             }
                         }
                     }
-                    log::debug!("pending wakeups: {}", wakeup_time.len());
+                    log::trace!("pending wakeups: {}", wakeup_time.len());
                 }
 
                 let now = timer.elapsed_ms();
@@ -1238,6 +1277,7 @@ fn main() -> ! {
                             &mut None => continue,
                             Some(s) => {
                                 socket = iface.get_socket::<TcpSocket>(s.1);
+                                log::debug!("connect state: {:?}", socket.state());
                                 if socket.state() == TcpState::SynSent
                                     || socket.state() == TcpState::SynReceived
                                 {
@@ -1248,7 +1288,7 @@ fn main() -> ! {
                         connection.take().unwrap()
                     };
 
-                    log::trace!("tcp state is {:?}", socket.state());
+                    log::debug!("tcp state is {:?}", socket.state());
                     if socket.state() == TcpState::Established {
                         respond_with_connected(env, fd, local_port, remote_port);
                     } else {
@@ -1271,6 +1311,7 @@ fn main() -> ! {
                                 socket = iface.get_socket::<TcpSocket>(s.handle);
                                 if !socket.can_recv() {
                                     if let Some(trigger) = s.expiry {
+                                        log::debug!("rxrcv {:?}", trigger.get());
                                         if trigger.get() < now {
                                             // timer expired
                                         } else {
@@ -1287,6 +1328,7 @@ fn main() -> ! {
 
                     // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
+                        log::debug!("rxrcv timed out");
                         respond_with_error(env, NetError::TimedOut);
                         continue;
                     }
@@ -1294,11 +1336,12 @@ fn main() -> ! {
                     let body = env.body.memory_message_mut().unwrap();
                     match socket.recv_slice(body.buf.as_slice_mut()) {
                         Ok(count) => {
+                            log::debug!("rxrcv of {}", count);
                             body.valid = xous::MemorySize::new(count);
                             body.offset = xous::MemoryAddress::new(1);
                         }
                         Err(e) => {
-                            log::trace!("unable to receive: {:?}", e);
+                            log::debug!("unable to receive: {:?}", e);
                             body.offset = None;
                             body.valid = None;
                         }
@@ -1371,7 +1414,7 @@ fn main() -> ! {
                 }
 
                 // this handles TCP std listeners
-                log::debug!("pump: tcp listen");
+                log::trace!("pump: tcp listen");
                 for connection in tcp_accept_waiting.iter_mut() {
                     let ep: IpEndpoint;
                     let AcceptingSocket {
@@ -1468,7 +1511,7 @@ fn main() -> ! {
                     }
                 }
 
-                log::debug!("pump: tcp close");
+                log::trace!("pump: tcp close");
                 if tcp_tx_closing.len() > 0 {
                     let mut closed = Vec::<usize>::new();
                     for (index, &(handle, sender)) in tcp_tx_closing.iter().enumerate() {
