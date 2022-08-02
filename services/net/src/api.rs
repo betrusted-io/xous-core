@@ -357,6 +357,8 @@ pub(crate) enum Opcode {
     StdTcpAccept = 45,
 
     StdTcpStreamShutdown = 46,
+
+    LoopbackRx = 47,
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
