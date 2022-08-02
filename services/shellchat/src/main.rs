@@ -45,6 +45,9 @@ use cmds::*;
 
 mod oqc_test;
 
+#[cfg(feature="nettest")]
+mod nettests;
+
 #[cfg(feature="tts")]
 use locales::t;
 #[cfg(feature="tts")]

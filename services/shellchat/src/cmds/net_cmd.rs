@@ -1,4 +1,4 @@
-use crate::{ShellCmdApi, CommonEnv};
+use crate::{ShellCmdApi, CommonEnv, nettests};
 use com::api::NET_MTU;
 use xous_ipc::String;
 #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -286,6 +286,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     }
+                }
+                #[cfg(feature="nettest")]
+                "test" => {
+                    nettests::start_batch_tests();
+                    write!(ret, "Net batch tests started...").ok();
                 }
                 #[cfg(feature="ditherpunk")]
                 "image" => {
