@@ -594,6 +594,7 @@ impl ActionManager {
         il.clear();
         match self.mode_cache {
             VaultMode::Password => {
+                let start = self.tt.elapsed_ms();
                 let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
@@ -609,6 +610,9 @@ impl ActionManager {
                         Vec::new()
                     }
                 };
+                log::info!("listing took {} ms", self.tt.elapsed_ms() - start);
+                let start = self.tt.elapsed_ms();
+                let klen = keylist.len();
                 for key in keylist {
                     match self.pddb.borrow().get(
                         VAULT_PASSWORD_DICT,
@@ -618,8 +622,13 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            // determine the exact length of the record and read it in one go.
+                            // read_to_end() performs ~5x read calls to do the same thing, because it
+                            // has to "guess" the total record length starting with a 32-byte increment
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
                                         let extra = format!("{}; {}{}",
@@ -652,6 +661,7 @@ impl ActionManager {
                         },
                     }
                 }
+                log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
             }
             VaultMode::Fido => {
                 // first assemble U2F records
@@ -678,8 +688,10 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(ai) = deserialize_app_info(data) {
                                         let extra = format!("{}; {}{}",
@@ -729,8 +741,10 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     match crate::ctap::storage::deserialize_credential(&data) {
                                         Some(result) => {
@@ -781,8 +795,10 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
                                         let alg: String = totp.algorithm.into();

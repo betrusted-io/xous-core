@@ -1,9 +1,10 @@
 use zeroize::Zeroize;
 use core::mem::size_of;
 use core::ops::{Deref, DerefMut};
-use aes_gcm_siv::{AesGcmSiv, Nonce, Key, Tag};
-use aes_gcm_siv::aead::{Aead, NewAead, Payload};
-use aes::Aes256;
+use aes_gcm_siv::{
+    aead::{KeyInit, Aead, Payload},
+    Aes256GcmSiv, Tag, Nonce
+};
 use subtle::ConstantTimeEq;
 use crate::{BackupHeader, BackupOp};
 
@@ -144,7 +145,7 @@ pub(crate) fn create_backup(
     trng.fill_bytes(&mut kcom_nonce);
 
     let (kenc, kcom) = kcom_func(&key.0, &kcom_nonce);
-    let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&kenc.0));
+    let cipher = Aes256GcmSiv::new(&kenc.0.into());
 
     // the backup data
     let mut backup_data_pt = BackupDataPt::default();
@@ -186,7 +187,7 @@ pub(crate) fn restore_backup(
     backup: &BackupDataCt
 ) -> Option<BackupDataPt> {
     let (kenc, kcom) = kcom_func(&key.0, &backup.commit_nonce);
-    let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&kenc.0));
+    let cipher = Aes256GcmSiv::new(&kenc.0.into());
 
     // Attempt decryption. This is None on failure
     let plaintext = cipher.decrypt(

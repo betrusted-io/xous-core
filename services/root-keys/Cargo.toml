@@ -47,8 +47,8 @@ jtag = {path = "../jtag"}
 tts-frontend = {path="../tts"}
 
 # backups
-# aes-gcm-siv = {version = "0.11.0-pre", default-features = false, features = ["alloc"]}
-aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
+aes-gcm-siv = {version = "0.11.1", default-features = false, features = ["alloc", "aes"]}
+#aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 subtle = {version = "2.4.1", default-features = false}
 usb-device-xous = {path="../usb-device-xous"}
 keyboard = {path="../keyboard"}

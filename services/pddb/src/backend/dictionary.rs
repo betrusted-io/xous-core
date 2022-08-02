@@ -4,9 +4,8 @@ use super::*;
 use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
-use aes_gcm_siv::AesGcmSiv;
-use aes::Aes256;
-use std::collections::{HashMap, BinaryHeap, HashSet};
+use aes_gcm_siv::Aes256GcmSiv;
+use std::collections::{HashMap, BinaryHeap, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
 use std::cmp::{Ordering, Reverse};
@@ -89,7 +88,7 @@ impl DictCacheEntry {
     /// Requires a descriptor for the hardware, and our virtual to physical page mapping.
     /// Does not overwrite existing cache entries, if they already exist -- only loads in ones that are missing.
     /// Todo: condense routines in common with ensure_key_entry() to make it easier to maintain.
-    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>) -> VirtAddr {
+    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> VirtAddr {
         let mut try_entry = 1;
         let mut key_count = 0;
         let mut alloc_top = VirtAddr::new(LARGE_POOL_START).unwrap();
@@ -197,7 +196,7 @@ impl DictCacheEntry {
     }
     /// merges the list of keys in this dict cache entry into a merge_list.
     /// The `merge_list` is used because keys are presented as a union across all open basis.
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>, merge_list: &mut HashSet<String>) {
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, merge_list: &mut BTreeSet<String>) {
         // ensure that the key cache is filled
         if self.keys.len() < self.key_count as usize {
             self.fill(hw, v2p_map, cipher);
@@ -213,7 +212,7 @@ impl DictCacheEntry {
     /// This shares a lot of code with the fill() routine -- we should condense the common routines
     /// to make this easier to maintain. Returns false if the disk was searched and no key was found; true
     /// if cache is hot or key was found on search.
-    pub(crate) fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    pub(crate) fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str) -> bool {
         // only fill if the key isn't in the cache.
         if !self.keys.contains_key(name_str) {
@@ -285,7 +284,7 @@ impl DictCacheEntry {
             }
         }
     }
-    fn try_fill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    fn try_fill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         data_cache: &mut PlaintextCache, key_name: &str) {
         if let Some(kcache) = self.keys.get_mut(key_name) {
             if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
@@ -368,7 +367,7 @@ impl DictCacheEntry {
     /// specific dictionary in a named basis. In all of these cases, the Basis resolver will have had to find the
     /// correct DictCacheEntry and issue the `key_update` to it; for multiple updates, then multiple calls to
     /// multiple DictCacheEntry are required.
-    pub fn key_update(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    pub fn key_update(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name: &str, data: &[u8], offset: usize, alloc_hint:Option<usize>, truncate: bool, large_alloc_ptr: PageAlignedVa) -> Result <PageAlignedVa> {
         self.age = self.age.saturating_add(1);
         self.clean = false;
@@ -702,7 +701,7 @@ impl DictCacheEntry {
     /// Used to remove a key from the dictionary. If you call it with a non-existent key,
     /// the routine has no effect, and does not report an error. Small keys are not immediately
     /// overwritten in paranoid mode, but large keys are.
-    pub fn key_remove(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    pub fn key_remove(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str, paranoid: bool) {
         if paranoid {
             // large records are paranoid-erased, by default, because of the pool-reuse problem.
@@ -815,7 +814,7 @@ impl DictCacheEntry {
     ///
     /// Observation: given the dictionary index and the small key pool index, we know exactly
     /// the virtual address of the data pool.
-    pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>) -> bool {
+    pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> bool {
         for (index, entry) in self.small_pool.iter_mut().enumerate() {
             if !entry.clean {
                 let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(self.index, index)).unwrap();
@@ -1219,7 +1218,7 @@ pub(crate) struct PlaintextCache {
     pub(crate) tag: Option<PhysPage>,
 }
 impl PlaintextCache {
-    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>, aad: &[u8],
+    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, aad: &[u8],
         req_vaddr: VirtAddr
     ) {
         if let Some(pp) = v2p_map.get(&req_vaddr) {

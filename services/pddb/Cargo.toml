@@ -24,8 +24,8 @@ aes = {path="../aes"}
 root-keys = {path="../root-keys"}
 cipher = "0.4.2"
 bitfield = "0.13.2"
-# aes-gcm-siv = {version = "0.11.0-pre", default-features = false, features = ["alloc"]}
-aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
+aes-gcm-siv = {version = "0.11.1", default-features = false, features = ["alloc", "aes"]}
+# aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 llio = {path="../llio"}
 subtle = {version = "2.4.1", default-features = false}
 tts-frontend = {path="../tts"}
@@ -52,6 +52,8 @@ utralib = { path = "../../utralib"}
 rand = "0.7.3"
 rand_chacha = "0.3.1"
 
+hex = { version = "0.4.3", default-features = false, features = ["alloc"], optional = true }
+
 [features]
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
@@ -76,4 +78,6 @@ migration1 = []
 # hazardous debug flag decorates any debug paths that might accidentally leak key material
 hazardous-debug = []
 test-rekey = []
+# routines to help with performance profiling of the PDDB in hosted mode
+pddb-flamegraph = ["hex"]
 default = ["mbbb"]

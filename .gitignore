@@ -22,6 +22,7 @@ buildpush.ps1
 # local-only routines used to start builds
 /*.ps1
 /*.bat
+/*.sh
 # notes to myself
 /*.txt
 

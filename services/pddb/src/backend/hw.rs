@@ -1,8 +1,8 @@
 use std::convert::TryInto;
 
 use crate::*;
-use aes_gcm_siv::{AesGcmSiv, Nonce, Key, Tag};
-use aes_gcm_siv::aead::{Aead, NewAead, Payload};
+use aes_gcm_siv::{Nonce, Tag, Aes256GcmSiv};
+use aes_gcm_siv::aead::{Aead, Payload};
 use aes::{Aes256, Block, BLOCK_SIZE};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 use root_keys::api::AesRootkeyType;
@@ -97,7 +97,7 @@ pub(crate) struct BasisKeys {
 
 struct MigrationCiphers {
     pt_ecb: Aes256,
-    data_gcm_siv: AesGcmSiv<Aes256>,
+    data_gcm_siv: Aes256GcmSiv,
     data_key: [u8; 32],
     aad_incoming: Vec::<u8>,
     aad_local: Vec::<u8>,
@@ -497,7 +497,7 @@ impl PddbOs {
                     pp.set_space_state(SpaceState::Used);
                     // handle conflicting journal versions here
                     if let Some(prev_page) = map.get(&pte.vaddr()) {
-                        let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(data_key));
+                        let cipher = Aes256GcmSiv::new(data_key.into());
                         let aad = self.data_aad(basis_name);
                         if pte.vaddr() != VirtAddr::new(VPAGE_SIZE as u64).unwrap() {
                             // handle case that there is a conflict in data areas
@@ -761,8 +761,7 @@ impl PddbOs {
     fn fast_space_write(&mut self, fs: &FastSpace) {
         self.syskey_ensure();
         if let Some(system_basis_key) = &self.system_basis_key {
-            let key = Key::from_slice(&system_basis_key.data);
-            let cipher = AesGcmSiv::<Aes256>::new(key);
+            let cipher = Aes256GcmSiv::new(&system_basis_key.data.into());
             let nonce_array = self.entropy.borrow_mut().get_nonce();
             let nonce = Nonce::from_slice(&nonce_array);
             let fs_ser: &[u8] = fs.deref();
@@ -974,8 +973,7 @@ impl PddbOs {
                             msg: &fscb_buf,
                             aad: &aad,
                         };
-                        let key = Key::from_slice(&system_key.data);
-                        let cipher = AesGcmSiv::<Aes256>::new(key);
+                        let cipher = Aes256GcmSiv::new(&system_key.data.into());
                         match cipher.decrypt(Nonce::from_slice(&fscb_slice[page_start..page_start + size_of::<Nonce>()]), payload) {
                             Ok(msg) => {
                                 log::info!("decrypted: {}, FastSpace size: {}", msg.len(), size_of::<FastSpace>());
@@ -1333,7 +1331,7 @@ impl PddbOs {
     /// returns a decrypted page that still includes the journal number at the very beginning
     /// We don't clip it off because it would require re-allocating a vector, and it's cheaper (although less elegant) to later
     /// just index past it.
-    pub(crate) fn data_decrypt_page(&self, cipher: &AesGcmSiv::<Aes256>, aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
+    pub(crate) fn data_decrypt_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], page: &PhysPage) -> Option<Vec::<u8>> {
         let ct_slice = &self.pddb_mr.as_slice()[
             self.data_phys_base.as_usize() + page.page_number() as usize * PAGE_SIZE ..
             self.data_phys_base.as_usize() + (page.page_number() as usize + 1) * PAGE_SIZE];
@@ -1408,7 +1406,7 @@ impl PddbOs {
         log::debug!("found kcom_nonce of {:x?}", nonce_comm);
 
         let (kenc, kcom) = self.kcom_func(key.try_into().unwrap(), &nonce_comm);
-        let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&kenc));
+        let cipher = Aes256GcmSiv::new(&kenc.into());
 
         // Attempt decryption. This is None on failure
         let plaintext = cipher.decrypt(
@@ -1428,7 +1426,7 @@ impl PddbOs {
     }
 
     /// `data` includes the journal entry on top. The data passed in must be exactly one vpage plus the journal entry
-    pub(crate) fn data_encrypt_and_patch_page(&self, cipher: &AesGcmSiv::<Aes256>, aad: &[u8], data: &mut [u8], pp: &PhysPage) {
+    pub(crate) fn data_encrypt_and_patch_page(&self, cipher: &Aes256GcmSiv, aad: &[u8], data: &mut [u8], pp: &PhysPage) {
         assert!(data.len() == VPAGE_SIZE + size_of::<JournalType>(), "did not get a page-sized region to patch");
         let j = JournalType::from_le_bytes(data[..size_of::<JournalType>()].try_into().unwrap()).saturating_add(1);
         for (&src, dst) in j.to_le_bytes().iter().zip(data[..size_of::<JournalType>()].iter_mut()) { *dst = src; }
@@ -1459,7 +1457,7 @@ impl PddbOs {
         self.trng_slice(&mut kcom_nonce);
         // generates the encryption and commit keys
         let (kenc, kcom) = self.kcom_func(key.try_into().unwrap(), &kcom_nonce);
-        let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&kenc));
+        let cipher = Aes256GcmSiv::new(&kenc.into());
         let ciphertext = cipher.encrypt(
             &nonce,
             Payload {
@@ -1885,7 +1883,7 @@ impl PddbOs {
     pub(crate) fn pddb_generate_used_map(&self, cache: &Vec::<BasisCacheEntry>) -> Option<BinaryHeap<Reverse<u32>>> {
         if let Some(all_keys) = self.pddb_get_all_keys(&cache) {
             let mut page_heap = BinaryHeap::new();
-            let mut page_check = HashSet::new(); // this is just for sanity checking because you can't query a heap
+            let mut page_check = std::collections::HashSet::new(); // this is just for sanity checking because you can't query a heap
             for (basis_keys, name) in all_keys {
                 // scan the disclosed bases
                 if let Some(map) = self.pt_scan_key(&basis_keys.pt, &basis_keys.data, &name) {
@@ -1909,7 +1907,7 @@ impl PddbOs {
             for pp in self.fspace_cache.iter() {
                 if pp.space_state() == SpaceState::Used || pp.space_state() == SpaceState::MaybeUsed {
                     if !page_check.insert(pp.page_number()) {
-                        log::info!("FSCB and page table both record this used page: {} (this is normal)", pp.page_number());
+                        log::debug!("FSCB and page table both record this used page: {} (this is normal)", pp.page_number());
                     } else {
                         page_heap.push(Reverse(pp.page_number()));
                         log::info!("FSCB contained {}, but not yet committed to disk; added to page_heap", pp.page_number());
@@ -1982,7 +1980,7 @@ impl PddbOs {
                     log::warn!("pt_scan for basis {} failed, data may be lost", name);
                 }
                 let pt_ecb = Aes256::new(&GenericArray::from_slice(&basis_keys.pt));
-                let data_gcm_siv = AesGcmSiv::<Aes256>::new(Key::from_slice(&basis_keys.data));
+                let data_gcm_siv = Aes256GcmSiv::new(&basis_keys.data.into());
                 self.dna_mode = DnaMode::Normal;
                 let aad_local = self.data_aad(&name);
                 self.dna_mode = DnaMode::Migration;
@@ -2579,10 +2577,10 @@ impl PddbOs {
         aad_v2: &Vec::<u8>,
         key_v1: &[u8; AES_KEYSIZE], // needed to decrypt page with commit
         cipher_pt_v1: &Aes256,
-        cipher_data_v1: &AesGcmSiv::<Aes256>,
+        cipher_data_v1: &Aes256GcmSiv,
         key_data_v2: &[u8; AES_KEYSIZE], // this is needed because we have to do a key commitment
         cipher_pt_v2: &Aes256,
-        cipher_data_v2: &AesGcmSiv::<Aes256>,
+        cipher_data_v2: &Aes256GcmSiv,
         used_pages: &mut BinaryHeap::<Reverse<u32>>,
     ) -> bool {
         let blank = [0xffu8; aes::BLOCK_SIZE];
@@ -2742,7 +2740,7 @@ impl PddbOs {
                 // build the ECB cipher for page table entries, and data cipher for data pages
                 self.cipher_ecb = Some(Aes256::new(GenericArray::from_slice(&system_basis_key_pt)));
                 let cipher_v2 = Aes256::new(GenericArray::from_slice(&system_basis_key_pt)); // a second copy for patching the page table later in this routine interior mutability blah blah work around oops
-                let data_cipher_v2 = AesGcmSiv::<Aes256>::new(Key::from_slice(&system_basis_key));
+                let data_cipher_v2 = Aes256GcmSiv::new(Key::from_slice(&system_basis_key));
                 let aad_v2 = self.data_aad(PDDB_DEFAULT_SYSTEM_BASIS);
                 // now wrap the key for storage
                 let wrapped_key = self.rootkeys.wrap_key(&system_basis_key).expect("Internal error wrapping our encryption key");
@@ -2772,7 +2770,7 @@ impl PddbOs {
 
                 // now we have a copy of the AES key necessary to re-encrypt all the basis
                 // build the data cipher for v1 pages
-                let data_cipher_v1 = AesGcmSiv::<Aes256>::new(Key::from_slice(&system_key_v1));
+                let data_cipher_v1 = Aes256GcmSiv::new(Key::from_slice(&system_key_v1));
                 let aad_v1 = data_aad_v1(&self, PDDB_DEFAULT_SYSTEM_BASIS);
 
                 // track used pages so we can create the FSCB at the end
@@ -2829,10 +2827,10 @@ impl PddbOs {
                                             let basis_aad_v1 = data_aad_v1(&self, bname.first().as_str());
                                             let basis_aad_v2 = self.data_aad(bname.first().as_str());
                                             let basis_pt_cipher_v1 = Aes256::new(GenericArray::from_slice(&basis_key_v1));
-                                            let basis_data_cipher_v1 = AesGcmSiv::<Aes256>::new(Key::from_slice(&basis_key_v1));
+                                            let basis_data_cipher_v1 = Aes256GcmSiv::new(Key::from_slice(&basis_key_v1));
                                             let basis_keys = self.basis_derive_key(bname.first().as_str(), pw.as_str().unwrap_or("UTF8 error"));
                                             let basis_pt_cipher_2 = Aes256::new(GenericArray::from_slice(&basis_keys.pt));
-                                            let basis_data_cipher_2 = AesGcmSiv::<Aes256>::new(Key::from_slice(&basis_keys.data));
+                                            let basis_data_cipher_2 = Aes256GcmSiv::new(Key::from_slice(&basis_keys.data));
                                             // perform the migration
                                             if self.migration_v1_to_v2_inner(
                                                 &basis_aad_v1, &basis_aad_v2,

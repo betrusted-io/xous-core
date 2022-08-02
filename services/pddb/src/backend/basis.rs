@@ -136,12 +136,14 @@ use super::*;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use std::convert::TryInto;
-use aes_gcm_siv::{AesGcmSiv, Key};
-use aes_gcm_siv::aead::NewAead;
+use aes_gcm_siv::{
+    aead::KeyInit,
+    Aes256GcmSiv,
+};
 use aes::Aes256;
-use aes::cipher::{KeyInit, generic_array::GenericArray};
+use aes::cipher::generic_array::GenericArray;
 use std::iter::IntoIterator;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use std::cmp::Reverse;
 use std::cmp::Ordering;
@@ -379,8 +381,8 @@ impl BasisCache {
         }
         dict_set
     }
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<HashSet::<String>> {
-        let mut merge_list = HashSet::<String>::new();
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<BTreeSet::<String>> {
+        let mut merge_list = BTreeSet::<String>::new();
         let mut found_dict = false;
         if basis_name.is_some() {
             if let Some(basis_index) = self.select_basis(basis_name) {
@@ -1090,7 +1092,7 @@ pub(crate) struct BasisCacheEntry {
     /// expressed as a number that needs to be multiplied by DICT_VSIZE to arrive at a virtual address
     pub free_dict_offset: Option<u32>,
     /// the cipher for the basis
-    pub cipher: AesGcmSiv::<Aes256>,
+    pub cipher: Aes256GcmSiv,
     /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
     pub cipher_ecb: Aes256,
     /// raw AES page table key -- needed because we have to do a low-level PT scan to generate FSCB, and sometimes the key comes from
@@ -1121,7 +1123,7 @@ impl BasisCacheEntry {
     /// discover the location of the `large_alloc_ptr`.
     pub(crate) fn mount(hw: &mut PddbOs, name: &str,  key: &BasisKeys, lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         if let Some(basis_map) = hw.pt_scan_key(&key.pt, &key.data, name) {
-            let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&key.data));
+            let cipher = Aes256GcmSiv::new(&key.data.into());
             let aad = hw.data_aad(name);
             // get the first page, where the basis root is guaranteed to be
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {

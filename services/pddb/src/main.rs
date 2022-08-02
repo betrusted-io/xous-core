@@ -381,13 +381,16 @@ mod tests;
 #[allow(unused_imports)]
 use tests::*;
 
+#[cfg(feature="pddb-flamegraph")]
+mod profiling;
+
 use num_traits::*;
 use xous::{send_message, Message, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use core::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeSet};
 use std::io::ErrorKind;
 use core::fmt::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -556,7 +559,7 @@ fn wrapped_main() -> ! {
         }
     });
     // main server loop
-    let mut key_list = Vec::<String>::new(); // storage for key lists
+    let mut key_list: Option::<BTreeSet::<String>> = None; // storage for key lists
     let mut key_token: Option<[u32; 4]> = None;
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
@@ -663,6 +666,8 @@ fn wrapped_main() -> ! {
                         latest_cache = basis_cache.cache_size();
                         log::info!("PDDB post-mount caching stats: {} heap, {} cache", latest_heap, latest_cache);
                         scrub_run.store(true, Ordering::SeqCst);
+                        #[cfg(feature="pddb-flamegraph")]
+                        profiling::do_query_work();
                     }
                 }
             }),
@@ -1153,7 +1158,6 @@ fn wrapped_main() -> ! {
                     continue;
                 }
                 key_token = Some(req.token);
-                key_list.clear();
                 let bname = if req.basis_specified {
                     Some(req.basis.as_str().unwrap())
                 } else {
@@ -1161,58 +1165,65 @@ fn wrapped_main() -> ! {
                 };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
                 log::debug!("counting keys in dict {} basis {:?}", dict, bname);
-                match basis_cache.key_list(&mut pddb_os, dict, bname) {
+                key_list = match basis_cache.key_list(&mut pddb_os, dict, bname) {
                     Ok(list) => {
                         log::debug!("count: {}", list.len());
-                        if list.len() > 0 {
-                            req.index = list.len() as u32;
-                            for key in list {
-                                log::debug!("key list: {}", key);
-                                key_list.push(key);
-                            }
-                        } else {
-                            log::debug!("count is 0, resetting state");
-                            // no keys to list, so reset the state
-                            key_token = None;
-                            key_list.clear();
-                        }
                         req.code = PddbRequestCode::NoErr;
+                        Some(list)
                     }
                     Err(e) => {
                         key_token = None;
-                        key_list.clear();
                         match e.kind() {
                             std::io::ErrorKind::NotFound => req.code = PddbRequestCode::NotFound,
                             _ => req.code = PddbRequestCode::InternalError,
                         }
+                        None
                     }
-                }
+                };
                 buffer.replace(req).unwrap();
             }
-            Opcode::GetKeyNameAtIndex => {
+            Opcode::ListKeyV2 => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                let mut req = buffer.to_original::<PddbKeyList, _>().unwrap();
                 if let Some(token) = key_token {
                     if req.token != token {
-                        req.code = PddbRequestCode::AccessDenied;
+                        req.retcode = PddbRetcode::AccessDenied;
                     } else {
-                        if req.index >= key_list.len() as u32 {
-                            req.code = PddbRequestCode::InternalError;
-                        } else {
-                            req.key = xous_ipc::String::<KEY_NAME_LEN>::from_str(&key_list[req.index as usize]);
-                            req.code = PddbRequestCode::NoErr;
-                            log::debug!("fetching key at index {}: {}", req.index, req.key);
-                            // the last index requested must be the highest one!
-                            if req.index == key_list.len() as u32 - 1 {
-                                log::debug!("last key, resetting state");
-                                key_token = None;
-                                key_list.clear();
+                        if let Some(klist) = &mut key_list {
+                            let mut index = 0;
+                            loop {
+                                let keyname =
+                                    if let Some(keyname) = klist.iter().next() {
+                                        keyname.to_string()
+                                    } else {
+                                        key_token = None;
+                                        req.end = true;
+                                        req.retcode = PddbRetcode::Ok;
+                                        break;
+                                    };
+                                if keyname.len() + 1 + index < MAX_PDDBKLISTLEN {
+                                    assert!(keyname.len() < u8::MAX as usize); // this should always be true due to other limits in the PDDB
+                                    req.data[index] = keyname.len() as u8;
+                                    index += 1;
+                                    req.data[index..index + keyname.len()].copy_from_slice(keyname.as_bytes());
+                                    index += keyname.len();
+                                    klist.remove(&keyname);
+                                } else {
+                                    // don't remove the item, and indicate there is more to come
+                                    req.end = false;
+                                    req.retcode = PddbRetcode::Ok;
+                                    break;
+                                }
                             }
+                        } else {
+                            key_token = None;
+                            req.end = true;
+                            req.retcode = PddbRetcode::Ok;
                         }
                     }
                 } else {
                     log::debug!("multiple concurrent requests detected, returning error");
-                    req.code = PddbRequestCode::AccessDenied;
+                    req.retcode = PddbRetcode::AccessDenied;
                 }
                 buffer.replace(req).unwrap();
             }
@@ -1227,7 +1238,7 @@ fn wrapped_main() -> ! {
             Opcode::DictCountInBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
-                if key_token.is_some() {
+                if dict_token.is_some() {
                     req.code = PddbRequestCode::AccessDenied;
                     buffer.replace(req).unwrap();
                     continue;
@@ -1291,7 +1302,7 @@ fn wrapped_main() -> ! {
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
                         let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
-                        log::debug!("read (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
+                        log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
                         match basis_cache.key_read(&mut pddb_os,
                             &rec.dict, &rec.key,
                             &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
