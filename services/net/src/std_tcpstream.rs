@@ -57,7 +57,7 @@ pub(crate) fn std_tcp_connect(
             _ => NetError::LibraryError,
         })
     {
-        log::trace!("couldn't connect: {:?}", e);
+        log::debug!("couldn't connect: {:?}", e);
         respond_with_error(msg, e);
         return;
     }
@@ -71,6 +71,7 @@ pub(crate) fn std_tcp_connect(
         tcp_connect_waiting,
         (msg, handle, idx, local_port, remote_port),
     );
+    log::info!("connect waiting now: {}, {:?} {:?} {:?}", idx, handle, local_port, remote_port);
 }
 
 pub(crate) fn std_tcp_tx(
@@ -174,7 +175,7 @@ pub(crate) fn std_tcp_rx(
 
     let socket = iface.get_socket::<TcpSocket>(*handle);
     if socket.can_recv() {
-        log::trace!("receiving data right away");
+        log::debug!("receiving data right away");
         match socket.recv_slice(body.buf.as_slice_mut()) {
             Ok(bytes) => {
                 // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
@@ -182,7 +183,7 @@ pub(crate) fn std_tcp_rx(
                 // as the "error" when you try to create a NonZeroUsize with 0.
                 body.valid = xous::MemorySize::new(bytes);
                 body.offset = xous::MemoryAddress::new(1);
-                log::trace!("set body.valid = {:?}", body.valid);
+                log::debug!("set body.valid = {:?}", body.valid);
             }
             Err(e) => {
                 log::error!("unable to receive: {:?}", e);
@@ -192,7 +193,7 @@ pub(crate) fn std_tcp_rx(
         return;
     }
 
-    log::trace!("socket was not able to receive, adding it to list of waiting messages");
+    log::debug!("socket was not able to receive, adding it to list of waiting messages");
 
     // Add the message to the TcpRxWaiting list, which will prevent it from getting
     // responded to right away.

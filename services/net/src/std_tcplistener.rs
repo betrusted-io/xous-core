@@ -48,7 +48,7 @@ pub(crate) fn std_tcp_listen(
             _ => NetError::LibraryError,
         })
     {
-        log::trace!("couldn't listen: {:?}", e);
+        log::debug!("couldn't listen: {:?}", e);
         std_failure(msg, e);
         return;
     }
@@ -58,7 +58,7 @@ pub(crate) fn std_tcp_listen(
 
     let body = msg.body.memory_message_mut().unwrap();
     let bfr = body.buf.as_slice_mut::<u8>();
-    log::trace!("successfully connected: {} -> {:?}:{}", fd, address, local_port);
+    log::debug!("successfully connected: {} -> {:?}:{}", fd, address, local_port);
     bfr[0] = 0;
     bfr[1] = fd;
 }
@@ -95,7 +95,7 @@ pub(crate) fn std_tcp_accept(
     let socket = iface.get_socket::<TcpSocket>(*handle);
 
     if socket.is_active() {
-        log::trace!("accept did not block; immediately returning TcpSocket");
+        log::debug!("accept did not block; immediately returning TcpSocket");
         let buf = body.buf.as_slice_mut::<u8>();
         tcp_accept_success(buf, fd as u16, socket.remote_endpoint());
         return;
@@ -105,7 +105,7 @@ pub(crate) fn std_tcp_accept(
         std_failure(msg, NetError::WouldBlock);
         return;
     }
-    log::trace!("TCP listener added to accept queue");
+    log::debug!("TCP listener added to accept queue");
 
     // Adding the message to the udp_rx_waiting list prevents it from going out of scope and
     // thus prevents the .drop() method from being called. Since messages are returned to the sender

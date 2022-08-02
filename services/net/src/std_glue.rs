@@ -87,7 +87,7 @@ pub(crate) fn respond_with_connected(
     let body = env.body.memory_message_mut().unwrap();
     let bfr = body.buf.as_slice_mut::<u16>();
 
-    log::trace!("successfully connected: {}", idx);
+    log::debug!("successfully connected: {}", idx);
     bfr[0] = 0;
     bfr[1] = idx;
     bfr[2] = local_port;
