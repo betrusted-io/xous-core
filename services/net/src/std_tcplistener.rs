@@ -27,6 +27,12 @@ pub(crate) fn std_tcp_listen(
             return;
         }
     };
+    if address.as_bytes() != [0, 0, 0, 0]
+    && address.as_bytes() != [127, 0, 0, 1]
+    && address.as_bytes() != IPV4_ADDRESS.load(Ordering::SeqCst).to_be_bytes() {
+        std_failure(msg, NetError::Invalid);
+        return;
+    }
 
     let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
     let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; TCP_BUFFER_SIZE]);
