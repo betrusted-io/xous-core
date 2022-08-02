@@ -18,6 +18,11 @@ use num_traits::*;
 mod connection_manager;
 mod device;
 
+#[cfg(test)]
+mod tests;
+#[cfg(feature="btest")]
+mod btests;
+
 use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::convert::TryInto;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID, SID};
@@ -42,6 +47,9 @@ use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::cmp::Ordering as CmpOrdering;
+
+// 0 indicates no address is currently assigned
+pub static IPV4_ADDRESS: AtomicU32 = AtomicU32::new(0);
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
 const MAX_DELAY_THREADS: u32 = 9;
@@ -1074,6 +1082,8 @@ fn main() -> ! {
                                         std::net::IpAddr::from(config.addr),
                                         xous::BOOKEND_END);
                                     net_config = Some(config);
+                                    // update a static variable that tracks this, useful for e.g. UDP bind address checking
+                                    IPV4_ADDRESS.store(u32::from_be_bytes(config.addr), Ordering::SeqCst);
 
                                     // note: ARP cache is stale. Maybe that's ok?
 
@@ -1868,6 +1878,8 @@ fn main() -> ! {
                 }
             }),
             Some(Opcode::Reset) => {
+                // reset the DHCP address
+                IPV4_ADDRESS.store(0, Ordering::SeqCst);
                 // ack any pending ints
                 com_int_list.clear();
                 com.ints_get_active(&mut com_int_list).ok();
