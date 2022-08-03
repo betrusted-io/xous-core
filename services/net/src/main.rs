@@ -103,6 +103,7 @@ pub struct PingConnection {
     retop: usize,
 }
 
+#[derive(Debug)]
 struct WaitingSocket {
     env: xous::MessageEnvelope,
     handle: SocketHandle,
@@ -239,8 +240,11 @@ fn main() -> ! {
     // is being accumulated.
     let mut tcp_tx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
-    // socket handles waiting for writes to flush on close
+    // socket handles waiting for writes to flush on close (transitions to sending FIN)
     let mut tcp_tx_closing: Vec<(SocketHandle, xous::MessageSender)> = Vec::new();
+
+    // socket handles waiting to enter the closed state
+    let mut tcp_tx_wait_fin: Vec<(SocketHandle, xous::MessageSender)> = Vec::new();
 
     // When a client issues a Connect request, it will get placed here while the connection is
     // being established.
@@ -660,7 +664,6 @@ fn main() -> ! {
             }
 
             Some(Opcode::StdTcpClose) => {
-                log::debug!("StdTcpClose");
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
                 let handle = if let Some(connection) = process_sockets
@@ -678,20 +681,16 @@ fn main() -> ! {
                     respond_with_error(msg, NetError::Invalid);
                     continue;
                 };
+                let socket = iface.get_socket::<TcpSocket>(handle);
+                log::debug!("StdTcpClose {:?}", socket.local_endpoint());
                 if !std_tcp_can_close(&tcp_tx_waiting, handle) {
                     log::trace!("def"); // these are short because the extra delay of a long message affects the computation
                     tcp_tx_closing.push((handle, msg.sender));
                 } else {
-                    let socket = iface.get_socket::<TcpSocket>(handle);
                     if socket.may_send() && socket.send_queue() == 0 {
                         log::trace!("imm");
                         socket.close();
-                        iface.remove_socket(handle);
-                        if let Some(response) = msg.body.memory_message_mut() {
-                            response.buf.as_slice_mut::<u8>()[0] = 0;
-                        } else if !msg.body.has_memory() && msg.body.is_blocking() {
-                            xous::return_scalar(msg.sender, 0).ok();
-                        }
+                        tcp_tx_wait_fin.push((handle, msg.sender));
                     } else {
                         log::trace!("def2");
                         tcp_tx_closing.push((handle, msg.sender));
@@ -1309,6 +1308,7 @@ fn main() -> ! {
                             &mut None => continue,
                             Some(s) => {
                                 socket = iface.get_socket::<TcpSocket>(s.handle);
+                                log::debug!("rx_state: {:?} {:?}", socket.state(), socket.local_endpoint());
                                 if !socket.can_recv() {
                                     if let Some(trigger) = s.expiry {
                                         log::debug!("rxrcv {:?}", trigger.get());
@@ -1317,6 +1317,8 @@ fn main() -> ! {
                                         } else {
                                             continue;
                                         }
+                                    } else if socket.state() == smoltcp::socket::TcpState::CloseWait {
+                                        // stop waiting if we're in CloseWait, as we don't plan to transmit
                                     } else {
                                         continue;
                                     }
@@ -1328,9 +1330,18 @@ fn main() -> ! {
 
                     // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
-                        log::debug!("rxrcv timed out");
-                        respond_with_error(env, NetError::TimedOut);
-                        continue;
+                        if socket.state() == smoltcp::socket::TcpState::CloseWait {
+                            log::debug!("rxrcv connection closed");
+                            let body = env.body.memory_message_mut().unwrap();
+                            log::debug!("rxrcv of {}", 0);
+                            body.valid = xous::MemorySize::new(0);
+                            body.offset = xous::MemoryAddress::new(1);
+                            continue;
+                        } else {
+                            log::debug!("rxrcv timed out");
+                            respond_with_error(env, NetError::TimedOut);
+                            continue;
+                        }
                     }
 
                     let body = env.body.memory_message_mut().unwrap();
@@ -1512,24 +1523,36 @@ fn main() -> ! {
                 }
 
                 log::trace!("pump: tcp close");
-                if tcp_tx_closing.len() > 0 {
-                    let mut closed = Vec::<usize>::new();
-                    for (index, &(handle, sender)) in tcp_tx_closing.iter().enumerate() {
-                        if std_tcp_can_close(&tcp_tx_waiting, handle) {
-                            let socket = iface.get_socket::<TcpSocket>(handle);
-                            if socket.may_send() && socket.send_queue() == 0 {
-                                socket.close();
-                                iface.remove_socket(handle);
-                                log::debug!("deferred close, socket is not active");
-                                xous::return_scalar(sender, 0).ok();
-                                closed.push(index);
-                            }
+                tcp_tx_closing.retain(|(handle, sender)| {
+                    if std_tcp_can_close(&tcp_tx_waiting, *handle) {
+                        let socket = iface.get_socket::<TcpSocket>(*handle);
+                        log::trace!("may_send: {}, send_queue: {}", socket.may_send(), socket.send_queue());
+                        // different condition than the previous wait -- here we opportunistically close
+                        // when either condition is met.
+                        if !socket.may_send() || socket.send_queue() == 0 {
+                            socket.close();
+                            tcp_tx_wait_fin.push((*handle, *sender));
+                            false
+                        } else {
+                            true
                         }
+                    } else {
+                        true
                     }
-                    for &index in closed.iter().rev() {
-                        tcp_tx_closing.remove(index);
+                });
+
+                tcp_tx_wait_fin.retain(|(handle, sender)| {
+                    let socket = iface.get_socket::<TcpSocket>(*handle);
+                    if !socket.is_open() {
+                        log::debug!("socket closed {:?}", socket.local_endpoint());
+                        iface.remove_socket(*handle);
+                        xous::return_scalar(*sender, 0).ok();
+                        false
+                    } else {
+                        log::debug!("socket waiting to close: {:?} {:?}->{:?}", socket.state(), socket.local_endpoint(), socket.remote_endpoint());
+                        true
                     }
-                }
+                });
 
                 // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net crate.
                 log::trace!("pump: icmp");
