@@ -120,7 +120,7 @@ pub const ES256_CRED_PARAM: PublicKeyCredentialParameter = PublicKeyCredentialPa
 // You can change this value to one of the following for more privacy.
 // - Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIdList)
 // - Some(CredentialProtectionPolicy::UserVerificationRequired)
-const DEFAULT_CRED_PROTECT: Option<CredentialProtectionPolicy> = None;
+const DEFAULT_CRED_PROTECT: Option<CredentialProtectionPolicy> = Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIdList);
 
 pub(crate) const FIDO_CRED_DICT: &'static str = "fido.cred";
 
