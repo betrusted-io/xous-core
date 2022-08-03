@@ -918,7 +918,7 @@ where
                 transports: Some(vec![AuthenticatorTransport::Usb]),
                 #[cfg(feature = "with_ctap2_1")]
                 algorithms: Some(vec![ES256_CRED_PARAM]),
-                default_cred_protect: DEFAULT_CRED_PROTECT,
+                default_cred_protect: DEFAULT_CRED_PROTECT.is_some(),
                 #[cfg(feature = "with_ctap2_1")]
                 min_pin_length: self.persistent_store.min_pin_length()?,
                 #[cfg(feature = "with_ctap2_1")]
