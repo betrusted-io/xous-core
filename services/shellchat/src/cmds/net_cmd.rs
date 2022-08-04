@@ -368,7 +368,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         let mut rx_buf = [0u8; CHUNK];
                                         log::info!("starting read loop");
                                         // stream.set_nonblocking(true).expect("couldn't set stream to nonblocking");
-                                        let mut last_chunk = 0;
+                                        // let mut last_chunk = 0;
                                         loop {
                                             match stream.read(&mut rx_buf) {
                                                 Ok(len) => {
@@ -379,6 +379,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                         log::info!("got 0-length read, concluding we're at an EOF...");
                                                         break;
                                                     }
+                                                    /*
                                                     if last_chunk == 0 {
                                                         last_chunk = len;
                                                     } else {
@@ -386,7 +387,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                             log::info!("heuristic termination of read loop");
                                                             break;
                                                         }
-                                                    }
+                                                    }*/
                                                 },
                                                 Err(e) => {
                                                     log::info!("quitting read loop with err {:?}", e);
