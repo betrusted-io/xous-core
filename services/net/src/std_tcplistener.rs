@@ -67,6 +67,7 @@ pub(crate) fn std_tcp_accept(
     mut msg: xous::MessageEnvelope,
     iface: &mut Interface::<NetPhy>,
     tcp_accept_waiting: &mut Vec<Option<AcceptingSocket>>,
+    tcp_server_remote_close_poll: &mut Vec<SocketHandle>,
     our_sockets: &Vec<Option<SocketHandle>>,
 ) {
     let fd = (msg.body.id() >> 16) & 0xffff;
@@ -97,6 +98,7 @@ pub(crate) fn std_tcp_accept(
     if socket.is_active() {
         log::debug!("accept did not block; immediately returning TcpSocket");
         let buf = body.buf.as_slice_mut::<u8>();
+        tcp_server_remote_close_poll.push(*handle);
         tcp_accept_success(buf, fd as u16, socket.remote_endpoint());
         return;
     }
@@ -121,7 +123,7 @@ pub(crate) fn std_tcp_accept(
 }
 
 pub(crate) fn tcp_accept_success(buf: &mut [u8], fd: u16, ep: IpEndpoint) {
-    log::debug!("tcp accept: {:?}", ep);
+    log::debug!("tcp accept: remote {:?}", ep);
     buf[0] = 0;
     let fd_arr = fd.to_le_bytes();
     buf[1] = fd_arr[0];

@@ -246,6 +246,9 @@ fn main() -> ! {
     // socket handles waiting to enter the closed state
     let mut tcp_tx_wait_fin: Vec<(SocketHandle, xous::MessageSender)> = Vec::new();
 
+    // socket handles corresponding to servers that could be closed by clients
+    let mut tcp_server_remote_close_poll: Vec<SocketHandle> = Vec::new();
+
     // When a client issues a Connect request, it will get placed here while the connection is
     // being established.
     let mut tcp_connect_waiting: Vec<
@@ -819,6 +822,7 @@ fn main() -> ! {
                     msg,
                     &mut iface,
                     &mut tcp_accept_waiting,
+                    &mut tcp_server_remote_close_poll,
                     process_sockets.entry(pid).or_default(),
                 );
                 xous::try_send_message(
@@ -1317,7 +1321,9 @@ fn main() -> ! {
                                         } else {
                                             continue;
                                         }
-                                    } else if socket.state() == smoltcp::socket::TcpState::CloseWait {
+                                    } else if socket.state() == smoltcp::socket::TcpState::CloseWait
+                                    // this state added to handle the auto-close edge case on a remote hang-up
+                                    || socket.state() == smoltcp::socket::TcpState::Closed {
                                         // stop waiting if we're in CloseWait, as we don't plan to transmit
                                     } else {
                                         continue;
@@ -1330,7 +1336,9 @@ fn main() -> ! {
 
                     // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
-                        if socket.state() == smoltcp::socket::TcpState::CloseWait {
+                        if socket.state() == smoltcp::socket::TcpState::CloseWait
+                        // this state added to handle the auto-close edge case on a remote hang-up
+                        || socket.state() == smoltcp::socket::TcpState::Closed {
                             log::debug!("rxrcv connection closed");
                             let body = env.body.memory_message_mut().unwrap();
                             log::debug!("rxrcv of {}", 0);
@@ -1372,7 +1380,10 @@ fn main() -> ! {
                             &mut None => continue,
                             Some(s) => {
                                 socket = iface.get_socket::<TcpSocket>(s.handle);
-                                if !socket.can_send() {
+                                log::debug!("tx_state: {:?} {:?}", socket.state(), socket.local_endpoint());
+                                if socket.state() == smoltcp::socket::TcpState::Closed {
+                                    // stop waiting if the stocket just closed on us outright
+                                } else if !socket.can_send() {
                                     if let Some(trigger) = s.expiry {
                                         if trigger.get() < now {
                                             // timer expired
@@ -1388,7 +1399,7 @@ fn main() -> ! {
                         connection.take().unwrap()
                     };
 
-                    if !socket.can_send() {
+                    if !socket.can_send() || socket.state() == smoltcp::socket::TcpState::Closed {
                         respond_with_error(env, NetError::TimedOut);
                         continue;
                     }
@@ -1437,6 +1448,7 @@ fn main() -> ! {
                         Some(s) => {
                             let socket = iface.get_socket::<TcpSocket>(s.handle);
                             if socket.is_active() {
+                                tcp_server_remote_close_poll.push(s.handle);
                                 ep = socket.remote_endpoint();
                                 connection.take().unwrap()
                             } else {
@@ -1546,10 +1558,31 @@ fn main() -> ! {
                     if !socket.is_open() {
                         log::debug!("socket closed {:?}", socket.local_endpoint());
                         iface.remove_socket(*handle);
+                        tcp_server_remote_close_poll.retain(|x| {
+                            *x != *handle
+                        });
                         xous::return_scalar(*sender, 0).ok();
                         false
                     } else {
                         log::debug!("socket waiting to close: {:?} {:?}->{:?}", socket.state(), socket.local_endpoint(), socket.remote_endpoint());
+                        true
+                    }
+                });
+
+                tcp_server_remote_close_poll.retain(|handle| {
+                    let socket = iface.get_socket::<TcpSocket>(*handle);
+                    log::debug!("remote close poll: state {:?} local {:?}", socket.state(), socket.local_endpoint());
+                    if socket.state() == smoltcp::socket::TcpState::CloseWait {
+                        // initiate the closing ack, but allow the explicit drop to remove the socket once the handle is finished
+                        // this handles the special case that a stream was accepted, but then the client hangs up
+                        // and the server isn't actively polling the loop. By pushing the socket to the "close"
+                        // state, we allow the three-way close handshake to actually complete instead of hanging
+                        // in a FIN-WAIT-2 state.
+                        socket.close();
+                    }
+                    if !socket.is_open() {
+                        false
+                    } else {
                         true
                     }
                 });

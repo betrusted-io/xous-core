@@ -99,6 +99,7 @@ pub(crate) fn std_tcp_tx(
     };
 
     let socket = iface.get_socket::<TcpSocket>(*handle);
+    // handle the case that the connection closed due to the receiver quitting
     if !socket.can_send() {
         log::trace!("tx can't send, will retry");
         let expiry = body
