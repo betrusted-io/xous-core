@@ -215,7 +215,7 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                 }
             }),
             Some(ConnectionManagerOpcode::ComInt) => msg_scalar_unpack!(msg, ints, raw_arg, 0, 0, {
-                log::debug!("debug: {:x}, {:x}", ints, raw_arg);
+                log::trace!("debug: {:x}, {:x}", ints, raw_arg);
                 let mut mask_bit: u16 = 1;
                 for _ in 0..16 {
                     let source = ComIntSources::from(mask_bit & (ints as u16));
