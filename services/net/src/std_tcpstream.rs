@@ -153,6 +153,7 @@ pub(crate) fn std_tcp_rx(
     iface: &mut Interface::<NetPhy>,
     tcp_rx_waiting: &mut Vec<Option<WaitingSocket>>,
     our_sockets: &Vec<Option<SocketHandle>>,
+    nonblocking: bool,
 ) {
     let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
     let body = match msg.body.memory_message_mut() {
@@ -162,6 +163,9 @@ pub(crate) fn std_tcp_rx(
             return;
         }
     };
+    let expiry = body
+        .offset
+        .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
 
     // Offset is used as a flag to indicate an error. `None` means an error occured. `Some` means no error.
     body.offset = None;
@@ -177,7 +181,12 @@ pub(crate) fn std_tcp_rx(
     let socket = iface.get_socket::<TcpSocket>(*handle);
     if socket.can_recv() {
         log::debug!("receiving data right away");
-        match socket.recv_slice(body.buf.as_slice_mut()) {
+        let buflen = if let Some(valid) = body.valid {
+            valid.get()
+        } else {
+            0
+        };
+        match socket.recv_slice(&mut body.buf.as_slice_mut()[..buflen]) {
             Ok(bytes) => {
                 // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
                 // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned
@@ -193,14 +202,18 @@ pub(crate) fn std_tcp_rx(
         }
         return;
     }
+    if nonblocking {
+        respond_with_error(msg, NetError::WouldBlock);
+        return;
+    }
 
     log::debug!("socket was not able to receive, adding it to list of waiting messages");
 
     // Add the message to the TcpRxWaiting list, which will prevent it from getting
     // responded to right away.
-    let expiry = body
-        .offset
-        .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
+    if expiry.is_some() {
+        log::debug!("read with timeout set: {:?}", expiry);
+    }
     insert_or_append(
         tcp_rx_waiting,
         WaitingSocket {
@@ -213,8 +226,11 @@ pub(crate) fn std_tcp_rx(
 
 pub(crate) fn std_tcp_peek(
     mut msg: xous::MessageEnvelope,
+    timer: &Ticktimer,
     iface: &mut Interface::<NetPhy>,
     our_sockets: &Vec<Option<SocketHandle>>,
+    tcp_peek_waiting: &mut Vec<Option<WaitingSocket>>,
+    nonblocking: bool,
 ) {
     let connection_handle_index = (msg.body.id() >> 16) & 0xffff;
     let body = match msg.body.memory_message_mut() {
@@ -224,6 +240,9 @@ pub(crate) fn std_tcp_peek(
             return;
         }
     };
+    let expiry = body
+    .offset
+    .map(|x| unsafe { NonZeroU64::new_unchecked(x.get() as u64 + timer.elapsed_ms()) });
 
     // Offset is used to indicate an error. None=>Error, Some=>no error
     body.offset = None;
@@ -238,8 +257,13 @@ pub(crate) fn std_tcp_peek(
 
     let socket = iface.get_socket::<TcpSocket>(*handle);
     if socket.can_recv() {
-        log::trace!("receiving data right away");
-        match socket.peek_slice(body.buf.as_slice_mut()) {
+        log::debug!("peeking data right away");
+        let buflen = if let Some(valid) = body.valid {
+            valid.get()
+        } else {
+            0
+        };
+        match socket.peek_slice(&mut body.buf.as_slice_mut()[..buflen]) {
             Ok(bytes) => {
                 // it's actually valid to receive 0 bytes, but the encoding of this field doesn't allow it.
                 // so, `None` is abused to represent the value of "0" bytes, which is what is naturally returned
@@ -254,11 +278,20 @@ pub(crate) fn std_tcp_peek(
             }
         }
     } else {
-        // No data available, so indicate `None`
-        body.valid = None;
-        // Also indicate no error
-        body.offset = xous::MemoryAddress::new(1);
-        body.buf.as_slice_mut::<u32>()[0] = 0;
+        if nonblocking {
+            respond_with_error(msg, NetError::WouldBlock);
+        } else {
+            // Add the message to the TcpRxWaiting list, which will prevent it from getting
+            // responded to right away.
+            insert_or_append(
+                tcp_peek_waiting,
+                WaitingSocket {
+                    env: msg,
+                    handle: *handle,
+                    expiry,
+                },
+            );
+        }
     }
 }
 
