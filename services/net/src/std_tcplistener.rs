@@ -6,6 +6,7 @@ pub(crate) fn std_tcp_listen(
     mut msg: xous::MessageEnvelope,
     iface: &mut Interface::<NetPhy>,
     our_sockets: &mut Vec<Option<SocketHandle>>,
+    trng: &trng::Trng,
     ) {
     // Ignore nonblocking and scalar messages
     let body = match msg.body.memory_message_mut() {
@@ -18,7 +19,12 @@ pub(crate) fn std_tcp_listen(
     };
 
     let bytes = body.buf.as_slice::<u8>();
-    let local_port = u16::from_le_bytes([bytes[0], bytes[1]]);
+    let mut local_port = u16::from_le_bytes([bytes[0], bytes[1]]);
+    let mut retry_local_port = false;
+    if local_port == 0 {
+        local_port = (trng.get_u32().unwrap() % 16384 + 49152) as u16;
+        retry_local_port = true;
+    }
     let address = match parse_address(&bytes[2..]) {
         Some(addr) => addr,
         None => {
@@ -40,17 +46,37 @@ pub(crate) fn std_tcp_listen(
     let handle = iface.add_socket(tcp_socket);
     let tcp_socket = iface.get_socket::<TcpSocket>(handle);
 
-    if let Err(e) = tcp_socket
-        .listen(local_port)
-        .map_err(|e| match e {
-            smoltcp::Error::Illegal => NetError::SocketInUse,
-            smoltcp::Error::Unaddressable => NetError::Unaddressable,
-            _ => NetError::LibraryError,
-        })
-    {
-        log::debug!("couldn't listen: {:?}", e);
-        std_failure(msg, e);
-        return;
+    loop {
+        if let Err(e) = tcp_socket
+            .listen(local_port)
+            .map_err(|e| match e {
+                smoltcp::Error::Illegal => NetError::SocketInUse,
+                smoltcp::Error::Unaddressable => NetError::Unaddressable,
+                _ => NetError::LibraryError,
+            })
+        {
+            match e {
+                NetError::SocketInUse => {
+                    // catch the case that someone gave us port 0, we picked a random port, and it didn't work out.
+                    // basically, try it again...
+                    if retry_local_port {
+                        local_port = (trng.get_u32().unwrap() % 16384 + 49152) as u16;
+                        continue;
+                    } else {
+                        log::debug!("couldn't listen: {:?}", e);
+                        std_failure(msg, e);
+                        return;
+                    }
+                }
+                _ => {
+                    log::debug!("couldn't listen: {:?}", e);
+                    std_failure(msg, e);
+                    return;
+                }
+            }
+        } else {
+            break;
+        }
     }
 
     // Add the socket into our process' list of sockets, and pass the index back as the `fd` parameter for future reference.
@@ -61,6 +87,9 @@ pub(crate) fn std_tcp_listen(
     log::debug!("successfully connected: {} -> {:?}:{}", fd, address, local_port);
     bfr[0] = 0;
     bfr[1] = fd;
+    let local_port_u8 = local_port.to_le_bytes();
+    bfr[2] = local_port_u8[0];
+    bfr[3] = local_port_u8[1];
 }
 
 pub(crate) fn std_tcp_accept(
