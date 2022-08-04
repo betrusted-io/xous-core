@@ -628,7 +628,7 @@ fn wrapped_main() -> ! {
     let _ = thread::spawn({
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            tt.sleep_ms(4000).unwrap(); // a brief pause, to allow the other startup bits to finish running
+            tt.sleep_ms(2000).unwrap(); // a brief pause, to allow the other startup bits to finish running
             pddb::Pddb::new().try_mount();
         }
     });
