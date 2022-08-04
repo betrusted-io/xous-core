@@ -184,7 +184,7 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
                                     } => {
                                         log::trace!("outgoing arp: {:?} {:?} {:?}", source_hardware_addr, source_protocol_addr, target_protocol_addr);
                                         if target_protocol_addr.as_bytes() == [127, 0, 0, 1] && operation == ArpOperation::Request {
-                                            log::debug!("intercepted outgoing arp for 127.0.0.1: {:?}", pkt);
+                                            log::trace!("intercepted outgoing arp for 127.0.0.1: {:?}", pkt);
                                             self.wlan_queue_localhost_arp(
                                                 source_hardware_addr.as_bytes().try_into().unwrap(),
                                                 source_protocol_addr,
@@ -194,7 +194,7 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
                                             return result;
                                         } else if source_protocol_addr.as_bytes() == [127, 0, 0, 1] && operation == ArpOperation::Request {
                                             // reverse lookup case
-                                            log::debug!("intercepted outgoing arp for own IP: {:?} {:?}", target_protocol_addr, pkt);
+                                            log::trace!("intercepted outgoing arp for own IP: {:?} {:?}", target_protocol_addr, pkt);
                                             self.wlan_queue_localhost_arp(
                                                 source_hardware_addr.as_bytes().try_into().unwrap(),
                                                 source_protocol_addr,
