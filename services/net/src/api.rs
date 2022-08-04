@@ -310,6 +310,8 @@ pub(crate) enum Opcode {
     /// =======|=========
     ///      0 | 0 indicating success
     ///      1 | Connection index
+    ///      2 | local port LSB (in case the specified port was 0)
+    ///      3 | local port MSB
     ///
     /// # Errors
     ///
@@ -359,7 +361,11 @@ pub(crate) enum Opcode {
     StdTcpStreamShutdown = 46,
 
     LoopbackRx = 47,
+
+    // do not use any numbers higher than 0x8000 as that is reserved for the nonblocking flag
 }
+#[allow(dead_code)]
+pub(crate) const NONBLOCKING_FLAG:usize = 0x8000; // when set, modulates a Peek or Read to be nonblocking
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, Default)]
 pub(crate) struct SsidList {
