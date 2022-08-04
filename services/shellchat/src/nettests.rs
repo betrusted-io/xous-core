@@ -4,36 +4,68 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(crate) fn start_batch_tests() {
     let _ = thread::spawn({
         move || {
-            log::info!("bind_error");
+            log::info!("################################################## bind_error");
             bind_error();
-            log::info!("connect_error");
+            log::info!("################################################## connect_error");
             connect_error();
-            log::info!("listen_localhost");
+            log::info!("################################################## listen_localhost");
             listen_localhost();
-            log::info!("connect_loopback");
+            log::info!("################################################## connect_loopback");
             connect_loopback();
-            log::info!("smoke_test");
+            log::info!("################################################## smoke_test");
             smoke_test();
-            log::info!("read_eof");
+            log::info!("################################################## read_eof");
             read_eof();
-            log::info!("write_close");
+            log::info!("################################################## write_close");
             write_close();
-            log::info!("multiple_connect_serial");
-            multiple_connect_serial();
-            log::info!("multiple_connect_interleaved_greedy_schedule");
-            multiple_connect_interleaved_greedy_schedule();
-            log::info!("multiple_connect_interleaved_lazy_schedule");
-            multiple_connect_interleaved_lazy_schedule();
-            log::info!("partial_read");
+            log::info!("################################################## partial_read");
             partial_read();
-            log::info!("read_vectored");
+            log::info!("################################################## read_vectored");
             read_vectored();
+            log::info!("################################################## write_vectored");
+            write_vectored();
+            log::info!("################################################## tcp_clone_smoke");
+            tcp_clone_smoke();
+            log::info!("################################################## tcp_clone_two_read");
+            tcp_clone_two_read();
+            log::info!("################################################## tcp_clone_two_write");
+            tcp_clone_two_write();
+            log::info!("################################################## clone_while_reading");
+            clone_while_reading();
+            log::info!("################################################## clone_accept_smoke");
+            clone_accept_smoke();
+            log::info!("################################################## clone_accept_concurrent");
+            clone_accept_concurrent();
+            log::info!("################################################## timeouts");
+            timeouts();
+            log::info!("################################################## test_read_timeout");
+            test_read_timeout();
+            log::info!("################################################## test_read_with_timeout");
+            test_read_with_timeout();
+            log::info!("################################################## test_timeout_zero_duration");
+            test_timeout_zero_duration();
+            log::info!("################################################## nodelay");
+            nodelay();
+            log::info!("################################################## ttl");
+            ttl();
+            log::info!("################################################## set_nonblocking");
+            set_nonblocking();
+            log::info!("################################################## peek");
+            peek();
+            log::info!("################################################## connect_timeout_valid");
+            connect_timeout_valid();
+            log::info!("################################################## multiple_connect_serial");
+            multiple_connect_serial();
+            log::info!("################################################## multiple_connect_interleaved_greedy_schedule");
+            multiple_connect_interleaved_greedy_schedule();
+            log::info!("################################################## multiple_connect_interleaved_lazy_schedule");
+            multiple_connect_interleaved_lazy_schedule();
         }
     });
 }
@@ -48,14 +80,8 @@ pub fn next_test_ip4() -> SocketAddr {
     SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), port))
 }
 
-pub fn next_test_ip6() -> SocketAddr {
-    let port = PORT.fetch_add(1, Ordering::SeqCst) as u16 + base_port();
-    SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1), port, 0, 0))
-}
-
 fn each_ip(f: &mut dyn FnMut(SocketAddr)) {
     f(next_test_ip4());
-    f(next_test_ip6());
 }
 
 macro_rules! t {
@@ -72,10 +98,7 @@ fn bind_error() {
         Ok(..) => panic!(),
         Err(e) =>
         {
-            #[cfg(not(any(target_os = "none", target_os = "xous")))]
-            assert_eq!(e.kind(), ErrorKind::AddrNotAvailable);
-            #[cfg(any(target_os = "none", target_os = "xous"))]
-            assert_eq!(e.kind(), ErrorKind::InvalidInput); // official test says this should be ErrorKind::AddrNotAvailable, but we report this.
+            assert_eq!(e.kind(), ErrorKind::AddrNotAvailable); // this will break on earlier versions of stdlib
         }
     }
 }
@@ -89,8 +112,7 @@ fn connect_error() {
             e.kind() == ErrorKind::ConnectionRefused
                 || e.kind() == ErrorKind::InvalidInput // this is how we will report it in 1.62.1
                 || e.kind() == ErrorKind::AddrInUse
-                || e.kind() == ErrorKind::AddrNotAvailable // this is how it's reported on Windows
-                || e.kind() == ErrorKind::Other, // this is the error as reported on Xous.
+                || e.kind() == ErrorKind::AddrNotAvailable, // this is how it's reported on Windows
             "bad error: {} {:?}",
             e,
             e.kind()
@@ -100,17 +122,25 @@ fn connect_error() {
 
 fn listen_localhost() {
     let socket_addr = next_test_ip4();
+    //log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~listen_localhost with addr: {:?}", socket_addr);
     let listener = t!(TcpListener::bind(&socket_addr));
+    //log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Listener created");
 
     let _t = thread::spawn(move || {
+        //log::info!("+++++++++++++++++++++++++++++++++in Tx thread");
         let mut stream = t!(TcpStream::connect(&("localhost", socket_addr.port())));
+        //log::info!("+++++++++++++++++++++++++++++++++spawned localhost writer");
         t!(stream.write(&[144]));
+        //log::info!("+++++++++++++++++++++++++++++++++wrote test byte");
     });
 
+    //log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~calling listener.accept()");
     let mut stream = t!(listener.accept()).0;
     let mut buf = [0];
+    //log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~got localhost stream");
     t!(stream.read(&mut buf));
     assert!(buf[0] == 144);
+    //log::info!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~got test byte");
 }
 
 fn connect_loopback() {
@@ -172,17 +202,27 @@ fn read_eof() {
 
 fn write_close() {
     each_ip(&mut |addr| {
-        let acceptor = t!(TcpListener::bind(&addr));
+        let acceptor = t!(TcpListener::bind(&addr)); // listener is on 127.0.0.1
+        log::info!("++++++++++++++++++++++++++create server");
 
         let (tx, rx) = channel();
         let _t = thread::spawn(move || {
-            drop(t!(TcpStream::connect(&addr)));
+            drop(t!(TcpStream::connect(&addr))); // this comes from 10.0.245.184
+            log::info!("----------------------------create and drop connection to server");
+            // we get stuck on the above connect trying to close its connection to the TcpListener
+            // it is stuck on FinWait2
+            // the Listener is not responding with an ACK
             tx.send(()).unwrap();
+            log::info!("----------------------------signal that we should proceed to send the data to the closed server");
         });
 
+        log::info!("++++++++++++++++++++++++++try to establish connection");
         let mut stream = t!(acceptor.accept()).0;
+        log::info!("++++++++++++++++++++++++++established");
+        // the stuck-ness happens around here in real terms
         rx.recv().unwrap();
         let buf = [0];
+        log::info!("++++++++++++++++++++++++++try to write to a stream that's now closed");
         match stream.write(&buf) {
             Ok(..) => {}
             Err(e) => {
@@ -194,12 +234,13 @@ fn write_close() {
                 );
             }
         }
+        log::info!("++++++++++++++++++++++++++done");
     })
 }
 
 fn multiple_connect_serial() {
     each_ip(&mut |addr| {
-        let max = 10;
+        let max = 3;
         let acceptor = t!(TcpListener::bind(&addr));
 
         let _t = thread::spawn(move || {
@@ -219,7 +260,7 @@ fn multiple_connect_serial() {
 }
 
 fn multiple_connect_interleaved_greedy_schedule() {
-    const MAX: usize = 10;
+    const MAX: usize = 3;
     each_ip(&mut |addr| {
         let acceptor = t!(TcpListener::bind(&addr));
 
@@ -256,7 +297,7 @@ fn multiple_connect_interleaved_greedy_schedule() {
 
 
 fn multiple_connect_interleaved_lazy_schedule() {
-    const MAX: usize = 10;
+    const MAX: usize = 3;
     each_ip(&mut |addr| {
         let acceptor = t!(TcpListener::bind(&addr));
 
@@ -329,12 +370,12 @@ fn read_vectored() {
         ],));
         assert!(len > 0);
         assert_eq!(b, [10]);
+        log::info!("len: {}, c: {:?}", len, c);
         // some implementations don't support readv, so we may only fill the first buffer
         assert!(len == 1 || c == [11, 12, 0]);
     })
 }
 
-#[test]
 fn write_vectored() {
     each_ip(&mut |addr| {
         let srv = t!(TcpListener::bind(&addr));
@@ -359,7 +400,6 @@ fn write_vectored() {
 }
 
 
-#[test]
 fn tcp_clone_smoke() {
     each_ip(&mut |addr| {
         let acceptor = t!(TcpListener::bind(&addr));
@@ -390,7 +430,6 @@ fn tcp_clone_smoke() {
     })
 }
 
-#[test]
 fn tcp_clone_two_read() {
     each_ip(&mut |addr| {
         let acceptor = t!(TcpListener::bind(&addr));
@@ -424,7 +463,6 @@ fn tcp_clone_two_read() {
     })
 }
 
-#[test]
 fn tcp_clone_two_write() {
     each_ip(&mut |addr| {
         let acceptor = t!(TcpListener::bind(&addr));
@@ -451,7 +489,6 @@ fn tcp_clone_two_write() {
     })
 }
 
-#[test]
 fn clone_while_reading() {
     each_ip(&mut |addr| {
         let accept = t!(TcpListener::bind(&addr));
@@ -491,7 +528,6 @@ fn clone_while_reading() {
     })
 }
 
-#[test]
 fn clone_accept_smoke() {
     each_ip(&mut |addr| {
         let a = t!(TcpListener::bind(&addr));
@@ -509,7 +545,6 @@ fn clone_accept_smoke() {
     })
 }
 
-#[test]
 fn clone_accept_concurrent() {
     each_ip(&mut |addr| {
         let a = t!(TcpListener::bind(&addr));
@@ -541,9 +576,6 @@ fn clone_accept_concurrent() {
 // FIXME: re-enabled openbsd tests once their socket timeout code
 //        no longer has rounding errors.
 // VxWorks ignores SO_SNDTIMEO.
-#[cfg_attr(any(target_os = "netbsd", target_os = "openbsd", target_os = "vxworks"), ignore)]
-#[cfg_attr(target_env = "sgx", ignore)] // FIXME: https://github.com/fortanix/rust-sgx/issues/31
-#[test]
 fn timeouts() {
     let addr = next_test_ip4();
     let listener = t!(TcpListener::bind(&addr));
@@ -569,8 +601,6 @@ fn timeouts() {
     drop(listener);
 }
 
-#[test]
-#[cfg_attr(target_env = "sgx", ignore)] // FIXME: https://github.com/fortanix/rust-sgx/issues/31
 fn test_read_timeout() {
     let addr = next_test_ip4();
     let listener = t!(TcpListener::bind(&addr));
@@ -590,8 +620,6 @@ fn test_read_timeout() {
     drop(listener);
 }
 
-#[test]
-#[cfg_attr(target_env = "sgx", ignore)] // FIXME: https://github.com/fortanix/rust-sgx/issues/31
 fn test_read_with_timeout() {
     let addr = next_test_ip4();
     let listener = t!(TcpListener::bind(&addr));
@@ -619,7 +647,6 @@ fn test_read_with_timeout() {
 
 // Ensure the `set_read_timeout` and `set_write_timeout` calls return errors
 // when passed zero Durations
-#[test]
 fn test_timeout_zero_duration() {
     let addr = next_test_ip4();
 
@@ -637,8 +664,6 @@ fn test_timeout_zero_duration() {
     drop(listener);
 }
 
-#[test]
-#[cfg_attr(target_env = "sgx", ignore)]
 fn nodelay() {
     let addr = next_test_ip4();
     let _listener = t!(TcpListener::bind(&addr));
@@ -652,8 +677,6 @@ fn nodelay() {
     assert_eq!(false, t!(stream.nodelay()));
 }
 
-#[test]
-#[cfg_attr(target_env = "sgx", ignore)]
 fn ttl() {
     let ttl = 100;
 
@@ -669,8 +692,6 @@ fn ttl() {
     assert_eq!(ttl, t!(stream.ttl()));
 }
 
-#[test]
-#[cfg_attr(target_env = "sgx", ignore)]
 fn set_nonblocking() {
     let addr = next_test_ip4();
     let listener = t!(TcpListener::bind(&addr));
@@ -691,7 +712,6 @@ fn set_nonblocking() {
     }
 }
 
-#[test]
 #[cfg_attr(target_env = "sgx", ignore)] // FIXME: https://github.com/fortanix/rust-sgx/issues/31
 fn peek() {
     each_ip(&mut |addr| {
@@ -723,7 +743,6 @@ fn peek() {
     })
 }
 
-#[test]
 #[cfg_attr(target_env = "sgx", ignore)] // FIXME: https://github.com/fortanix/rust-sgx/issues/31
 fn connect_timeout_valid() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
