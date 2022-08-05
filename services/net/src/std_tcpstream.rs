@@ -71,7 +71,7 @@ pub(crate) fn std_tcp_connect(
         tcp_connect_waiting,
         (msg, handle, idx, local_port, remote_port),
     );
-    log::info!("connect waiting now: {}, {:?} {:?} {:?}", idx, handle, local_port, remote_port);
+    log::debug!("connect waiting now: {}, {:?} {:?} {:?}", idx, handle, local_port, remote_port);
 }
 
 pub(crate) fn std_tcp_tx(

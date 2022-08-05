@@ -145,7 +145,7 @@ impl <'a> NetPhyTxToken<'a> {
             repr.emit(&mut packet);
         }
         let pkt = frame.into_inner().to_vec();
-        log::info!("stuffing arp {:?}", pkt);
+        log::debug!("stuffing arp {:?}", pkt);
         self.com.wlan_queue_loopback(&pkt);
         self.loopback_rx(pkt.len());
     }
@@ -168,12 +168,12 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
                 local_hwaddr[2..6].copy_from_slice(&MAC_ADDRESS_LSB.load(Ordering::SeqCst).to_be_bytes());
                 local_hwaddr[0..2].copy_from_slice(&MAC_ADDRESS_MSB.load(Ordering::SeqCst).to_be_bytes());
                 if frame.dst_addr() == EthernetAddress::default() {
-                    log::info!("loopback packet redirect");
+                    log::debug!("loopback packet redirect");
                     // override the destination address to be our own address
                     frame.set_dst_addr(smoltcp::wire::EthernetAddress(local_hwaddr));
                     loopback = true;
                 } else if frame.dst_addr().as_bytes() == local_hwaddr {
-                    log::info!("loopback return packet redirect");
+                    log::debug!("loopback return packet redirect");
                     loopback = true;
                 }
             }

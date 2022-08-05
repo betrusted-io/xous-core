@@ -193,7 +193,7 @@ fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -1020,7 +1020,7 @@ fn main() -> ! {
                     let socket = iface.get_socket::<TcpSocket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
                     let no_delay = args.arg1 != 0;
-                    log::info!("setting nagle to {}", !no_delay);
+                    log::warn!("Setting nagle to {}, see issue #210 about readback!", !no_delay);
                     socket.set_nagle_enabled(!no_delay);
                     xous::return_scalar(msg.sender, 0).ok();
                 } else {
@@ -1705,7 +1705,7 @@ fn main() -> ! {
                         tcp_server_remote_close_poll.retain(|x| {
                             *x != *handle
                         });
-                        log::info!("would return_scalar now");
+                        // log::info!("would return_scalar now");
                         xous::return_scalar(*sender, 0).ok();
                         false
                     } else {
