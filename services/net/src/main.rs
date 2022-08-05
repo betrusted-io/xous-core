@@ -1695,7 +1695,7 @@ fn main() -> ! {
                     // FORCE_CLOSE_COUNT is an arbitrary threshold where we just decide to stop waiting for the other
                     // side to send the final ack: it's long enough that it almost never times out
                     // incorrectly, but short enough that we're not keeping around baggage forever.
-                    const FORCE_CLOSE_COUNT: u32 = 8;
+                    const FORCE_CLOSE_COUNT: u32 = 16;
                     if !socket.is_open() || *count > FORCE_CLOSE_COUNT {
                         if *count > FORCE_CLOSE_COUNT {
                             log::warn!("forced close on {:?}", socket.local_endpoint());
