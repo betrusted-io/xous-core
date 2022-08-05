@@ -227,6 +227,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - `backalyzer` script added to analyze backups. Useful for debug & recovery of data.
   - Fixed aes-keywrap bug - OG library was faulty; swapped in one that passes NIST test vectors & added transparent migration.
 - Net fixes (`std` testbench compliance):
+  - added loopback interface by "faking it" over the COM as smoltcp does not yet have the feature (loops back packets and ARP packets)
   - `net test` command added when the nettest feature is turned on
   - get error codes into compliance with library expcectations
   - add nonblocking feature
