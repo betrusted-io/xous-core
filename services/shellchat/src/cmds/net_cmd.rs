@@ -652,8 +652,8 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
         contents
     );
 
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    stream.write(response.as_bytes()).ok();
+    stream.flush().ok();
 }
 
 pub struct ThreadPool {
