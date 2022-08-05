@@ -192,7 +192,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                     }
                                                     count += 1;
                                                     if count == 10 && short_test {
-                                                        stream.flush().unwrap();
+                                                        stream.flush().ok();
                                                         break;
                                                     }
                                                 }
@@ -203,7 +203,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     });
-                    write!(ret, "Fountain started on port 3333").unwrap();
+                    write!(ret, "Fountain started on port 3333").ok();
                 }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
@@ -614,7 +614,13 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
     );
 
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    match stream.read(&mut buffer) {
+        Ok(_) => {},
+        Err(e) => {
+            log::warn!("Server connection error; closing connection {:?}", e);
+            return;
+        }
+    }
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
