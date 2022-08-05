@@ -10,73 +10,108 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub(crate) fn start_batch_tests() {
     let _ = thread::spawn({
         move || {
-            let run_passing = false;
+            let run_passing = true;
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            const PRINT_DELAY: usize = 3000;
             if run_passing {
                 log::info!("################################################## bind_error");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 bind_error();
                 log::info!("################################################## connect_error");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 connect_error();
                 log::info!("################################################## listen_localhost");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 listen_localhost();
                 log::info!("################################################## connect_loopback");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 connect_loopback();
                 log::info!("################################################## smoke_test");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 smoke_test();
                 log::info!("################################################## read_eof");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 read_eof();
                 log::info!("################################################## write_close");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 write_close();
                 log::info!("################################################## partial_read");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 partial_read();
 
                 // note: these tests don't pass in their native form because our Close is blocking
                 // tried to make it non-blocking but other things break because the smoltcp layer doesn't
                 // clear enough state if you just let things move on (I think).
                 log::info!("################################################## read_vectored");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 read_vectored();
                 log::info!("################################################## write_vectored");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 write_vectored();
 
                 // This test cannot be run until issue #210 is fixed see https://github.com/betrusted-io/xous-core/issues/210
                 //log::info!("################################################## nodelay");
                 //nodelay();
                 log::info!("################################################## ttl");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 ttl();
                 log::info!("################################################## set_nonblocking");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 set_nonblocking();
                 log::info!("################################################## peek");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 peek();
 
                 log::info!("################################################## timeouts");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 timeouts();
                 log::info!("################################################## test_read_timeout");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 test_read_timeout();
                 log::info!("################################################## test_read_with_timeout");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 test_read_with_timeout();
                 log::info!("################################################## test_timeout_zero_duration");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 test_timeout_zero_duration();
                 log::info!("################################################## connect_timeout_valid");
+                tt.sleep_ms(PRINT_DELAY).ok();
                 connect_timeout_valid();
+
+                log::info!("################################################## tcp_clone_smoke");
+                tt.sleep_ms(PRINT_DELAY).ok();
+                tcp_clone_smoke();
+                log::info!("################################################## tcp_clone_two_read");
+                tt.sleep_ms(PRINT_DELAY).ok();
+                tcp_clone_two_read();
+                log::info!("################################################## tcp_clone_two_write");
+                tt.sleep_ms(PRINT_DELAY).ok();
+                tcp_clone_two_write();
+                log::info!("################################################## clone_while_reading");
+                tt.sleep_ms(PRINT_DELAY).ok();
+                clone_while_reading();
+                log::info!("################################################## clone_accept_smoke");
+                tt.sleep_ms(PRINT_DELAY).ok();
+                clone_accept_smoke();
+                log::info!("################################################## clone_accept_concurrent");
+                tt.sleep_ms(PRINT_DELAY).ok();
+                clone_accept_concurrent();
             }
 
-            log::info!("################################################## tcp_clone_smoke");
-            tcp_clone_smoke();
-            log::info!("################################################## tcp_clone_two_read");
-            tcp_clone_two_read();
-            log::info!("################################################## tcp_clone_two_write");
-            tcp_clone_two_write();
-            log::info!("################################################## clone_while_reading");
-            clone_while_reading();
-            log::info!("################################################## clone_accept_smoke");
-            clone_accept_smoke();
-            log::info!("################################################## clone_accept_concurrent");
-            clone_accept_concurrent();
             log::info!("################################################## multiple_connect_serial");
+            tt.sleep_ms(PRINT_DELAY).ok();
             multiple_connect_serial();
             log::info!("################################################## multiple_connect_interleaved_greedy_schedule");
+            tt.sleep_ms(PRINT_DELAY).ok();
             multiple_connect_interleaved_greedy_schedule();
             log::info!("################################################## multiple_connect_interleaved_lazy_schedule");
+            tt.sleep_ms(PRINT_DELAY).ok();
             multiple_connect_interleaved_lazy_schedule();
+
+            log::info!("################################################## FIN");
+            log::info!("################################################## FIN");
+            log::info!("################################################## FIN");
+            tt.sleep_ms(PRINT_DELAY).ok();
         }
     });
 }
