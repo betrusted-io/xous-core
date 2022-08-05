@@ -540,19 +540,6 @@ impl Com {
         if pkt.len() > NET_MTU {
             return Err(xous::Error::OutOfMemory)
         }
-        {
-            // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
-            // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
-            // Inject the loopback packets. loopback packets always take priority, for now.
-            if let Some(loop_packet) = self.loopback_buf.borrow_mut().pop_front() {
-                // pkt.len() is almost always not loop_packet.len(), just copy the first bit that can fit and the rest is garbarge...
-                for (&s, d) in loop_packet.iter().zip(pkt.iter_mut()) {
-                    *d = s;
-                }
-                // skips polling the COM -- let's hope there wasn't a race condition on the interrupt
-                return Ok(())
-            }
-        }
         let mut prealloc: [u8; NET_MTU] = [0; NET_MTU];
         let len_bytes = (pkt.len() as u16).to_be_bytes();
         prealloc[0] = len_bytes[0];
@@ -562,6 +549,19 @@ impl Com {
         let response = buf.as_flat::<[u8; NET_MTU], _>().expect("couldn't convert WlanFetchPacket buffer");
         for (&src, dst) in response.iter().zip(pkt.iter_mut()) {
             *dst = src;
+        }
+        Ok(())
+    }
+
+    pub fn wlan_fetch_loopback_packet(&self, pkt: &mut [u8]) -> Result<(), xous::Error> {
+        // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
+        // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+        // Inject the loopback packets. loopback packets always take priority, for now.
+        if let Some(loop_packet) = self.loopback_buf.borrow_mut().pop_front() {
+            // pkt.len() is almost always not loop_packet.len(), just copy the first bit that can fit and the rest is garbarge...
+            for (&s, d) in loop_packet.iter().zip(pkt.iter_mut()) {
+                *d = s;
+            }
         }
         Ok(())
     }

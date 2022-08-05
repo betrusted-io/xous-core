@@ -13,6 +13,8 @@ use smoltcp::{
 
 use crate::{MAC_ADDRESS_LSB, MAC_ADDRESS_MSB};
 use core::sync::atomic::Ordering;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 pub struct NetPhy {
     rx_buffer: [u8; NET_MTU],
@@ -20,6 +22,8 @@ pub struct NetPhy {
     com: Com,
     rx_avail: Option<u16>,
     loopback_conn: xous::CID,
+    // tracks the length (and count) of the loopback packets pending
+    loopback_pending: Arc::<Mutex::<VecDeque<u16>>>,
 }
 
 impl<'a> NetPhy {
@@ -30,6 +34,7 @@ impl<'a> NetPhy {
             com: Com::new(&xns).unwrap(),
             rx_avail: None,
             loopback_conn,
+            loopback_pending: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
     // returns None if there was a slot to put the availability into
@@ -49,18 +54,26 @@ impl<'a> phy::Device<'a> for NetPhy {
     type TxToken = NetPhyTxToken<'a>;
 
     fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        if let Some(rx_len) = self.rx_avail.take() {
-            self.com.wlan_fetch_packet(&mut self.rx_buffer[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
+        if let Some(rx_len) = self.loopback_pending.lock().unwrap().pop_front() {
+            // loopback takes precedence
+            self.com.wlan_fetch_loopback_packet(&mut self.rx_buffer[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
 
             Some((NetPhyRxToken{buf: &mut self.rx_buffer[..rx_len as usize]},
-            NetPhyTxToken{buf: &mut self.tx_buffer[..], com: & self.com, loopback_conn: self.loopback_conn}))
+            NetPhyTxToken{buf: &mut self.tx_buffer[..], com: & self.com, loopback_conn: self.loopback_conn, loopback_count: self.loopback_pending.clone()}))
         } else {
-            None
+            if let Some(rx_len) = self.rx_avail.take() {
+                self.com.wlan_fetch_packet(&mut self.rx_buffer[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
+
+                Some((NetPhyRxToken{buf: &mut self.rx_buffer[..rx_len as usize]},
+                NetPhyTxToken{buf: &mut self.tx_buffer[..], com: & self.com, loopback_conn: self.loopback_conn, loopback_count: self.loopback_pending.clone()}))
+            } else {
+                None
+            }
         }
     }
 
     fn transmit(&'a mut self) -> Option<Self::TxToken> {
-        Some(NetPhyTxToken{buf: &mut self.tx_buffer[..], com: &self.com, loopback_conn: self.loopback_conn})
+        Some(NetPhyTxToken{buf: &mut self.tx_buffer[..], com: &self.com, loopback_conn: self.loopback_conn, loopback_count: self.loopback_pending.clone()})
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
@@ -90,10 +103,12 @@ pub struct NetPhyTxToken<'a> {
     buf: &'a mut [u8],
     com: &'a Com,
     loopback_conn: xous::CID,
+    loopback_count: Arc::<Mutex::<VecDeque<u16>>>,
 }
 impl <'a> NetPhyTxToken<'a> {
     /// Initiates the Rx side of things to read out the loopback packet that was queued
     fn loopback_rx(&self, rxlen: usize) {
+        self.loopback_count.lock().unwrap().push_back(rxlen as u16);
         xous::try_send_message(self.loopback_conn,
             xous::Message::new_scalar(crate::Opcode::LoopbackRx.to_usize().unwrap(), rxlen, 0, 0, 0)
         ).ok();

@@ -1263,11 +1263,15 @@ fn main() -> ! {
                     }
                 }
             }
-            Some(Opcode::LoopbackRx) => msg_scalar_unpack!(msg, rxlen, _, _, _, {
+            Some(Opcode::LoopbackRx) => msg_scalar_unpack!(msg, _rxlen, _, _, _, {
+                /*
+                // the rx buf for loopback is different from the wlan interface
+                // loopback uses an "infinite" internal buffer with its own length tracking, so we don't need
+                // to track rxlen
                 match iface.device_mut().push_rx_avail(rxlen as u16) {
                     None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
-                    Some(_) => log::warn!("Got more packets, but smoltcp didn't drain them in time"),
-                }
+                    Some(_) => log::warn!("Got more loopback packets, but smoltcp didn't drain them in time"),
+                } */
                 match xous::try_send_message(
                     net_conn,
                     Message::new_scalar(
