@@ -23,9 +23,9 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         #[cfg(not(feature="pddbtest"))]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn] [flush] [sync]";
         #[cfg(feature="pddbtest")]
-        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete]\n[test]";
+        let helpstring = "pddb [basislist] [basiscreate] [basisunlock] [basislock] [basisdelete] [default]\n[dictlist] [keylist] [query] [dictdelete] [keydelete] [churn] [flush] [sync]\n[test]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
@@ -254,6 +254,10 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 "flush" => {
                     write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
                     write!(ret, "Flush result code: {:?}", self.pddb.flush_space_update()).ok();
+                }
+                "sync" => {
+                    write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
+                    log::info!("{}PDDB.SYNCDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 }
                 #[cfg(feature="test-rekey")]
                 "rekey" => {
