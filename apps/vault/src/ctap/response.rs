@@ -15,7 +15,7 @@
 #[cfg(feature = "with_ctap2_1")]
 use super::data_formats::{AuthenticatorTransport, PublicKeyCredentialParameter};
 use super::data_formats::{
-    CoseKey, CredentialProtectionPolicy, PackedAttestationStatement, PublicKeyCredentialDescriptor,
+    CoseKey, PackedAttestationStatement, PublicKeyCredentialDescriptor,
     PublicKeyCredentialUserEntity,
 };
 use std::collections::BTreeMap;
@@ -126,7 +126,7 @@ pub struct AuthenticatorGetInfoResponse {
     pub transports: Option<Vec<AuthenticatorTransport>>,
     #[cfg(feature = "with_ctap2_1")]
     pub algorithms: Option<Vec<PublicKeyCredentialParameter>>,
-    pub default_cred_protect: Option<CredentialProtectionPolicy>,
+    pub default_cred_protect: bool,
     #[cfg(feature = "with_ctap2_1")]
     pub min_pin_length: u8,
     #[cfg(feature = "with_ctap2_1")]
@@ -171,7 +171,7 @@ impl From<AuthenticatorGetInfoResponse> for cbor::Value {
             0x08 => max_credential_id_length,
             0x09 => transports.map(|vec| cbor_array_vec!(vec)),
             0x0A => algorithms.map(|vec| cbor_array_vec!(vec)),
-            0x0C => default_cred_protect.map(|p| p as u64),
+            0x0C => default_cred_protect,
             0x0D => min_pin_length as u64,
             0x0E => firmware_version,
         }

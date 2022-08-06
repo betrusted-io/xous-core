@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 
 fn main() -> anyhow::Result<()> {
     let matches = App::new("svd2repl")
-        .about("Generate a Rebide Platform description from SVD files")
+        .about("Generate a Renode Platform description from SVD files")
         .arg(
             Arg::with_name("input")
                 .help("Input SVD file")

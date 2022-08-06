@@ -60,7 +60,11 @@ threadpool = "1.8.1"
 
 # testing rand compatibility - this is chasing the devil, but unfortunately
 # a *lot* of useful packages are chasing this devil.
+# also used in pddb testing
 rand = {version = "0.8.5", features = ["getrandom"]}
+
+# pddb testing
+rand_chacha = {version = "0.3.1", optional = true}
 
 # for ditherpunk testing
 png = {version = "0.17.5", optional = true}
@@ -97,7 +101,12 @@ spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals m
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
 aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
-pddbtest = []
+pddbtest = ["rand_chacha"]
+autobasis = ["rand_chacha"]
+autobasis-ci = []
 ditherpunk = ["png"]
 tracking-alloc = ["tracking-allocator", "tracing", "tracing-subscriber"]
+dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX). Also need to enable this feature in the status crate. Intended for debug only.
+test-rekey = []
+nettest = [] # batch network tests
 default = [] # "debugprint"

@@ -1,0 +1,1 @@
+from .precursorupdater import main

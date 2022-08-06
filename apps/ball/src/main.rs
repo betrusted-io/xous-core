@@ -55,6 +55,7 @@ fn main() -> ! {
 
     // this is the main event loop for the app.
     let mut allow_redraw = true;
+    let mut into_allow_redraw = false;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -65,6 +66,10 @@ fn main() -> ! {
                 }
             }
             Some(AppOp::Pump) => { // this is a blocking scalar so that pump calls don't initiate faster than the app can draw
+                if into_allow_redraw {
+                    ball.focus();
+                    into_allow_redraw = false;
+                }
                 if allow_redraw {
                     ball.update();
                 }
@@ -81,6 +86,7 @@ fn main() -> ! {
             }),
             Some(AppOp::FocusChange) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
+                log::info!("focus change: {:?}", new_state);
                 match new_state {
                     gam::FocusState::Background => {
                         allow_redraw = false; // this instantly terminates future updates, even if Pump messages are in our input queue
@@ -90,6 +96,7 @@ fn main() -> ! {
                         ).expect("couldn't send stop message to the pump thread");
                     }
                     gam::FocusState::Foreground => {
+                        into_allow_redraw = true;
                         allow_redraw = true;
                         xous::send_message(
                             cid_to_pump,

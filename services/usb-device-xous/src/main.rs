@@ -29,6 +29,7 @@ use usbd_human_interface_device::device::fido::RawFidoMsg;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use usbd_human_interface_device::device::fido::RawFidoInterface;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous_semver::SemVer;
 use core::num::NonZeroU8;
 use std::collections::BTreeMap;
 
@@ -87,55 +88,53 @@ fn main() -> ! {
 
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let serial_number = format!("{:x}", llio.soc_dna().unwrap());
-    let (maj, min, rev, extra, _gitrev) = llio.soc_gitrev().unwrap();
-    if maj == 0 && min <= 9 && rev <= 8 {
-        if (min == 9 && rev == 8 && extra < 20) ||
-        (min < 9) || (min == 9 && rev < 8) {
-            if min != 0 { // don't show during hosted mode, which reports 0.0.0+0
-                tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
-                let modals = modals::Modals::new(&xns).unwrap();
-                modals.show_notification(
-                    &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}.{}.{}+{}. Refusing to start USB driver.",
-                    maj, min, rev, extra
-                ),
-                    None
-                ).unwrap();
-            }
-            let mut fido_listener: Option<xous::MessageEnvelope> = None;
-            loop {
-                let msg = xous::receive_message(usbdev_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
-                        xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
-                    }),
-                    Some(Opcode::U2fRxDeferred) => {
-                        // block any rx requests forever
-                        fido_listener = Some(msg);
-                    }
-                    Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                        xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
-                    }),
-                    Some(Opcode::Quit) => {
-                        break;
-                    }
-                    _ => {
-                        log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
-                        // make it so blocking scalars don't block
-                        if let xous::Message::BlockingScalar(xous::ScalarMessage {
-                            id: _,
-                            arg1: _,
-                            arg2: _,
-                            arg3: _,
-                            arg4: _,
-                        }) = msg.body {
-                            log::warn!("Returning bogus result");
-                            xous::return_scalar(msg.sender, 0).unwrap();
-                        }
+    let minimum_ver = SemVer {maj: 0, min: 9, rev: 8, extra: 20, commit: None};
+    let soc_ver = llio.soc_gitrev().unwrap();
+    if soc_ver < minimum_ver {
+        if soc_ver.min != 0 { // don't show during hosted mode, which reports 0.0.0+0
+            tt.sleep_ms(1500).ok(); // wait for some system boot to happen before popping up the modal
+            let modals = modals::Modals::new(&xns).unwrap();
+            modals.show_notification(
+                &format!("SoC version >= 0.9.8+20 required for USB HID. Detected rev: {}. Refusing to start USB driver.",
+                soc_ver.to_string()
+            ),
+                None
+            ).unwrap();
+        }
+        let mut fido_listener: Option<xous::MessageEnvelope> = None;
+        loop {
+            let msg = xous::receive_message(usbdev_sid).unwrap();
+            match FromPrimitive::from_usize(msg.body.id()) {
+                Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, _update_req, _new_state, _, _, {
+                    xous::return_scalar2(msg.sender, 0, 1).expect("couldn't return status");
+                }),
+                Some(Opcode::U2fRxDeferred) => {
+                    // block any rx requests forever
+                    fido_listener = Some(msg);
+                }
+                Some(Opcode::IsSocCompatible) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, 0).expect("couldn't return compatibility status")
+                }),
+                Some(Opcode::Quit) => {
+                    break;
+                }
+                _ => {
+                    log::warn!("SoC not compatible with HID, ignoring USB message: {:?}", msg);
+                    // make it so blocking scalars don't block
+                    if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                        id: _,
+                        arg1: _,
+                        arg2: _,
+                        arg3: _,
+                        arg4: _,
+                    }) = msg.body {
+                        log::warn!("Returning bogus result");
+                        xous::return_scalar(msg.sender, 0).unwrap();
                     }
                 }
             }
-            log::info!("consuming listener: {:?}", fido_listener);
         }
+        log::info!("consuming listener: {:?}", fido_listener);
     }
 
     let usbdev = SpinalUsbDevice::new(usbdev_sid);

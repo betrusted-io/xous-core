@@ -268,6 +268,38 @@ impl Gfx {
         )
         .expect("couldn't self test");
     }
+
+    pub fn stash(&self, blocking: bool) {
+        if blocking {
+            send_message(
+                self.conn,
+                Message::new_blocking_scalar(Opcode::Stash.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        } else {
+            send_message(
+                self.conn,
+                Message::new_scalar(Opcode::Stash.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        }
+    }
+
+    pub fn pop(&self, blocking: bool) {
+        if blocking {
+            send_message(
+                self.conn,
+                Message::new_blocking_scalar(Opcode::Pop.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        } else {
+            send_message(
+                self.conn,
+                Message::new_scalar(Opcode::Pop.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

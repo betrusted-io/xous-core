@@ -1,6 +1,10 @@
 # Xous Tools
 
-This repository contains build tools for Xous, used to package up the
+The `updater` directory contains the `precursorupdater` script for device updates.
+There are also various other scripts for backup, restore, and PDDB analysis located
+here.
+
+The `src` directory contains build tools for Xous, used to package up the
 kernel and initial program images and create something that the runtime
 can use.
 

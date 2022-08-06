@@ -964,7 +964,7 @@ fn main() -> ! {
 
                 if observer_conn.is_some() && observer_op.is_some() {
                     log::trace!("sending observer key");
-                    xous::send_message(observer_conn.unwrap(),
+                    xous::try_send_message(observer_conn.unwrap(),
                         xous::Message::new_scalar(
                             observer_op.unwrap(),
                             0,
@@ -972,7 +972,7 @@ fn main() -> ! {
                             0,
                             0,
                         )
-                    ).expect("couldn't send key codes to listener");
+                    ).ok();
                 }
 
                 #[cfg(all(feature="debuginject", not(feature="rawserial")))]

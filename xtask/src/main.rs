@@ -10,6 +10,10 @@ use std::{
     process::Command,
 };
 
+// This is the minimum Xous version required to read a PDDB backup generated
+// by the current kernel revision.
+const MIN_XOUS_VERSION: &str = "v0.9.8-791";
+
 type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
@@ -378,6 +382,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "renode-bypass"]),
             )?;
         }
+        Some("pddb-flamegraph") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = pddb_dev_pkgs.to_vec();
+            // add pkgs required for functional testing. Quite a bit. :-/
+            pkgs.push("llio");
+            pkgs.push("root-keys");
+            pkgs.push("jtag");
+            pkgs.push("com");
+            pkgs.push("gam");
+            pkgs.push("net");
+            pkgs.push("dns");
+            pkgs.push("graphics-server");
+            pkgs.push("modals");
+            pkgs.push("keyboard");
+            pkgs.push("ime-frontend");
+            pkgs.push("ime-plugin-shell");
+            pkgs.push("status");
+            pkgs.push("usb-device-xous");
+            generate_app_menus(&vec![]);
+            run(false, &pkgs,
+                Some(&[
+                    "--features", "pddbtest",
+                    "--features", "pddb-flamegraph",
+                ]), false)?
+
+        }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
             renode_image(false, &aestest_pkgs, &[], None, None)?
@@ -394,6 +425,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "pddb/ci", "--features", "pddb/deterministic"]),
                 false,
             )?
+        }
+        Some("pddb-btest") => {
+            generate_app_menus(&Vec::<String>::new());
+            // for hosted runs, compile in the pddb test routines by default...for now.
+            run(false, &hw_pkgs,
+                Some(&[
+                    "--features", "pddbtest",
+                    "--features", "autobasis", // this will make secret basis tracking synthetic and automated for stress testing
+                    "--features", "pddb/deterministic",
+                    "--features", "autobasis-ci",
+                ]), false)?
         }
         Some("run") => {
             let mut args = env::args();
@@ -416,6 +458,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "--features", "pddbtest",
                     "--features", "ditherpunk",
                     "--features", "tracking-alloc",
+                    // "--features", "test-rekey",
                 ]), false)?
         }
         Some("hosted-ci") => {
@@ -865,6 +908,17 @@ fn build_hw_image(
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
+    // stash any LTO settings applied to the kernel; proper layout of the loader
+    // block depends on the loader being compact and highly optimized.
+    let existing_lto = std::env::var("CARGO_PROFILE_RELEASE_LTO")
+        .map(|v| Some(v))
+        .unwrap_or(None);
+    let existing_codegen_units = std::env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS")
+        .map(|v| Some(v))
+        .unwrap_or(None);
+    // these settings will generate the most compact code (but also the hardest to debug)
+    std::env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
+    std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
     let mut loader = build(
         &["loader"],
         debug,
@@ -873,6 +927,13 @@ fn build_hw_image(
         None,
         loader_features,
     )?;
+    // restore the LTO settings
+    if let Some(existing) = existing_lto {
+        std::env::set_var("CARGO_PROFILE_RELEASE_LTO", existing);
+    }
+    if let Some(existing) = existing_codegen_units {
+        std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
+    }
     loader.push(PathBuf::from("loader"));
 
     let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
@@ -918,6 +979,8 @@ fn build_hw_image(
             loaderkey_file.as_str(),
             "--loader-output",
             loader_bin.to_str().unwrap(),
+            "--min-xous-ver",
+            MIN_XOUS_VERSION,
         ])
         .status()?;
     if !status.success() {
@@ -955,6 +1018,8 @@ fn build_hw_image(
             kernelkey_file.as_str(),
             "--kernel-output",
             xous_img_path.to_str().unwrap(),
+            "--min-xous-ver",
+            MIN_XOUS_VERSION,
             // "--defile",
         ])
         .status()?;

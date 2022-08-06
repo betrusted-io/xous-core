@@ -16,6 +16,7 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 susres = {path = "../susres"}
 xous-names = {path = "../xous-names"}
+xous-semver = "0.1.2"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}

@@ -1,4 +1,88 @@
 {
+    "pddb.rekey.keys": {
+        "en": "Generating encryption mappings...",
+        "ja": "暗号化マッピングの生成...",
+        "zh": "生成加密映射...",
+        "en-tts": "Generating encryption mappings..."
+    },
+    "pddb.rekey.running": {
+        "en": "Rekeying the database...",
+        "ja": "データベースのキーの再生成...",
+        "zh": "重新加密数据库...",
+        "en-tts": "Rekeying the database..."
+    },
+    "pddb.rekey.fastspace": {
+        "en": "Regenerating free space cache...",
+        "ja": "空き領域キャッシュの再生成...",
+        "zh": "重新生成可用空间缓存...",
+        "en-tts": "Regenerating free space cache..."
+    },
+    "pddb.freespace.request": {
+        "en": "⚠ PDDB needs to allocate more free space. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten.",
+        "ja": "⚠ PDDBは、より多くの空き領域を割り当てる必要があります。⚠\nこれを安全に行うには、今すぐすべてのシークレットベースのロックを解除する必要があります。 ロックされたままのベーシスは上書きされる可能性があります。",
+        "zh": "⚠ PDDB 需要分配更多可用空间。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
+        "en-tts": "⚠ PDDB needs to allocate more free space. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
+    },
+    "pddb.rekey.request": {
+        "en": "⚠ PDDB needs to be keyed to this device. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten.",
+        "ja": "⚠ PDDBのキーを再入力する必要があります. ⚠\nこれを安全に行うには、今すぐすべてのシークレットベースのロックを解除する必要があります。 ロックされたままのベーシスは上書きされる可能性があります。",
+        "zh": "⚠ PDDB 需要重新加密。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
+        "en-tts": "⚠ PDDB needs to be keyed to this device. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
+    },
+    "pddb.churn.request": {
+        "en": "⚠ PDDB `churn` requested. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten.",
+        "ja": "⚠ PDDBの「チャーン」が要求されました。 ⚠\nこれを安全に行うには、今すぐすべてのシークレットベースのロックを解除する必要があります。 ロックされたままのベーシスは上書きされる可能性があります。",
+        "zh": "⚠ 请求 PDDB `churn`。⚠\n为了安全地执行此操作，您现在必须解锁所有秘密基地。 任何被锁定的基础都可以被覆盖。",
+        "en-tts": "⚠ PDDB `churn` requested. ⚠\nYou must enumerate all secret Bases now. Any Basis not disclosed could be overwritten."
+    },
+    "pddb.freespace.enumerate": {
+        "en": "Enumerate a Basis?",
+        "ja": "根拠を開示しますか？",
+        "zh": "披露依据？",
+        "en-tts": "Enumerate a Basis?"
+    },
+    "pddb.freespace.enumerate_another": {
+        "en": "Enumerate another Basis?",
+        "ja": "別の根拠を開示しますか？",
+        "zh": "披露另一个依据？",
+        "en-tts": "Enumerate another Basis?"
+    },
+    "pddb.freespace.name": {
+        "en": "Enter name of Basis to enumerate:",
+        "ja": "列挙する基準の名前を入力します。",
+        "zh": "输入要枚举的基础名称:",
+        "en-tts": "Enter name of Basis to enumerate:"
+    },
+    "pddb.freespace.badpass": {
+        "en": "Bad password or Basis does not exist.",
+        "ja": "不正なパスワードまたはベーシスが存在しません。",
+        "zh": "密码错误或基础不存在。",
+        "en-tts": "Bad password, or Basis does not exist."
+    },
+    "pddb.freespace.currentlist": {
+        "en": "The following Bases are currently enumerated:\n",
+        "ja": "以下の根拠を列挙します:\n",
+        "zh": "列举如下依据:\n",
+        "en-tts": "The following Bases are currently enumerated:\n"
+    },
+    "pddb.freespace.finished": {
+        "en": "Enumeration finished.\n\nShall we proceed to generate the free space cache?",
+        "ja": "空き領域キャッシュの生成に進みましょうか。",
+        "zh": "我们要继续生成可用空间缓存吗？",
+        "en-tts": "Enumeration finished.\n\nShall we proceed to generate the free space cache?"
+    },
+    "pddb.rekey.finished": {
+        "en": "Enumeration finished.\n\nShall we proceed to rekeying?",
+        "ja": "キーの再生成に進みましょう?",
+        "zh": "继续重新加密？",
+        "en-tts": "Enumeration finished.\n\nShall we proceed to rekeying?"
+    },
+    "pddb.churn.finished": {
+        "en": "Enumeration finished.\n\nShall we proceed to churning? This process takes about 20 minutes.",
+        "ja": "列挙が終了しました。\n\n攪拌に進みましょうか？ このプロセスには約20分かかります。",
+        "zh": "枚举完成。\n\n我们要继续搅拌吗？ 这个过程大约需要 20 分钟。",
+        "en-tts": "Enumeration finished.\n\nShall we proceed to churning? This process takes about 20 minutes."
+    },
     "pddb.okay": {
         "en": "Okay",
         "ja": "OK",
@@ -30,7 +114,7 @@
         "en-tts": "Incorrect password. Try again?"
     },
     "pddb.checkpass": {
-        "en": "Press any key, then re-enter your password for setup confirmation.",
+        "en": "Press any key, then re-enter your password to confirm.",
         "ja": "任意キーを押して、パスワードを再入力してセットアップを確認してください。",
         "zh": "第一次使用，再次输入密码",
         "en-tts": "First-time setup: Enter password again."
@@ -48,7 +132,7 @@
         "en-tts": "Incorrect password. Please try again."
     },
     "pddb.requestformat": {
-        "en": "The PDDB storage needs formatting. This takes about 15 minutes and can't be interrupted.\n\nProceed?",
+        "en": "The PDDB needs to be cryptographically formatted. This takes about 15 minutes and can't be interrupted.\n\nProceed?",
         "ja": "PDDBストレージのフォーマットが必要です。これは約15分かかり、中断することはできません。\n\n続行しますか？",
         "zh": "存储需要格式化。这需要15分钟。继续？",
         "en-tts": "The PDDB storage needs formatting. It will take about 15 minutes and can't be interrupted. Proceed?"

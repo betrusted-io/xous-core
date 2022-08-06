@@ -120,7 +120,7 @@ pub const ES256_CRED_PARAM: PublicKeyCredentialParameter = PublicKeyCredentialPa
 // You can change this value to one of the following for more privacy.
 // - Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIdList)
 // - Some(CredentialProtectionPolicy::UserVerificationRequired)
-const DEFAULT_CRED_PROTECT: Option<CredentialProtectionPolicy> = None;
+const DEFAULT_CRED_PROTECT: Option<CredentialProtectionPolicy> = Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIdList);
 
 pub(crate) const FIDO_CRED_DICT: &'static str = "fido.cred";
 
@@ -918,7 +918,7 @@ where
                 transports: Some(vec![AuthenticatorTransport::Usb]),
                 #[cfg(feature = "with_ctap2_1")]
                 algorithms: Some(vec![ES256_CRED_PARAM]),
-                default_cred_protect: DEFAULT_CRED_PROTECT,
+                default_cred_protect: DEFAULT_CRED_PROTECT.is_some(),
                 #[cfg(feature = "with_ctap2_1")]
                 min_pin_length: self.persistent_store.min_pin_length()?,
                 #[cfg(feature = "with_ctap2_1")]

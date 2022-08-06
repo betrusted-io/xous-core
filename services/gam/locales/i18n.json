@@ -41,6 +41,54 @@
         "zh": "",
         "en-tts": "Checked "
     },
+    "bip39.invalid_word": {
+        "en": "Invalid word!",
+        "ja": "無効な単語",
+        "zh": "无效词",
+        "en-tts": "Invalid word!"
+    },
+    "bip39.waiting": {
+        "en": "Waiting for input...",
+        "ja": "入力を待っています...",
+        "zh": "等待输入...",
+        "en-tts": "Waiting for input..."
+    },
+    "bip39.enter_to_complete": {
+        "en": "Press enter to accept current phrase, or keep typing...",
+        "ja": "Enterキーを押して現在のフレーズを受け入れるか、入力を続けます...",
+        "zh": "按 Enter 接受当前短语，或继续输入...",
+        "en-tts": "Press enter to accept current phrase, or keep typing..."
+    },
+    "bip39.start_typing": {
+        "en": "Start typing...",
+        "ja": "入力を開始します...",
+        "zh": "开始打字……",
+        "en-tts": "Start typing..."
+    },
+    "bip39.invalid_phrase": {
+        "en": "\tPhrase is not valid",
+        "ja": "\tフレーズが無効です",
+        "zh": "\t短语无效",
+        "en-tts": "\tPhrase is not valid"
+    },
+    "bip39.abort_help": {
+        "en": "Press F4 to abort entry",
+        "ja": "F4を押して入力を中止します",
+        "zh": "按 F4 中止输入",
+        "en-tts": "Press F4 to abort entry"
+    },
+    "bip39.valid_phrase": {
+        "en": "Valid input:",
+        "ja": "有効な入力：",
+        "zh": "有效输入：",
+        "en-tts": "Valid input:"
+    },
+    "bip39.invalid_bytes": {
+        "en": "Invalid BIP39 data length",
+        "ja": "無効なBIP39データ長",
+        "zh": "BIP39 数据长度无效",
+        "en-tts": "Invalid BIP39 data length"
+    },
     "progress.increment": {
         "en": "",
         "ja": "",

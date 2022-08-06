@@ -192,7 +192,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                     }
                                                     count += 1;
                                                     if count == 10 && short_test {
-                                                        stream.flush().unwrap();
+                                                        stream.flush().ok();
                                                         break;
                                                     }
                                                 }
@@ -203,7 +203,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     });
-                    write!(ret, "Fountain started on port 3333").unwrap();
+                    write!(ret, "Fountain started on port 3333").ok();
                 }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
@@ -287,9 +287,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
-                #[cfg(feature="ditherpunk")] 
+                #[cfg(feature="nettest")]
+                "test" => {
+                    crate::nettests::start_batch_tests();
+                    write!(ret, "Net batch tests started...").ok();
+                }
+                #[cfg(feature="ditherpunk")]
                 "image" => {
-                    // use std::io::BufRead; // not implemented yet!
                     if let Some(mut url) = tokens.next() {                
                         match url.split_once('/') {
                             Some((host, path)) => {
@@ -308,9 +312,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         write!(stream, "Connection: close\r\n").expect("stream error");
                                         write!(stream, "\r\n").expect("stream error");
                                         log::info!("fetching response....");
-                                        // let mut reader = std::io::BufReader::new(&mut stream);
-                                        log::info!("trying to read entire response...");
-                                        
+                                        let mut reader = std::io::BufReader::new(&mut stream);                                        
                                         let mut buf = Vec::<u8>::new();
                                         let mut byte = [0u8; 1];
                                         let mut content_length = 0;
@@ -322,7 +324,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                             let mut len = buf.len();
                                             // read a line terminated by /r/n
                                             while (len < 2 || buf.as_slice()[(len-2)..] != [0x0d, 0x0a]) && len <= 1024 {
-                                                stream.read(&mut byte).expect("png stream read error");
+                                                reader.read(&mut byte).expect("png stream read error");
                                                 buf.push(byte[0]);
                                                 len = buf.len();
                                             }
@@ -357,7 +359,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         
                                         if content_length > 0 {
                                             log::info!("heap size: {}", heap_usage());
-                                            let mut png = DecodePng::new(stream).expect("png decode failed");
+                                            let mut png = DecodePng::new(reader).expect("png decode failed");
                                             const BORDER: u32 = 3;
                                             let modal_size = gam::Point::new(
                                                  (gam::IMG_MODAL_WIDTH - 2 * BORDER) as i16, 
@@ -532,7 +534,13 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
     );
 
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    match stream.read(&mut buffer) {
+        Ok(_) => {},
+        Err(e) => {
+            log::warn!("Server connection error; closing connection {:?}", e);
+            return;
+        }
+    }
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
@@ -570,8 +578,8 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
         contents
     );
 
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    stream.write(response.as_bytes()).ok();
+    stream.flush().ok();
 }
 
 pub struct ThreadPool {

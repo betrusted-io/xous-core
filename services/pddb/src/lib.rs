@@ -524,34 +524,56 @@ impl Pddb {
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
 
         let response = buf.to_original::<PddbDictRequest, _>().unwrap();
-        let count = match response.code {
-            PddbRequestCode::NoErr => response.index,
+        match response.code {
+            PddbRequestCode::NoErr => (),
             PddbRequestCode::NotFound => return Err(Error::new(ErrorKind::NotFound, "dictionary not found")),
             _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
         };
-        // very non-optimal, slow way of doing this, but let's just get it working first and optimize later.
-        // it's absolutely important that you access every entry, and the highest index last, because
-        // that is how the server knows you've finished with the list-out.
+        // v2 key listing packs the key list into a larger [u8] field that should cut down on the number of messages
+        // required to list a large dictionary by about a factor of 50.
         let mut key_list = Vec::<String>::new();
-        for index in 0..count {
-            let request = PddbDictRequest {
-                basis_specified: basis_name.is_some(),
-                basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(&bname),
-                dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict_name),
-                key: xous_ipc::String::<KEY_NAME_LEN>::new(),
-                index,
-                code: PddbRequestCode::Uninit,
+        // just make sure we didn't screw up the sizing of this record
+        assert!(core::mem::size_of::<PddbKeyList>() < 4096);
+        loop {
+            let request = PddbKeyList {
                 token,
+                end: false,
+                retcode: PddbRetcode::Uninit,
+                data: [0u8; MAX_PDDBKLISTLEN]
             };
             let mut buf = Buffer::into_buf(request)
                 .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-            buf.lend_mut(self.conn, Opcode::GetKeyNameAtIndex.to_u32().unwrap())
+            buf.lend_mut(self.conn, Opcode::ListKeyV2.to_u32().unwrap())
                 .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-            let response = buf.to_original::<PddbDictRequest, _>().unwrap();
-            match response.code {
-                PddbRequestCode::NoErr => key_list.push(String::from(response.key.as_str().expect("utf-8 parse error in key name"))),
-                _ => return Err(Error::new(ErrorKind::Other, "Internal error")),
+            let response = buf.as_flat::<PddbKeyList, _>().unwrap();
+            match response.retcode {
+                ArchivedPddbRetcode::Ok => (),
+                ArchivedPddbRetcode::AccessDenied => return Err(Error::new(ErrorKind::PermissionDenied, "KeyList facility locked by another process, try again later")),
+                _ => return Err(Error::new(ErrorKind::Other, "Internal Error")),
             }
+            // the [u8] data is structured as a packed list of u8-len + u8 data slice. The max length of
+            // a PDDB key name is guaranteed to be shorter than a u8. If the length field is 0, then this
+            // particular response has no more data in it to read.
+            let mut index = 0;
+            while response.data[index] != 0 && index < MAX_PDDBKLISTLEN {
+                let strlen = response.data[index] as usize;
+                index += 1;
+                if strlen + index >= MAX_PDDBKLISTLEN {
+                    log::error!("Logic error in key list, index would be out of bounds. Aborting");
+                    break;
+                }
+                if strlen == 0 { // case of an empty dictionary
+                    break;
+                }
+                let key = String::from(std::str::from_utf8(&response.data[index..index+strlen]).unwrap_or("UTF8 error"));
+                log::trace!("Returned {}", key);
+                key_list.push(key);
+                index += strlen;
+            }
+            if response.end {
+                break;
+            }
+
         }
         Ok(key_list)
     }
@@ -628,6 +650,38 @@ impl Pddb {
             panic!("Internal error: wrong return code for is_efuse_secured()");
         }
     }
+    /// Reset the "don't ask to init root keys" flag. Used primarily by the OQC test routine to reset this in case
+    /// a worker accidentally set it during testing.
+    pub fn reset_dont_ask_init(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ResetDontAskInit.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send ResetDontAskInit");
+    }
+    /// Flush the `SpaceUpdate` journal. SpaceUpdates will leak the last couple hundred or so free space operations,
+    /// so periodically flushing this is needed to restore deniability.
+    pub fn flush_space_update(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::FlushSpaceUpdate.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send FlushSpaceUpdate");
+    }
+    /// Rekey the PDDB. This can be a very long-running blocking operation that will definitely.
+    /// interrupt normal user flow.
+    pub fn rekey_pddb(&self, op: PddbRekeyOp) -> Result<()> {
+        let mut buf = Buffer::into_buf(op)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(self.conn, Opcode::RekeyPddb.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())?;
+        let result = buf.to_original::<PddbRekeyOp, _>()
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        match result {
+            PddbRekeyOp::Success => Ok(()),
+            PddbRekeyOp::AuthFail => Err(Error::new(ErrorKind::PermissionDenied, "Permission error")),
+            PddbRekeyOp::UserAbort => Err(Error::new(ErrorKind::Interrupted, "User aborted operation")),
+            PddbRekeyOp::InternalError => Err(Error::new(ErrorKind::Other, "Xous internal error")),
+            PddbRekeyOp::VerifyFail => Err(Error::new(ErrorKind::InvalidData, "Data verification error while rekeying")),
+            _ => Err(Error::new(ErrorKind::Unsupported, "Return code was never set")),
+        }
+    }
     /// Triggers a dump of the PDDB to host disk
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {
@@ -652,6 +706,21 @@ impl Pddb {
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
         buf.lend(self.conn, Opcode::DangerousDebug.to_u32().unwrap())
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error"))).map(|_| ())
+    }
+
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    pub fn basis_testing(&self, config: &[Option<bool>; 32]) {
+        let mut op = 0;
+        let mut valid = 0;
+        for (index, &c) in config.iter().enumerate() {
+            if let Some(opt) = c {
+                valid |= 1 << index;
+                op |= (if opt {1} else {0}) << index;
+            }
+        }
+        send_message(self.conn,
+            Message::new_scalar(Opcode::BasisTesting.to_usize().unwrap(), op, valid, 0, 0)
+        ).expect("couldn't send basis test message");
     }
 }
 

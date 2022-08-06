@@ -18,6 +18,11 @@ use num_traits::*;
 mod connection_manager;
 mod device;
 
+#[cfg(test)]
+mod tests;
+#[cfg(feature="btest")]
+mod btests;
+
 use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::convert::TryInto;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message, CID, SID};
@@ -32,7 +37,7 @@ use smoltcp::wire::{Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr};
 use crate::device::NetPhy;
 
 use core::num::NonZeroU64;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU16, Ordering};
 use smoltcp::socket::{
     TcpSocket, TcpSocketBuffer, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
 };
@@ -42,6 +47,12 @@ use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::cmp::Ordering as CmpOrdering;
+
+// 0 indicates no address is currently assigned
+pub static IPV4_ADDRESS: AtomicU32 = AtomicU32::new(0);
+// stash the MAC address for inserstion as a loopback target. Coded as big-end bytes.
+pub static MAC_ADDRESS_LSB: AtomicU32 = AtomicU32::new(0);
+pub static MAC_ADDRESS_MSB: AtomicU16 = AtomicU16::new(0);
 
 const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
 const MAX_DELAY_THREADS: u32 = 9;
@@ -56,7 +67,12 @@ where
             .iter_mut()
             .next()
             .expect("trouble updating ipv4 addresses in routing table");
-        *dest = IpCidr::Ipv4(cidr);
+        if *dest.address().as_bytes() != [127, 0, 0, 1] {
+            log::info!("updating to address {:?}", cidr);
+            *dest = IpCidr::Ipv4(cidr);
+        } else {
+            log::info!("not updating loopback address");
+        }
     });
 }
 
@@ -87,6 +103,7 @@ pub struct PingConnection {
     retop: usize,
 }
 
+#[derive(Debug)]
 struct WaitingSocket {
     env: xous::MessageEnvelope,
     handle: SocketHandle,
@@ -141,6 +158,7 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.push(ComIntSources::WlanSsidScanUpdate);
     com_int_list.push(ComIntSources::WlanSsidScanFinished);
     com_int_list.push(ComIntSources::WfxErr);
+    com_int_list.push(ComIntSources::Invalid);
 }
 
 fn setup_icmp(iface: &mut Interface::<NetPhy>) -> SocketHandle {
@@ -217,13 +235,20 @@ fn main() -> ! {
     // When a TCP client issues a Receive request, it will get placed here while the packet data
     // is being accumulated.
     let mut tcp_rx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
+    let mut tcp_peek_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
     // When a client issues a Send request, it will get placed here while the packet data
     // is being accumulated.
     let mut tcp_tx_waiting: Vec<Option<WaitingSocket>> = Vec::new();
 
-    // socket handles waiting for writes to flush on close
+    // socket handles waiting for writes to flush on close (transitions to sending FIN)
     let mut tcp_tx_closing: Vec<(SocketHandle, xous::MessageSender)> = Vec::new();
+
+    // socket handles waiting to enter the closed state
+    let mut tcp_tx_wait_fin: Vec<(SocketHandle, xous::MessageSender, u32)> = Vec::new();
+
+    // socket handles corresponding to servers that could be closed by clients
+    let mut tcp_server_remote_close_poll: Vec<SocketHandle> = Vec::new();
 
     // When a client issues a Connect request, it will get placed here while the connection is
     // being established.
@@ -246,13 +271,32 @@ fn main() -> ! {
 
     // --------------- other link storage -------------
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
-    let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
+    let ip_addrs = [
+        IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0),
+        IpCidr::new(IpAddress::v4(127, 0, 0, 1), 8)
+    ];
     let routes = Routes::new(BTreeMap::new());
 
     // build the device
-    let hw_config = com.wlan_get_config().expect("couldn't fetch initial wifi MAC");
+    let hw_config = match com.wlan_get_config() {
+        Ok(config) => config,
+        Err(e) => {
+            log::error!("Something is wrong with the EC, got {:?} when requesting a MAC address. Trying our best to bodge through it.", e);
+            Ipv4Conf {
+                dhcp: com_rs_ref::DhcpState::Invalid,
+                mac: [2, 2, 4, 5, 6, 2],
+                addr: [169, 254, 0, 2], // link local address
+                gtwy: [169, 254, 0, 1], // something bogus
+                mask: [255, 255, 0, 0,],
+                dns1: [1, 1, 1, 1],
+                dns2: [8, 8, 8, 8],
+            }
+        }
+    };
     log::debug!("My MAC address is: {:x?}", hw_config.mac);
-    let device = device::NetPhy::new(&xns);
+    MAC_ADDRESS_LSB.store(u32::from_be_bytes(hw_config.mac[2..6].try_into().unwrap()), Ordering::SeqCst);
+    MAC_ADDRESS_MSB.store(u16::from_be_bytes(hw_config.mac[0..2].try_into().unwrap()), Ordering::SeqCst);
+    let device = device::NetPhy::new(&xns, net_cid);
     // needed by ICMP to determine if we should compute checksums
     let device_caps = device.capabilities();
     let medium = device.capabilities().medium;
@@ -372,7 +416,10 @@ fn main() -> ! {
                 }
             }
         }
-        match FromPrimitive::from_usize(msg.body.id() & 0xffff) {
+        let op = FromPrimitive::from_usize(msg.body.id() & 0x7fff);
+        let nonblocking = (msg.body.id() & NONBLOCKING_FLAG) != 0;
+        log::debug!("{:?}", op);
+        match op {
             Some(Opcode::Ping) => {
                 log::debug!("Ping");
                 let mut buf = unsafe {
@@ -592,7 +639,14 @@ fn main() -> ! {
             Some(Opcode::StdTcpPeek) => {
                 log::debug!("StdTcpPeek");
                 let pid = msg.sender.pid();
-                std_tcp_peek(msg, &mut iface, process_sockets.entry(pid).or_default());
+                std_tcp_peek(
+                    msg,
+                    &timer,
+                    &mut iface,
+                    process_sockets.entry(pid).or_default(),
+                    &mut tcp_peek_waiting,
+                    nonblocking,
+                );
                 xous::try_send_message(
                     net_conn,
                     Message::new_scalar(
@@ -611,6 +665,7 @@ fn main() -> ! {
                     &mut iface,
                     &mut tcp_rx_waiting,
                     process_sockets.entry(pid).or_default(),
+                    nonblocking,
                 );
                 xous::try_send_message(
                     net_conn,
@@ -622,7 +677,6 @@ fn main() -> ! {
             }
 
             Some(Opcode::StdTcpClose) => {
-                log::debug!("StdTcpClose");
                 let pid = msg.sender.pid();
                 let connection_idx = msg.body.id() >> 16;
                 let handle = if let Some(connection) = process_sockets
@@ -640,20 +694,18 @@ fn main() -> ! {
                     respond_with_error(msg, NetError::Invalid);
                     continue;
                 };
+                let socket = iface.get_socket::<TcpSocket>(handle);
+                log::debug!("StdTcpClose {:?}", socket.local_endpoint());
                 if !std_tcp_can_close(&tcp_tx_waiting, handle) {
                     log::trace!("def"); // these are short because the extra delay of a long message affects the computation
                     tcp_tx_closing.push((handle, msg.sender));
                 } else {
-                    let socket = iface.get_socket::<TcpSocket>(handle);
                     if socket.may_send() && socket.send_queue() == 0 {
                         log::trace!("imm");
                         socket.close();
-                        iface.remove_socket(handle);
-                        if let Some(response) = msg.body.memory_message_mut() {
-                            response.buf.as_slice_mut::<u8>()[0] = 0;
-                        } else if !msg.body.has_memory() && msg.body.is_blocking() {
-                            xous::return_scalar(msg.sender, 0).ok();
-                        }
+                        tcp_tx_wait_fin.push((handle, msg.sender, 0));
+                        //log::info!("EARLY CLOSE");
+                        //xous::return_scalar(msg.sender, 0).ok(); // ack early so we don't block other processes waiting to close
                     } else {
                         log::trace!("def2");
                         tcp_tx_closing.push((handle, msg.sender));
@@ -696,6 +748,35 @@ fn main() -> ! {
                             };
                             // if we got here, we found a message that needs to be aborted
                             log::info!("TcpShutdown: aborting rx waiting handle: {:?}", handle);
+                            match msg.body.memory_message_mut() {
+                                Some(body) => {
+                                    // u32::MAX indicates a zero-length receive
+                                    body.valid = xous::MemorySize::new(u32::MAX as usize);
+                                },
+                                None => {
+                                    respond_with_error(msg, NetError::LibraryError);
+                                }
+                            }
+                            // in theory, there should be no more matching handles as they should be all unique, so we can abort the search.
+                            break;
+                        }
+                        for rx_waiter in tcp_peek_waiting.iter_mut() {
+                            let WaitingSocket {
+                                env: mut msg,
+                                handle,
+                                expiry: _,
+                            } = match rx_waiter {
+                                &mut None => continue,
+                                Some(s) => {
+                                    if s.handle == *connection {
+                                        rx_waiter.take().unwrap() // removes the message from the waiting queue
+                                    } else {
+                                        continue
+                                    }
+                                }
+                            };
+                            // if we got here, we found a message that needs to be aborted
+                            log::info!("TcpShutdown: aborting peek waiting handle: {:?}", handle);
                             match msg.body.memory_message_mut() {
                                 Some(body) => {
                                     // u32::MAX indicates a zero-length receive
@@ -765,6 +846,7 @@ fn main() -> ! {
                     msg,
                     &mut iface,
                     process_sockets.entry(pid).or_default(),
+                    &trng,
                 );
                 xous::try_send_message(
                     net_conn,
@@ -782,6 +864,7 @@ fn main() -> ! {
                     msg,
                     &mut iface,
                     &mut tcp_accept_waiting,
+                    &mut tcp_server_remote_close_poll,
                     process_sockets.entry(pid).or_default(),
                 );
                 xous::try_send_message(
@@ -901,9 +984,14 @@ fn main() -> ! {
                     .get_mut(connection_idx)
                 {
                     let socket = iface.get_socket::<TcpSocket>(*connection);
+                    // this is actually broken right now; it's fixed in https://github.com/smoltcp-rs/smoltcp/commit/8090469c2a1456b87a3e277e5b2f2e34e4f7555b
+                    // not worth forking over this, though. We'll leave this as an erratum.
+                    let nagle_enabled = socket.nagle_enabled().is_some(); // this return type will turn to bool on the next release.
+                    log::warn!("Issue #210: nagle value read is always incorrect. Setting works, however. Returning nagle value of {}", nagle_enabled);
+                    let no_delay = !nagle_enabled;
                     xous::return_scalar(
                         msg.sender,
-                        if socket.nagle_enabled().is_some() {
+                        if no_delay {
                             1
                         } else {
                             0
@@ -931,7 +1019,9 @@ fn main() -> ! {
                 {
                     let socket = iface.get_socket::<TcpSocket>(*connection);
                     let args = msg.body.scalar_message().unwrap();
-                    socket.set_nagle_enabled(args.arg1 != 0);
+                    let no_delay = args.arg1 != 0;
+                    log::warn!("Setting nagle to {}, see issue #210 about readback!", !no_delay);
+                    socket.set_nagle_enabled(!no_delay);
                     xous::return_scalar(msg.sender, 0).ok();
                 } else {
                     respond_with_error(msg, NetError::Invalid);
@@ -1045,15 +1135,22 @@ fn main() -> ! {
                                 ComIntSources::WlanIpConfigUpdate => {
                                     // right now the WLAN implementation only does IPV4. So IPV6 compatibility ends here.
                                     // if IPV6 gets added to the EC/COM bus, ideally this is one of a couple spots in Xous that needs a tweak.
-                                    let config = com
-                                        .wlan_get_config()
-                                        .expect("couldn't retrieve updated ipv4 config");
+                                    let config = match com
+                                    .wlan_get_config() {
+                                        Ok(config) => config,
+                                        Err(e) => {
+                                            log::error!("WLAN config interrupt was bogus. EC is probably updating? Ignoring. Error: {:?}", e);
+                                            continue;
+                                        }
+                                    };
                                     log::info!("Network config acquired: {:?}", config);
                                     log::info!("{}NET.OK,{:?},{}",
                                         xous::BOOKEND_START,
                                         std::net::IpAddr::from(config.addr),
                                         xous::BOOKEND_END);
                                     net_config = Some(config);
+                                    // update a static variable that tracks this, useful for e.g. UDP bind address checking
+                                    IPV4_ADDRESS.store(u32::from_be_bytes(config.addr), Ordering::SeqCst);
 
                                     // note: ARP cache is stale. Maybe that's ok?
 
@@ -1132,6 +1229,13 @@ fn main() -> ! {
                                         }
                                     }
                                 }
+                                ComIntSources::Invalid => {
+                                    com.ints_ack(&com_int_list); // ack everything that's pending
+                                    // re-enable the interrupts as we intended
+                                    let mut ena_list: Vec<ComIntSources> = vec![];
+                                    set_com_ints(&mut ena_list);
+                                    com.ints_enable(&ena_list);
+                                }
                                 _ => {
                                     log::debug!("Unhandled: {:?}", pending);
                                 }
@@ -1159,8 +1263,36 @@ fn main() -> ! {
                     }
                 }
             }
+            Some(Opcode::LoopbackRx) => msg_scalar_unpack!(msg, _rxlen, _, _, _, {
+                /*
+                // the rx buf for loopback is different from the wlan interface
+                // loopback uses an "infinite" internal buffer with its own length tracking, so we don't need
+                // to track rxlen
+                match iface.device_mut().push_rx_avail(rxlen as u16) {
+                    None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
+                    Some(_) => log::warn!("Got more loopback packets, but smoltcp didn't drain them in time"),
+                } */
+                match xous::try_send_message(
+                    net_conn,
+                    Message::new_scalar(
+                        Opcode::NetPump.to_usize().unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                ) {
+                    Ok(_) => {}
+                    Err(xous::Error::ServerQueueFull) => {
+                        log::warn!("Our net queue runneth over, packets will be dropped.");
+                    }
+                    Err(e) => {
+                        log::error!("Unhandled error sending NetPump to self: {:?}", e);
+                    }
+                }
+            }),
             Some(Opcode::NetPump) => msg_scalar_unpack!(msg, wup_hi, wup_lo, _, _, {
-                log::debug!("NetPump");
+                log::trace!("NetPump");
                 // assume: if wup_hi/wup_lo == 0, then the wakeup is from a non-timer thread
                 let wakeup: u64 = (wup_hi as u64) << 32 | (wup_lo as u64);
                 if wakeup != 0 {
@@ -1176,7 +1308,7 @@ fn main() -> ! {
                             }
                         }
                     }
-                    log::debug!("pending wakeups: {}", wakeup_time.len());
+                    log::trace!("pending wakeups: {}", wakeup_time.len());
                 }
 
                 let now = timer.elapsed_ms();
@@ -1201,6 +1333,7 @@ fn main() -> ! {
                             &mut None => continue,
                             Some(s) => {
                                 socket = iface.get_socket::<TcpSocket>(s.1);
+                                log::debug!("connect state: {:?}", socket.state());
                                 if socket.state() == TcpState::SynSent
                                     || socket.state() == TcpState::SynReceived
                                 {
@@ -1211,7 +1344,7 @@ fn main() -> ! {
                         connection.take().unwrap()
                     };
 
-                    log::trace!("tcp state is {:?}", socket.state());
+                    log::debug!("tcp state is {:?}", socket.state());
                     if socket.state() == TcpState::Established {
                         respond_with_connected(env, fd, local_port, remote_port);
                     } else {
@@ -1232,13 +1365,19 @@ fn main() -> ! {
                             &mut None => continue,
                             Some(s) => {
                                 socket = iface.get_socket::<TcpSocket>(s.handle);
+                                log::debug!("rx_state: {:?} {:?}", socket.state(), socket.local_endpoint());
                                 if !socket.can_recv() {
                                     if let Some(trigger) = s.expiry {
+                                        log::debug!("rxrcv {:?}", trigger.get());
                                         if trigger.get() < now {
                                             // timer expired
                                         } else {
                                             continue;
                                         }
+                                    } else if socket.state() == smoltcp::socket::TcpState::CloseWait
+                                    // this state added to handle the auto-close edge case on a remote hang-up
+                                    || socket.state() == smoltcp::socket::TcpState::Closed {
+                                        // stop waiting if we're in CloseWait, as we don't plan to transmit
                                     } else {
                                         continue;
                                     }
@@ -1250,18 +1389,109 @@ fn main() -> ! {
 
                     // If it can't receive, then the only explanation was that it timed out
                     if !socket.can_recv() {
-                        respond_with_error(env, NetError::TimedOut);
-                        continue;
+                        if socket.state() == smoltcp::socket::TcpState::CloseWait
+                        // this state added to handle the auto-close edge case on a remote hang-up
+                        || socket.state() == smoltcp::socket::TcpState::Closed {
+                            log::debug!("rxrcv connection closed");
+                            let body = env.body.memory_message_mut().unwrap();
+                            log::debug!("rxrcv of {}", 0);
+                            body.valid = xous::MemorySize::new(0);
+                            body.offset = xous::MemoryAddress::new(1);
+                            continue;
+                        } else {
+                            log::debug!("rxrcv timed out");
+                            respond_with_error(env, NetError::TimedOut);
+                            continue;
+                        }
                     }
 
                     let body = env.body.memory_message_mut().unwrap();
-                    match socket.recv_slice(body.buf.as_slice_mut()) {
+                    let buflen = if let Some(valid) = body.valid {
+                        valid.get()
+                    } else {
+                        0
+                    };
+                    match socket.recv_slice(&mut body.buf.as_slice_mut()[..buflen]) {
                         Ok(count) => {
+                            log::debug!("rxrcv of {}", count);
                             body.valid = xous::MemorySize::new(count);
                             body.offset = xous::MemoryAddress::new(1);
                         }
                         Err(e) => {
-                            log::trace!("unable to receive: {:?}", e);
+                            log::debug!("unable to receive: {:?}", e);
+                            body.offset = None;
+                            body.valid = None;
+                        }
+                    }
+                }
+
+                // This block handles TCP Peek for libstd callers
+                log::trace!("pump: tcp peek");
+                for connection in tcp_peek_waiting.iter_mut() {
+                    let socket;
+                    let WaitingSocket {
+                        mut env,
+                        handle: _,
+                        expiry: _,
+                    } = {
+                        match connection {
+                            &mut None => continue,
+                            Some(s) => {
+                                socket = iface.get_socket::<TcpSocket>(s.handle);
+                                log::debug!("peek_state: {:?} {:?}", socket.state(), socket.local_endpoint());
+                                if !socket.can_recv() {
+                                    if let Some(trigger) = s.expiry {
+                                        log::debug!("rx peek {:?}", trigger.get());
+                                        if trigger.get() < now {
+                                            // timer expired
+                                        } else {
+                                            continue;
+                                        }
+                                    } else if socket.state() == smoltcp::socket::TcpState::CloseWait
+                                    // this state added to handle the auto-close edge case on a remote hang-up
+                                    || socket.state() == smoltcp::socket::TcpState::Closed {
+                                        // stop waiting if we're in CloseWait, as we don't plan to transmit
+                                    } else {
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        connection.take().unwrap()
+                    };
+
+                    // If it can't receive, then the only explanation was that it timed out
+                    if !socket.can_recv() {
+                        if socket.state() == smoltcp::socket::TcpState::CloseWait
+                        // this state added to handle the auto-close edge case on a remote hang-up
+                        || socket.state() == smoltcp::socket::TcpState::Closed {
+                            log::debug!("peekrcv connection closed");
+                            let body = env.body.memory_message_mut().unwrap();
+                            log::debug!("peekrcv of {}", 0);
+                            body.valid = xous::MemorySize::new(0);
+                            body.offset = xous::MemoryAddress::new(1);
+                            continue;
+                        } else {
+                            log::debug!("peekrcv timed out");
+                            respond_with_error(env, NetError::TimedOut);
+                            continue;
+                        }
+                    }
+
+                    let body = env.body.memory_message_mut().unwrap();
+                    let buflen = if let Some(valid) = body.valid {
+                        valid.get()
+                    } else {
+                        0
+                    };
+                    match socket.peek_slice(&mut body.buf.as_slice_mut()[..buflen]) {
+                        Ok(count) => {
+                            log::debug!("peekrcv of {}", count);
+                            body.valid = xous::MemorySize::new(count);
+                            body.offset = xous::MemoryAddress::new(1);
+                        }
+                        Err(e) => {
+                            log::debug!("unable to peek: {:?}", e);
                             body.offset = None;
                             body.valid = None;
                         }
@@ -1281,7 +1511,10 @@ fn main() -> ! {
                             &mut None => continue,
                             Some(s) => {
                                 socket = iface.get_socket::<TcpSocket>(s.handle);
-                                if !socket.can_send() {
+                                log::debug!("tx_state: {:?} {:?}", socket.state(), socket.local_endpoint());
+                                if socket.state() == smoltcp::socket::TcpState::Closed {
+                                    // stop waiting if the stocket just closed on us outright
+                                } else if !socket.can_send() {
                                     if let Some(trigger) = s.expiry {
                                         if trigger.get() < now {
                                             // timer expired
@@ -1297,7 +1530,7 @@ fn main() -> ! {
                         connection.take().unwrap()
                     };
 
-                    if !socket.can_send() {
+                    if !socket.can_send() || socket.state() == smoltcp::socket::TcpState::Closed {
                         respond_with_error(env, NetError::TimedOut);
                         continue;
                     }
@@ -1334,7 +1567,7 @@ fn main() -> ! {
                 }
 
                 // this handles TCP std listeners
-                log::debug!("pump: tcp listen");
+                log::trace!("pump: tcp listen");
                 for connection in tcp_accept_waiting.iter_mut() {
                     let ep: IpEndpoint;
                     let AcceptingSocket {
@@ -1346,6 +1579,7 @@ fn main() -> ! {
                         Some(s) => {
                             let socket = iface.get_socket::<TcpSocket>(s.handle);
                             if socket.is_active() {
+                                tcp_server_remote_close_poll.push(s.handle);
                                 ep = socket.remote_endpoint();
                                 connection.take().unwrap()
                             } else {
@@ -1431,25 +1665,73 @@ fn main() -> ! {
                     }
                 }
 
-                log::debug!("pump: tcp close");
-                if tcp_tx_closing.len() > 0 {
-                    let mut closed = Vec::<usize>::new();
-                    for (index, &(handle, sender)) in tcp_tx_closing.iter().enumerate() {
-                        if std_tcp_can_close(&tcp_tx_waiting, handle) {
-                            let socket = iface.get_socket::<TcpSocket>(handle);
-                            if socket.may_send() && socket.send_queue() == 0 {
-                                socket.close();
-                                iface.remove_socket(handle);
-                                log::debug!("deferred close, socket is not active");
-                                xous::return_scalar(sender, 0).ok();
-                                closed.push(index);
-                            }
+                log::trace!("pump: tcp close");
+                tcp_tx_closing.retain(|(handle, sender)| {
+                    if std_tcp_can_close(&tcp_tx_waiting, *handle) {
+                        let socket = iface.get_socket::<TcpSocket>(*handle);
+                        log::trace!("may_send: {}, send_queue: {}", socket.may_send(), socket.send_queue());
+                        // different condition than the previous wait -- here we opportunistically close
+                        // when either condition is met.
+                        if !socket.may_send() || socket.send_queue() == 0 {
+                            socket.close();
+                            tcp_tx_wait_fin.push((*handle, *sender, 0));
+                            //log::info!("EARLY CLOSE");
+                            //xous::return_scalar(*sender, 0).ok(); // ack early so we don't block other processes waiting to close
+                            false
+                        } else {
+                            true
                         }
+                    } else {
+                        true
                     }
-                    for &index in closed.iter().rev() {
-                        tcp_tx_closing.remove(index);
+                });
+
+                tcp_tx_wait_fin.retain_mut(|(handle, sender, count)| {
+                    let socket = iface.get_socket::<TcpSocket>(*handle);
+                    // count is a heuristic to stop TcpClose from blocking too long
+                    // most implementations are fully non-blocking, we need to block on Xous
+                    // to allow smoltcp to process correctly. However, the socket will stick
+                    // around forever if the final ack doesn't arrive, and this gums up the works.
+                    // FORCE_CLOSE_COUNT is an arbitrary threshold where we just decide to stop waiting for the other
+                    // side to send the final ack: it's long enough that it almost never times out
+                    // incorrectly, but short enough that we're not keeping around baggage forever.
+                    const FORCE_CLOSE_COUNT: u32 = 16;
+                    if !socket.is_open() || *count > FORCE_CLOSE_COUNT {
+                        if *count > FORCE_CLOSE_COUNT {
+                            log::warn!("forced close on {:?}", socket.local_endpoint());
+                        }
+                        log::debug!("socket closed {:?}", socket.local_endpoint());
+                        iface.remove_socket(*handle);
+                        tcp_server_remote_close_poll.retain(|x| {
+                            *x != *handle
+                        });
+                        // log::info!("would return_scalar now");
+                        xous::return_scalar(*sender, 0).ok();
+                        false
+                    } else {
+                        *count += 1;
+                        log::debug!("socket waiting to close({}): {:?} {:?}->{:?}", count, socket.state(), socket.local_endpoint(), socket.remote_endpoint());
+                        true
                     }
-                }
+                });
+
+                tcp_server_remote_close_poll.retain(|handle| {
+                    let socket = iface.get_socket::<TcpSocket>(*handle);
+                    log::debug!("remote close poll: state {:?} local {:?}", socket.state(), socket.local_endpoint());
+                    if socket.state() == smoltcp::socket::TcpState::CloseWait {
+                        // initiate the closing ack, but allow the explicit drop to remove the socket once the handle is finished
+                        // this handles the special case that a stream was accepted, but then the client hangs up
+                        // and the server isn't actively polling the loop. By pushing the socket to the "close"
+                        // state, we allow the three-way close handshake to actually complete instead of hanging
+                        // in a FIN-WAIT-2 state.
+                        socket.close();
+                    }
+                    if !socket.is_open() {
+                        false
+                    } else {
+                        true
+                    }
+                });
 
                 // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net crate.
                 log::trace!("pump: icmp");
@@ -1841,9 +2123,34 @@ fn main() -> ! {
                 }
             }),
             Some(Opcode::Reset) => {
+                // reset the DHCP address
+                IPV4_ADDRESS.store(0, Ordering::SeqCst);
+                // ack any pending ints
+                com_int_list.clear();
+                com.ints_get_active(&mut com_int_list).ok();
+                com.ints_ack(&com_int_list);
+                // re-enable the interrupts as we intended
+                set_com_ints(&mut com_int_list);
+                com.ints_enable(&com_int_list);
+                com_int_list.clear();
+
                 // note: ARP cache isn't reset
                 iface.routes_mut().remove_default_ipv4_route();
                 dns_allclear_hook.notify();
+
+                send_message(
+                    cm_cid,
+                    Message::new_scalar( // this has to be non-blocking to avoid deadlock: reset can be called from inside connection_manager
+                        connection_manager::ConnectionManagerOpcode::EcReset
+                            .to_usize()
+                            .unwrap(),
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+                .expect("couldn't send EcReset message");
                 xous::return_scalar(msg.sender, 1).unwrap();
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {

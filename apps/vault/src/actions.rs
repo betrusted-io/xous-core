@@ -202,7 +202,7 @@ impl ActionManager {
             VaultMode::Password => {
                 let description = match self.modals
                     .alert_builder(t!("vault.newitem.name", xous::LANG))
-                    .field(None, Some(name_validator))
+                    .field(None, Some(password_validator))
                     .build()
                 {
                     Ok(text) => {
@@ -213,7 +213,7 @@ impl ActionManager {
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let username = match self.modals
                     .alert_builder(t!("vault.newitem.username", xous::LANG))
-                    .field(None, Some(name_validator))
+                    .field(None, Some(password_validator))
                     .build()
                 {
                     Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
@@ -270,7 +270,7 @@ impl ActionManager {
                 while !approved {
                     let maybe_password = match self.modals
                         .alert_builder(t!("vault.newitem.password", xous::LANG))
-                        .field(Some(password), Some(name_validator))
+                        .field(Some(password), Some(password_validator))
                         .build()
                     {
                         Ok(text) => {
@@ -364,7 +364,7 @@ impl ActionManager {
             VaultMode::Totp => {
                 let description = match self.modals
                     .alert_builder(t!("vault.newitem.name", xous::LANG))
-                    .field(None, Some(name_validator))
+                    .field(None, Some(password_validator))
                     .build()
                 {
                     Ok(text) => {
@@ -519,10 +519,10 @@ impl ActionManager {
                                 if let Some(mut pw) = deserialize_password(data) {
                                     let edit_data = self.modals
                                         .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                        .field(Some(pw.description), Some(name_validator))
-                                        .field(Some(pw.username), Some(name_validator))
-                                        .field(Some(pw.password), Some(name_validator))
-                                        .field(Some(pw.notes), Some(name_validator))
+                                        .field(Some(pw.description), Some(password_validator))
+                                        .field(Some(pw.username), Some(password_validator))
+                                        .field(Some(pw.password), Some(password_validator))
+                                        .field(Some(pw.notes), Some(password_validator))
                                         .build().expect("modals error in edit");
                                     pw.description = edit_data.content()[0].content.as_str().unwrap().to_string();
                                     pw.username = edit_data.content()[1].content.as_str().unwrap().to_string();
@@ -591,8 +591,8 @@ impl ActionManager {
                                 if let Some(mut ai) = crate::fido::deserialize_app_info(data) {
                                     let edit_data = self.modals
                                         .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                        .field(Some(ai.name), Some(name_validator))
-                                        .field(Some(ai.notes), Some(name_validator))
+                                        .field(Some(ai.name), Some(password_validator))
+                                        .field(Some(ai.notes), Some(password_validator))
                                         .field(Some(hex::encode(ai.id)), None)
                                         .build().expect("modals error in edit");
                                     ai.name = edit_data.content()[0].content.as_str().unwrap().to_string();
@@ -646,12 +646,12 @@ impl ActionManager {
                                     let alg: String = pw.algorithm.into();
                                     let edit_data = self.modals
                                         .alert_builder(t!("vault.edit_dialog", xous::LANG))
-                                        .field(Some(pw.name), Some(name_validator))
-                                        .field(Some(pw.secret), Some(name_validator))
-                                        .field(Some(pw.notes), Some(name_validator))
-                                        .field(Some(pw.timestep.to_string()), Some(name_validator))
-                                        .field(Some(alg), Some(name_validator))
-                                        .field(Some(pw.digits.to_string()), Some(name_validator))
+                                        .field(Some(pw.name), Some(password_validator))
+                                        .field(Some(pw.secret), Some(password_validator))
+                                        .field(Some(pw.notes), Some(password_validator))
+                                        .field(Some(pw.timestep.to_string()), Some(password_validator))
+                                        .field(Some(alg), Some(password_validator))
+                                        .field(Some(pw.digits.to_string()), Some(password_validator))
                                         .build().expect("modals error in edit");
                                     pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
                                     pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
@@ -736,6 +736,7 @@ impl ActionManager {
         il.clear();
         match self.mode_cache {
             VaultMode::Password => {
+                let start = self.tt.elapsed_ms();
                 let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
@@ -751,6 +752,9 @@ impl ActionManager {
                         Vec::new()
                     }
                 };
+                log::info!("listing took {} ms", self.tt.elapsed_ms() - start);
+                let start = self.tt.elapsed_ms();
+                let klen = keylist.len();
                 for key in keylist {
                     match self.pddb.borrow().get(
                         VAULT_PASSWORD_DICT,
@@ -760,8 +764,13 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            // determine the exact length of the record and read it in one go.
+                            // read_to_end() performs ~5x read calls to do the same thing, because it
+                            // has to "guess" the total record length starting with a 32-byte increment
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(pw) = deserialize_password(data) {
                                         let extra = format!("{}; {}{}",
@@ -794,6 +803,7 @@ impl ActionManager {
                         },
                     }
                 }
+                log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
             }
             VaultMode::Fido => {
                 // first assemble U2F records
@@ -820,8 +830,10 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(ai) = deserialize_app_info(data) {
                                         let extra = format!("{}; {}{}",
@@ -871,8 +883,10 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     match crate::ctap::storage::deserialize_credential(&data) {
                                         Some(result) => {
@@ -923,8 +937,10 @@ impl ActionManager {
                         Some(crate::basis_change)
                     ) {
                         Ok(mut record) => {
-                            let mut data = Vec::<u8>::new();
-                            match record.read_to_end(&mut data) {
+                            let len = record.attributes().unwrap().len;
+                            let mut data = Vec::<u8>::with_capacity(len);
+                            data.resize(len, 0);
+                            match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(totp) = deserialize_totp(data) {
                                         let alg: String = totp.algorithm.into();
@@ -1293,7 +1309,15 @@ pub(crate) fn totp_ss_validator(input: TextEntryPayload) -> Option<xous_ipc::Str
 }
 pub(crate) fn name_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
     let proposed_name = input.as_str();
-    if proposed_name.contains('\n') { // the '\n' is reserved as the delimiter to end the name field
+    if proposed_name.contains(['\n',':']) { // the '\n' is reserved as the delimiter to end the name field, and ':' is the path separator
+        Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", xous::LANG)))
+    } else {
+        None
+    }
+}
+pub(crate) fn password_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+    let proposed_name = input.as_str();
+    if proposed_name.contains(['\n']) { // the '\n' is reserved as the delimiter to end the name field
         Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_char", xous::LANG)))
     } else {
         None

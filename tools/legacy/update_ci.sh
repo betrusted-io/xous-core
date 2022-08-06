@@ -14,7 +14,9 @@ else
     echo "Usage: ${0} [-s] [-b] [[-l LOCALE]], where LOCALE is one of en, ja, zh, or en-tts"
     echo "One of -s or -b must be specified for either stabilized or bleeding edge branches"
     echo " "
-    echo "This script does a factory reset: all keys and data will be lost. No backsies."
+    echo "This script also assumes you have initialized your root keys. If you have not,"
+    echo "you will have to download and overwrite your base gateware image manually"
+    echo "using the './usb_update --soc' command."
     exit 1
 fi
 
@@ -30,36 +32,37 @@ else
 fi
 
 ./usb_update.py --disable-boot
-echo "waiting for device to reboot"
+echo "waiting for device to reconnect"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/xous$LOCALE.img -O /tmp/xous.img
 ./usb_update.py -k /tmp/xous.img
 rm /tmp/xous.img
 
-echo "waiting for device to reboot"
+echo "waiting for device to reconnect"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/ec_fw.bin -O /tmp/ec_fw.bin
 ./usb_update.py -e /tmp/ec_fw.bin
 rm /tmp/ec_fw.bin
 
+echo "waiting for device to reconnect"
 sleep 5
 
 wget https://ci.betrusted.io/$REVISION/wf200_fw.bin -O /tmp/wf200_fw.bin
 ./usb_update.py -w /tmp/wf200_fw.bin
 rm /tmp/wf200_fw.bin
 
-echo "waiting for device to reboot"
+echo "waiting for device to reconnect"
 sleep 5
 
-# this should sequence last because it overwrites all of the CSR values on the currently loaded SoC
-wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
 wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
-./usb_update.py --enable-boot-wipe --soc /tmp/soc_csr.bin -l /tmp/loader.bin
+wget https://ci.betrusted.io/$REVISION/soc_csr.bin -O /tmp/soc_csr.bin
+./usb_update.py --enable-boot-update -s /tmp/soc_csr.bin -l /tmp/loader.bin
 rm /tmp/loader.bin
 rm /tmp/soc_csr.bin
 
-echo "Please insert a paperclip in the hard reset hole in the lower right hand corner to ensure the new FPGA gateware is loaded."
-echo "After inserting the paperclip you will need to apply power via USB to boot."
-echo "IMPORTANT: you must run 'ecup auto' to update the EC with the staged firmware objects."
+echo " "
+echo "Please insert a paperclip into the hole in the lower right hand corner to force a full reset."
+echo " "
+echo "Follow the on-device instructions to finalize the update."

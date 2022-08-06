@@ -54,10 +54,10 @@
         "en-tts": "Basis does not exist. Or maybe wrong password?"
     },
     "vault.error.mount_pddb": {
-        "en": "PDDB not mounted. Please init root keys and then init PDDB.",
+        "en": "PDDB not mounted. Please setup passwords, and then format the PDDB.",
         "ja": "PDDBがマウントされていません。 ルートキーを初期化してから、PDDBを初期化してください。",
         "zh": "未安装 PDDB。 请初始化根密钥，然后初始化 PDDB。",
-        "en-tts": "PDDB not mounted. Please init rootkeys and then init PDDB."
+        "en-tts": "PDDB not mounted. Please setup passwords and then format the PDDB."
     },
     "vault.error.time_init": {
         "en": "Please set the time.",
@@ -198,10 +198,10 @@
         "en-tts": "Symbols"
     },
     "vault.illegal_char": {
-        "en": "Entries may not contain a newline character.",
-        "ja": "エントリに改行文字を含めることはできません。",
-        "zh": "条目可能不包含换行符。",
-        "en-tts": "Entries may not contain a newline character."
+        "en": "Entries may not contain ':', or a newline character.",
+        "ja": "エントリに「：」または改行文字を含めることはできません。",
+        "zh": "条目不得包含 ':' 或换行符。",
+        "en-tts": "Entries may not contain ':', or a newline character."
     },
     "vault.illegal_number": {
         "en": "Please enter a number from 1-128",

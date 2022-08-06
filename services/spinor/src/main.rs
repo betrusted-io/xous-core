@@ -249,6 +249,8 @@ mod implementation {
         // write 0 into the register to clear it
         spinor.csr.wfo(utra::spinor::WDATA_WDATA, 0);
         flash_wrcr2(&mut spinor.csr, 0x800);
+        spinor.csr.wfo(utra::spinor::WDATA_WDATA, 0);
+        flash_wrcr2(&mut spinor.csr, 0x0400_0800);
 
         xous::try_send_message(spinor.handler_conn,
             xous::Message::new_scalar(Opcode::EccError.to_usize().unwrap(),
@@ -833,6 +835,13 @@ fn main() -> ! {
                     This is the raw log:
                     ERR :spinor: ECC error reported: 0xfffffffc 0xb3b30000 0x3305080 0x7305030 (services\spinor\src\main.rs:830)
                     Archived here: https://ci.betrusted.io/view/Enabled/job/ctap2-tests/64/console
+                    - Second ECC failure noted July 13, 2022 on the high-cycle dev unit. The failure actually may
+                      be linked to an aborted write during backup generation; it was reported at an address that
+                      up until now was never used. This error was different from the previous one in that after
+                      tripping the ROM would only return 0xFF, and it would not clear. The error address
+                      was 0x01D7_F0A0 - just inside the backup block. The backup code has been fixed to not
+                      use two disjoint patch operations to merge its data, and to instead merge the write data
+                      before patching. Error was cleared by erasing the block, and has not since been observed again.
                  */
                 if !ecc_errors.contains(&(hw_rep as u32, status as u32, lower_addr as u32, upper_addr as u32)) {
                     if ecc_errors.len() < MAX_ERRLOG_LEN {

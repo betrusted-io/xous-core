@@ -12,6 +12,8 @@ pub struct ScanCode {
     pub alt: Option<char>,
 }
 
+/// Maintainer note: there is a "BackupKeyboardLayout" serializer inside
+/// root-keys/api.rs that needs to be updated when this changes.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum KeyMap {
     Qwerty,

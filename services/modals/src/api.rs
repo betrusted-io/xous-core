@@ -40,7 +40,15 @@ pub struct ManagedNotification {
     pub token: [u32; 4],
     pub message: xous_ipc::String<1024>,
     // A Type 40 (177x177) qrcode with Medium data correction can encode max 3391 alphanumeric characters
-    pub qrtext: Option<xous_ipc::String<4096>>,
+    pub qrtext: Option<xous_ipc::String<3000>>,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct ManagedBip39 {
+    pub token: [u32; 4],
+    pub bip39_data: [u8; 32],
+    pub bip39_len: u32,
+    pub caption: Option<xous_ipc::String<1024>>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -73,6 +81,10 @@ pub struct DynamicNotification {
     pub text: Option<xous_ipc::String<2048>>,
 }
 
+/// API note: enums with explicit numbers may not have their numbers re-ordered, especially
+/// not for aesthetic reasons! This is because when we assign numbers to enums, something else
+/// is explicitly depending on that number in a way that will break if you change it (e.g.
+/// FFI ABIs)
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     // these are blocking calls
@@ -82,6 +94,10 @@ pub(crate) enum Opcode {
     PromptWithMultiResponse = 1,
     /// simple notification
     Notification = 2,
+    /// bip39 coded notification
+    Bip39 = 31, // ---- note op number
+    Bip39Input = 32, // ----- note op number
+    Bip39Return = 33, // ----- note op number
     /// display an image
     #[cfg(feature = "ditherpunk")]
     Image = 3,

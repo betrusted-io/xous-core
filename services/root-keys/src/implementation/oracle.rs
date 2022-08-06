@@ -7,7 +7,7 @@ use aes::Aes256;
 use aes::cipher::{KeyInit, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FpgaKeySource {
     Bbram,
     Efuse,

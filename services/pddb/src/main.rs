@@ -373,11 +373,16 @@ use ux::*;
 mod menu;
 use menu::*;
 
+mod libstd;
+
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod tests;
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 #[allow(unused_imports)]
 use tests::*;
+
+#[cfg(feature="pddb-flamegraph")]
+mod profiling;
 
 use num_traits::*;
 use xous::{send_message, Message, msg_blocking_scalar_unpack};
@@ -385,7 +390,7 @@ use xous_ipc::Buffer;
 use core::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeSet};
 use std::io::ErrorKind;
 use core::fmt::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -413,6 +418,21 @@ struct TokenRecord {
     pub alloc_hint: Option<usize>,
     pub conn: Option<xous::CID>, // callback connection, if one was specified
 }
+
+struct FileHandle {
+    pub dict: String,
+    pub key: String,
+    pub basis: Option<String>,
+    pub alloc_hint: Option<usize>,
+    pub offset: u64,
+    pub length: u64,
+    pub conn: Option<xous::CID>, // callback connection, if one was specified
+
+    /// This is set to `true` when a file is removed in order to prevent
+    /// other operations from functioning.
+    pub deleted: bool,
+}
+
 fn main () -> ! {
     let stack_size = 1024 * 1024;
     std::thread::Builder::new()
@@ -422,6 +442,7 @@ fn main () -> ! {
         .join()
         .unwrap()
 }
+
 fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -437,12 +458,28 @@ fn wrapped_main() -> ! {
     // for less-secured user prompts (everything but password entry)
     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
 
+    // our very own password modal. Password modals are precious and privately owned, to avoid
+    // other processes from crafting them.
+    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
+    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
+    let pw_handle = thread::spawn({
+        move || {
+            password_ux_manager(
+                xous::connect(pddb_sid).unwrap(),
+                pw_sid
+            )
+        }
+    });
+
     // OS-specific PDDB driver
-    let mut pddb_os = PddbOs::new(Rc::clone(&entropy));
+    let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
     // storage for the basis cache
     let mut basis_cache = BasisCache::new();
     // storage for the token lookup: given an ApiToken, return a dict/key/basis set. Basis can be None or specified.
     let mut token_dict = HashMap::<ApiToken, TokenRecord>::new();
+
+    // Process-indexed map of file descriptors to token records
+    let mut fd_mapping = HashMap::<Option<xous::PID>, Vec<Option<FileHandle>>>::new();
 
     // mount poller thread
     let is_mounted = Arc::new(AtomicBool::new(false));
@@ -453,7 +490,7 @@ fn wrapped_main() -> ! {
             let poller_sid = xns.register_name(api::SERVER_NAME_PDDB_POLLER, None).expect("can't register server");
             loop {
                 let msg = xous::receive_message(poller_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                match FromPrimitive::from_usize(msg.body.id() & 0xffff) {
                     Some(PollOp::Poll) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         if is_mounted.load(Ordering::SeqCst) {
                             xous::return_scalar(msg.sender, 1).unwrap();
@@ -483,35 +520,12 @@ fn wrapped_main() -> ! {
         hw_testcase(&mut pddb_os);
     }
 
-    // our very own password modal. Password modals are precious and privately owned, to avoid
-    // other processes from crafting them.
-    let pw_sid = xous::create_server().expect("couldn't create a server for the password UX handler");
-    let pw_cid = xous::connect(pw_sid).expect("couldn't connect to the password UX handler");
-    let pw_handle = thread::spawn({
-        move || {
-            password_ux_manager(
-                xous::connect(pddb_sid).unwrap(),
-                pw_sid
-            )
-        }
-    });
     // our menu handler
     let my_cid = xous::connect(pddb_sid).unwrap();
     let _ = thread::spawn({
         let my_cid = my_cid.clone();
         move || {
             pddb_menu(my_cid);
-        }
-    });
-    // spawn a delayed mount command, shortly after boot. There's too much going on at boot, and it blocks other things from coming up.
-    let _ = thread::spawn({
-        let my_cid = my_cid.clone();
-        move || {
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            tt.sleep_ms(4000).unwrap(); // wait after boot before attempting to mount, to let the boot screen finish redrawing
-            send_message(my_cid,
-                Message::new_blocking_scalar(Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)
-            ).expect("couldn't send mount request");
         }
     });
     // a thread to trigger period scrubbing of the PDDB
@@ -521,18 +535,31 @@ fn wrapped_main() -> ! {
         let scrub_run = scrub_run.clone();
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
+            let mut flush_interval = 0;
+            const ARBITRARY_INTERVAL_MS: usize = 12_513;
+            const PERIODIC_FLUSH_MS: usize = 1000 * 60 * 60 * 18 - 5555; // every 18 hours less ~5 seconds to try and stagger the process off of other periodics
             loop {
-                tt.sleep_ms(12_513).unwrap(); // arbitrary interval, but trying to avoid "round" numbers of seconds to interleave periodic tasks
+                tt.sleep_ms(ARBITRARY_INTERVAL_MS).unwrap(); // arbitrary interval, but trying to avoid "round" numbers of seconds to interleave periodic tasks
+                flush_interval += ARBITRARY_INTERVAL_MS;
                 if scrub_run.load(Ordering::SeqCst) {
-                    send_message(my_cid,
-                        Message::new_scalar(Opcode::PeriodicScrub.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't send mount request");
+                    if flush_interval > PERIODIC_FLUSH_MS {
+                        // this runs once a day, and skips the scrub request when it runs
+                        flush_interval = 0;
+                        send_message(my_cid,
+                            Message::new_blocking_scalar(Opcode::FlushSpaceUpdate.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't send flush request");
+                    } else {
+                        // this is what actually runs every interval, to a first order
+                        send_message(my_cid,
+                            Message::new_scalar(Opcode::PeriodicScrub.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't send scrub request");
+                    }
                 }
             }
         }
     });
     // main server loop
-    let mut key_list = Vec::<String>::new(); // storage for key lists
+    let mut key_list: Option::<BTreeSet::<String>> = None; // storage for key lists
     let mut key_token: Option<[u32; 4]> = None;
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
@@ -575,7 +602,8 @@ fn wrapped_main() -> ! {
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
     loop {
         let mut msg = xous::receive_message(pddb_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()).unwrap_or(Opcode::InvalidOpcode) {
+        // log::error!("got msg: {:x?}", msg);
+        match FromPrimitive::from_usize(msg.body.id() & 0xffff).unwrap_or(Opcode::InvalidOpcode) {
             Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
@@ -638,6 +666,8 @@ fn wrapped_main() -> ! {
                         latest_cache = basis_cache.cache_size();
                         log::info!("PDDB post-mount caching stats: {} heap, {} cache", latest_heap, latest_cache);
                         scrub_run.store(true, Ordering::SeqCst);
+                        #[cfg(feature="pddb-flamegraph")]
+                        profiling::do_query_work();
                     }
                 }
             }),
@@ -671,6 +701,30 @@ fn wrapped_main() -> ! {
                 list_ipc.num = basis_list.len() as u32;
                 buffer.replace(list_ipc).unwrap();
             }
+            Opcode::ListBasisStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_basis(mem, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+            Opcode::ListPathStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_path(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+            Opcode::StatPathStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::stat_path(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
             Opcode::LatestBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut mgmt = buffer.to_original::<PddbBasisRequest, _>().unwrap();
@@ -682,6 +736,20 @@ fn wrapped_main() -> ! {
                     mgmt.code = PddbRequestCode::NotMounted;
                 }
                 buffer.replace(mgmt).unwrap();
+            }
+            Opcode::LatestBasisStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Some(name) = basis_cache.basis_latest() {
+                        for (src, dest) in name.as_bytes().iter().zip(mem.buf.as_slice_mut().iter_mut()) {
+                            *dest = *src;
+                        }
+                        mem.offset = xous::MemorySize::new(name.len().min(mem.buf.len()));
+                    }
+                }
+            }
+            Opcode::CreateBasisStd => {
+                unimplemented!()
             }
             Opcode::CreateBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -697,7 +765,10 @@ fn wrapped_main() -> ! {
                         let ret = buf.to_original::<BasisRequestPassword, _>().unwrap();
                         if let Some(pw) = ret.plaintext_pw {
                             match basis_cache.basis_create(&mut pddb_os, mgmt.name.as_str().expect("name is not valid utf-8"), pw.as_str().expect("password was not valid utf-8")) {
-                                Ok(_) => mgmt.code = PddbRequestCode::NoErr,
+                                Ok(_) => {
+                                    log::info!("{}PDDB.CREATEOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
+                                    mgmt.code = PddbRequestCode::NoErr
+                                },
                                 _ => mgmt.code = PddbRequestCode::InternalError,
                             }
                         } else {
@@ -731,8 +802,10 @@ fn wrapped_main() -> ! {
                                 ) {
                                     basis_cache.basis_add(basis);
                                     finished = true;
+                                    log::info!("{}PDDB.UNLOCKOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
                                     mgmt.code = PddbRequestCode::NoErr;
                                 } else {
+                                    log::info!("{}PDDB.BADPASS,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
                                     modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
                                     modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
                                     match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
@@ -841,7 +914,9 @@ fn wrapped_main() -> ! {
                             // create an empty key placeholder
                             let empty: [u8; 0] = [];
                             match basis_cache.key_update(&mut pddb_os,
-                                dict, key, &empty, None, alloc_hint, bname, true
+                                dict, key, &empty, None, alloc_hint, bname,
+                                // don't truncate if we've been given an explicit size hint.
+                                alloc_hint.is_none()
                             ) {
                                 Ok(_) => {},
                                 Err(e) => {
@@ -877,6 +952,15 @@ fn wrapped_main() -> ! {
                     break; // if we got here, entry was found, stop searching
                 }
             }
+            Opcode::OpenKeyStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::open_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default()) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+
             Opcode::KeyDrop => msg_blocking_scalar_unpack!(msg, t0, t1, t2, _, {
                 let token: ApiToken = [t0 as u32, t1 as u32, t2 as u32];
                 if let Some(rec) = token_dict.remove(&token) {
@@ -900,9 +984,26 @@ fn wrapped_main() -> ! {
                     } else {
                         // if there was no/never a connection allocated, there's no connection to remove. do nothing.
                     }
+                    xous::return_scalar(msg.sender, PddbRetcode::Ok as usize).expect("couldn't ack KeyDrop");
+                } else {
+                    xous::return_scalar(msg.sender, PddbRetcode::BasisLost as usize).expect("couldn't ack KeyDrop");
                 }
-                xous::return_scalar(msg.sender, 1).expect("couldn't ack KeyDrop");
             }),
+
+            Opcode::CloseKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if msg.body.scalar_message().is_some() {
+                    let result = libstd::close_key(fd_mapping.entry(msg.sender.pid()).or_default(), fd);
+                    if msg.body.is_blocking() {
+                        if let Err(e) = result {
+                            xous::return_scalar(msg.sender, e as usize)
+                        } else {
+                            xous::return_scalar2(msg.sender, 0, 0)
+                        }.ok();
+                    }
+                }
+            }
+
             Opcode::DeleteKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
@@ -952,6 +1053,14 @@ fn wrapped_main() -> ! {
                     }
                 }
                 buffer.replace(req).unwrap();
+            }
+            Opcode::DeleteKeyStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(err) = libstd::delete_key(mem, &mut pddb_os, &mut basis_cache, &mut fd_mapping) {
+                        mem.offset = xous::MemoryAddress::new(err as usize);
+                    }
+                }
             }
             Opcode::DeleteDict => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -1003,6 +1112,22 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
+            Opcode::DeleteDictStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(err) = libstd::delete_dict(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(err as usize);
+                    }
+                }
+            }
+            Opcode::CreateDictStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(err) = libstd::create_dict(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(err as usize);
+                    }
+                }
+            }
             Opcode::KeyAttributes => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbKeyAttrIpc, _>().unwrap();
@@ -1033,7 +1158,6 @@ fn wrapped_main() -> ! {
                     continue;
                 }
                 key_token = Some(req.token);
-                key_list.clear();
                 let bname = if req.basis_specified {
                     Some(req.basis.as_str().unwrap())
                 } else {
@@ -1041,65 +1165,80 @@ fn wrapped_main() -> ! {
                 };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
                 log::debug!("counting keys in dict {} basis {:?}", dict, bname);
-                match basis_cache.key_list(&mut pddb_os, dict, bname) {
+                key_list = match basis_cache.key_list(&mut pddb_os, dict, bname) {
                     Ok(list) => {
                         log::debug!("count: {}", list.len());
-                        if list.len() > 0 {
-                            req.index = list.len() as u32;
-                            for key in list {
-                                log::debug!("key list: {}", key);
-                                key_list.push(key);
-                            }
-                        } else {
-                            log::debug!("count is 0, resetting state");
-                            // no keys to list, so reset the state
-                            key_token = None;
-                            key_list.clear();
-                        }
                         req.code = PddbRequestCode::NoErr;
+                        Some(list)
                     }
                     Err(e) => {
                         key_token = None;
-                        key_list.clear();
                         match e.kind() {
                             std::io::ErrorKind::NotFound => req.code = PddbRequestCode::NotFound,
                             _ => req.code = PddbRequestCode::InternalError,
                         }
+                        None
                     }
-                }
+                };
                 buffer.replace(req).unwrap();
             }
-            Opcode::GetKeyNameAtIndex => {
+            Opcode::ListKeyV2 => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
+                let mut req = buffer.to_original::<PddbKeyList, _>().unwrap();
                 if let Some(token) = key_token {
                     if req.token != token {
-                        req.code = PddbRequestCode::AccessDenied;
+                        req.retcode = PddbRetcode::AccessDenied;
                     } else {
-                        if req.index >= key_list.len() as u32 {
-                            req.code = PddbRequestCode::InternalError;
-                        } else {
-                            req.key = xous_ipc::String::<KEY_NAME_LEN>::from_str(&key_list[req.index as usize]);
-                            req.code = PddbRequestCode::NoErr;
-                            log::debug!("fetching key at index {}: {}", req.index, req.key);
-                            // the last index requested must be the highest one!
-                            if req.index == key_list.len() as u32 - 1 {
-                                log::debug!("last key, resetting state");
-                                key_token = None;
-                                key_list.clear();
+                        if let Some(klist) = &mut key_list {
+                            let mut index = 0;
+                            loop {
+                                let keyname =
+                                    if let Some(keyname) = klist.iter().next() {
+                                        keyname.to_string()
+                                    } else {
+                                        key_token = None;
+                                        req.end = true;
+                                        req.retcode = PddbRetcode::Ok;
+                                        break;
+                                    };
+                                if keyname.len() + 1 + index < MAX_PDDBKLISTLEN {
+                                    assert!(keyname.len() < u8::MAX as usize); // this should always be true due to other limits in the PDDB
+                                    req.data[index] = keyname.len() as u8;
+                                    index += 1;
+                                    req.data[index..index + keyname.len()].copy_from_slice(keyname.as_bytes());
+                                    index += keyname.len();
+                                    klist.remove(&keyname);
+                                } else {
+                                    // don't remove the item, and indicate there is more to come
+                                    req.end = false;
+                                    req.retcode = PddbRetcode::Ok;
+                                    break;
+                                }
                             }
+                        } else {
+                            key_token = None;
+                            req.end = true;
+                            req.retcode = PddbRetcode::Ok;
                         }
                     }
                 } else {
                     log::debug!("multiple concurrent requests detected, returning error");
-                    req.code = PddbRequestCode::AccessDenied;
+                    req.retcode = PddbRetcode::AccessDenied;
                 }
                 buffer.replace(req).unwrap();
+            }
+            Opcode::ListKeyStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_key(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
             }
             Opcode::DictCountInBasis => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
-                if key_token.is_some() {
+                if dict_token.is_some() {
                     req.code = PddbRequestCode::AccessDenied;
                     buffer.replace(req).unwrap();
                     continue;
@@ -1148,6 +1287,14 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(req).unwrap();
             }
+            Opcode::ListDictStd => {
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::list_dict(mem, &mut pddb_os, &mut basis_cache) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
             Opcode::ReadKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
@@ -1155,7 +1302,7 @@ fn wrapped_main() -> ! {
                 if let Some(rec) = token_dict.get(&token) {
                     for basis in basis_cache.access_list().iter() {
                         let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
-                        log::debug!("read (spec: {:?}){:?} {}", rec.basis, temp, rec.key);
+                        log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
                         match basis_cache.key_read(&mut pddb_os,
                             &rec.dict, &rec.key,
                             &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
@@ -1182,6 +1329,31 @@ fn wrapped_main() -> ! {
                 }
                 // we don't nede a "replace" operation because all ops happen in-place
             }
+
+            Opcode::SeekKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if let Some(scalar) = msg.body.scalar_message() {
+                    let seek_by = (((scalar.arg2 as u32) as u64) << 32) | ((scalar.arg3 as u32) as u64);
+                    let result = libstd::seek_key(scalar.arg1, seek_by, fd_mapping.entry(msg.sender.pid()).or_default(), fd);
+                    if msg.body.is_blocking() {
+                        match result {
+                            Ok(offset) => xous::return_scalar2(msg.sender, offset as usize, (offset >> 32) as usize).ok(),
+                            Err(e) =>xous::return_scalar(msg.sender, e as usize).ok(),
+                        };
+                    }
+                }
+            }
+
+            Opcode::ReadKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::read_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default(), fd) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+
             Opcode::WriteKey => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
@@ -1216,6 +1388,17 @@ fn wrapped_main() -> ! {
                 // for now, do an expensive sync operation after every write to ensure data integrity
                 basis_cache.sync(&mut pddb_os, None).expect("couldn't sync basis");
             }
+
+            Opcode::WriteKeyStd => {
+                let fd = (msg.body.id() >> 16) & 0xffff;
+                if let Some(mem) = msg.body.memory_message_mut() {
+                    mem.offset = None;
+                    if let Err(e) = libstd::write_key(mem, &mut pddb_os, &mut basis_cache, fd_mapping.entry(msg.sender.pid()).or_default(), fd) {
+                        mem.offset = xous::MemoryAddress::new(e as usize);
+                    }
+                }
+            }
+
             Opcode::WriteKeyFlush => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 match basis_cache.sync(&mut pddb_os, None) {
                     Ok(_) => xous::return_scalar(msg.sender, PddbRetcode::Ok.to_usize().unwrap()).unwrap(),
@@ -1226,6 +1409,7 @@ fn wrapped_main() -> ! {
                     }
                 };
             }),
+
             Opcode::MenuListBasis => {
                 let bases = basis_cache.basis_list();
                 let mut note = String::from(t!("pddb.menu.listbasis_response", xous::LANG));
@@ -1235,6 +1419,20 @@ fn wrapped_main() -> ! {
                 }
                 modals.show_notification(&note, None).expect("couldn't show basis list");
             },
+            Opcode::RekeyPddb => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let rekey_op = buffer.to_original::<PddbRekeyOp, _>().unwrap();
+                let result = basis_cache.rekey(&mut pddb_os, rekey_op);
+                buffer.replace(result).unwrap();
+            }
+            Opcode::FlushSpaceUpdate => {
+                pddb_os.fast_space_flush();
+                xous::return_scalar(msg.sender, 1).ok();
+            }
+            Opcode::ResetDontAskInit => {
+                pddb_os.reset_dont_ask_init();
+                xous::return_scalar(msg.sender, 1).ok();
+            }
             #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -1242,7 +1440,13 @@ fn wrapped_main() -> ! {
                 match dbg.request {
                     DebugRequest::Dump => {
                         log::info!("dumping pddb to {}", dbg.dump_name.as_str().unwrap());
+                        #[cfg(not(feature="autobasis"))]
                         pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), None);
+                        #[cfg(feature="autobasis")]
+                        {
+                            let export_extra = pddb_os.dbg_extra();
+                            pddb_os.dbg_dump(Some(dbg.dump_name.as_str().unwrap().to_string()), Some(&export_extra));
+                        }
                     },
                     DebugRequest::Remount => {
                         log::info!("attempting remount");
@@ -1256,6 +1460,18 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
+            #[cfg(all(feature="pddbtest", feature="autobasis"))]
+            Opcode::BasisTesting => xous::msg_scalar_unpack!(msg, op, valid, _, _, {
+                let mut config: [Option<bool>; 32] = [None::<bool>; 32];
+                for i in 0..32 {
+                    if ((1 << i) & valid) != 0 {
+                        config[i] = Some(
+                            ((1 << i) & op) != 0
+                        )
+                    }
+                }
+                pddb_os.basis_testing(&mut basis_cache, &config);
+            }),
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
                 send_message(
@@ -1334,7 +1550,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(target_os = "none", target_os = "xous", feature="test-rekey"))]
         {
             log::debug!("PDDB did not mount; requesting format");
             modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
@@ -1403,7 +1619,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 false
             }
         }
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(not(any(target_os = "none", target_os = "xous", feature="test-rekey")))]
         {
             pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
             let _ = xous::send_message(time_resetter,

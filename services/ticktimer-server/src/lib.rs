@@ -4,6 +4,7 @@ pub mod api;
 
 use num_traits::ToPrimitive;
 use xous::{send_message, Error, CID};
+use xous_semver::SemVer;
 
 #[derive(Debug)]
 pub struct Ticktimer {
@@ -72,6 +73,9 @@ impl Ticktimer {
             .to_original::<api::VersionString, _>()
             .expect("couldn't revert buffer");
         String::from(v.version.as_str().unwrap())
+    }
+    pub fn get_version_semver(&self) -> SemVer {
+        SemVer::from_str(self.get_version().lines().next().unwrap()).unwrap()
     }
 
     /// Lock the given Mutex. Blocks until the Mutex is locked.

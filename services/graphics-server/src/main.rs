@@ -472,7 +472,11 @@ fn wrapped_main() -> ! {
                         .expect("couldn't ack that bulk read pointer was reset");
                 }),
                 Some(Opcode::BulkReadFonts) => {
-                    let fontlen = fontmap::FONT_TOTAL_LEN as u32 + 8;
+                    // this also needs to reflect in root-keys/src/implementation.rs @ sign_loader()
+                    let fontlen = fontmap::FONT_TOTAL_LEN as u32
+                        + 16  // minver
+                        + 16  // current ver
+                        + 8;  // sig ver + len
                     let mut buf = unsafe {
                         Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                     };
@@ -606,6 +610,20 @@ fn wrapped_main() -> ! {
 
                     xous::return_scalar(msg.sender, duration).expect("couldn't ack test pattern");
                 }),
+                Some(Opcode::Stash) => {
+                    display.stash();
+                    match msg.body { // ack the message if it's a blocking scalar
+                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
+                        _ => ()
+                    }
+                }
+                Some(Opcode::Pop) => {
+                    display.pop();
+                    match msg.body { // ack the message if it's a blocking scalar
+                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
+                        _ => ()
+                    }
+                }
                 Some(Opcode::Quit) => break,
                 None => {
                     log::error!("received opcode scalar that is not handled");

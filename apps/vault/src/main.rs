@@ -373,7 +373,7 @@ fn main() -> ! {
             Some(VaultOp::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
                 vaultux.change_focus_to(&new_state);
-                log::info!("change focus: {:?}", new_state);
+                log::debug!("change focus: {:?}", new_state);
                 match new_state {
                     gam::FocusState::Background => {
                         allow_redraw = false;
