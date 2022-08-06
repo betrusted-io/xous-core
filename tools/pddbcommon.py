@@ -205,7 +205,7 @@ class KeyDescriptor:
                     if remaining > 0:
                         assert(read_start == 0)
                 except ValueError:
-                    logging.error("key: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(page_addr), pp_start)
+                    logging.error("key: couldn't decrypt vpage @ {:x} ppage @ {:x} data {}".format(page_addr, pp_start, pp_data.hex()))
                 page_addr += VPAGE_SIZE
             global DO_CI_TESTS
             if DO_CI_TESTS:
