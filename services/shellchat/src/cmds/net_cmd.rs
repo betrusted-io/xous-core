@@ -350,13 +350,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         write!(stream, "Connection: close\r\n").expect("stream error");
                                         write!(stream, "\r\n").expect("stream error");
                                         log::info!("fetching response....");
-                                        // let mut reader = std::io::BufReader::new(&mut stream);
+                                        let mut reader = std::io::BufReader::new(&mut stream);
                                         log::info!("trying to read entire response...");
                                         let mut received = Vec::<u8>::new();
                                         received.reserve(128 * 1024); // up to 128k image size...
-                                        let mut rx_len = 0;
-                                        const CHUNK: usize = 4096;
-                                        /*
                                         let rx_len = match reader.read_to_end(&mut received) {
                                             Ok(len) => len,
                                             Err(e) => {
@@ -364,37 +361,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                 write!(ret, "Couldn't read image: {:?}", e).unwrap();
                                                 return Ok(Some(ret))
                                             }
-                                        }; */
-                                        let mut rx_buf = [0u8; CHUNK];
-                                        log::info!("starting read loop");
-                                        // stream.set_nonblocking(true).expect("couldn't set stream to nonblocking");
-                                        // let mut last_chunk = 0;
-                                        loop {
-                                            match stream.read(&mut rx_buf) {
-                                                Ok(len) => {
-                                                    log::info!("got {} bytes", len);
-                                                    received.extend_from_slice(&rx_buf[..len]);
-                                                    rx_len += len;
-                                                    if len == 0 {
-                                                        log::info!("got 0-length read, concluding we're at an EOF...");
-                                                        break;
-                                                    }
-                                                    /*
-                                                    if last_chunk == 0 {
-                                                        last_chunk = len;
-                                                    } else {
-                                                        if len < last_chunk {
-                                                            log::info!("heuristic termination of read loop");
-                                                            break;
-                                                        }
-                                                    }*/
-                                                },
-                                                Err(e) => {
-                                                    log::info!("quitting read loop with err {:?}", e);
-                                                    break;
-                                                }
-                                            }
-                                        }
+                                        };
                                         log::info!("read {} bytes", rx_len);
                                         if let Some(start) = find_subsequence(
                                             &received,
