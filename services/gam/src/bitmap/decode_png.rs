@@ -216,7 +216,10 @@ impl<R: Read> DecodePng<R> {
                 };
                 self.bytes_per_pixel = (color_type.bpp(self.bit_depth) / 8).try_into().unwrap();
                 self.bytes_per_line = 1 + self.bytes_per_pixel * self.width as usize;
-                self.prior_line = vec![0u8; self.bytes_per_line];
+                // png filter specification calls for initial prior_line = [0u8]
+                // see: https://www.w3.org/TR/PNG/#9Filters
+                // but [0u8] results in distortion???????
+                self.prior_line = vec![125u8; self.bytes_per_line];
                 self.prior_px = vec![0u8; self.bytes_per_pixel];
             }
             (_, _) => return Err(Error::new(InvalidData, "header chunk not first")),
@@ -448,6 +451,7 @@ impl<R: Read> DecodePng<R> {
                     // capture the filter byte at the beginning of each png scan line
                     0 => {
                         self.set_filter_type();
+                        self.prior_px = vec![0u8; self.bytes_per_pixel];
                         0
                     }
                     i => i - 1,
