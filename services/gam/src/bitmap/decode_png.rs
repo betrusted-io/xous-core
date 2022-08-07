@@ -36,10 +36,19 @@ use std::io::{Error, ErrorKind::InvalidData, Read, Result};
 use miniz_oxide::{inflate::stream::InflateState, DataFormat, MZFlush, MZStatus};
 //use pix::rgb::SRgb8;
 
-mod consts;
-use consts::*;
 mod color_type;
 use color_type::*;
+
+// Magic bytes to start a PNG file.
+pub(super) const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
+
+// Chunk Identifiers
+pub(super) const IMAGE_HEADER: [u8; 4] = *b"IHDR";
+pub(super) const IMAGE_DATA: [u8; 4] = *b"IDAT";
+pub(super) const IMAGE_END: [u8; 4] = *b"IEND";
+pub(super) const PALETTE: [u8; 4] = *b"PLTE";
+
+pub(super) const MAX_CHUNK_SIZE: usize = 1 << 31; // 2³¹
 
 // These may be adjusted to tune the heap requirement.
 // Probably better for INFLATED_BUFFER = 2-3x IDAT_BUFFER
@@ -60,7 +69,6 @@ pub struct DecodePng<R: Read> {
     // PLTE chunk fields
     palette: Option<Vec<(u8, u8, u8)>>,
     //palette: Option<Vec<SRgb8>>,
-    chksum: u32,
     // fields to manage the filter
     bytes_per_pixel: usize,
     bytes_per_line: usize,
@@ -100,7 +108,6 @@ impl<R: Read> DecodePng<R> {
             filter_method: 0,
             interlace: false,
             palette: None,
-            chksum: consts::CRC32_INIT,
             bytes_per_pixel: 0,
             bytes_per_line: 0,
             byte_index: 0,
@@ -147,7 +154,7 @@ impl<R: Read> DecodePng<R> {
         self.bit_depth
     }
 
-    /// Prepare a chunk for reading, capturing name & length, and resetting checksum.
+    /// Prepare a chunk for reading, capturing name & length.
     pub(crate) fn prepare_chunk(&mut self) -> Result<([u8; 4], u32)> {
         let length = match self.u8() {
             Ok(first) => u32::from_be_bytes([first, self.u8()?, self.u8()?, self.u8()?]),
@@ -156,9 +163,8 @@ impl<R: Read> DecodePng<R> {
                 0
             }
         };
-        self.chksum = consts::CRC32_INIT;
         let name = [self.u8()?, self.u8()?, self.u8()?, self.u8()?];
-        if length > consts::MAX_CHUNK_SIZE as u32 {
+        if length > MAX_CHUNK_SIZE as u32 {
             log::warn!("failed to decode png chunk: oversize");
         }
         log::trace!(
@@ -198,7 +204,7 @@ impl<R: Read> DecodePng<R> {
                     1 => true,
                     _ => return Err(Error::new(InvalidData, "invalid interlace")),
                 };
-                self.check_crc()?;
+                self.ignore_crc()?;
 
                 color_type = match self.color_type {
                     0 => ColorType::Grey,
@@ -255,7 +261,7 @@ impl<R: Read> DecodePng<R> {
                         palette.push((red, green, blue));
                         //palette.push(SRgb8::new(red, green, blue));
                     }
-                    self.check_crc()?;
+                    self.ignore_crc()?;
                     Some(palette)
                 }
                 (IMAGE_DATA, _) => {
@@ -296,11 +302,12 @@ impl<R: Read> DecodePng<R> {
 
     /// Read and ignore the entire chunk + checksum.
     pub(crate) fn ignore_chunk(&mut self, length: u32) -> Result<()> {
-        let len = length + 4; // add 4 x u8 for checksum
+        let len = length;
         let mut byte = [0; 1];
         for _ in 0..len {
             self.reader.read_exact(&mut byte)?;
         }
+        self.ignore_crc()?;
         Ok(())
     }
 
@@ -308,8 +315,6 @@ impl<R: Read> DecodePng<R> {
     pub(crate) fn u8(&mut self) -> Result<u8> {
         let mut byte = [0; 1];
         self.reader.read_exact(&mut byte).map_err(Error::from)?;
-        let index: usize = (self.chksum as u8 ^ byte[0]).into();
-        self.chksum = consts::CRC32_LOOKUP[index] ^ (self.chksum >> 8);
         Ok(byte[0])
     }
 
@@ -323,18 +328,13 @@ impl<R: Read> DecodePng<R> {
         ]))
     }
 
-    /// Check if the CRC matches calculated CRC.
-    pub(crate) fn check_crc(&mut self) -> Result<()> {
-        let mut crc32 = [0; 4];
-        self.reader.read_exact(&mut crc32)?;
-        if u32::from_be_bytes(crc32) != (self.chksum ^ consts::CRC32_INIT) {
-            return Err(Error::new(InvalidData, "checksum failed"));
-        }
-        Ok(())
+    /// Ignore the CRC bytes for performance.
+    pub(crate) fn ignore_crc(&mut self) -> Result<u32> {
+        self.u32()
     }
 
     // Reads u8 bytes from the png idat chunk into the idat_buffer
-    // If the idat chunk is exhausted then check the checksum and
+    // If the idat chunk is exhausted then ignore the checksum and
     // move to the next idat chunk and continue.
     fn fill_idat_buffer(&mut self, length: usize) -> Result<u32> {
         let mut read = 0;
@@ -358,7 +358,7 @@ impl<R: Read> DecodePng<R> {
                     self.idat_buffer.push(byte);
                     self.idat_remaining -= 1;
                     if self.idat_remaining <= 0 {
-                        self.check_crc()?;
+                        self.ignore_crc()?;
                     }
                 }
                 Err(err) => {
