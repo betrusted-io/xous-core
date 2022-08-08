@@ -219,6 +219,7 @@ impl<R: Read> DecodePng<R> {
                 // png filter specification calls for initial prior_line = [0u8]
                 // see: https://www.w3.org/TR/PNG/#9Filters
                 // but [0u8] results in distortion???????
+                // TODO fix this properly (probably a byte overflow or bad cast)
                 self.prior_line = vec![125u8; self.bytes_per_line];
                 self.prior_px = vec![0u8; self.bytes_per_pixel];
             }
@@ -425,7 +426,7 @@ impl<R: Read> DecodePng<R> {
                 self.inflated_index += 1;
                 if filter_type <= 4 {
                     log::trace!(
-                        "png decode prior_line {} filter type = {}",
+                        "png decode line {} filter type = {}",
                         self.byte_index / self.bytes_per_line,
                         filter_type
                     );
@@ -440,6 +441,7 @@ impl<R: Read> DecodePng<R> {
 
     // Get an inflated byte from the png idat
     // Note: this fn() updates inflated_index, byte_index, line_index & filter_type
+    // a scanline of rgb begins with a filterbyte FRGBRGBRGBRGB...
     fn get_inflated_byte(&mut self) -> Option<u8> {
         match self.inflated_length() {
             0 => None,
@@ -462,6 +464,9 @@ impl<R: Read> DecodePng<R> {
     }
 
     // in the notation from https://www.w3.org/TR/PNG/#9Filters
+    // note that a & c relate to the equivalent byte in the prior pixel
+    // prior_line   R G B R G B c G B b G B R G B
+    // current_line R G B R G B a G B x
     fn unfilter(&mut self) -> Option<u8> {
         let filter = self.filter_type;
         let index = self.line_index;
@@ -497,7 +502,7 @@ impl<R: Read> DecodePng<R> {
 
 // in the notation from https://www.w3.org/TR/PNG/#9Filters
 fn average(a: u8, b: u8) -> u8 {
-    ((a as i16 + b as i16) >> 1) as u8
+    ((a as u16 + b as u16) >> 1) as u8
 }
 
 // in the notation from https://www.w3.org/TR/PNG/#9Filters
