@@ -458,6 +458,11 @@ fn main() -> ! {
                 vaultux.readout_mode(true);
                 modals.dynamic_notification_close().ok();
 
+                // TODO: rethink the integration of this menu item. The problem is that if you're in readout
+                // mode and the "vault" mode is active, the "pumper" thread keeps sending messages to redraw
+                // the TOTP timer bar. This will eventually overflow this server's queue and cause a hang.
+                // However, the final integration for this will depend a bit on how the vault upload/download PR
+                // turns out.
                 modals.show_notification(t!("vault.readout_active", xous::LANG), None).ok();
                 // TODO: add some variable here to de-activate HID readout once this is done
 
