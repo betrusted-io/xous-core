@@ -180,17 +180,15 @@ pub struct SpinalUsbDevice {
     // 1:1 mapping of endpoint structures to offsets in the memory space for the actual ep storage
     // data must be committed to this in a single write, and not composed dynamcally using this as scratch space
     eps: AtomicPtr<UdcEpStatus>,
-    // index into the view that represents the configuration we're showing right now.
-    current_view: Arc::<AtomicUsize>,
     // different views into allocation, depending on the configuration
-    view: Vec::<AllocView>,
+    view: AllocView,
     tt: ticktimer_server::Ticktimer,
     address: AtomicUsize,
     // bit vector to track if a read is allowed. This prevents a race condition between polled reads and interrupted reads.
     read_allowed: AtomicU16,
 }
 impl SpinalUsbDevice {
-    pub fn new(sid: xous::SID, view: Arc::<AtomicUsize>) -> SpinalUsbDevice {
+    pub fn new(sid: xous::SID) -> SpinalUsbDevice {
         // this particular core does not use CSRs for control - it uses directly memory mapped registers
         let usb = xous::syscall::map_memory(
             xous::MemoryAddress::new(utralib::HW_USBDEV_MEM),
@@ -219,8 +217,7 @@ impl SpinalUsbDevice {
             eps: AtomicPtr::new(unsafe {
                     (usb.as_mut_ptr().add(0x00) as *mut UdcEpStatus).as_mut().unwrap()
             }),
-            current_view: view,
-            view: vec![AllocView::default()], // always at least one view present
+            view: AllocView::default(),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             address: AtomicUsize::new(0),
             read_allowed: AtomicU16::new(0),
@@ -241,10 +238,6 @@ impl SpinalUsbDevice {
         usbdev.regs.set_config(cfg);
 
         usbdev
-    }
-    pub fn allocate_view(&mut self) -> usize {
-        self.view.push(AllocView::default());
-        self.view.len()
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
         SpinalUsbMgmt {
@@ -320,12 +313,12 @@ impl SpinalUsbDevice {
     /// 4 before being put into a SpinalHDL descriptor (it uses 16-byte alignment and thus
     /// discards the lower 4 bits).
     pub fn alloc_region(&mut self, requested: u32) -> Option<u32> {
-        alloc_inner(&mut self.view[self.current_view.load(Ordering::SeqCst)].allocs.lock().unwrap(), requested)
+        alloc_inner(&mut self.view.allocs.lock().unwrap(), requested)
     }
     #[allow(dead_code)]
     /// returns `true` if the region was available to be deallocated
     pub fn dealloc_region(&mut self, offset: u32) -> bool {
-        dealloc_inner(&mut self.view[self.current_view.load(Ordering::SeqCst)].allocs.lock().unwrap(), offset)
+        dealloc_inner(&mut self.view.allocs.lock().unwrap(), offset)
     }
     pub(crate) fn descriptor_from_status(&self, ep_status: &UdcEpStatus) -> SpinalUdcDescriptor {
         SpinalUdcDescriptor::new(
@@ -432,7 +425,7 @@ impl UsbBus for SpinalUsbDevice {
             return Ok(EndpointAddress::from_parts(0, UsbDirection::Out))
         }
         for index in ep_addr.map(|a| a.index()..a.index() + 1).unwrap_or(1..NUM_ENDPOINTS) {
-            if self.view[self.current_view.load(Ordering::SeqCst)].ep_allocs[index].is_none() {
+            if self.view.ep_allocs[index].is_none() {
                 // only if there is memory that can accommodate the max_packet_size
                 if let Some(offset) = self.alloc_region(max_packet_size as _) {
                     log::debug!("allocated offset {:x}({})", offset, max_packet_size);
@@ -489,12 +482,12 @@ impl UsbBus for SpinalUsbDevice {
 
                     if index == 0 {
                         // stash a copy of the ep0 IN head location, because the SETUP packet resets this to 0
-                        self.view[self.current_view.load(Ordering::SeqCst)].ep0in_head = ep_status.head_offset();
+                        self.view.ep0in_head = ep_status.head_offset();
                     }
 
                     // now commit the ep config
                     self.status_write_volatile(index, ep_status);
-                    self.view[self.current_view.load(Ordering::SeqCst)].ep_allocs[index] = Some((offset as usize / 16, max_packet_size as usize));
+                    self.view.ep_allocs[index] = Some((offset as usize / 16, max_packet_size as usize));
 
                     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                     log::info!("alloc ep{} type {:?} dir {:?}, @{:x}({})",
@@ -536,7 +529,7 @@ impl UsbBus for SpinalUsbDevice {
         self.regs.set_address(0x0); // this does *not* require the trigger
         self.address.store(0, Ordering::SeqCst);
         self.ep0_out_reset();
-        for (index, &ep) in self.view[self.current_view.load(Ordering::SeqCst)].ep_allocs.iter().enumerate() {
+        for (index, &ep) in self.view.ep_allocs.iter().enumerate() {
             if let Some((head_offset, max_len)) = ep {
                 if index == 0 {
                     log::trace!("ep0 reset");
@@ -569,7 +562,7 @@ impl UsbBus for SpinalUsbDevice {
         }
         if false {
             // Config confirmation for debug (change above to `true`)
-            for (index, &ep) in self.view[self.current_view.load(Ordering::SeqCst)].ep_allocs.iter().enumerate() {
+            for (index, &ep) in self.view.ep_allocs.iter().enumerate() {
                 if let Some((head_offset, _max_len)) = ep {
                     let mut ep_status = self.status_read_volatile(index);
                     ep_status.set_head_offset(head_offset as u32);
@@ -613,7 +606,7 @@ impl UsbBus for SpinalUsbDevice {
     ///
     /// Implementations may also return other errors if applicable.
     fn write(&self, ep_addr: EndpointAddress, buf: &[u8]) -> Result<usize> {
-        if let Some((head_offset, max_len)) = self.view[self.current_view.load(Ordering::SeqCst)].ep_allocs[ep_addr.index()] {
+        if let Some((head_offset, max_len)) = self.view.ep_allocs[ep_addr.index()] {
             if buf.len() > max_len {
                 Err(UsbError::BufferOverflow)
             } else {
@@ -729,7 +722,7 @@ impl UsbBus for SpinalUsbDevice {
     /// Implementations may also return other errors if applicable.
     fn read(&self, ep_addr: EndpointAddress, buf: &mut [u8]) -> Result<usize> {
         log::trace!("read ep{} into buf of len {}", ep_addr.index(), buf.len());
-        if let Some((head_offset, max_len)) = self.view[self.current_view.load(Ordering::SeqCst)].ep_allocs[ep_addr.index()] {
+        if let Some((head_offset, max_len)) = self.view.ep_allocs[ep_addr.index()] {
             if ep_addr.index() == 0 {
                 if buf.len() == 0 {
                     log::info!("STATUS dummy read");
@@ -954,8 +947,8 @@ impl UsbBus for SpinalUsbDevice {
                             // EP0 SETUP overrides the descriptor offset, restore it to obtain a descriptor
                             // (but don't write it back, since we're not ready to send anything --
                             // it will get written back on the next `write`)
-                            ep_status.set_head_offset(self.view[self.current_view.load(Ordering::SeqCst)].ep0in_head);
-                        } else if let Some((head_offset, _max_len)) = self.view[self.current_view.load(Ordering::SeqCst)].ep_allocs[bit] {
+                            ep_status.set_head_offset(self.view.ep0in_head);
+                        } else if let Some((head_offset, _max_len)) = self.view.ep_allocs[bit] {
                             if ep_status.head_offset() != 0 {
                                 log::warn!("got INT on ep{} but head is not 0", bit);
                             }

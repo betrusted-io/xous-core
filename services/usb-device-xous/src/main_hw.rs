@@ -111,9 +111,7 @@ pub(crate) fn main_hw() -> ! {
     }
 
     // this is a super-unsafe reach-around that shifts the hardware view based on the variable `view`
-    let view = Arc::new(AtomicUsize::new(0));
-    let mut usbdev = SpinalUsbDevice::new(usbdev_sid, view.clone());
-    assert_eq!(usbdev.allocate_view(), 2);
+    let mut usbdev = SpinalUsbDevice::new(usbdev_sid);
     let mut usbmgmt = usbdev.get_iface();
 
     // register a suspend/resume listener
@@ -128,7 +126,6 @@ pub(crate) fn main_hw() -> ! {
     let usb_alloc = UsbBusAllocator::new(usbdev);
     let clock = EmbeddedClock::new();
 
-    view.store(Views::FidoWithKbd as usize, Ordering::SeqCst);
     let mut composite = UsbHidClassBuilder::new()
         .add_interface(
             NKROBootKeyboardInterface::default_config(&clock),
@@ -160,7 +157,6 @@ pub(crate) fn main_hw() -> ! {
     .serial_number(&serial_number)
     .build(); */
 
-    view.store(Views::FidoWithKbd as usize, Ordering::SeqCst);
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     // under the theory that PIDs are unforgeable. TODO: check that PIDs are unforgeable.
