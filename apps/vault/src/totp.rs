@@ -151,7 +151,7 @@ pub(crate) fn pumper(mode: Arc<Mutex<VaultMode>>, sid: xous::SID, main_conn: xou
                 log::trace!("{:?}", opcode);
                 match opcode {
                     Some(PumpOp::Pump) => {
-                        try_send_message(main_conn,
+                        xous::try_send_message(main_conn,
                             Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(),
                             0, 0, 0, 0)
                         ).ok(); // don't panic if the queue overflows
