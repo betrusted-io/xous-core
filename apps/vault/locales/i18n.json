@@ -365,6 +365,18 @@
         "zh": "选择字体",
         "en-tts": "Select a font style"
     },
+    "vault.readout_switchover": {
+        "en": "Switching USB functions...",
+        "ja": "USB機能を切り替え中...",
+        "zh": "切换 USB 功能...",
+        "en-tts": "Switching USB functions..."
+    },
+    "vault.readout_active": {
+        "en": "🔓Readout mode active.🔓\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security.",
+        "ja": "🔓読み出しモードがアクティブです。🔓\n\nホストは、ロックされていないレコードの読み取りと書き込みを許可されています。\n\nホスト スクリプトを実行してから、任意のキーを押してセキュリティを復元してください。",
+        "zh": "🔓读出模式激活。🔓\n\n允许主机读取和写入未锁定的记录。\n\n请运行主机脚本，然后按任意键恢复安全。",
+        "en-tts": "Readout mode active.\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security."
+    },
     "vault.menu_autotype": {
         "en": "Autotype",
         "ja": "自動的に入力",
@@ -406,6 +418,12 @@
         "ja": "管理基盤",
         "zh": "管理基础",
         "en-tts": "Manage Bases"
+    },
+    "vault.menu_readout_mode": {
+        "en": "Enable host readout",
+        "ja": "ホスト読み出しを有効にする",
+        "zh": "启用主机读出",
+        "en-tts": "Enable host readout"
     },
     "vault.menu_close": {
         "en": "Close submenu",

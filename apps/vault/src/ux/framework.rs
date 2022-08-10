@@ -779,4 +779,15 @@ impl VaultUx {
         self.usb_dev.ensure_core(self.usb_type).unwrap();
         self.usb_dev.restrict_debug_access(true).unwrap();
     }
+    /// In readout mode, the keyboard composite function has to be turned off, because
+    /// Windows will block any programs that try to talk to USB devices that contain a keyboard
+    /// (ostensibly to prevent keyboard loggers).
+    pub(crate) fn readout_mode(&mut self, enabled: bool) {
+        if enabled {
+            self.usb_type = UsbDeviceType::Fido;
+        } else {
+            self.usb_type = UsbDeviceType::FidoKbd;
+        }
+        self.usb_dev.ensure_core(self.usb_type).unwrap();
+    }
 }

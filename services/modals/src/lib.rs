@@ -11,6 +11,7 @@ use gam::*;
 use num_traits::*;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
+#[cfg(feature = "ditherpunk")]
 use std::cmp::max;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
