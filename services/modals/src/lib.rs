@@ -11,6 +11,7 @@ use gam::*;
 use num_traits::*;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
+use std::cmp::max;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -250,48 +251,22 @@ impl Modals {
 
     /// this blocks until the image has been dismissed.
     #[cfg(feature = "ditherpunk")]
-    pub fn show_image(&self, img: &Img) -> Result<(), xous::Error> {
+    pub fn show_image(&self, mut bm: Bitmap) -> Result<(), xous::Error> {
         self.lock();
-        // resize and/or rotate
-        const BORDER: u32 = 3;
-
-        let (modal_width, modal_height) = (
-            gam::IMG_MODAL_WIDTH - 2 * BORDER,
-            gam::IMG_MODAL_HEIGHT - 2 * BORDER,
-        );
-
-        let (w, h) = (img.width(), img.height());
-        let (img_width, img_height) = (w as f32, h as f32);
-
-        let portrait_scale = (modal_width as f32 / img_width).min(modal_height as f32 / img_height);
-        let landscape_scale =
-            (modal_width as f32 / img_height).min(modal_height as f32 / img_width);
-        let mut bm = if portrait_scale >= 1.0 {
-            log::info!("show image as is");
-            Bitmap::from(img)
-        } else if landscape_scale >= 1.0 {
-            log::info!("rotate image");
-            Bitmap::from(img).rotate90()
-        } else if portrait_scale >= landscape_scale {
-            log::info!("scale image {}", portrait_scale);
-            Bitmap::new_resize(img, (portrait_scale * img_width) as usize)
-        } else {
-            log::info!("scale image {} and rotate", landscape_scale);
-            Bitmap::new_resize(img, (landscape_scale * img_width) as usize).rotate90()
-        };
         let (bm_width, bm_height) = bm.size();
         let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
 
         // center image in modal
-        let center = Point::new(
-            (BORDER + (gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2)
+        const BORDER: u32 = 3;
+        let margin = Point::new(
+            (BORDER + max(0, (gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2))
                 .try_into()
                 .unwrap(),
-            (BORDER + (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2)
+            (BORDER + max(0, (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2))
                 .try_into()
                 .unwrap(),
         );
-        bm.translate(center);
+        bm.translate(margin);
 
         let mut tiles: [Option<Tile>; 6] = [None; 6];
         for (t, tile) in bm.iter().enumerate() {
