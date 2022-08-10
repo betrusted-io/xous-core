@@ -11,11 +11,6 @@ use packed_struct::PackedStruct;
 use xous_ipc::Buffer;
 pub use usbd_human_interface_device::device::fido::RawFidoMsg;
 
-pub enum UsbDeviceType {
-    Debug = 0,
-    Hid = 1,
-}
-
 #[derive(Debug)]
 pub struct UsbHid {
     conn: CID,
@@ -53,10 +48,7 @@ impl UsbHid {
             self.conn,
             Message::new_blocking_scalar(
                 Opcode::SwitchCores.to_usize().unwrap(),
-                match core {
-                    UsbDeviceType::Debug => 0,
-                    UsbDeviceType::Hid => 1,
-                },
+                core as usize,
                 0, 0, 0
             )
         ) {
@@ -75,10 +67,7 @@ impl UsbHid {
             self.conn,
             Message::new_blocking_scalar(
                 Opcode::EnsureCore.to_usize().unwrap(),
-                match core {
-                    UsbDeviceType::Debug => 0,
-                    UsbDeviceType::Hid => 1,
-                },
+                core as usize,
                 0, 0, 0
             )
         ) {
@@ -102,7 +91,8 @@ impl UsbHid {
             Ok(xous::Result::Scalar1(code)) => {
                 match code {
                     0 => Ok(UsbDeviceType::Debug),
-                    1 => Ok(UsbDeviceType::Hid),
+                    1 => Ok(UsbDeviceType::FidoKbd),
+                    2 => Ok(UsbDeviceType::Fido),
                     _ => Err(xous::Error::InternalError)
                 }
             }

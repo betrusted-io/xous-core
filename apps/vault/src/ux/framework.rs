@@ -10,6 +10,7 @@ use std::io::{Read, Write as FsWrite};
 use actions::ActionOp;
 use std::sync::atomic::Ordering as AtomicOrdering;
 use std::convert::TryFrom;
+use usb_device_xous::UsbDeviceType;
 
 /// Display list for items. "name" is the key by which the list is sorted.
 /// "extra" is more information about the item, which should not be part of the sort.
@@ -91,6 +92,7 @@ pub(crate) struct VaultUx {
 
     /// usb interface
     usb_dev: usb_device_xous::UsbHid,
+    usb_type: UsbDeviceType,
 
     /// totp redraw state
     last_epoch: u64,
@@ -179,6 +181,7 @@ impl VaultUx {
             last_epoch: current_time / 30,
             current_time,
             last_query: String::new(),
+            usb_type: UsbDeviceType::FidoKbd,
         }
     }
 
@@ -773,7 +776,7 @@ impl VaultUx {
         }
     }
     pub(crate) fn ensure_hid(&self) {
-        self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Hid).unwrap();
+        self.usb_dev.ensure_core(self.usb_type).unwrap();
         self.usb_dev.restrict_debug_access(true).unwrap();
     }
 }

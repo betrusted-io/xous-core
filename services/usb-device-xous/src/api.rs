@@ -62,3 +62,24 @@ pub enum U2fCode {
     Hangup,
     Denied,
 }
+
+#[derive(Eq, PartialEq, Copy, Clone)]
+#[repr(usize)]
+pub enum UsbDeviceType {
+    Debug = 0,
+    FidoKbd = 1,
+    Fido = 2,
+}
+use std::convert::TryFrom;
+impl TryFrom<usize> for UsbDeviceType {
+    type Error = &'static str;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(UsbDeviceType::Debug),
+            1 => Ok(UsbDeviceType::FidoKbd),
+            2 => Ok(UsbDeviceType::Fido),
+            _ => Err("Invalid UsbDeviceType specifier"),
+        }
+    }
+}

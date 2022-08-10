@@ -60,6 +60,20 @@ impl SpinalUsbMgmt {
         log::debug!("ramsize: {}", self.regs.ramsize());
         assert!(4096 == self.regs.ramsize(), "hardware ramsize parameter does not match our expectations");
     }
+    /// Force and hold the reset pin according to the state selected
+    pub fn ll_reset(&mut self, state: bool) {
+        self.csr.rmwf(utra::usbdev::USBSELECT_FORCE_RESET, if state {1} else {0});
+    }
+    /// does not encode resets, leaves timing to the caller
+    pub fn ll_connect_device_core(&mut self, state: bool) {
+        if state {
+            log::trace!("connecting USB device core");
+            self.csr.rmwf(utra::usbdev::USBSELECT_SELECT_DEVICE, 1);
+        } else {
+            log::trace!("connecting USB debug core");
+            self.csr.rmwf(utra::usbdev::USBSELECT_SELECT_DEVICE, 0);
+        }
+    }
     pub fn connect_device_core(&mut self, state: bool) {
         self.sr_core = state;
         log::trace!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_SELECT_DEVICE));
@@ -238,6 +252,24 @@ impl SpinalUsbDevice {
         usbdev.regs.set_config(cfg);
 
         usbdev
+    }
+    /// Creates a clone that has access to all the address space, but none of the allocations
+    pub fn clone_unalloc(&self) -> SpinalUsbDevice {
+        let usb = self.usb.clone();
+        SpinalUsbDevice {
+            conn: self.conn,
+            csr_addr: self.csr_addr,
+            csr: AtomicCsr::new(self.csr.base.load(Ordering::SeqCst)),
+            regs: SpinalUdcRegs::new(unsafe{usb.as_mut_ptr().add(0xFF00) as *mut u32}),
+            eps: AtomicPtr::new(unsafe {
+                    (usb.as_mut_ptr().add(0x00) as *mut UdcEpStatus).as_mut().unwrap()
+            }),
+            usb,
+            view: AllocView::default(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
+            address: AtomicUsize::new(0),
+            read_allowed: AtomicU16::new(0),
+        }
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {
         SpinalUsbMgmt {

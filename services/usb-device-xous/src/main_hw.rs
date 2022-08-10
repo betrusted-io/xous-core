@@ -2,13 +2,12 @@ use crate::*;
 
 use num_traits::*;
 use usb_device_xous::KeyboardLedsReport;
+use usb_device_xous::UsbDeviceType;
 use usbd_human_interface_device::device::fido::RawFidoMsg;
 use usbd_human_interface_device::device::fido::RawFidoInterface;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_semver::SemVer;
 use core::num::NonZeroU8;
-use core::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 
 use usb_device::prelude::*;
 use usb_device::class_prelude::*;
@@ -41,6 +40,10 @@ impl Clock for EmbeddedClock {
     }
 }
 
+/// Time allowed for switchover between device core types. It's longer because some hosts
+/// get really confused when you have the same VID/PID show up with a different set of endpoints.
+const EXTENDED_CORE_RESET_MS: usize = 4000;
+#[derive(Eq, PartialEq)]
 #[repr(usize)]
 enum Views {
     FidoWithKbd = 0,
@@ -110,9 +113,13 @@ pub(crate) fn main_hw() -> ! {
         log::info!("consuming listener: {:?}", fido_listener);
     }
 
-    // this is a super-unsafe reach-around that shifts the hardware view based on the variable `view`
-    let mut usbdev = SpinalUsbDevice::new(usbdev_sid);
-    let mut usbmgmt = usbdev.get_iface();
+    let usb_fidokbd_dev = SpinalUsbDevice::new(usbdev_sid);
+    let mut usbmgmt = usb_fidokbd_dev.get_iface();
+    // before doing any allocs, clone a copy of the hardware access structure so we can build a second
+    // view into the hardware with only FIDO descriptors
+    let usb_fido_dev = usb_fidokbd_dev.clone_unalloc();
+    // track which view is visible on the device core
+    let mut view = Views::FidoWithKbd;
 
     // register a suspend/resume listener
     let cid = xous::connect(usbdev_sid).expect("couldn't create suspend callback connection");
@@ -123,7 +130,7 @@ pub(crate) fn main_hw() -> ! {
         cid
     ).expect("couldn't create suspend/resume object");
 
-    let usb_alloc = UsbBusAllocator::new(usbdev);
+    let usb_alloc = UsbBusAllocator::new(usb_fidokbd_dev);
     let clock = EmbeddedClock::new();
 
     let mut composite = UsbHidClassBuilder::new()
@@ -143,19 +150,19 @@ pub(crate) fn main_hw() -> ! {
     let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
     keyboard.write_report(&Vec::<Keyboard>::new()).ok();
     keyboard.tick().ok();
-    /*
-    view.store(Views::FidoOnly as usize, Ordering::SeqCst);
+
+    let fido_alloc = UsbBusAllocator::new(usb_fido_dev);
     let mut fido_class = UsbHidClassBuilder::new()
         .add_interface(
             RawFidoInterface::default_config()
         )
-        .build(&usb_alloc);
+        .build(&fido_alloc);
 
-    let mut fido_dev = UsbDeviceBuilder::new(&usb_alloc, UsbVidPid(0x1209, 0x3613))
+    let mut fido_dev = UsbDeviceBuilder::new(&fido_alloc, UsbVidPid(0x1209, 0x3613))
     .manufacturer("Kosagi")
     .product("Precursor")
     .serial_number(&serial_number)
-    .build(); */
+    .build();
 
     let mut led_state: KeyboardLedsReport = KeyboardLedsReport::default();
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
@@ -167,51 +174,6 @@ pub(crate) fn main_hw() -> ! {
     let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
     let mut was_suspend = true;
 
-    /*
-    let mut mode: bool = false;
-    if if mode {
-            usb_dev.poll(&mut [&mut c0])
-        } else {
-            usb_dev.poll(&mut [&mut c1])
-        }
-    {
-        if mode {
-            let keyboard = c0.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-            match keyboard.read_report() {
-                Ok(l) => {
-                    log::info!("keyboard LEDs: {:?}", l);
-                    led_state = l;
-                }
-                Err(e) => log::trace!("KEYB ERR: {:?}", e),
-            }
-        }
-        let u2f =
-            if mode {
-                c0.interface::<RawFidoInterface<'_, _>, _>()
-            } else {
-                c1.interface::<RawFidoInterface<'_, _>, _>()
-            };
-        match u2f.read_report() {
-            Ok(u2f_report) => {
-                if let Some(mut listener) = fido_listener.take() {
-                    let mut response = unsafe {
-                        Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
-                    };
-                    let mut buf = response.to_original::<U2fMsgIpc, _>().unwrap();
-                    assert_eq!(buf.code, U2fCode::RxWait, "Expected U2fcode::RxWait in wrapper");
-                    buf.data.copy_from_slice(&u2f_report.packet);
-                    log::trace!("ret deferred data {:x?}", &u2f_report.packet[..8]);
-                    buf.code = U2fCode::RxAck;
-                    response.replace(buf).unwrap();
-                } else {
-                    log::debug!("Got U2F packet, but no server to respond...queuing.");
-                    fido_rx_queue.push_back(u2f_report.packet);
-                }
-            },
-            Err(e) => log::trace!("U2F ERR: {:?}", e),
-        }
-    }
-    */
     loop {
         let mut msg = xous::receive_message(usbdev_sid).unwrap();
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
@@ -222,10 +184,20 @@ pub(crate) fn main_hw() -> ! {
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 // resume1 + reset brings us to an initialized state
                 usbmgmt.xous_resume1();
-                match usb_dev.force_reset() {
-                    Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
-                    _ => ()
-                };
+                match view {
+                    Views::FidoWithKbd => {
+                        match usb_dev.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => ()
+                        };
+                    }
+                    Views::FidoOnly => {
+                        match fido_dev.force_reset() {
+                            Err(e) => log::warn!("USB reset on resume failed: {:?}", e),
+                            _ => ()
+                        };
+                    }
+                }
                 // resume2 brings us to our last application state
                 usbmgmt.xous_resume2();
                 lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
@@ -276,7 +248,10 @@ pub(crate) fn main_hw() -> ! {
                     let mut u2f_msg = RawFidoMsg::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
                     u2f_msg.packet.copy_from_slice(&u2f_ipc.data);
-                    let u2f = composite.interface::<RawFidoInterface<'_, _>, _>();
+                    let u2f = match view {
+                        Views::FidoWithKbd => composite.interface::<RawFidoInterface<'_, _>, _>(),
+                        Views::FidoOnly => fido_class.interface::<RawFidoInterface<'_, _>, _>(),
+                    };
                     u2f.write_report(&u2f_msg).ok();
                     log::debug!("sent U2F packet {:x?}", u2f_ipc.data);
                     u2f_ipc.code = U2fCode::TxAck;
@@ -286,19 +261,31 @@ pub(crate) fn main_hw() -> ! {
                 buffer.replace(u2f_ipc).unwrap();
             }
             Some(Opcode::UsbIrqHandler) => {
-                if usb_dev.poll(&mut [&mut composite]) {
-                    #[cfg(feature="emukbd")]
-                    {
-                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-                        match keyboard.read_report() {
-                            Ok(l) => {
-                                log::info!("keyboard LEDs: {:?}", l);
-                                led_state = l;
+                let maybe_u2f = match view {
+                    Views::FidoWithKbd => {
+                        if usb_dev.poll(&mut [&mut composite]) {
+                            let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                            match keyboard.read_report() {
+                                Ok(l) => {
+                                    log::info!("keyboard LEDs: {:?}", l);
+                                    led_state = l;
+                                }
+                                Err(e) => log::trace!("KEYB ERR: {:?}", e),
                             }
-                            Err(e) => log::trace!("KEYB ERR: {:?}", e),
+                            Some(composite.interface::<RawFidoInterface<'_, _>, _>())
+                        } else {
+                            None
                         }
                     }
-                    let u2f = composite.interface::<RawFidoInterface<'_, _>, _>();
+                    Views::FidoOnly => {
+                        if fido_dev.poll(&mut [&mut fido_class]) {
+                            Some(fido_class.interface::<RawFidoInterface<'_, _>, _>())
+                        } else {
+                            None
+                        }
+                    }
+                };
+                if let Some(u2f) = maybe_u2f {
                     match u2f.read_report() {
                         Ok(u2f_report) => {
                             if let Some(mut listener) = fido_listener.take() {
@@ -319,7 +306,12 @@ pub(crate) fn main_hw() -> ! {
                         Err(e) => log::trace!("U2F ERR: {:?}", e),
                     }
                 }
-                if usb_dev.state() == UsbDeviceState::Suspend {
+
+                let is_suspend = match view {
+                    Views::FidoWithKbd => usb_dev.state() == UsbDeviceState::Suspend,
+                    Views::FidoOnly => fido_dev.state() == UsbDeviceState::Suspend,
+                };
+                if is_suspend {
                     log::info!("suspend detected");
                     if was_suspend == false {
                         // FIDO listener needs to know when USB was unplugged, so that it can reset state per FIDO2 spec
@@ -338,35 +330,102 @@ pub(crate) fn main_hw() -> ! {
                     was_suspend = false;
                 }
             },
+            // always triggers a reset when called
             Some(Opcode::SwitchCores) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
-                if core == 1 {
-                    log::info!("Connecting USB device core; disconnecting debug USB core");
-                    usbmgmt.connect_device_core(true);
-                } else {
-                    log::info!("Connecting debug core; disconnecting USB device core");
-                    usbmgmt.connect_device_core(false);
+                let devtype: UsbDeviceType = core.try_into().unwrap();
+                match devtype {
+                    UsbDeviceType::Debug => {
+                        log::info!("Connecting debug core; disconnecting USB device core");
+                        usbmgmt.connect_device_core(false);
+                    }
+                    UsbDeviceType::FidoKbd => {
+                        // need to recode to also consider the view type
+                        log::info!("Connecting USB device core; disconnecting debug USB core");
+                        match view {
+                            Views::FidoWithKbd => usbmgmt.connect_device_core(true),
+                            Views::FidoOnly => {
+                                view = Views::FidoWithKbd;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
+                    UsbDeviceType::Fido => {
+                        match view {
+                            Views::FidoOnly => usbmgmt.connect_device_core(true),
+                            Views::FidoWithKbd => {
+                                view = Views::FidoOnly;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            }
+                        }
+                    }
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
+            // does not trigger a reset if we're already on the core
             Some(Opcode::EnsureCore) => msg_blocking_scalar_unpack!(msg, core, _, _, _, {
-                if core == 1 {
-                    if !usbmgmt.is_device_connected() {
-                        log::info!("Connecting USB device core; disconnecting debug USB core");
-                        usbmgmt.connect_device_core(true);
+                let devtype: UsbDeviceType = core.try_into().unwrap();
+                match devtype {
+                    UsbDeviceType::Debug => {
+                        if usbmgmt.is_device_connected() {
+                            log::info!("Connecting debug core; disconnecting USB device core");
+                            usbmgmt.connect_device_core(false);
+                        }
                     }
-                } else {
-                    if usbmgmt.is_device_connected() {
-                        log::info!("Connecting debug core; disconnecting USB device core");
-                        usbmgmt.connect_device_core(false);
+                    UsbDeviceType::FidoKbd => {
+                        if !usbmgmt.is_device_connected() {
+                            log::info!("Connecting USB device core; disconnecting debug USB core");
+                            view = Views::FidoWithKbd;
+                            usbmgmt.connect_device_core(true);
+                        } else {
+                            if view != Views::FidoWithKbd {
+                                view = Views::FidoWithKbd;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            } else {
+                                // type matches, do nothing
+                            }
+                        }
+                    }
+                    UsbDeviceType::Fido => {
+                        if !usbmgmt.is_device_connected() {
+                            log::info!("Connecting USB device core; disconnecting debug USB core");
+                            view = Views::FidoOnly;
+                            usbmgmt.connect_device_core(true);
+                        } else {
+                            if view != Views::FidoOnly {
+                                view = Views::FidoOnly;
+                                usbmgmt.ll_reset(true);
+                                tt.sleep_ms(1000).ok();
+                                usbmgmt.ll_connect_device_core(true);
+                                tt.sleep_ms(EXTENDED_CORE_RESET_MS).ok();
+                                usbmgmt.ll_reset(false);
+                            } else {
+                                // type matches, do nothing
+                            }
+                        }
                     }
                 }
                 xous::return_scalar(msg.sender, 0).unwrap();
             }),
             Some(Opcode::WhichCore) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if usbmgmt.is_device_connected() {
-                    xous::return_scalar(msg.sender, 1).unwrap();
+                    match view {
+                        Views::FidoWithKbd => xous::return_scalar(msg.sender, UsbDeviceType::FidoKbd as usize).unwrap(),
+                        Views::FidoOnly => xous::return_scalar(msg.sender, UsbDeviceType::Fido as usize).unwrap(),
+                    }
                 } else {
-                    xous::return_scalar(msg.sender, 0).unwrap();
+                    xous::return_scalar(msg.sender, UsbDeviceType::Debug as usize).unwrap();
                 }
             }),
             Some(Opcode::RestrictDebugAccess) => msg_scalar_unpack!(msg, restrict, _, _, _, {
@@ -414,59 +473,68 @@ pub(crate) fn main_hw() -> ! {
                 lockstatus_force_update = false;
             }),
             Some(Opcode::LinkStatus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                xous::return_scalar(msg.sender, usb_dev.state() as usize).unwrap();
+                match view {
+                    Views::FidoWithKbd => xous::return_scalar(msg.sender, usb_dev.state() as usize).unwrap(),
+                    Views::FidoOnly => xous::return_scalar(msg.sender, fido_dev.state() as usize).unwrap(),
+                }
             }),
             Some(Opcode::SendKeyCode) => msg_blocking_scalar_unpack!(msg, code0, code1, code2, autoup, {
-                if usb_dev.state() == UsbDeviceState::Configured {
-                    let mut codes = Vec::<Keyboard>::new();
-                    if code0 != 0 {
-                        codes.push(Keyboard::from_primitive(code0 as u8));
-                    }
-                    if code1 != 0 {
-                        codes.push(Keyboard::from_primitive(code1 as u8));
-                    }
-                    if code2 != 0 {
-                        codes.push(Keyboard::from_primitive(code2 as u8));
-                    }
-                    let auto_up = if autoup == 1 {true} else {false};
-                    #[cfg(feature="emukbd")]
-                    {
-                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-                        keyboard.write_report(&codes).ok();
-                        keyboard.tick().ok();
-                        tt.sleep_ms(30).ok();
-                        if auto_up {
-                            keyboard.write_report(&[]).ok(); // this is the key-up
+                match view {
+                    Views::FidoWithKbd => {
+                        if usb_dev.state() == UsbDeviceState::Configured {
+                            let mut codes = Vec::<Keyboard>::new();
+                            if code0 != 0 {
+                                codes.push(Keyboard::from_primitive(code0 as u8));
+                            }
+                            if code1 != 0 {
+                                codes.push(Keyboard::from_primitive(code1 as u8));
+                            }
+                            if code2 != 0 {
+                                codes.push(Keyboard::from_primitive(code2 as u8));
+                            }
+                            let auto_up = if autoup == 1 {true} else {false};
+                            let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                            keyboard.write_report(&codes).ok();
                             keyboard.tick().ok();
                             tt.sleep_ms(30).ok();
+                            if auto_up {
+                                keyboard.write_report(&[]).ok(); // this is the key-up
+                                keyboard.tick().ok();
+                                tt.sleep_ms(30).ok();
+                            }
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                        } else {
+                            xous::return_scalar(msg.sender, 1).unwrap();
                         }
                     }
-                    xous::return_scalar(msg.sender, 0).unwrap();
-                } else {
-                    xous::return_scalar(msg.sender, 1).unwrap();
+                    Views::FidoOnly => {
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    }
                 }
             }),
             Some(Opcode::SendString) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
                 let mut sent = 0;
-                for ch in usb_send.s.as_str().unwrap().chars() {
-                    // ASSUME: user's keyboard type matches the preference on their Precursor device.
-                    let codes = match native_map {
-                        KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
-                        _ => mappings::char_to_hid_code_us101(ch),
-                    };
-                    #[cfg(feature="emukbd")]
-                    {
-                        let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
-                        keyboard.write_report(&codes).ok();
-                        keyboard.tick().ok();
-                        tt.sleep_ms(30).ok();
-                        keyboard.write_report(&[]).ok(); // this is the key-up
-                        keyboard.tick().ok();
-                        tt.sleep_ms(30).ok();
+                match view {
+                    Views::FidoWithKbd => {
+                        for ch in usb_send.s.as_str().unwrap().chars() {
+                            // ASSUME: user's keyboard type matches the preference on their Precursor device.
+                            let codes = match native_map {
+                                KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
+                                _ => mappings::char_to_hid_code_us101(ch),
+                            };
+                            let keyboard = composite.interface::<NKROBootKeyboardInterface<'_, _, _,>, _>();
+                            keyboard.write_report(&codes).ok();
+                            keyboard.tick().ok();
+                            tt.sleep_ms(30).ok();
+                            keyboard.write_report(&[]).ok(); // this is the key-up
+                            keyboard.tick().ok();
+                            tt.sleep_ms(30).ok();
+                            sent += 1;
+                        }
                     }
-                    sent += 1;
+                    _ => {} // do nothing; will report that 0 characters were sent
                 }
                 usb_send.sent = Some(sent);
                 buffer.replace(usb_send).unwrap();
