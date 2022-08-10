@@ -1,6 +1,6 @@
 use crate::*;
 
-pub const IMG_MODAL_HEIGHT: u32 = 300;
+pub const IMG_MODAL_HEIGHT: u32 = 374;
 pub const IMG_MODAL_WIDTH: u32 = 296;
 #[derive(Debug)]
 pub struct Image {

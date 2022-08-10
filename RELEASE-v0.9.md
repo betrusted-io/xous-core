@@ -236,6 +236,10 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - fix TcpClose -- waits until the close handshake finishes before removing the socket
   - handle "unattended" closes -- this is when someone connects to a server and immediately disconnects, so the application layer never has time to issue a "formal" close request. Now it is automatically issued.
   - fix timeouts
+- `ditherpunk` improvements:
+  - iterator form for PNG decoding (thanks to nworbnhoj for a ton of work to get that together)
+  - memory usage is well-constrained now, and suitable for everyday use
+  - primary limit to PNG decode speed is read speed over e.g. TCP
 
 ## Roadmap to 1.0
 
