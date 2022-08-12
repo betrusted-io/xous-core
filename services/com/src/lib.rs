@@ -10,7 +10,8 @@ use com_rs_ref::{DhcpState, LinkState};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
-
+use std::collections::VecDeque;
+use std::cell::RefCell;
 pub use com_rs_ref::serdes::Ipv4Conf;
 use xous_semver::SemVer;
 
@@ -47,6 +48,9 @@ pub struct Com {
     battstats_sid: Option<xous::SID>,
     ec_lock_id: Option<[u32; 4]>,
     ec_acquired: bool,
+    /// this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
+    /// https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+    loopback_buf: RefCell::<VecDeque::<Vec::<u8>>>,
 }
 impl Com {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -57,6 +61,7 @@ impl Com {
             battstats_sid: None,
             ec_lock_id: None,
             ec_acquired: false,
+            loopback_buf: RefCell::new(VecDeque::new()),
         })
     }
     pub fn conn(&self) -> CID {self.conn}
@@ -546,6 +551,26 @@ impl Com {
             *dst = src;
         }
         Ok(())
+    }
+
+    pub fn wlan_fetch_loopback_packet(&self, pkt: &mut [u8]) -> Result<(), xous::Error> {
+        // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
+        // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+        // Inject the loopback packets. loopback packets always take priority, for now.
+        if let Some(loop_packet) = self.loopback_buf.borrow_mut().pop_front() {
+            // pkt.len() is almost always not loop_packet.len(), just copy the first bit that can fit and the rest is garbarge...
+            for (&s, d) in loop_packet.iter().zip(pkt.iter_mut()) {
+                *d = s;
+            }
+        }
+        Ok(())
+    }
+
+    // this is a hack to make loopbacks work on smoltcp. Work-around taken from Redox, but tracking this issue as well:
+    // https://github.com/smoltcp-rs/smoltcp/issues/50 and https://github.com/smoltcp-rs/smoltcp/issues/55
+    // this function handles enqueuing packets for local injection
+    pub fn wlan_queue_loopback(&self, pk: &[u8]) {
+        self.loopback_buf.borrow_mut().push_back(pk.to_vec());
     }
 
     pub fn wlan_send_packet(&self, pkt: &[u8]) -> Result<(), xous::Error> {

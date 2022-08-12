@@ -17,7 +17,7 @@ use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issu
 #[cfg(feature="ditherpunk")]
 use std::str::FromStr;
 #[cfg(feature="ditherpunk")]
-use gam::{Img, PixelType};
+use gam::DecodePng;
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -192,7 +192,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                     }
                                                     count += 1;
                                                     if count == 10 && short_test {
-                                                        stream.flush().unwrap();
+                                                        stream.flush().ok();
                                                         break;
                                                     }
                                                 }
@@ -203,7 +203,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     });
-                    write!(ret, "Fountain started on port 3333").unwrap();
+                    write!(ret, "Fountain started on port 3333").ok();
                 }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
@@ -287,46 +287,13 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
+                #[cfg(feature="nettest")]
+                "test" => {
+                    crate::nettests::start_batch_tests();
+                    write!(ret, "Net batch tests started...").ok();
+                }
                 #[cfg(feature="ditherpunk")]
                 "image" => {
-                    let new_limit = 2048 * 1024;
-                    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-                        xous::Limits::HeapMaximum as usize,
-                        0,
-                        new_limit,
-                    ));
-
-                    if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
-                        xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-                            xous::Limits::HeapMaximum as usize,
-                            current_limit,
-                            new_limit,
-                        ))
-                        .unwrap();
-                        log::info!("Our new heap is: {}", new_limit);
-                    } else {
-                        panic!("Unsupported syscall!");
-                    }
-
-                    #[cfg(feature="tracking-alloc")]
-                    use tracking_allocator::{
-                        AllocationGroupToken, AllocationRegistry,
-                    };
-                    #[cfg(feature="tracking-alloc")]
-                    use crate::StdoutTracker;
-                    #[cfg(feature="tracking-alloc")]
-                    let mut local_token = {
-                        let _ = AllocationRegistry::set_global_tracker(StdoutTracker{total: core::sync::atomic::AtomicIsize::new(0)})
-                        .expect("no other global tracker should be set yet");
-
-                        AllocationRegistry::enable_tracking();
-                        AllocationGroupToken::register().expect("failed to register allocation group")
-                    };
-
-                    #[cfg(feature="tracking-alloc")]
-                    let local_guard = local_token.enter();
-
-                    // use std::io::BufRead; // not implemented yet!
                     if let Some(url) = tokens.next() {
                         match url.split_once('/') {
                             Some((host, path)) => {
@@ -345,99 +312,68 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                         write!(stream, "Connection: close\r\n").expect("stream error");
                                         write!(stream, "\r\n").expect("stream error");
                                         log::info!("fetching response....");
-                                        // let mut reader = std::io::BufReader::new(&mut stream);
-                                        log::info!("trying to read entire response...");
-                                        let mut received = Vec::<u8>::new();
-                                        received.reserve(128 * 1024); // up to 128k image size...
-                                        let mut rx_len = 0;
-                                        const CHUNK: usize = 4096;
-                                        /*
-                                        let rx_len = match reader.read_to_end(&mut received) {
-                                            Ok(len) => len,
-                                            Err(e) => {
-                                                log::error!("couldn't read image: {:?}", e);
-                                                write!(ret, "Couldn't read image: {:?}", e).unwrap();
-                                                return Ok(Some(ret))
+                                        let mut reader = std::io::BufReader::new(&mut stream);
+                                        let mut buf = Vec::<u8>::new();
+                                        let mut byte = [0u8; 1];
+                                        let mut content_length = 0;
+                                        // consume the header - plucking the content-length on the way
+                                        const HEADER_LIMIT: usize = 20;
+                                        let mut line_count = 0;
+                                        while line_count <= HEADER_LIMIT {
+                                            line_count += 1;
+                                            let mut len = buf.len();
+                                            // read a line terminated by /r/n
+                                            while (len < 2 || buf.as_slice()[(len-2)..] != [0x0d, 0x0a]) && len <= 1024 {
+                                                reader.read(&mut byte).expect("png stream read error");
+                                                buf.push(byte[0]);
+                                                len = buf.len();
                                             }
-                                        }; */
-                                        let mut rx_buf = [0u8; CHUNK];
-                                        log::info!("starting read loop");
-                                        // stream.set_nonblocking(true).expect("couldn't set stream to nonblocking");
-                                        let mut last_chunk = 0;
-                                        loop {
-                                            match stream.read(&mut rx_buf) {
-                                                Ok(len) => {
-                                                    log::info!("got {} bytes", len);
-                                                    received.extend_from_slice(&rx_buf[..len]);
-                                                    rx_len += len;
-                                                    if len == 0 {
-                                                        log::info!("got 0-length read, concluding we're at an EOF...");
-                                                        break;
-                                                    }
-                                                    if last_chunk == 0 {
-                                                        last_chunk = len;
-                                                    } else {
-                                                        if len < last_chunk {
-                                                            log::info!("heuristic termination of read loop");
-                                                            break;
-                                                        }
-                                                    }
+                                            match len {
+                                                2 => {
+                                                   log::info!("found end of header after {} lines.", line_count);
+                                                   break;
                                                 },
-                                                Err(e) => {
-                                                    log::info!("quitting read loop with err {:?}", e);
+                                                1024.. => {
+                                                    let line = std::string::String::from_utf8_lossy(&buf);
+                                                    log::warn!("header contained line > 4k {:?}", line);
                                                     break;
                                                 }
+                                                _ => {},
                                             }
-                                        }
-                                        log::info!("read {} bytes", rx_len);
-                                        if let Some(start) = find_subsequence(
-                                            &received,
-                                            &[0x0d, 0x0a, 0x0d, 0x0a], // this is \r\n\r\n, which indicates end of header.
-                                        ) {
-                                            log::info!("header is {} bytes long", start);
-                                            let header = std::string::String::from_utf8_lossy(&received[..start]);
-                                            let lines = header.split("\r\n");
-                                            let mut content_length = 0;
-                                            for line in lines {
-                                                let l_line_split = line.to_ascii_lowercase();
-                                                let l_line: Vec<&str> = l_line_split.split(':').collect();
-                                                if l_line.len() > 1 {
-                                                    log::info!("attr: {}, {}", l_line[0], l_line[1]);
-                                                    match l_line[0] {
-                                                        "content-length" => {
-                                                            content_length = usize::from_str(l_line[1].trim()).unwrap_or(0);
-                                                            log::info!("found content-length of {}", content_length);
-                                                            break;
-                                                        }
-                                                        _ => {}
+                                            let line = std::string::String::from_utf8_lossy(&buf);
+                                            log::info!("{:?}", line);
+                                            let l_line_split = line.to_ascii_lowercase();
+                                            let l_line: Vec<&str> = l_line_split.split(':').collect();
+                                            if l_line.len() > 1 {
+                                                log::info!("attr: {}, {}", l_line[0], l_line[1]);
+                                                match l_line[0] {
+                                                    "content-length" => {
+                                                        content_length = usize::from_str(l_line[1].trim()).unwrap_or(0);
+                                                        log::info!("found content-length of {}", content_length);
                                                     }
+                                                    _ => {}
                                                 }
-                                            }
-                                            if content_length > 0 {
-                                                let modals = modals::Modals::new(&env.xns).unwrap();
-                                                // have to add 4 to the start because the index is at the beginning of the header sequence,
-                                                // not the end of the sequence.
-                                                log::info!("heap size: {}", heap_usage());
-                                                log::info!("decoding png starting with: {:x?}", &received[start+4..start+4+64]);
-                                                let decoder = png::Decoder::new_with_limits(&received[start+4..], png::Limits { bytes: 400 * 1024 });
-                                                log::info!("heap size: {}", heap_usage());
-                                                let mut reader = decoder.read_info().expect("failed to read png info");
-                                                let mut buf = vec![0; reader.output_buffer_size()];
-                                                let info = reader.next_frame(&mut buf).expect("failed to decode png");
-                                                log::info!("heap size: {}", heap_usage());
-
-                                                let (width, height) = (info.width, info.height);
-                                                log::info!("image is {} x {}", width, height);
-                                                log::info!("some image bytes: {:x?}", &buf[..64]);
-                                                let img = Img::new(buf, width as usize, PixelType::U8x3);
-
-                                                modals.show_image(&img).expect("show image modal failed");
-                                                write!(ret, "Image of {} bytes read successfully", content_length).unwrap();
-                                            } else {
-                                                write!(ret, "content-length was 0, no image read").unwrap();
-                                            }
+                                            };
+                                            buf.clear();
                                         }
-                                        // reader.consume(received.len());
+
+                                        if content_length > 0 {
+                                            log::info!("heap size: {}", heap_usage());
+                                            let mut png = DecodePng::new(reader).expect("png decode failed");
+                                            const BORDER: u32 = 3;
+                                            let modal_size = gam::Point::new(
+                                                 (gam::IMG_MODAL_WIDTH - 2 * BORDER) as i16,
+                                                 (gam::IMG_MODAL_HEIGHT - 2 * BORDER) as i16
+                                            );
+                                            let bm = gam::Bitmap::from_png(&mut png, Some(modal_size));
+
+                                            log::info!("heap size: {}", heap_usage());
+                                            let modals = modals::Modals::new(&env.xns).unwrap();
+                                            modals.show_image(bm).expect("show image modal failed");
+
+                                        } else {
+                                            write!(ret, "content-length was 0, no image read").unwrap();
+                                        }
                                     }
                                     Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
                                 }
@@ -447,10 +383,6 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     } else {
                         write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap();
                     }
-                    #[cfg(feature="tracking-alloc")]
-                    drop(local_guard);
-                    #[cfg(feature="tracking-alloc")]
-                    AllocationRegistry::disable_tracking();
                 }
                 "tls" => {
                     write!(ret, "Work in progress. Please check back later!").unwrap();
@@ -586,12 +518,6 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
     }
 }
 
-// yep. this is from stackoverflow copypasta
-#[cfg(feature="ditherpunk")]
-fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
-}
-
 enum Responses {
     Uptime,
     NotFound,
@@ -608,7 +534,13 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
     );
 
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    match stream.read(&mut buffer) {
+        Ok(_) => {},
+        Err(e) => {
+            log::warn!("Server connection error; closing connection {:?}", e);
+            return;
+        }
+    }
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
@@ -646,8 +578,8 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
         contents
     );
 
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    stream.write(response.as_bytes()).ok();
+    stream.flush().ok();
 }
 
 pub struct ThreadPool {

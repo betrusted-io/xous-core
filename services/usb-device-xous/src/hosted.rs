@@ -26,7 +26,7 @@ pub struct SpinalUsbDevice {
 }
 
 impl SpinalUsbDevice {
-    pub fn new(_sid: xous::SID) -> SpinalUsbDevice {
+    pub fn new(_sid: xous::SID, _view: std::sync::Arc::<std::sync::atomic::AtomicUsize>) -> SpinalUsbDevice {
         SpinalUsbDevice {}
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {

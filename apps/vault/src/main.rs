@@ -131,6 +131,7 @@ pub(crate) enum VaultOp {
     MenuDeleteStage1,
     MenuEditStage1,
     MenuAutotype,
+    MenuReadoutMode,
 
     /// PDDB basis change
     BasisChange,
@@ -498,6 +499,23 @@ fn main() -> ! {
                     // this will block redraws, but it's just one notification in a sequence so it's OK.
                     modals.show_notification(t!("vault.error.nothing_selected", xous::LANG), None).ok();
                 }
+            }
+            Some(VaultOp::MenuReadoutMode) => {
+                modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
+                vaultux.readout_mode(true);
+                modals.dynamic_notification_close().ok();
+
+                // TODO: rethink the integration of this menu item. The problem is that if you're in readout
+                // mode and the "vault" mode is active, the "pumper" thread keeps sending messages to redraw
+                // the TOTP timer bar. This will eventually overflow this server's queue and cause a hang.
+                // However, the final integration for this will depend a bit on how the vault upload/download PR
+                // turns out.
+                modals.show_notification(t!("vault.readout_active", xous::LANG), None).ok();
+                // TODO: add some variable here to de-activate HID readout once this is done
+
+                modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
+                vaultux.readout_mode(false);
+                modals.dynamic_notification_close().ok();
             }
             Some(VaultOp::Quit) => {
                 log::error!("got Quit");

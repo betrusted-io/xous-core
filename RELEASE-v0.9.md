@@ -226,6 +226,20 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - Shellchat commands for flush, sync, and write added to the pddb subcommand
   - `backalyzer` script added to analyze backups. Useful for debug & recovery of data.
   - Fixed aes-keywrap bug - OG library was faulty; swapped in one that passes NIST test vectors & added transparent migration.
+- Net fixes (`std` testbench compliance):
+  - added loopback interface by "faking it" over the COM as smoltcp does not yet have the feature (loops back packets and ARP packets)
+  - `net test` command added when the nettest feature is turned on
+  - get error codes into compliance with library expcectations
+  - add nonblocking feature
+  - fix Peek
+  - fix short reads -- no more discarding of excess data when the read buffer is shorter than the data in the buffer
+  - fix TcpClose -- waits until the close handshake finishes before removing the socket
+  - handle "unattended" closes -- this is when someone connects to a server and immediately disconnects, so the application layer never has time to issue a "formal" close request. Now it is automatically issued.
+  - fix timeouts
+- `ditherpunk` improvements:
+  - iterator form for PNG decoding (thanks to nworbnhoj for a ton of work to get that together)
+  - memory usage is well-constrained now, and suitable for everyday use
+  - primary limit to PNG decode speed is read speed over e.g. TCP
 
 ## Roadmap to 1.0
 
