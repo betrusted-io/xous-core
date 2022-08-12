@@ -773,7 +773,6 @@ dependencies = [
  "rand_core 0.6.3",
  "regex",
  "rfc6979 0.2.0",
- "ring",
  "serde",
  "serde_json",
  "sha2",
@@ -2818,8 +2817,6 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.16.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
 dependencies = [
  "cc",
  "libc",
@@ -2958,13 +2955,23 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.20.6"
+dependencies = [
+ "log",
+ "ring",
+ "sct 0.6.1",
+ "webpki 0.22.0",
+]
+
+[[package]]
+name = "rustls"
+version = "0.20.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aab8ee6c7097ed6057f43c187a62418d0c05a4bd5f18b3571db50ee0f9ce033"
 dependencies = [
  "log",
  "ring",
- "sct",
- "webpki",
+ "sct 0.7.0",
+ "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2993,6 +3000,14 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
+
+[[package]]
+name = "sct"
+version = "0.6.1"
+dependencies = [
+ "ring",
+ "untrusted",
+]
 
 [[package]]
 name = "sct"
@@ -3227,6 +3242,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rkyv",
  "root-keys",
+ "rustls 0.20.6",
  "sha2",
  "spectrum-analyzer",
  "spinor",
@@ -3819,11 +3835,11 @@ dependencies = [
  "flate2",
  "log",
  "once_cell",
- "rustls",
+ "rustls 0.20.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
  "url",
- "webpki",
+ "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki-roots",
 ]
 
@@ -4243,6 +4259,14 @@ dependencies = [
 [[package]]
 name = "webpki"
 version = "0.22.0"
+dependencies = [
+ "ring",
+ "untrusted",
+]
+
+[[package]]
+name = "webpki"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
 dependencies = [
@@ -4256,7 +4280,7 @@ version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44d8de8415c823c8abd270ad483c6feeac771fad964890779f9a8cb24fbbc1bf"
 dependencies = [
- "webpki",
+ "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

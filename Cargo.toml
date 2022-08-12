@@ -135,3 +135,6 @@ branch="main"
 
 [patch.crates-io.getrandom]
 path = "imports/getrandom"
+
+[patch.crates-io.ring]
+path = "../ring"
