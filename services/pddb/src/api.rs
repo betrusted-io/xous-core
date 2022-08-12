@@ -210,6 +210,9 @@ pub(crate) enum Opcode {
     /// Optimized key listing
     ListKeyV2 = 45,
 
+    /// change unlock PIN
+    MenuChangePin = 46,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }

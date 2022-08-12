@@ -147,8 +147,9 @@ mod implementation {
         pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>) {
             log::info!("policy updated: {:?}", policy);
         }
-        pub fn hash_and_save_password(&mut self, pw: &str) {
+        pub fn hash_and_save_password(&mut self, pw: &str, _verify: bool) -> bool {
             log::info!("got password plaintext: {}", pw);
+            true
         }
         pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
             self.password_type = cur_type;
@@ -197,6 +198,7 @@ mod implementation {
         }
         pub fn purge_password(&mut self, _ptype: PasswordType) {}
         pub fn purge_user_password(&mut self, _ptype: AesRootkeyType) {}
+        pub fn purge_sensitive_data(&mut self) {}
 
         pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
         pub fn finish_key_init(&mut self) {}
@@ -470,7 +472,7 @@ fn main() -> ! {
             true,
             TextEntryVisibility::LastChars,
             main_cid,
-            Opcode::UxInitBootPasswordReturn.to_u32().unwrap(),
+            Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap(),
             vec![TextEntryPayload::new()],
             None,
     );
@@ -481,7 +483,7 @@ fn main() -> ! {
     let mut rootkeys_modal = Modal::new(
         gam::ROOTKEY_MODAL_NAME,
         ActionType::TextEntry(password_action.clone()),
-        Some(t!("rootkeys.bootpass", xous::LANG)),
+        Some(t!("rootkeys.updatefirstpass", xous::LANG)),
         None,
         GlyphStyle::Regular,
         8
@@ -624,29 +626,29 @@ fn main() -> ! {
                     }
                     // setup_key_init() prepares the salt and other items necessary to receive a password safely
                     keys.setup_key_init();
-                    // request the boot password first
-                    keys.set_ux_password_type(Some(PasswordType::Boot));
+                    // request the update password first
+                    keys.set_ux_password_type(Some(PasswordType::Update));
                     // pop up our private password dialog box
-                    password_action.set_action_opcode(Opcode::UxInitBootPasswordReturn.to_u32().unwrap());
+                    password_action.set_action_opcode(Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::TextEntry(password_action.clone())),
-                        Some(t!("rootkeys.bootpass", xous::LANG)), false,
+                        Some(t!("rootkeys.updatefirstpass", xous::LANG)), false,
                         None, true, None
                     );
                     #[cfg(feature="tts")]
-                    tts.tts_blocking(t!("rootkeys.bootpass", xous::LANG)).unwrap();
-                    log::info!("{}ROOTKEY.BOOTPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    tts.tts_blocking(t!("rootkeys.updatefirstpass", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                     rootkeys_modal.activate();
                 }
             },
-            Some(Opcode::UxInitBootPasswordReturn) => {
+            Some(Opcode::UxInitUpdateFirstPasswordReturn) => {
                 // assume:
                 //   - setup_key_init has also been called (exactly once, before anything happens)
                 //   - set_ux_password_type has been called already
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
@@ -667,7 +669,56 @@ fn main() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                if !keys.hash_and_save_password(plaintext_pw.first().as_str(), true) {
+                    // password did not verify
+                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("modals error");
+                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("modals error");
+                    match modals.get_radiobutton(t!("rootkeys.updatepass_fail", xous::LANG)) {
+                        Ok(response) => {
+                            if response == t!("rootkeys.gwup.yes", xous::LANG) {
+                                keys.purge_password(PasswordType::Update);
+                                // request the update password first
+                                keys.set_ux_password_type(Some(PasswordType::Update));
+                                // pop up our private password dialog box
+                                password_action.set_action_opcode(Opcode::UxInitUpdateFirstPasswordReturn.to_u32().unwrap());
+                                rootkeys_modal.modify(
+                                    Some(ActionType::TextEntry(password_action.clone())),
+                                    Some(t!("rootkeys.updatefirstpass", xous::LANG)), false,
+                                    None, true, None
+                                );
+                                #[cfg(feature="tts")]
+                                tts.tts_blocking(t!("rootkeys.updatefirstpass", xous::LANG)).unwrap();
+                                log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                                rootkeys_modal.activate();
+                                continue;
+                            } else {
+                                // abort
+                                plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                                buf.volatile_clear();
+                                keys.purge_password(PasswordType::Update);
+                                keys.purge_sensitive_data();
+                                susres.set_suspendable(true).expect("couldn't unblock suspend/resume");
+                                if let Some(dr) = deferred_response.take() {
+                                    xous::return_scalar(dr, 0).unwrap();
+                                }
+                                continue;
+                            }
+                        }
+                        _ => {
+                            log::error!("get_radiobutton failed");
+                            plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                            buf.volatile_clear();
+                            keys.purge_password(PasswordType::Update);
+                            keys.purge_sensitive_data();
+                            susres.set_suspendable(true).expect("couldn't unblock suspend/resume");
+                            if let Some(dr) = deferred_response.take() {
+                                xous::return_scalar(dr, 0).unwrap();
+                            }
+                            continue;
+                        },
+                    }
+                }
+
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
@@ -946,7 +997,7 @@ fn main() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
                 // indicate that there should be no change to the policy
@@ -1034,7 +1085,7 @@ fn main() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
@@ -1130,7 +1181,7 @@ fn main() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
@@ -1170,7 +1221,7 @@ fn main() -> ! {
                     {
                         let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                         let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
-                        keys.hash_and_save_password(plaintext_pw.first().as_str());
+                        keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                         plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                         buf.volatile_clear();
 
@@ -1259,7 +1310,7 @@ fn main() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
                 send_message(main_cid,
@@ -1373,7 +1424,7 @@ fn main() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
                 keys.set_ux_password_type(None);
@@ -1554,7 +1605,7 @@ fn main() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let plaintext_pw = buf.to_original::<gam::modal::TextEntryPayloads, _>().unwrap();
 
-                keys.hash_and_save_password(plaintext_pw.first().as_str());
+                keys.hash_and_save_password(plaintext_pw.first().as_str(), false);
                 plaintext_pw.first().volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
                 keys.set_ux_password_type(None);

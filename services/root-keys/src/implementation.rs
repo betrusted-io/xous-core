@@ -722,12 +722,12 @@ impl<'a> RootKeys {
 
     /// Plaintext password is passed as a &str. Any copies internally are destroyed. Caller is responsible for destroying the &str original.
     /// Performs a bcrypt hash of the password, with the currently set salt; does not store the plaintext after exit.
-    pub fn hash_and_save_password(&mut self, pw: &str) {
+    pub fn hash_and_save_password(&mut self, pw: &str, verify: bool) -> bool {
         let pw_type = if let Some(cur_type) = self.cur_password_type {
             cur_type
         } else {
             log::error!("got an unexpected password from the UX");
-            return;
+            return false;
         };
         let mut hashed_password: [u8; 24] = [0; 24];
         let mut salt = self.get_salt();
@@ -751,19 +751,51 @@ impl<'a> RootKeys {
         let digest = hasher.finalize();
 
         let pcache_ptr: *mut PasswordCache = self.pass_cache.as_mut_ptr() as *mut PasswordCache;
-        unsafe {
-            match pw_type {
-                PasswordType::Boot => {
-                    for (&src, dst) in digest.iter().zip((*pcache_ptr).hashed_boot_pw.iter_mut()) {
-                        *dst = src;
+        if !verify {
+            unsafe {
+                match pw_type {
+                    PasswordType::Boot => {
+                        for (&src, dst) in digest.iter().zip((*pcache_ptr).hashed_boot_pw.iter_mut()) {
+                            *dst = src;
+                        }
+                        (*pcache_ptr).hashed_boot_pw_valid = 1;
                     }
-                    (*pcache_ptr).hashed_boot_pw_valid = 1;
+                    PasswordType::Update => {
+                        for (&src, dst) in digest.iter().zip((*pcache_ptr).hashed_update_pw.iter_mut()) {
+                            *dst = src;
+                        }
+                        (*pcache_ptr).hashed_update_pw_valid = 1;
+                    }
                 }
-                PasswordType::Update => {
-                    for (&src, dst) in digest.iter().zip((*pcache_ptr).hashed_update_pw.iter_mut()) {
-                        *dst = src;
+            }
+            true
+        } else {
+            unsafe {
+                match pw_type {
+                    PasswordType::Boot => {
+                        if (*pcache_ptr).hashed_boot_pw_valid == 1 {
+                            for (&src, &dst) in digest.iter().zip((*pcache_ptr).hashed_boot_pw.iter()) {
+                                if dst != src {
+                                    return false
+                                }
+                            }
+                            true
+                        } else {
+                            false
+                        }
                     }
-                    (*pcache_ptr).hashed_update_pw_valid = 1;
+                    PasswordType::Update => {
+                        if (*pcache_ptr).hashed_update_pw_valid == 1 {
+                            for (&src, &dst) in digest.iter().zip((*pcache_ptr).hashed_update_pw.iter()) {
+                                if dst != src {
+                                    return false
+                                }
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }
                 }
             }
         }
@@ -1063,7 +1095,6 @@ impl<'a> RootKeys {
         // extract the update password key from the cache, and apply it to the private key
         #[cfg(feature = "hazardous-debug")]
         {
-            log::debug!("cached boot passwords {:x?}", pcache.hashed_boot_pw);
             log::debug!("cached update password: {:x?}", pcache.hashed_update_pw);
         }
         // private key must XOR with password before storing
@@ -1081,30 +1112,28 @@ impl<'a> RootKeys {
         .zip(self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::SELFSIGN_PRIVKEY as usize..KeyRomLocs::SELFSIGN_PRIVKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
             *dst = u32::from_be_bytes(src.try_into().unwrap())
         }
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("private_key_enc: {:?}", private_key_enc);
 
         pb.set_percentage(10);
 
-        // generate and store a root key (aka boot key), this is what is unlocked by the "boot password"
-        // ironically, it's a "lower security" key because it just acts as a gatekeeper to further
-        // keys that would have a stronger password applied to them, based upon the importance of the secret
-        // think of this more as a user PIN login confirmation, than as a significant cryptographic event
+        // generate the "boot key". This is just a random number that eventually gets XOR'd with a PIN
+        // by the PDDB to derive the final PDDB .System unlock key.
         let mut boot_key_enc: [u8; 32] = [0; 32];
-        for (dst, key) in
-        boot_key_enc.chunks_mut(4).into_iter()
-        .zip(pcache.hashed_boot_pw.chunks(4).into_iter()) {
+        for dst in
+        boot_key_enc.chunks_mut(4).into_iter() {
             let key_word = self.trng.get_u32().unwrap().to_be_bytes();
             // just unroll this loop, it's fast and easy enough
-            (*dst)[0] = key[0] ^ key_word[0];
-            (*dst)[1] = key[1] ^ key_word[1];
-            (*dst)[2] = key[2] ^ key_word[2];
-            (*dst)[3] = key[3] ^ key_word[3];
-            // also note that interestingly, we don't have to XOR it with the hashed boot password --
-            // this key isn't used by this routine, just initialized, so really, it only matters to
-            // XOR it with the password when you use it the first time to encrypt something.
+            (*dst)[0] = key_word[0];
+            (*dst)[1] = key_word[1];
+            (*dst)[2] = key_word[2];
+            (*dst)[3] = key_word[3];
         }
+        #[cfg(feature = "hazardous-debug")]
+        log::debug!("boot_key_enc: {:?}", boot_key_enc);
 
         // store the boot key to the keyrom staging area
-        for (src, dst) in private_key_enc.chunks(4).into_iter()
+        for (src, dst) in boot_key_enc.chunks(4).into_iter()
         .zip(self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::USER_KEY as usize..KeyRomLocs::USER_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
             *dst = u32::from_be_bytes(src.try_into().unwrap())
         }

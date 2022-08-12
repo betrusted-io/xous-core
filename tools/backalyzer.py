@@ -192,6 +192,7 @@ def main():
             bcrypter = bcrypt.BCrypt()
             # logging.debug("{}".format(boot_pw_array[:pw_len]))
             logging.debug("user_key_enc: {}".format(list(user_key_enc)))
+            logging.debug("private_key_enc: {}".format(list(get_key(8, keyrom, 32))))
             logging.debug("salt: {}".format(list(pepper)))
             hashed_pw = bcrypter.crypt_raw(boot_pw_array[:pw_len], pepper, 7)
             logging.debug("hashed_pw: {}".format(list(hashed_pw)))

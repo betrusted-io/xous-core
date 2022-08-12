@@ -16,6 +16,15 @@ pub(crate) fn pddb_menu(conn: xous::CID) {
             close_on_select: true,
         }
     );
+    menu_items.push(
+        MenuItem {
+            name: String::from_str(t!("pddb.menu.change_unlock_pin", xous::LANG)),
+            action_conn: Some(conn),
+            action_opcode: Opcode::MenuChangePin.to_u32().unwrap(),
+            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        }
+    );
     menu_items.push(MenuItem {
         name: String::from_str(t!("mainmenu.closemenu", xous::LANG)),
         action_conn: None,

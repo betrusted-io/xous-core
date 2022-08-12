@@ -95,17 +95,23 @@
         "zh": "执行备份的内部错误。 进程中止。",
         "en-tts": "Internal error performing backup. Process aborted."
     },
-    "rootkeys.bootpass": {
-        "en": "Create a PIN code for device unlock.",
-        "ja": "デバイスのロックを解除するためのPINコードを作成します。",
-        "zh": "输入密码 解锁 安全含义:低",
-        "en-tts": "Enter unlock password"
-    },
-    "rootkeys.updatepass": {
+    "rootkeys.updatefirstpass": {
         "en": "⚠ Critical Password ⚠\nCreate a strong root password for authorizing system updates.",
         "ja": "重要なパスワード\nシステムアップデートを認証するための強力なパスフレーズを作成します。",
         "zh": "输入密码 软件更新 安全含义:至关重要 ",
         "en-tts": "Enter a root password. This should be a strong password."
+    },
+    "rootkeys.updatepass": {
+        "en": "⚠ Critical Password ⚠\nPlease confirm the root password.",
+        "ja": "ルートパスワードを確認してください。",
+        "zh": "请确认root密码。",
+        "en-tts": "Please confirm the root password."
+    },
+    "rootkeys.updatepass_fail": {
+        "en": "Passwords did not match. Try again?",
+        "ja": "パスワードが間違っています。 再試行？",
+        "zh": "密码不匹配。 再试一次？",
+        "en-tts": "Passwords did not match. Try again?"
     },
     "rootkeys.blind_update": {
         "en": "No device keys detected. Shall we copy the staged gateware anyways, overwriting the current image?",
@@ -126,10 +132,10 @@
         "en-tts": "Device keys already initialized."
     },
     "rootkeys.confirm": {
-        "en": "🔐 Setup passwords for Precursor 🔐\n\nYou will be prompted for two passwords:\n\t1. Device unlock PIN code\n\t2. Root passphrase.\n\nAre you ready?",
-        "ja": "これにより、Precursorデバイスのルートキーが初期化されます。\n\n2つのパスワードの入力を求められます。\n\t1.デバイスのロック解除PINコード\n\t2.システムアップデートパスフレーズ。\n\n準備はいいですか？",
-        "zh": "仅当您准备好信 任此设备时才 应继续",
-        "en-tts": "Setup passwords for Precursor. You will create two passwords, a PIN code, and a root password."
+        "en": "🔐 Setup passwords for Precursor 🔐\n\nYou will be prompted for a root passphrase that must be secure and cannot be changed.\n\nAre you ready?",
+        "ja": "🔐 Precursor のパスワードを設定する 🔐\n\nルート パスフレーズの入力を求めるメッセージが表示されます。ルート パスフレーズは安全である必要があり、変更することはできません。\n\n準備はできていますか?",
+        "zh": "🔐 为 Precursor 设置密码 🔐\n\n系统将提示您输入必须安全且无法更改的根密码。\n\n您准备好了吗？",
+        "en-tts": "Setup passwords for Precursor\n\nYou will be prompted for a root passphrase that must be secure and cannot be changed.\n\nAre you ready?"
     },
     "rootkeys.confirm.yes": {
         "en": "I'm ready!",
