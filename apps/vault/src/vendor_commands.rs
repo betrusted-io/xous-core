@@ -10,22 +10,172 @@ use crate::{
 // Vault-specific command to upload TOTP codes
 pub const COMMAND_RESTORE_TOTP_CODES: u8 = 0x41;
 pub const COMMAND_BACKUP_TOTP_CODES: u8 = 0x42;
-pub const COMMAND_BENCHMARK: u8 = 0x43;
+pub const COMMAND_RESET_SESSION: u8 = 0x44;
 
-pub fn handle_vendor_command(
+// TODO(gsora): add something that checks whether or not a command works.
+
+pub enum SessionError {
+    WrongIndex,
+    WrongCommand,
+}
+
+impl SessionError {
+    pub fn ctaphid_error(&self, channel_id: ChannelID) -> HidPacketIterator {
+        HidPacketIterator::new(error_message(channel_id, backup::VENDOR_SESSION_ERROR)).unwrap()
+    }
+}
+
+#[derive(Default)]
+pub struct VendorSession {
+    data: Vec<u8>,
+    finished: bool,
+    command: u8,
+    channel_id: ChannelID,
+    index: u64,
+
+    // TODO: write backup kind here
+    backup_kind: Option<backup::PayloadType>,
+    is_backup: bool,
+    backup_chunks: Option<backup::Wires>,
+}
+
+impl VendorSession {
+    fn reset(&mut self) {
+        *self = VendorSession::default()
+    }
+    fn read_from_wire(
+        &mut self,
+        w: backup::Wire,
+        command: u8,
+        channel_id: ChannelID,
+    ) -> Result<(), SessionError> {
+        self.data.append(&mut w.data.clone());
+        self.finished = !w.more_data;
+
+        if self.command != 0 && self.command != command {
+            return Err(SessionError::WrongCommand);
+        }
+
+        self.command = command;
+
+        if self.index != 0 && self.index <= w.index {
+            return Err(SessionError::WrongIndex);
+        }
+
+        Ok(())
+    }
+
+    fn load_backup_data(&mut self, data: backup::DataPacket) {
+        let mut data = backup::Wires::from(data);
+        data.reverse();
+        self.backup_chunks = Some(data)
+    }
+
+    fn drain_backup(&mut self) -> Option<backup::Wire> {
+        if self.backup_chunks.is_none() {
+            return None;
+        }
+
+        let mut b = self.backup_chunks.as_mut().unwrap();
+
+        b.pop()
+    }
+
+    pub fn is_backup(&self) -> bool {
+        self.is_backup
+    }
+
+    pub fn has_backup_data(&self) -> bool {
+        self.backup_chunks.is_some()
+    }
+
+    fn finished(&self) -> bool {
+        self.finished
+    }
+}
+
+pub fn handle_vendor_data(
     cmd: u8,
     channel_id: ChannelID,
     payload: Vec<u8>,
-) -> HidPacketIterator {
-    log::debug!("got vendor command: {}, payload: {:?}", cmd, payload);
+    current_state: &mut VendorSession,
+) -> Result<Option<HidPacketIterator>, SessionError> {
+    if cmd == COMMAND_RESET_SESSION {
+        log::debug!("resetting session");
+        return Ok(Some(
+            HidPacketIterator::new(Message {
+                cid: channel_id,
+                cmd,
+                payload: vec![0xca, 0xfe, 0xba, 0xbe],
+            })
+            .unwrap(),
+        ));
+    }
+    current_state.command = cmd;
+    current_state.channel_id = channel_id;
+
+    // if we received a backup::PayloadType, we are being requested a backup.
+    let backup_type = match backup::PayloadType::try_from(&payload) {
+        Ok(t) => Some(t),
+        Err(_) => None,
+    };
+
+    if backup_type.is_some() {
+        log::debug!("vendor data is of backup kind");
+        current_state.is_backup = true;
+        current_state.backup_kind = backup_type;
+        return Ok(None); // Handle Backup
+    }
+
+    log::debug!("vendor data is of restore kind, reading payload as cbor");
+    let c = match cbor::read(&payload) {
+        Ok(w) => w,
+        Err(error) => {
+            log::error!("error while handling vendor data, {:?}", error);
+            return Ok(Some(
+                HidPacketIterator::new(error_message(channel_id, backup::ERROR_VENDOR_HANDLING))
+                    .unwrap(),
+            ));
+        }
+    };
+
+    log::debug!("reading cbor as wire");
+    let wire_data = match backup::Wire::try_from(c) {
+        Ok(w) => w,
+        Err(error) => {
+            log::error!("error while handling vendor data, {:?}", error);
+            return Ok(Some(
+                HidPacketIterator::new(error_message(channel_id, backup::ERROR_VENDOR_HANDLING))
+                    .unwrap(),
+            ));
+        }
+    };
+
+    current_state.read_from_wire(wire_data, cmd, channel_id)?;
+
+    log::debug!("state.finished(): {:?}", current_state.finished());
+    match current_state.finished() {
+        true => Ok(None),
+        false => Ok(Some(
+            HidPacketIterator::new(Message {
+                cid: channel_id,
+                cmd,
+                payload: backup::CONTINUE_RESPONSE.to_vec(),
+            })
+            .unwrap(),
+        )),
+    }
+}
+
+pub fn handle_vendor_command(session: &mut VendorSession) -> HidPacketIterator {
+    let cmd = session.command;
+    let payload = session.data.clone();
+    let channel_id = session.channel_id;
+
+    log::debug!("got vendor command: {}", cmd);
     let xns = xous_names::XousNames::new().unwrap();
 
-    let payload = match cmd {
-        COMMAND_BENCHMARK => Message {
-            cid: channel_id,
-            cmd,
-            payload: handle_benchmark(),
-        },
+    let payload = match session.command {
         COMMAND_RESTORE_TOTP_CODES => match handle_restore(payload, &xns) {
             Ok(payload) => Message {
                 cid: channel_id,
@@ -37,15 +187,26 @@ pub fn handle_vendor_command(
                 error_message(channel_id, 41)
             }
         },
-        COMMAND_BACKUP_TOTP_CODES => match handle_backup(&xns, payload) {
-            Ok(payload) => Message {
-                cid: channel_id,
-                cmd,
-                payload,
-            },
+        COMMAND_BACKUP_TOTP_CODES => match handle_backup(&xns, session) {
+            Ok(payload) => {
+                log::debug!("sending over chunk: {:?}", payload);
+                Message {
+                    cid: channel_id,
+                    cmd,
+                    payload,
+                }
+            }
             Err(error) => {
-                log::error!("error while restoring codes: {:?}", error);
-                error_message(channel_id, 42)
+                match error {
+                    BackupError::NoMoreChunks => {
+                        log::debug!("no more chunks to send via backup!");
+                        error_message(channel_id, 88) // TODO(gsora): make this a constant
+                    }
+                    _ => {
+                        log::error!("error while restoring codes: {:?}", error);
+                        error_message(channel_id, 42)
+                    }
+                }
             }
         },
         _ => error_message(channel_id, 0x33),
@@ -64,6 +225,7 @@ enum BackupError {
     CborConversionError(backup::CborConversionError),
     PddbError(std::io::Error),
     StorageError(crate::storage::Error),
+    NoMoreChunks,
 }
 
 impl From<DecoderError> for BackupError {
@@ -88,15 +250,20 @@ impl From<backup::CborConversionError> for BackupError {
 }
 
 fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>, BackupError> {
+    log::debug!("handling restore");
     let mut storage = crate::storage::Manager::new(xns);
 
     let c = cbor::read(&data)?;
 
     let data = backup::DataPacket::try_from(c)?;
 
+    let mut entries: Vec<Box<dyn crate::storage::StorageContent>> = vec![];
+
     match data {
         backup::DataPacket::TOTP(totp_entries) => {
-            for elem in totp_entries.0 {
+            log::debug!("restoring totp");
+            for (idx, elem) in totp_entries.0.into_iter().enumerate() {
+                log::debug!("restoring element {}", idx);
                 let mut totp = TotpRecord {
                     version: 1,
                     name: elem.name,
@@ -111,12 +278,13 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
                     ctime: 0, // Will be filled in later by storage::new_totp_record();
                     notes: t!("vault.notes", xous::LANG).to_string(),
                 };
-
-                storage.new_record(&mut totp, None)?;
+                entries.push(Box::new(totp));
             }
         }
         backup::DataPacket::Password(password_entries) => {
-            for elem in password_entries.0 {
+            log::debug!("restoring password");
+            for (idx, elem) in password_entries.0.into_iter().enumerate() {
+                log::debug!("restoring element {}", idx);
                 let mut password = PasswordRecord {
                     version: 1,
                     description: elem.description,
@@ -128,23 +296,47 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
                     atime: 0,
                 };
 
-                storage.new_record(&mut password, None)?;
+                entries.push(Box::new(password));
             }
         }
     };
 
+    storage.new_records(entries, None)?;
     Ok(vec![0xca, 0xfe, 0xba, 0xbe])
 }
 
 fn handle_backup(
     xns: &xous_names::XousNames,
-    payload_type: Vec<u8>,
+    session: &mut VendorSession,
 ) -> Result<Vec<u8>, BackupError> {
+    log::debug!(
+        "entering backup handler, is_backup: {} has_backup_data: {}",
+        session.is_backup(),
+        session.has_backup_data()
+    );
+
+    if session.is_backup() && session.has_backup_data() {
+        log::debug!("there was some backup data, getting last chunk and sending it over");
+        let new_chunk = session.drain_backup();
+        if new_chunk.is_none() {
+            log::debug!("finished chunks!");
+            return Err(BackupError::NoMoreChunks);
+        }
+
+        let new_chunk = new_chunk.as_ref().unwrap();
+
+        log::debug!(
+            "new chunk data: idx: {}, more_data: {}",
+            new_chunk.index,
+            new_chunk.more_data
+        );
+        return Ok(new_chunk.into());
+    }
+
     let storage = crate::storage::Manager::new(xns);
 
-    let payload_type: backup::PayloadType = backup::PayloadType::from(payload_type);
-
-    match payload_type {
+    log::debug!("no backup data found, creating");
+    let data = match session.backup_kind.as_ref().unwrap() {
         backup::PayloadType::TOTP => {
             let totp_codes: Vec<crate::storage::TotpRecord> =
                 storage.all(crate::storage::ContentKind::TOTP)?;
@@ -166,7 +358,7 @@ fn handle_backup(
                 });
             }
 
-            Ok((&backup::TotpEntries(ret)).into())
+            backup::DataPacket::TOTP(backup::TotpEntries(ret))
         }
         backup::PayloadType::Password => {
             let passwords: Vec<crate::storage::PasswordRecord> =
@@ -183,9 +375,34 @@ fn handle_backup(
                 });
             }
 
-            Ok((&backup::PasswordEntries(ret)).into())
+            backup::DataPacket::Password(backup::PasswordEntries(ret))
         }
+    };
+
+    log::debug!("loading newly created backup data in session");
+    session.load_backup_data(data);
+
+    log::debug!(
+        "amount of chunks: {}",
+        session.backup_chunks.as_ref().unwrap().len()
+    );
+
+    let new_chunk = session.drain_backup();
+
+    if new_chunk.is_none() {
+        log::debug!("no more chunks after first load!");
+        return Err(BackupError::NoMoreChunks);
     }
+
+    let new_chunk = new_chunk.as_ref().unwrap();
+
+    log::debug!(
+        "new chunk data: idx: {}, more_data: {}",
+        new_chunk.index,
+        new_chunk.more_data
+    );
+
+    return Ok(new_chunk.into());
 }
 
 fn error_message(cid: ChannelID, error_code: u8) -> Message {
