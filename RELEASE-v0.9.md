@@ -240,6 +240,9 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - iterator form for PNG decoding (thanks to nworbnhoj for a ton of work to get that together)
   - memory usage is well-constrained now, and suitable for everyday use
   - primary limit to PNG decode speed is read speed over e.g. TCP
+- Feature #211 (change unlock PIN) implemented
+  - The menu item is in the PDDB Submenu->Change unlock PIN
+  - The redundant boot PIN setting during first power on setup is also removed. Only the one you set when you init the PDDB matters.
 
 ## Roadmap to 1.0
 
