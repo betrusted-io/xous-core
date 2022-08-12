@@ -17,6 +17,8 @@ pub enum Error {
     IoError(std::io::Error),
     TotpSerError(TOTPSerializationError),
     PasswordSerError(PasswordSerializationError),
+    KeyExists,
+    DupesExist(Vec<usize>),
 }
 
 impl From<std::io::Error> for Error {
@@ -85,6 +87,25 @@ impl Manager {
         hex::encode(guid)
     }
 
+    fn pddb_exists(&self, dict: &str, key_name: &str, basis: Option<String>) -> bool {
+        match self.pddb.get(
+            dict,
+            &key_name,
+            basis.as_deref(),
+            false,
+            false,
+            None,
+            Some(crate::basis_change),
+        ) {
+            Ok(_) => return true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(e) => {
+                log::error!("error while trying to lookup if a key exists, {}", e);
+                false
+            }
+        }
+    }
+
     fn pddb_store(
         &self,
         payload: &[u8],
@@ -93,12 +114,18 @@ impl Manager {
         alloc_hint: Option<usize>,
         basis: Option<String>,
         sync: bool,
+        overwrite: bool,
     ) -> Result<(), Error> {
+        if !overwrite && self.pddb_exists(dict, key_name, basis.clone()) {
+            return Err(Error::KeyExists);
+        }
+
         match self.pddb.get(
             dict,
             &key_name,
             basis.as_deref(),
-            true,
+            true, // if overwrite, we wanna create both the dict and the key if they don't
+            // exist
             true,
             alloc_hint,
             Some(crate::basis_change),
@@ -155,6 +182,7 @@ impl Manager {
         &mut self,
         record: &mut dyn StorageContent,
         basis: Option<String>,
+        overwrite: bool,
     ) -> Result<(), Error> {
         let record = record;
         let settings = record.settings();
@@ -169,6 +197,7 @@ impl Manager {
             settings.alloc_hint,
             basis.clone(),
             true,
+            overwrite,
         )
     }
 
@@ -176,9 +205,11 @@ impl Manager {
         &mut self,
         records: Vec<Box<dyn StorageContent>>,
         basis: Option<String>,
+        overwrite: bool,
     ) -> Result<(), Error> {
         let mut precords = records.into_iter().peekable();
         let mut current_idx = 0; // idk how to use peekable + enumerate
+        let mut dupes = vec![];
         while let Some(record) = precords.next() {
             let mut record = record;
             let settings = record.settings();
@@ -187,9 +218,12 @@ impl Manager {
             let guid = self.gen_guid();
             let should_sync = precords.peek().is_none() || current_idx % 10 == 0;
 
-            log::debug!("current_idx: {}, should_sync: {}, is_none: {}", current_idx, should_sync, precords.peek().is_none());
-
-            current_idx += 1;
+            log::debug!(
+                "current_idx: {}, should_sync: {}, is_none: {}",
+                current_idx,
+                should_sync,
+                precords.peek().is_none()
+            );
 
             match self.pddb_store(
                 &serialized_record,
@@ -198,10 +232,23 @@ impl Manager {
                 settings.alloc_hint,
                 basis.clone(),
                 should_sync,
+                overwrite,
             ) {
-                Ok(()) => continue,
-                Err(error) => return Err(error),
-            };
+                Ok(()) => (),
+                Err(error) => match error {
+                    Error::KeyExists => {
+                        dupes.push(current_idx);
+                        ()
+                    }
+                    _ => return Err(error),
+                },
+            }
+
+            current_idx += 1;
+        }
+
+        if !dupes.is_empty() {
+            return Err(Error::DupesExist(dupes));
         }
 
         Ok(())
@@ -250,7 +297,7 @@ impl Manager {
         self.pddb
             .delete_key(&settings.dict, key_name, Some(&basis))?;
 
-        self.new_record(&mut *record, Some(basis))
+        self.new_record(&mut *record, Some(basis), true)
     }
 
     pub fn delete(&mut self, kind: ContentKind, key_name: &str) -> Result<(), Error> {

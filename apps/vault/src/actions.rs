@@ -321,7 +321,7 @@ impl ActionManager {
                     count: 0,
                 };
 
-                match self.storage.borrow_mut().new_record(&mut record, None) {
+                match self.storage.borrow_mut().new_record(&mut record, None, true) {
                     Ok(_) => (),
                     Err(error) => {
                         log::error!("internal error");
@@ -383,7 +383,7 @@ impl ActionManager {
                     notes: t!("vault.notes", xous::LANG).to_string(),
                 };
 
-                match self.storage.borrow_mut().new_record(&mut totp, None) {
+                match self.storage.borrow_mut().new_record(&mut totp, None, true) {
                     Ok(_) => (),
                     Err(error) => {
                         log::error!("internal error");

@@ -44,11 +44,7 @@ impl VendorSession {
         *self = VendorSession::default()
     }
 
-    fn read_from_wire(
-        &mut self,
-        w: backup::Wire,
-        command: u8,
-    ) -> Result<(), SessionError> {
+    fn read_from_wire(&mut self, w: backup::Wire, command: u8) -> Result<(), SessionError> {
         self.data.append(&mut w.data.clone());
         self.finished = !w.more_data;
 
@@ -298,8 +294,17 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
         }
     };
 
-    storage.new_records(entries, None)?;
-    Ok(vec![0xca, 0xfe, 0xba, 0xbe])
+    match storage.new_records(entries, None, false) {
+        Ok(()) => Ok(vec![0xca, 0xfe, 0xba, 0xbe]),
+        Err(error) => match error {
+            crate::storage::Error::DupesExist(dupes) => {
+                // this is a non-fatal error, let's just print the dupes and continue
+                log::info!("dupes detected while restoring! {:?}", dupes);
+                Ok(vec![0xca, 0xfe, 0xba, 0xbe])
+            }
+            _ => Err(error)?,
+        },
+    }
 }
 
 fn handle_backup(
