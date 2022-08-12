@@ -29,7 +29,7 @@ pub(crate) enum Opcode {
 
     /// attempt to initialize keys on a brand new system. Does nothing if the keys are already provisioned.
     UxTryInitKeys = 9,
-    UxInitBootPasswordReturn = 10,
+    UxInitUpdateFirstPasswordReturn = 10,
     UxInitUpdatePasswordReturn = 11,
 
     /// provision a gateware update with our secret data
