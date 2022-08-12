@@ -82,6 +82,14 @@ impl Deref for StaticCryptoData {
         }
     }
 }
+impl DerefMut for StaticCryptoData {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut StaticCryptoData as *mut u8, size_of::<StaticCryptoData>())
+                as &mut [u8]
+        }
+    }
+}
 #[derive(Eq, PartialEq)]
 enum DnaMode {
     Normal,
@@ -1562,6 +1570,63 @@ impl PddbOs {
         }
     }
 
+    fn pw_check(&self, modals: &modals::Modals) -> Result<()> {
+        let mut success = false;
+        while !success {
+            // the "same password check" is accomplished by just encrypting the all-zeros block twice
+            // with the cipher after clearing the password and re-entering it, and then comparing that
+            // the results are identical. The test blocks are never committed or stored anywhere.
+            // The actual creation of the "real" key material is done in step 3.
+            let mut checkblock_a = [0u8; BLOCK_SIZE];
+            self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
+
+            log::info!("{}PDDB.CHECKPASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+            #[cfg(any(target_os = "none", target_os = "xous"))] // skip this dialog in hosted mode
+            modals.show_notification(t!("pddb.checkpass", xous::LANG), None).expect("notification failed");
+
+            self.clear_password();
+            let mut checkblock_b = [0u8; BLOCK_SIZE];
+            self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_b));
+
+            if checkblock_a == checkblock_b {
+                success = true;
+            } else {
+                log::info!("{}PDDB.PWFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                modals.show_notification(t!("pddb.checkpass_fail", xous::LANG), None).expect("notification failed");
+                self.clear_password();
+            }
+        }
+        if success {
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::PermissionDenied, "Password entry failed"))
+        }
+    }
+
+    /// this function attempts to change the PIN. returns Ok() if changed, error if not.
+    pub(crate) fn pddb_change_pin(&mut self, modals: &modals::Modals) -> Result<()> {
+        if let Some(system_keys) = &self.system_basis_key {
+            // get the new password
+            self.clear_password();
+            modals.show_notification(t!("pddb.changepin.enter_new_pin", xous::LANG), None)
+                .map_err(|_| Error::new(ErrorKind::Other, "Internal error"))?;
+            self.pw_check(modals)?;
+
+            // wrap keys in the new password, and store them to disk
+            let wrapped_key = self.rootkeys.wrap_key(&system_keys.data).expect("Internal error wrapping our encryption key");
+            let wrapped_key_pt = self.rootkeys.wrap_key(&system_keys.pt).expect("Internal error wrapping our encryption key");
+            let mut crypto_keys = StaticCryptoData::default();
+            crypto_keys.deref_mut().copy_from_slice(&self.static_crypto_data_get().deref());
+            assert!(wrapped_key_pt.len() == 40);
+            assert!(wrapped_key.len() == 40);
+            crypto_keys.system_key_pt.copy_from_slice(&wrapped_key_pt);
+            crypto_keys.system_key.copy_from_slice(&wrapped_key);
+            self.patch_keys(crypto_keys.deref(), 0);
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::PermissionDenied, "System basis keys not unlocked"))
+        }
+    }
     /// this function is dangerous in that calling it will completely erase all of the previous data
     /// in the PDDB an replace it with a brand-spanking new, blank PDDB.
     /// The number of servers that can connect to the Spinor crate is strictly tracked, so we borrow a reference
@@ -1572,31 +1637,7 @@ impl PddbOs {
         }
         // step 0. If we have a modal, confirm that the password entered was correct with a double-entry.
         if let Some(modals) = progress {
-            let mut success = false;
-            while !success {
-                // the "same password check" is accomplished by just encrypting the all-zeros block twice
-                // with the cipher after clearing the password and re-entering it, and then comparing that
-                // the results are identical. The test blocks are never committed or stored anywhere.
-                // The actual creation of the "real" key material is done in step 3.
-                let mut checkblock_a = [0u8; BLOCK_SIZE];
-                self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
-
-                log::info!("{}PDDB.CHECKPASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                #[cfg(any(target_os = "none", target_os = "xous"))] // skip this dialog in hosted mode
-                modals.show_notification(t!("pddb.checkpass", xous::LANG), None).expect("notification failed");
-
-                self.clear_password();
-                let mut checkblock_b = [0u8; BLOCK_SIZE];
-                self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_b));
-
-                if checkblock_a == checkblock_b {
-                    success = true;
-                } else {
-                    log::info!("{}PDDB.PWFAIL,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                    modals.show_notification(t!("pddb.checkpass_fail", xous::LANG), None).expect("notification failed");
-                    self.clear_password();
-                }
-            }
+            self.pw_check(modals)?;
         }
 
         // step 1. Erase the entire PDDB region - leaves the state in all 1's

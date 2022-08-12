@@ -1419,6 +1419,22 @@ fn wrapped_main() -> ! {
                 }
                 modals.show_notification(&note, None).expect("couldn't show basis list");
             },
+            Opcode::MenuChangePin => {
+                if basis_cache.basis_count() == 0 {
+                    modals.show_notification(t!("pddb.changepin.mountfirst", xous::LANG), None)
+                        .expect("couldn't show notification");
+                    continue;
+                }
+                match pddb_os.pddb_change_pin(&modals) {
+                    Ok(_) => modals.show_notification(t!("pddb.changepin.success", xous::LANG), None)
+                                .expect("couldn't show notification"),
+                    Err(e) => {
+                        log::error!("Error changing PIN: {:?}", e);
+                        modals.show_notification(t!("pddb.changepin.nochange", xous::LANG), None)
+                        .expect("couldn't show notification");
+                    }
+                }
+            },
             Opcode::RekeyPddb => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let rekey_op = buffer.to_original::<PddbRekeyOp, _>().unwrap();

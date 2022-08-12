@@ -108,28 +108,28 @@
         "en-tts": "No"
     },
     "pddb.badpass": {
-        "en": "Incorrect password.\n\nTry again?\n",
+        "en": "Incorrect PIN.\n\nTry again?\n",
         "ja": "パスワードを認証失敗でした。\n\nもう一度実行しませんか。\n",
         "zh": "密码错误。 再试一次？",
-        "en-tts": "Incorrect password. Try again?"
+        "en-tts": "Incorrect PIN. Try again?"
     },
     "pddb.checkpass": {
-        "en": "Press any key, then re-enter your password to confirm.",
+        "en": "Press any key, then re-enter your PIN to confirm.",
         "ja": "任意キーを押して、パスワードを再入力してセットアップを確認してください。",
         "zh": "第一次使用，再次输入密码",
-        "en-tts": "First-time setup: Enter password again."
+        "en-tts": "First-time setup: Enter PIN again."
     },
     "pddb.checkpass_fail": {
-        "en": "Password mismatch!\n\nPlease try again.",
+        "en": "PIN mismatch!\n\nPlease try again.",
         "ja": "パスワード一致していません!\n\nもう一度実行しください。",
         "zh": "密码不匹配，请重试.",
-        "en-tts": "Password mismatch! Please try again."
+        "en-tts": "PIN mismatch! Please try again."
     },
     "pddb.badpass_infallible": {
-        "en": "Incorrect password.\n\nPlease try again.",
+        "en": "Incorrect PIN.\n\nPlease try again.",
         "ja": "パスワードを認証失敗でした。\n\nもう一度実行しください。",
         "zh": "密码错误。",
-        "en-tts": "Incorrect password. Please try again."
+        "en-tts": "Incorrect PIN. Please try again."
     },
     "pddb.requestformat": {
         "en": "The PDDB needs to be cryptographically formatted. This takes about 15 minutes and can't be interrupted.\n\nProceed?",
@@ -202,6 +202,36 @@
         "ja": "Basis 名前: ",
         "zh": "基础姓名: ",
         "en-tts": "For basis: "
+    },
+    "pddb.changepin.mountfirst": {
+        "en": "Unlock the device before changing the PIN",
+        "ja": "PIN を変更する前にデバイスのロックを解除してください",
+        "zh": "在更改 PIN 之前解锁设备",
+        "en-tts": "Unlock the device before changing the PIN"
+    },
+    "pddb.changepin.enter_new_pin": {
+        "en": "Enter your new PIN in the next dialog box.",
+        "ja": "次のダイアログ ボックスに新しい PIN を入力します。",
+        "zh": "在下一个对话框中输入您的新 PIN。",
+        "en-tts": "Enter your new PIN in the next dialog box."
+    },
+    "pddb.changepin.success": {
+        "en": "PIN updated!",
+        "ja": "PIN が更新されました。",
+        "zh": "PIN 已更新！",
+        "en-tts": "PIN updated!"
+    },
+    "pddb.changepin.nochange": {
+        "en": "PIN unchanged.",
+        "ja": "PIN は変更されていません",
+        "zh": "PIN 未更改",
+        "en-tts": "PIN unchanged."
+    },
+    "pddb.menu.change_unlock_pin": {
+        "en": "Change unlock PIN",
+        "ja": "ロック解除暗証番号の変更",
+        "zh": "更改解锁密码",
+        "en-tts": "Change unlock PIN"
     },
     "pddb.menu.listbasis": {
         "en": "List unlocked bases",
