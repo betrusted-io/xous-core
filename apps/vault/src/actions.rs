@@ -122,7 +122,10 @@ pub(crate) fn start_actions_thread(
 struct ActionManager {
     modals: modals::Modals,
     storage: RefCell<storage::Manager>,
+
+    #[cfg(feature="testing")]
     trng: RefCell::<trng::Trng>,
+
     mode: Arc::<Mutex::<VaultMode>>,
     item_list: Arc::<Mutex::<Vec::<ListItem>>>,
     pddb: RefCell::<pddb::Pddb>,
@@ -145,7 +148,10 @@ impl ActionManager {
         ActionManager {
             modals: modals::Modals::new(&xns).unwrap(),
             storage: RefCell::new(storage_manager),
+
+            #[cfg(feature="testing")]
             trng: RefCell::new(trng::Trng::new(&xns).unwrap()),
+
             mode_cache: mc,
             mode,
             item_list,

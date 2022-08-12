@@ -156,7 +156,7 @@ impl Manager {
         record: &mut dyn StorageContent,
         basis: Option<String>,
     ) -> Result<(), Error> {
-        let mut record = record;
+        let record = record;
         let settings = record.settings();
         record.set_ctime(utc_now().timestamp() as u64);
         let serialized_record: Vec<u8> = record.to_vec();

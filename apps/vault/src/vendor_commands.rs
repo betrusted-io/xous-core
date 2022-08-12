@@ -43,11 +43,11 @@ impl VendorSession {
     fn reset(&mut self) {
         *self = VendorSession::default()
     }
+
     fn read_from_wire(
         &mut self,
         w: backup::Wire,
         command: u8,
-        channel_id: ChannelID,
     ) -> Result<(), SessionError> {
         self.data.append(&mut w.data.clone());
         self.finished = !w.more_data;
@@ -76,7 +76,7 @@ impl VendorSession {
             return None;
         }
 
-        let mut b = self.backup_chunks.as_mut().unwrap();
+        let b = self.backup_chunks.as_mut().unwrap();
 
         b.pop()
     }
@@ -102,6 +102,7 @@ pub fn handle_vendor_data(
 ) -> Result<Option<HidPacketIterator>, SessionError> {
     if cmd == COMMAND_RESET_SESSION {
         log::debug!("resetting session");
+        current_state.reset();
         return Ok(Some(
             HidPacketIterator::new(Message {
                 cid: channel_id,
@@ -151,7 +152,7 @@ pub fn handle_vendor_data(
         }
     };
 
-    current_state.read_from_wire(wire_data, cmd, channel_id)?;
+    current_state.read_from_wire(wire_data, cmd)?;
 
     log::debug!("state.finished(): {:?}", current_state.finished());
     match current_state.finished() {
@@ -215,10 +216,6 @@ pub fn handle_vendor_command(session: &mut VendorSession) -> HidPacketIterator {
     HidPacketIterator::new(payload).unwrap()
 }
 
-fn handle_benchmark() -> Vec<u8> {
-    vec![0xDE, 0xAD, 0xBE, 0xEF]
-}
-
 #[derive(Debug)]
 enum BackupError {
     CborError(DecoderError),
@@ -264,7 +261,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
             log::debug!("restoring totp");
             for (idx, elem) in totp_entries.0.into_iter().enumerate() {
                 log::debug!("restoring element {}", idx);
-                let mut totp = TotpRecord {
+                let totp = TotpRecord {
                     version: 1,
                     name: elem.name,
                     secret: elem.shared_secret,
@@ -285,7 +282,7 @@ fn handle_restore(data: Vec<u8>, xns: &xous_names::XousNames) -> Result<Vec<u8>,
             log::debug!("restoring password");
             for (idx, elem) in password_entries.0.into_iter().enumerate() {
                 log::debug!("restoring element {}", idx);
-                let mut password = PasswordRecord {
+                let password = PasswordRecord {
                     version: 1,
                     description: elem.description,
                     username: elem.username,
