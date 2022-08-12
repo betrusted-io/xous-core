@@ -16,3 +16,5 @@ serde = {version = "1.0.138", features = ["derive"]}
 hex = "0.4.3"
 clap = { version = "3.2.12", features = ["derive"] }
 anyhow = "1.0.58"
+log = "0.4.17"
+env_logger = "0.9.0"

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::Result;
 use clap::Parser;
 use clap::Subcommand;
@@ -24,7 +26,6 @@ impl From<&Target> for backup::PayloadType {
         }
     }
 }
-
 
 #[derive(Debug, PartialEq, clap::Args, Clone)]
 struct SubcommandFields {
@@ -65,11 +66,11 @@ impl std::fmt::Display for ProgramError {
 
 impl std::error::Error for ProgramError {}
 
-const OKAY_CANARY: &[u8] = &[0xca, 0xfe, 0xba, 0xbe];
 const PRECURSOR_VENDOR_ID: u16 = 0x1209;
 const PRECURSOR_PRODUCT_ID: u16 = 0x3613;
 
 fn main() -> Result<()> {
+    env_logger::init();
     let wp = CLI::parse();
 
     let ha = hidapi::HidApi::new()?;
@@ -87,68 +88,120 @@ fn main() -> Result<()> {
         return Err(ProgramError::NoDevicesFound)?;
     }
 
+    log::info!("connecting to device...");
     let device = ctaphid::Device::connect(&ha, precursor.unwrap())?;
+    log::info!("connected!");
+
+    device.vendor_command(ctaphid::command::VendorCommand::H44, &vec![])?;
+    log::debug!("sent session reset command");
+
+    let start = Instant::now();
 
     match wp.command {
         Commands::Backup(params) => {
-            let pt: backup::PayloadType = (&params.target).into();
-            let ops: u8 = (&pt).into();
+            log::info!("receiving data...");
+            let bd = {
+                let mut data = vec![];
+                let mut idx = 0;
+                loop {
+                    let pt: backup::PayloadType = (&params.target).into();
+                    let ops: u8 = (&pt).into();
 
-            let bd = device.vendor_command(ctaphid::command::VendorCommand::H42, &vec![ops])?;
+                    let wire_data = match device
+                        .vendor_command(ctaphid::command::VendorCommand::H42, &vec![ops])
+                    {
+                        Ok(we) => we,
 
-            let json = unmarshal_backup_data(bd, params.target)?;
+                        Err(error) => match error {
+                            ctaphid::error::Error::DeviceError(
+                                ctaphid::error::DeviceError::Unknown(value),
+                            ) => {
+                                if value == 88 {
+                                    break;
+                                }
 
+                                return Err(error)?;
+                            }
+                            _ => return Err(error)?,
+                        },
+                    };
+
+                    let raw_cbor = cbor::read(&wire_data).unwrap();
+                    let mut wire_data: backup::Wire = backup::Wire::try_from(raw_cbor)?;
+
+                    data.append(&mut wire_data.data);
+                    log::debug!("received chunk {}", idx);
+                    idx += 1;
+
+                    if !wire_data.more_data {
+                        break;
+                    }
+                }
+
+                data
+            };
+
+            let json = unmarshal_backup_data( bd)?;
             std::fs::write(params.path, json)?;
 
+            log::info!("done! elapsed: {:?}", start.elapsed());
             Ok(())
         }
         Commands::Restore(params) => {
+            log::info!("sending data...");
             let hbf = read_human_backup_file(&params.path, params.target)?;
-            let vcres = device.vendor_command(ctaphid::command::VendorCommand::H41, &hbf)?;
+            let chunks: backup::Wires = backup::Wires::from(hbf);
 
-            if vcres.ne(OKAY_CANARY) {
-                return Err(ProgramError::DeviceError(vcres))?;
+            log::debug!("preparing to send {} chunks", chunks.len());
+
+            for (idx, chunk) in chunks.into_iter().enumerate() {
+                log::debug!("sending chunk {}", idx);
+                let chunk = &chunk;
+                let chunk_bytes: Vec<u8> = chunk.into();
+                let vcres =
+                    device.vendor_command(ctaphid::command::VendorCommand::H41, &chunk_bytes)?;
+
+                if vcres.eq(backup::CONTINUE_RESPONSE) {
+                    log::debug!("received CONTINUE response");
+                    continue;
+                }
+
+                if vcres.ne(backup::OKAY_CANARY) {
+                    log::debug!("finished!");
+                    return Err(ProgramError::DeviceError(vcres))?;
+                }
             }
 
+            log::info!("done! elapsed: {:?}", start.elapsed());
             Ok(())
         }
     }
 }
 
-fn read_human_backup_file(path: &str, target: Target) -> Result<Vec<u8>> {
+fn read_human_backup_file(path: &str, target: Target) -> Result<backup::DataPacket> {
     let f = std::fs::File::open(path)?;
 
     match target {
         Target::TOTP => {
             let backup_json: backup::TotpEntries = serde_json::from_reader(f)?;
 
-            let backup_object = backup::DataPacket::TOTP(backup_json);
-
-            Ok(backup_object.into())
+            Ok(backup::DataPacket::TOTP(backup_json))
         }
         Target::Password => {
             let backup_json: backup::PasswordEntries = serde_json::from_reader(f)?;
 
-            let backup_object = backup::DataPacket::Password(backup_json);
-
-            Ok(backup_object.into())
+            Ok(backup::DataPacket::Password(backup_json))
         }
     }
 }
 
-fn unmarshal_backup_data(data: Vec<u8>, target: Target) -> Result<Vec<u8>> {
+fn unmarshal_backup_data(data: Vec<u8>) -> Result<Vec<u8>> {
     let raw_cbor = cbor::read(&data).unwrap();
 
-    match target {
-        Target::TOTP => {
-            let data: backup::TotpEntries = raw_cbor.try_into()?;
+    let dp = backup::DataPacket::try_from(raw_cbor).unwrap();
 
-            Ok(serde_json::ser::to_vec(&data).unwrap())
-        }
-        Target::Password => {
-            let data: backup::PasswordEntries = raw_cbor.try_into()?;
-
-            Ok(serde_json::ser::to_vec(&data).unwrap())
-        }
+    match dp {
+        backup::DataPacket::Password(pw) => Ok(serde_json::ser::to_vec(&pw).unwrap()),
+        backup::DataPacket::TOTP(t) => Ok(serde_json::ser::to_vec(&t).unwrap()),
     }
 }
