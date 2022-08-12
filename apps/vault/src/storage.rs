@@ -92,6 +92,7 @@ impl Manager {
         key_name: &str,
         alloc_hint: Option<usize>,
         basis: Option<String>,
+        sync: bool,
     ) -> Result<(), Error> {
         match self.pddb.get(
             dict,
@@ -103,7 +104,10 @@ impl Manager {
             Some(crate::basis_change),
         ) {
             Ok(mut data) => match data.write(payload) {
-                Ok(_) => Ok(self.pddb.sync().unwrap_or(())),
+                Ok(_) => match sync {
+                    true => Ok(self.pddb.sync().unwrap_or(())),
+                    false => Ok(()),
+                },
                 Err(e) => Err(Error::IoError(e)),
             },
             Err(e) => Err(Error::IoError(e)),
@@ -163,8 +167,44 @@ impl Manager {
             &settings.dict,
             &guid,
             settings.alloc_hint,
-            basis,
+            basis.clone(),
+            true,
         )
+    }
+
+    pub fn new_records(
+        &mut self,
+        records: Vec<Box<dyn StorageContent>>,
+        basis: Option<String>,
+    ) -> Result<(), Error> {
+        let mut precords = records.into_iter().peekable();
+        let mut current_idx = 0; // idk how to use peekable + enumerate
+        while let Some(record) = precords.next() {
+            let mut record = record;
+            let settings = record.settings();
+            record.set_ctime(utc_now().timestamp() as u64);
+            let serialized_record: Vec<u8> = record.to_vec();
+            let guid = self.gen_guid();
+            let should_sync = precords.peek().is_none() || current_idx % 10 == 0;
+
+            log::debug!("current_idx: {}, should_sync: {}, is_none: {}", current_idx, should_sync, precords.peek().is_none());
+
+            current_idx += 1;
+
+            match self.pddb_store(
+                &serialized_record,
+                &settings.dict,
+                &guid,
+                settings.alloc_hint,
+                basis.clone(),
+                should_sync,
+            ) {
+                Ok(()) => continue,
+                Err(error) => return Err(error),
+            };
+        }
+
+        Ok(())
     }
 
     pub fn all<T: StorageContent + std::default::Default>(
