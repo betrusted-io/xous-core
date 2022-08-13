@@ -13,17 +13,26 @@ use num_traits::*;
 
 // Derived from https://github.com/blakesmith/xous-core/blob/xtotp-time/apps/xtotp/src/main.rs
 #[derive(Clone, Copy)]
-pub(crate) enum TotpAlgorithm {
+pub enum TotpAlgorithm {
     HmacSha1,
     HmacSha256,
     HmacSha512,
+    None,
 }
+
+impl Default for TotpAlgorithm {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 impl std::fmt::Debug for TotpAlgorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             TotpAlgorithm::HmacSha1 => write!(f, "SHA1"),
             TotpAlgorithm::HmacSha256 => write!(f, "SHA256"),
             TotpAlgorithm::HmacSha512 => write!(f, "SHA512"),
+            TotpAlgorithm::None => write!(f, "None"),
         }
     }
 }
@@ -45,6 +54,7 @@ impl Into<String> for TotpAlgorithm {
             TotpAlgorithm::HmacSha1 => "SHA1".to_string(),
             TotpAlgorithm::HmacSha256 => "SHA256".to_string(),
             TotpAlgorithm::HmacSha512 => "SHA512".to_string(),
+            TotpAlgorithm::None => "None".to_string(),
         }
     }
 }
@@ -111,6 +121,9 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
             mac.update(&unpack_u64(unix_timestamp / totp_entry.step_seconds as u64));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
+        }
+        TotpAlgorithm::None => {
+            panic!("cannot generate hmac bytes for None algorithm")
         }
     }
 

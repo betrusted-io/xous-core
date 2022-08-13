@@ -21,6 +21,8 @@ mod submenu;
 mod actions;
 mod totp;
 mod prereqs;
+mod vendor_commands;
+mod storage;
 
 use locales::t;
 
@@ -28,6 +30,7 @@ use framework::ListItem;
 use actions::{ActionOp, start_actions_thread};
 
 use crate::prereqs::ntp_updater;
+use crate::vendor_commands::VendorSession;
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -159,7 +162,7 @@ const ERR_TIMEOUT_MS: usize = 5000;
 
 fn main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -183,12 +186,15 @@ fn main() -> ! {
     start_actions_thread(conn, actions_sid, mode.clone(), item_list.clone(), action_active.clone());
     let actions_conn = xous::connect(actions_sid).unwrap();
 
+
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let boot_time = ClockValue::new(tt.elapsed_ms() as i64, 1000);
+
+            let mut vendor_session = VendorSession::default();
 
             let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
             // this call will block until the PDDB is mounted.
@@ -202,7 +208,48 @@ fn main() -> ! {
                         Ok(msg) => {
                             log::trace!("FIDO listener got message: {:?}", msg);
                             let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                            let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
+                            let reply = match ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state) {
+                                ctap::hid::send::CTAPHIDResponse::StandardCommand(iter) => iter,
+                                ctap::hid::send::CTAPHIDResponse::VendorCommand(cmd, cid, payload) => {
+                                    match vendor_commands::handle_vendor_data(cmd, cid, payload, &mut vendor_session) {
+                                        Ok(return_payload) => {
+                                            // if None, this means we've finished parsing all that
+                                            // was needed, and we handle/respond with real data
+
+                                            match return_payload {
+                                                Some(data) => data,
+                                                None => {
+                                                    log::debug!("starting processing of vendor data...");
+                                                    let resp = vendor_commands::handle_vendor_command(&mut vendor_session);
+                                                    log::debug!("finished processing of vendor data!");
+                                                    
+                                                    match vendor_session.is_backup() {
+                                                        true => {
+                                                            if vendor_session.has_backup_data() {
+                                                                resp
+                                                            } else {
+                                                                vendor_session = VendorSession::default();
+                                                                resp
+                                                            }
+                                                        },
+                                                        false => {
+                                                            vendor_session = VendorSession::default();
+                                                            resp
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Err(session_error) => {
+                                            // reset the session
+                                            vendor_session = VendorSession::default();
+
+                                            session_error.ctaphid_error(cid)
+                                        }
+                                    }
+                                    //vendor_commands::handle_vendor_command(cmd, cid, payload)
+                                }
+                            };
                             // This block handles sending packets.
                             for pkt_reply in reply {
                                 let mut reply = RawFidoMsg::default();

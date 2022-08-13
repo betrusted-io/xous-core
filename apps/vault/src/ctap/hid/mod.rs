@@ -15,7 +15,7 @@
 pub mod receive;
 pub mod send;
 
-use self::receive::MessageAssembler;
+use self::{receive::MessageAssembler, send::CTAPHIDResponse};
 use self::send::HidPacketIterator;
 #[cfg(feature = "with_ctap1")]
 use super::ctap1;
@@ -151,7 +151,7 @@ impl CtapHid {
         packet: &HidPacket,
         clock_value: ClockValue,
         ctap_state: &mut CtapState<R, CheckUserPresence>,
-    ) -> HidPacketIterator
+    ) -> CTAPHIDResponse
     where
         R: Rng256,
         CheckUserPresence: Fn(ChannelID) -> Result<(), Ctap2StatusCode>,
@@ -170,7 +170,7 @@ impl CtapHid {
                 if !self.has_valid_channel(&message) {
                     #[cfg(feature = "debug_ctap")]
                     writeln!(&mut Console::new(), "Invalid channel: {:02x?}", cid).unwrap();
-                    return CtapHid::error_message(cid, CtapHid::ERR_INVALID_CHANNEL);
+                    return CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_INVALID_CHANNEL));
                 }
                 // If another command arrives, stop winking to prevent accidential button touches.
                 self.wink_permission = TimedPermission::waiting();
@@ -191,11 +191,11 @@ impl CtapHid {
                         ) {
                             Ok(payload) => {
                                 log::trace!("command success: {:x?}", payload);
-                                CtapHid::ctap1_success_message(cid, &payload)
+                                CTAPHIDResponse::StandardCommand(CtapHid::ctap1_success_message(cid, &payload))
                             },
                             Err(ctap1_status_code) => {
                                 log::trace!("command failure: {:?}", ctap1_status_code);
-                                CtapHid::ctap1_error_message(cid, ctap1_status_code)
+                                CTAPHIDResponse::StandardCommand(CtapHid::ctap1_error_message(cid, ctap1_status_code))
                             }
                         }
                     }
@@ -213,7 +213,7 @@ impl CtapHid {
                             cmd: CtapHid::COMMAND_CBOR,
                             payload: response,
                         }) {
-                            iterator
+                            CTAPHIDResponse::StandardCommand(iterator)
                         } else {
                             // Handle the case of a payload > 7609 bytes.
                             // Although this shouldn't happen if the FIDO2 commands are implemented
@@ -222,21 +222,23 @@ impl CtapHid {
                             //
                             // The error payload that we send instead is 1 <= 7609 bytes, so it is
                             // safe to unwrap() the result.
-                            CtapHid::split_message(Message {
-                                cid,
-                                cmd: CtapHid::COMMAND_CBOR,
-                                payload: vec![
-                                    Ctap2StatusCode::CTAP2_ERR_VENDOR_RESPONSE_TOO_LONG as u8,
-                                ],
-                            })
-                            .unwrap()
+                            CTAPHIDResponse::StandardCommand(
+                                CtapHid::split_message(Message {
+                                    cid,
+                                    cmd: CtapHid::COMMAND_CBOR,
+                                    payload: vec![
+                                        Ctap2StatusCode::CTAP2_ERR_VENDOR_RESPONSE_TOO_LONG as u8,
+                                    ],
+                                })
+                                .unwrap()
+                            )
                         }
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.3
                     CtapHid::COMMAND_INIT => {
                         log::debug!("COMMAND_INIT");
                         if message.payload.len() != 8 {
-                            return CtapHid::error_message(cid, CtapHid::ERR_INVALID_LEN);
+                            return CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_INVALID_LEN));
                         }
 
                         let new_cid = if cid == CtapHid::CHANNEL_BROADCAST {
@@ -258,12 +260,14 @@ impl CtapHid {
                         payload[16] = CtapHid::CAPABILITIES;
 
                         // This unwrap is safe because the payload length is 17 <= 7609 bytes.
-                        CtapHid::split_message(Message {
-                            cid,
-                            cmd: CtapHid::COMMAND_INIT,
-                            payload,
-                        })
-                        .unwrap()
+                        CTAPHIDResponse::StandardCommand(
+                            CtapHid::split_message(Message {
+                                cid,
+                                cmd: CtapHid::COMMAND_INIT,
+                                payload,
+                            })
+                            .unwrap()
+                        )
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.4
                     CtapHid::COMMAND_PING => {
@@ -271,71 +275,81 @@ impl CtapHid {
                         // Pong the same message.
                         // This unwrap is safe because if we could parse the incoming message, it's
                         // payload length must be <= 7609 bytes.
-                        CtapHid::split_message(message).unwrap()
+                        CTAPHIDResponse::StandardCommand(CtapHid::split_message(message).unwrap())
                     }
                     // CTAP specification (version 20190130) section 8.1.9.1.5
                     CtapHid::COMMAND_CANCEL => {
                         log::debug!("COMMAND_CANCEL");
                         // Authenticators MUST NOT reply to this message.
                         // CANCEL is handled during user presence checks in main.
-                        HidPacketIterator::none()
+                        CTAPHIDResponse::StandardCommand(HidPacketIterator::none())
                     }
                     // Optional commands
                     // CTAP specification (version 20190130) section 8.1.9.2.1
                     CtapHid::COMMAND_WINK => {
                         log::debug!("COMMAND_WINK");
                         if !message.payload.is_empty() {
-                            return CtapHid::error_message(cid, CtapHid::ERR_INVALID_LEN);
+                            return CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_INVALID_LEN));
                         }
                         self.wink_permission =
                             TimedPermission::granted(clock_value, CtapHid::WINK_TIMEOUT_DURATION);
-                        CtapHid::split_message(Message {
-                            cid,
-                            cmd: CtapHid::COMMAND_WINK,
-                            payload: vec![],
-                        })
-                        .unwrap()
+                        CTAPHIDResponse::StandardCommand(
+                            CtapHid::split_message(Message {
+                                cid,
+                                cmd: CtapHid::COMMAND_WINK,
+                                payload: vec![],
+                            })
+                            .unwrap()
+                        )
                     }
-                    // CTAP specification (version 20190130) section 8.1.9.2.2
+                    // If we encountered a vendor command, return VendorCommand and let upstream code
+                    // deal with it.
+                    CtapHid::COMMAND_VENDOR_FIRST..=CtapHid::COMMAND_VENDOR_LAST => {
+                        CTAPHIDResponse::VendorCommand(
+                            message.cmd,
+                            message.cid,
+                            message.payload,
+                        )
+                    }
                     // TODO: implement LOCK
                     _ => {
                         log::debug!("ERR_INVALID_CMD");
                         // Unknown or unsupported command.
-                        CtapHid::error_message(cid, CtapHid::ERR_INVALID_CMD)
+                        CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_INVALID_CMD))
                     }
                 }
             }
             Ok(None) => {
                 // Waiting for more packets to assemble the message, nothing to send for now.
-                HidPacketIterator::none()
+                CTAPHIDResponse::StandardCommand(HidPacketIterator::none())
             }
             Err((cid, error)) => {
                 if !self.is_allocated_channel(cid)
                     && error != receive::Error::UnexpectedContinuation
                 {
-                    CtapHid::error_message(cid, CtapHid::ERR_INVALID_CHANNEL)
+                    CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_INVALID_CHANNEL))
                 } else {
                     match error {
                         receive::Error::UnexpectedChannel => {
-                            CtapHid::error_message(cid, CtapHid::ERR_CHANNEL_BUSY)
+                            CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_CHANNEL_BUSY))
                         }
                         receive::Error::UnexpectedInit => {
                             // TODO: Should we send another error code in this case?
                             // Technically, we were expecting a sequence number and got another
                             // byte, although the command/seqnum bit has higher-level semantics
                             // than sequence numbers.
-                            CtapHid::error_message(cid, CtapHid::ERR_INVALID_SEQ)
+                            CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_INVALID_SEQ))
                         }
                         receive::Error::UnexpectedContinuation => {
                             // CTAP specification (version 20190130) section 8.1.5.4
                             // Spurious continuation packets will be ignored.
-                            HidPacketIterator::none()
+                            CTAPHIDResponse::StandardCommand(HidPacketIterator::none())
                         }
                         receive::Error::UnexpectedSeq => {
-                            CtapHid::error_message(cid, CtapHid::ERR_INVALID_SEQ)
+                            CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_INVALID_SEQ))
                         }
                         receive::Error::Timeout => {
-                            CtapHid::error_message(cid, CtapHid::ERR_MSG_TIMEOUT)
+                            CTAPHIDResponse::StandardCommand(CtapHid::error_message(cid, CtapHid::ERR_MSG_TIMEOUT))
                         }
                     }
                 }
@@ -437,6 +451,19 @@ impl CtapHid {
         })
         .unwrap()
     }
+
+    #[cfg(feature = "with_ctap1")]
+    fn ctap1_generic_success_message(cid: ChannelID, cmd: u8, payload: &[u8]) -> HidPacketIterator {
+        let mut response = payload.to_vec();
+        let code: u16 = ctap1::Ctap1StatusCode::SW_SUCCESS.into();
+        response.extend_from_slice(&code.to_be_bytes());
+        CtapHid::split_message(Message {
+            cid,
+            cmd: cmd,
+            payload: response,
+        })
+        .unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -462,7 +489,10 @@ mod test {
         for msg_request in request {
             for pkt_request in HidPacketIterator::new(msg_request).unwrap() {
                 for pkt_reply in
-                    ctap_hid.process_hid_packet(&pkt_request, DUMMY_CLOCK_VALUE, ctap_state)
+                    match ctap_hid.process_hid_packet(&pkt_request, DUMMY_CLOCK_VALUE, ctap_state) {
+                        CTAPHIDResponse::StandardCommand(iter) => iter,
+                        CTAPHIDResponse::VendorCommand(_, _, _) => panic!("expected StandardCommand, not VendorCommand")
+                    }
                 {
                     match assembler_reply.parse_packet(&pkt_reply, DUMMY_TIMESTAMP) {
                         Ok(Some(message)) => result.push(message),
@@ -538,7 +568,12 @@ mod test {
         let mut packet = [0x00; 64];
         packet[0..7].copy_from_slice(&[0xC1, 0xC1, 0xC1, 0xC1, 0x00, 0x51, 0x51]);
         let mut assembler_reply = MessageAssembler::new();
-        for pkt_reply in ctap_hid.process_hid_packet(&packet, DUMMY_CLOCK_VALUE, &mut ctap_state) {
+        let reply = match ctap_hid.process_hid_packet(&packet, DUMMY_CLOCK_VALUE, &mut ctap_state) {
+            CTAPHIDResponse::StandardCommand(iter) => iter,
+            CTAPHIDResponse::VendorCommand(_, _, _) => panic!("expected StandardCommand, not VendorCommand")
+        };
+
+        for pkt_reply in reply {
             // Continuation packets are silently ignored.
             assert_eq!(
                 assembler_reply
@@ -616,7 +651,10 @@ mod test {
         let mut assembler_reply = MessageAssembler::new();
         for pkt_request in &[packet1, packet2] {
             for pkt_reply in
-                ctap_hid.process_hid_packet(&pkt_request, DUMMY_CLOCK_VALUE, &mut ctap_state)
+                match ctap_hid.process_hid_packet(&pkt_request, DUMMY_CLOCK_VALUE, &mut ctap_state) {
+                    CTAPHIDResponse::StandardCommand(iter) => iter,
+                    CTAPHIDResponse::VendorCommand(_, _, _) => panic!("expected StandardCommand, not VendorCommand")
+                }
             {
                 if let Some(message) = assembler_reply
                     .parse_packet(&pkt_reply, DUMMY_TIMESTAMP)

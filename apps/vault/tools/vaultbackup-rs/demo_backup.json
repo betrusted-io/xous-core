@@ -1,0 +1,16 @@
+[
+    {
+        "step_seconds": 30,
+        "shared_secret": "I65VU7K5ZQL7WB4E",
+        "digit_count": 6,
+        "algorithm": "SHA256",
+        "name": "demo backup!"
+    },
+    {
+        "step_seconds": 30,
+        "shared_secret": "I65VU7K5ZQL7WB4E",
+        "digit_count": 6,
+        "algorithm": "SHA256",
+        "name": "demo backup 2: this time is personal"
+    }
+]
