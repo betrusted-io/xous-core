@@ -8,9 +8,9 @@ use crate::{
 };
 
 // Vault-specific command to upload TOTP codes
-pub const COMMAND_RESTORE_TOTP_CODES: u8 = 0x41;
-pub const COMMAND_BACKUP_TOTP_CODES: u8 = 0x42;
-pub const COMMAND_RESET_SESSION: u8 = 0x44;
+pub const COMMAND_RESTORE_TOTP_CODES: u8 = 0x71;
+pub const COMMAND_BACKUP_TOTP_CODES: u8 = 0x72;
+pub const COMMAND_RESET_SESSION: u8 = 0x74;
 
 // TODO(gsora): add something that checks whether or not a command works.
 

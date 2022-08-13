@@ -92,7 +92,7 @@ fn main() -> Result<()> {
     let device = ctaphid::Device::connect(&ha, precursor.unwrap())?;
     log::info!("connected!");
 
-    device.vendor_command(ctaphid::command::VendorCommand::H44, &vec![])?;
+    device.vendor_command(ctaphid::command::VendorCommand::H74, &vec![])?;
     log::debug!("sent session reset command");
 
     let start = Instant::now();
@@ -108,7 +108,7 @@ fn main() -> Result<()> {
                     let ops: u8 = (&pt).into();
 
                     let wire_data = match device
-                        .vendor_command(ctaphid::command::VendorCommand::H42, &vec![ops])
+                        .vendor_command(ctaphid::command::VendorCommand::H72, &vec![ops])
                     {
                         Ok(we) => we,
 
@@ -159,7 +159,7 @@ fn main() -> Result<()> {
                 let chunk = &chunk;
                 let chunk_bytes: Vec<u8> = chunk.into();
                 let vcres =
-                    device.vendor_command(ctaphid::command::VendorCommand::H41, &chunk_bytes)?;
+                    device.vendor_command(ctaphid::command::VendorCommand::H71, &chunk_bytes)?;
 
                 if vcres.eq(backup::CONTINUE_RESPONSE) {
                     log::debug!("received CONTINUE response");
