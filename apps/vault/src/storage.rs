@@ -43,7 +43,6 @@ impl From<PasswordSerializationError> for Error {
 
 pub struct Manager {
     pddb: pddb::Pddb,
-    trng: trng::Trng,
 }
 
 pub trait StorageContent {
@@ -78,17 +77,10 @@ impl ContentKind {
 }
 
 impl Manager {
-    pub fn new(xns: &xous_names::XousNames) -> Manager {
+    pub fn new(_xns: &xous_names::XousNames) -> Manager {
         Manager {
             pddb: pddb::Pddb::new(),
-            trng: trng::Trng::new(xns).unwrap(),
         }
-    }
-
-    fn gen_guid(&mut self) -> String {
-        let mut guid = [0u8; 16];
-        self.trng.fill_bytes(&mut guid);
-        hex::encode(guid)
     }
 
     fn pddb_exists(&self, dict: &str, key_name: &str, basis: Option<String>) -> bool {
