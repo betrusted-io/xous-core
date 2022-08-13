@@ -247,6 +247,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - backup and restore of TOTP + password records to a host device via USB implemented by gsora. Huge thanks, that was a massive effort! lots of refactoring of the internal data structures used by the vault, making them more idiomatic.
   - separate host-based tool currently located at `apps/vault/tools/vaultbackup-rs` must be run on the host side to perform the backup
   - data is stored on the host as JSON; users can format their own JSON records to import existing TOTP and password data to the device in a bulk command
+  - BitWarden export format is also supported by `vaultbackup-rs`.
   - backup and restore can only be run with user approval, accessed via the `vault` context menu and then selecting `Enable host readout`. Note that in this mode, any host can read vault secrets; therefore, the mode locks out the UI and when it is active.
 
 ## Roadmap to 1.0
