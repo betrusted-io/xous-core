@@ -236,13 +236,18 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - fix TcpClose -- waits until the close handshake finishes before removing the socket
   - handle "unattended" closes -- this is when someone connects to a server and immediately disconnects, so the application layer never has time to issue a "formal" close request. Now it is automatically issued.
   - fix timeouts
-- `ditherpunk` improvements:
+- `ditherpunk` improvements (PR #207):
   - iterator form for PNG decoding (thanks to nworbnhoj for a ton of work to get that together)
   - memory usage is well-constrained now, and suitable for everyday use
   - primary limit to PNG decode speed is read speed over e.g. TCP
 - Feature #211 (change unlock PIN) implemented
   - The menu item is in the PDDB Submenu->Change unlock PIN
   - The redundant boot PIN setting during first power on setup is also removed. Only the one you set when you init the PDDB matters.
+- vault backup restore (PR #205):
+  - backup and restore of TOTP + password records to a host device via USB implemented by gsora. Huge thanks, that was a massive effort! lots of refactoring of the internal data structures used by the vault, making them more idiomatic.
+  - separate host-based tool currently located at `apps/vault/tools/vaultbackup-rs` must be run on the host side to perform the backup
+  - data is stored on the host as JSON; users can format their own JSON records to import existing TOTP and password data to the device in a bulk command
+  - backup and restore can only be run with user approval, accessed via the `vault` context menu and then selecting `Enable host readout`. Note that in this mode, any host can read vault secrets; therefore, the mode locks out the UI and when it is active.
 
 ## Roadmap to 1.0
 
