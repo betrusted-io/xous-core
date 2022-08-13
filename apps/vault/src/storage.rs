@@ -6,6 +6,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ctap_crypto::Hash256;
+
 const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 const VAULT_TOTP_DICT: &'static str = "vault.totp";
 const VAULT_TOTP_ALLOC_HINT: usize = 128;
@@ -51,6 +53,8 @@ pub trait StorageContent {
 
     fn from_vec(&mut self, data: Vec<u8>) -> Result<(), Error>;
     fn to_vec(&self) -> Vec<u8>;
+
+    fn hash(&self) -> Vec<u8>;
 }
 
 #[derive(Clone)]
@@ -188,12 +192,11 @@ impl Manager {
         let settings = record.settings();
         record.set_ctime(utc_now().timestamp() as u64);
         let serialized_record: Vec<u8> = record.to_vec();
-        let guid = self.gen_guid();
 
         self.pddb_store(
             &serialized_record,
             &settings.dict,
-            &guid,
+            &hex(record.hash()),
             settings.alloc_hint,
             basis.clone(),
             true,
@@ -215,7 +218,6 @@ impl Manager {
             let settings = record.settings();
             record.set_ctime(utc_now().timestamp() as u64);
             let serialized_record: Vec<u8> = record.to_vec();
-            let guid = self.gen_guid();
             let should_sync = precords.peek().is_none() || current_idx % 10 == 0;
 
             log::debug!(
@@ -228,7 +230,7 @@ impl Manager {
             match self.pddb_store(
                 &serialized_record,
                 &settings.dict,
-                &guid,
+                &hex(record.hash()),
                 settings.alloc_hint,
                 basis.clone(),
                 should_sync,
@@ -433,6 +435,13 @@ impl StorageContent for TotpRecord {
             self.ctime,
         )
         .into_bytes()
+    }
+
+    fn hash(&self) -> Vec<u8> {
+        let mut h = ctap_crypto::sha256::Sha256::new();
+        h.update(self.secret.as_bytes());
+        h.update(self.name.as_bytes());
+        h.finalize().to_vec()
     }
 }
 
@@ -655,6 +664,13 @@ impl StorageContent for PasswordRecord {
         )
         .into_bytes()
     }
+
+    fn hash(&self) -> Vec<u8> {
+        let mut h = ctap_crypto::sha256::Sha256::new();
+        h.update(self.password.as_bytes());
+        h.update(self.username.as_bytes());
+        h.finalize().to_vec()
+    }
 }
 
 impl TryFrom<Vec<u8>> for PasswordRecord {
@@ -762,4 +778,14 @@ fn utc_now() -> DateTime<Utc> {
         .expect("system time before Unix epoch");
     let naive = NaiveDateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos() as u32);
     DateTime::from_utc(naive, Utc)
+}
+
+fn hex(data: Vec<u8>) -> String {
+    use std::fmt::Write;
+    let mut s = String::with_capacity(2 * data.len());
+    for byte in data {
+        write!(s, "{:02X}", byte).unwrap();
+    }
+
+    s
 }
