@@ -208,8 +208,9 @@ fn main() -> Result<()> {
                                     break;
                                 }
                                 if value == 44 {
-                                    log::error!("Device is not in backup mode, operation aborted!");
-                                    std::process::exit(1);
+                                    return Err(
+                                        std::io::Error::new(std::io::ErrorKind::PermissionDenied,
+                                            "Host readout is not enabled, unable to proceed!\nPlease select 'Enable host readout' from the vault context menu first."))?;
                                 }
 
                                 return Err(error)?;
@@ -252,7 +253,23 @@ fn main() -> Result<()> {
                 let chunk = &chunk;
                 let chunk_bytes: Vec<u8> = chunk.into();
                 let vcres =
-                    device.vendor_command(ctaphid::command::VendorCommand::H71, &chunk_bytes)?;
+                    match device.vendor_command(ctaphid::command::VendorCommand::H71, &chunk_bytes) {
+                        Ok(vcres) => vcres,
+                        Err(error) => match error {
+                            ctaphid::error::Error::DeviceError(
+                                ctaphid::error::DeviceError::Unknown(value),
+                            ) => {
+                                if value == 44 {
+                                    return Err(
+                                        std::io::Error::new(std::io::ErrorKind::PermissionDenied,
+                                            "Host readout is not enabled, unable to proceed!\nPlease select 'Enable host readout' from the vault context menu first."))?;
+                                }
+
+                                return Err(error)?;
+                            }
+                            _ => return Err(error)?,
+                        }
+                    };
 
                 if vcres.eq(backup::CONTINUE_RESPONSE) {
                     log::debug!("received CONTINUE response");
