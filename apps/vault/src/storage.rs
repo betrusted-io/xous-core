@@ -431,7 +431,6 @@ impl StorageContent for TotpRecord {
 
     fn hash(&self) -> Vec<u8> {
         let mut h = ctap_crypto::sha256::Sha256::new();
-        h.update(self.secret.as_bytes());
         h.update(self.name.as_bytes());
         h.finalize().to_vec()
     }
@@ -659,7 +658,7 @@ impl StorageContent for PasswordRecord {
 
     fn hash(&self) -> Vec<u8> {
         let mut h = ctap_crypto::sha256::Sha256::new();
-        h.update(self.password.as_bytes());
+        h.update(self.description.as_bytes());
         h.update(self.username.as_bytes());
         h.finalize().to_vec()
     }
