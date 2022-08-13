@@ -44,6 +44,7 @@ OPTIONS:
 
 SUBCOMMANDS:
     backup     Backup data from device
+    format     Format a known password manager export for Vault
     help       Print this message or the help of the given subcommand(s)
     restore    Restore data to device
 ```
@@ -64,3 +65,18 @@ vaultbackup-rs <ACTION> <TARGET> <PATH>
 `PATH` specifies the path where `vaultbackup-rs` reads/writes data.
 
 The output format is JSON.
+
+## Importing other password manager's exports
+
+`vaultbackup-rs` supports importing other password manager's export data in Vault, but to do so, you have to format it to Vault's format first.
+
+The `subcommand` does this for you.
+
+Supported password managers:
+ - Bitwarden: TOTP, logins
+
+Example:
+
+```bash
+$ vaultbackup-rs format bitwarden your-bitwarden-export.json
+```
