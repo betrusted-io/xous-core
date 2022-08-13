@@ -334,12 +334,16 @@ impl From<&PayloadType> for u8 {
 
 #[derive(Debug)]
 pub enum PayloadTypeError {
-    BadType
+    BadType,
 }
 
 impl TryFrom<&Vec<u8>> for PayloadType {
     type Error = PayloadTypeError;
     fn try_from(u: &Vec<u8>) -> Result<PayloadType, Self::Error> {
+        if u.is_empty() {
+            return Err(PayloadTypeError::BadType);
+        }
+
         match u[0] {
             1 => Ok(PayloadType::TOTP),
             2 => Ok(PayloadType::Password),
