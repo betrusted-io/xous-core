@@ -202,7 +202,7 @@ impl TryFrom<cbor::Value> for PasswordEntry {
     type Error = CborConversionError;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct PasswordEntries(pub Vec<PasswordEntry>);
 
 impl From<&PasswordEntries> for cbor::Value {
