@@ -1,8 +1,8 @@
-use std::time::Instant;
-
+mod bitwarden;
 use anyhow::Result;
 use clap::Parser;
 use clap::Subcommand;
+use std::time::Instant;
 
 #[derive(Debug, Parser)]
 #[clap(name = "vaultbackup")]
@@ -38,6 +38,22 @@ struct SubcommandFields {
     path: String,
 }
 
+#[derive(Debug, PartialEq, clap::ValueEnum, Clone)]
+enum FormatTargets {
+    Bitwarden,
+}
+
+#[derive(Debug, PartialEq, clap::Args, Clone)]
+struct FormatFields {
+    /// The target for which to run the action
+    #[clap(required = true, value_enum)]
+    target: FormatTargets,
+
+    /// The path to read input data from
+    #[clap(required = true, value_parser)]
+    path: String,
+}
+
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Backup data from device
@@ -47,6 +63,10 @@ enum Commands {
     /// Restore data to device
     #[clap(arg_required_else_help = true)]
     Restore(SubcommandFields),
+
+    /// Format a known password manager export for Vault.
+    #[clap(arg_required_else_help = true)]
+    Format(FormatFields),
 }
 
 #[derive(Debug)]
@@ -69,10 +89,7 @@ impl std::error::Error for ProgramError {}
 const PRECURSOR_VENDOR_ID: u16 = 0x1209;
 const PRECURSOR_PRODUCT_ID: u16 = 0x3613;
 
-fn main() -> Result<()> {
-    env_logger::init();
-    let wp = CLI::parse();
-
+fn open_precursor() -> Result<ctaphid::Device> {
     let ha = hidapi::HidApi::new()?;
     let dl = ha.device_list();
 
@@ -95,10 +112,81 @@ fn main() -> Result<()> {
     device.vendor_command(ctaphid::command::VendorCommand::H44, &vec![])?;
     log::debug!("sent session reset command");
 
+    Ok(device)
+}
+
+fn main() -> Result<()> {
+    env_logger::init();
+    let wp = CLI::parse();
+
     let start = Instant::now();
 
     match wp.command {
+        Commands::Format(params) => {
+            let f = std::fs::File::open(params.path)?;
+
+            match params.target {
+                FormatTargets::Bitwarden => {
+                    let items = bitwarden::Items::try_from(f)?;
+                    let items = items.logins();
+
+                    let mut passwords = backup::PasswordEntries::default();
+                    let mut totps = backup::TotpEntries::default();
+
+                    for (idx, item) in items.into_iter().enumerate() {
+                        let mut pw = backup::PasswordEntry::default();
+                        let login = item.login.as_ref().unwrap();
+
+                        match login.sane() {
+                            Ok(()) => (),
+                            Err(err) => {
+                                log::error!("entry {} is invalid: {}", idx, err);
+                                continue
+                            }
+                        }
+
+                        pw.password = login.password.as_ref().unwrap().clone();
+                        pw.username = login.username.as_ref().unwrap().clone();
+                        pw.description = item.name.clone();
+                        pw.notes = item.notes.as_ref().unwrap_or(&String::new()).clone();
+
+                        passwords.0.push(pw);
+
+                        if login.totp.is_some() {
+                            let totp = login.totp.as_ref().unwrap();
+
+                            let mut t = backup::TotpEntry::default();
+                            t.name = item.name.clone();
+                            t.algorithm = backup::HashAlgorithms::SHA256;
+                            t.digit_count = 6;
+                            t.step_seconds = 30;
+                            t.shared_secret = totp
+                                .strip_prefix("otpauth://totp/")
+                                .unwrap_or(&totp)
+                                .to_string();
+
+                            totps.0.push(t);
+                        }
+                    }
+
+                    std::fs::write(
+                        "bitwarden_to_vault_passwords.json",
+                        serde_json::ser::to_vec(&passwords)?,
+                    )?;
+
+                    if totps.0.len() > 0 {
+                        std::fs::write(
+                            "bitwarden_to_vault_totps.json",
+                            serde_json::ser::to_vec(&totps)?,
+                        )?;
+                    }
+
+                    Ok(())
+                }
+            }
+        }
         Commands::Backup(params) => {
+            let device = open_precursor()?;
             log::info!("receiving data...");
             let bd = {
                 let mut data = vec![];
@@ -141,13 +229,14 @@ fn main() -> Result<()> {
                 data
             };
 
-            let json = unmarshal_backup_data( bd)?;
+            let json = unmarshal_backup_data(bd)?;
             std::fs::write(params.path, json)?;
 
             log::info!("done! elapsed: {:?}", start.elapsed());
             Ok(())
         }
         Commands::Restore(params) => {
+            let device = open_precursor()?;
             log::info!("sending data...");
             let hbf = read_human_backup_file(&params.path, params.target)?;
             let chunks: backup::Wires = backup::Wires::from(hbf);
