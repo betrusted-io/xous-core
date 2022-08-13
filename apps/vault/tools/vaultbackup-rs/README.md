@@ -32,6 +32,9 @@ If you prefer prefixing `sudo` to every `vaultbackup-rs` invocation, you're free
 
 ## Usage
 
+The Precursor device must have "host readout" enabled, by selecting the `vault` context menu at F4
+and selecting "Enable host readout".
+
 ```
 vaultbackup
 A backup/restore tool for the Precursor vault app.
