@@ -18,6 +18,7 @@ use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issu
 use std::str::FromStr;
 #[cfg(feature="ditherpunk")]
 use gam::DecodePng;
+use std::convert::TryInto;
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -385,7 +386,52 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 "tls" => {
-                    write!(ret, "Work in progress. Please check back later!").unwrap();
+                    let mut root_store = rustls::RootCertStore::empty();
+                    root_store.add_server_trust_anchors(
+                        webpki_roots::TLS_SERVER_ROOTS
+                            .0
+                            .iter()
+                            .map(|ta| {
+                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                                    ta.subject,
+                                    ta.spki,
+                                    ta.name_constraints,
+                                )
+                            })
+                    );
+                    let config = rustls::ClientConfig::builder()
+                        .with_safe_defaults()
+                        .with_root_certificates(root_store)
+                        .with_no_client_auth();
+
+                    let server_name = "bunniefoo.com".try_into().unwrap();
+                    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+
+                    let mut sock = TcpStream::connect("google.com:443").unwrap();
+                    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+                    tls.write_all(
+                        concat!(
+                            "GET / HTTP/1.1\r\n",
+                            "Host: bunniefoo.com\r\n",
+                            "Connection: close\r\n",
+                            "Accept-Encoding: identity\r\n",
+                            "\r\n"
+                        )
+                        .as_bytes(),
+                    )
+                    .unwrap();
+                    let ciphersuite = tls
+                        .conn
+                        .negotiated_cipher_suite()
+                        .unwrap();
+                    log::info!(
+                        "Current ciphersuite: {:?}",
+                        ciphersuite.suite()
+                    );
+                    let mut plaintext = Vec::new();
+                    tls.read_to_end(&mut plaintext).unwrap();
+                    log::info!("len: {}", plaintext.len());
+                    log::info!("{}", std::str::from_utf8(&plaintext).unwrap_or("utf-error"));
                 }
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {

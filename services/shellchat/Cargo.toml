@@ -75,6 +75,7 @@ tracing-subscriber = {version = "0.3.11", optional = true}
 # for rustls testing
 #rustls = "0.20.6"
 rustls = {path="../../../rustls/rustls"}
+webpki-roots = "0.22.4"
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.

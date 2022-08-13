@@ -2821,10 +2821,14 @@ dependencies = [
  "cc",
  "libc",
  "once_cell",
+ "rkyv",
  "spin 0.5.2",
  "untrusted",
  "web-sys",
  "winapi",
+ "xous",
+ "xous-ipc 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-names",
 ]
 
 [[package]]
@@ -3256,6 +3260,7 @@ dependencies = [
  "tts-frontend",
  "usb-device-xous",
  "utralib",
+ "webpki-roots",
  "x25519-dalek",
  "xous",
  "xous-ipc 0.9.7",
@@ -4276,9 +4281,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.22.3"
+version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44d8de8415c823c8abd270ad483c6feeac771fad964890779f9a8cb24fbbc1bf"
+checksum = "f1c760f0d366a6c24a02ed7816e23e691f5d92291f94d15e836006fd11b04daf"
 dependencies = [
  "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
