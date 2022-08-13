@@ -164,7 +164,7 @@ pub fn handle_vendor_data(
     }
 }
 
-pub fn handle_vendor_command(session: &mut VendorSession) -> HidPacketIterator {
+pub fn handle_vendor_command(session: &mut VendorSession, allow_host: bool) -> HidPacketIterator {
     let cmd = session.command;
     let payload = session.data.clone();
     let channel_id = session.channel_id;
@@ -172,41 +172,45 @@ pub fn handle_vendor_command(session: &mut VendorSession) -> HidPacketIterator {
     log::debug!("got vendor command: {}", cmd);
     let xns = xous_names::XousNames::new().unwrap();
 
-    let payload = match session.command {
-        COMMAND_RESTORE_TOTP_CODES => match handle_restore(payload, &xns) {
-            Ok(payload) => Message {
-                cid: channel_id,
-                cmd,
-                payload,
-            },
-            Err(error) => {
-                log::error!("error while restoring codes: {:?}", error);
-                error_message(channel_id, 41)
-            }
-        },
-        COMMAND_BACKUP_TOTP_CODES => match handle_backup(&xns, session) {
-            Ok(payload) => {
-                log::debug!("sending over chunk: {:?}", payload);
-                Message {
+    let payload = if allow_host {
+        match session.command {
+            COMMAND_RESTORE_TOTP_CODES => match handle_restore(payload, &xns) {
+                Ok(payload) => Message {
                     cid: channel_id,
                     cmd,
                     payload,
+                },
+                Err(error) => {
+                    log::error!("error while restoring codes: {:?}", error);
+                    error_message(channel_id, 41)
                 }
-            }
-            Err(error) => {
-                match error {
-                    BackupError::NoMoreChunks => {
-                        log::debug!("no more chunks to send via backup!");
-                        error_message(channel_id, 88) // TODO(gsora): make this a constant
-                    }
-                    _ => {
-                        log::error!("error while restoring codes: {:?}", error);
-                        error_message(channel_id, 42)
+            },
+            COMMAND_BACKUP_TOTP_CODES => match handle_backup(&xns, session) {
+                Ok(payload) => {
+                    log::debug!("sending over chunk: {:?}", payload);
+                    Message {
+                        cid: channel_id,
+                        cmd,
+                        payload,
                     }
                 }
-            }
-        },
-        _ => error_message(channel_id, 0x33),
+                Err(error) => {
+                    match error {
+                        BackupError::NoMoreChunks => {
+                            log::debug!("no more chunks to send via backup!");
+                            error_message(channel_id, 88) // TODO(gsora): make this a constant
+                        }
+                        _ => {
+                            log::error!("error while restoring codes: {:?}", error);
+                            error_message(channel_id, 42)
+                        }
+                    }
+                }
+            },
+            _ => error_message(channel_id, 0x33),
+        }
+    } else {
+        error_message(channel_id, 44)
     };
 
     HidPacketIterator::new(payload).unwrap()
@@ -407,7 +411,7 @@ fn handle_backup(
     return Ok(new_chunk.into());
 }
 
-fn error_message(cid: ChannelID, error_code: u8) -> Message {
+pub(crate) fn error_message(cid: ChannelID, error_code: u8) -> Message {
     // This unwrap is safe because the payload length is 1 <= 7609 bytes.
     Message {
         cid,

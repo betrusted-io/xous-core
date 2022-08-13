@@ -176,6 +176,7 @@ fn main() -> ! {
     let mode = Arc::new(Mutex::new(VaultMode::Fido));
     let item_list = Arc::new(Mutex::new(Vec::<ListItem>::new()));
     let action_active = Arc::new(AtomicBool::new(false));
+    let allow_host = Arc::new(AtomicBool::new(false));
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
@@ -189,6 +190,7 @@ fn main() -> ! {
 
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
+        let allow_host = allow_host.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -220,9 +222,12 @@ fn main() -> ! {
                                                 Some(data) => data,
                                                 None => {
                                                     log::debug!("starting processing of vendor data...");
-                                                    let resp = vendor_commands::handle_vendor_command(&mut vendor_session);
+                                                    let resp = vendor_commands::handle_vendor_command(
+                                                        &mut vendor_session,
+                                                        allow_host.load(Ordering::SeqCst)
+                                                    );
                                                     log::debug!("finished processing of vendor data!");
-                                                    
+
                                                     match vendor_session.is_backup() {
                                                         true => {
                                                             if vendor_session.has_backup_data() {
@@ -292,7 +297,7 @@ fn main() -> ! {
     });
     // spawn the TOTP pumper
     let pump_sid = xous::create_server().unwrap();
-    crate::totp::pumper(mode.clone(), pump_sid, conn);
+    crate::totp::pumper(mode.clone(), pump_sid, conn, allow_host.clone());
     let pump_conn = xous::connect(pump_sid).unwrap();
 
     let menu_sid = xous::create_server().unwrap();
@@ -505,13 +510,9 @@ fn main() -> ! {
                 vaultux.readout_mode(true);
                 modals.dynamic_notification_close().ok();
 
-                // TODO: rethink the integration of this menu item. The problem is that if you're in readout
-                // mode and the "vault" mode is active, the "pumper" thread keeps sending messages to redraw
-                // the TOTP timer bar. This will eventually overflow this server's queue and cause a hang.
-                // However, the final integration for this will depend a bit on how the vault upload/download PR
-                // turns out.
+                allow_host.store(true, Ordering::SeqCst);
                 modals.show_notification(t!("vault.readout_active", xous::LANG), None).ok();
-                // TODO: add some variable here to de-activate HID readout once this is done
+                allow_host.store(false, Ordering::SeqCst);
 
                 modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
                 vaultux.readout_mode(false);

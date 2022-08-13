@@ -153,7 +153,12 @@ pub(crate) enum PumpOp {
     Quit,
 }
 
-pub(crate) fn pumper(mode: Arc<Mutex<VaultMode>>, sid: xous::SID, main_conn: xous::CID) {
+pub(crate) fn pumper(
+    mode: Arc<Mutex<VaultMode>>,
+    sid: xous::SID,
+    main_conn: xous::CID,
+    allow_host: Arc<core::sync::atomic::AtomicBool>
+) {
     let _ = thread::spawn({
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -164,10 +169,12 @@ pub(crate) fn pumper(mode: Arc<Mutex<VaultMode>>, sid: xous::SID, main_conn: xou
                 log::trace!("{:?}", opcode);
                 match opcode {
                     Some(PumpOp::Pump) => {
-                        xous::try_send_message(main_conn,
-                            Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(),
-                            0, 0, 0, 0)
-                        ).ok(); // don't panic if the queue overflows
+                        if !allow_host.load(core::sync::atomic::Ordering::SeqCst) { // don't redraw if we're in host access mode
+                            xous::try_send_message(main_conn,
+                                Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(),
+                                0, 0, 0, 0)
+                            ).ok(); // don't panic if the queue overflows
+                        }
                         let mode_cache = {(*mode.lock().unwrap()).clone()};
                         { // we really want mode.lock() to be in a different scope so...
                             if mode_cache == VaultMode::Totp {

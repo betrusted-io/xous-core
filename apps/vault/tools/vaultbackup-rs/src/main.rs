@@ -119,6 +119,10 @@ fn main() -> Result<()> {
                                 if value == 88 {
                                     break;
                                 }
+                                if value == 44 {
+                                    log::error!("Device is not in backup mode, operation aborted!");
+                                    std::process::exit(1);
+                                }
 
                                 return Err(error)?;
                             }
