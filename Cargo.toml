@@ -139,3 +139,6 @@ path = "imports/getrandom"
 
 [patch.crates-io.ring]
 path = "../ring"
+
+[patch.crates-io.webpki]
+path = "../webpki-0.22.0"

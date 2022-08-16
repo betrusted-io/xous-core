@@ -3140,8 +3140,8 @@ version = "0.20.6"
 dependencies = [
  "log",
  "ring",
- "sct 0.6.1",
- "webpki 0.22.0",
+ "sct",
+ "webpki",
 ]
 
 [[package]]
@@ -3152,8 +3152,8 @@ checksum = "5aab8ee6c7097ed6057f43c187a62418d0c05a4bd5f18b3571db50ee0f9ce033"
 dependencies = [
  "log",
  "ring",
- "sct 0.7.0",
- "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sct",
+ "webpki",
 ]
 
 [[package]]
@@ -3182,14 +3182,6 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
-
-[[package]]
-name = "sct"
-version = "0.6.1"
-dependencies = [
- "ring",
- "untrusted",
-]
 
 [[package]]
 name = "sct"
@@ -4045,7 +4037,7 @@ dependencies = [
  "serde",
  "serde_json",
  "url",
- "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "webpki",
  "webpki-roots",
 ]
 
@@ -4486,16 +4478,7 @@ dependencies = [
 name = "webpki"
 version = "0.22.0"
 dependencies = [
- "ring",
- "untrusted",
-]
-
-[[package]]
-name = "webpki"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
-dependencies = [
+ "log",
  "ring",
  "untrusted",
 ]
@@ -4506,7 +4489,7 @@ version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1c760f0d366a6c24a02ed7816e23e691f5d92291f94d15e836006fd11b04daf"
 dependencies = [
- "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "webpki",
 ]
 
 [[package]]
