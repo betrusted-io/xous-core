@@ -21,6 +21,8 @@ mod submenu;
 mod actions;
 mod totp;
 mod prereqs;
+mod vendor_commands;
+mod storage;
 
 use locales::t;
 
@@ -28,6 +30,7 @@ use framework::ListItem;
 use actions::{ActionOp, start_actions_thread};
 
 use crate::prereqs::ntp_updater;
+use crate::vendor_commands::VendorSession;
 
 // CTAP2 testing notes:
 // run our branch and use this to forward the prompts on to the device:
@@ -173,6 +176,7 @@ fn main() -> ! {
     let mode = Arc::new(Mutex::new(VaultMode::Fido));
     let item_list = Arc::new(Mutex::new(Vec::<ListItem>::new()));
     let action_active = Arc::new(AtomicBool::new(false));
+    let allow_host = Arc::new(AtomicBool::new(false));
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
@@ -183,12 +187,16 @@ fn main() -> ! {
     start_actions_thread(conn, actions_sid, mode.clone(), item_list.clone(), action_active.clone());
     let actions_conn = xous::connect(actions_sid).unwrap();
 
+
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
+        let allow_host = allow_host.clone();
         move || {
             let xns = xous_names::XousNames::new().unwrap();
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             let boot_time = ClockValue::new(tt.elapsed_ms() as i64, 1000);
+
+            let mut vendor_session = VendorSession::default();
 
             let mut rng = ctap_crypto::rng256::XousRng256::new(&xns);
             // this call will block until the PDDB is mounted.
@@ -202,7 +210,51 @@ fn main() -> ! {
                         Ok(msg) => {
                             log::trace!("FIDO listener got message: {:?}", msg);
                             let now = ClockValue::new(tt.elapsed_ms() as i64, 1000);
-                            let reply = ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state);
+                            let reply = match ctap_hid.process_hid_packet(&msg.packet, now, &mut ctap_state) {
+                                ctap::hid::send::CTAPHIDResponse::StandardCommand(iter) => iter,
+                                ctap::hid::send::CTAPHIDResponse::VendorCommand(cmd, cid, payload) => {
+                                    match vendor_commands::handle_vendor_data(cmd, cid, payload, &mut vendor_session) {
+                                        Ok(return_payload) => {
+                                            // if None, this means we've finished parsing all that
+                                            // was needed, and we handle/respond with real data
+
+                                            match return_payload {
+                                                Some(data) => data,
+                                                None => {
+                                                    log::debug!("starting processing of vendor data...");
+                                                    let resp = vendor_commands::handle_vendor_command(
+                                                        &mut vendor_session,
+                                                        allow_host.load(Ordering::SeqCst)
+                                                    );
+                                                    log::debug!("finished processing of vendor data!");
+
+                                                    match vendor_session.is_backup() {
+                                                        true => {
+                                                            if vendor_session.has_backup_data() {
+                                                                resp
+                                                            } else {
+                                                                vendor_session = VendorSession::default();
+                                                                resp
+                                                            }
+                                                        },
+                                                        false => {
+                                                            vendor_session = VendorSession::default();
+                                                            resp
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Err(session_error) => {
+                                            // reset the session
+                                            vendor_session = VendorSession::default();
+
+                                            session_error.ctaphid_error(cid)
+                                        }
+                                    }
+                                    //vendor_commands::handle_vendor_command(cmd, cid, payload)
+                                }
+                            };
                             // This block handles sending packets.
                             for pkt_reply in reply {
                                 let mut reply = RawFidoMsg::default();
@@ -245,7 +297,7 @@ fn main() -> ! {
     });
     // spawn the TOTP pumper
     let pump_sid = xous::create_server().unwrap();
-    crate::totp::pumper(mode.clone(), pump_sid, conn);
+    crate::totp::pumper(mode.clone(), pump_sid, conn, allow_host.clone());
     let pump_conn = xous::connect(pump_sid).unwrap();
 
     let menu_sid = xous::create_server().unwrap();
@@ -458,13 +510,9 @@ fn main() -> ! {
                 vaultux.readout_mode(true);
                 modals.dynamic_notification_close().ok();
 
-                // TODO: rethink the integration of this menu item. The problem is that if you're in readout
-                // mode and the "vault" mode is active, the "pumper" thread keeps sending messages to redraw
-                // the TOTP timer bar. This will eventually overflow this server's queue and cause a hang.
-                // However, the final integration for this will depend a bit on how the vault upload/download PR
-                // turns out.
+                allow_host.store(true, Ordering::SeqCst);
                 modals.show_notification(t!("vault.readout_active", xous::LANG), None).ok();
-                // TODO: add some variable here to de-activate HID readout once this is done
+                allow_host.store(false, Ordering::SeqCst);
 
                 modals.dynamic_notification(Some(t!("vault.readout_switchover", xous::LANG)), None).ok();
                 vaultux.readout_mode(false);

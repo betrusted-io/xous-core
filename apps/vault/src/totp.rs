@@ -13,17 +13,26 @@ use num_traits::*;
 
 // Derived from https://github.com/blakesmith/xous-core/blob/xtotp-time/apps/xtotp/src/main.rs
 #[derive(Clone, Copy)]
-pub(crate) enum TotpAlgorithm {
+pub enum TotpAlgorithm {
     HmacSha1,
     HmacSha256,
     HmacSha512,
+    None,
 }
+
+impl Default for TotpAlgorithm {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 impl std::fmt::Debug for TotpAlgorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             TotpAlgorithm::HmacSha1 => write!(f, "SHA1"),
             TotpAlgorithm::HmacSha256 => write!(f, "SHA256"),
             TotpAlgorithm::HmacSha512 => write!(f, "SHA512"),
+            TotpAlgorithm::None => write!(f, "None"),
         }
     }
 }
@@ -45,6 +54,7 @@ impl Into<String> for TotpAlgorithm {
             TotpAlgorithm::HmacSha1 => "SHA1".to_string(),
             TotpAlgorithm::HmacSha256 => "SHA256".to_string(),
             TotpAlgorithm::HmacSha512 => "SHA512".to_string(),
+            TotpAlgorithm::None => "None".to_string(),
         }
     }
 }
@@ -112,6 +122,9 @@ fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Ve
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
+        TotpAlgorithm::None => {
+            panic!("cannot generate hmac bytes for None algorithm")
+        }
     }
 
     Ok(computed_hmac)
@@ -140,7 +153,12 @@ pub(crate) enum PumpOp {
     Quit,
 }
 
-pub(crate) fn pumper(mode: Arc<Mutex<VaultMode>>, sid: xous::SID, main_conn: xous::CID) {
+pub(crate) fn pumper(
+    mode: Arc<Mutex<VaultMode>>,
+    sid: xous::SID,
+    main_conn: xous::CID,
+    allow_host: Arc<core::sync::atomic::AtomicBool>
+) {
     let _ = thread::spawn({
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -151,10 +169,12 @@ pub(crate) fn pumper(mode: Arc<Mutex<VaultMode>>, sid: xous::SID, main_conn: xou
                 log::trace!("{:?}", opcode);
                 match opcode {
                     Some(PumpOp::Pump) => {
-                        xous::try_send_message(main_conn,
-                            Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(),
-                            0, 0, 0, 0)
-                        ).ok(); // don't panic if the queue overflows
+                        if !allow_host.load(core::sync::atomic::Ordering::SeqCst) { // don't redraw if we're in host access mode
+                            xous::try_send_message(main_conn,
+                                Message::new_scalar(crate::VaultOp::Redraw.to_usize().unwrap(),
+                                0, 0, 0, 0)
+                            ).ok(); // don't panic if the queue overflows
+                        }
                         let mode_cache = {(*mode.lock().unwrap()).clone()};
                         { // we really want mode.lock() to be in a different scope so...
                             if mode_cache == VaultMode::Totp {
