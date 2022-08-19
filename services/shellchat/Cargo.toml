@@ -116,4 +116,4 @@ dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX)
 test-rekey = []
 nettest = [] # batch network tests
 tls = ["rustls", "webpki-roots", "ring"]
-default = [] # "debugprint"
+default = ["tls"] # "debugprint"
