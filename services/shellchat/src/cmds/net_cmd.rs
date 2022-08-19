@@ -385,7 +385,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap();
                     }
                 }
-                #[cfg(feature="tls")]
+                // only valid for hardware configs with TLS enabled
+                #[cfg(all(any(target_os = "none", target_os = "xous"),feature="tls"))]
                 "rt" => {
                     log::set_max_level(log::LevelFilter::Trace);
                     ring::xous_test::p256_elem_add_test();

@@ -458,6 +458,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "--features", "pddbtest",
                     "--features", "ditherpunk",
                     "--features", "tracking-alloc",
+                    "--features", "tls",
                     // "--features", "test-rekey",
                 ]), false)?
         }
