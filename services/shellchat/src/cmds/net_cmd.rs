@@ -385,8 +385,15 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap();
                     }
                 }
-                "tls" => {
+                #[cfg(feature="tls")]
+                "rt" => {
                     log::set_max_level(log::LevelFilter::Trace);
+                    ring::xous_test::p256_elem_add_test();
+                    log::set_max_level(log::LevelFilter::Info);
+                }
+                #[cfg(feature="tls")]
+                "tls" => {
+                    log::set_max_level(log::LevelFilter::Info);
                     log::info!("starting TLS run");
                     let mut root_store = rustls::RootCertStore::empty();
                     log::info!("create root store");

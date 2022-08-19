@@ -73,9 +73,10 @@ tracing = {version = "0.1.35", optional = true}
 tracing-subscriber = {version = "0.3.11", optional = true}
 
 # for rustls testing
-#rustls = "0.20.6"
-rustls = {path="../../../rustls/rustls"}
-webpki-roots = "0.22.4"
+rustls = {version = "0.20.6", optional = true}
+# rustls = {path="../../../rustls/rustls"}
+webpki-roots = {version = "0.22.4", optional = true}
+ring = {version = "0.16.20", optional = true} # for testing ring math functions
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
@@ -114,4 +115,5 @@ tracking-alloc = ["tracking-allocator", "tracing", "tracing-subscriber"]
 dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX). Also need to enable this feature in the status crate. Intended for debug only.
 test-rekey = []
 nettest = [] # batch network tests
-default = [] # "debugprint"
+tls = ["rustls", "webpki-roots", "ring"]
+default = ["tls"] # "debugprint"

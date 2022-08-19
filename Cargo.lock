@@ -2995,9 +2995,11 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.16.20"
+source = "git+https://github.com/betrusted-io/ring-xous?branch=0.16.20-fiat-rs#87163fbe825eb986e92a34623791ee299967fe09"
 dependencies = [
  "cc",
  "libc",
+ "log",
  "once_cell",
  "rkyv",
  "spin 0.5.2",
@@ -3132,16 +3134,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
 dependencies = [
  "semver 1.0.9",
-]
-
-[[package]]
-name = "rustls"
-version = "0.20.6"
-dependencies = [
- "log",
- "ring",
- "sct",
- "webpki",
 ]
 
 [[package]]
@@ -3425,9 +3417,10 @@ dependencies = [
  "png",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "ring",
  "rkyv",
  "root-keys",
- "rustls 0.20.6",
+ "rustls",
  "sha2",
  "spectrum-analyzer",
  "spinor",
@@ -4033,7 +4026,7 @@ dependencies = [
  "flate2",
  "log",
  "once_cell",
- "rustls 0.20.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls",
  "serde",
  "serde_json",
  "url",
@@ -4477,8 +4470,9 @@ dependencies = [
 [[package]]
 name = "webpki"
 version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
 dependencies = [
- "log",
  "ring",
  "untrusted",
 ]
