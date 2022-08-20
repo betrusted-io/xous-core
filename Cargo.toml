@@ -93,6 +93,7 @@ resolver = "2"
 exclude = [
   "utralib",  # Exclude UTRA, since it is machine-generated.
   "locales",  # exclude because it is machine-generated
+  "xtask",
 ]
 
 [profile.release]
@@ -138,8 +139,10 @@ branch="main"
 path = "imports/getrandom"
 
 [patch.crates-io.ring]
+#path = "../ring"
 git="https://github.com/betrusted-io/ring-xous"
-branch="0.16.20-fiat-rs"
+commit="2348af8d0a0ecfbe4ac3d74ce00eb601239b287a"
+#branch="0.16.20-fiat-rs"
 
 #[patch.crates-io.webpki]
 #path = "../webpki-0.22.0"
