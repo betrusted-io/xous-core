@@ -1,5 +1,5 @@
 [alias]
-xtask = "run --package xtask --"
+xtask = "run --package xtask --release --"
 
 # [net]
 # offline = true              # do not access the network
