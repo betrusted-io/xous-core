@@ -139,10 +139,6 @@ branch="main"
 path = "imports/getrandom"
 
 [patch.crates-io.ring]
-#path = "../ring"
 git="https://github.com/betrusted-io/ring-xous"
-commit="2348af8d0a0ecfbe4ac3d74ce00eb601239b287a"
-#branch="0.16.20-fiat-rs"
-
-#[patch.crates-io.webpki]
-#path = "../webpki-0.22.0"
+#commit="517e75f6e30d0d652a64b8a938bad7bed7129729"
+branch="0.16.20-cleanup"
