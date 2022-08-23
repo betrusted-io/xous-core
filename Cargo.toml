@@ -140,5 +140,5 @@ path = "imports/getrandom"
 
 [patch.crates-io.ring]
 git="https://github.com/betrusted-io/ring-xous"
-rev="786a046a15dfb288ac7025a39f46036163efd8fe" # use the commitref because we're still updating the branch
+rev="50c73bb898dd1e8bffe040afd7709962e83d3300" # use the commitref because we're still updating the branch
 #branch="0.16.20-cleanup"
