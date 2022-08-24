@@ -413,7 +413,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         let msg = socket.read_message().expect("Error reading message");
                         log::info!("Received: {}", msg);
                     }
-                    socket.close(None);
+                    // socket.close(None);
                 }
                 #[cfg(feature="tls")]
                 "tls" => {
