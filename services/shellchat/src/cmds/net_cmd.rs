@@ -393,6 +393,29 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     log::set_max_level(log::LevelFilter::Info);
                 }
                 #[cfg(feature="tls")]
+                "ws" => {
+                    let (mut socket, response) =
+                    tungstenite::connect(url::Url::parse("wss://socket.io").unwrap()).expect("Can't connect");
+
+                    log::info!("Connected to the server");
+                    log::info!("Response HTTP code: {}", response.status());
+                    log::info!("Response contains the following headers:");
+                    for (ref header, _value) in response.headers() {
+                        log::info!("* {}", header);
+                    }
+                    if let Some(msg) = tokens.next() {
+                        socket.write_message(tungstenite::Message::Text(msg.into())).unwrap();
+
+                    } else {
+                        socket.write_message(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
+                    }
+                    loop {
+                        let msg = socket.read_message().expect("Error reading message");
+                        log::info!("Received: {}", msg);
+                    }
+                    socket.close(None);
+                }
+                #[cfg(feature="tls")]
                 "tls" => {
                     log::set_max_level(log::LevelFilter::Info);
                     log::info!("starting TLS run");
