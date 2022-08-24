@@ -395,7 +395,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 #[cfg(feature="tls")]
                 "ws" => {
                     let (mut socket, response) =
-                    tungstenite::connect(url::Url::parse("wss://socket.io").unwrap()).expect("Can't connect");
+                    tungstenite::connect(url::Url::parse("wss://javascript.info/article/websocket/demo/hello").unwrap()).expect("Can't connect");
 
                     log::info!("Connected to the server");
                     log::info!("Response HTTP code: {}", response.status());
@@ -410,10 +410,19 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         socket.write_message(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
                     }
                     loop {
-                        let msg = socket.read_message().expect("Error reading message");
-                        log::info!("Received: {}", msg);
+                        match socket.read_message() {
+                            Ok(msg) => {
+                                log::info!("Received: {}", msg);
+                                write!(ret, "Rx: {}", msg).ok();
+                            },
+                            Err(e) => {
+                                log::info!("got ws error: {:?}, quitting", e);
+                                break;
+                            }
+                        }
                     }
-                    // socket.close(None);
+                    socket.close(None).ok();
+                    write!(ret, "\nWeb socket session closed.").ok();
                 }
                 #[cfg(feature="tls")]
                 "tls" => {
