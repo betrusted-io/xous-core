@@ -19,6 +19,8 @@ use std::str::FromStr;
 #[cfg(feature="ditherpunk")]
 use gam::DecodePng;
 use std::convert::TryInto;
+#[cfg(feature="tls")]
+use tungstenite::{WebSocket, stream::MaybeTlsStream};
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -26,6 +28,8 @@ pub struct NetCmd {
     dns: Dns,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     ping: Option<net::Ping>,
+    #[cfg(feature="tls")]
+    ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -35,6 +39,7 @@ impl NetCmd {
             dns: dns::Dns::new(&xns).unwrap(),
             #[cfg(any(target_os = "none", target_os = "xous"))]
             ping: None,
+            ws: None,
         }
     }
 }
@@ -394,22 +399,27 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
                 #[cfg(feature="tls")]
                 "ws" => {
-                    let (mut socket, response) =
-                    tungstenite::connect(url::Url::parse("wss://javascript.info/article/websocket/demo/hello").unwrap()).expect("Can't connect");
+                    if self.ws.is_none() {
+                        let (socket, response) =
+                        tungstenite::connect(url::Url::parse("wss://awake.noskills.club/ws").unwrap()).expect("Can't connect");
 
-                    log::info!("Connected to the server");
-                    log::info!("Response HTTP code: {}", response.status());
-                    log::info!("Response contains the following headers:");
-                    for (ref header, _value) in response.headers() {
-                        log::info!("* {}", header);
+                        log::info!("Connected to the server");
+                        log::info!("Response HTTP code: {}", response.status());
+                        log::info!("Response contains the following headers:");
+                        for (ref header, _value) in response.headers() {
+                            log::info!("* {}", header);
+                        }
+                        self.ws = Some(socket);
                     }
-                    if let Some(msg) = tokens.next() {
-                        socket.write_message(tungstenite::Message::Text(msg.into())).unwrap();
-
-                    } else {
-                        socket.write_message(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
-                    }
-                    loop {
+                    let mut err = false;
+                    if let Some(socket) = &mut self.ws {
+                        let mut val = String::<1024>::new();
+                        join_tokens(&mut val, &mut tokens);
+                        if val.len() > 0 {
+                            socket.write_message(tungstenite::Message::Text(val.as_str().unwrap().into())).unwrap();
+                        } else {
+                            socket.write_message(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
+                        }
                         match socket.read_message() {
                             Ok(msg) => {
                                 log::info!("Received: {}", msg);
@@ -417,12 +427,15 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             },
                             Err(e) => {
                                 log::info!("got ws error: {:?}, quitting", e);
-                                break;
+                                err = true;
+                                socket.close(None).ok();
                             }
                         }
                     }
-                    socket.close(None).ok();
-                    write!(ret, "\nWeb socket session closed.").ok();
+                    if err {
+                        self.ws.take();
+                        write!(ret, "\nWeb socket session closed.").ok();
+                    }
                 }
                 #[cfg(feature="tls")]
                 "tls" => {
@@ -785,5 +798,17 @@ fn heap_usage() -> usize {
             log::error!("Couldn't measure heap usage");
             0
          },
+    }
+}
+
+#[cfg(feature ="tls")]
+fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+    use core::fmt::Write;
+    for (i, tok) in tokens.enumerate() {
+        if i == 0 {
+            write!(buf, "{}", tok).unwrap();
+        } else {
+            write!(buf, " {}", tok).unwrap();
+        }
     }
 }
