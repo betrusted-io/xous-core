@@ -18,6 +18,7 @@ use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issu
 use std::str::FromStr;
 #[cfg(feature="ditherpunk")]
 use gam::DecodePng;
+#[cfg(feature="tls")]
 use std::convert::TryInto;
 #[cfg(feature="tls")]
 use tungstenite::{WebSocket, stream::MaybeTlsStream};
@@ -39,6 +40,7 @@ impl NetCmd {
             dns: dns::Dns::new(&xns).unwrap(),
             #[cfg(any(target_os = "none", target_os = "xous"))]
             ping: None,
+            #[cfg(feature="tls")]
             ws: None,
         }
     }
