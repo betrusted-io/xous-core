@@ -4,6 +4,15 @@ use protobuf::Message;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
+fn set_issuer(t: &mut backup::TotpEntry, issuer: String) {
+    let mut issuer = issuer;
+    issuer.push_str(":");
+    if !t.name.starts_with(&issuer) {
+        issuer.push_str(&t.name);
+        t.name = issuer
+    }
+}
+
 pub fn otpauth_to_entry(uri: &url::Url) -> Result<backup::TotpEntry, anyhow::Error> {
     let mut t = backup::TotpEntry::default();
 
@@ -13,17 +22,12 @@ pub fn otpauth_to_entry(uri: &url::Url) -> Result<backup::TotpEntry, anyhow::Err
     t.name = uri.path()[1..].to_string();
 
     for (k, v) in uri.query_pairs() {
-        match k.into_owned().as_str() {
+        match k.as_ref() {
             "secret" => {
-                t.shared_secret = v.into_owned();
+                t.shared_secret = v.to_string();
             }
             "issuer" => {
-                let mut issuer = v.into_owned();
-                issuer.push_str(":");
-                if !t.name.starts_with(&issuer) {
-                    issuer.push_str(&t.name);
-                    t.name = issuer
-                }
+                set_issuer(&mut t, v.to_string());
             }
             "algorithm" => {
                 t.algorithm = backup::HashAlgorithms::from_str(&v)?;
@@ -69,12 +73,7 @@ fn migration_payload_to_entry(param: otpauth_migration::migration_payload::OtpPa
                     bail!("ALGORITHM_MD5 not supported")
             }
             t.name = param.name;
-            let mut issuer = param.issuer;
-            issuer.push_str(":");
-            if !t.name.starts_with(&issuer) {
-                issuer.push_str(&t.name);
-                t.name = issuer
-            }
+            set_issuer(&mut t, param.issuer);
             t.shared_secret = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &param.secret);
             Ok(t)
         }
@@ -89,7 +88,7 @@ pub fn otpauth_migration_to_entries(uri: &url::Url) -> Result<Vec<backup::TotpEn
     let mut entries = Vec::new();
 
     for (k, v) in uri.query_pairs() {
-        match k.into_owned().as_str() {
+        match k.as_ref() {
             "data" => {
                 let data = base64::decode(&v)?;
                 let payload = otpauth_migration::MigrationPayload::parse_from_bytes(&data)?;
