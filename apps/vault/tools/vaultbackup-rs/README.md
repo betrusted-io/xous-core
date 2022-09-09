@@ -9,9 +9,9 @@ A tool to backup/restore `vault` app storage to/from your computer.
 
 ## Dependencies
 
-[`hidapi`](https://github.com/libusb/hidapi) is required for this tool to work.
+[`hidapi`](https://github.com/libusb/hidapi) and `protoc` is required for this tool to work.
 
-On Debian-based systems, it can be installed with `apt-get install libhidapi-dev`.
+On Debian-based systems, it can be installed with `apt-get install libhidapi-dev protobuf-compiler`.
 
 On top of that, Linux systems need the following `udev` rules:
 
