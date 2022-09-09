@@ -171,8 +171,8 @@ def main():
 
     # now try to download all the artifacts and check their versions
     # this list should visit kernels in order from newest to oldest.
-    URL_BLEEDING = 'https://ci.betrusted.io/releases/latest/'
-    URL_STABLE = 'https://ci.betrusted.io/latest-ci/'
+    URL_STABLE = 'https://ci.betrusted.io/releases/latest/'
+    URL_BLEEDING = 'https://ci.betrusted.io/latest-ci/'
     print("Phase 1: Download the update")
     if args.bleeding_edge:
         print("Bleeding edge CI build selected")
