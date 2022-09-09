@@ -94,3 +94,5 @@ $ zbarcam --raw | tee authenticator-export.txt
 $ vaultbackup-rs format authenticator authenticator-export.txt
 $ vaultbackup-rs restore totp authenticator_to_vault_totps.json
 ```
+
+If `zbarcam` can't decode a dense QR code with multiple TOTP exports, try selecting just one TOTP code at a time, and then exporting them in series. The commands will automatically collate all the individually read QR codes.
