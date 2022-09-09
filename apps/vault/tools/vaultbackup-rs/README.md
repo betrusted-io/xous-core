@@ -77,9 +77,20 @@ The `subcommand` does this for you.
 
 Supported password managers:
  - Bitwarden: TOTP, logins
+ - Google Authenticator: TOTP
 
 Example:
 
 ```bash
 $ vaultbackup-rs format bitwarden your-bitwarden-export.json
+```
+
+For Google Authenticator, the input file is expected to contain
+`otpauth://` or `otpauth-migration://` URIs, one per line; for example,
+to import QR codes from the Google Authenticator app:
+
+```bash
+$ zbarcam --raw | tee authenticator-export.txt
+$ vaultbackup-rs format authenticator authenticator-export.txt
+$ vaultbackup-rs restore totp authenticator_to_vault_totps.json
 ```

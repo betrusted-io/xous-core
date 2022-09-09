@@ -28,6 +28,21 @@ impl Display for CborConversionError {
 
 impl std::error::Error for CborConversionError {}
 
+#[derive(Debug)]
+pub enum HashFromStrError {
+    UnknownHash,
+}
+
+impl Display for HashFromStrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HashFromStrError::UnknownHash => write!(f, "unknown hash type"),
+        }
+    }
+}
+
+impl std::error::Error for HashFromStrError {}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum HashAlgorithms {
     #[default]
@@ -60,6 +75,19 @@ impl TryFrom<cbor::Value> for HashAlgorithms {
     }
 
     type Error = CborConversionError;
+}
+
+impl std::str::FromStr for HashAlgorithms {
+    fn from_str(input: &str) -> Result<HashAlgorithms, Self::Err> {
+        match input {
+            "SHA1" => Ok(HashAlgorithms::SHA1),
+            "SHA256" => Ok(HashAlgorithms::SHA256),
+            "SHA512" => Ok(HashAlgorithms::SHA512),
+            _ => Err(HashFromStrError::UnknownHash),
+        }
+    }
+
+    type Err = HashFromStrError;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

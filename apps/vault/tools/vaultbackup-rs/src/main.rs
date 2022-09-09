@@ -1,8 +1,12 @@
 mod bitwarden;
+mod authenticator;
 use anyhow::Result;
 use clap::Parser;
 use clap::Subcommand;
 use std::time::Instant;
+use std::io::BufRead;
+
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 
 #[derive(Debug, Parser)]
 #[clap(name = "vaultbackup")]
@@ -41,6 +45,7 @@ struct SubcommandFields {
 #[derive(Debug, PartialEq, clap::ValueEnum, Clone)]
 enum FormatTargets {
     Bitwarden,
+    Authenticator,
 }
 
 #[derive(Debug, PartialEq, clap::Args, Clone)]
@@ -180,6 +185,33 @@ fn main() -> Result<()> {
                             serde_json::ser::to_vec(&totps)?,
                         )?;
                     }
+
+                    Ok(())
+                }
+                FormatTargets::Authenticator => {
+                    let mut totps = backup::TotpEntries::default();
+
+                    for uri in std::io::BufReader::new(f).lines() {
+                        let uri = url::Url::parse(&uri?)?;
+                        match (uri.scheme(), uri.host_str()) {
+                            ("otpauth", Some("totp")) => {
+                                totps.0.push(authenticator::otpauth_to_entry(&uri)?)
+                            }
+                            ("otpauth-migration", Some("offline")) => {
+                                for t in authenticator::otpauth_migration_to_entries(&uri)? {
+                                    totps.0.push(t);
+                                }
+                            }
+                            _ => {
+                                log::error!("unsupported URI: {}", uri)
+                            }
+                        }
+                    }
+
+                    std::fs::write(
+                        "authenticator_to_vault_totps.json",
+                        serde_json::ser::to_vec(&totps)?,
+                        )?;
 
                     Ok(())
                 }
