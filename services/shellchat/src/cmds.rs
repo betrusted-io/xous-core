@@ -1,6 +1,8 @@
 use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
+#[cfg(feature="perfcounter")]
+use utralib::generated::*;
 
 use std::collections::HashMap;
 /////////////////////////// Common items to all commands
@@ -48,6 +50,11 @@ pub struct CommonEnv {
     netmgr: net::NetManager,
     xns: xous_names::XousNames,
     boot_instant: std::time::Instant,
+    /// make this communal so any number of commands can trigger or reset the performance counter, and/or perform logging
+    #[cfg(feature="perfcounter")]
+    perf_csr: CSR<u32>,
+    #[cfg(feature="perfcounter")]
+    event_csr: CSR::<u32>,
 }
 impl CommonEnv {
     pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
@@ -161,6 +168,23 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+        #[cfg(feature="perfcounter")]
+        let perf_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::perfcounter::HW_PERFCOUNTER_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map perfcounter CSR range");
+        #[cfg(feature="perfcounter")]
+        let event1_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::event_source1::HW_EVENT_SOURCE1_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map event1 CSR range");
+
         let common = CommonEnv {
             llio: llio::Llio::new(&xns),
             com: com::Com::new(&xns).expect("could't connect to COM"),
@@ -171,6 +195,10 @@ impl CmdEnv {
             xns: xous_names::XousNames::new().unwrap(),
             netmgr: net::NetManager::new(),
             boot_instant: std::time::Instant::now(),
+            #[cfg(feature="perfcounter")]
+            perf_csr: CSR::new(perf_csr.as_mut_ptr() as *mut u32),
+            #[cfg(feature="perfcounter")]
+            event_csr: CSR::new(event1_csr.as_mut_ptr() as *mut u32),
         };
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]
