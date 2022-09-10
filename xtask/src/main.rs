@@ -510,6 +510,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None,
             )?
         }
+        Some("perf-image") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let apps = get_packages();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            build_hw_image(
+                false,
+                Some("./precursors/soc-perf.svd".to_string()),
+                &pkgs,
+                lkey,
+                kkey,
+                Some(&[
+                    "--features", "perfcounter"
+                ]),
+                &[],
+                None,
+            )?
+        }
+        Some("utra") => {
+            let mut args = env::args();
+            let config = args.nth(2);
+            if let Some(tgt) = config {
+                if tgt == "perf" {
+                    let path = std::path::Path::new("./precursors/soc-perf.svd");
+                    if !path.exists() {
+                        return Err("svd file does not exist".into());
+                    }
+                    // Tools use this environment variable to know when to rebuild the UTRA crate.
+                    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+                    println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
+                } else {
+                    return Err("Unrecognized target, doing nothing".into());
+                }
+            } else {
+                let path = std::path::Path::new("./precursors/soc.svd");
+                if !path.exists() {
+                    return Err("svd file does not exist".into());
+                }
+                // Tools use this environment variable to know when to rebuild the UTRA crate.
+                std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+                println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
+            }
+            let status = Command::new(cargo())
+                .current_dir(project_root())
+                .args(&[
+                    "build",
+                    "--package",
+                    "utralib",
+                ])
+                .status()?;
+            if !status.success() {
+                return Err("cargo build failed".into());
+            }
+        }
         Some("ditherpunk-image") => {
             let mut args = env::args();
             args.nth(1);
@@ -671,6 +729,7 @@ Hardware images:
           [loader.key]   plus signing key options
           [kernel.key]
  app-image [app1] [..]   builds an image for real hardware of baseline kernel + specified apps
+ perf-image [app1] [..]  builds an image for real hardware assuming a performance counter variant of the SOC.
 
 Hosted emulation:
  run [app1] [..]         runs a release build using a hosted environment plus specified apps
@@ -682,6 +741,10 @@ Renode emulation:
  libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
                          specified on the command line (e.g. built externally). Bypasses sig checks, keys locked out.
  libstd-net [pkg1] [..]  builds a test image for testing network functions. Bypasses sig checks, keys locked out.
+
+UTRA (re-)generation:
+ utra [perf]             (re)generate the UTRA file for the default or [perf] configurations. Explicit call
+                         utilized when swapping between the two configs, to avoid spurious full rebuilds.
 
 Locale (re-)generation:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
