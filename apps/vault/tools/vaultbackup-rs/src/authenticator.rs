@@ -90,7 +90,7 @@ pub fn otpauth_migration_to_entries(uri: &url::Url) -> Result<Vec<backup::TotpEn
     for (k, v) in uri.query_pairs() {
         match k.as_ref() {
             "data" => {
-                let data = base64::decode(&v)?;
+                let data = base64::decode(&v.into_owned())?;
                 let payload = otpauth_migration::MigrationPayload::parse_from_bytes(&data)?;
                 for param in payload.otp_parameters {
                     entries.push(migration_payload_to_entry(param)?)

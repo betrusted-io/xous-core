@@ -211,9 +211,9 @@ checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
 
 [[package]]
 name = "base64"
-version = "0.3.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33678aec1839cd59fbb29a90950baa95fc4a5464711a7858f5ba68dbc3d3eab2"
+checksum = "30e93c03064e7590d0466209155251b90c22e37fab1daf2771582598b5827557"
 dependencies = [
  "byteorder",
 ]
@@ -4334,7 +4334,7 @@ dependencies = [
  "argh",
  "backup",
  "base32",
- "base64 0.3.1",
+ "base64 0.5.2",
  "cbor",
  "clap 3.2.12",
  "ctaphid",
