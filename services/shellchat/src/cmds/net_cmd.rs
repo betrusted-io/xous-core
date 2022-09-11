@@ -501,8 +501,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     log::set_max_level(log::LevelFilter::Info);
                 }
                 #[cfg(feature="perfcounter")]
-                "ctime" => {
-                    log::info!("constant time tests");
+                "cta1" => {
+                    log::info!("constant time RISC-V HW AES test");
                     env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
 
                     // stop the counter if it would rollover
@@ -541,6 +541,79 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
                                 ((databit as u32) << 8) | keybit as u32);
                             cipher_hw.encrypt_block(&mut block);
+                            env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
+                                0x100_0000 | ((databit as u32) << 8) | keybit as u32);
+                            entries += 1;
+                            if entries >= MAX_ENTRIES {
+                                // stop the counter
+                                env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+                                // read out the events and print them
+                                while env.perf_csr.rf(utra::perfcounter::STATUS_READABLE) == 1 {
+                                    let code = env.perf_csr.r(utra::perfcounter::EVENT_RAW0);
+                                    let time = env.perf_csr.r(utra::perfcounter::EVENT_RAW1);
+                                    let index = env.perf_csr.r(utra::perfcounter::EVENT_INDEX);
+                                    log::info!("{}:{}:{}", index, time, code)
+                                }
+                                // restart the counter
+                                log::info!("== restart ==");
+                                entries = 0;
+                                env.perf_csr.wfo(utra::perfcounter::RUN_RESET_RUN, 1);
+                            }
+                        }
+                    }
+                    // stop the counter
+                    env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+                    // read out the events and print them
+                    while env.perf_csr.rf(utra::perfcounter::STATUS_READABLE) == 1 {
+                        let code = env.perf_csr.r(utra::perfcounter::EVENT_RAW0);
+                        let time = env.perf_csr.r(utra::perfcounter::EVENT_RAW1);
+                        let index = env.perf_csr.r(utra::perfcounter::EVENT_INDEX);
+                        log::info!("{}:{}:{}", index, time, code)
+                    }
+                }
+                #[cfg(feature="perfcounter")]
+                "cta2" => {
+                    use ring::xous_test::aes_nohw::aes_key_st;
+
+                    log::info!("constant time ring-xous test");
+                    env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+
+                    // stop the counter if it would rollover
+                    env.perf_csr.wo(utra::perfcounter::SATURATE_LIMIT0, 0xFFFF_FFFF);
+                    env.perf_csr.wo(utra::perfcounter::SATURATE_LIMIT1, 0);
+
+                    // configure the system
+                    env.perf_csr.wo(utra::perfcounter::CONFIG,
+                        env.perf_csr.ms(utra::perfcounter::CONFIG_PRESCALER, 0)
+                        | env.perf_csr.ms(utra::perfcounter::CONFIG_SATURATE, 1)
+                        | env.perf_csr.ms(utra::perfcounter::CONFIG_EVENT_WIDTH_MINUS_ONE, 31)
+                    );
+
+                    // this starts the performance counter
+                    log::info!("== restart ==");
+                    env.perf_csr.wfo(utra::perfcounter::RUN_RESET_RUN, 1);
+
+                    let mut key_array: [u8; 32];
+                    let mut data_array: [u8; 16];
+                    let mut out_array: [u8; 16] = [0u8; 16];
+                    const MAX_ENTRIES: u32 = 4096;
+                    let mut entries: u32 = 0; // track the number of entries we've used up
+                    for databit in 0..128 {
+                        data_array = [0; 16];
+                        data_array[databit / 8] = 1 << databit % 8;
+                        for keybit in 0..256 {
+                            key_array = [0; 32];
+                            key_array[keybit / 8] = 1 << keybit % 8;
+                            let mut schedule = aes_key_st {
+                                rd_key: [0u32; 60],
+                                rounds: 0
+                            };
+                            ring::xous_test::expand_aes_key(&key_array, &mut schedule);
+                            // demarcate the encryption operation performance counter events
+                            entries += 1;
+                            env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
+                                ((databit as u32) << 8) | keybit as u32);
+                            ring::xous_test::aes_encrypt(&data_array, &mut out_array, &schedule);
                             env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
                                 0x100_0000 | ((databit as u32) << 8) | keybit as u32);
                             entries += 1;
