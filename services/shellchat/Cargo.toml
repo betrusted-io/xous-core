@@ -119,4 +119,4 @@ test-rekey = []
 nettest = [] # batch network tests
 tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
 perfcounter = ["ring"]
-default = ["perfcounter"] # "debugprint"
+default = [] # "debugprint"
