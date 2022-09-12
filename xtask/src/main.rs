@@ -43,7 +43,15 @@ impl std::error::Error for BuildError {}
 fn get_packages() -> Vec<String> {
     let mut args = env::args();
     args.nth(1);
-    args.filter(|x| !x.starts_with("-")).collect()
+    // skip everything past --
+    let mut pkgs = Vec::<String>::new();
+    for arg in args {
+        if arg == "--" {
+            break;
+        }
+        pkgs.push(arg);
+    }
+    pkgs.into_iter().filter(|x| !x.starts_with("-")).collect()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -172,8 +180,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
     let mut args = env::args();
     let task = args.nth(1);
-    let lkey = args.nth(3);
-    let kkey = args.nth(4);
+    // extract lkey/kkey args only after a "--" separator
+    let mut next_is_lkey = false;
+    let mut next_is_kkey = false;
+    let mut lkey: Option<String> = None;
+    let mut kkey: Option<String> = None;
+    for arg in args {
+        if next_is_kkey {
+            kkey = Some(arg);
+            next_is_kkey = false;
+            continue;
+        }
+        if next_is_lkey {
+            lkey = Some(arg);
+            next_is_lkey = false;
+            next_is_kkey = true;
+            continue;
+        }
+        if arg == "--" {
+            next_is_lkey = true;
+            continue;
+        }
+    }
     match task.as_deref() {
         Some("install-toolkit") | Some("install-toolchain") => {
             let arg = env::args().nth(2);
@@ -726,7 +754,7 @@ fn print_help() {
         "Tasks:
 Hardware images:
  hw-image [soc.svd]      builds an image for real hardware with baseline demo apps
-          [loader.key]   plus signing key options
+       -- [loader.key]   plus signing key options
           [kernel.key]
  app-image [app1] [..]   builds an image for real hardware of baseline kernel + specified apps
  perf-image [app1] [..]  builds an image for real hardware assuming a performance counter variant of the SOC.
