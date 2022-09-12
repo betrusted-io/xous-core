@@ -5,7 +5,7 @@ edition = "2018"
 name = "status"
 version = "0.1.0"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 com = {path = "../com"}
 content-plugin-api = {path = "../content-plugin-api"}
@@ -34,6 +34,12 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 
 chrono = {version = "0.4.19", default-features = false, features = ["std"]}
 sntpc = {version = "0.3.1"} #, features = ["log"]
+crossbeam = "0.8.1"
+
+sha2 = {path="../engine-sha512"}
+digest = "0.9.0"
+xous-semver = "0.1.2"
+com_rs-ref = {path = "../../imports/com_rs-ref"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
@@ -47,4 +53,7 @@ debugprint = []
 braille = [] # used for braille mode, so console isn't overwhelmed with status
 tts = []
 # default = ["debugprint"] # "debugprint"
+dbg-ecupdate = []
+ditherpunk = []
+test-rekey = []
 default = []

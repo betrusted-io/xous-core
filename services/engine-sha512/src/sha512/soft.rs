@@ -17,6 +17,7 @@ fn sha512load(v0: [u64; 2], v1: [u64; 2]) -> [u64; 2] {
 }
 
 /// Performs 2 rounds of the SHA-512 message schedule update.
+#[inline(never)] // bunnie: reduce binary size
 pub fn sha512_schedule_x2(v0: [u64; 2], v1: [u64; 2], v4to5: [u64; 2], v7: [u64; 2]) -> [u64; 2] {
     // sigma 0
     fn sigma0(x: u64) -> u64 {
@@ -46,6 +47,7 @@ pub fn sha512_schedule_x2(v0: [u64; 2], v1: [u64; 2], v4to5: [u64; 2], v7: [u64;
 }
 
 /// Performs one round of the SHA-512 message block digest.
+#[inline(never)] // bunnie: reduce binary size
 pub fn sha512_digest_round(
     ae: [u64; 2],
     bf: [u64; 2],
@@ -100,6 +102,7 @@ pub fn sha512_digest_round(
 }
 
 /// Process a block with the SHA-512 algorithm.
+#[inline(never)] // bunnie: reduce binary size
 pub fn sha512_digest_block_u64(state: &mut [u64; 8], block: &[u64; 16]) {
     let k = &K64X2;
 

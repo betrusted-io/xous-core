@@ -91,6 +91,36 @@ enum TestOp {
     ModalDrop,
 }
 
+use std::num::ParseIntError;
+/// this will parse a simple decimal into an i32, multiplied by 1000
+/// we do this because the full f32 parsing stuff is pretty heavy, some
+/// 28kiB of code
+#[inline(never)]
+fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntError> {
+    if let Some((integer, fraction)) = input.split_once('.') {
+        let mut result = integer.parse::<i32>()? * 1000;
+        let mut significance = 100i32;
+        for (place, digit) in fraction.chars().enumerate() {
+            if place >= 3 {
+                break;
+            }
+            if let Some(d) = digit.to_digit(10) {
+                if result >= 0 {
+                    result += (d as i32) * significance;
+                } else {
+                    result -= (d as i32) * significance;
+                }
+                significance /= 10;
+            } else {
+                return "z".parse::<i32>() // you can't create a ParseIntError any other way
+            }
+        }
+        Ok(result)
+    } else {
+        let base = input.parse::<i32>()?;
+        Ok(base * 1000)
+    }
+}
 
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
@@ -151,8 +181,8 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     let (x, y, z, id) = env.com.gyro_read_blocking().unwrap();
                     log::info!("{}|GYRO|{}|{}|{}|{}|", SENTINEL, x, y, z, id);
-                    let (wf_maj, wf_min, wf_rev) = env.com.get_wf200_fw_rev().unwrap();
-                    log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_maj, wf_min, wf_rev);
+                    let wf_rev = env.com.get_wf200_fw_rev().unwrap();
+                    log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_rev.maj, wf_rev.min, wf_rev.rev);
                     let (ec_rev, ec_dirty) =  env.com.get_ec_git_rev().unwrap();
                     log::info!("{}|ECREV|{:x}|{:?}|", SENTINEL, ec_rev, ec_dirty);
                     let morestats = env.com.get_more_stats().unwrap();
@@ -166,8 +196,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let mut ht = env.trng.get_health_tests().unwrap();
                     for _ in 0..3 { // run the test 3 times
                         av_excurs = [
-                            (((ht.av_excursion[0].max as f64 - ht.av_excursion[0].min as f64) / 4096.0) * 1000.0) as u32,
-                            (((ht.av_excursion[1].max as f64 - ht.av_excursion[1].min as f64) / 4096.0) * 1000.0) as u32,
+                            (((ht.av_excursion[0].max as f32 - ht.av_excursion[0].min as f32) / 4096.0) * 1000.0) as u32,
+                            (((ht.av_excursion[1].max as f32 - ht.av_excursion[1].min as f32) / 4096.0) * 1000.0) as u32,
                         ];
                         // 78mv minimum excursion requirement for good entropy generation
                         if av_excurs[0] < 78 { av_pass[0] = false; }
@@ -310,8 +340,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 "astart" => {
                     self.freq = if let Some(freq_str) = tokens.next() {
-                        match freq_str.parse::<f32>() {
-                            Ok(f) => f,
+                        match simple_kilofloat_parse(freq_str) {
+                            Ok(f) => (f as f32) / 1000.0,
                             Err(_) => 440.0,
                         }
                     } else {
@@ -400,7 +430,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
-                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 0.005033 * 100_000 against 1.5V * 100_000
                         // if power is plugged in, deny powerdown request
                         write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
                         return Ok(Some(ret));
@@ -478,8 +508,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                                     }
                                 }
                                 write!(ret, "CHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",).unwrap();
-                                let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
-                                write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
+                                let soc_ver = env.llio.soc_gitrev().unwrap();
+                                write!(ret, "Version {}\n", soc_ver.to_string()).unwrap();
                                 log::info!("finished status update");
                                 break;
                             }
@@ -551,6 +581,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                         wifi_tries += 1;
                     }
 
+                    log::info!("Resetting the don't ask flag for initializing root keys");
+                    let pddb = pddb::Pddb::new();
+                    pddb.reset_dont_ask_init();
+
                     AUDIO_OQC.store(true, Ordering::Relaxed);
                     self.freq = 659.25;
                     self.left_play = true;
@@ -583,7 +617,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     write!(ret, "devboot off").unwrap();
                 }
                 "ship" => {
-                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                    if ((env.llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 0.005033 * 100_000 against 1.5V * 100_000
                         // if power is plugged in, deny powerdown request
                         write!(ret, "System can't go into ship mode while charging. Unplug charging cable and try again.").unwrap();
                     } else {
@@ -607,6 +641,38 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                         write!(ret, "Ship mode request denied").unwrap();
                     }
+                }
+                #[cfg(feature="ditherpunk")]
+                "modals" => {
+                    modals::tests::spawn_test();
+                }
+                "bip39" => {
+                    let modals = modals::Modals::new(&env.xns).unwrap();
+                    // 4. bip39 display test
+                    let refnum = 0b00000110001101100111100111001010000110110010100010110101110011111101101010011100000110000110101100110110011111100010011100011110u128;
+                    let refvec = refnum.to_be_bytes().to_vec();
+                    modals.show_bip39(Some("Some bip39 words"), &refvec)
+                    .expect("couldn't show bip39 words");
+
+                    // 5. bip39 input test
+                    log::info!("type these words: alert record income curve mercy tree heavy loan hen recycle mean devote");
+                    match modals.input_bip39(Some("Input BIP39 words")) {
+                        Ok(data) => {
+                            log::info!("got bip39 input: {:x?}", data);
+                            log::info!("reference: 0x063679ca1b28b5cfda9c186b367e271e");
+                        }
+                        Err(e) => log::error!("couldn't get input: {:?}", e),
+                    }
+                }
+                "ecup" => {
+                    let ecup_conn = env.xns.request_connection_blocking("__ECUP server__").unwrap();
+                    xous::send_message(ecup_conn,
+                        xous::Message::new_blocking_scalar(
+                            3, // hard coded to match UpdateOp
+                            0, 0, 0, 0
+                        )
+                    ).unwrap();
+                    write!(ret, "\nDid EC auto update command").unwrap();
                 }
                 _ => {
                     () // do nothing

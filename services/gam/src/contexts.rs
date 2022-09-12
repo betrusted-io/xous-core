@@ -56,10 +56,12 @@ pub(crate) struct UxContext {
     /// a putative human-readable name given to the context. The name itself is stored in the TokenManager, not in this struct.
     /// Passed to the TokenManager to compute a trust level; add the app's name to tokens.rs EXPECTED_BOOT_CONTEXTS if you want this to succeed.
     pub app_token: [u32; 4], // shared with the app, can be used for other auths to other servers (e.g. audio codec)
-    /// a token associated with the UxContext, but private to the GAM (not shared with the app). [currently no use for this, just seems like a good idea...]
+    /// a token associated with the UxContext, but private to the GAM (not shared with the app). (used by predictor to set API tokens)
     pub gam_token: [u32; 4],
     /// set to true if keyboard vibrate is turned on
     pub vibe: bool,
+    /// API token for the predictor. Allows our prediction history to be shown only when our context is active.
+    pub pred_token: Option<[u32; 4]>,
 
     /// CID to send ContextEvents
     pub listener: xous::CID,
@@ -73,6 +75,8 @@ pub(crate) struct UxContext {
     pub audioframe_id: Option<u32>,
     /// opcode ID for focus change
     pub focuschange_id: Option<u32>,
+    /// sets the behavior of the IMEF
+    pub imef_menu_mode: bool,
 }
 pub(crate) const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
@@ -88,6 +92,7 @@ pub(crate) struct ContextManager {
     contexts: HashMap::<[u32; 4], UxContext>,
     focused_context: Option<[u32; 4]>, // app_token of the app that has I/O focus, if any
     last_context: Option<[u32; 4]>, // previously focused context, if any
+    context_stack: Vec::<[u32; 4]>,
     imef: ime_plugin_api::ImeFrontEnd,
     imef_active: bool,
     kbd: keyboard::Keyboard,
@@ -108,6 +113,7 @@ impl ContextManager {
         ContextManager {
             tm: TokenManager::new(&xns),
             contexts: HashMap::new(),
+            context_stack: Vec::new(),
             focused_context: None,
             last_context: None,
             imef,
@@ -154,6 +160,9 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: None,
                         vibe: false,
+                        imef_menu_mode: false,
+                        // this gets initialized on the first attempt to change predictors, not here
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                 },
@@ -175,6 +184,8 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
+                        imef_menu_mode: false,
+                        pred_token: None,
                     };
 
                     if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
@@ -202,6 +213,8 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
+                        imef_menu_mode: false,
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                     // this check gives permissions to password boxes to render inverted text
@@ -229,6 +242,8 @@ impl ContextManager {
                         focuschange_id: registration.focuschange_id,
                         rawkeys_id: registration.rawkeys_id,
                         vibe: false,
+                        imef_menu_mode: false,
+                        pred_token: None,
                     };
                     self.contexts.insert(token, ux_context);
                 }
@@ -312,11 +327,15 @@ impl ContextManager {
         token: [u32; 4],
         clear: bool,
     ) -> Result<(), xous::Error> {
+        self.notify_app_switch(token).ok();
+
         let mut leaving_visibility: bool = false;
+        let stack_on_entry = self.context_stack.len();
         {
             // using a temp copy of the old focus, check if we need to update any visibility state
-            let maybe_leaving_focused_context = if self.focused_context.is_some() {
-                if let Some(old_context) = self.get_context_by_token(self.focused_context.unwrap()) {
+            let maybe_leaving_focused_context = if let Some(focused_token) = self.focused_context {
+                log::debug!("leaving {:?}", self.tm.lookup_name(&focused_token));
+                if let Some(old_context) = self.get_context_by_token(focused_token) {
                     Some(old_context.clone())
                 } else {
                     None
@@ -324,6 +343,7 @@ impl ContextManager {
             } else {
                 None
             };
+            log::debug!("entering {:?}", self.tm.lookup_name(&token));
             let maybe_new_focus = self.get_context_by_token_mut(token);
             log::trace!("resolving visibility rules");
             if let Some(context) = maybe_new_focus {
@@ -342,22 +362,27 @@ impl ContextManager {
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
+                            self.context_stack.pop();
+                            self.context_stack.push(token);
                         } else if // alert covering an app
                         (context.layout.behavior()                 == LayoutBehavior::Alert) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = true;
+                            self.context_stack.push(token);
                         } else if // app covering an alert
                         (context.layout.behavior()                 == LayoutBehavior::App) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
+                            self.context_stack.pop();
                         }
                     }
                 } else {
                     // there was no current focus, just make the activation visible
                     log::debug!("setting first-time visibility to context {:?}", token);
                     context.layout.set_visibility_state(true, canvases);
+                    self.context_stack.push(token);
                 }
             }
         }
@@ -397,12 +422,14 @@ impl ContextManager {
                             },
                         predictor: context.predictor,
                         token: context.gam_token,
+                        predictor_token: context.pred_token,
                     };
+                    log::debug!("context gam token: {:?}, pred token: {:?}", context.gam_token, context.pred_token);
                     self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
                     self.imef_active = true;
                 } else {
                     self.imef_active = false;
-                }
+                };
 
                 // now recompute the drawability of canvases, based on on-screen visibility and trust state
                 recompute_canvases(canvases);
@@ -413,10 +440,10 @@ impl ContextManager {
             // now re-check-out the new context and finalize things
             let maybe_new_focus = self.get_context_by_token(token);
             if let Some(context) = maybe_new_focus {
+                self.imef.set_menu_mode(context.imef_menu_mode).expect("couldn't set menu mode");
                 if clear {
                     context.layout.clear(gfx, canvases).expect("can't clear on context activation");
                 }
-                // now update the IMEF area, since we're initialized
                 // note: we may need to skip this call if the context does not utilize a predictor...
                 if context.predictor.is_some() {
                     log::debug!("calling IMEF redraw");
@@ -431,14 +458,38 @@ impl ContextManager {
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
             }
+            log::trace!("context stack: {:x?}", self.context_stack);
+            if self.context_stack.len() > 1 { // we've now got a stack of contexts, start stashing copies
+                log::trace!("stashing");
+                gfx.stash(true);
+            }
             // run the defacement before we redraw all the canvases
             if deface(gfx, &self.trng, canvases) {
                 log::trace!("activate triggered a defacement");
             }
             log::trace!("activate redraw");
-            self.redraw().expect("couldn't redraw the currently focused app");
+            if self.context_stack.len() > 0 && stack_on_entry > 1 {
+                if self.context_stack[self.context_stack.len() - 1] == token {
+                    // if we're returning to the previous context, just pop the image
+                    log::trace!("popping");
+                    gfx.pop(true);
+                } else {
+                    self.redraw().expect("couldn't redraw the currently focused app");
+                }
+            } else {
+                self.redraw().expect("couldn't redraw the currently focused app");
+            }
         }
         Ok(())
+    }
+    pub(crate) fn set_pred_api_token(&mut self, at: ApiToken) {
+        for context in self.contexts.values_mut() {
+            if context.gam_token == at.gam_token {
+                log::debug!("setting {:?} token to {:?}", at.gam_token, at.api_token);
+                context.pred_token = Some(at.api_token);
+                break;
+            }
+        }
     }
     pub(crate) fn revert_focus(&mut self,
         gfx: &graphics_server::Gfx,
@@ -451,19 +502,24 @@ impl ContextManager {
         }
     }
     pub(crate) fn notify_app_switch(&self, new_app_token: [u32; 4]) -> Result<(), xous::Error> {
-        if let Some(old_context) = self.get_context_by_token(self.focused_context.unwrap()) {
-            if let Some(focuschange_id) = old_context.focuschange_id {
-                log::trace!("Background focus change to {}, id {}", old_context.listener, old_context.redraw_id);
-                xous::send_message(old_context.listener,
-                    xous::Message::new_scalar(focuschange_id as usize, gam::FocusState::Background as usize, 0, 0, 0)
-                ).map(|_| ())?;
-            } else {
-                return Err(xous::Error::ServerNotFound);
+        log::trace!("notify app switch to {:?}", new_app_token);
+        if let Some(current_focus) = self.focused_context {
+            if let Some(old_context) = self.get_context_by_token(current_focus) {
+                if let Some(focuschange_id) = old_context.focuschange_id {
+                    log::trace!("Background focus change to {}, id {} / {:?}", old_context.listener, old_context.redraw_id, current_focus);
+                    xous::send_message(old_context.listener,
+                        xous::Message::new_scalar(focuschange_id as usize, gam::FocusState::Background as usize, 0, 0, 0)
+                    ).map(|_| ())?;
+                } else {
+                    // don't return an error -- this just means that the listener doesn't recognize focus changes. This should not
+                    // deprive the later app of a notification that it is coming into focus!
+                }
             }
         }
+
         if let Some(new_context) = self.get_context_by_token(new_app_token) {
             if let Some(focuschange_id) = new_context.focuschange_id {
-                log::trace!("Foreground focus change to {}, id {}", new_context.listener, new_context.redraw_id);
+                log::trace!("Foreground focus change to {}, id {} / {:?}", new_context.listener, new_context.redraw_id, new_app_token);
                 xous::send_message(new_context.listener,
                     xous::Message::new_scalar(focuschange_id as usize, gam::FocusState::Foreground as usize, 0, 0, 0)
                 ).map(|_| ())?;
@@ -477,9 +533,16 @@ impl ContextManager {
         if let Some(token) = self.focused_app() {
             if let Some(context) = self.contexts.get(&token) {
                 log::debug!("redraw msg to {}, id {}", context.listener, context.redraw_id);
-                let ret = xous::send_message(context.listener,
+                let ret = match xous::try_send_message(context.listener,
                     xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
-                ).map(|_| ());
+                ) {
+                    Err(xous::Error::ServerQueueFull) => {
+                        log::warn!("server queue full, redraw skipped");
+                        Ok(())
+                    },
+                    Ok(_r) => Ok(()),
+                    Err(e) => Err(e),
+                };
                 // this delay helps ensure that the previously requested UX redraw has time to complete
                 // in particular, this helps sequence the case where one modal is erased, and the next one is
                 // raised, in quick succession.
@@ -584,6 +647,12 @@ impl ContextManager {
         self.kbd.set_vibe(set_vibe).expect("couldn't set vibe on keyboard");
         if let Some(context) = self.focused_context_mut() {
             (*context).vibe = set_vibe;
+        }
+    }
+    pub(crate) fn toggle_menu_mode(&mut self, token: [u32; 4]) {
+        if let Some(context) = self.contexts.get_mut(&token) {
+            context.imef_menu_mode = !context.imef_menu_mode;
+            log::debug!("menu mode for token {:?} is now {}", token, context.imef_menu_mode);
         }
     }
     pub(crate) fn raise_menu(&mut self,

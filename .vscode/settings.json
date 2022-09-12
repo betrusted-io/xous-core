@@ -1,4 +1,18 @@
 {
     "rust-analyzer.checkOnSave.allTargets": false,
     "rust-analyzer.cargo.target":"riscv32imac-unknown-xous-elf",
+    "rust-analyzer.checkOnSave.extraArgs": ["--target-dir", "./target/check"],
+    "rust-analyzer.server.extraEnv": {
+        "XOUS_SVD_FILE": "../precursors/soc.svd"
+    },
+    "rust-analyzer.files.excludeDirs": ["./loader/**"],
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**/loader/**": true,
+    }
 }

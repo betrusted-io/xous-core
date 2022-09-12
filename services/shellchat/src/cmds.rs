@@ -1,6 +1,8 @@
 use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
+#[cfg(feature="perfcounter")]
+use utralib::generated::*;
 
 use std::collections::HashMap;
 /////////////////////////// Common items to all commands
@@ -48,6 +50,11 @@ pub struct CommonEnv {
     netmgr: net::NetManager,
     xns: xous_names::XousNames,
     boot_instant: std::time::Instant,
+    /// make this communal so any number of commands can trigger or reset the performance counter, and/or perform logging
+    #[cfg(feature="perfcounter")]
+    perf_csr: CSR<u32>,
+    #[cfg(feature="perfcounter")]
+    event_csr: CSR::<u32>,
 }
 impl CommonEnv {
     pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
@@ -90,7 +97,10 @@ mod ver;      use ver::*;
 //mod audio;    use audio::*; // this command is currently contra-indicated with PDDB, as the test audio currently overlaps the PDDB space. We'll fix this eventually, but for now, let's switch to PDDB mode.
 mod backlight; use backlight::*;
 mod accel;    use accel::*;
-mod ecup;     use ecup::*;
+#[cfg(feature="dbg-ecupdate")]
+mod ecup;
+#[cfg(feature="dbg-ecupdate")]
+use ecup::*;
 mod trng_cmd; use trng_cmd::*;
 mod console;  use console::*;
 //mod memtest;  use memtest::*;
@@ -133,6 +143,7 @@ pub struct CmdEnv {
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
     //audio_cmd: Audio,
+    #[cfg(feature="dbg-ecupdate")]
     ecup_cmd: EcUpdate,
     trng_cmd: TrngCmd,
     //memtest_cmd: Memtest,
@@ -157,7 +168,24 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-        let mut common = CommonEnv {
+        #[cfg(feature="perfcounter")]
+        let perf_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::perfcounter::HW_PERFCOUNTER_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map perfcounter CSR range");
+        #[cfg(feature="perfcounter")]
+        let event1_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::event_source1::HW_EVENT_SOURCE1_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map event1 CSR range");
+
+        let common = CommonEnv {
             llio: llio::Llio::new(&xns),
             com: com::Com::new(&xns).expect("could't connect to COM"),
             ticktimer,
@@ -167,6 +195,10 @@ impl CmdEnv {
             xns: xous_names::XousNames::new().unwrap(),
             netmgr: net::NetManager::new(),
             boot_instant: std::time::Instant::now(),
+            #[cfg(feature="perfcounter")]
+            perf_csr: CSR::new(perf_csr.as_mut_ptr() as *mut u32),
+            #[cfg(feature="perfcounter")]
+            event_csr: CSR::new(event1_csr.as_mut_ptr() as *mut u32),
         };
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]
@@ -175,20 +207,19 @@ impl CmdEnv {
         let aes = Aes::new(&xns, &mut common);
         #[cfg(feature="benchmarks")]
         let engine = Engine::new(&xns, &mut common);
-        let ecup = EcUpdate::new(&mut common);
         //let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
-        let (maj, min, rev, extra, gitrev) = common.llio.soc_gitrev().unwrap();
-        log::info!("SoC git rev {}.{}.{}+{} commit {:x}", maj, min, rev, extra, gitrev);
-        log::info!("SoC DNA: 0x{:x}", common.llio.soc_dna().unwrap());
+        let soc_ver = common.llio.soc_gitrev().unwrap();
+        log::info!("SoC git rev {}", soc_ver.to_string());
+        log::info!("{}PDDB.DNA,{:x},{}", xous::BOOKEND_START, common.llio.soc_dna().unwrap(), xous::BOOKEND_END);
         let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
         let dirtystr = if dirty { "dirty" } else { "clean" };
         log::info!("EC gateware git commit: {:x}, {}", rev, dirtystr);
-        let (maj, min, rev, commit) = common.com.get_ec_sw_tag().unwrap();
-        log::info!("EC sw tag: {}.{}.{}+{}", maj, min, rev, commit);
-        let (maj, min, rev) = common.com.get_wf200_fw_rev().unwrap();
-        log::info!("WF200 fw rev {}.{}.{}", maj, min, rev);
+        let ec_ver = common.com.get_ec_sw_tag().unwrap();
+        log::info!("EC sw tag: {}", ec_ver.to_string());
+        let wf_ver = common.com.get_wf200_fw_rev().unwrap();
+        log::info!("WF200 fw rev {}.{}.{}", wf_ver.maj, wf_ver.min, wf_ver.rev);
 
 
         CmdEnv {
@@ -203,7 +234,8 @@ impl CmdEnv {
             vibe_cmd: Vibe::new(),
             ssid_cmd: Ssid::new(),
             //audio_cmd: Audio::new(&xns),
-            ecup_cmd: ecup,
+            #[cfg(feature="dbg-ecupdate")]
+            ecup_cmd: EcUpdate::new(),
             trng_cmd: TrngCmd::new(),
             //memtest_cmd: memtest,
             keys_cmd: Keys::new(&xns),
@@ -248,6 +280,7 @@ impl CmdEnv {
             //&mut self.audio_cmd,
             &mut backlight_cmd,
             &mut accel_cmd,
+            #[cfg(feature="dbg-ecupdate")]
             &mut self.ecup_cmd,
             &mut self.trng_cmd,
             &mut console_cmd,

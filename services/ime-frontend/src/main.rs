@@ -11,7 +11,7 @@ use log::{error, info};
 
 use graphics_server::{Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView, DrawStyle};
 use gam::GlyphStyle;
-use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
+use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi, ApiToken};
 
 use num_traits::{ToPrimitive,FromPrimitive};
 use xous_ipc::Buffer;
@@ -63,6 +63,9 @@ struct InputTracker {
     /// keep track if our box was grown
     was_grown: bool,
 
+    /// if set to true, the F1-F4 keys work as menu selects, and not as predictive inputs
+    menu_mode: bool,
+
     /// render the predictions. Slightly awkward because this code comes from before we had libstd
     pred_options: [Option<String>; MAX_PREDICTION_OPTIONS],
     #[cfg(feature = "tts")]
@@ -88,12 +91,20 @@ impl InputTracker {
             last_height: 0,
             was_grown: false,
             pred_options: Default::default(),
+            menu_mode: false,
             #[cfg(feature="tts")]
             tts: TtsFrontend::new(xns).unwrap(),
         }
     }
     pub fn set_gam_token(&mut self, token: [u32; 4]) {
         self.gam_token = Some(token);
+    }
+    /// this is a separate, non-blocking call instead of a return because
+    /// the call which sets the predictor *must* complete to allow further drawing
+    /// this does mean there is a tiny bit of a race condition between when
+    /// a context is swapped and when a predictor can run.
+    pub fn send_api_token(&self, at: &ApiToken) {
+        self.gam.set_predictor_api_token(at.api_token, at.gam_token).expect("couldn't set predictor API token");
     }
     pub fn set_predictor(&mut self, predictor: Option<PredictionPlugin>) {
         self.predictor = predictor;
@@ -118,6 +129,9 @@ impl InputTracker {
     }
     pub fn activate_emoji(&self) {
         self.gam.raise_menu(gam::EMOJI_MENU_NAME).expect("couldn't activate emoji menu");
+    }
+    pub fn set_menu_mode(&mut self, mode: bool) {
+        self.menu_mode = mode;
     }
 
     pub fn clear_area(&mut self) -> Result<(), xous::Error> {
@@ -236,9 +250,9 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool) -> Result<Option<xous_ipc::String::<4000>>, xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool, api_token: [u32; 4]) -> Result<Option<xous_ipc::String::<4000>>, xous::Error> {
         let debug1= false;
-        let mut update_predictor = false;
+        let mut update_predictor = force_redraw;
         let mut retstring: Option<xous_ipc::String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("updating input area");}
@@ -255,57 +269,93 @@ impl InputTracker {
                 match k {
                     '\u{0000}' => (),
                     '←' => { // move insertion point back
-                        if self.insertion > 0 {
-                            log::debug!("moving insertion point back");
-                            self.insertion -= 1;
+                        if !self.menu_mode {
+                            if self.insertion > 0 {
+                                log::debug!("moving insertion point back");
+                                self.insertion -= 1;
+                            }
+                            do_redraw = true;
+                            self.pred_phrase.clear(); // don't track predictions on edits
+                            self.can_unpick = false;
+                            self.last_trigger_char = None;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("←")));
                         }
-                        do_redraw = true;
-                        self.pred_phrase.clear(); // don't track predictions on edits
-                        self.can_unpick = false;
-                        self.last_trigger_char = None;
                     }
                     '→' => {
-                        if self.insertion < self.characters {
-                            self.insertion += 1;
+                        if !self.menu_mode {
+                            if self.insertion < self.characters {
+                                self.insertion += 1;
+                            }
+                            do_redraw = true;
+                            self.pred_phrase.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = None;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("→")));
                         }
-                        do_redraw = true;
-                        self.pred_phrase.clear();
-                        self.can_unpick = false;
-                        self.last_trigger_char = None;
                     }
                     '↑' => {
-                        // bring the insertion point to the front of the text box
-                        self.insertion = 0;
-                        do_redraw = true;
-                        self.pred_phrase.clear();
-                        self.can_unpick = false;
-                        self.last_trigger_char = None;
+                        if !self.menu_mode {
+                            // bring the insertion point to the front of the text box
+                            self.insertion = 0;
+                            do_redraw = true;
+                            self.pred_phrase.clear();
+                            self.can_unpick = false;
+                            self.last_trigger_char = None;
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("↑")));
+                        }
                     }
                     '↓' => {
-                        // bring insertion point to the very end of the text box
-                        self.insertion = self.characters;
-                        do_redraw = true;
-                        self.pred_phrase.clear();
-                        self.can_unpick = false;
-                        // this means that when we resume typing after an edit, the predictor will set its insertion point
-                        // at the very end, not the space prior to the last word...
-                        self.last_trigger_char = Some(self.characters);
+                        if !self.menu_mode {
+                            // bring insertion point to the very end of the text box
+                            self.insertion = self.characters;
+                            do_redraw = true;
+                            self.pred_phrase.clear();
+                            self.can_unpick = false;
+                            // this means that when we resume typing after an edit, the predictor will set its insertion point
+                            // at the very end, not the space prior to the last word...
+                            self.last_trigger_char = Some(self.characters);
+                        } else {
+                            return Ok(Some(xous_ipc::String::<4000>::from_str("↓")));
+                        }
                     }
                     '\u{0011}' => { // F1
-                        self.insert_prediction(0);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(0);
+                            do_redraw = true;
+                        } else {
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0011}"));
+                            do_redraw = true;
+                        }
                     }
                     '\u{0012}' => { // F2
-                        self.insert_prediction(1);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(1);
+                            do_redraw = true;
+                        } else {
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0012}"));
+                            do_redraw = true;
+                        }
                     }
                     '\u{0013}' => { // F3
-                        self.insert_prediction(2);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(2);
+                            do_redraw = true;
+                        } else {
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0013}"));
+                            do_redraw = true;
+                        }
                     }
                     '\u{0014}' => { // F4
-                        self.insert_prediction(3);
-                        do_redraw = true;
+                        if !self.menu_mode {
+                            self.insert_prediction(3);
+                            do_redraw = true;
+                        } else {
+                            retstring = Some(xous_ipc::String::<4000>::from_str("\u{0014}"));
+                            do_redraw = true;
+                        }
                     }
                     '\u{0008}' => { // backspace
                         #[cfg(feature="tts")]
@@ -323,7 +373,8 @@ impl InputTracker {
                                     self.can_unpick = false;
                                     update_predictor = true;
                                 }
-                                self.pred_phrase.clear();
+                                self.pred_phrase.pop();
+                                if self.menu_mode { update_predictor = true; }
                             }
                         } else if (self.characters > 0)  && (self.insertion > 0) {
                             if debug1{info!("mid-string backspace case")}
@@ -358,6 +409,7 @@ impl InputTracker {
                             self.insertion -= 1;
                             self.characters -= 1;
                             do_redraw = true;
+                            if self.menu_mode { update_predictor = true; }
                         } else {
                             // ignore, we are either at the front of the string, or the string had no characters
                         }
@@ -537,7 +589,7 @@ impl InputTracker {
             if debug1{info!("got pc_bound {:?}", pc_bounds);}
 
             if update_predictor {
-                if self.pred_phrase.len() > 0 {
+                if self.pred_phrase.len() > 0 || self.menu_mode {
                     if let Some(pred) = self.predictor {
                         pred.set_input(
                             xous_ipc::String::<4000>::from_str(&self.pred_phrase)).expect("couldn't update predictor with current input");
@@ -547,7 +599,8 @@ impl InputTracker {
                 // Query the prediction engine for the latest predictions
                 if let Some(pred) = self.predictor {
                     for i in 0..self.pred_options.len() {
-                        let p = if let Some(prediction) = pred.get_prediction(i as u32).expect("couldn't query prediction engine") {
+                        let p = if let Some(prediction) =
+                        pred.get_prediction(i as u32, api_token).expect("couldn't query prediction engine") {
                             Some(String::from(prediction.as_str().unwrap_or("UTF-8 Error")))
                         } else {
                             None
@@ -642,6 +695,8 @@ fn main() -> ! {
     emoji_menu(xous::connect(imef_sid).unwrap());
 
     log::trace!("Initialized but still waiting for my canvas Gids");
+    // the API token allows individual predictor back end uses to have their own history buffers
+    let mut api_token: Option<ApiToken> = None;
     loop {
         let msg = xous::receive_message(imef_sid).unwrap();
         log::trace!("Message: {:?}", msg);
@@ -663,7 +718,8 @@ fn main() -> ! {
                     tracker.clear_pred_canvas();
                 }
                 // disconnect any existing predictor, if we have one already
-                if let Some(_pred) = tracker.get_predictor() {
+                if let Some(pred) = tracker.get_predictor() {
+                    pred.release(api_token.take().unwrap().api_token); // api token *should* be Some() if pred is Some()
                     if let Some((name, token)) = tracker.predictor_conn {
                         xns.disconnect_with_token(name.as_str().unwrap(), token)
                            .expect("couldn't disconnect from previous predictor. Something is wrong with internal state!");
@@ -672,10 +728,19 @@ fn main() -> ! {
                     tracker.set_predictor(None);
                 }
                 if let Some(s) = descriptor.predictor {
-                    log::trace!("got prediction server: {}", s.as_str().unwrap());
                     match xns.request_connection_with_token(s.as_str().unwrap()) {
                         Ok((pc, token)) => {
-                            tracker.set_predictor( Some(ime_plugin_api::PredictionPlugin {connection: Some(pc)}) );
+                            let pred = ime_plugin_api::PredictionPlugin {connection: Some(pc)};
+                            match pred.acquire(descriptor.predictor_token) {
+                                Ok(confirmation) => {
+                                    api_token = Some(ApiToken {
+                                        api_token: confirmation,
+                                        gam_token: descriptor.token,
+                                    });
+                                },
+                                Err(e) => log::error!("Internal error: {:?}", e),
+                            }
+                            tracker.set_predictor( Some(pred) );
                             tracker.predictor_conn = Some(
                                 (xous_ipc::String::<64>::from_str(s.as_str().unwrap()),
                                 token.expect("didn't get the disconnect token!"))
@@ -684,7 +749,11 @@ fn main() -> ! {
                         _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str().unwrap()),
                     }
                 }
+                log::debug!("predictor: {:?}, api_token: {:?}", tracker.get_predictor(), api_token);
                 tracker.set_gam_token(descriptor.token);
+                if let Some(at) = &api_token {
+                    tracker.send_api_token(at);
+                }
             }
             Some(ImefOpcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
@@ -697,7 +766,7 @@ fn main() -> ! {
                 }
             }),
             Some(ImefOpcode::ProcessKeys) => {
-                if tracker.is_init() {
+                if tracker.is_init() && api_token.is_some() {
                     msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                         let keys = [
                             core::char::from_u32(k1 as u32).unwrap_or('\u{0000}'),
@@ -709,7 +778,7 @@ fn main() -> ! {
                         if keys[0] == '😊' {
                             tracker.activate_emoji();
                         } else {
-                            if let Some(line) = tracker.update(keys, false).expect("couldn't update input tracker with latest key presses") {
+                            if let Some(line) = tracker.update(keys, false, api_token.as_ref().unwrap().api_token).expect("couldn't update input tracker with latest key presses") {
                                 if dbglistener{info!("sending listeners {:?}", line);}
                                 if let Some(conn) = listener {
                                     if dbglistener{info!("sending to conn {:?}", conn);}
@@ -740,13 +809,20 @@ fn main() -> ! {
                 }
             }
             Some(ImefOpcode::Redraw) => msg_scalar_unpack!(msg, arg, _, _, _, {
-                if tracker.is_init() {
+                if tracker.is_init() && api_token.is_some() {
                     let force = if arg != 0 { true } else { false };
                     tracker.clear_area().expect("can't initially clear areas");
-                    tracker.update(['\u{0000}'; 4], force).expect("can't setup initial screen arrangement");
+                    tracker.update(['\u{0000}'; 4], force, api_token.as_ref().unwrap().api_token).expect("can't setup initial screen arrangement");
                 } else {
                     log::trace!("got redraw, but we're not initialized");
                     // ignore keyboard events until we've fully initialized
+                }
+            }),
+            Some(ImefOpcode::SetMenuMode) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                if arg == 1 {
+                    tracker.set_menu_mode(true);
+                } else {
+                    tracker.set_menu_mode(false);
                 }
             }),
             Some(ImefOpcode::Quit) => {log::error!("recevied quit, goodbye!"); break;}

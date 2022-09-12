@@ -42,19 +42,19 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                 }
                 "excur" => {
                     let ht = env.trng.get_health_tests().unwrap();
-                    write!(ret, "AV0: {:.0}/{:.0} mV\n"
-                        ,(ht.av_excursion[0].min as f64 / 4096.0) * 1000.0
-                        ,(ht.av_excursion[0].max as f64 / 4096.0) * 1000.0
+                    write!(ret, "AV0: {}/{} mV\n"
+                        ,((ht.av_excursion[0].min as u32 * 1000) / 4096)
+                        ,((ht.av_excursion[0].max as u32 * 1000) / 4096)
                     ).unwrap();
-                    write!(ret, "AV0 delta: {:.0} mV\n"
-                        ,((ht.av_excursion[0].max as f64 - ht.av_excursion[0].min as f64) / 4096.0) * 1000.0
+                    write!(ret, "AV0 delta: {} mV\n"
+                        ,(((ht.av_excursion[0].max as u32 - ht.av_excursion[0].min as u32) * 1000) / 4096)
                     ).unwrap();
-                    write!(ret, "AV1: {:.0}/{:.0} mV\n"
-                        ,(ht.av_excursion[1].min as f64 / 4096.0) * 1000.0
-                        ,(ht.av_excursion[1].max as f64 / 4096.0) * 1000.0
+                    write!(ret, "AV1: {}/{} mV\n"
+                        ,((ht.av_excursion[1].min as u32 * 1000) / 4096)
+                        ,((ht.av_excursion[1].max as u32 * 1000) / 4096)
                     ).unwrap();
-                    write!(ret, "AV1 delta: {:.0} mV\n"
-                        ,((ht.av_excursion[1].max as f64 - ht.av_excursion[1].min as f64) / 4096.0) * 1000.0
+                    write!(ret, "AV1 delta: {} mV\n"
+                        ,(((ht.av_excursion[1].max as u32 - ht.av_excursion[1].min as u32) * 1000 ) / 4096)
                     ).unwrap();
                 }
                 "pump" => {

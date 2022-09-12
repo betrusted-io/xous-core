@@ -315,11 +315,13 @@ pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError
         debug!("    link:             {:?}", s.link());
         let size = s.size();
 
+        let no_copy = s.get_type() == Ok(ShType::NoBits);
+
         if s.flags() & SHF_ALLOC == 0 {
             debug!("section has no allocations -- skipping");
             continue;
         }
-        if s.get_type() == Ok(ShType::NoBits) {
+        if no_copy {
             flags |= MiniElfFlags::NOCOPY;
         }
         if s.flags() & SHF_EXECINSTR != 0 {
@@ -335,17 +337,17 @@ pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError
             name,
             s.offset(),
             program_offset,
-            s.raw_data(&elf).len(),
+            if no_copy { 0 } else { s.raw_data(&elf).len() },
             program_offset
-        );
-        let section_data = s.raw_data(&elf);
-        debug!(
-            "Section start: {:02x} {:02x} {:02x} {:02x} going into offset 0x{:08x}",
-            section_data[0], section_data[1], section_data[2], section_data[3], program_offset
         );
 
         // If this section gets copied, add it to the program stream.
         if s.get_type() != Ok(ShType::NoBits) {
+            let section_data = s.raw_data(&elf);
+            debug!(
+                "Section start: {:02x} {:02x} {:02x} {:02x} going into offset 0x{:08x}",
+                section_data[0], section_data[1], section_data[2], section_data[3], program_offset
+            );
             program_data
                 .seek(SeekFrom::Start(program_offset))
                 .map_err(ElfReadError::FileSeekError)?;

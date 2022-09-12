@@ -2,11 +2,17 @@
 
 pub mod api;
 use api::*;
+#[cfg(feature = "ditherpunk")]
+pub mod tests;
 
 use bit_field::BitField;
 use core::cell::Cell;
 use gam::*;
 use num_traits::*;
+#[cfg(feature = "ditherpunk")]
+use std::convert::TryInto;
+#[cfg(feature = "ditherpunk")]
+use std::cmp::max;
 use xous::{send_message, Message, CID};
 use xous_ipc::Buffer;
 
@@ -184,6 +190,99 @@ impl Modals {
         };
         let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::Notification.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        Ok(())
+    }
+
+    /// this blocks until the notification has been acknowledged. It will attempt to render up to 256 bits
+    /// of `data` in bip39 format. Data must conform to the codeable lengths by BIP39, or else the routine
+    /// will return immediately with an `InvalidString` error without showing any dialog box.
+    pub fn show_bip39(
+        &self,
+        caption: Option<&str>,
+        data: &Vec::<u8>,
+    ) -> Result<(), xous::Error> {
+        match data.len() {
+            16 | 20 | 24 | 28 | 32 => (),
+            _ => return Err(xous::Error::InvalidString)
+        }
+        self.lock();
+        let mut bip39_data = [0u8; 32];
+        for (&s, d) in data.iter().zip(bip39_data.iter_mut()) {
+            *d = s;
+        }
+        let spec = ManagedBip39 {
+            token: self.token,
+            caption: if let Some(c) = caption {Some(xous_ipc::String::from_str(c))} else {None},
+            bip39_data,
+            bip39_len: if data.len() <= 32 {data.len() as u32} else {32},
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Bip39.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        Ok(())
+    }
+
+    pub fn input_bip39(
+        &self,
+        prompt: Option<&str>,
+    ) -> Result<Vec::<u8>, xous::Error> {
+        self.lock();
+        let spec = ManagedBip39 {
+            token: self.token,
+            caption: if let Some(c) = prompt {Some(xous_ipc::String::from_str(c))} else {None},
+            bip39_data: [0u8; 32],
+            bip39_len: 0,
+        };
+        let mut buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Bip39Input.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        let result = buf.to_original::<ManagedBip39, _>().or(Err(xous::Error::InternalError))?;
+        self.unlock();
+        if result.bip39_len == 0 {
+            Err(xous::Error::InvalidString)
+        } else {
+            Ok(
+                result.bip39_data[..result.bip39_len as usize].to_vec()
+            )
+        }
+    }
+
+    /// this blocks until the image has been dismissed.
+    #[cfg(feature = "ditherpunk")]
+    pub fn show_image(&self, mut bm: Bitmap) -> Result<(), xous::Error> {
+        self.lock();
+        let (bm_width, bm_height) = bm.size();
+        let (bm_width, bm_height) = (bm_width as u32, bm_height as u32);
+
+        // center image in modal
+        const BORDER: u32 = 3;
+        let margin = Point::new(
+            (BORDER + max(0, (gam::IMG_MODAL_WIDTH - 2 * BORDER - bm_width) / 2))
+                .try_into()
+                .unwrap(),
+            (BORDER + max(0, (gam::IMG_MODAL_HEIGHT - 2 * BORDER - bm_height) / 2))
+                .try_into()
+                .unwrap(),
+        );
+        bm.translate(margin);
+
+        let mut tiles: [Option<Tile>; 6] = [None; 6];
+        for (t, tile) in bm.iter().enumerate() {
+            if t >= tiles.len() {
+                continue;
+            }
+            tiles[t] = Some(*tile);
+        }
+
+        let spec = ManagedImage {
+            token: self.token,
+            tiles: tiles,
+        };
+        let buf = Buffer::into_buf(spec).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::Image.to_u32().unwrap())
             .or(Err(xous::Error::InternalError))?;
         self.unlock();
         Ok(())
@@ -441,10 +540,14 @@ impl Modals {
     fn unlock(&self) {
         self.have_lock.set(false);
     }
-    pub fn conn(&self) -> CID {self.conn}
+    pub fn conn(&self) -> CID {
+        self.conn
+    }
     /// Don't leak this token outside of your server, otherwise, another server can pretend to be you and
     /// steal your modal information!
-    pub fn token(&self) -> [u32; 4] {self.token}
+    pub fn token(&self) -> [u32; 4] {
+        self.token
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -472,7 +575,10 @@ impl Drop for Modals {
 ///
 /// This function is "broken out" so that it can be called from a thread without having
 /// to wrap a mutex around the primary Modals structure.
-pub fn dynamic_notification_blocking_listener(token: [u32; 4], conn: CID) -> Result<Option<char>, xous::Error> {
+pub fn dynamic_notification_blocking_listener(
+    token: [u32; 4],
+    conn: CID,
+) -> Result<Option<char>, xous::Error> {
     match send_message(
         conn,
         Message::new_blocking_scalar(
@@ -482,7 +588,9 @@ pub fn dynamic_notification_blocking_listener(token: [u32; 4], conn: CID) -> Res
             token[2] as usize,
             token[3] as usize,
         ),
-    ).expect("couldn't listen") {
+    )
+    .expect("couldn't listen")
+    {
         xous::Result::Scalar2(is_some, code) => {
             if is_some == 1 {
                 let c = char::from_u32(code as u32).unwrap_or('\u{0000}');
@@ -494,6 +602,6 @@ pub fn dynamic_notification_blocking_listener(token: [u32; 4], conn: CID) -> Res
                 Ok(None)
             }
         }
-        _ => Err(xous::Error::InternalError)
+        _ => Err(xous::Error::InternalError),
     }
 }

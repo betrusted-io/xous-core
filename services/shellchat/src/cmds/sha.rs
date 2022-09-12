@@ -254,7 +254,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
 
         xous::msg_scalar_unpack!(msg, pass, first_time, hw_mode, _, {
             let end = env.ticktimer.elapsed_ms();
-            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / TEST_ITERS as f64;
+            let elapsed: f32 = ((end - self.start_time.unwrap()) as f32) / TEST_ITERS as f32;
             let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
             if first_time != 0 {
                 write!(ret, "[{}] first pass: {}ms/hash", modestr, elapsed).unwrap();

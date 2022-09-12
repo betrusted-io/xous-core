@@ -12,6 +12,8 @@ pub struct ScanCode {
     pub alt: Option<char>,
 }
 
+/// Maintainer note: there is a "BackupKeyboardLayout" serializer inside
+/// root-keys/api.rs that needs to be updated when this changes.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum KeyMap {
     Qwerty,
@@ -59,6 +61,9 @@ pub(crate) enum Opcode {
 
     /// request for raw keyups/downs
     RegisterRawListener = 3,
+
+    /// request for updates for *when* keyboard is pressed
+    RegisterKeyObserver = 12,
 
     /// set repeat delay, rate; both in ms
     SetRepeat = 4, //(u32, u32),

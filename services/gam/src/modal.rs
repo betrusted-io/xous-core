@@ -14,6 +14,12 @@ mod progressbar;
 pub use progressbar::*;
 mod consoleinput;
 pub use consoleinput::*;
+#[cfg(feature="ditherpunk")]
+mod image;
+#[cfg(feature="ditherpunk")]
+pub use image::*;
+mod bip39entry;
+pub use bip39entry::*;
 
 use enum_dispatch::enum_dispatch;
 
@@ -33,10 +39,13 @@ pub const MAX_ITEMS: usize = 8;
 #[enum_dispatch(ActionApi)]
 pub enum ActionType {
     TextEntry,
+    Bip39Entry,
     RadioButtons,
     CheckBoxes,
     Slider,
     Notification,
+    #[cfg(feature="ditherpunk")]
+    Image,
     ConsoleInput
 }
 
@@ -68,6 +77,14 @@ impl ItemName {
     pub fn as_str(&self) -> &str {
         self.0.as_str().expect("couldn't convert item into string")
     }
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
+pub struct Bip39EntryPayload {
+    // up to 32 bytes (256 bits) could be entered
+    pub data: [u8; 32],
+    // the actual length entered is reported here
+    pub len: u32,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq, Default)]
@@ -466,9 +483,9 @@ impl<'a> Modal<'a> {
                     self.modify(None, None, false, Some(err_msg.to_str()), false, None);
                 } else {
                     if close {
-                        log::debug!("closing modal");
                         // if it's a "close" button, invoke the GAM to put our box away
                         self.gam.relinquish_focus().unwrap();
+                        xous::yield_slice();
                         break; // don't process any more keys after a close message
                     }
                 }

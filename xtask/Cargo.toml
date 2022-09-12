@@ -6,7 +6,7 @@ authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 rust-version = "1.59"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 atty = "0.2.14"
 filetime = "0.2.14"
@@ -16,4 +16,4 @@ chrono = "0.4"
 serde_json = "1.0.41"
 serde = { version = "1.0.130", features = ["derive"] }
 tempfile = "3.3.0"
-ureq = { version = "2.4.0", features = ["json"] }
+ureq = { version = "2.5.0", features = ["json"] }

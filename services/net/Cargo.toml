@@ -5,7 +5,7 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Network middleware"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = { path = "../../xous-rs" }
 xous-ipc = {path="../../xous-ipc"}
@@ -28,6 +28,8 @@ locales = {path = "../../locales"}
 
 # for automatic SSID management and AP list storage
 pddb = {path = "../pddb"}
+
+xous-semver = "0.1.2"
 
 [dependencies.smoltcp]
 # some historical notes for development on branches in the future

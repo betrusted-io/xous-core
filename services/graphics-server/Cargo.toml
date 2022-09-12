@@ -5,7 +5,7 @@ edition = "2018"
 name = "graphics-server"
 version = "0.1.0"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
@@ -31,4 +31,5 @@ minifb = "0.23.0"
 debugprint = []
 braille = []
 testing = []
+ditherpunk = []
 default = []

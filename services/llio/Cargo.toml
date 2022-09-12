@@ -5,7 +5,7 @@ edition = "2018"
 name = "llio"
 version = "0.1.0"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
 log-server = {path = "../log-server"}
@@ -23,6 +23,8 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
+xous-semver = "0.1.2"
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 
@@ -36,5 +38,6 @@ chrono = "0.4.19"
 debugprint = []
 wfi_off = [] # useful for serial port debugging, forces power on so the UART characters can finish printing
 tts = []
+test-rekey = []
 default = [] # "debugprint"
 #default = ["debugprint"] # , "fccagent"

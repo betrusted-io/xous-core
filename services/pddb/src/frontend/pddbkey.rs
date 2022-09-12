@@ -108,7 +108,7 @@ impl<'a> Read for PddbKey<'a> {
                             *dst = src;
                         }
                         assert!(pbuf.len <= readlen, "More data returned than we requested");
-                        self.pos += buf.len() as u64;
+                        self.pos += pbuf.len as u64;
                         Ok(pbuf.len as usize)
                     }
                     PddbRetcode::BasisLost => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),
@@ -157,7 +157,7 @@ impl<'a> Write for PddbKey<'a> {
                 match pbuf.retcode {
                     PddbRetcode::Ok => {
                         assert!(pbuf.len <= writelen, "More data written than we requested");
-                        self.pos += writelen as u64;
+                        self.pos += pbuf.len as u64;
                         Ok(pbuf.len as usize)
                     }
                     PddbRetcode::BasisLost => Err(Error::new(ErrorKind::BrokenPipe, "Basis lost")),

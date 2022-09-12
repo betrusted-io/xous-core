@@ -1,4 +1,226 @@
 {
+    "vault.basis.name": {
+        "en": "Enter name of Basis to unlock:",
+        "ja": "ロックを解除する基準の名前を入力してください:",
+        "zh": "输入要解锁的基础名称:",
+        "en-tts": "Enter name of Basis to unlock:"
+    },
+    "vault.basis.create": {
+        "en": "Enter name of Basis to create:",
+        "ja": "作成する基準の名前を入力します:",
+        "zh": "输入要创建的基础名称：",
+        "en-tts": "Enter name of Basis to create:"
+    },
+    "vault.basis.created_mount": {
+        "en": "Basis created. Mount it now?",
+        "ja": "ベーシスが作成されました。 今それをマウントしますか？",
+        "zh": "创建的基础。 现在装吗？",
+        "en-tts": "Basis created. Mount it now?"
+    },
+    "vault.basis.none": {
+        "en": "No active secret Bases. Would you like to create one?",
+        "ja": "アクティブな秘密の根拠はありません。 作成しますか？",
+        "zh": "没有有效的秘密基础。 你想创建一个吗？",
+        "en-tts": "No active secret Bases. Would you like to create one?"
+    },
+    "vault.basis.unmount": {
+        "en": "Select the Bases to unmount:",
+        "ja": "アンマウントするベースを選択します:",
+        "zh": "选择要卸载的基础:",
+        "en-tts": "Select the Bases to unmount:"
+    },
+    "vault.edit_dialog": {
+        "en": "Make your changes and press enter.\nUse the d-pad to navigate entries.",
+        "ja": "変更を加えてEnterキーを押します。 D-PADを使用してエントリをナビゲートします。",
+        "zh": "进行更改并按 Enter。 使用 D-PAD 导航条目。",
+        "en-tts": "Make your changes and press enter.\nUse the d-pad to navigate entries."
+    },
+    "vault.notes": {
+        "en": "Notes",
+        "ja": "ノート",
+        "zh": "笔录",
+        "en-tts": "Notes"
+    },
+    "vault.autotyping": {
+        "en": "Autotyping...",
+        "ja": "今すぐ自動入力...",
+        "zh": "现在自动输入...",
+        "en-tts": "Autotyping..."
+    },
+    "vault.error.basis_unlock_error": {
+        "en": "Basis does not exist. Or maybe wrong password?",
+        "ja": "根拠は存在しません。 または多分間違ったパスワード？",
+        "zh": "基础不存在。 或者密码错误？",
+        "en-tts": "Basis does not exist. Or maybe wrong password?"
+    },
+    "vault.error.mount_pddb": {
+        "en": "PDDB not mounted. Please setup passwords, and then format the PDDB.",
+        "ja": "PDDBがマウントされていません。 ルートキーを初期化してから、PDDBを初期化してください。",
+        "zh": "未安装 PDDB。 请初始化根密钥，然后初始化 PDDB。",
+        "en-tts": "PDDB not mounted. Please setup passwords and then format the PDDB."
+    },
+    "vault.error.time_init": {
+        "en": "Please set the time.",
+        "ja": "時間を設定してください.",
+        "zh": "请设定时间.",
+        "en-tts": "Please set the time."
+    },
+    "vault.error.usb_error": {
+        "en": "USB error. Check connection to host.",
+        "ja": "USBエラー。 ホストへの接続を確認してください。",
+        "zh": "USB错误。 检查与主机的连接。",
+        "en-tts": "USB error. Check connection to host."
+    },
+    "vault.error.record_error": {
+        "en": "Corrupt database entry.",
+        "ja": "破損したデータベースエントリ",
+        "zh": "损坏的数据库条目.",
+        "en-tts": "Corrupt database entry."
+    },
+    "vault.error.not_found": {
+        "en": "Entry not found.",
+        "ja": "エントリが見つかりません.",
+        "zh": "找不到条目.",
+        "en-tts": "Entry not found."
+    },
+    "vault.error.update_error": {
+        "en": "Couldn't update access times. Record lost forever!",
+        "ja": "アクセス時間を更新できませんでした。 記録は永遠に失われました！",
+        "zh": "无法更新访问时间。 记录永远丢失！",
+        "en-tts": "Couldn't update access times. Record lost forever!"
+    },
+    "vault.error.fido2": {
+        "en": "Can't edit FIDO2 tokens.",
+        "ja": "FIDO2トークンを編集できません。",
+        "zh": "无法编辑 FIDO2 令牌。",
+        "en-tts": "Can't edit FIDO2 tokens."
+    },
+    "vault.error.add_fido2": {
+        "en": "FIDO tokens are added through the web.",
+        "ja": "FIDOトークンはWebを使用して追加されます.",
+        "zh": "FIDO 令牌是使用网络添加的.",
+        "en-tts": "FIDO tokens are added through the web."
+    },
+    "vault.error.internal_error": {
+        "en": "Internal error.",
+        "ja": "内部エラー.",
+        "zh": "内部错误.",
+        "en-tts": "Internal error."
+    },
+    "vault.error.nothing_selected": {
+        "en": "Nothing selected.",
+        "ja": "何も選択されていません.",
+        "zh": "未选择任何内容.",
+        "en-tts": "Nothing selected."
+    },
+    "vault.delete.confirm": {
+        "en": "Confirm entry deletion: ",
+        "ja": "エントリの削除を確認する: ",
+        "zh": "确认条目删除: ",
+        "en-tts": "Confirm entry deletion: "
+    },
+    "vault.completed": {
+        "en": "Operation completed.",
+        "ja": "操作が完了しました.",
+        "zh": "操作完成.",
+        "en-tts": "Operation completed."
+    },
+    "vault.yes": {
+        "en": "Yes",
+        "ja": "はい",
+        "zh": "确定",
+        "en-tts": "Yes"
+    },
+    "vault.no": {
+        "en": "No",
+        "ja": "いいえ",
+        "zh": "取消",
+        "en-tts": "No"
+    },
+    "vault.newitem.totp_ss": {
+        "en": "Enter the TOTP shared secret in Base32:",
+        "ja": "Base32にTOTP共有シークレットを入力します。",
+        "zh": "在 Base32 中输入 TOTP 共享密钥：",
+        "en-tts": "Enter the TOTP shared secret in Base32:"
+    },
+    "vault.newitem.name": {
+        "en": "Please name the credential:",
+        "ja": "クレデンシャルに名前を付ける:",
+        "zh": "命名凭证:",
+        "en-tts": "Please name the credential"
+    },
+    "vault.newitem.username": {
+        "en": "Enter the associated username:",
+        "ja": "関連するユーザー名を入力します:",
+        "zh": "输入关联的用户名:",
+        "en-tts": "Enter the associated username"
+    },
+    "vault.newitem.password": {
+        "en": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n",
+        "ja": "Enterキーを押して提案を受け入れるか、入力を開始して独自の提案を作成します。\n\n空白のままにしてジェネレータをカスタマイズします。\n",
+        "zh": "按 Enter 接受建议，或开始输入以创建您自己的建议。\n\n留空以自定义生成器。\n",
+        "en-tts": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator.\n"
+    },
+    "vault.newitem.approve": {
+        "en": "Is this password okay?",
+        "ja": "このパスワードは大丈夫ですか?",
+        "zh": "这个密码可以吗?",
+        "en-tts": "Is this password okay?"
+    },
+    "vault.newitem.configure_generator": {
+        "en": "Select options for the password generator:",
+        "ja": "パスワードジェネレータを設定してください：",
+        "zh": "请配置密码生成器：",
+        "en-tts": "Select options for the password generator:"
+    },
+    "vault.newitem.configure_length": {
+        "en": "Desired length of password:",
+        "ja": "パスワードの文字数:",
+        "zh": "密码有多少个字符:",
+        "en-tts": "Desired length of password:"
+    },
+    "vault.newitem.uppercase": {
+        "en": "Uppercase letters",
+        "ja": "大文字",
+        "zh": "大写字母",
+        "en-tts": "Uppercase letters"
+    },
+    "vault.newitem.numbers": {
+        "en": "Numbers",
+        "ja": "数字",
+        "zh": "数字",
+        "en-tts": "Numbers"
+    },
+    "vault.newitem.symbols": {
+        "en": "Symbols",
+        "ja": "シンボル",
+        "zh": "符号",
+        "en-tts": "Symbols"
+    },
+    "vault.illegal_char": {
+        "en": "Entries may not contain ':', or a newline character.",
+        "ja": "エントリに「：」または改行文字を含めることはできません。",
+        "zh": "条目不得包含 ':' 或换行符。",
+        "en-tts": "Entries may not contain ':', or a newline character."
+    },
+    "vault.illegal_number": {
+        "en": "Please enter a number from 1-128",
+        "ja": "1〜128の数字を入力してください",
+        "zh": "请输入 1-128 之间的数字",
+        "en-tts": "Please enter a number from 1-128"
+    },
+    "vault.illegal_totp": {
+        "en": "Shared secret is not valid Base32",
+        "ja": "共有秘密は無効ですBase32",
+        "zh": "共享密钥无效 Base32",
+        "en-tts": "Shared secret is not valid Base32"
+    },
+    "vault.no_items": {
+        "en": "No items found",
+        "ja": "項目は見つかりませんでした",
+        "zh": "未找到任何项目",
+        "en-tts": "No items found"
+    },
     "vault.fido.countdown": {
         "en": "s until abort",
         "ja": "秒 中止するまで",
@@ -84,10 +306,10 @@
         "en-tts": "App name: "
     },
     "vault.u2f.appinfo.last_authtime": {
-        "en": "Last authorized: ",
-        "ja": "最後に承認された:",
-        "zh": "最后授权:",
-        "en-tts": "Last authorized: "
+        "en": "Last accessed: ",
+        "ja": "最後にアクセスした:",
+        "zh": "最后访问:",
+        "en-tts": "Last accessed: "
     },
     "vault.u2f.appinfo.seconds_ago": {
         "en": "secs ago",
@@ -136,5 +358,77 @@
         "ja": "FIDOリクエスト",
         "zh": "FIDO 请求",
         "en-tts": "FIDO Request"
+    },
+    "vault.select_font": {
+        "en": "Select a font style",
+        "ja": "フォントを選択する",
+        "zh": "选择字体",
+        "en-tts": "Select a font style"
+    },
+    "vault.readout_switchover": {
+        "en": "Switching USB functions...",
+        "ja": "USB機能を切り替え中...",
+        "zh": "切换 USB 功能...",
+        "en-tts": "Switching USB functions..."
+    },
+    "vault.readout_active": {
+        "en": "🔓Readout mode active.🔓\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security.",
+        "ja": "🔓読み出しモードがアクティブです。🔓\n\nホストは、ロックされていないレコードの読み取りと書き込みを許可されています。\n\nホスト スクリプトを実行してから、任意のキーを押してセキュリティを復元してください。",
+        "zh": "🔓读出模式激活。🔓\n\n允许主机读取和写入未锁定的记录。\n\n请运行主机脚本，然后按任意键恢复安全。",
+        "en-tts": "Readout mode active.\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security."
+    },
+    "vault.menu_autotype": {
+        "en": "Autotype",
+        "ja": "自動的に入力",
+        "zh": "自动输入",
+        "en-tts": "Autotype"
+    },
+    "vault.menu_addnew": {
+        "en": "Add new item",
+        "ja": "新しいアイテムを追加する",
+        "zh": "添加新项目",
+        "en-tts": "Add new item"
+    },
+    "vault.menu_edit": {
+        "en": "Edit item",
+        "ja": "アイテムを編集する",
+        "zh": "编辑项目",
+        "en-tts": "Edit item"
+    },
+    "vault.menu_delete": {
+        "en": "Delete item",
+        "ja": "アイテムを削除",
+        "zh": "删除项目",
+        "en-tts": "Delete item"
+    },
+    "vault.menu_change_font": {
+        "en": "Change list font",
+        "ja": "フォントを変更する",
+        "zh": "更改字体",
+        "en-tts": "🔇"
+    },
+    "vault.menu_unlock_basis": {
+        "en": "Unlock secret Basis",
+        "ja": "シークレットベースのロックを解除",
+        "zh": "解锁秘密基础",
+        "en-tts": "Unlock secret basis"
+    },
+    "vault.menu_manage_basis": {
+        "en": "Manage Bases",
+        "ja": "管理基盤",
+        "zh": "管理基础",
+        "en-tts": "Manage Bases"
+    },
+    "vault.menu_readout_mode": {
+        "en": "Enable host readout",
+        "ja": "ホスト読み出しを有効にする",
+        "zh": "启用主机读出",
+        "en-tts": "Enable host readout"
+    },
+    "vault.menu_close": {
+        "en": "Close submenu",
+        "ja": "メニューを閉じる",
+        "zh": "关闭功能表",
+        "en-tts": "Close submenu"
     }
 }

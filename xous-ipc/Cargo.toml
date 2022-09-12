@@ -8,7 +8,7 @@ version = "0.9.7"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = {version = "1"}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}

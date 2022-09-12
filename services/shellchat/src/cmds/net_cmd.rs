@@ -14,6 +14,16 @@ use std::time::{Duration, Instant};
 use std::thread;
 use std::sync::mpsc;
 use dns::Dns; // necessary to work around https://github.com/rust-lang/rust/issues/94182
+#[cfg(feature="ditherpunk")]
+use std::str::FromStr;
+#[cfg(feature="ditherpunk")]
+use gam::DecodePng;
+#[cfg(feature="tls")]
+use std::convert::TryInto;
+#[cfg(feature="tls")]
+use tungstenite::{WebSocket, stream::MaybeTlsStream};
+#[cfg(feature="perfcounter")]
+use utralib::generated::*;
 
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -21,6 +31,8 @@ pub struct NetCmd {
     dns: Dns,
     #[cfg(any(target_os = "none", target_os = "xous"))]
     ping: Option<net::Ping>,
+    #[cfg(feature="tls")]
+    ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -30,6 +42,8 @@ impl NetCmd {
             dns: dns::Dns::new(&xns).unwrap(),
             #[cfg(any(target_os = "none", target_os = "xous"))]
             ping: None,
+            #[cfg(feature="tls")]
+            ws: None,
         }
     }
 }
@@ -188,7 +202,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                                                     }
                                                     count += 1;
                                                     if count == 10 && short_test {
-                                                        stream.flush().unwrap();
+                                                        stream.flush().ok();
                                                         break;
                                                     }
                                                 }
@@ -199,7 +213,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     });
-                    write!(ret, "Fountain started on port 3333").unwrap();
+                    write!(ret, "Fountain started on port 3333").ok();
                 }
                 // Testing of udp is done with netcat:
                 // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
@@ -283,8 +297,352 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
-                "tls" => {
+                #[cfg(feature="nettest")]
+                "test" => {
+                    crate::nettests::start_batch_tests();
+                    write!(ret, "Net batch tests started...").ok();
+                }
+                #[cfg(feature="ditherpunk")]
+                "image" => {
+                    if let Some(url) = tokens.next() {
+                        match url.split_once('/') {
+                            Some((host, path)) => {
+                                match TcpStream::connect((host, 80)) {
+                                    Ok(mut stream) => {
+                                        stream.set_read_timeout(Some(Duration::from_millis(5_000))).unwrap();
+                                        stream.set_write_timeout(Some(Duration::from_millis(5_000))).unwrap();
+                                        match write!(stream, "GET /{} HTTP/1.1\r\n", path) {
+                                            Ok(_) => log::trace!("sent GET"),
+                                            Err(e) => {
+                                                log::error!("GET err {:?}", e);
+                                                write!(ret, "Error sending GET: {:?}", e).unwrap();
+                                            }
+                                        }
+                                        write!(stream, "Host: {}\r\nAccept: */*\r\nUser-Agent: Precursor/0.9.6\r\n", host).expect("stream error");
+                                        write!(stream, "Connection: close\r\n").expect("stream error");
+                                        write!(stream, "\r\n").expect("stream error");
+                                        log::info!("fetching response....");
+                                        let mut reader = std::io::BufReader::new(&mut stream);
+                                        let mut buf = Vec::<u8>::new();
+                                        let mut byte = [0u8; 1];
+                                        let mut content_length = 0;
+                                        // consume the header - plucking the content-length on the way
+                                        const HEADER_LIMIT: usize = 20;
+                                        let mut line_count = 0;
+                                        while line_count <= HEADER_LIMIT {
+                                            line_count += 1;
+                                            let mut len = buf.len();
+                                            // read a line terminated by /r/n
+                                            while (len < 2 || buf.as_slice()[(len-2)..] != [0x0d, 0x0a]) && len <= 1024 {
+                                                reader.read(&mut byte).expect("png stream read error");
+                                                buf.push(byte[0]);
+                                                len = buf.len();
+                                            }
+                                            match len {
+                                                2 => {
+                                                   log::info!("found end of header after {} lines.", line_count);
+                                                   break;
+                                                },
+                                                1024.. => {
+                                                    let line = std::string::String::from_utf8_lossy(&buf);
+                                                    log::warn!("header contained line > 4k {:?}", line);
+                                                    break;
+                                                }
+                                                _ => {},
+                                            }
+                                            let line = std::string::String::from_utf8_lossy(&buf);
+                                            log::info!("{:?}", line);
+                                            let l_line_split = line.to_ascii_lowercase();
+                                            let l_line: Vec<&str> = l_line_split.split(':').collect();
+                                            if l_line.len() > 1 {
+                                                log::info!("attr: {}, {}", l_line[0], l_line[1]);
+                                                match l_line[0] {
+                                                    "content-length" => {
+                                                        content_length = usize::from_str(l_line[1].trim()).unwrap_or(0);
+                                                        log::info!("found content-length of {}", content_length);
+                                                    }
+                                                    _ => {}
+                                                }
+                                            };
+                                            buf.clear();
+                                        }
 
+                                        if content_length > 0 {
+                                            log::info!("heap size: {}", heap_usage());
+                                            let mut png = DecodePng::new(reader).expect("png decode failed");
+                                            const BORDER: u32 = 3;
+                                            let modal_size = gam::Point::new(
+                                                 (gam::IMG_MODAL_WIDTH - 2 * BORDER) as i16,
+                                                 (gam::IMG_MODAL_HEIGHT - 2 * BORDER) as i16
+                                            );
+                                            let bm = gam::Bitmap::from_png(&mut png, Some(modal_size));
+
+                                            log::info!("heap size: {}", heap_usage());
+                                            let modals = modals::Modals::new(&env.xns).unwrap();
+                                            modals.show_image(bm).expect("show image modal failed");
+
+                                        } else {
+                                            write!(ret, "content-length was 0, no image read").unwrap();
+                                        }
+                                    }
+                                    Err(e) => write!(ret, "Couldn't connect to {}:80: {:?}", host, e).unwrap(),
+                                }
+                            }
+                            _ => write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap(),
+                        }
+                    } else {
+                        write!(ret, "Usage: image bunniefoo.com/bunnie/bunny.png").unwrap();
+                    }
+                }
+                // only valid for hardware configs with TLS enabled
+                #[cfg(all(any(target_os = "none", target_os = "xous"),feature="tls"))]
+                "rt" => {
+                    log::set_max_level(log::LevelFilter::Trace);
+                    ring::xous_test::p256_elem_add_test();
+                    log::set_max_level(log::LevelFilter::Info);
+                }
+                #[cfg(feature="tls")]
+                "ws" => {
+                    if self.ws.is_none() {
+                        let (socket, response) =
+                        tungstenite::connect(url::Url::parse("wss://awake.noskills.club/ws").unwrap()).expect("Can't connect");
+
+                        log::info!("Connected to the server");
+                        log::info!("Response HTTP code: {}", response.status());
+                        log::info!("Response contains the following headers:");
+                        for (ref header, _value) in response.headers() {
+                            log::info!("* {}", header);
+                        }
+                        self.ws = Some(socket);
+                    }
+                    let mut err = false;
+                    if let Some(socket) = &mut self.ws {
+                        let mut val = String::<1024>::new();
+                        join_tokens(&mut val, &mut tokens);
+                        if val.len() > 0 {
+                            socket.write_message(tungstenite::Message::Text(val.as_str().unwrap().into())).unwrap();
+                        } else {
+                            socket.write_message(tungstenite::Message::Text("Hello WebSocket".into())).unwrap();
+                        }
+                        match socket.read_message() {
+                            Ok(msg) => {
+                                log::info!("Received: {}", msg);
+                                write!(ret, "Rx: {}", msg).ok();
+                            },
+                            Err(e) => {
+                                log::info!("got ws error: {:?}, quitting", e);
+                                err = true;
+                                socket.close(None).ok();
+                            }
+                        }
+                    }
+                    if err {
+                        self.ws.take();
+                        write!(ret, "\nWeb socket session closed.").ok();
+                    }
+                }
+                #[cfg(feature="tls")]
+                "tls" => {
+                    log::set_max_level(log::LevelFilter::Info);
+                    log::info!("starting TLS run");
+                    let mut root_store = rustls::RootCertStore::empty();
+                    log::info!("create root store");
+                    root_store.add_server_trust_anchors(
+                        webpki_roots::TLS_SERVER_ROOTS
+                            .0
+                            .iter()
+                            .map(|ta| {
+                                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                                    ta.subject,
+                                    ta.spki,
+                                    ta.name_constraints,
+                                )
+                            })
+                    );
+                    log::info!("build TLS client config");
+                    let config = rustls::ClientConfig::builder()
+                        .with_safe_defaults()
+                        .with_root_certificates(root_store)
+                        .with_no_client_auth();
+
+                    log::info!("point TLS to bunniefoo.com");
+                    let server_name = "bunniefoo.com".try_into().unwrap();
+                    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+
+                    log::info!("connect TCPstream to bunniefoo.com");
+                    let mut sock = TcpStream::connect("bunniefoo.com:443").unwrap();
+                    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+                    log::info!("create http headers and write to server");
+                    tls.write_all(
+                        concat!(
+                            "GET / HTTP/1.1\r\n",
+                            "Host: bunniefoo.com\r\n",
+                            "Connection: close\r\n",
+                            "Accept-Encoding: identity\r\n",
+                            "\r\n"
+                        )
+                        .as_bytes(),
+                    )
+                    .unwrap();
+                    log::info!("readout cipher suite");
+                    let ciphersuite = tls
+                        .conn
+                        .negotiated_cipher_suite()
+                        .unwrap();
+                    log::info!(
+                        "Current ciphersuite: {:?}",
+                        ciphersuite.suite()
+                    );
+                    let mut plaintext = Vec::new();
+                    log::info!("read TLS response");
+                    tls.read_to_end(&mut plaintext).unwrap();
+                    log::info!("len: {}", plaintext.len());
+                    log::info!("{}", std::str::from_utf8(&plaintext).unwrap_or("utf-error"));
+                    log::set_max_level(log::LevelFilter::Info);
+                }
+                #[cfg(feature="perfcounter")]
+                "cta1" => {
+                    log::info!("constant time RISC-V HW AES test");
+                    env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+
+                    // stop the counter if it would rollover
+                    env.perf_csr.wo(utra::perfcounter::SATURATE_LIMIT0, 0xFFFF_FFFF);
+                    env.perf_csr.wo(utra::perfcounter::SATURATE_LIMIT1, 0);
+
+                    // configure the system
+                    env.perf_csr.wo(utra::perfcounter::CONFIG,
+                        env.perf_csr.ms(utra::perfcounter::CONFIG_PRESCALER, 0)
+                        | env.perf_csr.ms(utra::perfcounter::CONFIG_SATURATE, 1)
+                        | env.perf_csr.ms(utra::perfcounter::CONFIG_EVENT_WIDTH_MINUS_ONE, 31)
+                    );
+
+                    // this starts the performance counter
+                    log::info!("== restart ==");
+                    env.perf_csr.wfo(utra::perfcounter::RUN_RESET_RUN, 1);
+
+                    use aes::Aes256;
+                    use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+                    use aes::cipher::generic_array::GenericArray;
+
+                    let mut key_array: [u8; 32];
+                    let mut data_array: [u8; 16];
+                    const MAX_ENTRIES: u32 = 4096;
+                    let mut entries: u32 = 0; // track the number of entries we've used up
+                    for databit in 0..128 {
+                        data_array = [0; 16];
+                        data_array[databit / 8] = 1 << databit % 8;
+                        for keybit in 0..256 {
+                            key_array = [0; 32];
+                            key_array[keybit / 8] = 1 << keybit % 8;
+                            let cipher_hw = Aes256::new(&key_array.into());
+                            let mut block = GenericArray::clone_from_slice(&mut data_array);
+                            // demarcate the encryption operation performance counter events
+                            entries += 1;
+                            env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
+                                ((databit as u32) << 8) | keybit as u32);
+                            cipher_hw.encrypt_block(&mut block);
+                            env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
+                                0x100_0000 | ((databit as u32) << 8) | keybit as u32);
+                            entries += 1;
+                            if entries >= MAX_ENTRIES {
+                                // stop the counter
+                                env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+                                // read out the events and print them
+                                while env.perf_csr.rf(utra::perfcounter::STATUS_READABLE) == 1 {
+                                    let code = env.perf_csr.r(utra::perfcounter::EVENT_RAW0);
+                                    let time = env.perf_csr.r(utra::perfcounter::EVENT_RAW1);
+                                    let index = env.perf_csr.r(utra::perfcounter::EVENT_INDEX);
+                                    log::info!("{}:{}:{}", index, time, code)
+                                }
+                                // restart the counter
+                                log::info!("== restart ==");
+                                entries = 0;
+                                env.perf_csr.wfo(utra::perfcounter::RUN_RESET_RUN, 1);
+                            }
+                        }
+                    }
+                    // stop the counter
+                    env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+                    // read out the events and print them
+                    while env.perf_csr.rf(utra::perfcounter::STATUS_READABLE) == 1 {
+                        let code = env.perf_csr.r(utra::perfcounter::EVENT_RAW0);
+                        let time = env.perf_csr.r(utra::perfcounter::EVENT_RAW1);
+                        let index = env.perf_csr.r(utra::perfcounter::EVENT_INDEX);
+                        log::info!("{}:{}:{}", index, time, code)
+                    }
+                }
+                #[cfg(feature="perfcounter")]
+                "cta2" => {
+                    use ring::xous_test::aes_nohw::aes_key_st;
+
+                    log::info!("constant time ring-xous test");
+                    env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+
+                    // stop the counter if it would rollover
+                    env.perf_csr.wo(utra::perfcounter::SATURATE_LIMIT0, 0xFFFF_FFFF);
+                    env.perf_csr.wo(utra::perfcounter::SATURATE_LIMIT1, 0);
+
+                    // configure the system
+                    env.perf_csr.wo(utra::perfcounter::CONFIG,
+                        env.perf_csr.ms(utra::perfcounter::CONFIG_PRESCALER, 0)
+                        | env.perf_csr.ms(utra::perfcounter::CONFIG_SATURATE, 1)
+                        | env.perf_csr.ms(utra::perfcounter::CONFIG_EVENT_WIDTH_MINUS_ONE, 31)
+                    );
+
+                    // this starts the performance counter
+                    log::info!("== restart ==");
+                    env.perf_csr.wfo(utra::perfcounter::RUN_RESET_RUN, 1);
+
+                    let mut key_array: [u8; 32];
+                    let mut data_array: [u8; 16];
+                    let mut out_array: [u8; 16] = [0u8; 16];
+                    const MAX_ENTRIES: u32 = 4096;
+                    let mut entries: u32 = 0; // track the number of entries we've used up
+                    for databit in 0..128 {
+                        data_array = [0; 16];
+                        data_array[databit / 8] = 1 << databit % 8;
+                        for keybit in 0..256 {
+                            key_array = [0; 32];
+                            key_array[keybit / 8] = 1 << keybit % 8;
+                            let mut schedule = aes_key_st {
+                                rd_key: [0u32; 60],
+                                rounds: 0
+                            };
+                            ring::xous_test::expand_aes_key(&key_array, &mut schedule);
+                            // demarcate the encryption operation performance counter events
+                            entries += 1;
+                            env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
+                                ((databit as u32) << 8) | keybit as u32);
+                            ring::xous_test::aes_encrypt(&data_array, &mut out_array, &schedule);
+                            env.event_csr.wfo(utra::event_source1::PERFEVENT_CODE,
+                                0x100_0000 | ((databit as u32) << 8) | keybit as u32);
+                            entries += 1;
+                            if entries >= MAX_ENTRIES {
+                                // stop the counter
+                                env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+                                // read out the events and print them
+                                while env.perf_csr.rf(utra::perfcounter::STATUS_READABLE) == 1 {
+                                    let code = env.perf_csr.r(utra::perfcounter::EVENT_RAW0);
+                                    let time = env.perf_csr.r(utra::perfcounter::EVENT_RAW1);
+                                    let index = env.perf_csr.r(utra::perfcounter::EVENT_INDEX);
+                                    log::info!("{}:{}:{}", index, time, code)
+                                }
+                                // restart the counter
+                                log::info!("== restart ==");
+                                entries = 0;
+                                env.perf_csr.wfo(utra::perfcounter::RUN_RESET_RUN, 1);
+                            }
+                        }
+                    }
+                    // stop the counter
+                    env.perf_csr.wfo(utra::perfcounter::RUN_STOP, 1);
+                    // read out the events and print them
+                    while env.perf_csr.rf(utra::perfcounter::STATUS_READABLE) == 1 {
+                        let code = env.perf_csr.r(utra::perfcounter::EVENT_RAW0);
+                        let time = env.perf_csr.r(utra::perfcounter::EVENT_RAW1);
+                        let index = env.perf_csr.r(utra::perfcounter::EVENT_INDEX);
+                        log::info!("{}:{}:{}", index, time, code)
+                    }
                 }
                 #[cfg(any(target_os = "none", target_os = "xous"))]
                 "ping" => {
@@ -433,7 +791,13 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
     );
 
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    match stream.read(&mut buffer) {
+        Ok(_) => {},
+        Err(e) => {
+            log::warn!("Server connection error; closing connection {:?}", e);
+            return;
+        }
+    }
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
@@ -471,8 +835,8 @@ fn handle_connection(mut stream: TcpStream, boot_instant: Instant) {
         contents
     );
 
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    stream.write(response.as_bytes()).ok();
+    stream.flush().ok();
 }
 
 pub struct ThreadPool {
@@ -567,6 +931,32 @@ impl Worker {
         Worker {
             id,
             thread: Some(thread),
+        }
+    }
+}
+
+#[cfg(feature="ditherpunk")]
+fn heap_usage() -> usize {
+    match xous::rsyscall(xous::SysCall::IncreaseHeap(0, xous::MemoryFlags::R)).expect("couldn't get heap size") {
+        xous::Result::MemoryRange(m) => {
+            let usage = m.len();
+            usage
+        }
+        _ => {
+            log::error!("Couldn't measure heap usage");
+            0
+         },
+    }
+}
+
+#[cfg(feature ="tls")]
+fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>) {
+    use core::fmt::Write;
+    for (i, tok) in tokens.enumerate() {
+        if i == 0 {
+            write!(buf, "{}", tok).unwrap();
+        } else {
+            write!(buf, " {}", tok).unwrap();
         }
     }
 }

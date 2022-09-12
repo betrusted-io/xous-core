@@ -72,12 +72,14 @@ pub enum SysCall {
     /// Add the given number of bytes to the heap.  The number of bytes must be
     /// divisible by the page size.  The newly-allocated pages will have the
     /// specified flags.  To get the current heap base, call this with a size of
-    /// `0`.
+    /// `0`, which will return a `MemoryRange` containing the heap base and the size.
     ///
     /// # Returns
     ///
-    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new
-    ///   size of the heap */)
+    /// * **MemoryRange(
+    ///         *mut usize, /* The newly-allocated offset */
+    ///         usize,      /* The amount of data added */
+    ///     )**
     ///
     /// # Errors
     ///
@@ -425,6 +427,36 @@ pub enum SysCall {
         usize, /* stack pointer */
     ),
 
+    /// Adjust one of the limits within this process. Note that you must pass
+    /// the current limit value in order to set the new limit. The current limit
+    /// value is always returned, so this function may need to be called twice --
+    /// once in order to get the current limit, and again to set the new limit.
+    ///
+    /// ## Arguments
+    ///
+    ///     * **Index**: The item to adjust. Currently the following limits
+    ///                  are supported:
+    ///                         1: Maximum heap size
+    ///                         2: Current heap size
+    ///     * **Current Limit**: Pass the current limit value here. The current
+    ///                 limit must match in order for the new limit to take
+    ///                 effect. This is used to avoid a race condition if two
+    ///                 threads try to set the same limit.
+    ///     * **Proposed Limit**: The new value that you would like to use.
+    ///
+    /// ## Returns
+    ///
+    /// Returns a Scalar2 containing `(Index, Limit)`.
+    ///
+    /// ## Errors
+    ///
+    ///     * **InvalidLimit**: The specified index was not valid
+    AdjustProcessLimit(
+        usize, /* process limit index */
+        usize, /* expected current limit */
+        usize, /* proposed new limit */
+    ),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -468,6 +500,7 @@ pub enum SysCallNumber {
     Disconnect = 35,
     JoinThread = 36,
     SetExceptionHandler = 37,
+    AdjustProcessLimit = 38,
     Invalid,
 }
 
@@ -511,6 +544,7 @@ impl SysCallNumber {
             35 => Disconnect,
             36 => JoinThread,
             37 => SetExceptionHandler,
+            38 => AdjustProcessLimit,
             _ => Invalid,
         }
     }
@@ -865,6 +899,16 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::AdjustProcessLimit(index, current, new) => [
+                SysCallNumber::AdjustProcessLimit as usize,
+                *index,
+                *current,
+                *new,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -1028,6 +1072,7 @@ impl SysCall {
             SysCallNumber::Disconnect => SysCall::Disconnect(a1 as _),
             SysCallNumber::JoinThread => SysCall::JoinThread(a1 as _),
             SysCallNumber::SetExceptionHandler => SysCall::SetExceptionHandler(a1 as _, a2 as _),
+            SysCallNumber::AdjustProcessLimit => SysCall::AdjustProcessLimit(a1, a2, a3),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }

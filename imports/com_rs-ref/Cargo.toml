@@ -5,9 +5,9 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "com_rs import package"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
-com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "4a53c95b56407b8ad518b8c5ab6a361aae5dfaa1" }
+com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
 #com_rs = { path = "../../../betrusted-ec/sw/com_rs" }
 
 

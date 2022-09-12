@@ -10,6 +10,10 @@ use std::{
     process::Command,
 };
 
+// This is the minimum Xous version required to read a PDDB backup generated
+// by the current kernel revision.
+const MIN_XOUS_VERSION: &str = "v0.9.8-791";
+
 type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
@@ -39,7 +43,15 @@ impl std::error::Error for BuildError {}
 fn get_packages() -> Vec<String> {
     let mut args = env::args();
     args.nth(1);
-    args.filter(|x| !x.starts_with("-")).collect()
+    // skip everything past --
+    let mut pkgs = Vec::<String>::new();
+    for arg in args {
+        if arg == "--" {
+            break;
+        }
+        pkgs.push(arg);
+    }
+    pkgs.into_iter().filter(|x| !x.starts_with("-")).collect()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -168,8 +180,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
     let mut args = env::args();
     let task = args.nth(1);
-    let lkey = args.nth(3);
-    let kkey = args.nth(4);
+    // extract lkey/kkey args only after a "--" separator
+    let mut next_is_lkey = false;
+    let mut next_is_kkey = false;
+    let mut lkey: Option<String> = None;
+    let mut kkey: Option<String> = None;
+    for arg in args {
+        if next_is_kkey {
+            kkey = Some(arg);
+            next_is_kkey = false;
+            continue;
+        }
+        if next_is_lkey {
+            lkey = Some(arg);
+            next_is_lkey = false;
+            next_is_kkey = true;
+            continue;
+        }
+        if arg == "--" {
+            next_is_lkey = true;
+            continue;
+        }
+    }
     match task.as_deref() {
         Some("install-toolkit") | Some("install-toolchain") => {
             let arg = env::args().nth(2);
@@ -378,6 +410,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "renode-bypass"]),
             )?;
         }
+        Some("pddb-flamegraph") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = pddb_dev_pkgs.to_vec();
+            // add pkgs required for functional testing. Quite a bit. :-/
+            pkgs.push("llio");
+            pkgs.push("root-keys");
+            pkgs.push("jtag");
+            pkgs.push("com");
+            pkgs.push("gam");
+            pkgs.push("net");
+            pkgs.push("dns");
+            pkgs.push("graphics-server");
+            pkgs.push("modals");
+            pkgs.push("keyboard");
+            pkgs.push("ime-frontend");
+            pkgs.push("ime-plugin-shell");
+            pkgs.push("status");
+            pkgs.push("usb-device-xous");
+            generate_app_menus(&vec![]);
+            run(false, &pkgs,
+                Some(&[
+                    "--features", "pddbtest",
+                    "--features", "pddb-flamegraph",
+                ]), false)?
+
+        }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
             renode_image(false, &aestest_pkgs, &[], None, None)?
@@ -395,6 +454,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 false,
             )?
         }
+        Some("pddb-btest") => {
+            generate_app_menus(&Vec::<String>::new());
+            // for hosted runs, compile in the pddb test routines by default...for now.
+            run(false, &hw_pkgs,
+                Some(&[
+                    "--features", "pddbtest",
+                    "--features", "autobasis", // this will make secret basis tracking synthetic and automated for stress testing
+                    "--features", "pddb/deterministic",
+                    "--features", "autobasis-ci",
+                ]), false)?
+        }
         Some("run") => {
             let mut args = env::args();
             args.nth(1);
@@ -411,7 +481,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             generate_app_menus(&apps);
             // for hosted runs, compile in the pddb test routines by default...for now.
-            run(false, &pkgs, Some(&["--features", "pddbtest"]), false)?
+            run(false, &pkgs,
+                Some(&[
+                    "--features", "pddbtest",
+                    "--features", "ditherpunk",
+                    "--features", "tracking-alloc",
+                    "--features", "tls",
+                    // "--features", "test-rekey",
+                ]), false)?
         }
         Some("hosted-ci") => {
             let mut pkgs = hw_pkgs.to_vec();
@@ -457,6 +534,86 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 lkey,
                 kkey,
                 None,
+                &[],
+                None,
+            )?
+        }
+        Some("perf-image") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let apps = get_packages();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            build_hw_image(
+                false,
+                Some("./precursors/soc-perf.svd".to_string()),
+                &pkgs,
+                lkey,
+                kkey,
+                Some(&[
+                    "--features", "perfcounter"
+                ]),
+                &[],
+                None,
+            )?
+        }
+        Some("utra") => {
+            let mut args = env::args();
+            let config = args.nth(2);
+            if let Some(tgt) = config {
+                if tgt == "perf" {
+                    let path = std::path::Path::new("./precursors/soc-perf.svd");
+                    if !path.exists() {
+                        return Err("svd file does not exist".into());
+                    }
+                    // Tools use this environment variable to know when to rebuild the UTRA crate.
+                    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+                    println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
+                } else {
+                    return Err("Unrecognized target, doing nothing".into());
+                }
+            } else {
+                let path = std::path::Path::new("./precursors/soc.svd");
+                if !path.exists() {
+                    return Err("svd file does not exist".into());
+                }
+                // Tools use this environment variable to know when to rebuild the UTRA crate.
+                std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+                println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
+            }
+            let status = Command::new(cargo())
+                .current_dir(project_root())
+                .args(&[
+                    "build",
+                    "--package",
+                    "utralib",
+                ])
+                .status()?;
+            if !status.success() {
+                return Err("cargo build failed".into());
+            }
+        }
+        Some("ditherpunk-image") => {
+            let mut args = env::args();
+            args.nth(1);
+            let mut pkgs = hw_pkgs.to_vec();
+            let apps = get_packages();
+            for app in &apps {
+                pkgs.push(app);
+            }
+            generate_app_menus(&apps);
+            build_hw_image(
+                false,
+                Some("./precursors/soc.svd".to_string()),
+                &pkgs,
+                lkey,
+                kkey,
+                Some(&[
+                    "--features", "ditherpunk",
+                    ]),
                 &[],
                 None,
             )?
@@ -597,9 +754,10 @@ fn print_help() {
         "Tasks:
 Hardware images:
  hw-image [soc.svd]      builds an image for real hardware with baseline demo apps
-          [loader.key]   plus signing key options
+       -- [loader.key]   plus signing key options
           [kernel.key]
  app-image [app1] [..]   builds an image for real hardware of baseline kernel + specified apps
+ perf-image [app1] [..]  builds an image for real hardware assuming a performance counter variant of the SOC.
 
 Hosted emulation:
  run [app1] [..]         runs a release build using a hosted environment plus specified apps
@@ -611,6 +769,10 @@ Renode emulation:
  libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
                          specified on the command line (e.g. built externally). Bypasses sig checks, keys locked out.
  libstd-net [pkg1] [..]  builds a test image for testing network functions. Bypasses sig checks, keys locked out.
+
+UTRA (re-)generation:
+ utra [perf]             (re)generate the UTRA file for the default or [perf] configurations. Explicit call
+                         utilized when swapping between the two configs, to avoid spurious full rebuilds.
 
 Locale (re-)generation:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
@@ -838,6 +1000,17 @@ fn build_hw_image(
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
+    // stash any LTO settings applied to the kernel; proper layout of the loader
+    // block depends on the loader being compact and highly optimized.
+    let existing_lto = std::env::var("CARGO_PROFILE_RELEASE_LTO")
+        .map(|v| Some(v))
+        .unwrap_or(None);
+    let existing_codegen_units = std::env::var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS")
+        .map(|v| Some(v))
+        .unwrap_or(None);
+    // these settings will generate the most compact code (but also the hardest to debug)
+    std::env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
+    std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
     let mut loader = build(
         &["loader"],
         debug,
@@ -846,6 +1019,13 @@ fn build_hw_image(
         None,
         loader_features,
     )?;
+    // restore the LTO settings
+    if let Some(existing) = existing_lto {
+        std::env::set_var("CARGO_PROFILE_RELEASE_LTO", existing);
+    }
+    if let Some(existing) = existing_codegen_units {
+        std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", existing);
+    }
     loader.push(PathBuf::from("loader"));
 
     let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
@@ -891,6 +1071,8 @@ fn build_hw_image(
             loaderkey_file.as_str(),
             "--loader-output",
             loader_bin.to_str().unwrap(),
+            "--min-xous-ver",
+            MIN_XOUS_VERSION,
         ])
         .status()?;
     if !status.success() {
@@ -928,6 +1110,8 @@ fn build_hw_image(
             kernelkey_file.as_str(),
             "--kernel-output",
             xous_img_path.to_str().unwrap(),
+            "--min-xous-ver",
+            MIN_XOUS_VERSION,
             // "--defile",
         ])
         .status()?;
@@ -1637,6 +1821,7 @@ use std::string::String;
 struct AppManifest {
     context_name: String,
     menu_name: HashMap<String, HashMap<String, String>>,
+    submenu: Option::<u8>,
 }
 #[derive(Deserialize, Serialize, Debug)]
 struct Locales {
@@ -1694,14 +1879,38 @@ fn generate_app_menus(apps: &Vec<String>) {
             manifest.context_name,
         )
         .unwrap();
+        if let Some(menu_count) = manifest.submenu {
+            for i in 0..menu_count {
+                writeln!(
+                    gam_tokens,
+                    "pub const APP_MENU_{}_{}: &'static str = \"{} Submenu {}\";",
+                    i,
+                    app_name.to_uppercase(),
+                    manifest.context_name,
+                    i,
+                )
+                .unwrap();
+            }
+        }
     }
     writeln!(
         gam_tokens,
         "\npub const EXPECTED_APP_CONTEXTS: &[&'static str] = &["
     )
     .unwrap();
-    for (app_name, _manifest) in working_set.iter() {
+    for (app_name, manifest) in working_set.iter() {
         writeln!(gam_tokens, "    APP_NAME_{},", app_name.to_uppercase(),).unwrap();
+        if let Some(menu_count) = manifest.submenu {
+            for i in 0..menu_count {
+                writeln!(
+                    gam_tokens,
+                    "    APP_MENU_{}_{},",
+                    i,
+                    app_name.to_uppercase(),
+                )
+                .unwrap();
+            }
+        }
     }
     writeln!(gam_tokens, "];").unwrap();
     overwrite_if_changed(&gam_tokens, "services/gam/src/apps.rs");

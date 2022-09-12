@@ -418,7 +418,7 @@ def auto_int(x):
     return int(x, 0)
 
 def main():
-    parser = argparse.ArgumentParser(description="Update/upload to a Precursor device running Xous 0.8/0.9")
+    parser = argparse.ArgumentParser(description="Developer tool for loading local images to a Precursor. Use `precursorupdater` to fetch from a pre-built image.")
     parser.add_argument(
         "--soc", required=False, help="'Factory Reset' the SoC gateware. Note: this will overwrite any secret keys stored in your device!", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
     )
@@ -486,6 +486,8 @@ def main():
 
     if not len(sys.argv) > 1:
         print("No arguments specified, doing nothing. Use --help for more information.")
+        print("If you are looking to fetch pre-built images and burn them, this is the wrong tool:")
+        print("Use `precursorupdater` instead (via `pip3 install precursorupdater`)")
         exit(1)
 
     dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)

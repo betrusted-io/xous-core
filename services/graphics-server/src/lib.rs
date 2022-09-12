@@ -6,6 +6,8 @@ pub use api::{
     Circle, ClipObject, ClipObjectType, DrawStyle, Gid, Line, PixelColor, Point, Rectangle,
     RoundedRectangle, TextBounds, TextOp, TextView, TokenClaim, ClipRect, Cursor, GlyphStyle, ClipObjectList
 };
+#[cfg(feature="ditherpunk")]
+pub use api::Tile;
 pub mod op;
 
 pub mod fontmap;
@@ -208,6 +210,22 @@ impl Gfx {
             .map(|_| ())
     }
 
+    #[cfg(feature="ditherpunk")]
+    pub fn draw_tile_clipped(
+        &self,
+        tile: Tile,
+        clip: Rectangle,
+    ) -> Result<(), xous::Error> {
+        let co = ClipObject {
+            clip,
+            obj: ClipObjectType::Tile(tile),
+        };
+        log::info!("ClipObject size: {}", core::mem::size_of::<ClipObject>());
+        let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap())
+            .map(|_| ())
+    }
+
     pub fn draw_object_list_clipped(
         &self,
         list: ClipObjectList,
@@ -249,6 +267,38 @@ impl Gfx {
             Message::new_blocking_scalar(Opcode::TestPattern.to_usize().unwrap(), duration_ms, 0, 0, 0),
         )
         .expect("couldn't self test");
+    }
+
+    pub fn stash(&self, blocking: bool) {
+        if blocking {
+            send_message(
+                self.conn,
+                Message::new_blocking_scalar(Opcode::Stash.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        } else {
+            send_message(
+                self.conn,
+                Message::new_scalar(Opcode::Stash.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        }
+    }
+
+    pub fn pop(&self, blocking: bool) {
+        if blocking {
+            send_message(
+                self.conn,
+                Message::new_blocking_scalar(Opcode::Pop.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        } else {
+            send_message(
+                self.conn,
+                Message::new_scalar(Opcode::Pop.to_usize().unwrap(), 0, 0, 0, 0)
+            )
+            .expect("couldn't stash");
+        }
     }
 }
 

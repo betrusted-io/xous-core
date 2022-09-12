@@ -5,7 +5,7 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Plausibly Deniable Database"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = {version = "1"}
 xous = { path = "../../xous-rs" }
@@ -24,8 +24,8 @@ aes = {path="../aes"}
 root-keys = {path="../root-keys"}
 cipher = "0.4.2"
 bitfield = "0.13.2"
-#aes-gcm-siv = {version = "0.10.3", default-features = false, features = ["alloc"]}
-aes-gcm-siv = {git="https://github.com/rozbb/AEADs.git", branch="update-cipher"}
+aes-gcm-siv = {version = "0.11.1", default-features = false, features = ["alloc", "aes"]}
+# aes-gcm-siv = {git="https://github.com/RustCrypto/AEADs.git", branch="master"}
 llio = {path="../llio"}
 subtle = {version = "2.4.1", default-features = false}
 tts-frontend = {path="../tts"}
@@ -52,6 +52,8 @@ utralib = { path = "../../utralib"}
 rand = "0.7.3"
 rand_chacha = "0.3.1"
 
+hex = { version = "0.4.3", default-features = false, features = ["alloc"], optional = true }
+
 [features]
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
@@ -65,10 +67,17 @@ mbbb = []
 deterministic = []
 # this flag adds CI tests to the build
 ci = []
+# hosted mode manual tests
+pddbtest = []
+# turns on automatic basis tracking. must also be used in conjunction with pddbtest
+autobasis = []
 # this feature is for text-to-speech support
 tts = []
-# support migration type 1, from version 00.00.01.01 -> 00.00.02.01
+# support migration type 1, from version 00.00.01.01 -> 00.00.02.01, incurs a 42kiB penalty in binary size
 migration1 = []
 # hazardous debug flag decorates any debug paths that might accidentally leak key material
 hazardous-debug = []
-default = ["mbbb", "migration1"]
+test-rekey = []
+# routines to help with performance profiling of the PDDB in hosted mode
+pddb-flamegraph = ["hex"]
+default = ["mbbb"]

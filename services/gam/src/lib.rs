@@ -10,9 +10,16 @@ pub mod menu;
 pub use menu::*;
 pub mod apps;
 pub use apps::*;
+#[cfg(feature="ditherpunk")]
+pub mod bitmap;
+#[cfg(feature="ditherpunk")]
+pub use bitmap::{Bitmap, Img, PixelType, DecodePng};
 
 use graphics_server::api::{TextOp, TextView};
-use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
+use graphics_server::api::{Gid, Line, Circle, RoundedRectangle, TokenClaim};
+pub use graphics_server::api::{Point, Rectangle};
+#[cfg(feature="ditherpunk")]
+pub use graphics_server::api::Tile;
 pub use graphics_server::api::GlyphStyle;
 pub use graphics_server::api::PixelColor;
 use api::Opcode; // if you prefer to map the api into your local namespace
@@ -20,7 +27,7 @@ use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
-use ime_plugin_api::ImefCallback;
+use ime_plugin_api::{ImefCallback, ApiToken};
 
 #[doc = include_str!("../README.md")]
 
@@ -190,6 +197,19 @@ impl Gam {
         let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
     }
+    #[cfg(feature="ditherpunk")]
+    pub fn draw_bitmap(&self, gid: Gid, bm: &Bitmap) -> Result<(), xous::Error> {
+        for (_i, tile) in bm.iter().enumerate(){
+            let gt = GamTile {
+                tile: *tile,
+                canvas: gid,
+            };
+            let buf = Buffer::into_buf(gt).or(Err(xous::Error::InternalError))?;
+            buf.lend(self.conn, Opcode::RenderTile.to_u32().unwrap())
+                .map(|_| ())?;
+        };
+        Ok(())
+    }
     pub fn draw_circle(&self, gid: Gid, circ: Circle) -> Result<(), xous::Error> {
         let go = GamObject {
                 canvas: gid,
@@ -262,6 +282,15 @@ impl Gam {
 
         Ok(returned_claim.token)
     }
+    pub fn set_predictor_api_token(&self, api_token: [u32; 4], gam_token: [u32; 4]) -> Result<(), xous::Error> {
+        let at = ApiToken {
+            gam_token,
+            api_token,
+        };
+        let buf = Buffer::into_buf(at).or(Err(xous::Error::InternalError))?;
+        buf.send(self.conn, Opcode::PredictorApiToken.to_u32().unwrap())
+        .or(Err(xous::Error::InternalError)).map(|_|())
+    }
     pub fn trusted_init_done(&self) -> Result<bool, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::TrustedInitDone.to_usize().unwrap(), 0, 0, 0, 0)
@@ -309,11 +338,29 @@ impl Gam {
             ena, 0, 0, 0,)
         ).map(|_| ())
     }
+    pub fn toggle_menu_mode(&self, token: [u32; 4]) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::ToggleMenuMode.to_usize().unwrap(),
+            token[0] as usize,
+            token[1] as usize,
+            token[2] as usize,
+            token[3] as usize,
+            )
+        ).map(|_| ())
+    }
     /// this indicates to the GAM that the currently running app no longer wants to be the focus of attention
     /// we might respect that. or maybe not. depends on the GAM's policies.
     pub fn relinquish_focus(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_blocking_scalar(Opcode::RevertFocus.to_usize().unwrap(),
+            0, 0, 0, 0,)
+        ).map(|_| ())
+    }
+    /// note to self: this call isn't actually used - it might come in handy to debug a problem, but
+    /// in general if a context isn't redrawing, this isn't the root cause.
+    pub fn relinquish_focus_nb(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RevertFocusNb.to_usize().unwrap(),
             0, 0, 0, 0,)
         ).map(|_| ())
     }
@@ -398,6 +445,66 @@ impl Gam {
             Message::new_blocking_scalar(Opcode::SetDebugLevel.to_usize().unwrap(), l, 0, 0, 0),
         )
         .expect("couldn't set debug level");
+    }
+    pub fn bytes_to_bip39(&self, bytes: &Vec::<u8>) -> Result<Vec::<std::string::String>, xous::Error> {
+        match bytes.len() {
+            16 | 20 | 24 | 28 | 32 => (),
+            _ => return Err(xous::Error::InvalidString)
+        }
+        let mut ipc = Bip39Ipc::default();
+        ipc.data[..bytes.len()].copy_from_slice(&bytes);
+        ipc.data_len = bytes.len() as u32;
+        let mut buf = Buffer::into_buf(ipc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::BytestoBip39.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
+        let result = buf.to_original::<Bip39Ipc, _>().unwrap();
+        let mut ret = Vec::<std::string::String>::new();
+        for word in result.words {
+            if let Some(w) = word {
+                ret.push(w.as_str().unwrap().to_string());
+            }
+        }
+        if ret.len() == 0 {
+            Err(xous::Error::InvalidString)
+        } else {
+            Ok(ret)
+        }
+    }
+    pub fn bip39_to_bytes(&self, bip39: &Vec::<std::string::String>) -> Result<Vec::<u8>, xous::Error> {
+        match bip39.len() {
+            12 | 15 | 18 | 21 | 24 => (),
+            _ => return Err(xous::Error::InvalidString)
+        }
+        let mut ipc = Bip39Ipc::default();
+        for (word, slot) in bip39.iter().zip(ipc.words.iter_mut()) {
+            *slot = Some(xous_ipc::String::from_str(word))
+        }
+        let mut buf = Buffer::into_buf(ipc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Bip39toBytes.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
+        let result = buf.to_original::<Bip39Ipc, _>().unwrap();
+        if result.data_len == 0 {
+            Err(xous::Error::InvalidString)
+        } else {
+            Ok(
+                result.data[..result.data_len as usize].to_vec()
+            )
+        }
+    }
+    pub fn bip39_suggestions(&self, start: &str) -> Result<Vec::<std::string::String>, xous::Error> {
+        let mut ipc = Bip39Ipc::default();
+        // we abuse this struct a bit by shoving the lookup phrase into a u8-array...
+        let checked_start = start.as_bytes();
+        ipc.data[..checked_start.len().min(8)].copy_from_slice(&checked_start[..checked_start.len().min(8)]);
+        ipc.data_len = checked_start.len().min(8) as u32;
+        let mut buf = Buffer::into_buf(ipc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::Bip39Suggestions.to_u32().unwrap()).or(Err(xous::Error::InternalError)).expect("couldn't send RaiseMenu opcode");
+        let result = buf.to_original::<Bip39Ipc, _>().unwrap();
+        let mut suggestions = Vec::<std::string::String>::new();
+        for word in result.words {
+            if let Some(w) = word {
+                suggestions.push(w.as_str().unwrap().to_string())
+            }
+        }
+        Ok(suggestions)
     }
 }
 

@@ -5,7 +5,7 @@ edition = "2018"
 name = "shellchat"
 version = "0.1.0"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 com = {path = "../com"}
 content-plugin-api = {path = "../content-plugin-api"}# all content canvas providers must provide this API
@@ -60,7 +60,25 @@ threadpool = "1.8.1"
 
 # testing rand compatibility - this is chasing the devil, but unfortunately
 # a *lot* of useful packages are chasing this devil.
+# also used in pddb testing
 rand = {version = "0.8.5", features = ["getrandom"]}
+
+# pddb testing
+rand_chacha = {version = "0.3.1", optional = true}
+
+# for ditherpunk testing
+png = {version = "0.17.5", optional = true}
+tracking-allocator = {version = "0.3.0", optional = true}
+tracing = {version = "0.1.35", optional = true}
+tracing-subscriber = {version = "0.3.11", optional = true}
+
+# for rustls testing
+rustls = {version = "0.20.6", optional = true}
+# rustls = {path="../../../rustls/rustls"}
+webpki-roots = {version = "0.22.4", optional = true}
+ring = {version = "0.16.20", optional = true} # for testing ring math functions
+tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
+url = {version = "2.2.2", optional = true}
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
@@ -91,5 +109,14 @@ spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals m
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
 aestests = [] # adds AES tests
 tts = [] # adds text to speech plugin
-pddbtest = []
+pddbtest = ["rand_chacha"]
+autobasis = ["rand_chacha"]
+autobasis-ci = []
+ditherpunk = ["png"]
+tracking-alloc = ["tracking-allocator", "tracing", "tracing-subscriber"]
+dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX). Also need to enable this feature in the status crate. Intended for debug only.
+test-rekey = []
+nettest = [] # batch network tests
+tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
+perfcounter = ["ring"]
 default = [] # "debugprint"

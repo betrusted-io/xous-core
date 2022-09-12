@@ -92,8 +92,21 @@ fn map_fonts() -> MemoryRange {
 
     fontregion
 }
+fn main () -> ! {
+    #[cfg(not(feature="ditherpunk"))]
+    wrapped_main();
 
-fn main() -> ! {
+    #[cfg(feature="ditherpunk")]
+    let stack_size = 1024 * 1024;
+    #[cfg(feature="ditherpunk")]
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -117,8 +130,13 @@ fn main() -> ! {
     // these connections should be established:
     // - GAM
     // - keyrom (for verifying font maps)
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
+        .expect("can't register server");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let sid = xns
+        .register_name(api::SERVER_NAME_GFX, Some(1))
         .expect("can't register server");
 
     draw_boot_logo(&mut display);
@@ -171,6 +189,10 @@ fn main() -> ! {
                         ClipObjectType::RoundRect(rr) => {
                             op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
                         }
+                        #[cfg(feature="ditherpunk")]
+                        ClipObjectType::Tile(tile) => {
+                            op::tile(display.native_buffer(), tile, Some(obj.clip));
+                        }
                     }
                 }
                 Some(Opcode::DrawClipObjectList) => {
@@ -194,6 +216,10 @@ fn main() -> ! {
                                 }
                                 ClipObjectType::RoundRect(rr) => {
                                     op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
+                                }
+                                #[cfg(feature="ditherpunk")]
+                                ClipObjectType::Tile(tile) => {
+                                    op::tile(display.native_buffer(), tile, Some(obj.clip));
                                 }
                             }
                         } else {
@@ -228,6 +254,10 @@ fn main() -> ! {
                             Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tl.y) - tv.margin.y * 2),
                         TextBounds::GrowableFromTr(tr, width) =>
                             Pt::new(width as i16 - tv.margin.x * 2, (clip_rect.br().y - clip_rect.tl().y - tr.y) - tv.margin.y * 2),
+                        TextBounds::CenteredTop(r) =>
+                            Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
+                        TextBounds::CenteredBot(r) =>
+                            Pt::new(r.br().x - r.tl().x - tv.margin.x * 2, r.br().y - r.tl().y - tv.margin.y * 2),
                     };
                     let mut typesetter = Typesetter::setup(
                         tv.to_str(),
@@ -255,6 +285,29 @@ fn main() -> ! {
                             tl.add(tv.margin),
                         TextBounds::GrowableFromTr(tr, _width) =>
                             Point::new(tr.x - (composition.bb_width() as i16 + tv.margin.x), tr.y + tv.margin.y),
+                        TextBounds::CenteredTop(r) => {
+                            if r.width() as i16 > composition.bb_width() {
+                                r.tl().add(Point::new(
+                                        (r.width() as i16 - composition.bb_width()) / 2, 0
+                                ))
+                            } else {
+                                r.tl().add(tv.margin)
+                            }
+                        },
+                        TextBounds::CenteredBot(r) => {
+                            if r.width() as i16 > composition.bb_width() {
+                                r.tl().add(Point::new(
+                                        (r.width() as i16 - composition.bb_width()) / 2,
+                                        if (r.height() as i16) > (composition.bb_height() + tv.margin.y) {
+                                            (r.height() as i16) - (composition.bb_height() + tv.margin.y)
+                                        } else {
+                                            0
+                                        }
+                                ))
+                            } else {
+                                r.tl().add(tv.margin)
+                            }
+                        }
                     }
                     .add(screen_offset);
 
@@ -372,6 +425,13 @@ fn main() -> ! {
                     );
                     op::rounded_rectangle(display.native_buffer(), rr, screen_clip.into());
                 }),
+                #[cfg(feature="ditherpunk")]
+                Some(Opcode::Tile) => {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let bm = buffer.to_original::<Tile, _>().unwrap();
+                    op::tile(display.native_buffer(), bm, screen_clip.into());
+                },
                 Some(Opcode::Circle) => msg_scalar_unpack!(msg, center, radius, style, _, {
                     let c = Circle::new_with_style(
                         Point::from(center),
@@ -412,7 +472,11 @@ fn main() -> ! {
                         .expect("couldn't ack that bulk read pointer was reset");
                 }),
                 Some(Opcode::BulkReadFonts) => {
-                    let fontlen = fontmap::FONT_TOTAL_LEN as u32 + 8;
+                    // this also needs to reflect in root-keys/src/implementation.rs @ sign_loader()
+                    let fontlen = fontmap::FONT_TOTAL_LEN as u32
+                        + 16  // minver
+                        + 16  // current ver
+                        + 8;  // sig ver + len
                     let mut buf = unsafe {
                         Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                     };
@@ -546,6 +610,20 @@ fn main() -> ! {
 
                     xous::return_scalar(msg.sender, duration).expect("couldn't ack test pattern");
                 }),
+                Some(Opcode::Stash) => {
+                    display.stash();
+                    match msg.body { // ack the message if it's a blocking scalar
+                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
+                        _ => ()
+                    }
+                }
+                Some(Opcode::Pop) => {
+                    display.pop();
+                    match msg.body { // ack the message if it's a blocking scalar
+                        xous::Message::BlockingScalar(_) => xous::return_scalar(msg.sender, 1).unwrap(),
+                        _ => ()
+                    }
+                }
                 Some(Opcode::Quit) => break,
                 None => {
                     log::error!("received opcode scalar that is not handled");

@@ -708,6 +708,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             if delta & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
             }
+            // Special case for a delta of 0 -- just return the current heap size
+            if delta == 0 {
+                let (start, length) = ArchProcess::with_inner_mut(|process_inner| {
+                    (process_inner.mem_heap_base, process_inner.mem_heap_size)
+                });
+                return Ok(xous_kernel::Result::MemoryRange(unsafe {
+                    MemoryRange::new(
+                        start,
+                        // 0-length MemoryRanges are disallowed -- so return 4096 as the minimum in any case, even though it's a lie
+                        if length == 0 { 4096 } else { length },
+                    )
+                    .unwrap()
+                }));
+            }
+
             let start = {
                 ArchProcess::with_inner_mut(|process_inner| {
                     if process_inner.mem_heap_size + delta > process_inner.mem_heap_max {
@@ -719,6 +734,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     Ok(start as *mut u8)
                 })?
             };
+
+            // Mark the new pages as "reserved"
             MemoryManager::with_mut(|mm| {
                 Ok(xous_kernel::Result::MemoryRange(
                     mm.reserve_range(start, delta, flags)?,
@@ -729,22 +746,33 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             if delta & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
             }
-            let start = ArchProcess::with_inner_mut(|process_inner| {
-                if process_inner.mem_heap_size + delta > process_inner.mem_heap_max {
+            let (start, length, end) = ArchProcess::with_inner_mut(|process_inner| {
+                // Don't allow decreasing the heap beyond the current allocation
+                if delta > process_inner.mem_heap_size {
                     return Err(xous_kernel::Error::OutOfMemory);
                 }
 
-                let start = process_inner.mem_heap_base + process_inner.mem_heap_size;
+                let end = process_inner.mem_heap_base + process_inner.mem_heap_size;
                 process_inner.mem_heap_size -= delta;
-                Ok(start)
+                Ok((
+                    process_inner.mem_heap_base,
+                    process_inner.mem_heap_size,
+                    end,
+                ))
             })?;
+
+            // Unmap the pages from the heap
             MemoryManager::with_mut(|mm| {
-                for page in ((start - delta)..start).step_by(crate::arch::mem::PAGE_SIZE) {
+                for page in ((end - delta)..end).step_by(crate::arch::mem::PAGE_SIZE) {
                     mm.unmap_page(page as *mut usize)
                         .expect("unable to unmap page");
                 }
             });
-            Ok(xous_kernel::Result::Ok)
+
+            // Return the new size of the heap
+            Ok(xous_kernel::Result::MemoryRange(unsafe {
+                MemoryRange::new(start, length).unwrap()
+            }))
         }
         SysCall::SwitchTo(new_pid, new_context) => SystemServices::with_mut(|ss| {
             unsafe {
@@ -893,6 +921,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             MemoryManager::with_mut(|mm| mm.update_memory_flags(range, flags))?;
             Ok(xous_kernel::Result::Ok)
         }
+        SysCall::AdjustProcessLimit(index, current, new) => match index {
+            1 => arch::process::Process::with_inner_mut(|p| {
+                if p.mem_heap_max == current {
+                    p.mem_heap_max = new;
+                }
+                Ok(xous_kernel::Result::Scalar2(index, p.mem_heap_max))
+            }),
+            2 => arch::process::Process::with_inner_mut(|p| {
+                if p.mem_heap_size == current && new < p.mem_heap_max {
+                    p.mem_heap_size = new;
+                }
+                Ok(xous_kernel::Result::Scalar2(index, p.mem_heap_size))
+            }),
+            _ => Err(xous_kernel::Error::InvalidLimit),
+        },
         /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
             ss.set_exception_handler(pid, pc, sp)

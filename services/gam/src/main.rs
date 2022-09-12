@@ -6,11 +6,13 @@ use api::*;
 mod canvas;
 use canvas::*;
 mod tokens;
+use ime_plugin_api::ApiToken;
 use tokens::*;
 mod layouts;
 use layouts::*;
 mod contexts;
 use contexts::*;
+mod bip39;
 
 use graphics_server::*;
 use xous_ipc::{Buffer, String};
@@ -34,8 +36,21 @@ fn imef_cb(s: String::<4000>) {
         buf.lend(cb_to_main_conn, Opcode::InputLine.to_u32().unwrap()).unwrap();
     }
 }
+fn main () -> ! {
+    #[cfg(not(feature="ditherpunk"))]
+    wrapped_main();
 
-fn main() -> ! {
+    #[cfg(feature="ditherpunk")]
+    let stack_size = 1024 * 1024;
+    #[cfg(feature="ditherpunk")]
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
@@ -61,6 +76,7 @@ fn main() -> ! {
     let status_canvas = Canvas::new(
         Rectangle::new_coords(
             0, 0, screensize.x,
+            // note: if this gets modified, the "pop" routine in gfx/backend/betrusted.rs also needs to be updated
             gfx.glyph_height_hint(GlyphStyle::Cjk).expect("couldn't get glyph height") as i16 * 2),
         255, &trng, None, crate::api::CanvasType::Status
     ).expect("couldn't create status canvas");
@@ -305,6 +321,31 @@ fn main() -> ! {
                 let ret = api::Return::ContentCanvasReturn(context_mgr.get_content_canvas(req));
                 buffer.replace(ret).unwrap();
             }
+            #[cfg(feature="ditherpunk")]
+            Some(Opcode::RenderTile) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut obj = buffer.to_original::<GamTile, _>().unwrap();
+                log::debug!("RenderTile {:?}", obj);
+                if let Some(canvas) = canvases.get_mut(&obj.canvas) {
+                    // first, figure out if we should even be drawing to this canvas.
+                    log::debug!("drawable {} onscreen {} state{:?} for canvas {:?}", canvas.is_drawable(), canvas.is_onscreen(), canvas.state(), canvas.gid());
+                    if canvas.is_drawable() && canvas.is_onscreen() {
+                        obj.tile.translate(canvas.clip_rect().tl);
+                        obj.tile.translate(canvas.pan_offset());
+                        log::trace!("drawing tile {:?}", obj.tile);
+                        gfx.draw_tile_clipped(
+                            obj.tile,
+                            canvas.clip_rect(),
+                        ).expect("couldn't draw bitmap");
+                        canvas.do_drawn().expect("couldn't set canvas to drawn");
+                    } else {
+                        log::info!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj);
+                    }
+                } else {
+                    info!("bogus GID in Object, not doing anything in response to draw request.");
+                }
+                log::trace!("leaving RenderTile");
+            }
             Some(Opcode::RenderObject) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let obj = buffer.to_original::<GamObject, _>().unwrap();
@@ -385,7 +426,7 @@ fn main() -> ! {
                                         rr.translate(canvas.clip_rect().tl);
                                         rr.translate(canvas.pan_offset());
                                         obj_list.push(ClipObjectType::RoundRect(rr), canvas.clip_rect()).unwrap();
-                                    }
+                                    },
                                 }
                             } else {
                                 break;
@@ -405,6 +446,11 @@ fn main() -> ! {
                 let mut tokenclaim = buffer.to_original::<TokenClaim, _>().unwrap();
                 tokenclaim.token = context_mgr.claim_token(tokenclaim.name.as_str().unwrap());
                 buffer.replace(tokenclaim).unwrap();
+            },
+            Some(Opcode::PredictorApiToken) => {
+                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let at = buf.to_original::<ApiToken, _>().unwrap();
+                context_mgr.set_pred_api_token(at);
             },
             Some(Opcode::TrustedInitDone) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if context_mgr.allow_untrusted_code() {
@@ -460,7 +506,10 @@ fn main() -> ! {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let inputline = buffer.to_original::<String::<4000>, _>().unwrap();
                 log::debug!("received input line, forwarding on... {}", inputline);
-                context_mgr.forward_input(inputline).expect("couldn't forward input line to focused app");
+                match context_mgr.forward_input(inputline) {
+                    Err(e) => log::warn!("InputLine missed its target {:?}; input ignored", e),
+                    _ => (),
+                }
                 log::debug!("returned from forward_input");
             },
             Some(Opcode::KeyboardEvent) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
@@ -476,6 +525,10 @@ fn main() -> ! {
                 if ena != 0 { context_mgr.vibe(true) }
                 else { context_mgr.vibe(false) }
             }),
+            Some(Opcode::ToggleMenuMode) => msg_scalar_unpack!(msg, t1, t2, t3, t4, {
+                let token = [t1 as u32, t2 as u32, t3 as u32, t4 as u32];
+                context_mgr.toggle_menu_mode(token);
+            }),
             Some(Opcode::RevertFocus) => {
                 match context_mgr.revert_focus(&gfx, &mut canvases) {
                     Ok(_) => xous::return_scalar(msg.sender, 0).expect("couldn't unblock caller"),
@@ -484,7 +537,8 @@ fn main() -> ! {
             },
             Some(Opcode::RevertFocusNb) => {
                 match context_mgr.revert_focus(&gfx, &mut canvases) {
-                    _ => log::warn!("failed to revert focus, silent error!"),
+                    Ok(_) => {},
+                    Err(e) => log::warn!("failed to revert focus: {:?}", e),
                 }
             },
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
@@ -515,8 +569,6 @@ fn main() -> ! {
                         for switchers in authorized_switchers {
                             if let Some(auth_token) = context_mgr.find_app_token_by_name(switchers) {
                                 if auth_token == switchapp.token {
-                                    context_mgr.notify_app_switch(new_app_token)
-                                    .unwrap_or_else(|_| {log::warn!("Application does not recognize focus changes")});
                                     match context_mgr.activate(&gfx, &mut canvases, new_app_token, false) {
                                         Ok(_) => (),
                                         Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
@@ -563,6 +615,55 @@ fn main() -> ! {
                 }
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack self test");
             }),
+            Some(Opcode::Bip39toBytes) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut spec = buffer.to_original::<Bip39Ipc, _>().unwrap();
+                let mut phrase = Vec::<std::string::String>::new();
+                for maybe_word in spec.words {
+                    if let Some(word) = maybe_word {
+                        phrase.push(word.as_str().unwrap().to_string());
+                    }
+                }
+                match bip39::bip39_to_bytes(&phrase) {
+                    Ok(data) => {
+                        spec.data_len = data.len() as u32;
+                        spec.data[..data.len()].copy_from_slice(&data);
+                    }
+                    Err(_) => {
+                        // zero-length data indicates an error
+                        spec.data_len = 0;
+                    }
+                }
+                buffer.replace(spec).unwrap();
+            }
+            Some(Opcode::BytestoBip39) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut spec = buffer.to_original::<Bip39Ipc, _>().unwrap();
+                let data = spec.data[..spec.data_len as usize].to_vec();
+                match bip39::bytes_to_bip39(&data) {
+                    Ok(phrase) => {
+                        for (word, returned) in phrase.iter().zip(spec.words.iter_mut()) {
+                            *returned = Some(xous_ipc::String::from_str(word));
+                        }
+                    }
+                    Err(_) => {
+                        for returned in spec.words.iter_mut() {
+                            *returned = None;
+                        }
+                    }
+                }
+                buffer.replace(spec).unwrap();
+            }
+            Some(Opcode::Bip39Suggestions) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut spec = buffer.to_original::<Bip39Ipc, _>().unwrap();
+                let start = std::str::from_utf8(&spec.data[..spec.data_len as usize]).unwrap_or("");
+                let suggestions = bip39::suggest_bip39(start);
+                for (word, returned) in suggestions.iter().zip(spec.words.iter_mut()) {
+                    *returned = Some(xous_ipc::String::from_str(word));
+                }
+                buffer.replace(spec).unwrap();
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

@@ -9,12 +9,7 @@ pub use usbd_human_interface_device::device::keyboard::KeyboardLedsReport;
 pub use usbd_human_interface_device::page::Keyboard as UsbKeyCode;
 use packed_struct::PackedStruct;
 use xous_ipc::Buffer;
-pub use usbd_human_interface_device::device::fido::FidoMsg;
-
-pub enum UsbDeviceType {
-    Debug = 0,
-    Hid = 1,
-}
+pub use usbd_human_interface_device::device::fido::RawFidoMsg;
 
 #[derive(Debug)]
 pub struct UsbHid {
@@ -29,15 +24,50 @@ impl UsbHid {
             conn
         }
     }
+    /// used to query if the HID core was able to start. Mainly to handle edge cases between updates.
+    pub fn is_soc_compatible(&self) -> bool {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                Opcode::IsSocCompatible.to_usize().unwrap(),
+                0, 0, 0, 0
+            )
+        ) {
+            Ok(xous::Result::Scalar1(code)) => {
+                match code {
+                    0 => false,
+                    _ => true
+                }
+            }
+            _ => panic!("Internal error: illegal return type"),
+        }
+    }
+    /// this will always trigger a reset, even if it's the same core we're switching to
     pub fn switch_to_core(&self, core: UsbDeviceType) -> Result<(), xous::Error> {
         match send_message(
             self.conn,
             Message::new_blocking_scalar(
                 Opcode::SwitchCores.to_usize().unwrap(),
-                match core {
-                    UsbDeviceType::Debug => 0,
-                    UsbDeviceType::Hid => 1,
-                },
+                core as usize,
+                0, 0, 0
+            )
+        ) {
+            Ok(xous::Result::Scalar1(code)) => {
+                match code {
+                    0 => Ok(()),
+                    _ => Err(xous::Error::InternalError)
+                }
+            }
+            _ => panic!("Internal error: illegal return type"),
+        }
+    }
+    /// this will not trigger a reset if we're already on the requested core
+    pub fn ensure_core(&self, core: UsbDeviceType) -> Result<(), xous::Error> {
+        match send_message(
+            self.conn,
+            Message::new_blocking_scalar(
+                Opcode::EnsureCore.to_usize().unwrap(),
+                core as usize,
                 0, 0, 0
             )
         ) {
@@ -61,7 +91,8 @@ impl UsbHid {
             Ok(xous::Result::Scalar1(code)) => {
                 match code {
                     0 => Ok(UsbDeviceType::Debug),
-                    1 => Ok(UsbDeviceType::Hid),
+                    1 => Ok(UsbDeviceType::FidoKbd),
+                    2 => Ok(UsbDeviceType::Fido),
                     _ => Err(xous::Error::InternalError)
                 }
             }
@@ -201,7 +232,7 @@ impl UsbHid {
             _ => panic!("Internal error: illegal return type"),
         }
     }
-    pub fn u2f_wait_incoming(&self) -> Result<FidoMsg, xous::Error> {
+    pub fn u2f_wait_incoming(&self) -> Result<RawFidoMsg, xous::Error> {
         let req = U2fMsgIpc {
             data: [0; 64],
             code: U2fCode::RxWait
@@ -211,7 +242,7 @@ impl UsbHid {
         let ack = buf.to_original::<U2fMsgIpc, _>().unwrap();
         match ack.code {
             U2fCode::RxAck => {
-                let mut u2fmsg = FidoMsg::default();
+                let mut u2fmsg = RawFidoMsg::default();
                 u2fmsg.packet.copy_from_slice(&ack.data);
                 Ok(u2fmsg)
             },
@@ -221,7 +252,7 @@ impl UsbHid {
             _ => Err(xous::Error::InternalError)
         }
     }
-    pub fn u2f_send(&self, msg: FidoMsg) -> Result<(), xous::Error> {
+    pub fn u2f_send(&self, msg: RawFidoMsg) -> Result<(), xous::Error> {
         let mut req = U2fMsgIpc {
             data: [0; 64],
             code: U2fCode::Tx

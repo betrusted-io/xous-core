@@ -549,7 +549,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
 
         xous::msg_scalar_unpack!(msg, passes, fails, result_type, iters, {
             let end = env.ticktimer.elapsed_ms();
-            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / iters as f64;
+            let elapsed: f32 = ((end - self.start_time.unwrap()) as f32) / iters as f32;
             match FromPrimitive::from_usize(result_type) {
                 Some(BenchResult::EngineDone) => {
                     write!(ret, "{}ms/check_iter; In total, Engine passed {} vectors, failed {} vectors", elapsed, passes, fails).unwrap();

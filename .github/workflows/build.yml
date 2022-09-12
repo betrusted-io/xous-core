@@ -22,11 +22,13 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: "1.59.0"
+          toolchain: "1.62.1"
           default: true
 
       - name: Checkout sources
         uses: actions/checkout@v2
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags
 
       - uses: Swatinem/rust-cache@v1
 

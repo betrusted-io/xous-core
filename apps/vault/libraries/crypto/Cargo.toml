@@ -32,7 +32,7 @@ untrusted = { version = "0.7.0" }
 hex = { version = "0.3.2", default-features = false } # do not update this, it's required to be at this version for tests to work.
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-ring = { version = "0.16.11" }
+# ring = { version = "0.16.11" }
 byteorder = { version = "1", default-features = false }
 rfc6979 = "0.2.0"
 

@@ -1,4 +1,4 @@
-use crate::api::{DrawStyle, Point, ClipRect};
+use crate::api::{ClipRect, DrawStyle, Point};
 use crate::op::{HEIGHT, WIDTH};
 use core::cmp::{max, min};
 
@@ -25,6 +25,7 @@ impl Rectangle {
             style: DrawStyle::default(),
         }
     }
+
     pub fn new_coords(x0: i16, y0: i16, x1: i16, y1: i16) -> Rectangle {
         Rectangle {
             tl: Point::new(min(x0, x1), min(y0, y1)),
@@ -391,4 +392,5 @@ mod tests {
         // to the right of
         assert!(!a.intersects(Rectangle::new(Point::new(101, 0), Point::new(150, 150),)));
     }
+
 }

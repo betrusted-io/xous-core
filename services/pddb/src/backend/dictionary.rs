@@ -4,9 +4,8 @@ use super::*;
 use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
-use aes_gcm_siv::AesGcmSiv;
-use aes::Aes256;
-use std::collections::{HashMap, BinaryHeap, HashSet};
+use aes_gcm_siv::Aes256GcmSiv;
+use std::collections::{HashMap, BinaryHeap, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
 use std::cmp::{Ordering, Reverse};
@@ -59,6 +58,8 @@ pub(crate) struct DictCacheEntry {
     pub(crate) small_pool_free: BinaryHeap<KeySmallPoolOrd>,
     /// copy of our AAD, for convenience
     pub(crate) aad: Vec::<u8>,
+    /// ticktimer reference, for managing atimes
+    pub(crate) created: std::time::Instant,
 }
 impl DictCacheEntry {
     pub fn new(dict: Dictionary, index: usize, aad: &Vec<u8>) -> DictCacheEntry {
@@ -80,13 +81,14 @@ impl DictCacheEntry {
             small_pool: Vec::<KeySmallPool>::new(),
             small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
             aad: my_aad,
+            created: std::time::Instant::now(),
         }
     }
     /// Populates cache entries, reporting the maximum extent of large alloc data seen so far.
     /// Requires a descriptor for the hardware, and our virtual to physical page mapping.
     /// Does not overwrite existing cache entries, if they already exist -- only loads in ones that are missing.
     /// Todo: condense routines in common with ensure_key_entry() to make it easier to maintain.
-    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>) -> VirtAddr {
+    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> VirtAddr {
         let mut try_entry = 1;
         let mut key_count = 0;
         let mut alloc_top = VirtAddr::new(LARGE_POOL_START).unwrap();
@@ -157,6 +159,7 @@ impl DictCacheEntry {
                             descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
                             clean: true,
                             data: None,
+                            atime: self.created.elapsed().as_millis() as u64,
                         };
                         let kname = std::str::from_utf8(&keydesc.name.data[..keydesc.name.len as usize]).expect("key is not valid utf-8");
                         let key_exists_and_valid =
@@ -193,7 +196,7 @@ impl DictCacheEntry {
     }
     /// merges the list of keys in this dict cache entry into a merge_list.
     /// The `merge_list` is used because keys are presented as a union across all open basis.
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>, merge_list: &mut HashSet<String>) {
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, merge_list: &mut BTreeSet<String>) {
         // ensure that the key cache is filled
         if self.keys.len() < self.key_count as usize {
             self.fill(hw, v2p_map, cipher);
@@ -209,7 +212,7 @@ impl DictCacheEntry {
     /// This shares a lot of code with the fill() routine -- we should condense the common routines
     /// to make this easier to maintain. Returns false if the disk was searched and no key was found; true
     /// if cache is hot or key was found on search.
-    pub(crate) fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    pub(crate) fn ensure_key_entry(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str) -> bool {
         // only fill if the key isn't in the cache.
         if !self.keys.contains_key(name_str) {
@@ -259,6 +262,7 @@ impl DictCacheEntry {
                                 descriptor_index: NonZeroU32::new(try_entry as u32).unwrap(),
                                 clean: true,
                                 data: None,
+                                atime: self.created.elapsed().as_millis() as u64,
                             };
                             self.keys.insert(kname.to_string(), kcache);
                             self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, &kname);
@@ -280,7 +284,7 @@ impl DictCacheEntry {
             }
         }
     }
-    fn try_fill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    fn try_fill_small_key(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         data_cache: &mut PlaintextCache, key_name: &str) {
         if let Some(kcache) = self.keys.get_mut(key_name) {
             if let Some(pool_index) = small_storage_index_from_key(&kcache, self.index) {
@@ -297,13 +301,25 @@ impl DictCacheEntry {
                 }
                 let ksp = &mut self.small_pool[pool_index];
                 if !ksp.clean {
-                    ksp.contents.push(key_name.to_string());
-                    assert!(kcache.reserved >= kcache.len, "Reserved amount is less than length, this is an error!");
-                    assert!(kcache.reserved <= VPAGE_SIZE as u64, "Reserved amount is not appropriate for the small pool. Logic error in prior PDDB operation!");
-                    log::trace!("avail: {} reserved: {}", ksp.avail, kcache.reserved);
-                    assert!((ksp.avail as u64) >= kcache.reserved, "Total amount allocated to a small pool chunk is incorrect; suspect logic error in prior PDDB operation!");
-                    ksp.avail -= kcache.reserved as u16;
-                    // note: small_pool_free is updated only after all the entries have been read in
+                    if !ksp.contents.contains(&key_name.to_string()) {
+                        log::trace!("creating ksp entry for {}", key_name);
+                        ksp.contents.push(key_name.to_string());
+                        assert!(kcache.reserved >= kcache.len, "Reserved amount is less than length, this is an error!");
+                        assert!(kcache.reserved <= VPAGE_SIZE as u64, "Reserved amount is not appropriate for the small pool. Logic error in prior PDDB operation!");
+                        log::trace!("avail: {} reserved: {}", ksp.avail, kcache.reserved);
+                        assert!((ksp.avail as u64) >= kcache.reserved, "Total amount allocated to a small pool chunk is incorrect; suspect logic error in prior PDDB operation!");
+                        ksp.avail -= kcache.reserved as u16;
+                        // note: small_pool_free is updated only after all the entries have been read in
+                    } else {
+                        // if the entry was previously created, don't update the metadata.
+                        // This might not be the best place for this note, but, as a reminder to myself,
+                        // the small pool code is written assuming you scan through all the keys and fill it
+                        // into RAM at least once. Once you've done that, you can evict cached data to free up some
+                        // space, but it's sort of dumb that you have to do that in the first place. This is going to
+                        // lead to a crisis once the small pool data exceeds the available RAM -- which isn't too far from now.
+                        // This will be tracked in issue #109.
+                        log::trace!("refilling data only for {}", key_name);
+                    }
 
                     // now grab the *data* referred to by this key. Maybe this is a "bad" idea -- this can really eat up RAM fast to hold
                     // all the small pool data right away, but let's give it a try and see how it works. Later on we can always skip this.
@@ -351,12 +367,13 @@ impl DictCacheEntry {
     /// specific dictionary in a named basis. In all of these cases, the Basis resolver will have had to find the
     /// correct DictCacheEntry and issue the `key_update` to it; for multiple updates, then multiple calls to
     /// multiple DictCacheEntry are required.
-    pub fn key_update(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    pub fn key_update(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name: &str, data: &[u8], offset: usize, alloc_hint:Option<usize>, truncate: bool, large_alloc_ptr: PageAlignedVa) -> Result <PageAlignedVa> {
         self.age = self.age.saturating_add(1);
         self.clean = false;
         if self.ensure_key_entry(hw, v2p_map, cipher, name) {
             let kcache = self.keys.get_mut(name).expect("Entry was assured, but then not there!");
+            kcache.set_atime(self.created.elapsed().as_millis() as u64);
             kcache.clean = false;
             // the update isn't going to fit in the reserved space, remove it, and re-insert it with an entirely new entry.
             if kcache.reserved < (data.len() + offset) as u64 {
@@ -532,6 +549,7 @@ impl DictCacheEntry {
                         kcache.len = (data.len() + offset) as u64;
                     } else if truncate {
                         // discard all whole pages after written+offset, and reset the reserved field to the smaller size.
+                        log::trace!("PageAligned VA components: {}, {}", written, offset);
                         let vpage_end_offset = PageAlignedVa::from((written + offset) as u64);
                         if (vpage_end_offset.as_u64() - kcache.start) > kcache.reserved {
                             for vpage in (vpage_end_offset.as_u64()..kcache.start + kcache.reserved).step_by(VPAGE_SIZE) {
@@ -552,7 +570,7 @@ impl DictCacheEntry {
         } else {
             // key does not exist (or was previously erased) -- create one or replace the erased one.
             // try to fit the key in the small pool first
-            if ((data.len() + offset) < SMALL_CAPACITY) && (alloc_hint.unwrap_or(0) < SMALL_CAPACITY) {
+            if ((data.len() + offset) < SMALL_CAPACITY) && (alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) < SMALL_CAPACITY) {
                 log::debug!("creating small key {}", name);
                 // handle the case that we're a brand new dictionary and no small keys have ever been stored before.
                 if self.small_pool.len() == 0 {
@@ -560,8 +578,8 @@ impl DictCacheEntry {
                     self.rebuild_free_pool();
                 }
                 let pool_candidate = self.small_pool_free.pop().expect("Free pool was allocated & rebuilt, but still empty.");
-                let mut reservation = if alloc_hint.unwrap_or(0) > data.len() + offset {
-                    alloc_hint.unwrap_or(0)
+                let mut reservation = if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) > data.len() + offset {
+                    alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
                 } else {
                     data.len() + offset
                 };
@@ -620,16 +638,17 @@ impl DictCacheEntry {
                     data: Some(KeyCacheData::Small(KeySmallData{
                         clean: false,
                         data: alloc_data
-                    }))
+                    })),
+                    atime: self.created.elapsed().as_millis() as u64,
                 };
                 self.keys.insert(name.to_string(), kcache);
                 self.key_count += 1;
             } else {
-                log::debug!("creating large key");
+                log::debug!("creating large key: {}", data.len());
                 // it didn't fit in the small pool, stick it in the big pool.
                 let reservation = PageAlignedVa::from(
-                    if alloc_hint.unwrap_or(0) > data.len() + offset {
-                        alloc_hint.unwrap_or(0)
+                    if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) > data.len() + offset {
+                        alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
                     } else {
                         data.len() + offset
                     });
@@ -649,6 +668,7 @@ impl DictCacheEntry {
                     descriptor_index,
                     clean: false,
                     data: None, // no caching implemented yet for large keys
+                    atime: self.created.elapsed().as_millis() as u64,
                 };
                 self.keys.insert(name.to_string(), kcache);
                 self.key_count += 1;
@@ -668,7 +688,7 @@ impl DictCacheEntry {
         Ok(large_alloc_ptr)
     }
     #[allow(dead_code)]
-    pub fn key_contains(&mut self, name: &str) -> bool {
+    pub fn key_contains(&self, name: &str) -> bool {
         self.keys.contains_key(&String::from(name))
     }
 
@@ -681,7 +701,7 @@ impl DictCacheEntry {
     /// Used to remove a key from the dictionary. If you call it with a non-existent key,
     /// the routine has no effect, and does not report an error. Small keys are not immediately
     /// overwritten in paranoid mode, but large keys are.
-    pub fn key_remove(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>,
+    pub fn key_remove(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv,
         name_str: &str, paranoid: bool) {
         if paranoid {
             // large records are paranoid-erased, by default, because of the pool-reuse problem.
@@ -794,7 +814,7 @@ impl DictCacheEntry {
     ///
     /// Observation: given the dictionary index and the small key pool index, we know exactly
     /// the virtual address of the data pool.
-    pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>) -> bool {
+    pub(crate) fn sync_small_pool(&mut self, hw: &mut PddbOs, v2p_map: &mut HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv) -> bool {
         for (index, entry) in self.small_pool.iter_mut().enumerate() {
             if !entry.clean {
                 let pool_vaddr = VirtAddr::new(small_storage_base_vaddr_from_indices(self.index, index)).unwrap();
@@ -967,6 +987,27 @@ impl DictCacheEntry {
             clean: self.clean,
             small_key_count: self.small_pool.len(),
             basis: basis_name.to_string(),
+        }
+    }
+
+    /// removes a key cache entry from a dictionary cache, returning the amount of space liberated with
+    /// the eviction. 0 means the key was either 0-sized, or it could not be evicted (possibly
+    /// because it was dirty; you need to call sync before evicting anything from the cache)
+    pub(crate) fn evict_keycache_entry(&mut self, key: &str) -> usize {
+        if let Some(kcache) = self.keys.get_mut(key) {
+            // if the cache entry is dirty, abort
+            if kcache.flags.valid() && !kcache.clean {
+                return 0;
+            }
+            if kcache.data.is_some() {
+                let pruned = kcache.size();
+                kcache.data.take(); // this effectively frees up the key cache data
+                pruned
+            } else {
+                0
+            }
+        } else {
+            0
         }
     }
 }
@@ -1177,7 +1218,7 @@ pub(crate) struct PlaintextCache {
     pub(crate) tag: Option<PhysPage>,
 }
 impl PlaintextCache {
-    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &AesGcmSiv::<Aes256>, aad: &[u8],
+    pub fn fill(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, aad: &[u8],
         req_vaddr: VirtAddr
     ) {
         if let Some(pp) = v2p_map.get(&req_vaddr) {

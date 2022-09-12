@@ -22,7 +22,7 @@ mod key_material;
 mod pin_protocol_v1;
 pub mod response;
 pub mod status_code;
-mod storage;
+pub mod storage;
 mod timed_permission;
 
 #[cfg(feature = "with_ctap2_1")]
@@ -120,7 +120,9 @@ pub const ES256_CRED_PARAM: PublicKeyCredentialParameter = PublicKeyCredentialPa
 // You can change this value to one of the following for more privacy.
 // - Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIdList)
 // - Some(CredentialProtectionPolicy::UserVerificationRequired)
-const DEFAULT_CRED_PROTECT: Option<CredentialProtectionPolicy> = None;
+const DEFAULT_CRED_PROTECT: Option<CredentialProtectionPolicy> = Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIdList);
+
+pub(crate) const FIDO_CRED_DICT: &'static str = "fido.cred";
 
 // This function is adapted from https://doc.rust-lang.org/nightly/src/core/str/mod.rs.html#2110
 // (as of 2020-01-20) and truncates to "max" bytes, not breaking the encoding.
@@ -397,7 +399,7 @@ where
             // This case was added in FIDO 2.1.
             if auth_param.is_empty() {
                 //(self.check_user_presence)(cid)?;
-                if crate::ux::request_permission_blocking(
+                if crate::fido::request_permission_blocking(
                     t!("vault.fido.pin_uv_auth", xous::LANG).to_string(),
                     cid).is_none() {
                     return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
@@ -479,7 +481,7 @@ where
                             if let Some(name) = user.user_display_name {name} else {user.user_name.unwrap_or("*Unspecified*".to_string())},
                         )
                     );
-                    if crate::ux::request_permission_blocking(desc, cid).is_none() {
+                    if crate::fido::request_permission_blocking(desc, cid).is_none() {
                         return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
                     }
                     return Err(Ctap2StatusCode::CTAP2_ERR_CREDENTIAL_EXCLUDED);
@@ -531,7 +533,7 @@ where
                 if let Some(name) = &user.user_display_name {name} else {alt_name}
             )
         );
-        if crate::ux::request_permission_blocking(make_cred_desc, cid).is_none() {
+        if crate::fido::request_permission_blocking(make_cred_desc, cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
 
@@ -824,7 +826,7 @@ where
                     hex::encode(&client_data_hash),
                 )
             );
-            if crate::ux::request_permission_blocking(desc, cid).is_none() {
+            if crate::fido::request_permission_blocking(desc, cid).is_none() {
                 return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
             }
         }
@@ -861,7 +863,7 @@ where
         _now: ClockValue,
     ) -> Result<ResponseData, Ctap2StatusCode> {
         //self.check_command_permission(now)?;
-        if crate::ux::request_permission_blocking(
+        if crate::fido::request_permission_blocking(
             t!("vault.fido.next_assertion", xous::LANG).to_string(),
             [0xff, 0xff, 0xff, 0xff]
         ).is_none() {
@@ -916,7 +918,7 @@ where
                 transports: Some(vec![AuthenticatorTransport::Usb]),
                 #[cfg(feature = "with_ctap2_1")]
                 algorithms: Some(vec![ES256_CRED_PARAM]),
-                default_cred_protect: DEFAULT_CRED_PROTECT,
+                default_cred_protect: DEFAULT_CRED_PROTECT.is_some(),
                 #[cfg(feature = "with_ctap2_1")]
                 min_pin_length: self.persistent_store.min_pin_length()?,
                 #[cfg(feature = "with_ctap2_1")]
@@ -947,7 +949,7 @@ where
         // Resets are only possible in the first 10 seconds after booting.
         // TODO(kaczmarczyck) 2.1 allows Reset after Reset and 15 seconds?
         // self.check_command_permission(now)?;
-        if let Some(c) = crate::ux::request_permission_blocking(t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
+        if let Some(c) = crate::fido::request_permission_blocking(t!("vault.u2f.factoryreset", xous::LANG).to_string(), cid) {
             if c != 'y' {
                 return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
             }
@@ -962,7 +964,7 @@ where
         //(self.check_user_presence)(cid)?;
         // we skip the double-confirmation during autotesting, but leave it here for production
         #[cfg(not(feature="autotest"))]
-        if crate::ux::request_permission_blocking(t!("vault.u2f.reset_check", xous::LANG).to_string(), cid).is_none() {
+        if crate::fido::request_permission_blocking(t!("vault.u2f.reset_check", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
 
@@ -981,7 +983,7 @@ where
     #[cfg(feature = "with_ctap2_1")]
     fn process_selection(&self, cid: ChannelID) -> Result<ResponseData, Ctap2StatusCode> {
         //(self.check_user_presence)(cid)?;
-        if crate::ux::request_permission_blocking(t!("vault.u2f.authenticator_selection", xous::LANG).to_string(), cid).is_none() {
+        if crate::fido::request_permission_blocking(t!("vault.u2f.authenticator_selection", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
         Ok(ResponseData::AuthenticatorSelection)
@@ -993,7 +995,7 @@ where
         cid: ChannelID,
     ) -> Result<ResponseData, Ctap2StatusCode> {
         // (self.check_user_presence)(cid)?;
-        if crate::ux::request_permission_blocking(t!("vault.u2f.vendor_configure", xous::LANG).to_string(), cid).is_none() {
+        if crate::fido::request_permission_blocking(t!("vault.u2f.vendor_configure", xous::LANG).to_string(), cid).is_none() {
             return Err(Ctap2StatusCode::CTAP2_ERR_NOT_ALLOWED)
         }
 

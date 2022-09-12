@@ -7,7 +7,7 @@ version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = "1.2.1"
 clap = "2.33.3"
@@ -19,6 +19,7 @@ log = "0.4.14"
 pem = "0.8.3"
 svd2utra = {path = "../svd2utra"}
 xmas-elf = "0.7.0"
+xous-semver = "0.1.2"
 
 [[bin]]
 name = "copy-object"

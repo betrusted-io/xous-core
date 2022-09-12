@@ -41,6 +41,16 @@ impl Keyboard {
         .expect("couldn't register listener");
     }
 
+    pub fn register_observer(&self, server_name: &str, action_opcode: usize) {
+        let kr = KeyboardRegistration {
+            server_name: String::<64>::from_str(server_name),
+            listener_op_id: action_opcode
+        };
+        let buf = Buffer::into_buf(kr).unwrap();
+        buf.lend(self.conn, Opcode::RegisterKeyObserver.to_u32().unwrap())
+        .expect("couldn't register listener");
+    }
+
     pub fn set_vibe(&self, enable: bool) -> Result<(), xous::Error> {
         let ena =
             if enable { 1 }

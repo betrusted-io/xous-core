@@ -12,7 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{CtapHid, HidPacket, Message};
+use super::{CtapHid, HidPacket, Message, ChannelID};
+
+pub enum CTAPHIDResponse {
+    /// Standard-compliant command processing result.
+    StandardCommand(HidPacketIterator),
+
+    /// Vendor-specific command processing result.
+    VendorCommand(u8, ChannelID, Vec<u8>),
+}
 
 pub struct HidPacketIterator(Option<MessageSplitter>);
 

@@ -136,14 +136,17 @@ use super::*;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use std::convert::TryInto;
-use aes_gcm_siv::{AesGcmSiv, Key};
-use aes_gcm_siv::aead::NewAead;
+use aes_gcm_siv::{
+    aead::KeyInit,
+    Aes256GcmSiv,
+};
 use aes::Aes256;
-use aes::cipher::{KeyInit, generic_array::GenericArray};
+use aes::cipher::generic_array::GenericArray;
 use std::iter::IntoIterator;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use std::cmp::Reverse;
+use std::cmp::Ordering;
 use core::num::NonZeroU32;
 
 pub(crate) const SMALL_POOL_START: u64 = 0x0000_003F_8000_0000;
@@ -195,6 +198,10 @@ pub(crate) const DK_PER_VPAGE: usize = VPAGE_SIZE / DK_STRIDE; // should be 32 -
 pub(crate) const DICT_VSIZE: u64 = 0xFE_0000;
 /// maximum number of dictionaries in a system
 pub(crate) const DICT_MAXCOUNT: usize = 16383;
+/// default alloc hint, if none is given (needs to be non-zero)
+/// this would be the typical "minimum space" reserved for a key
+/// users are of course allowed to specify something smaller, but it should be non-zero
+pub(crate) const DEFAULT_ALLOC_HINT: usize = 8;
 
 /// This is the format of the Basis as stored on disk
 #[derive(PartialEq, Debug, Default)]
@@ -245,12 +252,28 @@ impl DerefMut for BasisRoot {
 pub(crate) struct BasisCache {
     /// the cache entries themselves
     cache: Vec::<BasisCacheEntry>,
+    /// ticktimer reference, for managing atimes
+    pub(crate) tt: ticktimer_server::Ticktimer,
 }
 impl BasisCache {
     pub(crate) fn new() -> Self {
-        BasisCache { cache: Vec::new() }
+        BasisCache {
+            cache: Vec::new(),
+            tt: ticktimer_server::Ticktimer::new().unwrap(),
+        }
     }
-    fn select_basis(&mut self, basis_name: Option<&str>) -> Option<usize> {
+    /// Returns a Vec which is a list of Bases to visit, in order of visitation, to create the union view.
+    pub(crate) fn access_list(&self) -> Vec::<String> {
+        let mut al = Vec::<String>::new();
+        for entry in self.cache.iter().rev() {
+            al.push(entry.name.to_string());
+        }
+        al
+    }
+    pub(crate) fn rekey(&self, hw: &mut PddbOs, op: PddbRekeyOp) -> PddbRekeyOp {
+        hw.pddb_rekey(op, &self.cache)
+    }
+    fn select_basis(&self, basis_name: Option<&str>) -> Option<usize> {
         if self.cache.len() == 0 {
             log::error!("Can't select basis: PDDB is not mounted");
             return None
@@ -314,6 +337,7 @@ impl BasisCache {
                 small_pool: Vec::<KeySmallPool>::new(),
                 small_pool_free: BinaryHeap::<KeySmallPoolOrd>::new(),
                 aad: my_aad,
+                created: std::time::Instant::now(),
             };
             log::debug!("adding dictionary {}", name);
             basis.dicts.insert(String::from(name), dict_cache);
@@ -357,8 +381,8 @@ impl BasisCache {
         }
         dict_set
     }
-    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<HashSet::<String>> {
-        let mut merge_list = HashSet::<String>::new();
+    pub(crate) fn key_list(&mut self, hw: &mut PddbOs, dict: &str, basis_name: Option<&str>) -> Result<BTreeSet::<String>> {
+        let mut merge_list = BTreeSet::<String>::new();
         let mut found_dict = false;
         if basis_name.is_some() {
             if let Some(basis_index) = self.select_basis(basis_name) {
@@ -418,6 +442,7 @@ impl BasisCache {
             if let Some(dict_entry) = basis.dicts.get_mut(dict) {
                 if dict_entry.ensure_key_entry(hw, &mut basis.v2p_map, &basis.cipher, key) {
                     let kcache = dict_entry.keys.get_mut(key).expect("Entry was assured, but then not there!");
+                    kcache.set_atime(self.tt.elapsed_ms());
                     // the key exists, *and* there's sufficient space for the data
                     if kcache.start < SMALL_POOL_END {
                         // small pool fetch
@@ -446,67 +471,56 @@ impl BasisCache {
                             return Ok(0)
                         }
                         // large pool fetch
-                        let mut cur_offset = offset.unwrap_or(0) as u64;
+                        let mut abs_cursor = offset.unwrap_or(0) as u64;
                         let mut blocks_read = 0;
+                        let mut bytes_read = 0;
                         loop {
-                            let start_vpage_addr = ((kcache.start + cur_offset) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
-                            // handle the case of terminating the last block read nicely:
-                            // we can either end because we hit the end of the key data (so the data readback buffer is too large)
-                            let key_endstop = if (kcache.len - cur_offset) < VPAGE_SIZE as u64 {
-                                (kcache.len - cur_offset) as usize + size_of::<JournalType>()
-                            } else {
-                                VPAGE_SIZE + size_of::<JournalType>()
-                            };
-                            // or we can hit the end because we ran out of datareadback buffer
-                            let data_endstop = if (data.len() as u64 - cur_offset) < VPAGE_SIZE as u64 {
-                                (data.len() as u64 - cur_offset) as usize + size_of::<JournalType>()
-                            } else {
-                                VPAGE_SIZE + size_of::<JournalType>()
-                            };
-                            // of the two possible end criteria, pick the nearest one
-                            let endstop = if key_endstop < data_endstop {
-                                key_endstop
-                            } else {
-                                data_endstop
-                            };
-                            log::debug!("reading offset {}->{}/{}:{}", key, cur_offset, endstop, kcache.len);
-                            let mut read_offset = (cur_offset % VPAGE_SIZE as u64) as usize;
+                            let start_vpage_addr = ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
+
                             if let Some(pp) = basis.v2p_map.get(&VirtAddr::new(start_vpage_addr).unwrap()) {
+                                let block_start_pos = (abs_cursor % VPAGE_SIZE as u64) as usize;
                                 assert!(pp.valid(), "v2p returned an invalid page");
                                 let pt_data = hw.data_decrypt_page(&basis.cipher, &basis.aad, pp).expect("Decryption auth error");
                                 if blocks_read != 0 {
-                                    assert!(read_offset == 0, "algorithm error in handling offset data");
+                                    assert!(block_start_pos == 0, "algorithm error in handling offset data");
                                 }
+                                if blocks_read == 0 {
+                                    log::debug!("reading {} abs: {}, block_start: {}, block: {}, data.len:{} kcache.len:{}",
+                                        key, abs_cursor, block_start_pos, blocks_read, data.len(), kcache.len);
+                                } else {
+                                    log::debug!("  reading {} abs: {}, block_start: {}, block: {}, remaining.data:{} kcache.len:{}",
+                                        key, abs_cursor, block_start_pos, blocks_read, data.len() - bytes_read, kcache.len);
+                                }
+                                let data_offset = bytes_read;
                                 for (&src, dst) in
                                 pt_data[
                                     size_of::<JournalType>() // always this fixed offset per block
-                                    + read_offset // this should be 0 after the first block
-                                    ..endstop
-                                ].iter().zip(data[cur_offset as usize..].iter_mut()) {
+                                    + block_start_pos
+                                    ..
+                                ].iter().zip(data[data_offset..].iter_mut()) {
                                     *dst = src;
-                                    cur_offset += 1;
-                                    read_offset += 1;
+                                    // it'd be computationally more efficient to figure out what this should be going into
+                                    // every copy loop, but it's logically easier to think about in this form. Without this
+                                    // check, a user could read past the allocated space for a block...
+                                    if abs_cursor >= kcache.len {
+                                        break;
+                                    }
+                                    abs_cursor += 1;
+                                    bytes_read += 1;
                                 }
                                 blocks_read += 1;
                             } else {
-                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, cur_offset, data.len());
-                                return Ok(cur_offset as usize)
+                                log::warn!("Not enough bytes available to read for key {}:{} ({}/{})", dict, key, abs_cursor, data.len());
+                                return Ok(bytes_read as usize)
                             }
-                            // cur_offset won't hit (start + len) if we're hitting an endstop, so the loop won't exit.
-                            // if we hit an endstop, we should exit the read loop.
-                            if endstop != VPAGE_SIZE + size_of::<JournalType>() {
+                            if abs_cursor >= kcache.len {
                                 break;
                             }
-                            // break if we've hit or exceeded our endstop
-                            if read_offset >= endstop {
-                                break;
-                            }
-                            // also exit if we're "just nice", e.g. the size of the data happened to be exactly a multiple of the length of our block size
-                            if cur_offset == kcache.len {
+                            if bytes_read >= data.len() {
                                 break;
                             }
                         }
-                        return Ok(cur_offset as usize)
+                        return Ok(bytes_read as usize)
                     }
 
                 } else {
@@ -567,10 +581,14 @@ impl BasisCache {
         // mutate the page table to allocate data while we're accessing the page table. This huge gob of code
         // computes the pages needed. :-/
         let mut pages_needed = 2; // things go badly when no space is available so make sure there's always at least 1 spot
-        let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(0) {
+        let reserved = if data.len() + offset.unwrap_or(0) > alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) {
             data.len() + offset.unwrap_or(0)
         } else {
-            alloc_hint.unwrap_or(0)
+            if alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT) == 0 { // disallow 0-sized alloc hints, round up to the default size if someone tries 0
+                DEFAULT_ALLOC_HINT
+            } else {
+                alloc_hint.unwrap_or(DEFAULT_ALLOC_HINT)
+            }
         };
         let reserved_pages = if reserved % VPAGE_SIZE == 0 {
             reserved / VPAGE_SIZE
@@ -788,7 +806,7 @@ impl BasisCache {
     pub(crate) fn basis_unlock(&mut self, hw: &mut PddbOs, name: &str, password: &str,
     policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
         let basis_key =  hw.basis_derive_key(name, password);
-        if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, name) {
+        if let Some(basis_map) = hw.pt_scan_key(&basis_key.pt, &basis_key.data, name) {
             let aad = hw.data_aad(name);
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
                 let vpage = match hw.data_decrypt_page_with_commit(&basis_key.data, &aad, root_page) {
@@ -882,10 +900,10 @@ impl BasisCache {
         }
         ret
     }
-    pub(crate) fn basis_latest(&mut self) -> Option<String> {
+    pub(crate) fn basis_latest(&self) -> Option<&str> {
         if let Some(basis_index) = self.select_basis(None) {
-            let basis = &mut self.cache[basis_index];
-            Some(basis.name.clone())
+            let basis = &self.cache[basis_index];
+            Some(&basis.name)
         } else {
             None
         }
@@ -933,6 +951,7 @@ impl BasisCache {
             }
         } else {
             for basis in self.cache.iter_mut() {
+                log::debug!("syncing {}", basis.name);
                 basis.sync(hw)?;
             }
         }
@@ -964,7 +983,97 @@ impl BasisCache {
             self.basis_unmount(hw, &basis).ok();
         }
     }
+
+    /// returns a relative measure of cache size. It is not absolutely accurate as
+    /// overhead is not accounted for, but the actual data cached is relatively correct.
+    pub(crate) fn cache_size(&mut self) -> usize {
+        let mut total_size = 0;
+        for basis in self.cache.iter() {
+            for dict in basis.dicts.values() {
+                for key in dict.keys.values() {
+                    total_size += key.size();
+                }
+            }
+        }
+        total_size
+    }
+    /// attempts to prune `target_bytes` out of the cached data set
+    pub(crate) fn cache_prune(&mut self, hw: &mut PddbOs, target_bytes: usize) -> usize {
+        let mut pruned = 0;
+        // this does it a "dumb" way, but at least it's sort of obvious how it works
+        // 0. sync the basis and dictionaries to disk, so that removing cache entries are guaranteed not to be problematic.
+        // 1. iterate through all the known keys, creating a sorted heap of fully-specified keys (basis/dict/key)
+        //    sorted by access time
+        // 2. evict keys with the oldest access time, until target_bytes is hit.
+        self.sync(hw, None).unwrap();
+
+        let mut candidates = BinaryHeap::new();
+        for basis in self.cache.iter() {
+            for (dict_name, dict) in basis.dicts.iter() {
+                for (key_name, key) in dict.keys.iter() {
+                    candidates.push(Reverse(
+                        KeyAge {
+                            atime: key.atime(),
+                            _size: key.size(),
+                            key: key_name.to_string(),
+                            dict: dict_name.to_string(),
+                            basis: basis.name.to_string(),
+                        }
+                    ));
+                }
+            }
+        }
+
+        loop {
+            if let Some(Reverse(ka)) = candidates.pop() {
+                for basis in self.cache.iter_mut() {
+                    if basis.name == ka.basis {
+                        match basis.dicts.get_mut(&ka.dict) {
+                            Some(dentry) => {
+                                let freed = dentry.evict_keycache_entry(&ka.key);
+                                log::debug!("pruned {} bytes from atime {} / total {}", freed, ka.atime, pruned);
+                                pruned += freed;
+                                if pruned >= target_bytes {
+                                    return pruned;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        pruned
+    }
 }
+// Revise this to use references instead of allocations once we've refactored the interior mutability
+// issues with the PDDB.
+struct KeyAge {
+    atime: u64,
+    // currently unused but collected in case we want to use it in the future
+    _size: usize,
+    key: String,
+    dict: String,
+    basis: String,
+}
+impl Ord for KeyAge {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.atime.cmp(&other.atime)
+    }
+}
+impl PartialOrd for KeyAge {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for KeyAge {
+    fn eq(&self, other: &Self) -> bool {
+        self.atime == other.atime
+    }
+}
+impl Eq for KeyAge {}
 
 /// This is the RAM cached copy of a basis as maintained in the PDDB.
 pub(crate) struct BasisCacheEntry {
@@ -983,10 +1092,14 @@ pub(crate) struct BasisCacheEntry {
     /// expressed as a number that needs to be multiplied by DICT_VSIZE to arrive at a virtual address
     pub free_dict_offset: Option<u32>,
     /// the cipher for the basis
-    pub cipher: AesGcmSiv::<Aes256>,
+    pub cipher: Aes256GcmSiv,
     /// derived cipher for encrypting PTEs -- cache it, so we can save the time cost of constructing the cipher key schedule
     pub cipher_ecb: Aes256,
-    /// raw AES key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
+    /// raw AES page table key -- needed because we have to do a low-level PT scan to generate FSCB, and sometimes the key comes from
+    /// a copy cached here, or from one derived solely for the FSCB scan. There is no way to copy an Aes256 record, so, we include
+    /// the raw key because we can copy that. :P so much for semantics.
+    pub pt_key: GenericArray<u8, cipher::consts::U32>,
+    /// raw AES data key -- needed because we have to use this to derive commitment keys for the basis root record, to work around AES-GCM-SIV salamanders
     pub key: GenericArray<u8, cipher::consts::U32>,
     /// the AAD associated with this Basis
     pub aad: Vec::<u8>,
@@ -1009,8 +1122,8 @@ impl BasisCacheEntry {
     /// If it `lazy` is false, it will populate the dictionary cache and key cache entries, as well as
     /// discover the location of the `large_alloc_ptr`.
     pub(crate) fn mount(hw: &mut PddbOs, name: &str,  key: &BasisKeys, lazy: bool, policy: BasisRetentionPolicy) -> Option<BasisCacheEntry> {
-        if let Some(basis_map) = hw.pt_scan_key(&key.pt, name) {
-            let cipher = AesGcmSiv::<Aes256>::new(Key::from_slice(&key.data));
+        if let Some(basis_map) = hw.pt_scan_key(&key.pt, &key.data, name) {
+            let cipher = Aes256GcmSiv::new(&key.data.into());
             let aad = hw.data_aad(name);
             // get the first page, where the basis root is guaranteed to be
             if let Some(root_page) = basis_map.get(&VirtAddr::new(VPAGE_SIZE as u64).unwrap()) {
@@ -1045,6 +1158,7 @@ impl BasisCacheEntry {
                     dicts: HashMap::<String, DictCacheEntry>::new(),
                     cipher,
                     cipher_ecb: Aes256::new(GenericArray::from_slice(&key.pt)),
+                    pt_key: GenericArray::clone_from_slice(&key.pt),
                     key: GenericArray::clone_from_slice(&key.data),
                     aad,
                     age: basis_root.age,
@@ -1489,6 +1603,7 @@ impl BasisCacheEntry {
     pub(crate) fn basis_sync(&mut self, hw: &mut PddbOs) {
         self.last_sync = Some(hw.timestamp_now());
         if !self.clean {
+            self.age += 1;
             let basis_root = BasisRoot {
                 magic: PDDB_MAGIC,
                 version: PDDB_VERSION,
@@ -1499,18 +1614,19 @@ impl BasisCacheEntry {
             let pp = self.v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap())
                 .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
             assert!(pp.valid(), "basis page was invalid");
+            log::debug!("{} before-sync journal: {}", self.name, self.journal);
             let journal_bytes = self.journal.to_le_bytes(); // journal gets bumped by the patching function now
             let slice_iter =
                 journal_bytes.iter() // journal rev
                 .chain(basis_root.as_ref().iter());
             let mut block = [0 as u8; KCOM_CT_LEN];
-            for (&src, dst) in (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes().iter().zip(block[..size_of::<JournalType>()].iter_mut()) {
-                *dst = src;
-            }
             for (&src, dst) in slice_iter.zip(block.iter_mut()) {
                 *dst = src;
             }
             hw.data_encrypt_and_patch_page_with_commit(self.key.as_slice(), &self.aad, &mut block, &pp);
+            // read back the incremented journal state
+            self.journal = u32::from_le_bytes(block[..4].try_into().unwrap());
+            log::debug!("{} after-sync journal: {}", self.name, self.journal);
             self.clean = true;
         }
     }

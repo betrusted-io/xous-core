@@ -27,14 +27,14 @@
 /// a `TextResponseValid` message which pumps the work queue.
 mod api;
 use api::*;
-mod tests;
+#[cfg(feature="ditherpunk")]
+use gam::Bitmap;
 
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
 use xous_ipc::Buffer;
+use locales::t;
 
 use gam::modal::*;
-#[cfg(feature = "tts")]
-use locales::t;
 #[cfg(feature = "tts")]
 use tts_frontend::TtsFrontend;
 #[cfg(feature = "tts")]
@@ -54,10 +54,30 @@ enum RendererState {
     RunText(ManagedPromptWithTextResponse),
     RunProgress(ManagedProgress),
     RunNotification(ManagedNotification),
+    RunBip39(ManagedBip39),
+    RunBip39Input(ManagedBip39),
     RunDynamicNotification(DynamicNotification),
+    #[cfg(feature="ditherpunk")]
+    RunImage(ManagedImage),
 }
 
-fn main() -> ! {
+const DEFAULT_STYLE: GlyphStyle = GlyphStyle::Regular;
+
+fn main () -> ! {
+    #[cfg(not(feature="ditherpunk"))]
+    wrapped_main();
+
+    #[cfg(feature="ditherpunk")]
+    let stack_size = 1024 * 1024;
+    #[cfg(feature="ditherpunk")]
+    std::thread::Builder::new()
+        .stack_size(stack_size)
+        .spawn(wrapped_main)
+        .unwrap()
+        .join()
+        .unwrap()
+}
+fn wrapped_main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -68,6 +88,7 @@ fn main() -> ! {
         .expect("can't register server");
     log::trace!("registered with NS -- {:?}", modals_sid);
 
+    #[cfg(feature = "tts")]
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     // we are our own renderer now that we implement deferred responses
@@ -109,7 +130,7 @@ fn main() -> ! {
         ActionType::TextEntry(text_action.clone()),
         Some("Placeholder"),
         None,
-        GlyphStyle::Regular,
+        DEFAULT_STYLE,
         8,
     );
     renderer_modal.spawn_helper(
@@ -122,11 +143,6 @@ fn main() -> ! {
 
     let mut list_hash = HashMap::<String, usize>::new();
     let mut list_selected = 0u32;
-
-    if cfg!(feature = "ux_tests") {
-        tt.sleep_ms(1000).unwrap();
-        tests::spawn_test();
-    }
 
     let mut token_lock: Option<[u32; 4]> = None;
     let trng = trng::Trng::new(&xns).unwrap();
@@ -143,8 +159,9 @@ fn main() -> ! {
 
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
-        log::debug!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             // ------------------ EXTERNAL APIS --------------------
             Some(Opcode::GetMutex) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
                 let incoming_token = [t0 as u32, t1 as u32, t2 as u32, t3 as u32];
@@ -235,6 +252,61 @@ fn main() -> ! {
                     continue;
                 }
                 op = RendererState::RunNotification(spec);
+                dr = Some(msg);
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't initiate UX op");
+            }
+            Some(Opcode::Bip39) => {
+                let spec = {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    buffer.to_original::<ManagedBip39, _>().unwrap()
+                };
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                op = RendererState::RunBip39(spec);
+                dr = Some(msg);
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't initiate UX op");
+            }
+            Some(Opcode::Bip39Input) => {
+                let spec = {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    buffer.to_original::<ManagedBip39, _>().unwrap()
+                };
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                op = RendererState::RunBip39Input(spec);
+                dr = Some(msg);
+                send_message(
+                    renderer_cid,
+                    Message::new_scalar(Opcode::InitiateOp.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .expect("couldn't initiate UX op");
+            }
+            #[cfg(feature="ditherpunk")]
+            Some(Opcode::Image) => {
+                let spec = {
+                    let buffer =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    buffer.to_original::<ManagedImage, _>().unwrap()
+                };
+                if spec.token != token_lock.unwrap_or(default_nonce) {
+                    log::warn!("Attempt to access modals without a mutex lock. Ignoring.");
+                    continue;
+                }
+                op = RendererState::RunImage(spec);
                 dr = Some(msg);
                 send_message(
                     renderer_cid,
@@ -407,7 +479,7 @@ fn main() -> ! {
                             false,
                             None,
                             true,
-                            None,
+                            Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
                         log::debug!("should be active!");
@@ -435,7 +507,79 @@ fn main() -> ! {
                             false,
                             None,
                             true,
+                            Some(DEFAULT_STYLE),
+                        );
+                        renderer_modal.activate();
+                    }
+                    RendererState::RunBip39(config) => {
+                        let notification = gam::modal::Notification::new(
+                            renderer_cid,
+                            Opcode::NotificationReturn.to_u32().unwrap(),
+                        );
+                        let mut text = String::new();
+                        if let Some(c) = config.caption {
+                            text.push_str(c.as_str().unwrap());
+                            text.push_str("\n\n");
+                        }
+
+                        let phrase = renderer_modal.gam.bytes_to_bip39(&config.bip39_data[..config.bip39_len as usize].to_vec())
+                        .unwrap_or(vec![t!("bip39.invalid_bytes", xous::LANG).to_string()]);
+
+                        for word in phrase {
+                            text.push_str(&word);
+                            text.push_str(" ");
+                        }
+
+                        #[cfg(feature = "tts")]
+                        tts.tts_simple(&text).unwrap();
+                        renderer_modal.modify(
+                            Some(ActionType::Notification(notification)),
+                            Some(&text),
+                            false,
                             None,
+                            true,
+                            Some(GlyphStyle::Bold),
+                        );
+                        renderer_modal.activate();
+                    }
+                    RendererState::RunBip39Input(config) => {
+                        let b39input = gam::modal::Bip39Entry::new(
+                            false,
+                            renderer_cid,
+                            Opcode::Bip39Return.to_u32().unwrap(),
+                        );
+                        let mut text = String::new();
+                        if let Some(c) = config.caption {
+                            text.push_str(c.as_str().unwrap());
+                        }
+
+                        #[cfg(feature = "tts")]
+                        tts.tts_simple(&text).unwrap();
+                        renderer_modal.modify(
+                            Some(ActionType::Bip39Entry(b39input)),
+                            Some(&text),
+                            false,
+                            None,
+                            true,
+                            Some(GlyphStyle::Bold),
+                        );
+                        renderer_modal.activate();
+                    }
+                    #[cfg(feature="ditherpunk")]
+                    RendererState::RunImage(config) => {
+                        let mut image = gam::modal::Image::new(
+                            renderer_cid,
+                            Opcode::ImageReturn.to_u32().unwrap(),
+                        );
+                        image.set_bitmap(Some(Bitmap::from(config.tiles)));
+                        log::debug!("image: {:x?}", image);
+                        renderer_modal.modify(
+                            Some(ActionType::Image(image)),
+                            None,
+                            true,
+                            None,
+                            true,
+                            Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
                     }
@@ -460,7 +604,7 @@ fn main() -> ! {
                             false,
                             None,
                             true,
-                            None,
+                            Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
                     }
@@ -488,7 +632,7 @@ fn main() -> ! {
                             false,
                             None,
                             true,
-                            None,
+                            Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
                     }
@@ -515,7 +659,7 @@ fn main() -> ! {
                             false,
                             None,
                             true,
-                            None,
+                            Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
                     }
@@ -544,7 +688,7 @@ fn main() -> ! {
                             config.title.is_none(),
                             Some(&bot_text),
                             config.text.is_none(),
-                            None,
+                            Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
                     }
@@ -651,7 +795,60 @@ fn main() -> ! {
             }),
             Some(Opcode::NotificationReturn) => {
                 match op {
-                    RendererState::RunNotification(_) => {
+                    RendererState::RunNotification(_) | RendererState::RunBip39(_) => {
+                        op = RendererState::None;
+                        dr.take(); // unblocks the caller, but without any response data
+                        token_lock = next_lock(&mut work_queue);
+                    }
+                    RendererState::None => {
+                        log::warn!("Notification detected a fat finger event, ignoring.")
+                    }
+                    _ => {
+                        log::error!(
+                            "UX return opcode does not match our current operation in flight: {:?}",
+                            op
+                        );
+                        panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    }
+                }
+            },
+            Some(Opcode::Bip39Return) => match op {
+                RendererState::RunBip39Input(_config) => {
+                    let buf =
+                        unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let b39 = buf
+                        .to_original::<gam::modal::Bip39EntryPayload, _>()
+                        .unwrap();
+                    if let Some(mut origin) = dr.take() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(
+                                origin.body.memory_message_mut().unwrap(),
+                            )
+                        };
+                        let mut spec = response.to_original::<ManagedBip39, _>().unwrap();
+                        spec.bip39_data[..b39.len as usize].copy_from_slice(&b39.data[..b39.len as usize]);
+                        spec.bip39_len = b39.len;
+
+                        response.replace(spec).unwrap();
+                        op = RendererState::None;
+                        token_lock = next_lock(&mut work_queue);
+                    } else {
+                        log::error!("Ux routine returned but no origin was recorded");
+                        panic!("Ux routine returned but no origin was recorded");
+                    }
+                }
+                RendererState::None => {
+                    log::warn!("Text entry detected a fat finger event, ignoring.")
+                }
+                _ => {
+                    log::error!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                    panic!("UX return opcode does not match our current operation in flight. This is a serious internal error.");
+                }
+            },
+            #[cfg(feature="ditherpunk")]
+            Some(Opcode::ImageReturn) => {
+                match op {
+                    RendererState::RunImage(_) => {
                         op = RendererState::None;
                         dr.take(); // unblocks the caller, but without any response data
                         token_lock = next_lock(&mut work_queue);

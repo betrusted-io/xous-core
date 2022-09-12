@@ -17,6 +17,23 @@
 /// This is a NIST-blessed construction. Other than that, AES Key Wrap is inefficient
 /// and is generally not very useful.
 
+/// Turns out that this implementation does not seem to work. It does not generate
+/// results that match the NIST test vectors at
+/// https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/kwtestvectors.zip
+///
+/// The `aes_kw` functions in the RustCrypto library do create matching results.
+/// However, back when the PDDB was written, this crate didn't exist (the first commit
+/// to `aes_kw` was Jan 2022, the PDDB was started back in October 2021, and around
+/// the time I searched for an aes-kw implementation, the `aes_kw` code was just pushed
+/// at 0.1.0, and not registering in Google).
+///
+/// Ah well. Better we caught it now than later! Unfortunately, this vendored-in
+/// implementation has to stick around for a while, because we need it to do migrations
+/// from the wrong version to the working version. I don't think this implementation
+/// may necessarily be insecure -- it seems /very close/ to the spec, maybe just a
+/// problem with how the block counter is incremented between rounds -- but it is still
+/// not compliant, so, we should migrate away from it!
+
 use aes::cipher::generic_array::GenericArray;
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
@@ -41,11 +58,12 @@ impl Aes256KeyWrap {
         }
     }
 
+    #[allow(dead_code)]
     pub fn encapsulate(&self, input: &[u8]) -> Result<Vec<u8>, KeywrapError> {
         if input.len() > std::u32::MAX as usize
             || input.len() as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
         {
-            return Err(KeywrapError::TooBig);
+            return Err(KeywrapError::InvalidDataSize);
         }
         let mut aiv: [u8; 8] = [0xa6u8, 0x59, 0x59, 0xa6, 0, 0, 0, 0];
         BigEndian::write_u32(&mut aiv[4..8], input.len() as u32);
@@ -84,19 +102,19 @@ impl Aes256KeyWrap {
 
     pub fn decapsulate(&self, input: &[u8], expected_len: usize) -> Result<Vec<u8>, KeywrapError> {
         if input.len() % 8 != 0 {
-            return Err(KeywrapError::Unpadded);
+            return Err(KeywrapError::InvalidDataSize);
         }
         let output_len = input
             .len()
             .checked_sub(Self::MAC_BYTES)
-            .ok_or(KeywrapError::TooSmall)?;
+            .ok_or(KeywrapError::InvalidOutputSize)?;
         if output_len > std::u32::MAX as usize
             || output_len as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
         {
-            return Err(KeywrapError::TooBig);
+            return Err(KeywrapError::InvalidDataSize);
         }
         if expected_len > output_len || (expected_len & !7) > output_len {
-            return Err(KeywrapError::InvalidExpectedLen);
+            return Err(KeywrapError::InvalidDataSize);
         }
         let mut output = vec![0u8; output_len];
         let mut aiv: [u8; 8] = [0xa6u8, 0x59, 0x59, 0xa6, 0, 0, 0, 0];
@@ -113,7 +131,7 @@ impl Aes256KeyWrap {
                 .zip(aiv.iter())
                 .fold(0, |acc, (a, b)| acc | (a ^ b));
             if c != 0 {
-                return Err(KeywrapError::AuthenticationFailed);
+                return Err(KeywrapError::IntegrityCheckFailed);
             }
             output[0..8].copy_from_slice(&block[8..16]);
             return Ok(output);
@@ -143,7 +161,7 @@ impl Aes256KeyWrap {
             .zip(aiv.iter())
             .fold(0, |acc, (a, b)| acc | (a ^ b));
         if c != 0 {
-            return Err(KeywrapError::AuthenticationFailed);
+            return Err(KeywrapError::IntegrityCheckFailed);
         }
         Ok(output)
     }

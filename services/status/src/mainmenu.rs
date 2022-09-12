@@ -8,7 +8,7 @@ use num_traits::*;
 use crate::StatusOpcode;
 
 #[allow(unused_variables)] // quiets a warning about unused com that is emitted in tts config. Would be nice to make this more targeted...
-pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com: &com::Com, time_ux_conn: xous::CID) {
+pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::SID, status_conn: xous::CID, com: &com::Com, time_ux_conn: xous::CID) -> MenuMatic {
     let key_conn = keys.lock().unwrap().conn();
 
     let mut menuitems = Vec::<MenuItem>::new();
@@ -31,6 +31,24 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
+
+    #[cfg(not(feature="tts"))]
+    menuitems.push(MenuItem {
+        name: String::from_str(t!("mainmenu.autobacklighton", xous::LANG)),
+        action_conn: Some(status_conn),
+        action_opcode: StatusOpcode::EnableAutomaticBacklight.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+
+    // #[cfg(not(feature="tts"))]
+    // menuitems.push(MenuItem {
+    //     name: String::from_str(t!("mainmenu.autobacklightoff", xous::LANG)),
+    //     action_conn: Some(kbb.cid()),
+    //     action_opcode: KbbOps::DisableAutomaticBacklight.to_u32().unwrap(),
+    //     action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+    //     close_on_select: true,
+    // });
 
     menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.wifimenu", xous::LANG)),
@@ -65,10 +83,19 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         });
+        menuitems.push(MenuItem {
+            name: String::from_str(t!("mainmenu.provision_gateware", xous::LANG)),
+            action_conn: Some(key_conn),
+            // note this is using the blind copy opcode -- makes a copy without installing keys
+            action_opcode: keys.lock().unwrap().get_blind_copy_gateware_op(),
+            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
     } else {
         menuitems.push(MenuItem {
             name: String::from_str(t!("mainmenu.provision_gateware", xous::LANG)),
             action_conn: Some(key_conn),
+            // note this is using the update opcode -- makes a copy while installing keys
             action_opcode: keys.lock().unwrap().get_update_gateware_op(),
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
@@ -121,6 +148,15 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
+    if key_init {
+        menuitems.push(MenuItem {
+            name: String::from_str(t!("mainmenu.prep_backup", xous::LANG)),
+            action_conn: Some(status_conn),
+            action_opcode: StatusOpcode::PrepareBackup.to_u32().unwrap(),
+            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+    }
     menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.battery_disconnect", xous::LANG)),
         action_conn: Some(status_conn),
@@ -136,5 +172,5 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, status_conn: xous::CID, com:
         close_on_select: true,
     });
 
-    menu_matic(menuitems, MAIN_MENU_NAME, None);
+    menu_matic(menuitems, MAIN_MENU_NAME, Some(menu_management_sid)).unwrap()
 }

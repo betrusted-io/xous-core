@@ -96,7 +96,7 @@ The firmware control pages have the following structure:
 base + 0x0000: [u8; 32]   = SHA-512/256 hash from base+0x20 to last byte of firmware
 base + 0x0020: [u8; 4]    = EC: [0x70, 0x72, 0x65, 0x63]; // signature 'cerp' ('prec' in big endian) or WF200: [0x77, 0x66, 0x32, 0x30]; // 'wf20'
 base + 0x0024: u32        = firmware control page version number (currently 1)
-base + 0x0028: u32        = length of firmware in bytes, computed from start of first firmware page
+base + 0x0028: u32        = length of firmware in bytes, computed from start of first firmware page (that is, base + 0x1000)
 base + 0x002c: [u8; 4052] = [0xff as u8; 4052] 0xff padding to start of first firmware page
 base + 0x1000: [u8; FW_LEN] = actual firmware
 
@@ -104,6 +104,22 @@ remainder of unused sectors are 0xff pad. The 0xff pad is not hashed for perform
 be considered insecure/untrusted.
 ```
 
+The EC FW has a versioning block, appended to the end of the firmware. This block is included in the "actual firmware length" for the purposes of hashing and signature checks. The block contains the following data, aligned to the very end of firmware:
+```
+FW_LEN-0x58:  [u8;32] = SHA512/256 hash of the gateware
+FW_LEN-0x38:  [u8;32] = SHA512/256 hash of the loader+firmware
+FW_LEN-0x18:  [u8;16] = SemVer serialized structure
+FW_LEN-0x8:   u32     = firmware control page version number (currently 1)
+FW_LEN-0x4:   u32     = FW_LEN
+FW_LEN
+```
+
+The WF200 firmware also has a hash embedded at the start. It has the following structure:
+```
+0x0000:  [u8;8] = KEYSET ('KEYSETC0')
+0x0008:  [u8;64] = signature (unspecified algorithm)
+0x0048:  [u8;8] = hash (unspecified algorithm)
+```
 
 The csr.csv block is further structured as follows:
 

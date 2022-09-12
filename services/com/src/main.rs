@@ -425,8 +425,9 @@ fn main() -> ! {
     trace!("starting main loop");
     loop {
         let mut msg = xous::receive_message(com_sid).unwrap();
-        trace!("Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", opcode);
+        match opcode {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
                 com.txrx(0); // suppress interrupts on suspend
@@ -451,27 +452,33 @@ fn main() -> ! {
             Some(Opcode::LinkReset) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::LINK_SYNC.verb);
                 ticktimer.sleep_ms(200).unwrap(); // give some time for the link to reset - the EC does not have a guaranteed latency to respond to a link reset
-                let mut attempts = 0;
-                let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
-                loop {
-                    com.txrx(ComState::LINK_PING.verb);
-                    com.txrx(ping_value);
-                    let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
-                    let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
-                    if pong == !ping_value &&
-                       phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
-                        break;
-                    } else {
-                        log::warn!("Link reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
-                        com.txrx(ComState::LINK_SYNC.verb);
-                        ticktimer.sleep_ms(200).unwrap();
-                        attempts += 1;
+                if ec_tag >= u32::from_be_bytes(ComState::LINK_PING.apilevel) {
+                    let mut attempts = 0;
+                    let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
+                    loop {
+                        com.txrx(ComState::LINK_PING.verb);
+                        com.txrx(ping_value);
+                        let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                        let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                        if pong == !ping_value &&
+                        phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                            break;
+                        } else {
+                            log::warn!("Link reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                            com.txrx(ComState::LINK_SYNC.verb);
+                            ticktimer.sleep_ms(200).unwrap();
+                            attempts += 1;
+                        }
+                        if attempts > 50 {
+                            // abort and return failure
+                            xous::return_scalar(msg.sender, 0).unwrap();
+                            continue;
+                        }
                     }
-                    if attempts > 50 {
-                        // abort and return failure
-                        xous::return_scalar(msg.sender, 0).unwrap();
-                        continue;
-                    }
+                } else {
+                    // replace with a dead wait loop for older revs
+                    log::warn!("EC rev is too old: replacing link SYNC with a dead wait loop");
+                    ticktimer.sleep_ms(5000).unwrap();
                 }
                 xous::return_scalar(msg.sender, 1).unwrap();
             }),
@@ -505,19 +512,19 @@ fn main() -> ! {
             }),
             Some(Opcode::FlashOp) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let flash_op = buffer.to_original::<api::FlashRecord, _>().unwrap();
+                let mut flash_op = buffer.to_original::<api::FlashRecord, _>().unwrap();
                 let mut pass = false;
                 if let Some(id) = flash_id {
                     if id == flash_op.id {
-                        match flash_op.op {
+                        match &mut flash_op.op {
                             api::FlashOp::Erase(addr, len) => {
-                                if addr < FLASH_LEN && len + addr < FLASH_LEN {
-                                    log::debug!("Erasing EC region starting at 0x{:x}, lenth 0x{:x}", addr, len);
+                                if *addr < FLASH_LEN && *len + *addr < FLASH_LEN {
+                                    log::debug!("Erasing EC region starting at 0x{:x}, lenth 0x{:x}", *addr, *len);
                                     com.txrx(ComState::FLASH_ERASE.verb);
-                                    com.txrx((addr >> 16) as u16);
-                                    com.txrx(addr as u16);
-                                    com.txrx((len >> 16) as u16);
-                                    com.txrx(len as u16);
+                                    com.txrx((*addr >> 16) as u16);
+                                    com.txrx(*addr as u16);
+                                    com.txrx((*len >> 16) as u16);
+                                    com.txrx(*len as u16);
                                     while ComState::FLASH_ACK.verb != com.wait_txrx(ComState::FLASH_WAITACK.verb, Some(FLASH_TIMEOUT)) {
                                         xous::yield_slice();
                                     }
@@ -528,7 +535,7 @@ fn main() -> ! {
                             },
                             api::FlashOp::Program(addr, some_pages) => {
                                 com.txrx(ComState::FLASH_LOCK.verb);
-                                let mut prog_ptr = addr;
+                                let mut prog_ptr = *addr;
                                 // this will fill the 1280-deep FIFO with up to 4 pages of data for programming
                                 pass = true;
                                 for &maybe_page in some_pages.iter() {
@@ -552,18 +559,45 @@ fn main() -> ! {
                                     xous::yield_slice();
                                 }
                                 com.txrx(ComState::FLASH_UNLOCK.verb);
+                            },
+                            api::FlashOp::Verify(addr, data) => {
+                                if ec_tag >= u32::from_be_bytes(ComState::FLASH_VERIFY.apilevel) {
+                                    com.txrx(ComState::FLASH_VERIFY.verb);
+                                    com.txrx((*addr >> 16) as u16);
+                                    com.txrx(*addr as u16);
+
+                                    for word in data.chunks_mut(2) {
+                                        let read = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)).to_le_bytes();
+                                        word[0] = read[0];
+                                        word[1] = read[1];
+                                    }
+                                    pass = true;
+                                } else {
+                                    for d in data.iter_mut() {
+                                        *d = 0;
+                                    }
+                                    pass = false;
+                                }
                             }
                         }
                     }
                 } else {
                     pass = false;
                 }
-                let response = if pass {
-                    api::FlashResult::Pass
-                } else {
-                    api::FlashResult::Fail
-                };
-                buffer.replace(response).expect("couldn't return result on FlashOp");
+                match flash_op.op {
+                    api::FlashOp::Verify(_a, data) => {
+                        log::debug!("verify returning {:x?}", &data[..32]);
+                        buffer.replace(flash_op).expect("couldn't return result on FlashOp");
+                    }
+                    _ => {
+                        let response = if pass {
+                            api::FlashResult::Pass
+                        } else {
+                            api::FlashResult::Fail
+                        };
+                        buffer.replace(response).expect("couldn't return result on FlashOp");
+                    }
+                }
             }
             Some(Opcode::RegisterBattStatsListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                     let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
@@ -723,36 +757,42 @@ fn main() -> ! {
                 let start = ticktimer.elapsed_ms();
                 com.txrx(ComState::WF200_RESET.verb);
                 com.txrx(0);
-                let mut attempts = 0;
-                let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
-                loop {
-                    com.txrx(ComState::LINK_PING.verb);
-                    com.txrx(ping_value);
-                    let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
-                    let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
-                    if pong == !ping_value &&
-                       phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
-                        break;
-                    } else {
-                        log::warn!("Wf200 reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
-                        com.txrx(ComState::LINK_SYNC.verb);
-                        ticktimer.sleep_ms(200).unwrap();
-                        attempts += 1;
-                    }
-                    if attempts > 50 {
-                        // something has gone horribly wrong. Reset the EC entirely.
-                        llio.ec_reset().unwrap();
-                        ticktimer.sleep_ms(EC_BOOT_WAIT_MS).unwrap();
-                        com.txrx(ComState::TRNG_SEED.verb);
-                        for _ in 0..2 {
-                            let mut rng = trng.get_u64().expect("couldn't fetch rngs");
-                            for _ in 0..4 {
-                                com.txrx(rng as u16);
-                                rng >>= 16;
-                            }
+                if ec_tag >= u32::from_be_bytes(ComState::LINK_PING.apilevel) {
+                    let mut attempts = 0;
+                    let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
+                    loop {
+                        com.txrx(ComState::LINK_PING.verb);
+                        com.txrx(ping_value);
+                        let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(5000)); // should finish with 5 seconds
+                        let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(500));
+                        if pong == !ping_value &&
+                        phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                            break;
+                        } else {
+                            log::warn!("Wf200 reset: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                            com.txrx(ComState::LINK_SYNC.verb);
+                            ticktimer.sleep_ms(200).unwrap();
+                            attempts += 1;
                         }
-                        break;
+                        if attempts > 50 {
+                            // something has gone horribly wrong. Reset the EC entirely.
+                            llio.ec_reset().unwrap();
+                            ticktimer.sleep_ms(EC_BOOT_WAIT_MS).unwrap();
+                            com.txrx(ComState::TRNG_SEED.verb);
+                            for _ in 0..2 {
+                                let mut rng = trng.get_u64().expect("couldn't fetch rngs");
+                                for _ in 0..4 {
+                                    com.txrx(rng as u16);
+                                    rng >>= 16;
+                                }
+                            }
+                            break;
+                        }
                     }
+                } else {
+                    // replace with a dead wait loop for older revs
+                    log::warn!("EC rev is too old: replacing EC RESET SYNC with a dead wait loop");
+                    ticktimer.sleep_ms(7000).unwrap();
                 }
                 xous::return_scalar(msg.sender, (ticktimer.elapsed_ms() - start) as usize).unwrap();
             }
@@ -911,7 +951,7 @@ fn main() -> ! {
                 com.txrx(ComState::WLAN_LEAVE.verb);
             }
             Some(Opcode::WlanStatus) => {
-                if ec_tag == LEGACY_TAG {
+                if ec_tag <= LEGACY_TAG {
                     log::warn!("Legacy EC detected. Ignoring status request update");
                 } else {
                     let mut buffer = unsafe {
@@ -974,7 +1014,8 @@ fn main() -> ! {
                     multicast is self.mac[0] & 0x1 == 1 -> this gets set when 0xDDDD or 0xDEAD is transmitted as EC is in reset
                     broadcast is 0xFF's -> this is unlikely to be sent, it only is sent if the EC won't configure at all
                 */
-                prealloc[1] &= 0xFF_FE; // this ensures the "safety" of a reported MAC, even if the EC is broken and avoiding system panic (issue #152)
+                // punting this to the lib side of things, so we can return an error and not just a bogus value.
+                // prealloc[1] &= 0xFF_FE; // this ensures the "safety" of a reported MAC, even if the EC is broken and avoiding system panic (issue #152)
                 buffer.replace(prealloc).expect("couldn't return result on FlashOp");
             }
             Some(Opcode::WlanFetchPacket) => {
@@ -1063,18 +1104,24 @@ fn main() -> ! {
                 tx_errs_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 drops_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 drops_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                com.txrx(ComState::WF200_DEBUG.verb);
+
                 let mut config_16 = [0u16; 2];
-                config_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                config_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                let control = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 let mut alloc_fail_16 = [0u16; 2];
-                alloc_fail_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                alloc_fail_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 let mut alloc_oversize_16 = [0u16; 2];
-                alloc_oversize_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                alloc_oversize_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                let alloc_free_count = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let mut control = 0;
+                let mut alloc_free_count = 0;
+                if ec_tag >= u32::from_be_bytes(ComState::WF200_DEBUG.apilevel) {
+                    com.txrx(ComState::WF200_DEBUG.verb);
+                    config_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    config_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    control = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    alloc_fail_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    alloc_fail_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    alloc_oversize_16[0] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    alloc_oversize_16[1] = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    alloc_free_count = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                }
+
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let debug = WlanDebug {
                     tx_errs: from_le_words(tx_errs_16),
@@ -1109,6 +1156,10 @@ fn main() -> ! {
 }
 
 fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
+    use xous_semver::SemVer;
+
+    // this feature was only introduced since 0.9.6. Unfortunately, there is no good way to figure out
+    // if we support it for earlier versions of the EC.
     com.txrx(ComState::EC_SW_TAG.verb);
     let mut rev_ret = [0u16; ComState::EC_SW_TAG.r_words as usize];
     for w in rev_ret.iter_mut() {
@@ -1125,25 +1176,9 @@ fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {
     if len_checked < 2 { // something is very wrong if our length is too short
         return 0;
     }
-    let revstr = core::str::from_utf8(&rev_bytes[..len_checked]).unwrap_or("v0.0.0-0-xxxxxxx"); // fake version number for hosted mode
-    // parse &str -- we do it here not in the EC, because the EC is memory-constrained
-    // v0.9.5-2-gb3e2868 exemplar template
-    let hyphenstr: Vec<&str> = revstr[1..].split('-').collect(); // drop the leading 'v' by doing [1..]
-    let revcodes: Vec<&str> = hyphenstr[0].split('.').collect();
-    let major = revcodes[0].parse::<u8>().unwrap_or(0);
-    let minor = if revcodes.len() > 1 {revcodes[1].parse::<u8>().unwrap_or(0)} else {0};
-    let rev = if revcodes.len() > 2 {revcodes[2].parse::<u8>().unwrap_or(0)} else {0};
-    let commit = if hyphenstr.len() > 2 { // extra commits beyond the tag
-        // version-extra-commit
-        hyphenstr[1].parse::<u8>().unwrap_or(0)
-    } else {
-        // I think the "extra" might disappear in the case that there is no extra beyond the tag. In this case, we would have just
-        // v0.9.6-gxxxxxx only, not v0.9.6-0-gxxxxxx. I'm actually not 100% sure, but also, I can't seem to find a definitive
-        // answer right now and I don't want to fuck up the tag state of my repo just to find out. Either way, this
-        // logic will cause the right thing to happen (a 0 for the extra commits)
-        0
-    };
-    (commit & 0xff) as u32 | ((rev & 0xff) as u32) << 8 | (((minor & 0xff) as u32) << 16) | (((major & 0xff) as u32) << 24)
+    let revstr = core::str::from_utf8(&rev_bytes[..len_checked]).unwrap_or("v0.9.5-0"); // fake version number for hosted mode, equal to a very old version of the EC
+    let ver = SemVer::from_str(revstr).unwrap_or(SemVer::from_str("v0.9.5-1").unwrap());
+    (ver.extra & 0xff) as u32 | ((ver.rev & 0xff) as u32) << 8 | (((ver.min & 0xff) as u32) << 16) | (((ver.maj & 0xff) as u32) << 24)
 }
 
 fn from_le_words(words: [u16; 2]) -> u32 {

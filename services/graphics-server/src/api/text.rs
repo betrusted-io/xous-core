@@ -15,6 +15,10 @@ pub enum TextBounds {
     GrowableFromBl(Point, u16),
     // fixed width, grows down from top right
     GrowableFromTr(Point, u16),
+    // fixed width, centered aligned top
+    CenteredTop(Rectangle),
+    // fixed width, centered aligned bottom
+    CenteredBot(Rectangle),
 }
 impl TextBounds {
     pub fn translate(&self, by: Point) -> TextBounds {
@@ -34,6 +38,14 @@ impl TextBounds {
             }
             TextBounds::GrowableFromTr(origin, width) => {
                 TextBounds::GrowableFromTr(origin.add(by), width)
+            }
+            TextBounds::CenteredTop(mut r) => {
+                r.translate(by);
+                TextBounds::BoundingBox(r)
+            }
+            TextBounds::CenteredBot(mut r) => {
+                r.translate(by);
+                TextBounds::BoundingBox(r)
             }
         }
     }

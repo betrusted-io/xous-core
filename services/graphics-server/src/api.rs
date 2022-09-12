@@ -26,6 +26,10 @@ pub mod glyphstyle;
 pub use glyphstyle::*;
 pub mod blitstr2;
 pub use blitstr2::*;
+#[cfg(feature="ditherpunk")]
+pub mod tile;
+#[cfg(feature="ditherpunk")]
+pub use tile::*;
 
 use std::hash::{Hash, Hasher};
 
@@ -74,6 +78,10 @@ pub(crate) enum Opcode {
     /// Draw a rounded rectangle
     RoundedRectangle, //(RoundedRectangle),
 
+    /// Paint a Bitmap Tile
+    #[cfg(feature="ditherpunk")]
+    Tile,
+
     /// Draw a circle with a specified radius
     Circle, //(Circle),
 
@@ -100,6 +108,11 @@ pub(crate) enum Opcode {
     BulkReadFonts,
     RestartBulkRead,
 
+    /// sling the framebuffer into and out of the suspend/resume area, abusing this
+    /// to help accelerate redraws between modal swaps.
+    Stash,
+    Pop,
+
     /// generates a test pattern
     TestPattern,
 
@@ -116,6 +129,8 @@ pub enum ClipObjectType {
     Rect(Rectangle),
     RoundRect(RoundedRectangle),
     XorLine(Line),
+    #[cfg(feature="ditherpunk")]
+    Tile(Tile),
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]

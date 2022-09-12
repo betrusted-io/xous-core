@@ -495,6 +495,7 @@ fn main() -> ! {
     // if you wanted to force a server into the initial config, you can do it here, for example:
     // resolver.add_server(IpAddr::V4(Ipv4Addr::new(1,1,1,1)));
 
+    // the `u32` value is the TTL of the IpAddr
     let mut dns_cache = HashMap::<std::string::String, HashMap<IpAddr, u32>>::new();
 
     // build a thread that pings the UpdateTtl function once every few minutes to expire the DNS cache
@@ -527,6 +528,13 @@ fn main() -> ! {
             Some(Opcode::RawLookup) => {
                 match name_from_msg(&msg).map(|s| s.to_owned()) {
                     Ok(owned_name) => {
+                        // handle the special case of "localhost" as a string
+                        if owned_name == "localhost" {
+                            let mut local = HashMap::<IpAddr, u32>::new();
+                            local.insert(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 86400);
+                            fill_response(msg, &local);
+                            continue;
+                        }
                         log::trace!("performing a lookup of {}", owned_name);
                         // Try to get the result out of the DNS cache
                         if let Some(entries) = dns_cache.get(&owned_name) {

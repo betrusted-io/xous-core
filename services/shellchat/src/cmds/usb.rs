@@ -19,23 +19,28 @@ impl<'a> ShellCmdApi<'a> for Usb {
 
     fn process(&mut self, args: xous_ipc::String::<1024>, _env: &mut CommonEnv) -> Result<Option<xous_ipc::String::<1024>>, xous::Error> {
         let mut ret = xous_ipc::String::<1024>::new();
-        let helpstring = "usb [hid] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
+        let helpstring = "usb [hid] [fido] [debug] [send <string>] [status] [leds] [lock] [unlock] [kbdtest]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "hid" => {
-                    self.usb_dev.switch_to_core(usb_device_xous::UsbDeviceType::Hid).unwrap();
-                    write!(ret, "USB connected to HID core").unwrap();
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::FidoKbd).unwrap();
+                    write!(ret, "USB connected to HID (FIDO + keyboard) core").unwrap();
+                }
+                "fido" => {
+                    self.usb_dev.ensure_core(usb_device_xous::UsbDeviceType::Fido).unwrap();
+                    write!(ret, "USB connected to FIDO-only core").unwrap();
                 }
                 "debug" => {
                     self.usb_dev.switch_to_core(usb_device_xous::UsbDeviceType::Debug).unwrap();
-                    write!(ret, "USB connected to Debug core").unwrap();
+                    self.usb_dev.debug_usb(Some(false)).unwrap();
+                    write!(ret, "USB connected to Debug core, secrets readable!").unwrap();
                 }
                 "send" => {
                     match self.usb_dev.get_current_core() {
-                        Ok(UsbDeviceType::Hid) => {
+                        Ok(UsbDeviceType::FidoKbd) => {
                             let mut val = String::new();
                             join_tokens(&mut val, &mut tokens);
                             match self.usb_dev.send_str(&val) {
@@ -57,7 +62,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                     }
                     test_str.push('\n');
                     match self.usb_dev.get_current_core() {
-                        Ok(UsbDeviceType::Hid) => {
+                        Ok(UsbDeviceType::FidoKbd) => {
                             match self.usb_dev.send_str(&test_str) {
                                 Ok(n) => write!(ret, "Sent {} test string", n).unwrap(),
                                 Err(_e) => write!(ret, "Can't send: are we connected to a host?").unwrap(),
@@ -72,7 +77,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                 "status" => {
                     match self.usb_dev.get_current_core() {
                         Ok(UsbDeviceType::Debug) => write!(ret, "Debug core connected").unwrap(),
-                        Ok(UsbDeviceType::Hid) => {
+                        Ok(UsbDeviceType::FidoKbd) => {
                             match self.usb_dev.status() {
                                 UsbDeviceState::Configured => write!(ret, "HID core connected to host").unwrap(),
                                 UsbDeviceState::Suspend => write!(ret, "HID in suspend").unwrap(),
@@ -84,7 +89,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                 }
                 "leds" => {
                     match self.usb_dev.get_current_core() {
-                        Ok(UsbDeviceType::Hid) => {
+                        Ok(UsbDeviceType::FidoKbd) => {
                             match self.usb_dev.get_led_state() {
                                 Ok(leds) => write!(ret, "LEDs: {:?}", leds).unwrap(),
                                 _ => write!(ret, "Not connected to USB host or other error").unwrap(),
@@ -102,7 +107,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                 }
                 "unlock" => {
                     self.usb_dev.restrict_debug_access(false).unwrap();
-                    write!(ret, "USB debug port unlocked: all secrets are readable via USB!").unwrap();
+                    write!(ret, "USB debug port unlocked: portions of the device are readable via USB!").unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

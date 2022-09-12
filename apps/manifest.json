@@ -38,7 +38,8 @@
                 "zh": "密钥库",
                 "en-tts": "Key Vault"
             }
-        }
+        },
+        "submenu": 1
     },
     "repl": {
         "context_name": "repl demo app",

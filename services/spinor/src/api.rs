@@ -11,28 +11,31 @@ pub const SPINOR_BULK_ERASE_SIZE: u32 = 0x1_0000; // this is the bulk erase size
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// writes are split into multiple transactions. Must acquire exclusive rights before initiation
-    AcquireExclusive,
-    ReleaseExclusive,
+    AcquireExclusive = 0,
+    ReleaseExclusive = 1,
     /// a special token is reserved for writing to the SoC region, only one service is allowed to do that
-    RegisterSocToken,
+    RegisterSocToken = 2,
     /// the SocToken holder can allow for writes to the staging area by other processes
-    SetStagingWriteProtect,
-    ClearStagingWriteProtect,
+    SetStagingWriteProtect = 3,
+    ClearStagingWriteProtect = 4,
     /// program a region. Erase is accomplished by calling WriteRegion with all 0xFF's as data.
-    WriteRegion,
+    WriteRegion = 5,
     /// bulk erase a region. Has fewer safety checks, used for accelerating the bulk clear of the PDDB for init.
-    BulkErase,
+    BulkErase = 6,
 
     /// allow the susres manager to prevent new ops from happening during a suspend
-    AcquireSuspendLock,
-    ReleaseSuspendLock,
+    AcquireSuspendLock = 7,
+    ReleaseSuspendLock = 8,
 
     /// intra-thread messages for suspend and resume
-    SuspendInner,
-    ResumeInner,
+    SuspendInner = 9,
+    ResumeInner = 10,
 
     /// internal interrupt handler ops
-    EccError,
+    EccError = 11,
+
+    /// read out the ECC log
+    EccLog = 12,
 }
 // Erase/Write are uninterruptable operations. Split suspend/resume
 // into a separate server to asynchronously manage this.

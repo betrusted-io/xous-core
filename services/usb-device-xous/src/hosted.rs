@@ -13,7 +13,8 @@ impl SpinalUsbMgmt {
     pub fn disable_debug(&mut self, _disable: bool) {}
     pub fn get_disable_debug(&self) -> bool {false}
     pub fn xous_suspend(&mut self) {}
-    pub fn xous_resume(&mut self) {}
+    pub fn xous_resume1(&mut self) {}
+    pub fn xous_resume2(&mut self) {}
     pub fn descriptor_from_status(&self, _ep_status: &UdcEpStatus) -> SpinalUdcDescriptor {
         SpinalUdcDescriptor {}
     }
@@ -25,7 +26,7 @@ pub struct SpinalUsbDevice {
 }
 
 impl SpinalUsbDevice {
-    pub fn new(_sid: xous::SID) -> SpinalUsbDevice {
+    pub fn new(_sid: xous::SID, _view: std::sync::Arc::<std::sync::atomic::AtomicUsize>) -> SpinalUsbDevice {
         SpinalUsbDevice {}
     }
     pub fn get_iface(&self) -> SpinalUsbMgmt {

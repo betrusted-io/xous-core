@@ -56,6 +56,7 @@ impl Susres {
     pub fn getop_suspend(&self) -> u32 { Opcode::SuspendRequest.to_u32().unwrap() }
 
     pub fn new_without_hook(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES)?;
         Ok(Susres {
             conn,
@@ -94,8 +95,10 @@ impl Susres {
         ).expect("couldn't query if my suspend was successful");
         if let xous::Result::Scalar1(result) = response {
             if result != 0 {
+                log::debug!("resume pid {} clean", xous::process::id()); // <-- use this to debug s/r
                 Ok(true)
             } else {
+                log::debug!("resume pid {} dirty", xous::process::id()); // <-- use this to debug s/r
                 Ok(false)
             }
         } else {

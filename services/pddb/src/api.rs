@@ -39,8 +39,11 @@ pub(crate) const PDDB_VERSION: u32 = 0x00_00_02_01;
 #[allow(dead_code)]
 // PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing.
 #[allow(dead_code)]
+#[cfg(not(any(feature="pddbtest",feature="autobasis",feature="ci")))]
 pub(crate) const PDDB_A_LEN: usize = xous::PDDB_LEN as usize;
-// pub(crate) const PDDB_A_LEN: usize = 4 * 1024 * 1024;
+#[allow(dead_code)]
+#[cfg(any(feature="pddbtest",feature="autobasis",feature="ci"))]
+pub const PDDB_A_LEN: usize = 4 * 1024 * 1024;
 
 /// range for the starting point of a journal number, picked from a random seed
 /// the goal is to reduce info leakage about the age of structures relative to each other
@@ -73,6 +76,26 @@ pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
 #[allow(dead_code)]
 pub(crate) const FSCB_FILL_UNCERTAINTY: f32 = 0.1;
 
+/// This is a number that represents a fraction out of 255 that is the chance of a given
+/// block of unused data being recycled with noise. (So 26 would be roughly a 10% chance).
+/// This is an optimization that makes PDDB migrations/restores faster, while maintaining
+/// some amount of deniability. The higher the chance of rekey, the better the deniability.
+///
+/// If you set the REKEY_CHANCE to 0, then after a migration or rekey operation,
+/// exactly the set of data that is used will have its ciphertext changed, which is a precise
+/// leak of the amount of information in the PDDB.
+///
+/// If you set REKEY_CHANCE to 256 or greater, then, every block is mutated, regardless of
+/// the usage state of the PDDB, and full deniability is preserved. However, this will cause
+/// the rekey operation to always take about a half hour, even if the PDDB is basically empty.
+///
+/// The initial 10% threshold gives us sufficient deniability for e.g. small secrets like
+/// passwords, TOTP tokens, U2F keys while incurring just a couple extra minutes overhead.
+/// However it would probably not be sufficient if you routinely use the PDDB to store
+/// large objects like images, audio, or large blocks of text.
+#[allow(dead_code)]
+pub(crate) const FAST_REKEY_CHANCE: u32 = 26;
+
 #[allow(dead_code)]
 pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 // this isn't an "official" basis, but it is used for the AAD for encrypting the FastSpace structure
@@ -85,79 +108,144 @@ pub(crate) const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWA
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
-    IsMounted,
-    TryMount,
+    IsMounted = 0,
+    TryMount = 1,
 
-    ListBasis,
-    LatestBasis,
+    ListBasis = 2,
+    LatestBasis = 3,
     /// Note that creating a basis does not automatically open it!
-    CreateBasis,
-    OpenBasis,
-    CloseBasis,
+    CreateBasis = 4,
+    OpenBasis = 5,
+    CloseBasis = 6,
     /// warning, the Delete routines have not been well tested
-    DeleteBasis,
-    DeleteKey,
-    DeleteDict,
-    KeyAttributes,
+    DeleteBasis = 7,
+    DeleteKey = 8,
+    DeleteDict = 9,
+    KeyAttributes = 10,
 
     // routines to list available resources
-    KeyCountInDict,
-    GetKeyNameAtIndex,
-    DictCountInBasis,
-    GetDictNameAtIndex,
+    KeyCountInDict = 11,
+    // GetKeyNameAtIndex = 12, // superceded by ListKeyV2
+    DictCountInBasis = 13,
+    GetDictNameAtIndex = 14,
 
     /// primary method for accessing the database
-    KeyRequest,
+    KeyRequest = 15,
 
     // pddbkey methods
-    ReadKey,
-    WriteKey,
-    WriteKeyFlush,
+    ReadKey = 16,
+    WriteKey = 17,
+    WriteKeyFlush = 18,
+
+    // GC methods
+    PeriodicScrub = 19,
 
     /// drops any connection state associated with a given key
-    KeyDrop,
+    KeyDrop = 20,
 
     /// Menu opcodes
-    MenuListBasis,
+    MenuListBasis = 21,
 
     /// Security state checks
-    IsEfuseSecured,
+    IsEfuseSecured = 22,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 23,
     /// quit the server
-    Quit,
+    Quit = 24,
     /// Write debug dump (only available in hosted mode)
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    DangerousDebug,
+    DangerousDebug = 25,
+    #[cfg(all(feature="pddbtest", feature="autobasis"))]
+    BasisTesting = 26,
+
+    ListBasisStd = 26,
+    CreateBasisStd = 27,
+
+    ListDictStd = 28,
+    ListKeyStd = 29,
+
+    /// libstd equivalent of `KeyRequest`
+    OpenKeyStd = 30,
+
+    /// Read a number of bytes from the current offset.
+    ReadKeyStd = 31,
+
+    /// Write a number of bytes at the current offset
+    WriteKeyStd = 32,
+
+    /// libstd equivalent of `KeyDrop`
+    CloseKeyStd = 34,
+
+    /// Remove a key from the database.
+    DeleteKeyStd = 35,
+
+    /// Return the latest basis. Useful for resolving `::` as a path.
+    LatestBasisStd = 36,
+
+    /// List all keys and dicts under a given colon-delimited path
+    ListPathStd = 37,
+
+    /// Get information about a file path
+    StatPathStd = 38,
+
+    /// Seek a file descriptor
+    SeekKeyStd = 39,
+
+    /// Create a dict
+    CreateDictStd = 40,
+
+    /// Remove an empty dict
+    DeleteDictStd = 41,
+
+    /// Rekey the PDDB
+    RekeyPddb = 42,
+
+    /// Reset "don't ask to init root keys" flag - pass-through to root keys object - for end of OQC test
+    ResetDontAskInit = 43,
+
+    /// Flush the SpaceUpdate log, restoring deniability
+    FlushSpaceUpdate = 44,
+
+    /// Optimized key listing
+    ListKeyV2 = 45,
+
+    /// change unlock PIN
+    MenuChangePin = 46,
+
+    /// This key type could not be decoded
+    InvalidOpcode = u32::MAX as _,
 }
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum PollOp {
-    Poll,
-    Quit,
+    Poll = 0,
+    Quit = 1,
 }
 
 pub type ApiToken = [u32; 3];
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C)]
 pub struct PddbBasisList {
     /// the first 63 that fit in the list -- generally we anticipate not more than a few being open at a time, so this should be enough.
     pub list: [xous_ipc::String::<BASIS_NAME_LEN>; 63],
     /// total number of basis open. Should be <= 63, but we allow it to be larger to indicate cases where this structure wasn't big enough.
     pub num: u32,
 }
+
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum PddbRequestCode {
-    Create,
-    Open,
-    Close,
-    Delete,
-    NoErr,
-    NotMounted,
-    NoFreeSpace,
-    NotFound,
-    InternalError,
-    AccessDenied,
-    Uninit,
+    Create = 0,
+    Open = 1,
+    Close = 2,
+    Delete = 3,
+    NoErr = 4,
+    NotMounted = 5,
+    NoFreeSpace = 6,
+    NotFound = 7,
+    InternalError = 8,
+    AccessDenied = 9,
+    Uninit = 10,
 }
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -207,9 +295,19 @@ pub struct PddbKeyRequest {
     pub result: PddbRequestCode,
 }
 
+pub(crate) const MAX_PDDBKLISTLEN: usize = 4064;
+/// A structure for requesting a token to access a particular key/value pair
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub (crate) struct PddbKeyList {
+    pub token: [u32; 4],
+    pub data: [u8; MAX_PDDBKLISTLEN],
+    pub retcode: PddbRetcode,
+    pub end: bool,
+}
+
 /// Return codes for Read/Write API calls to the main server
 #[repr(u8)]
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) enum PddbRetcode {
     Uninit = 0,
     Ok = 1,
@@ -219,26 +317,32 @@ pub(crate) enum PddbRetcode {
     InternalError = 5,
     DiskFull = 6,
 }
+
+pub(crate) const PDDB_BUF_DATA_LEN: usize = 4072;
 /// PddbBuf is a C-representation of a page of memory that's used
 /// to shuttle data for streaming channels. It must be exactly one
 /// page in size, with some overhead specific to the PDDB book-keeping
 /// at the top, and the remainder available for shuttling data.
-///
-/// It does not use rkyv, as the blanket implementation of that tends to
-/// incur too many extra copies an/or zeroing operations.
-#[repr(C, packed)]
+#[repr(C, align(4096))]
 pub(crate) struct PddbBuf {
     /// api token for the given buffer
     pub(crate) token: ApiToken,
-    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
-    pub(crate) position: u64,
-    /// length of the data field
-    pub(crate) len: u16,
     /// a field reserved for the return code
     pub(crate) retcode: PddbRetcode,
-    pub(crate) reserved: u8,
-    pub(crate) data: [u8; 4072],
+    reserved: u8,
+    /// length of the data field
+    pub(crate) len: u16,
+    /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
+    pub(crate) position: u64,
+    pub(crate) data: [u8; PDDB_BUF_DATA_LEN],
 }
+
+#[allow(dead_code)]
+/// Ensure that the `PddbBuf` struct is exactly one page big
+const fn _assert_pddbbuf_is_4096_bytes() {
+    unsafe { core::mem::transmute::<_, PddbBuf>([0u8; 4096]); }
+}
+
 impl PddbBuf {
     pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
         // this transforms the slice [u8] into a PddbBuf ref.
@@ -329,6 +433,46 @@ impl PddbKeyAttrIpc {
     }
 }
 
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
+pub enum PddbRekeyOp {
+    /// rekeys the a restored PDDB to the current device DNA using the "fast" method.
+    /// The "fast" method is significantly faster on PDDBs with a small amount of data, but
+    /// it will leak information on the amount of data in the PDDB, in a manner that can be
+    /// trivially recovered by doing comparative ciphertext analysis between the backup and
+    /// the current database image. *Some* amount of chaffe data is written, but only a
+    /// small amount.
+    FromDnaFast(u64),
+    /// same as the above, but blank space is also turned over, guaranteeing the deniability
+    /// of stored data even if an attacker has the previous backup copy of the PDDB.
+    FromDnaSafe(u64),
+    /// Basically the same as FromDnaSafe, but doing a self-to-self "safe" rekey
+    Churn,
+    /*
+    // skip this implementation for now. This opcode fits generally into this code flow,
+    // but requires some rework of the UX to actually acquire the old and new passwords.
+    // this UX work is off-topic from the mission of getting backup restoration done,
+    // but the potential to integrate the password rotation scheme into this function is
+    // noted here for future efforts.
+    //
+    /// Requests a single secret basis to have its password changed. This will reveal the size
+    /// of the Basis if the attacker has a before-and-after image of the PDDB.
+    /// Recommended to call `Churn` after this operation is done for optimal safety.
+    ///
+    /// Note: changing the password on the .System basis is a different flow. The
+    /// system basis keys are encrypted directly by the rootkeys enclave, so changing
+    /// its password requires calling a routine in root_keys (that does not exist
+    /// at this current time).
+    ChangePass(xous_ipc::String<BASIS_NAME_LEN>),
+    */
+
+    /// Return codes
+    Success,
+    AuthFail,
+    UserAbort,
+    VerifyFail,
+    InternalError,
+}
+
 /// Debugging commands, available only in hosted mode
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -339,8 +483,8 @@ pub struct PddbDangerousDebug {
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum DebugRequest {
-    Dump,
-    Remount,
+    Dump = 0,
+    Remount = 1,
 }
 
 #[cfg(test)]

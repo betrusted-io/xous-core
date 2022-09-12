@@ -52,6 +52,6 @@ fn main() {
     // CI sets this variable. This changes how the panic handler works.
     println!("cargo:rerun-if-env-changed=CI");
     if option_env!("CI").is_some() {
-        println!("cargp:rustc-cfg=ci");
+        println!("cargo:rustc-cfg=ci");
     }
 }

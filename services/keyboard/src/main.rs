@@ -738,12 +738,12 @@ fn main() -> ! {
     //  - GAM
     //  - graphics (if building for hosted mode)
     //  - oqc (for factory test)
-    //  - status sub system (for setting the layout)
+    //  - status sub system (for setting the layout, autobacklight feature)
     //  - USB (for getting layout)
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(5)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 
     // Create a new kbd object
@@ -760,6 +760,8 @@ fn main() -> ! {
     let mut listener_op: Option<usize> = None;
     let mut raw_listener_conn: Option<CID> = None;
     let mut raw_listener_op: Option<u32> = None;
+    let mut observer_conn: Option<CID> = None;
+    let mut observer_op: Option<usize> = None;
 
     let mut vibe = false;
     let llio = llio::Llio::new(&xns);
@@ -831,6 +833,23 @@ fn main() -> ! {
                         log::error!("couldn't connect to listener: {:?}", e);
                         raw_listener_conn = None;
                         raw_listener_op = None;
+                    }
+                }
+            },
+            Some(Opcode::RegisterKeyObserver) => {
+                let buffer = unsafe{Buffer::from_memory_message(msg.body.memory_message().unwrap())};
+                let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
+                if observer_conn.is_none() {
+                    match xns.request_connection_blocking(kr.server_name.as_str()) {
+                        Ok(cid) => {
+                            observer_conn = Some(cid);
+                            observer_op = Some(kr.listener_op_id as usize);
+                        }
+                        Err(e) => {
+                            log::error!("couldn't connect to observer: {:?}", e);
+                            observer_conn = None;
+                            observer_op = None;
+                        }
                     }
                 }
             },
@@ -942,6 +961,20 @@ fn main() -> ! {
                         ).unwrap();
                     }
                 }
+
+                if observer_conn.is_some() && observer_op.is_some() {
+                    log::trace!("sending observer key");
+                    xous::try_send_message(observer_conn.unwrap(),
+                        xous::Message::new_scalar(
+                            observer_op.unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        )
+                    ).ok();
+                }
+
                 #[cfg(all(feature="debuginject", not(feature="rawserial")))]
                 for listener in blocking_listener.drain(..) {
                     // we must unblock anyways once the key is hit; even if the key is invalid,
@@ -968,6 +1001,19 @@ fn main() -> ! {
 
                     let buf = Buffer::into_buf(krs_ser).or(Err(xous::Error::InternalError)).expect("couldn't serialize krs buffer");
                     buf.lend(raw_listener_conn.unwrap(), raw_listener_op.unwrap()).expect("couldn't send raw scancodes");
+                }
+
+                if observer_conn.is_some() && observer_op.is_some() {
+                    log::trace!("sending observer key");
+                    xous::send_message(observer_conn.unwrap(),
+                        xous::Message::new_scalar(
+                            observer_op.unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        )
+                    ).expect("couldn't send key codes to listener");
                 }
 
                 // interpret scancodes

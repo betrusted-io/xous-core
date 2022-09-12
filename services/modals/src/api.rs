@@ -1,4 +1,6 @@
 use gam::modal::*;
+#[cfg(feature = "ditherpunk")]
+use gam::Tile;
 
 pub(crate) const SERVER_NAME_MODALS: &str = "_Modal Dialog Server_";
 
@@ -38,8 +40,24 @@ pub struct ManagedNotification {
     pub token: [u32; 4],
     pub message: xous_ipc::String<1024>,
     // A Type 40 (177x177) qrcode with Medium data correction can encode max 3391 alphanumeric characters
-    pub qrtext: Option<xous_ipc::String<4096>>,
+    pub qrtext: Option<xous_ipc::String<3000>>,
 }
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct ManagedBip39 {
+    pub token: [u32; 4],
+    pub bip39_data: [u8; 32],
+    pub bip39_len: u32,
+    pub caption: Option<xous_ipc::String<1024>>,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[cfg(feature = "ditherpunk")]
+pub struct ManagedImage {
+    pub token: [u32; 4],
+    pub tiles: [Option<Tile>; 6],
+}
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ManagedProgress {
     pub token: [u32; 4],
@@ -63,44 +81,55 @@ pub struct DynamicNotification {
     pub text: Option<xous_ipc::String<2048>>,
 }
 
+/// API note: enums with explicit numbers may not have their numbers re-ordered, especially
+/// not for aesthetic reasons! This is because when we assign numbers to enums, something else
+/// is explicitly depending on that number in a way that will break if you change it (e.g.
+/// FFI ABIs)
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     // these are blocking calls
     /// ask a question, get a single response from a list of defined items (radio box)
-    PromptWithFixedResponse,
+    PromptWithFixedResponse = 0,
     /// ask a question, get multiple responses from a list of defined items (check box)
-    PromptWithMultiResponse,
+    PromptWithMultiResponse = 1,
     /// simple notification
-    Notification,
+    Notification = 2,
+    /// bip39 coded notification
+    Bip39 = 31, // ---- note op number
+    Bip39Input = 32, // ----- note op number
+    Bip39Return = 33, // ----- note op number
+    /// display an image
+    #[cfg(feature = "ditherpunk")]
+    Image = 3,
     /// dynamic notification - a simple non-interactive notification that allows its text to be dynamically updated
-    DynamicNotification,
+    DynamicNotification = 4,
     /// listen to dynamic notification - a blocking call, meant to be called from a separate thread from the control loop
-    ListenToDynamicNotification,
+    ListenToDynamicNotification = 5,
 
     /// ask a question, get a free-form answer back
-    PromptWithTextResponse,
+    PromptWithTextResponse = 6,
     /// must be used by the PromptWithTextResponse caller to acknowledge correct input
-    TextResponseValid,
+    TextResponseValid = 7,
 
     // these are non-blocking calls
     /// add an item to the radio box or check box. Note that all added items
     /// are cleared after the relevant "action" call happens (PromptWith[Fixed,Multi]Response)
-    AddModalItem,
+    AddModalItem = 8,
     /// get the index of the selected radio button / checkboxes
-    GetModalIndex,
+    GetModalIndex = 9,
     /// raise a progress bar
-    StartProgress,
+    StartProgress = 10,
     /// update the progress bar
-    DoUpdateProgress,
+    DoUpdateProgress = 11,
     /// lower a progress bar
-    StopProgress,
+    StopProgress = 12,
     /// update a dynamic notification's text
-    UpdateDynamicNotification,
+    UpdateDynamicNotification = 13,
     /// close dynamic notification
-    CloseDynamicNotification,
+    CloseDynamicNotification = 14,
 
     /// used by libraries to get the mutex on the server
-    GetMutex,
+    GetMutex = 15,
 
     // these are used internally by the modals to handle intermediate state. Do not call from the outside.
     // these were originally handled in a separate thread for deferred responses using busy-waits. They are
@@ -108,22 +137,24 @@ pub(crate) enum Opcode {
     // it does expose some of the internal API mechanics to outside processes. This is fine for the modals
     // box because it's a convenience routine used by "everyone"; password boxes are always handled within
     // a given secured server so that the attack surface for these do not extend into the modals boundary.
-    InitiateOp,
-    FinishProgress,
+    InitiateOp = 16,
+    FinishProgress = 17,
 
-    TextEntryReturn,
-    RadioReturn,
-    CheckBoxReturn,
-    NotificationReturn,
+    TextEntryReturn = 18,
+    RadioReturn = 19,
+    CheckBoxReturn = 20,
+    NotificationReturn = 21,
+    #[cfg(feature = "ditherpunk")]
+    ImageReturn = 22,
 
-    DoUpdateDynamicNotification,
-    DoCloseDynamicNotification,
-    HandleDynamicNotificationKeyhit,
+    DoUpdateDynamicNotification = 23,
+    DoCloseDynamicNotification = 24,
+    HandleDynamicNotificationKeyhit = 25,
 
-    ModalRedraw,
-    ModalKeypress,
-    ModalDrop,
-    Gutter,
+    ModalRedraw = 26,
+    ModalKeypress = 27,
+    ModalDrop = 28,
+    Gutter = 29,
 
-    Quit,
+    Quit = 30,
 }

@@ -18,14 +18,54 @@ apps/vault/tools/crypto_data
 
 # local utility shellscripts
 update-precursors.sh
+buildpush.ps1
+# local-only routines used to start builds
+/*.ps1
+/*.bat
+/*.sh
+# notes to myself
+/*.txt
+
+# SSH id file for convenience
+/id_pi
 
 # pddb debug files
 tools/pddb-images/
 tools/__pycache__
 
+# PDDB backup files
+*.pddb
+
+# renode will tickle this every time you run it, but you shouldn't commit that back to the tree
+/emulation/linux-server-rootfs.jffs2
+
 # don't record weirdnesses dealing with vscode
-.vscode/settings-hw.json
-.vscode/settings-xous.json
+/.vscode/
+/.vs/
 
 # don't commit local modifications to the Renode filesystem template
 emulation/linux-server-rootfs.jffs2
+
+# bloat analyzer reports
+reports/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+

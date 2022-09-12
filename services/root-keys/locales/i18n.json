@@ -1,27 +1,141 @@
 {
-    "rootkeys.bootpass": {
-        "en": "Create a PIN code for device unlock.",
-        "ja": "デバイスのロックを解除するためのPINコードを作成します。",
-        "zh": "输入密码 解锁 安全含义:低",
-        "en-tts": "Enter unlock password"
+    "rootkeys.backup_key": {
+        "en": "This is your backup key:\nWRITE IT DOWN, KEEP IT SECRET.",
+        "ja": "これがバックアップキーです：\n書き留めて、秘密にしてください。",
+        "zh": "这是您的备份密钥：\n写下来，保密。",
+        "en-tts": "This is your backup key:\nWRITE IT DOWN, KEEP IT SECRET."
     },
-    "rootkeys.updatepass": {
-        "en": "⚠ Critical Password ⚠\nCreate a strong passphrase for authorizing system updates.",
+    "rootkeys.backup_verify": {
+        "en": "Would you like to verify that you wrote the backup key down correctly by re-entering it now?",
+        "ja": "今すぐ再入力して、バックアップキーを正しく書き留めたことを確認しますか？",
+        "zh": "您想通过现在重新输入来验证您是否正确记下了备份密钥吗？",
+        "en-tts": "Would you like to verify that you wrote the backup key down correctly by re-entering it now?"
+    },
+    "rootkeys.backup_badpass": {
+        "en": "Password incorrect. Aborting backup!",
+        "ja": "正しくないパスワード。 バックアップを中止します！",
+        "zh": "密码错误。 中止备份！",
+        "en-tts": "Password incorrect. Aborting backup!"
+    },
+    "rootkeys.restore_badpass": {
+        "en": "BIP-39 entry was not valid. Aborting restore!",
+        "ja": "BIP-39エントリが無効でした。 復元を中止します！",
+        "zh": "BIP-39 条目无效。 中止恢复！",
+        "en-tts": "BIP-39 entry was not valid. Aborting restore!"
+    },
+    "rootkeys.restore_abort": {
+        "en": "Aborting restore!",
+        "ja": "復元を中止します！",
+        "zh": "中止恢复！",
+        "en-tts": "Aborting restore!"
+    },
+    "rootkeys.try_again": {
+        "en": "Try again?",
+        "ja": "再試行？",
+        "zh": "再试一次？",
+        "en-tts": "Try again?"
+    },
+    "rootkeys.restore_zero_key": {
+        "en": "Note: your backup was encrypted with the '0' key. Skipping password entry.\nThis is normal for developers.\n\nUsers should burn BBRAM or eFuse key for secure backups!",
+        "ja": "注：バックアップは「0」キーで暗号化されています。 パスワード入力をスキップします。\n\n安全なバックアップのためにBBRAMまたはeFuseキーを焼きます！",
+        "zh": "注意：您的备份是使用“0”密钥加密的。 跳过密码输入。\n\n刻录 BBRAM 或 eFuse 密钥以进行安全备份！",
+        "en-tts": "Note: your backup was encrypted with the '0' key. Skipping password entry.\n\nBurn BBRAM or eFuse key for secure backups!"
+    },
+    "rootkeys.restore_needs_keyburn": {
+        "en": "Note: Restoring to a device that booted from a 'Zero Key'.\n\nAfter the restore, you will need to set a brand new backup key. Until then, your backup key will be the insecure Zero Key!",
+        "ja": "注：ゼロキーから起動したデバイスに復元します。\n\n復元後、新しいバックアップキーを設定する必要があります。 それまでは、バックアップキーは0キーになります。",
+        "zh": "注意：还原到从零密钥启动的设备。\n\n还原后，您需要设置一个全新的备份密钥。 在那之前，您的备份密钥将是 0 密钥！",
+        "en-tts": "Note: Restoring to a device that booted from a zero key.\n\nAfter the restore, you will need to set a brand new backup key. Until then, your backup key will be the 0 key!"
+    },
+    "rootkeys.restore_corrupt": {
+        "en": "Restore record is corrupted. Aborting restore!",
+        "ja": "復元レコードが破損しています。 復元を中止します！",
+        "zh": "还原记录已损坏。 中止恢复！",
+        "en-tts": "Restore record is corrupted. Aborting restore!"
+    },
+    "rootkeys.restore_already_init": {
+        "en": "Device has already been initialized. A restore will overwrite existing keys, and potentially fail if your device is locked to a different backup key.\n\nProceed?",
+        "ja": "デバイスはすでに初期化されています。 復元するとすべてのデータが上書きされ、デバイスが別のバックアップキーにロックされていると失敗する可能性があります。\n \n続行しますか？",
+        "zh": "设备已经初始化。 还原将覆盖所有数据，如果您的设备被锁定到不同的备份密钥，则可能会失败。\n\n是否继续？",
+        "en-tts": "Device has already been initialized. A restore will overwrite existing keys, and potentially fail if your device is locked to a different backup key.\n\nProceed?"
+    },
+    "rootkeys.backup_key_enter": {
+        "en": "Please enter your backup key now:",
+        "ja": "今すぐバックアップキーを入力してください：",
+        "zh": "请立即输入您的备份密钥：",
+        "en-tts": "Please enter your backup key now:"
+    },
+    "rootkeys.backup_key_match": {
+        "en": "Backup key entered correctly!",
+        "ja": "バックアップキーが正しく入力されました！",
+        "zh": "备份密钥输入正确！",
+        "en-tts": "Backup key entered correctly!"
+    },
+    "rootkeys.backup_key_mismatch": {
+        "en": "Backup key did not match.\n\nThis is your backup key, again:",
+        "ja": "バックアップキーが一致しませんでした。\n\nこれもバックアップキーです：",
+        "zh": "备份密钥不匹配。\n\n这是您的备份密钥，再次：",
+        "en-tts": "Backup key did not match. This is your backup key, again:"
+    },
+    "rootkeys.backup_prepwait": {
+        "en": "Preparing backup state...",
+        "ja": "バックアップの準備中...",
+        "zh": "正在准备备份...",
+        "en-tts": "Preparing backup state..."
+    },
+    "rootkeys.backup_staged": {
+        "en": "Backup data is prepared.\nConnect to a host computer by USB, and download the backup data bundle.\nScan the QR code for instructions:",
+        "ja": "バックアップデータを用意します。 これで、ホストコンピューターに接続して、バックアップデータバンドルをダウンロードできます。",
+        "zh": "备份数据已准备好。 您现在可以连接到主机并下载备份数据包。",
+        "en-tts": "Backup data is prepared. You may now connect to a host computer and download the backup data bundle."
+    },
+    "rootkeys.backup_staging_error": {
+        "en": "Internal error performing backup. Process aborted.",
+        "ja": "バックアップの実行中に内部エラーが発生しました。 プロセスが中止されました。",
+        "zh": "执行备份的内部错误。 进程中止。",
+        "en-tts": "Internal error performing backup. Process aborted."
+    },
+    "rootkeys.updatefirstpass": {
+        "en": "⚠ Critical Password ⚠\nCreate a strong root password for authorizing system updates.",
         "ja": "重要なパスワード\nシステムアップデートを認証するための強力なパスフレーズを作成します。",
         "zh": "输入密码 软件更新 安全含义:至关重要 ",
-        "en-tts": "Enter update password. This password is critically important."
+        "en-tts": "Enter a root password. This should be a strong password."
+    },
+    "rootkeys.updatepass": {
+        "en": "⚠ Critical Password ⚠\nPlease confirm the root password.",
+        "ja": "ルートパスワードを確認してください。",
+        "zh": "请确认root密码。",
+        "en-tts": "Please confirm the root password."
+    },
+    "rootkeys.updatepass_fail": {
+        "en": "Passwords did not match. Try again?",
+        "ja": "パスワードが間違っています。 再試行？",
+        "zh": "密码不匹配。 再试一次？",
+        "en-tts": "Passwords did not match. Try again?"
+    },
+    "rootkeys.blind_update": {
+        "en": "No device keys detected. Shall we copy the staged gateware anyways, overwriting the current image?",
+        "ja": "ルートキーが検出されませんでした。 とにかくステージングされたゲートウェアをコピーして、現在のイメージを上書きしませんか？",
+        "zh": "未检测到根密钥。 我们是否要复制暂存的网关软件，覆盖当前映像？",
+        "en-tts": "No device keys detected. Shall we copy the staged gateware anyways, overwriting the current image?"
+    },
+    "rootkeys.wrong_state": {
+        "en": "System in an unexpected state. Aborting.",
+        "ja": "予期しない状態のシステム。 中止します。",
+        "zh": "系统处于意外状态。 中止。",
+        "en-tts": "System in an unexpected state. Aborting."
     },
     "rootkeys.already_init": {
-        "en": "Root keys already initialized.",
+        "en": "Device keys already initialized.",
         "ja": "ルートキーはすでに初期化されています。",
         "zh": "根密码已经设置",
-        "en-tts": "Root keys already initialized."
+        "en-tts": "Device keys already initialized."
     },
     "rootkeys.confirm": {
-        "en": "This will initialize the root keys on your Precursor device.\n\nYou will be prompted for two passwords:\n\t1. Device unlock PIN code\n\t2. System update passphrase.\n\nAre you ready?",
-        "ja": "これにより、Precursorデバイスのルートキーが初期化されます。\n\n2つのパスワードの入力を求められます。\n\t1.デバイスのロック解除PINコード\n\t2.システムアップデートパスフレーズ。\n\n準備はいいですか？",
-        "zh": "仅当您准备好信 任此设备时才 应继续",
-        "en-tts": "You should only proceed with this operation if you are ready to trust this device."
+        "en": "🔐 Setup passwords for Precursor 🔐\n\nYou will be prompted for a root passphrase that must be secure and cannot be changed.\n\nAre you ready?",
+        "ja": "🔐 Precursor のパスワードを設定する 🔐\n\nルート パスフレーズの入力を求めるメッセージが表示されます。ルート パスフレーズは安全である必要があり、変更することはできません。\n\n準備はできていますか?",
+        "zh": "🔐 为 Precursor 设置密码 🔐\n\n系统将提示您输入必须安全且无法更改的根密码。\n\n您准备好了吗？",
+        "en-tts": "Setup passwords for Precursor\n\nYou will be prompted for a root passphrase that must be secure and cannot be changed.\n\nAre you ready?"
     },
     "rootkeys.confirm.yes": {
         "en": "I'm ready!",
@@ -34,6 +148,12 @@
         "ja": "まだです、多分後で。",
         "zh": "我先检查一下,稍后再试",
         "en-tts": "I'll try again after inspecting my device."
+    },
+    "rootkeys.confirm.dont_ask": {
+        "en": "Stop bothering me; I know what I'm doing.",
+        "ja": "二度と気にしないで",
+        "zh": "不要再打扰我了",
+        "en-tts": "Stop bothering me; I know what I'm doing."
     },
     "rootkeys.setup_wait": {
         "en": "Initializing keys. This takes a few minutes. Do not reset or sleep!",
@@ -53,6 +173,12 @@
         "zh": "签名内核 可能还要等一下 不要重置或睡眠! ",
         "en-tts": "Signing kernel. This may take a while, don't reset or sleep the device."
     },
+    "rootkeys.init.signing_gateware": {
+        "en": "Signing gateware. This takes a few minutes. Do not reset or sleep!",
+        "ja": "ゲートウェアへを署名中です。これには数分かかります。リセットやスリープはしないでください。",
+        "zh": "备份比特流 可能还要等一下 不要重置或睡眠! ",
+        "en-tts": "Signing gateware. This may take a while, don't reset or sleep the device."
+    },
     "rootkeys.init.backup_gateware": {
         "en": "Backing up gateware. This takes a few minutes. Do not reset or sleep!",
         "ja": "ゲートウェアをバックアップ中です。これには数分かかります。リセットやスリープはしないでください。",
@@ -60,10 +186,10 @@
         "en-tts": "Backing up gateware. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.patching_keys": {
-        "en": "Injecting new keys. This takes a few minutes. Do not reset or sleep!",
+        "en": "Injecting device keys. This takes a few minutes. Do not reset or sleep!",
         "ja": "新しいキーを挿入中です。これには数分かかります。リセットやスリープはしないでください。",
         "zh": "更换新钥匙 可能还要等一下 不要重置或睡眠! ",
-        "en-tts": "Injecting new keys. This may take a while, don't reset or sleep the device."
+        "en-tts": "Injecting device keys. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.verifying_gateware": {
         "en": "Verifying new gateware. This takes a few minutes. Do not reset or sleep!",
@@ -84,10 +210,10 @@
         "en-tts": "Unplug the charging cable so I can reboot!"
     },
     "rootkeys.init.finished": {
-        "en": "Rebooting now...   ",
+        "en": "Rebooting now...\n\nIf the system shows a 'No valid keys' error or hangs, insert a paperclip into the hole in the lower right hand edge and plug in power to reload the FPGA bitstream.",
         "ja": "再起動中...",
         "zh": "准备重启...  ",
-        "en-tts": "Rebooting now."
+        "en-tts": "Rebooting now...\n\nIf the system shows a 'No valid keys' error or hangs, insert a paperclip into the hole in the lower right hand edge and plug in power to reload the FPGA bitstream."
     },
     "rootkeys.init.fail_verify": {
         "en": "Verification failed, aborting!",
@@ -96,10 +222,10 @@
         "en-tts": "Verification failed, aborting"
     },
     "rootkeys.init.fail_key": {
-        "en": "FPGA key is wrong: Perhaps the update password was entered incorrectly?",
-        "ja": "FPGAキーが間違っています: 更新パスワードが間違って入力された可能性がありますか？",
-        "zh": "*missing*正在初始化失败，中止します!",
-        "en-tts": "FPGA key is wrong, perhaps the update password was entered incorrectly?"
+        "en": "Incorrect password.",
+        "ja": "間違ったパスワード.",
+        "zh": "密码错误",
+        "en-tts": "Incorrect password."
     },
     "rootkeys.init.fail_burn": {
         "en": "FLASH write problem, aborting!",
@@ -146,8 +272,8 @@
     "rootkeys.gwup.viewinfo_dk": {
         "en": "Devkey image found. Review details?",
         "ja": "Devkeyの画像が見つかりました。 詳細を確認しますか？",
-        "zh": "**missing**查看更新的详细信息?",
-        "en-tts": "Self-signed image found. Review details?"
+        "zh": "找到 Devkey 映像。 查看详细信息？",
+        "en-tts": "Devkey image found. Review details?"
     },
     "rootkeys.gwup.details": {
         "en": "All details",
@@ -192,16 +318,28 @@
         "en-tts": "Updating gateware. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.get_update_password": {
-        "en": "⚠ Critical password request ⚠\nEnter the 'SYSTEM UPDATE' passphrase. This authorizes a system update.",
-        "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。これでシステムアップデートが許可されます。",
-        "zh": "输入密码 软件更新 安全含义:至关重要 ",
-        "en-tts": "Enter update password, in order to authorize a gateware update."
+        "en": "⚠ Critical password request ⚠\nEnter the 'root' passphrase. This authorizes a system update.",
+        "ja": "重要なパスワード要求\nROOTのパスフレーズを入力してください。これでシステムアップデートが許可されます。",
+        "zh": "⚠ 关键密码请求⚠\n输入ROOT密码。 这将授权系统更新。",
+        "en-tts": "Enter root password, in order to authorize a gateware update."
+    },
+    "rootkeys.get_update_password_backup": {
+        "en": "⚠ Critical password request ⚠\nEnter the 'root' passphrase. This authorizes a backup to be created.",
+        "ja": "重要なパスワード要求\nROOTのパスフレーズを入力してください。これにより、バックアップの作成が許可されます。",
+        "zh": "⚠ 关键密码请求⚠\n输入“ROOT”密码。 这将授权创建备份。",
+        "en-tts": "Enter root password, in order to authorize a backup."
+    },
+    "rootkeys.get_update_password_restore": {
+        "en": "⚠ Critical password request ⚠\nEnter the 'root' passphrase. This authorizes a restore to proceed.",
+        "ja": "重要なパスワード要求\nROOTのパスフレーズを入力してください。これにより、バックアップの作成が許可されます。",
+        "zh": "⚠ 关键密码请求⚠\n输入“ROOT”密码。 这将授权创建备份。",
+        "en-tts": "Enter root password, in order to authorize a restore to proceed."
     },
     "rootkeys.gwup.finished": {
-        "en": "Gateware update finished.\nReboot at your earliest convenience.",
+        "en": "Gateware update finished.\n\nReboot by inserting a paperclip into the small hole on the lower right at your earliest convenience.",
         "ja": "ゲートウェアアップデートが終了しました。ご都合の良い時に再起動してください。",
         "zh": "更新完成重启应用",
-        "en-tts": "Gateware update finished. Reboot at your earliest convenience."
+        "en-tts": "Gateware update finished. Reboot by inserting a paperclip into the small hole on the lower right at your earliest convenience."
     },
     "rootkeys.bbram.confirm": {
         "en": "Connect provisioning helper, then press enter. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for details.",
@@ -212,7 +350,7 @@
     "rootkeys.bbram.finished": {
         "en": "BBRAM helper should have rebooted the device. There was a problem with the procedure!",
         "ja": "BBRAMヘルパーはデバイスをリブートしたはずです。手順に問題がありました!",
-        "zh": "**missing**",
+        "zh": "BBRAM 助手应该已经重启了设备。 程序有问题！",
         "en-tts": "BBRAM helper should have rebooted the device, you should not get this message!"
     },
     "rootkeys.bbram.failed_restore": {
@@ -234,10 +372,10 @@
         "en-tts": "No BBRAM helper found. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for help."
     },
     "rootkeys.get_signing_password": {
-        "en": "⚠ Critical password request ⚠\nEnter the 'SYSTEM UPDATE' passphrase.\n\nThis will digitally sign your system firmware.",
-        "ja": "重要なパスワード要求\nSYSTEM UPDATEのパスフレーズを入力してください。\n\nこれにより、システムのファームウェアに電子署名が施されます。",
-        "zh": "输入密码 软件更新 安全含义:至关重要 ",
-        "en-tts": "Enter update password, in order to authorize a gateware update."
+        "en": "⚠ Critical password request ⚠\nEnter the 'root' passphrase.\n\nThis will digitally sign your system firmware.",
+        "ja": "重要なパスワード要求\nROOTのパスフレーズを入力してください。\n\nこれにより、システムのファームウェアに電子署名が施されます。",
+        "zh": "输入密码 ROOT 安全含义:至关重要 ",
+        "en-tts": "Enter root password, in order to authorize a gateware update."
     },
     "rootkeys.signxous.finished": {
         "en": "Xous signing finished.\nReboot at your earliest convenience.",
@@ -246,7 +384,7 @@
         "en-tts": "Xous signing finished. Reboot at your earliest convenience."
     },
     "rootkeys.get_login_password": {
-        "en": "Password request\nEnter the 'DEVICE UNLOCK' PIN code.",
+        "en": "Password request\nEnter the 'unlock' PIN code.",
         "ja": "パスワード要求\nデバイスのロック解除のPINコードを入力してください。",
         "zh": "输入密码 解锁 安全含义:低",
         "en-tts": "Enter device unlock password to access basic service."
@@ -254,7 +392,7 @@
     "rootkeys.bad_password_request": {
         "en": "Someone issued a request for a non-existent password.",
         "ja": "誰かが存在しないパスワードのリクエストを発行しました。",
-        "zh": "**improve**无效的密码请求",
+        "zh": "有人发出不存在密码的请求。",
         "en-tts": "Someone issued a request for a non-existent password."
     },
     "rootkeys.policy_request": {

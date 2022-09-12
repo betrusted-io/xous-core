@@ -30,6 +30,37 @@ const STOP_ID: usize = 1;
 const SAMPLE_RATE_HZ: f32 = 8000.0;
 // note to self: A4 = 440.0, E4 = 329.63, C4 = 261.63
 
+use std::num::ParseIntError;
+/// this will parse a simple decimal into an i32, multiplied by 1000
+/// we do this because the full f32 parsing stuff is pretty heavy, some
+/// 28kiB of code
+#[inline(never)]
+fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntError> {
+    if let Some((integer, fraction)) = input.split_once('.') {
+        let mut result = integer.parse::<i32>()? * 1000;
+        let mut significance = 100i32;
+        for (place, digit) in fraction.chars().enumerate() {
+            if place >= 3 {
+                break;
+            }
+            if let Some(d) = digit.to_digit(10) {
+                if result >= 0 {
+                    result += (d as i32) * significance;
+                } else {
+                    result -= (d as i32) * significance;
+                }
+                significance /= 10;
+            } else {
+                return "z".parse::<i32>() // you can't create a ParseIntError any other way
+            }
+        }
+        Ok(result)
+    } else {
+        let base = input.parse::<i32>()?;
+        Ok(base * 1000)
+    }
+}
+
 impl<'a> ShellCmdApi<'a> for Audio {
     cmd_api!(audio);
 
@@ -42,15 +73,15 @@ impl<'a> ShellCmdApi<'a> for Audio {
             match sub_cmd {
                 "tone" => {
                     self.freq = if let Some(freq_str) = tokens.next() {
-                        match freq_str.parse::<f32>() {
-                            Ok(f) => f,
+                        match simple_kilofloat_parse(freq_str) {
+                            Ok(f) => (f as f32) / 1000.0,
                             Err(_) => 440.0,
                         }
                     } else {
                         440.0
                     };
                     let mut duration: f32 = if let Some(duration_str) = tokens.next() {
-                        duration_str.parse::<f32>().unwrap_or(0.5)
+                        simple_kilofloat_parse(duration_str).unwrap_or(500) as f32 / 1000.0
                     } else {
                         0.5
                     };

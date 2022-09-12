@@ -5,7 +5,7 @@ edition = "2018"
 name = "com"
 version = "0.1.0"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 log = "0.4.14"
@@ -22,6 +22,8 @@ llio = {path = "../llio"}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+
+xous-semver = "0.1.2"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}

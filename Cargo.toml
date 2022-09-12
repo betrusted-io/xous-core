@@ -73,6 +73,7 @@ members = [
   "apps/hello",
   "apps/repl",
   "apps/vault",
+  "apps/vault/tools/vaultbackup-rs",
   "services/libstd-test",
   "services/ffi-test",
   "services/tts",
@@ -92,6 +93,7 @@ resolver = "2"
 exclude = [
   "utralib",  # Exclude UTRA, since it is machine-generated.
   "locales",  # exclude because it is machine-generated
+  "xtask",
 ]
 
 [profile.release]
@@ -101,7 +103,7 @@ strip = true
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
-#opt-level = 's'  # z,s: Optimize for size instead of performance
+#opt-level = 1  # z,s: Optimize for size instead of performance; 1 for easier debugging
 
 [patch.crates-io]
 xous = {path = "xous-rs"}
@@ -135,3 +137,9 @@ branch="main"
 
 [patch.crates-io.getrandom]
 path = "imports/getrandom"
+
+[patch.crates-io.ring]
+# path = "../ring-xous"  # for local dev only
+git="https://github.com/betrusted-io/ring-xous"
+rev="5d0d534dad8faf7a45c63bc726a18bbde6ea24e2" # use the commitref because we're still updating the branch
+#branch="0.16.20-cleanup"

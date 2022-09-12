@@ -1,4 +1,58 @@
 {
+    "socup.candidate": {
+        "ja": "ゲートウェアの更新候補が見つかりました。\n\n適用する必要がありますか？",
+        "en": "An update candidate for the SoC was found.\n\nShould we apply it?",
+        "zh": "找到了网关软件的更新候选者。\n\n我们应该应用它吗？",
+        "en-tts": "An update candidate for the SoC was found.\n\nShould we apply it?"
+    },
+    "rekey.fail": {
+        "ja": "キーの再生成に失敗しました。再起動して再試行してください。\n理由：",
+        "en": "Rekey operation failed, please reboot and try again.\n Reason: ",
+        "zh": "重新生成密钥操作失败，请重新启动并重试。\n原因：",
+        "en-tts": "Rekey operation failed, please reboot and try again.\nReason: "
+    },
+    "socup.ignore": {
+        "ja": "この更新を無視する",
+        "en": "Ignore this update",
+        "zh": "忽略此更新",
+        "en-tts": "Ignore this update"
+    },
+    "ecup.invalid": {
+        "ja": "ECファームウェアパッケージが破損しているか無効です: ",
+        "en": "EC firmware package is corrupted or invalid: ",
+        "zh": "固件包已损坏或无效: ",
+        "en-tts": "EC firmware package is corrupted or invalid: "
+    },
+    "ecup.abort": {
+        "ja": "エラーのため更新が中止されました！ (EC)",
+        "en": "EC update aborted due to error!",
+        "zh": "更新因错误而中止！(EC)",
+        "en-tts": "EC update aborted due to error!"
+    },
+    "ecup.erasing": {
+        "ja": "消去...",
+        "en": "EC Autoupdate\n\nErasing",
+        "zh": "擦除...",
+        "en-tts": "EC Autoupdate\n\nErasing"
+    },
+    "ecup.writing": {
+        "ja": "書き込み...",
+        "en": "EC Autoupdate\n\nWriting",
+        "zh": "写作...",
+        "en-tts": "EC Autoupdate\n\nWriting"
+    },
+    "ecup.update_applied": {
+        "ja": "USBロードのアップデートが適用されました.",
+        "en": "An EC update was successfully applied!",
+        "zh": "已应用 USB 加载更新.",
+        "en-tts": "An EC update was successfully applied!"
+    },
+    "ecup.resetting": {
+        "ja": "ECのリセット",
+        "en": "Resetting EC...",
+        "zh": "重置 EC",
+        "en-tts": "Resetting EC..."
+    },
     "stats.measuring": {
         "ja": "測定...",
         "en": "Measuring...",
@@ -36,6 +90,12 @@
         "zh": "请挂载 PDDB 并重试。",
         "en-tts": "Please mount the PDDB and try again."
     },
+    "secnote.zero_key": {
+        "en": " Backup key not set",
+        "ja": "Backupキーはゼロです",
+        "zh": "Backup 密钥为零",
+        "en-tts": "Backup key not set"
+    },
     "secnote.usb_unlock": {
         "en": " USB unlocked",
         "ja": "USBロック解除",
@@ -55,10 +115,10 @@
         "en-tts": "Invalid key state"
     },
     "secnote.no_keys": {
-        "en": " Root keys uninitialized",
+        "en": " No device keys",
         "ja": "ルートキーは未初期化",
         "zh": "密钥未初始化",
-        "en-tts": "Root keys unitialized"
+        "en-tts": "No device keys"
     },
     "secnote.allclear": {
         "en": " No security warnings",
@@ -94,11 +154,23 @@
         "zh": "背光关闭",
         "en-tts": "🔇"
     },
+    "mainmenu.autobacklighton": {
+        "en": "Enable automatic backlight",
+        "ja": "自動バックライトを有効にする",
+        "zh": "启用自动背光",
+        "en-tts": "🔇"
+    },
+    "mainmenu.autobacklightoff": {
+        "en": "Disable automatic backlight",
+        "ja": "自動バックライトを無効にする",
+        "zh": "禁用自动背光",
+        "en-tts": "🔇"
+    },
     "mainmenu.init_keys": {
-        "en": "Initialize root keys",
+        "en": "Setup passwords...",
         "ja": "ルートキーの初期化",
         "zh": "设置根密码",
-        "en-tts": "Initialize root keys"
+        "en-tts": "Setup passwords..."
     },
     "mainmenu.provision_gateware": {
         "en": "Install gateware update",
@@ -153,6 +225,12 @@
         "ja": "リブート",
         "zh": "重启",
         "en-tts": "Reboot"
+    },
+    "mainmenu.prep_backup": {
+        "en": "Prepare for backup...",
+        "ja": "バックアップの準備...",
+        "zh": "准备备份...",
+        "en-tts": "Prepare for backup..."
     },
     "mainmenu.closemenu": {
         "en": "Close menu",

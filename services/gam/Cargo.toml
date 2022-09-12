@@ -5,7 +5,7 @@ edition = "2018"
 name = "gam"
 version = "0.1.0"
 
-# Dependency policy: fully specify dependencies to the minor version number
+# Dependency versions enforced by Cargo.lock.
 [dependencies]
 com = {path = "../com"} # used by the backlight setting on the main menu thread
 content-plugin-api = {path = "../content-plugin-api"}
@@ -33,6 +33,13 @@ locales = {path = "../../locales"}
 tts-frontend = {path="../tts"}
 
 qrcode = { version = "0.12", default-features = false }
+miniz_oxide = "0.4.4"
+# pix = "0.13"
+
+# used in bip39 dialogue
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+sha2 = {path="../engine-sha512"}
+digest = "0.9.0"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
@@ -42,3 +49,4 @@ debugprint = []
 tts = []
 # default = ["debugprint"] # "debugprint"
 default = []
+ditherpunk = []

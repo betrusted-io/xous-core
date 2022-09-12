@@ -43,7 +43,7 @@ use super::CREDENTIAL_ID_SIZE;
 /// credentials, but what happens in this case is just a re-allocation in the PDDB.
 /// Whereas if this number is "too big" you end up with wasted space. I think a
 /// typical record will be around 300-400 bytes, so, this is a good compromise.
-const CRED_INITAL_SIZE: usize = 512;
+pub(crate) const CRED_INITAL_SIZE: usize = 512;
 
 // Those constants may be modified before compilation to tune the behavior of the key.
 //
@@ -65,7 +65,9 @@ const CRED_INITAL_SIZE: usize = 512;
 // With P=20 and K=150, we have I=2M which is enough for 500 increments per day for 10 years.
 #[allow(dead_code)] // openSK legacy
 const NUM_PAGES: usize = 20;
-#[allow(dead_code)] // OpenSK legacy
+
+/// The limit is based on the performance of the PDDB to get a query response within
+/// the compliance time-out limit. Note that most keys support about 25 credentials.
 const MAX_SUPPORTED_RESIDENTIAL_KEYS: usize = 150;
 
 const MAX_PIN_RETRIES: u8 = 8;
@@ -80,7 +82,7 @@ const _DEFAULT_MIN_PIN_LENGTH_RP_IDS: Vec<String> = Vec::new();
 const _MAX_RP_IDS_LENGTH: usize = 8;
 
 const FIDO_DICT: &'static str = "fido.cfg";
-const FIDO_CRED_DICT: &'static str = "fido.cred";
+use crate::ctap::FIDO_CRED_DICT;
 const FIDO_PERSISTENT_DICT: &'static str = "fido.persistent";
 
 /// Wrapper for master keys.
@@ -129,8 +131,8 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MASTER_KEYS,
-            None, true, true,
-            Some(64), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
+            Some(64), Some(crate::basis_change)
         ) {
             Ok(mut master_keys) => {
                 let mk_attr = master_keys.attributes().unwrap(); // attribute fetches should not fail, so we don't kick it up. We want to see the panic at this line if it does fail.
@@ -149,13 +151,11 @@ impl PersistentStore {
         }
 
         // Generate and store the CredRandom secrets if they are missing.
-        // note this goes into the FIDO_CRED_DICT, in order to force its creation.
-        // It does mean we have a special case key in the dictionary.
         match self.pddb.borrow().get(
-            FIDO_CRED_DICT,
+            FIDO_DICT,
             key::CRED_RANDOM_SECRET,
-            None, true, true,
-            Some(64), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
+            Some(64), Some(crate::basis_change)
         ) {
             Ok(mut cred_random) => {
                 let cred_attr = cred_random.attributes().unwrap();
@@ -176,8 +176,8 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
-            None, true, true,
-            Some(16), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
+            Some(16), Some(crate::basis_change)
         ) {
             Ok(mut aaguid) => {
                 let aaguid_attr = aaguid.attributes().unwrap();
@@ -222,8 +222,8 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
-            None, true, true,
-            Some(32), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
+            Some(32), Some(crate::basis_change)
         ) {
             Ok(mut aapriv) => {
                 let aapriv_attr = aapriv.attributes().unwrap();
@@ -234,7 +234,7 @@ impl PersistentStore {
                     }
                     let pk = decode_hex("b8c3abd05cbe17b2faf87659c6f73e8467832112a0e609807cb68996c9a0c6a8").unwrap();
                     log::info!("writing PK of length {}", pk.len());
-                    log::info!("pk: {:x?}", pk);
+                    log::debug!("pk: {:x?}", pk);
                     assert!(pk.len() == 32, "PK len is wrong");
                     aapriv.write(&pk)
                     .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
@@ -246,8 +246,8 @@ impl PersistentStore {
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
-            None, true, true,
-            Some(512), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
+            Some(512), Some(crate::basis_change)
         ) {
             Ok(mut cert) => {
                 let cert_attr = cert.attributes().unwrap();
@@ -266,13 +266,15 @@ impl PersistentStore {
                          e5d218e1022070853e1a43707298e07ebe9b9eb7cd5839b794db4c3d22209554\
                          1f0bdf82d1f4").unwrap();
                     log::info!("writing cert of length {}", der.len());
-                    log::info!("der: {:x?}", der);
+                    log::debug!("der: {:x?}", der);
                     cert.write(&der)
                     .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 }
             }
             _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
         }
+        self.pddb.borrow().sync()
+        .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
 
         Ok(())
     }
@@ -386,9 +388,10 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             FIDO_CRED_DICT,
             &shortid,
             None, false, false,
-            Some(CREDENTIAL_ID_SIZE), None::<fn()>
+            Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
         ) {
             Ok(mut cred) => {
+                log::trace!("find {}", shortid);
                 let mut data = Vec::<u8>::new();
                 cred.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 match deserialize_credential(&data) {
@@ -413,7 +416,10 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             }
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Ok(None),
-                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+                _ => {
+                    log::error!("PDDB internal error in find_credential: {:?}", e);
+                    Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
+                }, // PDDB internal error
             }
         }
     }
@@ -425,16 +431,22 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         &mut self,
         new_credential: PublicKeyCredentialSource,
     ) -> Result<(), Ctap2StatusCode> {
+        if self.count_credentials()? >= MAX_SUPPORTED_RESIDENTIAL_KEYS {
+            return Err(Ctap2StatusCode::CTAP2_ERR_KEY_STORE_FULL);
+        }
         let shortid = self.cid_to_str(&new_credential.credential_id);
         match self.pddb.borrow().get(
             FIDO_CRED_DICT,
             &shortid,
-            None, false, true,
-            Some(CRED_INITAL_SIZE), None::<fn()>
+            None, true, true,
+            Some(CRED_INITAL_SIZE), Some(crate::basis_change)
         ) {
             Ok(mut cred) => {
                 let value = serialize_credential(new_credential)?;
+                log::trace!("writing {}", shortid);
                 cred.write(&value)
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 Ok(())
             }
@@ -451,21 +463,22 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         check_cred_protect: bool,
     ) -> Result<Vec<PublicKeyCredentialSource>, Ctap2StatusCode> {
         let mut result = Vec::<PublicKeyCredentialSource>::new();
-        let mut cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
-        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't try to investigate this one key
+        let cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         for cred_name in cred_list.iter() {
             if let Some(mut cred_entry) = self.pddb.borrow().get(
                 FIDO_CRED_DICT,
                 cred_name,
                 None, false, false,
-                Some(CREDENTIAL_ID_SIZE), None::<fn()>
+                Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
             ).ok() {
+                log::trace!("checking {}", cred_name);
                 let mut data = Vec::<u8>::new();
                 cred_entry.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 if let Some(cred) = deserialize_credential(&data) {
                     if cred.rp_id == rp_id
                     && (cred.is_discoverable() || !check_cred_protect) {
+                        log::trace!("filtered {}", cred_name);
                         result.push(cred);
                     }
                 }
@@ -475,20 +488,17 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     }
 
     /// Returns the number of credentials.
-    #[cfg(test)]
     pub fn count_credentials(&self) -> Result<usize, Ctap2StatusCode> {
-        let mut cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
-        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't count this special case key
+        let cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         Ok(cred_list.len())
     }
 
     /// Returns the next creation order.
     pub fn new_creation_order(&self) -> Result<u64, Ctap2StatusCode> {
         let mut max = 0;
-        let mut cred_list = self.pddb.borrow().list_keys(
-            FIDO_CRED_DICT, None).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
-        cred_list.retain(|name| name != key::CRED_RANDOM_SECRET); // don't try to investigate this one key
+        let cred_list = self.pddb.borrow().list_keys(
+            FIDO_CRED_DICT, None).unwrap_or(Vec::new());
         if cred_list.len() == 0 {
             return Ok(0)
         }
@@ -497,7 +507,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                 FIDO_CRED_DICT,
                 cred_name,
                 None, false, false,
-                Some(CREDENTIAL_ID_SIZE), None::<fn()>
+                Some(CREDENTIAL_ID_SIZE), Some(crate::basis_change)
             ).ok() {
                 let mut data = Vec::<u8>::new();
                 cred_entry.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
@@ -514,8 +524,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::GLOBAL_SIGNATURE_COUNTER,
-            None, false, true,
-            Some(4), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(4), Some(crate::basis_change)
         ) {
             Ok(mut gsc) => {
                 let mut value = [0u8; 4];
@@ -524,6 +534,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
                     Ok(_) => {
                         gsc.seek(SeekFrom::Start(0)).ok(); // make sure we're writing to the beginning position
                         gsc.write(&INITIAL_SIGNATURE_COUNTER.to_ne_bytes())
+                        .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                        self.pddb.borrow().sync()
                         .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                         Ok(INITIAL_SIGNATURE_COUNTER)
                     },
@@ -542,12 +554,14 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::GLOBAL_SIGNATURE_COUNTER,
-            None, false, true,
-            Some(4), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(4), Some(crate::basis_change)
         ) {
             Ok(mut gsc) => {
                 gsc.write(&new_value.to_ne_bytes())
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
@@ -559,7 +573,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MASTER_KEYS,
-            None, false, false, None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut mk) => {
                 let mut master_keys = [0u8; 64];
@@ -580,9 +594,9 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     /// Returns the CredRandom secret.
     pub fn cred_random_secret(&self, has_uv: bool) -> Result<[u8; 32], Ctap2StatusCode> {
         match self.pddb.borrow().get(
-            FIDO_CRED_DICT,
+            FIDO_DICT,
             key::CRED_RANDOM_SECRET,
-            None, false, false, None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut crs) => {
                 let mut cred_random_secret = [0u8; 64];
@@ -603,13 +617,13 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_HASH,
-            None, false, false, None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut ph) => {
                 let mut pin_hash = [0u8; PIN_AUTH_LENGTH];
                 match ph.read(&mut pin_hash) {
                     Ok(PIN_AUTH_LENGTH) => {
-                        log::info!("pin_hash: {:x?}", &pin_hash);
+                        log::trace!("pin_hash: {:x?}", &pin_hash);
                         Ok(Some(pin_hash))
                     },
                     Ok(l) => {
@@ -642,12 +656,16 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_HASH,
-            None, false, true,
-            Some(PIN_AUTH_LENGTH), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(PIN_AUTH_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut ph) => {
                 match ph.write(pin_hash) {
-                    Ok(PIN_AUTH_LENGTH) => Ok(()),
+                    Ok(PIN_AUTH_LENGTH) => {
+                        self.pddb.borrow().sync()
+                        .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                        Ok(())
+                    },
                     Ok(l) => {
                         log::error!("set_pin_hash incorrect length: {}", l);
                         Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -667,7 +685,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::PIN_RETRIES,
-            None, false, false, None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut pr) => {
                 let mut value = [0u8; 1];
@@ -691,11 +709,13 @@ openssl asn1parse -in opensk_cert.pem -inform pem
             match self.pddb.borrow().get(
                 FIDO_DICT,
                 key::PIN_RETRIES,
-                None, false, true,
-                Some(1), None::<fn()>
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+                Some(1), Some(crate::basis_change)
             ) {
                 Ok(mut pr) => {
                     pr.write(&[new_value])
+                    .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                    self.pddb.borrow().sync()
                     .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
                 }
                 _ => return Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
@@ -709,7 +729,7 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().delete_key(
             FIDO_DICT,
             PIN_RETRIES,
-            None
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS)
         ) {
             Ok(_) => Ok(()),
             Err(e) => match e.kind() {
@@ -725,7 +745,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MIN_PIN_LENGTH,
-            None, false, false, None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS),
+            false, false, None, Some(crate::basis_change)
         ) {
             Ok(mut pr) => {
                 let mut value = [0u8; 1];
@@ -747,8 +768,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::MIN_PIN_LENGTH,
-            None, false, true,
-            Some(1), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(1), Some(crate::basis_change)
         ) {
             Ok(mut pl) => {
                 match pl.write(&[min_pin_length]) {
@@ -767,8 +788,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         if let Some(mut mplri) = self.pddb.borrow().get(
             FIDO_DICT,
             key::_MIN_PIN_LENGTH_RP_IDS,
-            None, false, false,
-            None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
+            None, Some(crate::basis_change)
         ).ok() {
             let mut data = Vec::<u8>::new();
             mplri.read_to_end(&mut data).or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
@@ -800,8 +821,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_DICT,
             key::_MIN_PIN_LENGTH_RP_IDS,
-            None, false, true,
-            Some(_MAX_RP_IDS_LENGTH), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(_MAX_RP_IDS_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut mrpli) => {
                 mrpli.write(&_serialize_min_pin_length_rp_ids(min_pin_length_rp_ids)?)
@@ -819,7 +840,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
-            None, false, false, None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
+            None, Some(crate::basis_change)
         ) {
             Ok(mut apk) => {
                 let mut key = [0u8; key_material::ATTESTATION_PRIVATE_KEY_LENGTH];
@@ -851,12 +873,14 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_PRIVATE_KEY,
-            None, false, true,
-            Some(key_material::ATTESTATION_PRIVATE_KEY_LENGTH), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(key_material::ATTESTATION_PRIVATE_KEY_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut apk) => {
                 apk.write(attestation_private_key)
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -868,8 +892,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         if let Some(mut acert) = self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
-            None, false, false,
-            None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
+            None, Some(crate::basis_change)
         ).ok() {
             let mut data = Vec::<u8>::new();
             match acert.read_to_end(&mut data) {
@@ -893,12 +917,14 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::ATTESTATION_CERTIFICATE,
-            None, false, true,
-            Some(1024), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(1024), Some(crate::basis_change)
         ) {
             Ok(mut acert) => {
                 acert.write(attestation_certificate)
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR)
@@ -910,8 +936,8 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         if let Some(mut guid) = self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
-            None, false, false,
-            None, None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
+            None, Some(crate::basis_change)
         ).ok() {
             let mut data = [0u8; key_material::AAGUID_LENGTH];
             match guid.read(&mut data) {
@@ -936,12 +962,14 @@ openssl asn1parse -in opensk_cert.pem -inform pem
         match self.pddb.borrow().get(
             FIDO_PERSISTENT_DICT,
             key::AAGUID,
-            None, false, true,
-            Some(key_material::AAGUID_LENGTH), None::<fn()>
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, true,
+            Some(key_material::AAGUID_LENGTH), Some(crate::basis_change)
         ) {
             Ok(mut guid) => {
                 guid.write(aaguid)
                 .map(|_|())
+                .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))?;
+                self.pddb.borrow().sync()
                 .or(Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR))
             }
             _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR),
@@ -952,27 +980,29 @@ openssl asn1parse -in opensk_cert.pem -inform pem
     ///
     /// In particular persistent entries are not reset.
     pub fn reset(&mut self, _rng: &mut impl Rng256) -> Result<(), Ctap2StatusCode> {
-        match self.pddb.borrow().delete_dict(FIDO_DICT, None) {
+        match self.pddb.borrow().delete_dict(FIDO_DICT, Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS)) {
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => Ok(()),
                 _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
             }
             Ok(_) => Ok(()),
         }?;
-        match self.pddb.borrow().delete_dict(FIDO_CRED_DICT, None) {
-            Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Ok(()),
-                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
-            }
-            Ok(_) => Ok(()),
-        }?;
-        match self.pddb.borrow().delete_dict(crate::ux::U2F_APP_DICT, None) {
-            Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Ok(()),
-                _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
-            }
-            Ok(_) => Ok(()),
-        }?;
+        for basis in self.pddb.borrow().list_basis().iter () {
+            match self.pddb.borrow().delete_dict(FIDO_CRED_DICT, Some(basis)) {
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::NotFound => Ok(()),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+                }
+                Ok(_) => Ok(()),
+            }?;
+            match self.pddb.borrow().delete_dict(crate::fido::U2F_APP_DICT, Some(basis)) {
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::NotFound => Ok(()),
+                    _ => Err(Ctap2StatusCode::CTAP2_ERR_VENDOR_INTERNAL_ERROR), // PDDB internal error
+                }
+                Ok(_) => Ok(()),
+            }?;
+        }
         // don't delete the persistent dictionary...
         self.init()?;
         Ok(())
@@ -980,13 +1010,13 @@ openssl asn1parse -in opensk_cert.pem -inform pem
 }
 
 /// Deserializes a credential from storage representation.
-fn deserialize_credential(data: &[u8]) -> Option<PublicKeyCredentialSource> {
+pub(crate) fn deserialize_credential(data: &[u8]) -> Option<PublicKeyCredentialSource> {
     let cbor = cbor::read(data).ok()?;
     cbor.try_into().ok()
 }
 
 /// Serializes a credential to storage representation.
-fn serialize_credential(credential: PublicKeyCredentialSource) -> Result<Vec<u8>, Ctap2StatusCode> {
+pub(crate) fn serialize_credential(credential: PublicKeyCredentialSource) -> Result<Vec<u8>, Ctap2StatusCode> {
     let mut data = Vec::new();
     if cbor::write(credential.into(), &mut data) {
         Ok(data)

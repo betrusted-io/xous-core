@@ -31,15 +31,15 @@ use num_traits::*;
 // imports for time ux
 use locales::t;
 use chrono::prelude::*;
-use xous::Message;
+use xous::{Message, send_message};
 use gam::modal::*;
 // ntp imports
 use sntpc::{Error, NtpContext, NtpTimestampGenerator, NtpUdpSocket, Result};
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::num::ParseIntError;
 
 /// This is a "well known name" used by `libstd` to connect to the time server
-/// Even thought it is "public" nobody connects to it directly, they connect to it via `libstd`
-/// hence the scope of the name is private to this crate.
+/// Anyone who wants to check if time has been initialized would use this name.
 pub const TIME_SERVER_PUBLIC: &'static [u8; 16] = b"timeserverpublic";
 
 /// Dictionary for RTC settings.
@@ -190,7 +190,9 @@ pub fn start_time_server() {
                     break;
                 }
                 let msg = xous::receive_message(pub_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                let op: Option<TimeOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", op);
+                match op {
                     Some(TimeOp::PddbMountPoll) => {
                         tt.sleep_ms(330).unwrap();
                         if temp < 10 {
@@ -204,8 +206,25 @@ pub fn start_time_server() {
                     Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                         susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                         // resync time on resume
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        let mut count = 0;
+                        loop {
+                            match llio.get_rtc_secs() {
+                                Ok(secs) => {
+                                    start_rtc_secs = secs;
+                                    start_tt_ms = tt.elapsed_ms();
+                                    break;
+                                }
+                                Err(e) => {
+                                    log::warn!("RTC read yielded error; retrying: {:?}", e);
+                                    tt.sleep_ms(850).unwrap();
+                                    count += 1;
+                                    if count > 5 {
+                                        // this should be a panic, I think, not an abort.
+                                        panic!("Couldn't sync time on resume. Something went wrong with the RTC hardware.");
+                                    }
+                                }
+                            }
+                        }
                     }),
                     Some(TimeOp::HwSync) => {
                         start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
@@ -245,7 +264,7 @@ pub fn start_time_server() {
             let mut offset_key = offset_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_UTC_OFFSET,
-                None, true, true,
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open UTC offset key");
@@ -253,7 +272,7 @@ pub fn start_time_server() {
             let mut tz_key = tz_handle.get(
                 TIME_SERVER_DICT,
                 TIME_SERVER_TZ_OFFSET,
-                None, true, true,
+                Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), true, true,
                 Some(8),
                 None::<fn()>
             ).expect("couldn't open TZ offset key");
@@ -271,20 +290,35 @@ pub fn start_time_server() {
             log::debug!("start_tt_ms: {}", start_tt_ms);
             loop {
                 let msg = xous::receive_message(pub_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
+                let opcode: Option<TimeOp> = FromPrimitive::from_usize(msg.body.id());
+                log::debug!("{:?}", opcode);
+                match opcode {
                     Some(TimeOp::PddbMountPoll) => {
                         // do nothing, we're mounted now.
                         continue;
                     },
                     Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                         susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                        // resync time on resume
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        // resync time on resume, but give a little time for other processes to clear as this is not urgent
+                        tt.sleep_ms(180).unwrap();
+                        send_message(self_cid,
+                            Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't queue sync request");
                     }),
                     Some(TimeOp::HwSync) => {
-                        start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
-                        start_tt_ms = tt.elapsed_ms();
+                        match llio.get_rtc_secs() {
+                            Ok(val) => {
+                                start_rtc_secs = val;
+                                start_tt_ms = tt.elapsed_ms();
+                            }
+                            Err(e) => {
+                                log::warn!("Error syncing time: {:?}; retrying!", e);
+                                tt.sleep_ms(82).unwrap();
+                                send_message(self_cid,
+                                    Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
+                                ).expect("couldn't queue sync request");
+                            }
+                        }
                     },
                     Some(TimeOp::GetUtcTimeMs) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                         let t =
@@ -478,6 +512,36 @@ fn to_bcd(binary: u8) -> u8 {
     (msd << 4) | lsd
 }
 
+/// this will parse a simple decimal into an i32, multiplied by 1000
+/// we do this because the full f32 parsing stuff is pretty heavy, some
+/// 28kiB of code
+#[inline(never)]
+fn simple_kilofloat_parse(input: &str) -> core::result::Result<i32, ParseIntError> {
+    if let Some((integer, fraction)) = input.split_once('.') {
+        let mut result = integer.parse::<i32>()? * 1000;
+        let mut significance = 100i32;
+        for (place, digit) in fraction.chars().enumerate() {
+            if place >= 3 {
+                break;
+            }
+            if let Some(d) = digit.to_digit(10) {
+                if result >= 0 {
+                    result += (d as i32) * significance;
+                } else {
+                    result -= (d as i32) * significance;
+                }
+                significance /= 10;
+            } else {
+                return "z".parse::<i32>() // you can't create a ParseIntError any other way
+            }
+        }
+        Ok(result)
+    } else {
+        let base = input.parse::<i32>()?;
+        Ok(base * 1000)
+    }
+}
+
 pub fn start_time_ux(sid: xous::SID) {
     thread::spawn({
         move || {
@@ -502,7 +566,7 @@ pub fn start_time_ux(sid: xous::SID) {
                         let maybe_tz_set_key = tz_set_handle.get(
                             TIME_SERVER_DICT,
                             TIME_SERVER_TZ_OFFSET,
-                            None, false, false,
+                            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS), false, false,
                             None,
                             None::<fn()>
                         ).ok();
@@ -517,15 +581,14 @@ pub fn start_time_ux(sid: xous::SID) {
                         // a key exists, but nothing was written to it (length of key was 0 or inappropriate)
                         if !tz_set {
                             log::info!("{}RTC.TZ,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                            let tz = modals.alert_builder(t!("rtc.timezone", xous::LANG))
+                            let tz_str = modals.alert_builder(t!("rtc.timezone", xous::LANG))
                                 .field(None, Some(tz_ux_validator))
                                 .build()
                                 .expect("couldn't get timezone")
-                                .first()
-                                .as_str()
-                                .parse::<f32>().expect("pre-validated input failed to re-parse!");
+                                .first();
+                            let tz = simple_kilofloat_parse(tz_str.as_str()).expect("pre-validated input failed to re-parse!");
                             log::info!("got tz offset {}", tz);
-                            tz_offset_ms = (tz * 3600.0 * 1000.0) as i64;
+                            tz_offset_ms = (tz * 3600) as i64;
                             xous::send_message(timeserver_cid,
                                 Message::new_scalar(
                                     crate::time::TimeOp::SetTzOffsetMs.to_usize().unwrap(),
@@ -632,15 +695,15 @@ pub fn start_time_ux(sid: xous::SID) {
                             continue;
                         }
 
-                        let tz = modals.alert_builder(t!("rtc.timezone", xous::LANG))
+                        let tz_str = modals.alert_builder(t!("rtc.timezone", xous::LANG))
                             .field(None, Some(tz_ux_validator))
                             .build()
                             .expect("couldn't get timezone")
-                            .first()
-                            .as_str()
-                            .parse::<f32>().expect("pre-validated input failed to re-parse!");
+                            .first();
+                        let tz = simple_kilofloat_parse(tz_str.as_str())
+                            .expect("pre-validated input failed to re-parse!");
                         log::info!("got tz offset {}", tz);
-                        let tzoff_ms = (tz * 3600.0 * 1000.0) as i64;
+                        let tzoff_ms = (tz * 3600) as i64;
                         xous::send_message(timeserver_cid,
                             Message::new_scalar(
                                 crate::time::TimeOp::SetTzOffsetMs.to_usize().unwrap(),
@@ -678,8 +741,8 @@ pub(crate) enum ValidatorOp {
 fn tz_ux_validator(input: TextEntryPayload) -> Option<ValidatorErr> {
     let text_str = input.as_str();
 
-    match text_str.parse::<f32>() {
-        Ok(input) => if input < -12.0 || input > 14.0 {
+    match simple_kilofloat_parse(text_str) {
+        Ok(input) => if input < -12_000 || input > 14_000 {
             return Some(ValidatorErr::from_str(t!("rtc.range_err", xous::LANG)));
         },
         _ => return Some(ValidatorErr::from_str(t!("rtc.integer_err", xous::LANG))),
