@@ -936,6 +936,13 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             }),
             _ => Err(xous_kernel::Error::InvalidLimit),
         },
+        SysCall::VirtToPhys(vaddr) => {
+            let phys_addr = crate::arch::mem::virt_to_phys(vaddr as usize);
+            match phys_addr {
+                Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
+                Err(_) => Err(xous_kernel::Error::BadAddress),
+            }
+        }
         /* https://github.com/betrusted-io/xous-core/issues/90
         SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
             ss.set_exception_handler(pid, pc, sp)
