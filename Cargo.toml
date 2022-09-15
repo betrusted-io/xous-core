@@ -81,6 +81,7 @@ members = [
   "services/test-spawn/spawn",
   "services/usb-test",
   "services/usb-device-xous",
+  "tools/perflib",
   "kernel",
   "loader",
 ]

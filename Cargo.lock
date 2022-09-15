@@ -2608,6 +2608,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
+name = "perflib"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "utralib",
+ "xous",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3508,6 +3517,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "pddb",
+ "perflib",
  "png",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
