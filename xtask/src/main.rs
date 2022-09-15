@@ -311,7 +311,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None,
                 Some(&["--features", "tts", "--features", "braille"]),
                 &[&tts_exec_string],
-                None,
+                None, None,
             )?;
             let mut locale_revert = OpenOptions::new()
                 .read(true)
@@ -345,7 +345,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None,
                 None,
                 None,
-                extra_packages.as_slice(), None)?;
+                extra_packages.as_slice(), None, None)?;
             }
         }
         Some("libstd-test") => {
@@ -385,6 +385,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None,
                 &[],
                 Some(&["--features", "renode-bypass"]),
+                None,
             )?
             //renode_image(false, &pkgs, extra_packages.as_slice(),
             //None, Some(&["--features", "renode-bypass"]))?;
@@ -535,7 +536,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kkey,
                 None,
                 &[],
-                None,
+                None, None,
             )?
         }
         Some("perf-image") => {
@@ -554,10 +555,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 lkey,
                 kkey,
                 Some(&[
-                    "--features", "perfcounter"
+                    "--features", "perfcounter",
                 ]),
                 &[],
-                None,
+                None, None,
             )?
         }
         Some("utra") => {
@@ -584,6 +585,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
                 println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
             }
+            let generated_path = std::path::Path::new("utralib/src/generated.rs");
+            // blank the contents so that the build command runs
+            std::fs::write(generated_path, "")?;
             let status = Command::new(cargo())
                 .current_dir(project_root())
                 .args(&[
@@ -615,7 +619,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "--features", "ditherpunk",
                     ]),
                 &[],
-                None,
+                None, None,
             )?
         }
         Some("hw-image") => {
@@ -639,7 +643,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kkey,
                 None,
                 &[],
-                None,
+                None, None,
             )?
         }
         Some("gfx-dev") => run(
@@ -656,7 +660,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             None,
             &[],
-            None,
+            None, None,
         )?,
         Some("pddb-hosted") => run(false, &pddb_dev_pkgs, None, false)?,
         Some("benchmark") => build_hw_image(
@@ -667,7 +671,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             None,
             &[],
-            None,
+            None, None,
         )?,
         Some("minimal") => build_hw_image(
             false,
@@ -677,7 +681,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             None,
             &[],
-            None,
+            None, None,
         )?,
         Some("cbtest") => build_hw_image(
             false,
@@ -687,7 +691,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             None,
             &[],
-            None,
+            None, None,
         )?,
         Some("trng-test") => {
             generate_app_menus(&Vec::<String>::new());
@@ -699,7 +703,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kkey,
                 Some(&["--features", "urandomtest"]),
                 &[],
-                None,
+                None, None,
             )?
         }
         Some("ro-test") => {
@@ -712,7 +716,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kkey,
                 Some(&["--features", "ringosctest"]),
                 &[],
-                None,
+                None, None,
             )?
         }
         Some("av-test") => {
@@ -725,7 +729,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kkey,
                 Some(&["--features", "avalanchetest"]),
                 &[],
-                None,
+                None, None,
             )?
         }
         Some("sr-test") => build_hw_image(
@@ -736,7 +740,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kkey,
             None,
             &[],
-            None,
+            None, None,
         )?,
         Some("burn-kernel") => update_usb(true, false, false, false)?,
         Some("burn-loader") => update_usb(false, true, false, false)?,
@@ -952,6 +956,7 @@ fn build_hw_image(
     extra_args: Option<&[&str]>,
     extra_packages: &[&str],
     loader_features: Option<&[&str]>,
+    kernel_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
@@ -972,7 +977,7 @@ fn build_hw_image(
     let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
     let kernelkey_file = kkey.unwrap_or_else(|| "devkey/dev.key".into());
 
-    let kernel = build_kernel(debug)?;
+    let kernel = build_kernel(debug, kernel_features)?;
     let mut init = vec![];
     let base_path = build(
         packages,
@@ -1170,6 +1175,7 @@ fn renode_image(
         xous_features,
         extra_packages,
         loader_features,
+        None,
     )
 }
 
@@ -1234,8 +1240,8 @@ fn run(
     Ok(())
 }
 
-fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
-    let mut path = build(&["kernel"], debug, Some(KERNEL_TARGET), None, None, None)?;
+fn build_kernel(debug: bool, features: Option<&[&str]>) -> Result<PathBuf, DynError> {
+    let mut path = build(&["kernel"], debug, Some(KERNEL_TARGET), None, None, features)?;
     path.push("kernel");
     Ok(path)
 }

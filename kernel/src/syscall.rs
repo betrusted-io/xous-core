@@ -936,6 +936,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             }),
             _ => Err(xous_kernel::Error::InvalidLimit),
         },
+        #[cfg(feature="v2p")]
         SysCall::VirtToPhys(vaddr) => {
             let phys_addr = crate::arch::mem::virt_to_phys(vaddr as usize);
             match phys_addr {
