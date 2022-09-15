@@ -35,7 +35,7 @@ gdbserver = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
-v2p = []
+v2p = ["xous-kernel/v2p"]
 # default = ["print-panics", "debug-print", "wrap-print"]
 default = ["print-panics", "gdbserver"]
 
