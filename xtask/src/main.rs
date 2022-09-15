@@ -540,6 +540,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?
         }
         Some("perf-image") => {
+            // note: to use this image, you need to load a version of the SOC that has the performance counters built in.
+            // this can be generated using the command `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
             let mut args = env::args();
             args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
@@ -558,7 +560,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "--features", "perfcounter",
                 ]),
                 &[],
-                None, None,
+                None,
+                Some(&[
+                    "--features", "v2p",
+                ]),
             )?
         }
         Some("utra") => {
