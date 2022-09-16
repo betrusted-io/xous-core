@@ -457,6 +457,21 @@ pub enum SysCall {
         usize, /* proposed new limit */
     ),
 
+    /// Returns the physical address corresponding to a virtual address, if such a mapping exists.
+    ///
+    /// ## Arguments
+    ///     * **vaddr**: The virtual address to inspect
+    ///
+    /// ## Returns
+    /// Returns a Scalar1 containing the physical address
+    ///
+    /// ## Errors
+    ///     * **BadAddress**: The mapping does not exist
+    #[cfg(feature="v2p")]
+    VirtToPhys(
+        usize, /* virtual address */
+    ),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -501,6 +516,8 @@ pub enum SysCallNumber {
     JoinThread = 36,
     SetExceptionHandler = 37,
     AdjustProcessLimit = 38,
+    #[cfg(feature="v2p")]
+    VirtToPhys = 39,
     Invalid,
 }
 
@@ -545,6 +562,8 @@ impl SysCallNumber {
             36 => JoinThread,
             37 => SetExceptionHandler,
             38 => AdjustProcessLimit,
+            #[cfg(feature="v2p")]
+            39 => VirtToPhys,
             _ => Invalid,
         }
     }
@@ -909,6 +928,17 @@ impl SysCall {
                 0,
                 0,
             ],
+            #[cfg(feature="v2p")]
+            SysCall::VirtToPhys(vaddr) => [
+                SysCallNumber::VirtToPhys as usize,
+                *vaddr,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -1073,6 +1103,8 @@ impl SysCall {
             SysCallNumber::JoinThread => SysCall::JoinThread(a1 as _),
             SysCallNumber::SetExceptionHandler => SysCall::SetExceptionHandler(a1 as _, a2 as _),
             SysCallNumber::AdjustProcessLimit => SysCall::AdjustProcessLimit(a1, a2, a3),
+            #[cfg(feature="v2p")]
+            SysCallNumber::VirtToPhys => SysCall::VirtToPhys(a1 as _),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1838,6 +1870,18 @@ pub fn set_exception_handler(
     })
 }
 */
+
+/// Translate a virtual address to a physical address
+#[cfg(feature="v2p")]
+pub fn virt_to_phys(va: usize) -> core::result::Result<usize, Error> {
+    rsyscall(SysCall::VirtToPhys(va)).and_then(|result| {
+        if let Result::Scalar1(pa) = result {
+            Ok(pa)
+        } else {
+            Err(Error::BadAddress)
+        }
+    })
+}
 
 /// Perform a raw syscall and return the result. This will transform
 /// `xous::Result::Error(e)` into an `Err(e)`.
