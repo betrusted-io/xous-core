@@ -1,6 +1,5 @@
 #! /usr/bin/env python3
 import argparse
-import re
 import numpy as np
 from PIL import Image as im
 import random
@@ -37,6 +36,9 @@ def main():
     parser.add_argument(
         "--file", default=False, help="file to analyze", type=str
     )
+    parser.add_argument(
+        "--average", default=False, help="average over a series. `file` is a root name; data series is hard-coded for now", action="store_true"
+    )
     args = parser.parse_args()
 
     if args.file is None:
@@ -47,35 +49,48 @@ def main():
 
     rekey_start = 0
     enc_start = 0
-    enc_times = np.arange(256*128).reshape((256, 128))
-    rekey_times = np.arange(256*128).reshape((256, 128))
-    with open(args.file, "r", encoding='utf-8', errors='replace') as f:
-        lines = f.readlines()
-        for line in lines:
-            if '== restart ==' in line:
-                rekey_start = 0
-            rgx = re.search('.*net_cmd: ([0-9]*):([0-9]*):([0-9]*).*', line)
-            if rgx is not None:
-                perfdata = rgx.groups()
-                timestamp = int(perfdata[1])
-                code = int(perfdata[2])
+    enc_times = np.zeros((256, 128))
+    rekey_times = np.zeros((256, 128))
+
+    if args.average:
+        flist = []
+        for i in range(1,9):
+            flist += [args.file + str(i) + ".bin"]
+    else:
+        flist = [args.file]
+
+    for fname in flist:
+        with open(fname, "rb") as f:
+            data = f.read()
+            entries = [data[i:i+8] for i in range(0, len(data), 8)]
+            for entry in entries:
+                code = int.from_bytes(entry[:4], 'little')
+                timestamp = int.from_bytes(entry[4:], 'little')
                 keybit = code & 0xFF
                 databit = (code >> 8) & 0xFF
                 start = (code & 0x100_0000) == 0
                 if start:
-                    rekey_times[keybit][databit] = timestamp - rekey_start
+                    rekey_times[keybit][databit] += timestamp - rekey_start
                     enc_start = timestamp
                 else:
-                    enc_times[keybit][databit] = timestamp - enc_start
+                    enc_times[keybit][databit] += timestamp - enc_start
                     rekey_start = timestamp
 
-    #print('enc time sample')
-    #for i in range(32):
-    #    print('{}'.format(enc_times[i]))
-    #print('rekey time sample')
-    #print('{}'.format(rekey_times[0]))
+    rekey_times = rekey_times / len(flist)
+    enc_times = enc_times / len(flist)
+
+    print('enc time sample')
+    for i in range(32):
+        print('{}'.format(enc_times[i]))
+    print('rekey time sample')
+    print('{}'.format(rekey_times[0]))
     print("enc: mean {} / max {}".format(enc_times.mean(), enc_times.max()))
-    enc_hist = np.histogram(enc_times, bins=32)
+    hw_range = (3800,4400)
+    ring_range = (12000,13000)
+    hist, bins = enc_hist = np.histogram(enc_times, bins=64, range=hw_range)
+    from matplotlib import pyplot as plt
+    plt.hist(enc_times, bins=bins)
+    plt.savefig('hist.png')
     print(enc_hist)
     print("enc typical cycles: {}".format(enc_hist[1][0]))
     print("rekey: mean {} / max {}".format(rekey_times.mean(), rekey_times.max()))

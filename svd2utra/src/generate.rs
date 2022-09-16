@@ -655,6 +655,17 @@ where
             base: AtomicPtr::new(base)
         }
     }
+    /// In reality, we should wrap this in an `Arc` so we can be truly safe across a multi-core
+    /// implementation, but for our single-core system this is fine. The reason we don't do it
+    /// immediately is that UTRA also needs to work in a `no_std` environment, where `Arc`
+    /// does not exist, and so additional config flags would need to be introduced to not break
+    /// that compability issue. If migrating to multicore, this technical debt would have to be
+    /// addressed.
+    pub fn clone(&self) -> Self {
+        AtomicCsr {
+            base: AtomicPtr::new(self.base.load(core::sync::atomic::Ordering::SeqCst))
+        }
+    }
     /// Read the contents of this register
     pub fn r(&self, reg: Register) -> T {
         // prevent re-ordering

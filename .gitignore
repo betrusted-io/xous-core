@@ -36,6 +36,9 @@ tools/__pycache__
 # PDDB backup files
 *.pddb
 
+# performance monitoring page table
+tools/ct_data/v2p.txt
+
 # renode will tickle this every time you run it, but you shouldn't commit that back to the tree
 /emulation/linux-server-rootfs.jffs2
 

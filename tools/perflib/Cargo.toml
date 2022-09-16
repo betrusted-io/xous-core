@@ -1,0 +1,15 @@
+[package]
+name = "perflib"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Performance counter tooling"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+xous = { path = "../../xous-rs" }
+log = "0.4.14"
+utralib = { path = "../../utralib"}
+
+[features]
+default = []
