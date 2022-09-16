@@ -250,6 +250,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - BitWarden export format is also supported by `vaultbackup-rs`.
   - backup and restore can only be run with user approval, accessed via the `vault` context menu and then selecting `Enable host readout`. Note that in this mode, any host can read vault secrets; therefore, the mode locks out the UI and when it is active.
 - highly experimental TLS support when the "tls" feature is enabled. Relies on a pure-Rust implementation of `ring` located in the `ring-xous` fork.
+- performance monitoring framework added. see `tools/perflib` and `services/shellchat/net_cmd.rs` for examples of how to use it.
 
 ## Roadmap to 1.0
 
