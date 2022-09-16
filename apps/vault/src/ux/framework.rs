@@ -291,7 +291,9 @@ impl VaultUx {
     }
     fn mark_as_dirty(&mut self, index: usize) {
         let list_len = self.filtered_list.len();
-        self.filtered_list[index.min(list_len - 1)].dirty = true;
+        if list_len > 0 {
+            self.filtered_list[index.min(list_len - 1)].dirty = true;
+        }
     }
     fn mark_screen_as_dirty(&mut self, index: usize) {
         let page = index as i16 / self.items_per_screen;
@@ -302,6 +304,17 @@ impl VaultUx {
         ].iter_mut() {
             item.dirty = true;
         }
+    }
+    fn backpropagate_item(&mut self, updated_item: ListItem) -> bool {
+        for item in self.item_list.lock().unwrap().iter_mut() {
+            if item.guid == updated_item.guid {
+                item.name = updated_item.name.to_string();
+                item.extra = updated_item.extra.to_string();
+                item.dirty = true;
+                return true;
+            }
+        }
+        false
     }
     pub(crate) fn nav(&mut self, dir: NavDir) {
         match dir {
@@ -576,26 +589,37 @@ impl VaultUx {
                     VaultMode::Fido | VaultMode::Password => {write!(box_text, "{}\n{}", item.name, item.extra).ok();},
                     VaultMode::Totp => {
                         let fields = item.extra.split(':').collect::<Vec<&str>>();
-                        if fields.len() == 4 {
+                        if fields.len() == 5 {
                             let shared_secret = base32::decode(
                                 base32::Alphabet::RFC4648 { padding: false }, fields[0])
                                 .unwrap_or(vec![]);
                             let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
-                            let step_seconds = u16::from_str_radix(fields[2], 10).unwrap_or(30);
-                            let algorithm = TotpAlgorithm::try_from(fields[2]).unwrap_or(TotpAlgorithm::HmacSha1);
+                            let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
+                            let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
+                            let is_hotp = fields[4].to_uppercase() == "HOTP";
                             let totp = totp::TotpEntry {
-                                step_seconds,
+                                step_seconds: if !is_hotp {step_seconds as u16} else {1},  // step_seconds is re-used by hotp as the code.
                                 shared_secret,
                                 digit_count,
                                 algorithm
                             };
-                            let code = generate_totp_code(
-                                totp::get_current_unix_time().unwrap_or(0),
-                                &totp
-                            ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
-                            // why code on top? because the item.name can be very long, and it can wrap which would cause
-                            // the code to become hidden.
-                            write!(box_text, "{}\n{}", code, item.name).ok();
+                            if !is_hotp {
+                                let code = generate_totp_code(
+                                    totp::get_current_unix_time().unwrap_or(0),
+                                    &totp
+                                ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                                // why code on top? because the item.name can be very long, and it can wrap which would cause
+                                // the code to become hidden.
+                                write!(box_text, "{}\n{}", code, item.name).ok();
+                            } else {
+                                let code = generate_totp_code(
+                                    step_seconds,
+                                    &totp
+                                ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
+                                // why code on top? because the item.name can be very long, and it can wrap which would cause
+                                // the code to become hidden.
+                                write!(box_text, "HOTP {}\n{}", code, item.name).ok();
+                            }
                         } else {
                             write!(box_text, "{}", t!("vault.error.record_error", xous::LANG)).ok();
                         }
@@ -734,27 +758,120 @@ impl VaultUx {
                     }
                 }
                 self.pddb.borrow().sync().ok();
+                // force a redraw of the record as the access count updated
+                self.filtered_list[self.selection_index].dirty = true;
+                self.backpropagate_item(self.filtered_list[self.selection_index].clone());
             }
             VaultMode::Totp => {
                 let fields = self.filtered_list[self.selection_index].extra.split(':').collect::<Vec<&str>>();
-                if fields.len() == 4 {
+                if fields.len() == 5 {
                     let shared_secret = base32::decode(
                         base32::Alphabet::RFC4648 { padding: false }, fields[0])
                         .unwrap_or(vec![]);
                     let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
-                    let step_seconds = u16::from_str_radix(fields[2], 10).unwrap_or(30);
-                    let algorithm = TotpAlgorithm::try_from(fields[2]).unwrap_or(TotpAlgorithm::HmacSha1);
+                    let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
+                    let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
+                    let is_hotp = fields[4] == "HOTP";
                     let totp = totp::TotpEntry {
-                        step_seconds,
+                        step_seconds: if !is_hotp {step_seconds as u16} else {1}, // step_seconds is re-used by hotp as the code.
                         shared_secret,
                         digit_count,
                         algorithm
                     };
-                    let code = generate_totp_code(
-                        totp::get_current_unix_time().unwrap_or(0),
-                        &totp
-                    ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string());
-                    self.usb_dev.send_str(&code).ok();
+                    let code = if !is_hotp {
+                        generate_totp_code(
+                            totp::get_current_unix_time().unwrap_or(0),
+                            &totp
+                        ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string())
+                    } else {
+                        generate_totp_code(
+                            step_seconds,
+                            &totp
+                        ).unwrap_or(t!("vault.error.record_error", xous::LANG).to_string())
+                    };
+                    match self.usb_dev.send_str(&code) {
+                        Ok(_) => {
+                            if is_hotp {
+                                // update the count once the HOTP has been typed successfully
+                                let entry = self.filtered_list[self.selection_index].guid.to_string();
+
+                                // this get determines which basis the key is in
+                                let (basis, hotp_rec) = match self.pddb.borrow().get(
+                                    crate::actions::VAULT_TOTP_DICT,
+                                    &entry,
+                                    None, true, true,
+                                    Some(256), Some(crate::basis_change)
+                                ) {
+                                    Ok(mut app_data) => {
+                                        let attr = app_data.attributes().expect("couldn't get attributes");
+                                        let len = app_data.attributes().unwrap().len;
+                                        let mut data = Vec::<u8>::with_capacity(len);
+                                        data.resize(len, 0);
+                                        match app_data.read_exact(&mut data) {
+                                            Ok(_len) => {
+                                                if let Some(mut totp_rec) = storage::TotpRecord::try_from(data).ok() {
+                                                    totp_rec.timestep += 1;
+                                                    (attr.basis, totp_rec)
+                                                } else {
+                                                    log::error!("Couldn't deserialize HOTP: {:?}", entry);
+                                                    return Err(xous::Error::InternalError);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::error!("Couldn't access HOTP key: {:?}", e);
+                                                return Err(xous::Error::InternalError);
+                                            },
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::error!("error updating HOTP count: {:?}", e);
+                                        return Err(xous::Error::InternalError);
+                                    }
+                                };
+                                // remove the old entry, specifically only in the most recently open basis.
+                                match self.pddb.borrow().delete_key(crate::actions::VAULT_TOTP_DICT, &entry, Some(&basis)) {
+                                    Ok(_) => {}
+                                    Err(_e) => {
+                                        return Err(xous::Error::InternalError);
+                                    }
+                                }
+                                // update the "extra" field, because the timestep field has been altered
+                                let alg: String = hotp_rec.algorithm.into();
+                                self.filtered_list[self.selection_index].extra = format!("{}:{}:{}:{}:{}",
+                                    hotp_rec.secret,
+                                    hotp_rec.digits,
+                                    hotp_rec.timestep,
+                                    alg,
+                                    if hotp_rec.is_hotp {"HOTP"} else {"TOTP"}
+                                );
+                                self.filtered_list[self.selection_index].dirty = true;
+                                self.backpropagate_item(self.filtered_list[self.selection_index].clone());
+                                // now write to disk
+                                match self.pddb.borrow().get(
+                                    crate::actions::VAULT_TOTP_DICT, &entry, Some(&basis),
+                                    false, true, Some(crate::actions::VAULT_ALLOC_HINT),
+                                    Some(crate::basis_change)
+                                ) {
+                                    Ok(mut record) => {
+                                        let ser: Vec<u8> = storage::TotpRecord::into(hotp_rec);
+                                        match record.write(&ser) {
+                                            Ok(_) => {}
+                                            Err(e) => {
+                                                log::error!("couldn't update key {}: {:?}", entry, e);
+                                                return Err(xous::Error::OutOfMemory);
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::error!("couldn't update key {}: {:?}", entry, e);
+                                        return Err(xous::Error::OutOfMemory);
+                                    }
+                                }
+                                self.pddb.borrow().sync().ok();
+                            }
+                        },
+                        _ => ()
+                    };
                 }
             }
             _ => log::error!("Illegal state! we shouldn't be having an autotype on {:?}", mode_cache),

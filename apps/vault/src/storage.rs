@@ -12,7 +12,7 @@ const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 const VAULT_TOTP_DICT: &'static str = "vault.totp";
 const VAULT_TOTP_ALLOC_HINT: usize = 128;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
-const VAULT_TOTP_REC_VERSION: u32 = 1;
+const VAULT_TOTP_REC_VERSION: u32 = 2;
 
 #[derive(Debug)]
 pub enum Error {
@@ -315,6 +315,7 @@ pub struct TotpRecord {
     pub digits: u32,
     pub timestep: u64,
     pub ctime: u64,
+    pub is_hotp: bool,
 }
 
 #[derive(Debug)]
@@ -324,6 +325,7 @@ pub enum TOTPSerializationError {
     BadDigitsAmount,
     BadCtime,
     BadTimestep,
+    BadHotp,
     MalformedInput,
 }
 
@@ -389,6 +391,18 @@ impl StorageContent for TotpRecord {
                             return Err(TOTPSerializationError::BadTimestep)?;
                         }
                     }
+                    "hotp" => {
+                        if let Ok(setting) = u8::from_str_radix(data, 10) {
+                            if setting != 0 {
+                                pr.is_hotp = true;
+                            } else {
+                                pr.is_hotp = false;
+                            }
+                        } else {
+                            log::warn!("hotp variant error");
+                            return Err(TOTPSerializationError::BadHotp)?;
+                        }
+                    }
                     _ => {
                         log::warn!(
                             "unexpected tag {} encountered parsing TOTP info, ignoring",
@@ -408,7 +422,7 @@ impl StorageContent for TotpRecord {
     fn to_vec(&self) -> Vec<u8> {
         let ta: String = self.algorithm.into();
         format!(
-            "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
+            "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
             "version",
             self.version,
             "secret",
@@ -423,6 +437,8 @@ impl StorageContent for TotpRecord {
             self.digits,
             "timestep",
             self.timestep,
+            "hotp",
+            if self.is_hotp {1} else {0},
             "ctime",
             self.ctime,
         )
@@ -451,6 +467,7 @@ impl TryFrom<Vec<u8>> for TotpRecord {
             digits: 0,
             ctime: 0,
             timestep: 0,
+            is_hotp: false,
         };
         let lines = desc_str.split('\n');
         for line in lines {
@@ -497,6 +514,18 @@ impl TryFrom<Vec<u8>> for TotpRecord {
                             return Err(TOTPSerializationError::BadTimestep);
                         }
                     }
+                    "hotp" => {
+                        if let Ok(setting) = u8::from_str_radix(data, 10) {
+                            if setting != 0 {
+                                pr.is_hotp = true;
+                            } else {
+                                pr.is_hotp = false;
+                            }
+                        } else {
+                            log::warn!("hotp error");
+                            return Err(TOTPSerializationError::BadHotp);
+                        }
+                    }
                     _ => {
                         log::warn!(
                             "unexpected tag {} encountered parsing TOTP info, ignoring",
@@ -517,7 +546,7 @@ impl From<TotpRecord> for Vec<u8> {
     fn from(tr: TotpRecord) -> Self {
         let ta: String = tr.algorithm.into();
         format!(
-            "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
+            "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
             "version",
             tr.version,
             "secret",
@@ -532,6 +561,8 @@ impl From<TotpRecord> for Vec<u8> {
             tr.digits,
             "timestep",
             tr.timestep,
+            "hotp",
+            if tr.is_hotp {1} else {0},
             "ctime",
             tr.ctime,
         )
