@@ -251,6 +251,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - backup and restore can only be run with user approval, accessed via the `vault` context menu and then selecting `Enable host readout`. Note that in this mode, any host can read vault secrets; therefore, the mode locks out the UI and when it is active.
 - highly experimental TLS support when the "tls" feature is enabled. Relies on a pure-Rust implementation of `ring` located in the `ring-xous` fork.
 - performance monitoring framework added. see `tools/perflib` and `services/shellchat/net_cmd.rs` for examples of how to use it.
+- HOTP support added to `vault`. HOTPs display in the TOTP window with the notation "HOTP" next to them, and they auto-increment on autotype. When creating new items in TOTP you are given the option to make an HOTP record, and you can convert between the two by editing the record and changing the bottom line from totp to hotp and vice-versa. The `timestep` field is re-used from the TOTP record to store the `count` for HOTP.
 
 ## Roadmap to 1.0
 
