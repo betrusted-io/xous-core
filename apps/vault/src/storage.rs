@@ -12,6 +12,13 @@ const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 const VAULT_TOTP_DICT: &'static str = "vault.totp";
 const VAULT_TOTP_ALLOC_HINT: usize = 128;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
+
+// Version history TOTP record:
+//  - v1 created, basic record for TOTP
+//  - v2 add HOTP support:
+//    - `hotp` field added. If 1, then HOTP record. If not existent or not 1, then TOTP
+//    - If HOTP, then the `timestep` field is re-purposed as the `count` field.
+//    - v1 records read directly onto v2 records, and `hotp` is always `false` for v1 records
 const VAULT_TOTP_REC_VERSION: u32 = 2;
 
 #[derive(Debug)]
