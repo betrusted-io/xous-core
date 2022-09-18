@@ -1,9 +1,9 @@
 {
     "socup.candidate": {
         "ja": "ゲートウェアの更新候補が見つかりました。\n\n適用する必要がありますか？",
-        "en": "An update candidate for the SoC was found.\n\nShould we apply it?",
+        "en": "An update candidate for the SoC was found.\n\nShould we apply it?\n\nNOTE: if you just installed an update, try rebooting using a paperclip in the hole in the lower right hand corner. This forces the latest image to load.",
         "zh": "找到了网关软件的更新候选者。\n\n我们应该应用它吗？",
-        "en-tts": "An update candidate for the SoC was found.\n\nShould we apply it?"
+        "en-tts": "An update candidate for the SoC was found.\n\nShould we apply it?\n\nNOTE: if you just installed an update, try rebooting using a paperclip in the hole in the lower right hand corner. This forces the latest image to load."
     },
     "rekey.fail": {
         "ja": "キーの再生成に失敗しました。再起動して再試行してください。\n理由：",
