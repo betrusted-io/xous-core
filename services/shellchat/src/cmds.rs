@@ -52,9 +52,9 @@ pub struct CommonEnv {
     boot_instant: std::time::Instant,
     /// make this communal so any number of commands can trigger or reset the performance counter, and/or perform logging
     #[cfg(feature="perfcounter")]
-    perf_csr: CSR<u32>,
+    perf_csr: AtomicCsr<u32>,
     #[cfg(feature="perfcounter")]
-    event_csr: CSR::<u32>,
+    event_csr: AtomicCsr::<u32>,
 }
 impl CommonEnv {
     pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
@@ -196,9 +196,9 @@ impl CmdEnv {
             netmgr: net::NetManager::new(),
             boot_instant: std::time::Instant::now(),
             #[cfg(feature="perfcounter")]
-            perf_csr: CSR::new(perf_csr.as_mut_ptr() as *mut u32),
+            perf_csr: AtomicCsr::new(perf_csr.as_mut_ptr() as *mut u32),
             #[cfg(feature="perfcounter")]
-            event_csr: CSR::new(event1_csr.as_mut_ptr() as *mut u32),
+            event_csr: AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32),
         };
         //let fcc = Fcc::new(&mut common);
         #[cfg(feature="benchmarks")]

@@ -9,6 +9,7 @@ import sys
 import hashlib
 import csv
 import urllib.request
+import re
 
 from progressbar.bar import ProgressBar
 
@@ -482,6 +483,12 @@ def main():
     parser.add_argument(
         "--override-csr", required=False, help="CSR file to use instead of CSR values stored with the image. Used to recover in case of partial update of soc_csr.bin", type=str,
     )
+    parser.add_argument(
+        "--dump", required=False, help="Dump a region of memory. Takes a virtual memory map file as an argument. Looks for lines of format `V|P vaddr paddr`", type=str,
+    )
+    parser.add_argument(
+        "--dump-file", required=False, help="Name out output file for dump. Required if --dump is specified.", type=str,
+    )
     args = parser.parse_args()
 
     if not len(sys.argv) > 1:
@@ -570,6 +577,27 @@ def main():
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
     pc_usb.ping_wdt()
+
+    if args.dump:
+        table = []
+        with open(args.dump, 'r') as map:
+            for line in map.readlines():
+                rgx = re.search('.*V\|P\s([0-9a-fA-F]*)\s([0-9a-fA-F]*).*', line)
+                if rgx is not None:
+                    map = rgx.groups()
+                    table += [int(map[1], 16)]
+
+        if args.dump_file is None:
+            print("Must specify --dump-file when using --dump")
+            exit(0)
+        with open(args.dump_file, 'wb') as f:
+            for page in table:
+                pc_usb.poke(vexdbg_addr, 0x00020000)
+                data = pc_usb.burst_read(page, 4096)
+                pc_usb.poke(vexdbg_addr, 0x02000000)
+                f.write(data)
+        exit(0)
+
     print("Halting CPU.")
     pc_usb.poke(vexdbg_addr, 0x00020000)
 

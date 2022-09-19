@@ -343,6 +343,25 @@ impl ActionManager {
                     },
                     _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
+
+                self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                self.modals
+                    .add_list(vec![
+                        t!("vault.newitem.totp", xous::LANG),
+                        t!("vault.newitem.hotp", xous::LANG),
+                    ]).expect("couldn't create configuration modal");
+                let is_totp: bool;
+                match self.modals.get_radiobutton(t!("vault.newitem.is_t_or_h_otp", xous::LANG)) {
+                    Ok(response) => {
+                        if &response == t!("vault.newitem.totp", xous::LANG) {
+                            is_totp = true;
+                        } else {
+                            is_totp = false;
+                        }
+                    }
+                    _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
+                }
+
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let secret = match self.modals
                     .alert_builder(t!("vault.newitem.totp_ss", xous::LANG))
@@ -371,6 +390,7 @@ impl ActionManager {
                     }
                 };
                 let validated_secret = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &ss_vec);
+
                 // time, hash, etc. are all the "expected defaults" -- if you want to change them, edit the record after entering it.
                 let mut totp = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
@@ -378,8 +398,9 @@ impl ActionManager {
                     secret: validated_secret,
                     algorithm: TotpAlgorithm::HmacSha1,
                     digits: 6,
-                    timestep: 30,
-                    ctime: 0, 
+                    timestep: if is_totp {30} else {0},
+                    ctime: 0,
+                    is_hotp: !is_totp,
                     notes: t!("vault.notes", xous::LANG).to_string(),
                 };
 
@@ -443,7 +464,7 @@ impl ActionManager {
         };
 
         if choice.is_none() {
-            let dict = VAULT_TOTP_DICT;
+            let dict = U2F_APP_DICT;
             // at the moment only U2F records are supported for editing. The FIDO2 stuff is done with a different record
             // storage format that's a bit funkier to edit.
             let maybe_update = match self.pddb.borrow().get(
@@ -524,10 +545,12 @@ impl ActionManager {
                     .field(Some(pw.timestep.to_string()), Some(password_validator))
                     .field(Some(alg), Some(password_validator))
                     .field(Some(pw.digits.to_string()), Some(password_validator))
+                    .field(Some(if pw.is_hotp {"HOTP".to_string()} else {"TOTP".to_string()}), Some(password_validator))
                     .build().expect("modals error in edit");
                 pw.name = edit_data.content()[0].content.as_str().unwrap().to_string();
                 pw.secret = edit_data.content()[1].content.as_str().unwrap().to_string();
                 pw.notes = edit_data.content()[2].content.as_str().unwrap().to_string();
+                pw.is_hotp = if edit_data.content()[6].content.as_str().unwrap().to_string().to_uppercase() == "HOTP" {true} else {false};
                 if let Ok(t) = u64::from_str_radix(edit_data.content()[3].content.as_str().unwrap(), 10) {
                     pw.timestep = t;
                 }
@@ -808,7 +831,13 @@ impl ActionManager {
                                 Ok(_len) => {
                                     if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
                                         let alg: String = totp.algorithm.into();
-                                        let extra = format!("{}:{}:{}:{}", totp.secret, totp.digits, totp.timestep, alg);
+                                        let extra = format!("{}:{}:{}:{}:{}",
+                                            totp.secret,
+                                            totp.digits,
+                                            totp.timestep,
+                                            alg,
+                                            if totp.is_hotp {"HOTP"} else {"TOTP"}
+                                        );
                                         let desc = format!("{}", totp.name);
                                         let li = ListItem {
                                             name: desc,
@@ -947,7 +976,7 @@ impl ActionManager {
                     strict: true,
                 };
                 let password = pg.generate_one().unwrap();
-                let record = storage::PasswordRecord {
+                let mut record = storage::PasswordRecord {
                     version: VAULT_PASSWORD_REC_VERSION,
                     description,
                     username,
@@ -958,7 +987,7 @@ impl ActionManager {
                     count: 0,
                 };
 
-                match self.storage.borrow_mut().new_record(record, None) {
+                match self.storage.borrow_mut().new_record(&mut record, None, true) {
                     Ok(_) => {},
                     Err(e) => log::error!("PW Error: {:?}", e),
                 };
@@ -1058,7 +1087,7 @@ impl ActionManager {
                 let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
                 let mut secret_bytes = [0u8; 10];
                 self.trng.borrow_mut().fill_bytes(&mut secret_bytes);
-                let record = storage::TotpRecord {
+                let mut record = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
                     secret: base32::encode(base32::Alphabet::RFC4648 { padding: false }, &secret_bytes),
                     name,
@@ -1067,15 +1096,16 @@ impl ActionManager {
                     digits: 6,
                     timestep: 30,
                     ctime: 0,
+                    is_hotp: false,
                 };
 
-                match self.storage.borrow_mut().new_record(record, None) {
+                match self.storage.borrow_mut().new_record(&mut record, None, true) {
                     Ok(_) => {},
                     Err(e) => log::error!("PW Error: {:?}", e),
                 };
             }
             // specific TOTP entry with a known shared secret for testing
-            let record = storage::TotpRecord {
+            let mut record = storage::TotpRecord {
                 version: VAULT_TOTP_REC_VERSION,
                 secret: "I65VU7K5ZQL7WB4E".to_string(),
                 name: "totp@authenticationtest.com".to_string(),
@@ -1084,9 +1114,10 @@ impl ActionManager {
                 digits: 6,
                 timestep: 30,
                 ctime: 0,
+                is_hotp: false,
             };
 
-            match self.storage.borrow_mut().new_record(record, None) {
+            match self.storage.borrow_mut().new_record(&mut record, None, true) {
                 Ok(_) => {},
                 Err(e) => log::error!("PW Error: {:?}", e),
             };

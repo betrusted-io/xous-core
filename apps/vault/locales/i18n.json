@@ -138,10 +138,28 @@
         "en-tts": "No"
     },
     "vault.newitem.totp_ss": {
-        "en": "Enter the TOTP shared secret in Base32:",
-        "ja": "Base32にTOTP共有シークレットを入力します。",
-        "zh": "在 Base32 中输入 TOTP 共享密钥：",
-        "en-tts": "Enter the TOTP shared secret in Base32:"
+        "en": "Enter the OTP shared secret in Base32:",
+        "ja": "Base32にOTP共有シークレットを入力します。",
+        "zh": "在 Base32 中输入 OTP 共享密钥：",
+        "en-tts": "Enter the OTP shared secret in Base32:"
+    },
+    "vault.newitem.is_t_or_h_otp": {
+        "en": "Which type of OTP record is this (if you don't know, it's probably TOTP)?",
+        "ja": "これはどのタイプの OTP レコードですか (わからない場合は、おそらく TOTP です)。",
+        "zh": "这是哪种类型的 OTP 记录（如果您不知道，可能是 TOTP）？",
+        "en-tts": "Which type of OTP record is this (if you don't know, it's probably TOTP)?"
+    },
+    "vault.newitem.totp": {
+        "en": "TOTP",
+        "ja": "TOTP",
+        "zh": "TOTP",
+        "en-tts": "TOTP"
+    },
+    "vault.newitem.hotp": {
+        "en": "HOTP",
+        "ja": "HOTP",
+        "zh": "HOTP",
+        "en-tts": "HOTP"
     },
     "vault.newitem.name": {
         "en": "Please name the credential:",
