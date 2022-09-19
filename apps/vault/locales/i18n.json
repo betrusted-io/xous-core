@@ -161,6 +161,12 @@
         "zh": "HOTP",
         "en-tts": "HOTP"
     },
+    "vault.hotp.count": {
+        "en": "Please enter the initial HOTP count:",
+        "ja": "最初の HOTP カウントを入力してください:",
+        "zh": "请输入初始 HOTP 计数：",
+        "en-tts": "Please enter the initial HOTP count:"
+    },
     "vault.newitem.name": {
         "en": "Please name the credential:",
         "ja": "クレデンシャルに名前を付ける:",

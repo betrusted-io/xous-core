@@ -391,6 +391,21 @@ impl ActionManager {
                 };
                 let validated_secret = base32::encode(base32::Alphabet::RFC4648 { padding: false }, &ss_vec);
 
+                let timestep = if !is_totp {
+                    // get the initial count if it's an HOTP record
+                    self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
+                    match self.modals
+                        .alert_builder(t!("vault.hotp.count", xous::LANG))
+                        .field(Some("0".to_string()), Some(length_validator))
+                        .build()
+                    {
+                        Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u64>().unwrap(),
+                        _ => {log::error!("Count entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
+                    }
+                } else {
+                    30 // default TOTP timestep otherwise
+                };
+
                 // time, hash, etc. are all the "expected defaults" -- if you want to change them, edit the record after entering it.
                 let mut totp = storage::TotpRecord {
                     version: VAULT_TOTP_REC_VERSION,
@@ -398,7 +413,7 @@ impl ActionManager {
                     secret: validated_secret,
                     algorithm: TotpAlgorithm::HmacSha1,
                     digits: 6,
-                    timestep: if is_totp {30} else {0},
+                    timestep,
                     ctime: 0,
                     is_hotp: !is_totp,
                     notes: t!("vault.notes", xous::LANG).to_string(),

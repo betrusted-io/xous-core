@@ -598,7 +598,7 @@ impl VaultUx {
                             let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
                             let is_hotp = fields[4].to_uppercase() == "HOTP";
                             let totp = totp::TotpEntry {
-                                step_seconds: if !is_hotp {step_seconds as u16} else {1},  // step_seconds is re-used by hotp as the code.
+                                step_seconds: if !is_hotp {step_seconds} else {1},  // step_seconds is re-used by hotp as the code.
                                 shared_secret,
                                 digit_count,
                                 algorithm
@@ -771,9 +771,9 @@ impl VaultUx {
                     let digit_count = u8::from_str_radix(fields[1], 10).unwrap_or(6);
                     let step_seconds = u64::from_str_radix(fields[2], 10).unwrap_or(30);
                     let algorithm = TotpAlgorithm::try_from(fields[3]).unwrap_or(TotpAlgorithm::HmacSha1);
-                    let is_hotp = fields[4] == "HOTP";
+                    let is_hotp = fields[4].to_uppercase() == "HOTP";
                     let totp = totp::TotpEntry {
-                        step_seconds: if !is_hotp {step_seconds as u16} else {1}, // step_seconds is re-used by hotp as the code.
+                        step_seconds: if !is_hotp {step_seconds} else {1}, // step_seconds is re-used by hotp as the code.
                         shared_secret,
                         digit_count,
                         algorithm

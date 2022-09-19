@@ -61,7 +61,7 @@ impl Into<String> for TotpAlgorithm {
 
 #[derive(Debug)]
 pub(crate) struct TotpEntry {
-    pub step_seconds: u16,
+    pub step_seconds: u64,
     pub shared_secret: Vec<u8>,
     pub digit_count: u8,
     pub algorithm: TotpAlgorithm,
@@ -100,25 +100,31 @@ fn unpack_u64(v: u64) -> [u8; 8] {
 
 fn generate_hmac_bytes(unix_timestamp: u64, totp_entry: &TotpEntry) -> Result<Vec<u8>, Error> {
     let mut computed_hmac = Vec::new();
+    let checked_step = if totp_entry.step_seconds == 0 {
+        log::warn!("totp step_seconds was 0, this would cause a div-by-zero; forcing to 1. Check that this is not an HOTP record?");
+        1
+    } else {
+        totp_entry.step_seconds
+    };
     match totp_entry.algorithm {
         // The OpenTitan HMAC core does not support hmac-sha1. Fall back to
         // a software implementation.
         TotpAlgorithm::HmacSha1 => {
             let mut mac: Hmac<Sha1> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
-            mac.update(&unpack_u64(unix_timestamp / totp_entry.step_seconds as u64));
+            mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
         // note: sha256/sha512 implementations not yet tested, as we have yet to find a site that uses this to test against.
         TotpAlgorithm::HmacSha256 => {
             let mut mac: Hmac<sha2::Sha256> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
-            mac.update(&unpack_u64(unix_timestamp / totp_entry.step_seconds as u64));
+            mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
         TotpAlgorithm::HmacSha512 => {
             let mut mac: Hmac<sha2::Sha512> = Hmac::new_from_slice(&totp_entry.shared_secret)?;
-            mac.update(&unpack_u64(unix_timestamp / totp_entry.step_seconds as u64));
+            mac.update(&unpack_u64(unix_timestamp / checked_step));
             let hash: &[u8] = &mac.finalize().into_bytes();
             computed_hmac.extend_from_slice(hash);
         }
