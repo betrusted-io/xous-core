@@ -4,6 +4,8 @@ use num_traits::*;
 
 use std::io::Write;
 
+use locales::t;
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
 enum WlanManOp {
     TurnWlanOn = 3,
@@ -18,13 +20,13 @@ enum WlanManOp {
 impl Display for WlanManOp {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::TurnWlanOn => write!(f, "Turn WLAN on"),
-            Self::TurnWlanOff => write!(f, "Turn WLAN off"),
-            Self::AddNetworkManually => write!(f, "Manually add a network"),
-            Self::ScanForNetworks => write!(f, "Scan for networks"),
-            Self::Status => write!(f, "Network status"),
-            Self::DeleteNetwork => write!(f, "Delete network"),
-            Self::KnownNetworks => write!(f, "List known networks"),
+            Self::TurnWlanOn => write!(f, "{}", t!("wlan.turnon", xous::LANG)),
+            Self::TurnWlanOff => write!(f, "{}", t!("wlan.turnoff", xous::LANG)),
+            Self::AddNetworkManually => write!(f, "{}", t!("wlan.manual_add", xous::LANG)),
+            Self::ScanForNetworks => write!(f, "{}", t!("wlan.scan", xous::LANG)),
+            Self::Status => write!(f, "{}", t!("wlan.status", xous::LANG)),
+            Self::DeleteNetwork => write!(f, "{}", t!("wlan.delete", xous::LANG)),
+            Self::KnownNetworks => write!(f, "{}", t!("wlan.list_known", xous::LANG)),
         }
     }
 }
@@ -119,7 +121,7 @@ impl WLANMan {
     fn add_new_ssid(&mut self) -> Result<(), WLANError> {
         let connection_data = self
             .modals
-            .alert_builder("Fill this form with your connection SSID and password.")
+            .alert_builder(t!("wlan.ssid_entry", xous::LANG))
             .field(
                 Some("SSID".to_string()),
                 Some(|text| {
@@ -131,7 +133,7 @@ impl WLANMan {
                 }),
             )
             .field(
-                Some("Password".to_string()),
+                Some(t!("wlan.password", xous::LANG).to_string()),
                 Some(|text| {
                     if text.as_str().is_empty() {
                         return Some(xous_ipc::String::from_str("Password cannot be empty"));
@@ -195,14 +197,14 @@ impl WLANMan {
 
         if networks.is_empty() {
             self.modals
-                .show_notification("No networks available.", None)
+                .show_notification(t!("wlan.no_networks", xous::LANG), None)
                 .unwrap();
             return Ok(());
         }
 
         self.modals.add_list(networks).unwrap();
 
-        let ssid = self.modals.get_radiobutton("Choose an action:").unwrap();
+        let ssid = self.modals.get_radiobutton(t!("wlan.ssid_choose", xous::LANG)).unwrap();
 
         self.fill_password_for_ssid(&ssid)
     }
@@ -210,12 +212,12 @@ impl WLANMan {
     fn fill_password_for_ssid(&mut self, ssid: &str) -> Result<(), WLANError> {
         let connection_data = self
             .modals
-            .alert_builder(&format!("Fill this form with the password for {ssid}."))
+            .alert_builder(&t!("wlan.ssid_password", xous::LANG).replace("{ssid}", ssid))
             .field(
-                Some("Password".to_string()),
+                Some(t!("wlan.password", xous::LANG).to_string()),
                 Some(|text| {
                     if text.as_str().is_empty() {
-                        return Some(xous_ipc::String::from_str("Password cannot be empty"));
+                        return Some(xous_ipc::String::from_str(t!("wlan.password_empty", xous::LANG)));
                     }
 
                     None
@@ -233,12 +235,14 @@ impl WLANMan {
         let status = self.com.wlan_status()?;
         let ssid = match status.ssid {
             Some(s) => s.name.to_string(),
-            None => "not connected".to_string(),
+            None => t!("stats.disconnected", xous::LANG).to_string(),
         };
 
         let ls = status.link_state;
         let ip = &status.ipv4;
 
+        // TODO: make a proper translation for this. But, I think for now, this is a fairly
+        // technical screen that we can leave in English.
         let status_str = format!(
             "Connection status: \n\n - SSID: {}\n - Link state: {:?}\n - IP: {}\n - Gateway: {}\n - Subnet mask: {}\n - DNS 1: {}\n - DNS 2: {}\n - DHCP state: {:?}",
             ssid,
@@ -256,9 +260,12 @@ impl WLANMan {
     }
 
     fn known_networks(&self) -> Result<(), WLANError> {
-        let networks = self.pddb.list_keys(net::AP_DICT_NAME, None)?;
+        let networks = match self.pddb.list_keys(net::AP_DICT_NAME, None) {
+            Ok(list) => list,
+            Err(_) => Vec::new(),
+        };
 
-        let mut networks_string = String::from("No known networks.");
+        let mut networks_string = String::from(t!("wlan.no_known_networks", xous::LANG));
 
         if networks.is_empty() {
             self.modals
@@ -267,7 +274,7 @@ impl WLANMan {
             return Ok(());
         }
 
-        networks_string = String::from("Known networks:\n");
+        networks_string = String::from(t!("wlan.known_networks", xous::LANG));
 
         networks_string += &networks
             .iter()
@@ -283,16 +290,19 @@ impl WLANMan {
     }
 
     fn delete_network(&mut self) -> Result<(), WLANError> {
-        let networks = self.pddb.list_keys(net::AP_DICT_NAME, None)?;
+        let networks = match self.pddb.list_keys(net::AP_DICT_NAME, None) {
+            Ok(list) => list,
+            Err(_) => Vec::new(),
+        };
 
         if networks.is_empty() {
             self.modals
-                .show_notification("No known networks.", None)
+                .show_notification(t!("wlan.no_known_networks", xous::LANG), None)
                 .unwrap();
             return Ok(());
         }
 
-        let cancel_item = "Cancel";
+        let cancel_item = t!("wlan.cancel", xous::LANG);
         self.modals
             .add_list(networks.iter().map(|s| s.as_str()).collect())
             .unwrap();
@@ -300,13 +310,13 @@ impl WLANMan {
 
         let ssid_to_be_deleted = self
             .modals
-            .get_radiobutton("Choose network to delete:")
+            .get_radiobutton(t!("wlan.choose_delete", xous::LANG))
             .unwrap();
 
         if ssid_to_be_deleted.eq(cancel_item) {
             return Ok(());
         }
-        
+
         self
                 .pddb
                 .delete_key(net::AP_DICT_NAME, &ssid_to_be_deleted, None).map_err(|e| WLANError::PDDBIoError(e))?;
@@ -328,7 +338,7 @@ impl WLANMan {
             .collect::<Vec<gam::MenuItem>>();
 
         menus.push(gam::MenuItem {
-            name: xous_ipc::String::from_str("Close menu"),
+            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
             action_conn: None,
             action_opcode: 0,
             action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
@@ -354,7 +364,7 @@ impl WLANMan {
 
     fn show_error_modal(&self, e: WLANError) {
         self.modals
-            .show_notification(format!("Error: {}", e).as_str(), None)
+            .show_notification(format!("{}: {}", t!("wlan.error", xous::LANG), e).as_str(), None)
             .unwrap()
     }
 }
