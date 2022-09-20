@@ -733,11 +733,19 @@ fn wrapped_main() -> ! {
                                 ssid.rssi,
                             ).unwrap();
                         } else {
-                            write!(
-                                &mut battstats_tv,
-                                "{}",
-                                t!("stats.disconnected", xous::LANG)
-                            ).unwrap();
+                            if wifi_status.link_state == com_rs_ref::LinkState::ResetHold {
+                                write!(
+                                    &mut battstats_tv,
+                                    "{}",
+                                    t!("stats.wifi_off", xous::LANG)
+                                ).unwrap();
+                            } else {
+                                write!(
+                                    &mut battstats_tv,
+                                    "{}",
+                                    t!("stats.disconnected", xous::LANG)
+                                ).unwrap();
+                            }
                         }
                     }
                 }

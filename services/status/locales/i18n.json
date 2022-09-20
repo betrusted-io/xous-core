@@ -65,6 +65,12 @@
         "zh": "没有连接",
         "en-tts": "Not connected"
     },
+    "stats.wifi_off": {
+        "ja": "WiFiオフ",
+        "en": "WiFi off",
+        "zh": "WiFi关闭",
+        "en-tts": "WiFi off"
+    },
     "stats.uptime": {
         "translator-note": "This needs to be a very short string, 2 chars max. Trailing space is necessary for English due to proportional font.",
         "ja": "稼働",

@@ -2118,6 +2118,34 @@ fn main() -> ! {
                         ),
                     )
                     .expect("couldn't send stop message");
+                } else if code == 2 {
+                    send_message(
+                        cm_cid,
+                        Message::new_scalar(
+                            connection_manager::ConnectionManagerOpcode::DisconnectAndStop
+                                .to_usize()
+                                .unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .expect("couldn't send disconnect and stop message");
+                } else if code == 3 {
+                    send_message(
+                        cm_cid,
+                        Message::new_scalar(
+                            connection_manager::ConnectionManagerOpcode::WifiOnAndRun
+                                .to_usize()
+                                .unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .expect("couldn't send disconnect and stop message");
                 } else {
                     log::error!("Got incorrect start/stop code: {}", code);
                 }

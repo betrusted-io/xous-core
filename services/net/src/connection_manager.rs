@@ -24,6 +24,8 @@ pub(crate) enum ConnectionManagerOpcode {
     Run,
     Poll,
     Stop,
+    DisconnectAndStop,
+    WifiOnAndRun,
     SubscribeWifiStats,
     UnsubWifiStats,
     FetchSsidList,
@@ -48,6 +50,7 @@ enum WifiState {
     InvalidAuth,
     Connected,
     Disconnected,
+    Off,
     Error
 }
 #[derive(Eq, PartialEq)]
@@ -191,6 +194,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         }
                         wifi_state = WifiState::Error;
                     }
+                    LinkState::ResetHold => {
+                        // wifi was manually forced "off", leave it off; presume connection manager is also stopped.
+                        wifi_state = WifiState::Off;
+                    }
                     _ => { // should approximately be a "disconnected" state.
                         match wifi_state {
                             WifiState::Connected => {
@@ -239,10 +246,14 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                         }
                         ComIntSources::Disconnect => {
                             log::info!("{:?}", source);
-                            ssid_list.clear(); // clear the ssid list because a likely cause of disconnect is we've moved out of range
-                            com.set_ssid_scanning(true).unwrap();
-                            scan_state = SsidScanState::Scanning;
-                            wifi_state = WifiState::Disconnected;
+                            if wifi_state != WifiState::Off {
+                                ssid_list.clear(); // clear the ssid list because a likely cause of disconnect is we've moved out of range
+                                com.set_ssid_scanning(true).unwrap();
+                                scan_state = SsidScanState::Scanning;
+                                wifi_state = WifiState::Disconnected;
+                            } else {
+                                log::info!("Wifi intent is off. Ignoring disconnect interrupt.");
+                            }
                         },
                         ComIntSources::WlanSsidScanUpdate => {
                             log::info!("{:?}", source);
@@ -273,18 +284,22 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                             activity_interval.store(0, Ordering::SeqCst);
                             // this is the "first" path -- it's hit immediately on connect.
                             // relay status updates to any subscribers that want to know if a state has changed
-                            wifi_stats_cache = com.wlan_status().unwrap();
-                            log::debug!("stats update: {:?}", wifi_stats_cache);
-                            for &sub in status_subscribers.keys() {
-                                let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
-                                buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
-                            }
-                            if wifi_stats_cache.ipv4.dhcp == com_rs_ref::DhcpState::Bound {
-                                wifi_state = WifiState::Connected;
+                            if wifi_state != WifiState::Off {
+                                wifi_stats_cache = com.wlan_status().unwrap();
+                                log::debug!("stats update: {:?}", wifi_stats_cache);
+                                for &sub in status_subscribers.keys() {
+                                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
+                                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                                }
+                                if wifi_stats_cache.ipv4.dhcp == com_rs_ref::DhcpState::Bound {
+                                    wifi_state = WifiState::Connected;
+                                } else {
+                                    wifi_state = WifiState::WaitDhcp;
+                                }
+                                log::debug!("comint new wifi state: {:?}", wifi_state);
                             } else {
-                                wifi_state = WifiState::WaitDhcp;
+                                log::info!("Wifi intent is off, skipping wlan status query update.");
                             }
-                            log::debug!("comint new wifi state: {:?}", wifi_state);
                         }
                         ComIntSources::WfxErr => {
                             log::info!("{:?}", source);
@@ -392,6 +407,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                                         buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
                                     }
                                 }
+                                WifiState::Off => {
+                                    // this state should not be reachable
+                                    log::warn!("Wifi state was manually forced off; did you remember to turn it on before setting the connection manager to RUN?");
+                                }
                             }
                         }
                     }
@@ -467,6 +486,54 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
             Some(ConnectionManagerOpcode::Stop) => msg_scalar_unpack!(msg, _, _, _, _, {
                 run.store(false, Ordering::SeqCst);
             }),
+            Some(ConnectionManagerOpcode::WifiOnAndRun) => msg_scalar_unpack!(msg, _, _, _, _, {
+                com.wlan_set_on().expect("couldn't turn on wifi");
+                wifi_state = WifiState::Disconnected;
+                ssid_list.clear();
+                com.set_ssid_scanning(true).unwrap();
+                scan_state = SsidScanState::Scanning;
+                intervals_without_activity = 0;
+                scan_count = 0;
+                // this will force the UI to transition from 'WiFi Off' -> 'Not connected'
+                wifi_stats_cache = WlanStatus {
+                    ssid: None,
+                    link_state: com_rs_ref::LinkState::Disconnected,
+                    ipv4: com::Ipv4Conf::default(),
+                };
+                log::debug!("stats update: {:?}", wifi_stats_cache);
+                for &sub in status_subscribers.keys() {
+                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
+                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                }
+                if !run.swap(true, Ordering::SeqCst) {
+                    if !pumping.load(Ordering::SeqCst) { // avoid having multiple pump messages being sent if a user tries to rapidly toggle the run/stop switch
+                        send_message(run_cid, Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't kick off next poll");
+                    }
+                }
+            }),
+            Some(ConnectionManagerOpcode::DisconnectAndStop) => {
+                run.store(false, Ordering::SeqCst);
+                wifi_state = WifiState::Off;
+                com.wlan_leave().expect("couldn't issue leave command");
+                ssid_list.clear();
+                intervals_without_activity = 0;
+                scan_count = 0;
+                com.set_ssid_scanning(false).unwrap();
+                scan_state = SsidScanState::Idle;
+
+                tt.sleep_ms(250).unwrap(); // give a moment to clean-up after leave before turning things off
+                com.wlan_set_off().expect("couldn't turn off wifi");
+                wifi_stats_cache = WlanStatus {
+                    ssid: None,
+                    link_state: com_rs_ref::LinkState::ResetHold,
+                    ipv4: com::Ipv4Conf::default(),
+                };
+                log::debug!("stats update: {:?}", wifi_stats_cache);
+                for &sub in status_subscribers.keys() {
+                    let buf = Buffer::into_buf(com::WlanStatusIpc::from_status(wifi_stats_cache)).or(Err(xous::Error::InternalError)).unwrap();
+                    buf.send(sub, WifiStateCallback::Update.to_u32().unwrap()).or(Err(xous::Error::InternalError)).unwrap();
+                }
+            }
             Some(ConnectionManagerOpcode::EcReset) => msg_scalar_unpack!(msg, _, _, _, _, {
                 // this opcode is used by other processes to inform us that the net link was reset by something other than us.
                 // (e.g. an update)

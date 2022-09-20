@@ -105,13 +105,11 @@ impl WLANMan {
         match state {
             true => {
                 // on
-                self.com.wlan_set_on()?;
-                self.netmgr.connection_manager_run()?;
+                self.netmgr.connection_manager_wifi_on_and_run()?;
             }
             false => {
                 // off
-                self.netmgr.connection_manager_stop()?;
-                self.com.wlan_set_off()?;
+                self.netmgr.connection_manager_wifi_off_and_stop()?;
             }
         };
 

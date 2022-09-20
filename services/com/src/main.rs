@@ -891,11 +891,37 @@ fn main() -> ! {
                 buffer.replace(ssid_ret).unwrap();
             }
             Some(Opcode::WlanOn) => {
-                info!("TODO: implement WlanOn");
                 com.txrx(ComState::WLAN_ON.verb);
+                // re-sync the link, because the COM will take about a second to reload the Wifi drivers
+                #[cfg(not(any(windows, unix)))] // avoid errors in hosted mode
+                {
+                    ticktimer.sleep_ms(100).unwrap(); // give the EC a moment to de-chatter
+                    let mut attempts = 0;
+                    let ping_value = 0xaeedu16; // for various reasons, this is a string that is "unlikely" to happen randomly
+                    loop {
+                        com.txrx(ComState::LINK_PING.verb);
+                        com.txrx(ping_value);
+                        let pong = com.wait_txrx(ComState::LINK_READ.verb, Some(150)); // this should "stall" until the EC comes out of reset
+                        let phase = com.wait_txrx(ComState::LINK_READ.verb, Some(150));
+                        if pong == !ping_value &&
+                        phase == 0x600d { // 0x600d is a hard-coded constant. It's included to confirm that we aren't "wedged" just sending one value back at us
+                            log::info!("Wifi on: link established");
+                            break;
+                        } else {
+                            log::info!("Wifi on: establishing link sync, attempt {} [{:04x}/{:04x}]", attempts, pong, phase);
+                            com.txrx(ComState::LINK_SYNC.verb);
+                            ticktimer.sleep_ms(200).unwrap();
+                            attempts += 1;
+                        }
+                        if attempts > 50 {
+                            log::error!("EC didn't sync after wifi on...continuing and praying for the best.");
+                            break;
+                        }
+                    }
+                }
+                xous::return_scalar(msg.sender, 1).ok();
             }
             Some(Opcode::WlanOff) => {
-                info!("TODO: implement WlanOff");
                 com.txrx(ComState::WLAN_OFF.verb);
             }
             Some(Opcode::WlanRssi) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {

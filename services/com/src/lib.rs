@@ -451,10 +451,11 @@ impl Com {
         }
     }
 
+    /// This blocks until the COM responds from initializing the Wifi chip
     pub fn wlan_set_on(&mut self) -> Result<xous::Result, xous::Error> {
         send_message(
             self.conn,
-            Message::new_scalar(Opcode::WlanOn.to_usize().unwrap(), 0, 0, 0, 0),
+            Message::new_blocking_scalar(Opcode::WlanOn.to_usize().unwrap(), 0, 0, 0, 0),
         )
     }
 
@@ -505,7 +506,7 @@ impl Com {
     /// Note: applications should poll the `NetManager::read_wifi_state()` call for wifi status information, not the COM directly.
     /// This is because the `wlan_status` call is fairly heavy weight, and the `NetManager::read_wifi_state()` will cache
     /// this information making the status check lighter-weight overall.
-    pub fn wlan_status(&mut self) -> Result<WlanStatus, xous::Error> {
+    pub fn wlan_status(&self) -> Result<WlanStatus, xous::Error> {
         let status = WlanStatusIpc::default();
         let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::WlanStatus.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
@@ -614,6 +615,14 @@ impl Com {
             Ok((LinkState::decode_u16(link as u16), DhcpState::decode_u16(dhcp as u16)))
         } else {
             Err(xous::Error::InternalError)
+        }
+    }
+    pub fn wlan_is_reset_hold(&self) -> Result<bool, xous::Error> {
+        let status = self.wlan_status()?;
+        if status.link_state == com_rs_ref::LinkState::ResetHold {
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 
