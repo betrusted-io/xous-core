@@ -65,6 +65,12 @@
         "zh": "没有连接",
         "en-tts": "Not connected"
     },
+    "stats.wifi_off": {
+        "ja": "WiFiオフ",
+        "en": "WiFi off",
+        "zh": "WiFi关闭",
+        "en-tts": "WiFi off"
+    },
     "stats.uptime": {
         "translator-note": "This needs to be a very short string, 2 chars max. Trailing space is necessary for English due to proportional font.",
         "ja": "稼働",
@@ -138,6 +144,12 @@
         "zh": "睡眠模式",
         "en-tts": "Sleep now"
     },
+    "mainmenu.wifimenu": {
+        "en": "WiFi submenu...",
+        "en-tts": "WiFi submenu...",
+        "ja": "WiFiメニュー...",
+        "zh": "无线网络菜单..."
+    },
     "mainmenu.backlighton": {
         "en": "Backlight on",
         "ja": "バックライト点灯",
@@ -193,10 +205,10 @@
         "en-tts": "Set timezone"
     },
     "mainmenu.pddb": {
-        "en": "PDDB Submenu",
+        "en": "PDDB submenu...",
         "ja": "PDDBサブメニュー",
         "zh": "PDDB子菜单",
-        "en-tts": "PDDB submenu"
+        "en-tts": "PDDB submenu..."
     },
     "mainmenu.app": {
         "en": "Switch to App...",
@@ -245,6 +257,120 @@
         "ja": "Shellchat",
         "zh": "外壳聊天",
         "en-tts": "Shellchat"
+    },
+    "wlan.turnon": {
+        "en": "Turn WiFi on",
+        "ja": "Wi-Fiをオンにする",
+        "zh": "打开wifi",
+        "en-tts": "Turn WiFi on"
+    },
+    "wlan.turnoff": {
+        "en": "Turn WiFi off",
+        "ja": "Wi-Fiをオフにする",
+        "zh": "关闭无线网络",
+        "en-tts": "Turn WiFi off"
+    },
+    "wlan.manual_add": {
+        "en": "Manually add a network",
+        "ja": "ネットワークを手動で追加する",
+        "zh": "手动添加网络",
+        "en-tts": "Manually add a network"
+    },
+    "wlan.scan": {
+        "en": "Scan for networks",
+        "ja": "ネットワークのスキャン",
+        "zh": "扫描网络",
+        "en-tts": "Scan for networks"
+    },
+    "wlan.status": {
+        "en": "Network status",
+        "ja": "ネットワークの状態",
+        "zh": "网络状态",
+        "en-tts": "Network status"
+    },
+    "wlan.delete": {
+        "en": "Delete network",
+        "ja": "ネットワークを削除",
+        "zh": "删除网络",
+        "en-tts": "Delete network"
+    },
+    "wlan.list_known": {
+        "en": "List known networks",
+        "ja": "既知のネットワークを一覧表示する",
+        "zh": "列出已知网络",
+        "en-tts": "List known networks"
+    },
+    "wlan.ssid_entry": {
+        "en": "Fill in SSID and password:",
+        "ja": "SSID とパスワードを入力します:",
+        "zh": "填写SSID和密码：",
+        "en-tts": "Fill in SSID and password:"
+    },
+    "wlan.ssid": {
+        "en": "[ SSID ]",
+        "ja": "[ SSID ]",
+        "zh": "[ SSID ]",
+        "en-tts": "[ SSID ]"
+    },
+    "wlan.password": {
+        "en": "[ password ]",
+        "ja": "[ パスワード ]",
+        "zh": "[ 密码 ]",
+        "en-tts": "[ password ]"
+    },
+    "wlan.no_networks": {
+        "en": "No networks available.",
+        "ja": "利用可能なネットワークがありません。",
+        "zh": "没有可用的网络。",
+        "en-tts": "No networks available."
+    },
+    "wlan.ssid_choose": {
+        "en": "Choose a network:",
+        "ja": "ネットワークを選択してください:",
+        "zh": "选择网络：",
+        "en-tts": "Choose a network:"
+    },
+    "wlan.ssid_password": {
+        "en": "Please enter the password for {ssid}:",
+        "ja": "{ssid} のパスワードを入力してください:",
+        "zh": "请输入 {ssid} 的密码：",
+        "en-tts": "Please enter the password for {ssid}:"
+    },
+    "wlan.password_empty": {
+        "en": "Password field cannot be empty",
+        "ja": "パスワードを空にすることはできません",
+        "zh": "密码不能为空",
+        "en-tts": "Password field cannot be empty"
+    },
+    "wlan.no_known_networks": {
+        "en": "No known networks.",
+        "ja": "既知のネットワークはありません。",
+        "zh": "没有已知的网络。",
+        "en-tts": "No known networks."
+    },
+    "wlan.known_networks": {
+        "en": "Known networks:\n",
+        "ja": "既知のネットワーク:\n",
+        "zh": "已知网络：\n",
+        "en-tts": "Known networks:\n"
+    },
+    "wlan.cancel": {
+        "en": "❌ Cancel request ❌",
+        "ja": "❌ キャンセル ❌",
+        "zh": "❌ 取消请求 ❌",
+        "en-tts": "Cancel the requested action"
+    },
+    "wlan.choose_delete": {
+        "en": "Choose a network to delete:",
+        "ja": "削除するネットワークを選択してください:",
+        "zh": "选择要删除的网络：",
+        "en-tts": "Choose a network to delete:"
+    },
+    "wlan.error": {
+        "en": "Error",
+        "ja": "エラー",
+        "zh": "错误",
+        "en-tts": "Error"
     },
     "rtc.try_ntp": {
         "en": "Attempt to automatically set time with NTP?",

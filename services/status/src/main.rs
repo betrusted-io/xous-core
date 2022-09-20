@@ -11,6 +11,7 @@ use kbdmenu::*;
 mod app_autogen;
 mod time;
 mod ecup;
+mod wifi;
 
 use com::api::*;
 use root_keys::api::{BackupOp, BackupKeyboardLayout};
@@ -87,6 +88,9 @@ pub(crate) enum StatusOpcode {
     BatteryDisconnect,
     /// for returning wifi stats
     WifiStats,
+
+    /// Raise the wifi menu
+    WifiMenu,
     Quit,
 }
 
@@ -633,6 +637,8 @@ fn wrapped_main() -> ! {
         }
     });
 
+    wifi::start_background_thread();
+
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -727,11 +733,19 @@ fn wrapped_main() -> ! {
                                 ssid.rssi,
                             ).unwrap();
                         } else {
-                            write!(
-                                &mut battstats_tv,
-                                "{}",
-                                t!("stats.disconnected", xous::LANG)
-                            ).unwrap();
+                            if wifi_status.link_state == com_rs_ref::LinkState::ResetHold {
+                                write!(
+                                    &mut battstats_tv,
+                                    "{}",
+                                    t!("stats.wifi_off", xous::LANG)
+                                ).unwrap();
+                            } else {
+                                write!(
+                                    &mut battstats_tv,
+                                    "{}",
+                                    t!("stats.disconnected", xous::LANG)
+                                ).unwrap();
+                            }
                         }
                     }
                 }
@@ -752,6 +766,10 @@ fn wrapped_main() -> ! {
                     xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
                 };
                 wifi_status = WlanStatus::from_ipc(buffer.to_original::<com::WlanStatusIpc, _>().unwrap());
+            },
+            Some(StatusOpcode::WifiMenu) => {
+                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
+                gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
             },
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
