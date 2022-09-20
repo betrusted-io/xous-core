@@ -8,13 +8,13 @@ use locales::t;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
 enum WlanManOp {
-    TurnWlanOn = 3,
-    TurnWlanOff,
-    AddNetworkManually,
-    ScanForNetworks,
+    ScanForNetworks = 3,
     Status,
+    AddNetworkManually,
+    KnownNetworks,
     DeleteNetwork,
-    KnownNetworks = 9,
+    TurnWlanOn,
+    TurnWlanOff = 9,
 }
 
 impl Display for WlanManOp {
@@ -91,13 +91,13 @@ impl WLANMan {
         use WlanManOp::*;
 
         vec![
-            TurnWlanOn,
-            TurnWlanOff,
-            AddNetworkManually,
             ScanForNetworks,
             Status,
+            AddNetworkManually,
             KnownNetworks,
             DeleteNetwork,
+            TurnWlanOn,
+            TurnWlanOff,
         ]
     }
 
@@ -193,7 +193,7 @@ impl WLANMan {
 
     fn show_available_networks(&mut self) -> Result<(), WLANError> {
         let networks = self.scan_networks()?;
-        let networks: Vec<&str> = networks.iter().map(|s| s.as_str()).collect();
+        let mut networks: Vec<&str> = networks.iter().map(|s| s.as_str()).collect();
 
         if networks.is_empty() {
             self.modals
@@ -202,9 +202,15 @@ impl WLANMan {
             return Ok(());
         }
 
+        networks.push(t!("wlan.cancel", xous::LANG));
+
         self.modals.add_list(networks).unwrap();
 
         let ssid = self.modals.get_radiobutton(t!("wlan.ssid_choose", xous::LANG)).unwrap();
+
+        if ssid == t!("wlan.cancel", xous::LANG) {
+            return Ok(())
+        }
 
         self.fill_password_for_ssid(&ssid)
     }
@@ -244,7 +250,7 @@ impl WLANMan {
         // TODO: make a proper translation for this. But, I think for now, this is a fairly
         // technical screen that we can leave in English.
         let status_str = format!(
-            "Connection status: \n\n - SSID: {}\n - Link state: {:?}\n - IP: {}\n - Gateway: {}\n - Subnet mask: {}\n - DNS 1: {}\n - DNS 2: {}\n - DHCP state: {:?}",
+            "Connection status: \n\n ▪ SSID: {}\n ▪ Link state: {:?}\n ▪ IP: {}\n ▪ Gateway: {}\n ▪ Subnet mask: {}\n ▪ DNS 1: {}\n ▪ DNS 2: {}\n ▪ DHCP state: {:?}",
             ssid,
             ls,
             format_ip(ip.addr),
@@ -278,7 +284,7 @@ impl WLANMan {
 
         networks_string += &networks
             .iter()
-            .map(|s| format!(" - {}", s))
+            .map(|s| format!(" ▪ {}", s))
             .collect::<Vec<String>>()
             .join("\n");
 
@@ -396,9 +402,11 @@ fn run_menu_thread() {
 
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(other) => {
-                if other >= WlanManOp::TurnWlanOn && other <= WlanManOp::KnownNetworks {
+                if other >= WlanManOp::ScanForNetworks && other <= WlanManOp::TurnWlanOff {
                     hello.consume_menu_action(other);
                     continue;
+                } else {
+                    log::warn!("Received out of range opcode. Did WlanManOp get re-ordered, but the bounds check was not updated as well?");
                 }
             }
 

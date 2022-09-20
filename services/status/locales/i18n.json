@@ -139,10 +139,10 @@
         "en-tts": "Sleep now"
     },
     "mainmenu.wifimenu": {
-        "en": "WiFi menu",
-        "en-tts": "WiFi menu",
-        "ja": "WiFiメニュー",
-        "zh": "无线网络菜单"
+        "en": "WiFi submenu...",
+        "en-tts": "WiFi submenu...",
+        "ja": "WiFiメニュー...",
+        "zh": "无线网络菜单..."
     },
     "mainmenu.backlighton": {
         "en": "Backlight on",
@@ -199,10 +199,10 @@
         "en-tts": "Set timezone"
     },
     "mainmenu.pddb": {
-        "en": "PDDB Submenu",
+        "en": "PDDB submenu...",
         "ja": "PDDBサブメニュー",
         "zh": "PDDB子菜单",
-        "en-tts": "PDDB submenu"
+        "en-tts": "PDDB submenu..."
     },
     "mainmenu.app": {
         "en": "Switch to App...",
@@ -301,16 +301,16 @@
         "en-tts": "Fill in SSID and password:"
     },
     "wlan.ssid": {
-        "en": "SSID",
-        "ja": "SSID",
-        "zh": "SSID",
-        "en-tts": "SSID"
+        "en": "[ SSID ]",
+        "ja": "[ SSID ]",
+        "zh": "[ SSID ]",
+        "en-tts": "[ SSID ]"
     },
     "wlan.password": {
-        "en": "Password",
-        "ja": "パスワード",
-        "zh": "密码",
-        "en-tts": "Password"
+        "en": "[ password ]",
+        "ja": "[ パスワード ]",
+        "zh": "[ 密码 ]",
+        "en-tts": "[ password ]"
     },
     "wlan.no_networks": {
         "en": "No networks available.",
@@ -349,10 +349,10 @@
         "en-tts": "Known networks:\n"
     },
     "wlan.cancel": {
-        "en": "Cancel",
-        "ja": "キャンセル",
-        "zh": "取消",
-        "en-tts": "Cancel"
+        "en": "❌ Cancel request ❌",
+        "ja": "❌ キャンセル ❌",
+        "zh": "❌ 取消请求 ❌",
+        "en-tts": "Cancel the requested action"
     },
     "wlan.choose_delete": {
         "en": "Choose a network to delete:",
