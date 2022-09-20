@@ -769,7 +769,12 @@ fn wrapped_main() -> ! {
                                     log::info!("{}PDDB.CREATEOK,{},{}", xous::BOOKEND_START, mgmt.name.as_str().unwrap(), xous::BOOKEND_END);
                                     mgmt.code = PddbRequestCode::NoErr
                                 },
-                                _ => mgmt.code = PddbRequestCode::InternalError,
+                                Err(e) => match e.kind() {
+                                    ErrorKind::AlreadyExists => {
+                                        mgmt.code = PddbRequestCode::DuplicateEntry;
+                                    }
+                                    _ => mgmt.code = PddbRequestCode::InternalError,
+                                }
                             }
                         } else {
                             mgmt.code = PddbRequestCode::InternalError;

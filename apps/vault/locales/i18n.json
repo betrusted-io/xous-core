@@ -29,6 +29,12 @@
         "zh": "选择要卸载的基础:",
         "en-tts": "Select the Bases to unmount:"
     },
+    "vault.basis.already_exists": {
+        "en": "Basis already exists! No action taken.",
+        "ja": "ベースはすでに存在します！ アクションは実行されません。",
+        "zh": "基础已经存在！ 不采取行动。",
+        "en-tts": "Basis already exists! No action taken."
+    },
     "vault.edit_dialog": {
         "en": "Make your changes and press enter.\nUse the d-pad to navigate entries.",
         "ja": "変更を加えてEnterキーを押します。 D-PADを使用してエントリをナビゲートします。",

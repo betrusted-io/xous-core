@@ -221,6 +221,7 @@ impl Pddb {
             PddbRequestCode::NoErr => Ok(()),
             PddbRequestCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No free space to create basis")),
             PddbRequestCode::InternalError => Err(Error::new(ErrorKind::Other, "Internal error creating basis")),
+            PddbRequestCode::DuplicateEntry => Err(Error::new(ErrorKind::AlreadyExists, "Basis already exists")),
             _ => {
                 log::error!("Invalid return code");
                 panic!("Invalid return code");

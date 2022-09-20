@@ -246,6 +246,7 @@ pub enum PddbRequestCode {
     InternalError = 8,
     AccessDenied = 9,
     Uninit = 10,
+    DuplicateEntry = 11,
 }
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

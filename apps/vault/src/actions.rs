@@ -938,6 +938,9 @@ impl ActionManager {
                         match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
                             Ok(_) => log::debug!("Basis {} unlocked", name),
                             Err(e) => match e.kind() {
+                                ErrorKind::AlreadyExists => {
+                                    self.modals.show_notification(t!("vault.basis.already_exists", xous::LANG), None).ok();
+                                }
                                 ErrorKind::PermissionDenied => {
                                     self.report_err(t!("vault.error.basis_unlock_error", xous::LANG), None::<std::io::Error>)
                                 },

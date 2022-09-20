@@ -851,6 +851,11 @@ impl BasisCache {
         };
 
         let basis_key =  hw.basis_derive_key(name, password);
+
+        if let Some(_basis_map) = hw.pt_scan_key(&basis_key.pt, &basis_key.data, name) {
+            return Err(Error::new(ErrorKind::AlreadyExists, "Basis already exists"));
+        }
+
         let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
         let basis_root = BasisRoot {
             magic: PDDB_MAGIC,
