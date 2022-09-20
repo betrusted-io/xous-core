@@ -396,7 +396,7 @@ impl ActionManager {
                     self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     match self.modals
                         .alert_builder(t!("vault.hotp.count", xous::LANG))
-                        .field(Some("0".to_string()), Some(length_validator))
+                        .field(Some("0".to_string()), Some(count_validator))
                         .build()
                     {
                         Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u64>().unwrap(),
@@ -1207,5 +1207,12 @@ fn length_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
             None
         },
         _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_number", xous::LANG))),
+    }
+}
+fn count_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
+    let text_str = input.as_str();
+    match text_str.parse::<u64>() {
+        Ok(_input_int) => None,
+        _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_count", xous::LANG))),
     }
 }

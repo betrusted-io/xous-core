@@ -239,6 +239,12 @@
         "zh": "请输入 1-128 之间的数字",
         "en-tts": "Please enter a number from 1-128"
     },
+    "vault.illegal_count": {
+        "en": "Please enter an integer number",
+        "ja": "整数を入力してください。",
+        "zh": "请输入一个整数。",
+        "en-tts": "Please enter an integer number"
+    },
     "vault.illegal_totp": {
         "en": "Shared secret is not valid Base32",
         "ja": "共有秘密は無効ですBase32",
