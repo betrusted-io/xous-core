@@ -469,7 +469,7 @@ impl Llio {
     }
     pub fn usb_int_ena(&mut self, ena: bool) {
         let value = if ena {1} else {0};
-        self.power_csr.rmwf(utra::power::EV_PENDING_USB_ATTACH, value);
+        self.power_csr.rmwf(utra::power::EV_ENABLE_USB_ATTACH, value);
     }
 }
 
