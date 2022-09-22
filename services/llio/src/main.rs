@@ -154,13 +154,10 @@ fn main() -> ! {
 
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut com_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
-    let mut rtc_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut gpio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
 
     // create a self-connection to I2C to handle the public, non-security sensitive RTC API calls
     let mut i2c = llio::I2c::new(&xns);
-    let mut rtc_alarm_enabled = false;
-    let mut wakeup_alarm_enabled = false;
     let tt = ticktimer_server::Ticktimer::new().unwrap();
 
     log::trace!("starting main loop");
@@ -330,11 +327,6 @@ fn main() -> ! {
                 let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
                 do_hook(hookdata, &mut com_cb_conns);
             }
-            Some(Opcode::EventRtcSubscribe) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
-                do_hook(hookdata, &mut rtc_cb_conns);
-            }
             Some(Opcode::GpioIntSubscribe) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
@@ -347,13 +339,6 @@ fn main() -> ! {
                     llio.com_int_ena(true);
                 }
             }),
-            Some(Opcode::EventRtcEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
-                if ena == 0 {
-                    llio.rtc_int_ena(false);
-                } else {
-                    llio.rtc_int_ena(true);
-                }
-            }),
             Some(Opcode::EventUsbAttachEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
                 if ena == 0 {
                     llio.usb_int_ena(false);
@@ -363,9 +348,6 @@ fn main() -> ! {
             }),
             Some(Opcode::EventComHappened) => {
                 send_event(&com_cb_conns, 0);
-            },
-            Some(Opcode::EventRtcHappened) => {
-                send_event(&rtc_cb_conns, 0);
             },
             Some(Opcode::EventUsbHappened) => {
                 send_event(&usb_cb_conns, 0);
@@ -399,7 +381,6 @@ fn main() -> ! {
                     continue;
                 }
                 let seconds = delay as u8;
-                wakeup_alarm_enabled = true;
                 // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
                 // set clock units to 1 second, output pulse length to ~218ms
@@ -407,78 +388,21 @@ fn main() -> ! {
                 // program elapsed time
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERB, &[seconds]).expect("RTC access error");
                 // enable timerb countdown interrupt, also clears any prior interrupt flag
-                let mut control2 = (Control2::COUNTDOWN_B_INT).bits();
-                if rtc_alarm_enabled {
-                    control2 |= Control2::COUNTDOWN_A_INT.bits();
-                }
+                let control2 = (Control2::COUNTDOWN_B_INT).bits();
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
                 // turn on the timer proper -- the system will wakeup in 5..4..3....
-                let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE).bits();
-                if rtc_alarm_enabled {
-                    config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
-                }
+                let config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE).bits();
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                wakeup_alarm_enabled = false;
                 // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
-                let mut config = Config::CLKOUT_DISABLE.bits();
-                if rtc_alarm_enabled {
-                    config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
-                }
+                let config = Config::CLKOUT_DISABLE.bits();
                 // turn off RTC wakeup timer, in case previously set
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
                 // clear my interrupts and flags
-                let mut control2 = 0;
-                if rtc_alarm_enabled {
-                    control2 |= Control2::COUNTDOWN_A_INT.bits();
-                }
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
-                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
-            }),
-             Some(Opcode::SetRtcAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
-                if delay > u8::MAX as usize {
-                    log::error!("Alarm must be no longer than {} secs in the future", u8::MAX);
-                    xous::return_scalar(msg.sender, 1).expect("couldn't return to caller");
-                    continue;
-                }
-                let seconds = delay as u8;
-                rtc_alarm_enabled = true;
-                // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &[(Control3::BATT_STD_BL_EN).bits()]).expect("RTC access error");
-                // set clock units to 1 second, output pulse length to ~218ms
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERA_CLK, &[(TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]).expect("RTC access error");
-                // program elapsed time
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_TIMERA, &[seconds]).expect("RTC access error");
-                // enable timerb countdown interrupt, also clears any prior interrupt flag
-                let mut control2 = (Control2::COUNTDOWN_A_INT).bits();
-                if wakeup_alarm_enabled {
-                    control2 |= Control2::COUNTDOWN_B_INT.bits();
-                }
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
-                // turn on the timer proper -- interrupt in 5..4..3....
-                let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
-                if wakeup_alarm_enabled {
-                    config |= (Config::TIMER_B_ENABLE).bits();
-                }
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
-                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
-            }),
-            Some(Opcode::ClearRtcAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                rtc_alarm_enabled = false;
-                // turn off RTC wakeup timer, in case previously set
-                let mut config = Config::CLKOUT_DISABLE.bits();
-                if wakeup_alarm_enabled {
-                    config |= (Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
-                }
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONFIG, &[config]).expect("RTC access error");
-                // clear my interrupts and flags
-                let mut control2 = 0;
-                if wakeup_alarm_enabled {
-                    control2 |= Control2::COUNTDOWN_B_INT.bits();
-                }
+                let control2 = 0;
                 i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL2, &[control2]).expect("RTC access error");
                 xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
@@ -553,7 +477,6 @@ fn main() -> ! {
     }
     log::trace!("main loop exit, destroying servers");
     unhook(&mut com_cb_conns);
-    unhook(&mut rtc_cb_conns);
     unhook(&mut usb_cb_conns);
     unhook(&mut gpio_cb_conns);
     xns.unregister_server(llio_sid).unwrap();

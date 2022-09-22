@@ -34,14 +34,6 @@ fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
             log::error!("|handle_event_irq: COM interrupt, but no connection for notification!")
         }
     }
-    if xl.event_csr.rf(utra::btevents::EV_PENDING_RTC_INT) != 0 {
-        if let Some(conn) = xl.handler_conn {
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(Opcode::EventRtcHappened.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
-        } else {
-            log::error!("|handle_event_irq: RTC interrupt, but no connection for notification!")
-        }
-    }
     xl.event_csr
         .wo(utra::btevents::EV_PENDING, xl.event_csr.r(utra::btevents::EV_PENDING));
 }
@@ -458,10 +450,6 @@ impl Llio {
     }
     pub fn xadc_gpio2(&self) -> u16 {
         self.xadc_csr.rf(utra::trng::XADC_GPIO2_XADC_GPIO2) as u16
-    }
-    pub fn rtc_int_ena(&mut self, ena: bool) {
-        let value = if ena {1} else {0};
-        self.event_csr.rmwf(utra::btevents::EV_ENABLE_RTC_INT, value);
     }
     pub fn com_int_ena(&mut self, ena: bool) {
         let value = if ena {1} else {0};

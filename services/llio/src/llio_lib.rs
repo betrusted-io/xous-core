@@ -13,7 +13,6 @@ pub struct Llio {
     com_sid: Option<xous::SID>,
     usb_sid: Option<xous::SID>,
     gpio_sid: Option<xous::SID>,
-    rtc_sid: Option<xous::SID>,
 }
 impl Llio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -24,36 +23,8 @@ impl Llio {
           com_sid: None,
           usb_sid: None,
           gpio_sid: None,
-          rtc_sid: None,
         }
     }
-    /// RTC alarm hooks -- even though it's physically associated with the RTC, all the async interrupts get
-    /// routed through the LLIO block through a single event register, and so, RTC event registration counter-intuitively
-    /// must be done through the LLIO, and not the RTC block.
-    pub fn hook_rtc_alarm_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
-        if self.rtc_sid.is_none() {
-            let sid = xous::create_server().unwrap();
-            self.rtc_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(rtc_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            let hookdata = ScalarHook {
-                sid: sid_tuple,
-                id,
-                cid,
-            };
-            let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
-            buf.lend(self.conn, Opcode::EventRtcSubscribe.to_u32().unwrap()).map(|_|())
-        } else {
-            Err(xous::Error::MemoryInUse) // can't hook it twice
-        }
-    }
-    pub fn rtc_alarm_enable(&self, ena: bool) -> Result<(), xous::Error> {
-        let arg = if ena { 1 } else { 0 };
-        send_message(self.conn,
-            Message::new_scalar(Opcode::EventRtcEnable.to_usize().unwrap(), arg, 0, 0, 0)
-        ).map(|_| ())
-    }
-
     pub fn vibe(&self, pattern: VibePattern) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::Vibe.to_usize().unwrap(), pattern.into(), 0, 0, 0)
@@ -366,17 +337,6 @@ impl Llio {
             Message::new_blocking_scalar(Opcode::ClearWakeupAlarm.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
-    /// the rtc alarm will not turn the system on, but it will trigger an interrupt on the CPU
-    pub fn set_rtc_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::SetRtcAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
-        ).map(|_|())
-    }
-    pub fn clear_rtc_alarm(&self) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
-        ).map(|_|())
-    }
     /// This returns the elapsed seconds on the RTC since an arbitrary start point in the past.
     /// The translation of this is handled by `libstd::SystemTime`; you may use this call, but
     /// the interpretation is not terribly meaningful on its own.
@@ -414,9 +374,6 @@ impl Drop for Llio {
             drop_conn(sid);
         }
         if let Some(sid) = self.gpio_sid.take() {
-            drop_conn(sid);
-        }
-        if let Some(sid) = self.rtc_sid.take() {
             drop_conn(sid);
         }
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
@@ -470,27 +427,6 @@ fn com_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
 /// handles callback messages that indicate a GPIO interrupt has happened, in the library user's process space.
 fn gpio_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(EventCallback::Event) => msg_scalar_unpack!(msg, cid, id, _, _, {
-                // directly pass the scalar message onto the CID with the ID memorized in the original hook
-                send_message(cid as u32,
-                    Message::new_scalar(id, 0, 0, 0, 0)
-                ).unwrap();
-            }),
-            Some(EventCallback::Drop) => {
-                break; // this exits the loop and kills the thread
-            }
-            None => (),
-        }
-    }
-    xous::destroy_server(sid).unwrap();
-}
-
-/// handles callback messages that indicate a RTC interrupt has happened, in the library user's process space.
-fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     loop {
         let msg = xous::receive_message(sid).unwrap();

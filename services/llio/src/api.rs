@@ -106,16 +106,16 @@ pub(crate) enum Opcode {
 
     /// partially tested -- events
     EventComSubscribe, //(String<64>),
-    EventRtcSubscribe, //(String<64>),
+    //EventRtcSubscribe, //(String<64>),
     EventUsbAttachSubscribe, //(String<64>),
     EventComEnable, //(bool),
-    EventRtcEnable, //(bool),
+    //EventRtcEnable, //(bool),
     EventUsbAttachEnable, //(bool),
     EventActivityHappened,
 
     /// internal from handler to main loop
     EventComHappened,
-    EventRtcHappened,
+    //EventRtcHappened,
     EventUsbHappened,
 
     /// SuspendResume callback
@@ -127,9 +127,9 @@ pub(crate) enum Opcode {
     /// clear any wakeup alarms that have been set
     ClearWakeupAlarm,
     /// sets an RTC alarm. This just triggers a regular interrupt, no other side-effect
-    SetRtcAlarm,
+    //SetRtcAlarm,
     /// clears any RTC alarms that have been set
-    ClearRtcAlarm,
+    //ClearRtcAlarm,
     /// reads the current RTC count as a value in seconds
     GetRtcValue,
 

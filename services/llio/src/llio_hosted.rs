@@ -72,8 +72,6 @@ impl Llio {
         0
     }
 
-    pub fn rtc_int_ena(self, _ena: bool) {
-    }
     pub fn com_int_ena(self, _ena: bool) {
     }
     pub fn usb_int_ena(self, _ena: bool) {
