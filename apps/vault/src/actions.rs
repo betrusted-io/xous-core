@@ -440,14 +440,14 @@ impl ActionManager {
 
             if choice.is_none() {
                 // we're dealing with FIDO stuff, use the custom code path
-                match self.pddb.borrow().get(crate::ctap::FIDO_CRED_DICT, entry.key_name.as_str().unwrap_or("UTF8-error"),
+                match self.pddb.borrow().get(U2F_APP_DICT, entry.key_name.as_str().unwrap_or("UTF8-error"),
                     None, false, false, None, None::<fn()>
                 ) {
                     Ok(candidate) => {
                         let attr = candidate.attributes().expect("couldn't get key attributes");
                         match self.pddb.borrow()
                         .delete_key(
-                            crate::ctap::FIDO_CRED_DICT,
+                            U2F_APP_DICT,
                             entry.key_name.as_str().unwrap_or("UTF8-error"),
                             Some(&attr.basis)
                         ) {
@@ -461,12 +461,12 @@ impl ActionManager {
                         self.report_err(t!("vault.error.not_found", xous::LANG), Some(e));
                     }
                 }
-            }
-
-            // we're deleting either a password, ora a totp
-            match self.storage.borrow_mut().delete(choice.unwrap(), entry.key_name.as_str().unwrap_or("UTF-8 error")) {
-                Ok(_) => self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok().unwrap(),
-                Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+            } else {
+                // we're deleting either a password, or a totp
+                match self.storage.borrow_mut().delete(choice.unwrap(), entry.key_name.as_str().unwrap_or("UTF-8 error")) {
+                    Ok(_) => self.modals.show_notification(t!("vault.completed", xous::LANG), None).ok().unwrap(),
+                    Err(e) => self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)),
+                }
             }
         }
     }
