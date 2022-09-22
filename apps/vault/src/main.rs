@@ -169,8 +169,9 @@ fn main() -> ! {
     let sid = xous::create_server().unwrap();
     // TODO: fix this so there is a uniform public API for the time server
     let time_conn = xous::connect(xous::SID::from_bytes(b"timeserverpublic").unwrap()).unwrap();
+    let conn = xous::connect(sid).unwrap();
 
-    start_fido_ux_thread();
+    start_fido_ux_thread(conn);
 
     // global shared state between threads.
     let mode = Arc::new(Mutex::new(VaultMode::Fido));
@@ -182,7 +183,6 @@ fn main() -> ! {
     // has to be in its own thread because it uses blocking modal calls that would cause
     // redraws of the background list to block/fail.
     let actions_sid = xous::create_server().unwrap();
-    let conn = xous::connect(sid).unwrap();
     SELF_CONN.store(conn, Ordering::SeqCst);
     start_actions_thread(conn, actions_sid, mode.clone(), item_list.clone(), action_active.clone());
     let actions_conn = xous::connect(actions_sid).unwrap();

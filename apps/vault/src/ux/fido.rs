@@ -113,7 +113,7 @@ const DEFAULT_PRESENCE_TIMEOUT_MS: i64 = 30_000;
 const DEFAULT_PROMPT_TIMEOUT_MS: i64 = 30_000;
 const POLLED_PROMPT_TIMEOUT_MS: i64 = 1000; // how long the screen stays up after the host "gives up" polling
 const KEEPALIVE_MS: usize = 100;
-pub(crate) fn start_fido_ux_thread() {
+pub(crate) fn start_fido_ux_thread(main_conn: xous::CID) {
     let sid = xous::create_server().unwrap();
     let cid = xous::connect(sid).expect("couldn't connect to UX thread server");
     SELF_CID.store(cid, Ordering::SeqCst);
@@ -380,7 +380,7 @@ pub(crate) fn start_fido_ux_thread() {
                                     }
                                 }
                                 let key_hit = kbhit.load(Ordering::SeqCst);
-                                if key_hit != 0 {
+                                if key_hit != 0 && key_hit != 0x11 { // 0x11 is the F1 character
                                     num_fido_auths += 1;
                                     log::info!("got user presence! count: {}", num_fido_auths);
                                     if let Some(mut msg) = deferred_req.take() {
@@ -401,21 +401,35 @@ pub(crate) fn start_fido_ux_thread() {
                                     ).unwrap();
                                 } else {
                                     tt.sleep_ms(interval).unwrap();
-                                    // check if we timed out
-                                    if tt.elapsed_ms() as i64 >= prompt_expiration_ms {
-                                        num_fido_auths += 1; // bump it so we can pass the "don't touch it" test
-                                        log::info!("timed out");
-                                        ux_state = UxState::Idle;
-                                        modals.dynamic_notification_close().unwrap();
-                                        // unblock the listener with a `None` response
-                                        if let Some(mut msg) = deferred_req.take() {
-                                            let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                                            let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
-                                            fido_request.granted = None;
-                                            log::trace!("timeout returning {:?}", fido_request.granted);
-                                            buffer.replace(fido_request).unwrap();
+                                    if key_hit != 0x11 {
+                                        // check if we timed out
+                                        if tt.elapsed_ms() as i64 >= prompt_expiration_ms {
+                                            num_fido_auths += 1; // bump it so we can pass the "don't touch it" test
+                                            log::info!("timed out");
+                                            ux_state = UxState::Idle;
+                                            modals.dynamic_notification_close().unwrap();
+                                            // unblock the listener with a `None` response
+                                            if let Some(mut msg) = deferred_req.take() {
+                                                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                                                let mut fido_request = buffer.to_original::<FidoRequest, _>().unwrap();
+                                                fido_request.granted = None;
+                                                log::trace!("timeout returning {:?}", fido_request.granted);
+                                                buffer.replace(fido_request).unwrap();
+                                            }
+                                        } else { // else pump the loop again
+                                            send_message(self_cid,
+                                                Message::new_scalar(UxOp::Pump.to_usize().unwrap(), KEEPALIVE_MS, 0, 0, 0)
+                                            ).unwrap();
                                         }
-                                    } else { // else pump the loop again
+                                    } else {
+                                        log::info!("aborted");
+                                        modals.dynamic_notification_close().unwrap();
+                                        tt.sleep_ms(interval).unwrap();
+                                        modals.dynamic_notification(
+                                            Some(t!("vault.u2f.wait_abort", xous::LANG)),
+                                            None,
+                                        ).unwrap();
+                                        kbhit.store(0, Ordering::SeqCst); // reset the waiting key...
                                         send_message(self_cid,
                                             Message::new_scalar(UxOp::Pump.to_usize().unwrap(), KEEPALIVE_MS, 0, 0, 0)
                                         ).unwrap();
@@ -486,6 +500,17 @@ pub(crate) fn start_fido_ux_thread() {
                                 _ => log::error!("Error updating app atime"),
                             }
                             pddb.sync().ok();
+
+                            // force a redraw of the screen so the new record is rendered,
+                            // but for some reason this isn't working...
+                            tt.sleep_ms(350).ok();
+                            log::info!("sycing UI state...");
+                            send_message(
+                                main_conn,
+                                Message::new_scalar(
+                                    crate::VaultOp::FullRedraw.to_usize().unwrap(),
+                                    0, 0, 0, 0)
+                            ).unwrap();
                         } else {
                             log::error!("Illegal state for U2F registration!");
                         }

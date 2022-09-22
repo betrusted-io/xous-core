@@ -318,10 +318,16 @@
         "en-tts": "Host has requested a factory reset of FIDO/U2F credentials. This will permanently erase all registrations.\nPress 'y' to allow, any other key to abort."
     },
     "vault.u2f.authenticate": {
-        "en": "U2F Authentication Request\nPress any key to approve.",
-        "ja": "U2F 認証リクエスト\nいずれかのキーを押して承認します。",
-        "zh": "U2F 认证请求\n按任意键批准。",
-        "en-tts": "U2F Authentication Request\nPress any key to approve."
+        "en": "U2F Authentication Request\n",
+        "ja": "U2F 認証リクエスト\n",
+        "zh": "U2F 认证请求\n",
+        "en-tts": "U2F Authentication Request\n"
+    },
+    "vault.u2f.wait_abort": {
+        "en": "U2F request denied. Waiting for host to abort...\n",
+        "ja": "U2F リクエストが拒否されました。 ホストが中止するのを待っています...\n",
+        "zh": "U2F 请求被拒绝。 等待主机中止...\n",
+        "en-tts": "U2F request denied.  Waiting for host to abort...\n"
     },
     "vault.u2f.newapphash": {
         "en": "New registration request. Press any key to approve.\nHash: ",
@@ -390,10 +396,10 @@
         "en-tts": "U2F Registration Request"
     },
     "vault.u2freq": {
-        "en": "FIDO Request",
-        "ja": "FIDOリクエスト",
-        "zh": "FIDO 请求",
-        "en-tts": "FIDO Request"
+        "en": "FIDO Request.\n\nDENY the request by pressing F1.\nAPPROVE by pressing any other key.\n",
+        "ja": "FIDOリクエスト\n\nF1 を押して要求を拒否するか、その他のキーを押して承認します。\n",
+        "zh": "FIDO 请求\n\n按 F1 拒绝请求，或按任何其他键批准它。\n",
+        "en-tts": "FIDO Request.\n\nPress F1 to DENY the request.\nPress any other key to approve it.\n"
     },
     "vault.select_font": {
         "en": "Select a font style",
