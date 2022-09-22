@@ -503,12 +503,11 @@ pub(crate) fn start_fido_ux_thread(main_conn: xous::CID) {
 
                             // force a redraw of the screen so the new record is rendered,
                             // but for some reason this isn't working...
-                            tt.sleep_ms(350).ok();
                             log::info!("sycing UI state...");
                             send_message(
                                 main_conn,
                                 Message::new_scalar(
-                                    crate::VaultOp::FullRedraw.to_usize().unwrap(),
+                                    crate::VaultOp::ReloadDbAndFullRedraw.to_usize().unwrap(),
                                     0, 0, 0, 0)
                             ).unwrap();
                         } else {

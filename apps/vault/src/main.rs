@@ -123,6 +123,8 @@ pub(crate) enum VaultOp {
     Redraw,
     /// ignore dirty rectangles and redraw everything
     FullRedraw,
+    /// reload the database (slow), and ignore dirty rectangles and redraw everything
+    ReloadDbAndFullRedraw,
     /// change focus
     ChangeFocus,
 
@@ -406,6 +408,15 @@ fn main() -> ! {
                 }
             }
             Some(VaultOp::FullRedraw) => {
+                vaultux.update_mode();
+                if allow_redraw {
+                    vaultux.redraw().expect("Vault couldn't redraw");
+                }
+            }
+            Some(VaultOp::ReloadDbAndFullRedraw) => {
+                send_message(actions_conn,
+                    Message::new_blocking_scalar(ActionOp::UpdateMode.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
                 vaultux.update_mode();
                 if allow_redraw {
                     vaultux.redraw().expect("Vault couldn't redraw");
