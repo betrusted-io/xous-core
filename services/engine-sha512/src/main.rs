@@ -269,7 +269,7 @@ mod implementation {
     pub(crate) struct Engine512 {}
 
     impl Engine512 {
-        pub(crate) fn new() -> Engine512 {
+        pub(crate) fn new(_handler_conn: Option<xous::CID>) -> Engine512 {
             Engine512 {}
         }
         pub(crate) fn suspend(&self) {}
