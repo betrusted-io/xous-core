@@ -65,6 +65,8 @@ pub(crate) enum Opcode {
 
     /// exit the server
     Quit,
+    #[cfg(feature = "event_wait")]
+    IrqEvent,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]

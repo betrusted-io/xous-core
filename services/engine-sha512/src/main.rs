@@ -18,6 +18,10 @@ use core::sync::atomic::{AtomicBool, Ordering};
 mod implementation {
     use crate::api::Sha2Config;
     use utralib::generated::*;
+    #[cfg(feature = "event_wait")]
+    use crate::api::Opcode;
+    #[cfg(feature = "event_wait")]
+    use num_traits::*;
 
     // Note: there is no susres manager for the Sha512 engine, because its state cannot be saved through a full power off
     // instead, we try to delay a suspend until the caller is finished hashing, and if not, we note that and return a failure
@@ -26,7 +30,7 @@ mod implementation {
         csr: utralib::CSR<u32>,
         fifo: xous::MemoryRange,
         #[cfg(feature = "event_wait")]
-        done: bool,
+        handler_conn: Option<xous::CID>,
     }
 
     /*
@@ -40,7 +44,14 @@ mod implementation {
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let engine512 = unsafe { &mut *(arg as *mut Engine512) };
         // note we are done and clear the pending request, as this is used as a "wait" until interrupt mechanism with xous::wait_event()
-        engine512.done = true;
+        // this message may not be strictly necessary but we added it in an attempt to get the wait_event() to pick up the
+        // interrupt; unfortunately, the interrupt completes before wait_event() finishes processing.
+        if let Some(conn) = engine512.handler_conn {
+            xous::try_send_message(conn,
+                xous::Message::new_scalar(Opcode::IrqEvent.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
+        } else {
+            log::error!("|handle_event_irq: COM interrupt, but no connection for notification!")
+        }
         engine512.csr.wo(
             utra::sha512::EV_PENDING,
             engine512.csr.r(utra::sha512::EV_PENDING),
@@ -48,7 +59,7 @@ mod implementation {
     }
 
     impl Engine512 {
-        pub(crate) fn new() -> Engine512 {
+        pub(crate) fn new(_handler_conn: Option<xous::CID>) -> Engine512 {
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::sha512::HW_SHA512_BASE),
                 None,
@@ -71,22 +82,23 @@ mod implementation {
             };
 
             #[cfg(feature = "event_wait")]
-            {
-                let mut engine512 = Engine512 {
-                    csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                    fifo,
-                    done: false,
-                };
-                xous::claim_interrupt(
-                    utra::sha512::SHA512_IRQ,
-                    handle_irq,
-                    (&mut engine512) as *mut Engine512 as *mut usize,
-                )
-                .expect("couldn't claim irq");
-                // note: we can't use a "susres" manager here because this block has un-suspendable state
-                // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon it
-                engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
-            }
+            let mut engine512 = Engine512 {
+                csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                fifo,
+                handler_conn: _handler_conn,
+            };
+            #[cfg(feature = "event_wait")]
+            xous::claim_interrupt(
+                utra::sha512::SHA512_IRQ,
+                handle_irq,
+                (&mut engine512) as *mut Engine512 as *mut usize,
+            )
+            .expect("couldn't claim irq");
+            // note: we can't use a "susres" manager here because this block has un-suspendable state
+            // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon it
+            #[cfg(feature = "event_wait")]
+            engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
+
             // reset the block on boot
             // we don't save this as part of the susres set because
             // on a "proper" resume, the block was already reset by the secure boot process
@@ -169,20 +181,26 @@ mod implementation {
             self.csr.wfo(utra::sha512::POWER_ON, 1);
             #[cfg(feature = "event_wait")]
             {
-                engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
-                self.done = false;
+                self.csr.wo(
+                    utra::sha512::EV_PENDING,
+                    self.csr.r(utra::sha512::EV_PENDING),
+                );
+                self.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
+                log::trace!("starting sha512_done");
                 self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
-                while !self.done {
-                    log::trace!("waiting for sha512_done");
+                while self.csr.rf(utra::sha512::FIFO_RUNNING) == 1 {
+                    // race condition between when this kicks off, and when the IRQ event comes in; in the end,
+                    // the overhead of wait_event() is longer than it takes for the computation to finish,
+                    // so the interrupt arrives *before* this call happens.
                     xous::wait_event();
                 }
-                log::trace!("moving on");
+                log::info!("moving on");
             }
             #[cfg(not(feature = "event_wait"))]
             {
                 self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
                 while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
-                    xous::yield_slice();
+                    // don't even call the OS idle, the computation is 2us and the syscall takes longer than that.
                 }
                 self.csr.wfo(utra::sha512::EV_PENDING_SHA512_DONE, 1);
             }
@@ -329,7 +347,10 @@ fn main() -> ! {
         .expect("can't register server");
     log::trace!("registered with NS -- {:?}", engine512_sid);
 
-    let mut engine512 = Engine512::new();
+    #[cfg(feature="event_wait")]
+    let mut engine512 = Engine512::new(xous::connect(engine512_sid).ok());
+    #[cfg(not(feature="event_wait"))]
+    let mut engine512 = Engine512::new(None);
 
     log::trace!("ready to accept requests");
 
@@ -468,6 +489,11 @@ fn main() -> ! {
                 SUSPEND_PENDING.store(false, Ordering::Relaxed);
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack AbortSuspendLock");
             }),
+            #[cfg(feature = "event_wait")]
+            Some(Opcode::IrqEvent) => {
+                log::info!("irq_event");
+                // nothing to do; the purpose is just to wake up the thread as it sleeps
+            }
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting!");
                 break;
