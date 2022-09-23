@@ -555,16 +555,6 @@ pub(crate) fn ci_tests(pddb_os: &mut PddbOs) -> Result<()> {
 
         log::info!("CI done");
 
-        /*
-        // abortive attempt to get CI to exit cleanly
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
-        {
-            let xns = xous_names::XousNames::new().unwrap();
-            let susres = susres::Susres::new_without_hook(&xns).unwrap();
-            susres.initiate_suspend().expect("couldn't initiate suspend op");
-            //xous::rsyscall(xous::SysCall::Shutdown).expect("unable to quit");
-        }*/
-
         Ok(())
     }
 }

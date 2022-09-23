@@ -53,7 +53,6 @@ impl Susres {
         })
     }
     pub fn conn(&self) -> CID { self.conn }
-    pub fn getop_suspend(&self) -> u32 { Opcode::SuspendRequest.to_u32().unwrap() }
 
     pub fn new_without_hook(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
@@ -66,9 +65,19 @@ impl Susres {
 
     pub fn initiate_suspend(&self) -> Result<(), xous::Error> {
         log::trace!("suspend initiated");
-        send_message(self.conn,
-            Message::new_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
-        ).map(|_|())
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
+        ) {
+            Ok(xous::Result::Scalar1(result)) => {
+                if result == 1 {
+                    Ok(())
+                } else {
+                    // indicate that we couldn't initiate the suspend
+                    Err(xous::Error::Timeout)
+                }
+            },
+            _ => Err(xous::Error::InternalError)
+        }
     }
 
     pub fn suspend_until_resume(&mut self, token: usize) -> Result<bool, xous::Error> {

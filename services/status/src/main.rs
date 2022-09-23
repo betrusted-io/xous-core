@@ -1001,7 +1001,15 @@ fn wrapped_main() -> ! {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
                     // log::set_max_level(log::LevelFilter::Debug);
-                    susres.initiate_suspend().expect("couldn't initiate suspend op");
+                    match susres.initiate_suspend() {
+                        Ok(_) => {},
+                        Err(xous::Error::Timeout) => {
+                            modals.show_notification(t!("suspend.fail", xous::LANG), None).unwrap();
+                        }
+                        Err(_e) => {
+                            panic!("Unhandled error on suspend request");
+                        }
+                    }
                 }
             },
             Some(StatusOpcode::BatteryDisconnect) => {

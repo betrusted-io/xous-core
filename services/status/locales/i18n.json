@@ -1,4 +1,10 @@
 {
+    "suspend.fail": {
+        "ja": "中断不可能な操作が保留中です。 数秒後にスリープ リクエストを再試行してください。",
+        "en": "Uninterruptible operation pending. Please retry the sleep request in a couple seconds.",
+        "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。",
+        "en-tts": "Uninterruptible operation pending. Please retry the sleep request in a couple seconds."
+    },
     "socup.candidate": {
         "ja": "ゲートウェアの更新候補が見つかりました。\n\n適用する必要がありますか？",
         "en": "An update candidate for the SoC was found.\n\nShould we apply it?\n\nNOTE: if you just installed an update, try rebooting using a paperclip in the hole in the lower right hand corner. This forces the latest image to load.",

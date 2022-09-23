@@ -64,7 +64,15 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                     write!(ret, "crypto power is now off").unwrap();
                 }
                 "sus" => {
-                    self.susres.initiate_suspend().unwrap();
+                    match self.susres.initiate_suspend() {
+                        Err(xous::Error::Timeout) => {
+                            write!(ret, "Couldn't suspend, a server was blocking suspend.\n").ok();
+                        }
+                        Ok(_) => {},
+                        Err(e) => {
+                            write!(ret, "Unknown error on suspend: {:?}", e).ok();
+                        }
+                    }
                     // the message below is sent after we wake up
                     write!(ret, "Resumed from sleep!").unwrap();
                 }
@@ -82,7 +90,15 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             loop {
                                 log::info!("suspend/resume cycle: {}", iters);
                                 llio.set_wakeup_alarm(4).unwrap();
-                                susres.initiate_suspend().unwrap();
+                                match susres.initiate_suspend() {
+                                    Err(xous::Error::Timeout) => {
+                                        log::warn!("Couldn't suspend, a server was blocking suspend.\n");
+                                    }
+                                    Ok(_) => {},
+                                    Err(e) => {
+                                        log::error!("Unknown error on suspend: {:?}", e);
+                                    }
+                                }
                                 ticktimer.sleep_ms(8000).unwrap();
                                 iters += 1;
                             }

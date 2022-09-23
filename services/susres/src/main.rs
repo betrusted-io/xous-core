@@ -699,6 +699,9 @@ fn main() -> ! {
                     // if the 2-second timeout is still pending from a previous suspend, deny the suspend request.
                     // ...just don't suspend that quickly after resuming???
                     if allow_suspend && !timeout_pending {
+                        // ack the request early
+                        xous::return_scalar(msg.sender, 1).ok();
+
                         susres_hw.ignore_wfi();
                         suspend_requested = true;
                         // clear the resume gate
@@ -726,7 +729,8 @@ fn main() -> ! {
                         // let the events fire
                         xous::yield_slice();
                     } else {
-                        log::warn!("suspend requested, but the system was not allowed to suspend. Ignoring request.")
+                        log::warn!("suspend requested, but the system was not allowed to suspend. Ignoring request.");
+                        xous::return_scalar(msg.sender, 0).ok();
                     }
                 },
                 Some(Opcode::SuspendTimeout) => {
