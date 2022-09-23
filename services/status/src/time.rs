@@ -71,7 +71,7 @@ pub(crate) enum TimeOp {
     /// Sync offsets to hardware RTC
     HwSync = 0,
     /// Suspend/resume call
-    SusRes = 1,
+    // SusRes = 1,
     /// Indicates the current time is precisely the provided number of ms since EPOCH
     SetUtcTimeMs = 2,
     /// Get UTC time in ms since EPOCH
@@ -91,6 +91,8 @@ pub(crate) enum TimeOp {
 pub(crate) enum PrivTimeOp {
     /// Reset the hardware RTC count
     ResetRtc = 0,
+    /// Suspend/resume call
+    SusRes = 1,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -146,13 +148,105 @@ impl NtpUdpSocket for UdpSocketWrapper {
 pub fn start_time_server() {
     let rtc_checked = Arc::new(AtomicBool::new(false));
 
+    // the public SID is well known and accessible by anyone who uses `libstd`
+    let pub_sid = xous::create_server_with_address(&TIME_SERVER_PUBLIC)
+        .expect("Couldn't create Ticktimer server");
+    let self_cid = xous::connect(pub_sid).unwrap();
+
+    // this thread handles more sensitive operations on the RTC.
+    #[cfg(any(target_os = "none", target_os = "xous"))]
+    thread::spawn({
+        let rtc_checked = rtc_checked.clone();
+        let self_cid = self_cid.clone();
+        move || {
+            let xns = xous_names::XousNames::new().unwrap();
+            let mut i2c = llio::I2c::new(&xns);
+            let trng = trng::Trng::new(&xns).unwrap();
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+
+            // allocate the SID for priveleged ops. we expect exactly one connection from the PDDB.
+            let priv_sid = xns.register_name(pddb::TIME_SERVER_PDDB, Some(1)).expect("can't register server");
+            let priv_conn = xous::connect(priv_sid).unwrap();
+
+            // register a suspend/resume listener
+            // let sr_cid = xous::connect(pub_sid).expect("couldn't create suspend callback connection");
+            let mut susres = susres::Susres::new(
+                Some(susres::SuspendOrder::Early),
+                &xns,
+                PrivTimeOp::SusRes as u32,
+                priv_conn
+            ).expect("couldn't create suspend/resume object");
+
+            // on boot, do the validation checks of the RTC. If it is not initialized or corrupted, fix it.
+            let mut settings = [0u8; 8];
+            loop {
+                match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
+                    Ok(I2cStatus::ResponseReadOk) => break,
+                    _ => {
+                        log::error!("Couldn't check RTC, retrying!");
+                        xous::yield_slice(); // recheck in a fast loop, we really should be able to grab this resource on boot.
+                    },
+                };
+            }
+            if is_rtc_invalid(&settings) {
+                log::warn!("RTC settings were invalid. Re-initializing! {:?}", settings);
+                settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
+                let mut start_time = trng.get_u64().unwrap();
+                // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
+                settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
+                start_time >>= 8;
+                settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
+                start_time >>= 8;
+                settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
+                start_time >>= 8;
+                settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
+                start_time >>= 8;
+                settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
+                start_time >>= 8;
+                settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
+                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
+            }
+            rtc_checked.store(true, Ordering::SeqCst);
+            loop {
+                let msg = xous::receive_message(priv_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(PrivTimeOp::ResetRtc) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                        log::warn!("RTC time reset command received.");
+                        settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
+                        let mut start_time = trng.get_u64().unwrap();
+                        // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
+                        settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
+                        start_time >>= 8;
+                        settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
+                        start_time >>= 8;
+                        settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
+                        start_time >>= 8;
+                        settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
+                        start_time >>= 8;
+                        settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
+                        start_time >>= 8;
+                        settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
+                        i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    }),
+                    Some(PrivTimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                        // resync time on resume, but give a little time for other processes to clear as this is not urgent
+                        tt.sleep_ms(180).unwrap();
+                        send_message(self_cid,
+                            Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't queue sync request");
+                    }),
+                    _ => log::error!("Time server private thread received unknown opcode: {:?}", msg),
+                }
+            }
+        }
+    });
+
     // this thread handles reading & updating the time offset from the PDDB
     thread::spawn({
         let rtc_checked = rtc_checked.clone();
         move || {
-            // the public SID is well known and accessible by anyone who uses `libstd`
-            let pub_sid = xous::create_server_with_address(&TIME_SERVER_PUBLIC)
-                .expect("Couldn't create Ticktimer server");
             let xns = xous_names::XousNames::new().unwrap();
             let llio = llio::Llio::new(&xns);
 
@@ -168,15 +262,6 @@ pub fn start_time_server() {
             log::trace!("start_rtc_secs: {}", start_rtc_secs);
             log::trace!("start_tt_ms: {}", start_tt_ms);
 
-            // register a suspend/resume listener
-            let sr_cid = xous::connect(pub_sid).expect("couldn't create suspend callback connection");
-            let mut susres = susres::Susres::new(
-                Some(susres::SuspendOrder::Early),
-                &xns,
-                TimeOp::SusRes as u32,
-                sr_cid
-            ).expect("couldn't create suspend/resume object");
-            let self_cid = xous::connect(pub_sid).unwrap();
             let pddb_poller = PddbMountPoller::new();
             // enqueue a the first mount poll message
             xous::send_message(self_cid,
@@ -203,29 +288,6 @@ pub fn start_time_server() {
                             xous::Message::new_scalar(TimeOp::PddbMountPoll.to_usize().unwrap(), 0, 0, 0, 0)
                         ).expect("couldn't check mount poll");
                     }
-                    Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                        // resync time on resume
-                        let mut count = 0;
-                        loop {
-                            match llio.get_rtc_secs() {
-                                Ok(secs) => {
-                                    start_rtc_secs = secs;
-                                    start_tt_ms = tt.elapsed_ms();
-                                    break;
-                                }
-                                Err(e) => {
-                                    log::warn!("RTC read yielded error; retrying: {:?}", e);
-                                    tt.sleep_ms(850).unwrap();
-                                    count += 1;
-                                    if count > 5 {
-                                        // this should be a panic, I think, not an abort.
-                                        panic!("Couldn't sync time on resume. Something went wrong with the RTC hardware.");
-                                    }
-                                }
-                            }
-                        }
-                    }),
                     Some(TimeOp::HwSync) => {
                         start_rtc_secs = llio.get_rtc_secs().expect("couldn't read RTC offset value");
                         start_tt_ms = tt.elapsed_ms();
@@ -297,14 +359,6 @@ pub fn start_time_server() {
                         // do nothing, we're mounted now.
                         continue;
                     },
-                    Some(TimeOp::SusRes) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                        susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                        // resync time on resume, but give a little time for other processes to clear as this is not urgent
-                        tt.sleep_ms(180).unwrap();
-                        send_message(self_cid,
-                            Message::new_scalar(TimeOp::HwSync.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).expect("couldn't queue sync request");
-                    }),
                     Some(TimeOp::HwSync) => {
                         match llio.get_rtc_secs() {
                             Ok(val) => {
@@ -386,75 +440,6 @@ pub fn start_time_server() {
                         }
                     }),
                     None => log::error!("Time server public thread received unknown opcode: {:?}", msg),
-                }
-            }
-        }
-    });
-
-    // this thread handles more sensitive operations on the RTC.
-    #[cfg(any(target_os = "none", target_os = "xous"))]
-    thread::spawn({
-        let rtc_checked = rtc_checked.clone();
-        move || {
-            let xns = xous_names::XousNames::new().unwrap();
-            // we expect exactly one connection from the PDDB
-            let priv_sid = xns.register_name(pddb::TIME_SERVER_PDDB, Some(1)).expect("can't register server");
-            let mut i2c = llio::I2c::new(&xns);
-            let trng = trng::Trng::new(&xns).unwrap();
-
-            // on boot, do the validation checks of the RTC. If it is not initialized or corrupted, fix it.
-            let mut settings = [0u8; 8];
-            loop {
-                match i2c.i2c_read(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &mut settings) {
-                    Ok(I2cStatus::ResponseReadOk) => break,
-                    _ => {
-                        log::error!("Couldn't check RTC, retrying!");
-                        xous::yield_slice(); // recheck in a fast loop, we really should be able to grab this resource on boot.
-                    },
-                };
-            }
-            if is_rtc_invalid(&settings) {
-                log::warn!("RTC settings were invalid. Re-initializing! {:?}", settings);
-                settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
-                let mut start_time = trng.get_u64().unwrap();
-                // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
-                settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                start_time >>= 8;
-                settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                start_time >>= 8;
-                settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
-                start_time >>= 8;
-                settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
-                start_time >>= 8;
-                settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
-                start_time >>= 8;
-                settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
-                i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
-            }
-            rtc_checked.store(true, Ordering::SeqCst);
-            loop {
-                let msg = xous::receive_message(priv_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(PrivTimeOp::ResetRtc) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                        log::warn!("RTC time reset command received.");
-                        settings[CTL3] = (Control3::BATT_STD_BL_EN).bits();
-                        let mut start_time = trng.get_u64().unwrap();
-                        // set the clock to a random start time from 1 to 10 years into its maximum range of 100 years
-                        settings[SECS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                        start_time >>= 8;
-                        settings[MINS] = to_bcd((start_time & 0xFF) as u8 % 60);
-                        start_time >>= 8;
-                        settings[HOURS] = to_bcd((start_time & 0xFF) as u8 % 24);
-                        start_time >>= 8;
-                        settings[DAYS] = to_bcd((start_time & 0xFF) as u8 % 28 + 1);
-                        start_time >>= 8;
-                        settings[MONTHS] = to_bcd((start_time & 0xFF) as u8 % 12 + 1);
-                        start_time >>= 8;
-                        settings[YEARS] = to_bcd((start_time & 0xFF) as u8 % 10 + 1);
-                        i2c.i2c_write(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &settings).expect("RTC access error");
-                        xous::return_scalar(msg.sender, 0).unwrap();
-                    }),
-                    _ => log::error!("Time server private thread received unknown opcode: {:?}", msg),
                 }
             }
         }
