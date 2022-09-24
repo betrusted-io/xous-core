@@ -254,6 +254,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - HOTP support added to `vault`. HOTPs display in the TOTP window with the notation "HOTP" next to them, and they auto-increment on autotype. When creating new items in TOTP you are given the option to make an HOTP record, and you can convert between the two by editing the record and changing the bottom line from totp to hotp and vice-versa. The `timestep` field is re-used from the TOTP record to store the `count` for HOTP.
 - `ball` app demo removed from default build
 - WLAN submenu added, thanks to a huge effort by @gsora.
+- fix/close various old issues (in particular, RTC interrupts stripped out and suspend lock fails now trigger a notification)
 
 ## Roadmap to 1.0
 
