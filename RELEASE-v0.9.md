@@ -255,6 +255,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - `ball` app demo removed from default build
 - WLAN submenu added, thanks to a huge effort by @gsora.
 - fix/close various old issues (in particular, RTC interrupts stripped out and suspend lock fails now trigger a notification)
+- move RTC resume handler to the secure/private server - hopefully resolves a susres failure case
 
 ## Roadmap to 1.0
 
