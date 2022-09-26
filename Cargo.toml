@@ -95,6 +95,8 @@ exclude = [
   "utralib",  # Exclude UTRA, since it is machine-generated.
   "locales",  # exclude because it is machine-generated
   "xtask",
+  # exclude the API crates, as they are domiciled here but referenced via crates.io
+  "api/log-server"
 ]
 
 [profile.release]
