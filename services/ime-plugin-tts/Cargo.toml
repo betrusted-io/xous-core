@@ -23,7 +23,7 @@ tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../../utralib", default-features = false }
 
 [features]
 debugprint = []

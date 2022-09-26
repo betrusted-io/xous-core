@@ -42,7 +42,7 @@ sha2 = {path="../engine-sha512"}
 digest = "0.9.0"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../../utralib", default-features = false }
 
 [features]
 debugprint = []

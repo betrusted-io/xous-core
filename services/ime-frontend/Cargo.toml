@@ -26,7 +26,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 tts-frontend = {path="../tts"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../../utralib", default-features = false }
 
 [features]
 tts = []

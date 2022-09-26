@@ -26,7 +26,7 @@ block-buffer = "0.9.0"
 opaque-debug = "0.3.0" # prevents internal hash state leakage from debug structures
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = { path = "../../utralib", default-features = false }
 
 [features]
 event_wait = [] # in theory, event_wait should be more efficient, but the OS overhead is greater than the computation.

@@ -19,7 +19,7 @@ xous-names = {path = "../xous-names"}
 xous-semver = "0.1.2"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../../utralib", default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 

@@ -13,7 +13,7 @@ ticktimer-server = { path = "../ticktimer-server" }
 log = "0.4.14"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = { path = "../../utralib", default-features = false }
 
 [features]
 default = []

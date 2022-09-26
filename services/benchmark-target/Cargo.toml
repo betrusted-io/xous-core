@@ -18,7 +18,7 @@ num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = { path = "../../utralib", default-features = false }
 
 [features]
 debugprint = []

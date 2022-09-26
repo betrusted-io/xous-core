@@ -102,7 +102,7 @@ default-features = false
 features = ["u32_backend", "rand"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../../utralib", default-features = false }
 
 [features]
 debugprint = []

@@ -19,7 +19,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 xous-ipc = "0.9.9"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = { path = "../../utralib", default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.8.5"

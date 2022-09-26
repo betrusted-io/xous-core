@@ -18,7 +18,7 @@ xous = "0.9.9"
 xous-ipc = "0.9.9"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../../utralib", default-features = false }
 
 [features]
 debugprint = [] # adding this allocates the UART for debugging the logger

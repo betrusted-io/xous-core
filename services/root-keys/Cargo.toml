@@ -74,7 +74,7 @@ default-features = false
 features = ["u32_backend", "rand"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = { path = "../../utralib", default-features = false }
 
 [features]
 policy-menu = [] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)

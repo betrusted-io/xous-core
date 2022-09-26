@@ -42,7 +42,7 @@ xous-semver = "0.1.2"
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../../utralib", default-features = false }
 
 # short circuit the datetime call on hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]
