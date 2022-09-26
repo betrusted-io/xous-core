@@ -7,11 +7,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/xous-book/"
 
-[features]
-std = []
-
-default_features = ["std"]
-
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 
@@ -19,4 +14,21 @@ default_features = ["std"]
 svd2utra = "0.1.0"
 
 # UTRA pre-generated version tracker
-# 0.1.0 - betrusted-soc v0.9.9-7-gc809403 without performance profiling
+[features]
+std = []
+
+# This specifies the SVD rev for platform targets
+# Precursor is an FPGA, so the actual hardware register spec can change over time,
+# hence the gitrev is specified as part of the precursor feature spec. We specify
+# every gitrev that we may need to refer back to, so that we're not trying to
+# map utralib version numbers to precursor soc revs -- by having the gitrev exposed,
+# we can directly look up what generated the SVD file we're using without having
+# to go through some manually maintained lookup table of version # to gitrev.
+#
+# SoCs in custom silicon would typically not need the gitrev, since their
+# hardware is immutable.
+precursor-c809403 = []
+precursor-c809403-perflib = []
+
+# Specify a Precusor default so that we can pass packaging CI tests.
+default_features = ["std", "precursor-c809403"]

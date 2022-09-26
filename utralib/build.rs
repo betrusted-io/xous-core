@@ -1,9 +1,8 @@
-use std::env;
-
 fn main() {
-    let svd_filename = env::var("XOUS_SVD_FILE")
-        .expect("Set the environment variable `XOUS_SVD_FILE` to point to an SVD file");
-    println!("cargo:rerun-if-env-changed=XOUS_SVD_FILE");
+    #[cfg(feature="precursor-c809403")]
+    let svd_filename = "precursor/soc-c809403.svd";
+    #[cfg(feature="precursor-c809403-perflib")]
+    let svd_filename = "precursor/soc-perf-c809403.svd";
 
     let svd_file_path = std::path::Path::new(&svd_filename);
     println!("cargo:rerun-if-changed={}", svd_file_path.canonicalize().unwrap().display());
