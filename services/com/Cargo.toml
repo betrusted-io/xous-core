@@ -14,7 +14,7 @@ ticktimer-server = {path = "../ticktimer-server"}
 susres = {path = "../susres"}
 typenum = "1.12"
 xous = "0.9.9"
-xous-ipc = "0.9.7"
+xous-ipc = "0.9.9"
 xous-names = {path = "../xous-names"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}

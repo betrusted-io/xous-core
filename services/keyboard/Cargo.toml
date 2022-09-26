@@ -11,7 +11,7 @@ log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"
 log-server = {version = "0.1.1", package = "xous-api-log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = "0.9.9"
-xous-ipc = "0.9.7"
+xous-ipc = "0.9.9"
 xous-names = {path = "../xous-names"}
 llio = {path = "../llio"}
 susres = {path = "../susres"}

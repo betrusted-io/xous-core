@@ -15,7 +15,7 @@ log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 xous = "0.9.9"
-xous-ipc = "0.9.7"
+xous-ipc = "0.9.9"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
