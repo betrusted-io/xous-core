@@ -7,7 +7,7 @@ description = "Audio CODEC server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = { path = "../../xous-rs" }
+xous = "0.9.9"
 log-server = { version = "0.1.1", package = "xous-api-log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }

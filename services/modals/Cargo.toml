@@ -7,14 +7,14 @@ description = "Ux modals server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = { path = "../../xous-rs" }
+xous = "0.9.9"
 log-server = { version = "0.1.1", package = "xous-api-log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-xous-ipc = { path = "../../xous-ipc" }
+xous-ipc = "0.9.9"
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 gam = {path="../gam"}
 trng = {path="../trng"}

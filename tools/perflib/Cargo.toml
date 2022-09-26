@@ -7,7 +7,7 @@ description = "Performance counter tooling"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = { path = "../../xous-rs" }
+xous = "0.9.9"
 log = "0.4.14"
 utralib = { path = "../../utralib"}
 

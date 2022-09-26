@@ -14,8 +14,8 @@ log-server = {version = "0.1.1", package = "xous-api-log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
-xous = {path = "../../xous-rs"}
-xous-ipc = {path = "../../xous-ipc"}
+xous = "0.9.9"
+xous-ipc = "0.9.9"
 xous-names = {path = "../xous-names"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}

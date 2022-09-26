@@ -10,12 +10,12 @@ version = "0.1.0"
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
 log-server = {version = "0.1.1", package = "xous-api-log-server"}
-xous = {path = "../../xous-rs"}
+xous = "0.9.9"
 susres = {path = "../susres"}
 trng = {path = "../trng"}
 ticktimer-server = {path = "../ticktimer-server"}
 
-xous-ipc = {path = "../../xous-ipc"}
+xous-ipc = "0.9.9"
 xous-names = {path = "../xous-names"}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}

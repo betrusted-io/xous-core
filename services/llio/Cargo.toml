@@ -10,8 +10,8 @@ version = "0.1.0"
 log = "0.4.14"
 log-server = {version = "0.1.1", package = "xous-api-log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
-xous = {path = "../../xous-rs"}
-xous-ipc = {path = "../../xous-ipc"}
+xous = "0.9.9"
+xous-ipc = "0.9.9"
 xous-names = {path = "../xous-names"}
 susres = {path = "../susres"}
 

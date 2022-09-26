@@ -7,7 +7,7 @@ description = "TRNG server"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = { path = "../../xous-rs" }
+xous = "0.9.9"
 log-server = { version = "0.1.1", package = "xous-api-log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
@@ -16,7 +16,7 @@ num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 susres = {path = "../susres"}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
-xous-ipc = {path = "../../xous-ipc"}
+xous-ipc = "0.9.9"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
