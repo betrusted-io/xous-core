@@ -31,4 +31,4 @@ precursor-c809403 = []
 precursor-c809403-perflib = []
 
 # Specify a Precusor default so that we can pass packaging CI tests.
-default_features = ["std", "precursor-c809403"]
+default = ["std", "precursor-c809403"]
