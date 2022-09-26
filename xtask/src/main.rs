@@ -10,6 +10,12 @@ use std::{
     process::Command,
 };
 
+// This is the default SVD file to be used to generate Xous. This must be manually
+// updated every time the SoC version is bumped.
+const SOC_SVD_VERSION: &str = "precursor-c809403";
+
+///// TODO: BRING BACK THE UTRA SWAP BUILD TARGET
+
 // This is the minimum Xous version required to read a PDDB backup generated
 // by the current kernel revision.
 const MIN_XOUS_VERSION: &str = "v0.9.8-791";
@@ -21,7 +27,9 @@ const KERNEL_TARGET: &str = "riscv32imac-unknown-xous-elf";
 const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 
 enum MemorySpec {
+    #[allow(dead_code)]
     SvdFile(String),
+    Spec(u32, u32),
 }
 
 #[derive(Debug)]
@@ -305,7 +313,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_app_menus(&apps);
             build_hw_image(
                 false,
-                Some("./precursors/soc.svd".to_string()),
+                None,
                 &pkgs,
                 None,
                 None,
@@ -341,7 +349,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Some(&["--no-default-features", "--features", "renode-bypass", "--features", "debug-print"]),
                 )?;
             } else {
-                build_hw_image(false, Some("./precursors/soc.svd".to_string()), &pkgs,
+                build_hw_image(false, None, &pkgs,
                 None,
                 None,
                 None,
@@ -378,7 +386,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             build_hw_image(
                 false,
-                Some("./precursors/soc.svd".to_string()),
+                None,
                 &pkgs,
                 None,
                 None,
@@ -530,7 +538,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_app_menus(&apps);
             build_hw_image(
                 false,
-                Some("./precursors/soc.svd".to_string()),
+                None,
                 &pkgs,
                 lkey,
                 kkey,
@@ -557,7 +565,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_app_menus(&apps);
             build_hw_image(
                 false,
-                Some("./precursors/soc-perf.svd".to_string()),
+                Some("precursor-c809403-perflib".to_string()), // this is the name of the *feature* flag to utralib
                 &pkgs,
                 lkey,
                 kkey,
@@ -571,45 +579,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ]),
             )?
         }
-        Some("utra") => {
-            let mut args = env::args();
-            let config = args.nth(2);
-            if let Some(tgt) = config {
-                if tgt == "perf" {
-                    let path = std::path::Path::new("./precursors/soc-perf.svd");
-                    if !path.exists() {
-                        return Err("svd file does not exist".into());
-                    }
-                    // Tools use this environment variable to know when to rebuild the UTRA crate.
-                    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
-                    println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
-                } else {
-                    return Err("Unrecognized target, doing nothing".into());
-                }
-            } else {
-                let path = std::path::Path::new("./precursors/soc.svd");
-                if !path.exists() {
-                    return Err("svd file does not exist".into());
-                }
-                // Tools use this environment variable to know when to rebuild the UTRA crate.
-                std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
-                println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
-            }
-            let generated_path = std::path::Path::new("utralib/src/generated.rs");
-            // blank the contents so that the build command runs
-            std::fs::write(generated_path, "")?;
-            let status = Command::new(cargo())
-                .current_dir(project_root())
-                .args(&[
-                    "build",
-                    "--package",
-                    "utralib",
-                ])
-                .status()?;
-            if !status.success() {
-                return Err("cargo build failed".into());
-            }
-        }
         Some("ditherpunk-image") => {
             let mut args = env::args();
             args.nth(1);
@@ -621,7 +590,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             generate_app_menus(&apps);
             build_hw_image(
                 false,
-                Some("./precursors/soc.svd".to_string()),
+                None,
                 &pkgs,
                 lkey,
                 kkey,
@@ -752,10 +721,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &[],
             None, None,
         )?,
-        Some("burn-kernel") => update_usb(true, false, false, false)?,
-        Some("burn-loader") => update_usb(false, true, false, false)?,
-        Some("nuke-soc") => update_usb(false, false, true, false)?,
-        Some("burn-soc") => update_usb(false, false, false, true)?,
         Some("generate-locales") => generate_locales()?,
         Some("wycheproof-import") => whycheproof_import()?,
         _ => print_help(),
@@ -784,29 +749,18 @@ Renode emulation:
                          specified on the command line (e.g. built externally). Bypasses sig checks, keys locked out.
  libstd-net [pkg1] [..]  builds a test image for testing network functions. Bypasses sig checks, keys locked out.
 
-UTRA (re-)generation:
- utra [perf]             (re)generate the UTRA file for the default or [perf] configurations. Explicit call
-                         utilized when swapping between the two configs, to avoid spurious full rebuilds.
-
 Locale (re-)generation:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
 
-Direct USB updates:
- ** Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py` **
- burn-kernel             invoke the `usb_update.py` utility to burn the kernel
- burn-loader             invoke the `usb_update.py` utility to burn the loader
- burn-soc                invoke the `usb_update.py` utility to stage the SoC gateware, which must then be provisioned with secret material using the Precursor device.
- nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
-
-Various debug configurations:
+Various debug configurations (high chance of bitrot):
  debug                   runs a debug build using a hosted environment
- benchmark [soc.svd]     builds a benchmarking image for real hardware
- minimal [soc.svd]       builds a minimal image for API testing
+ benchmark               builds a benchmarking image for real hardware
+ minimal                 builds a minimal image for API testing
  cbtest                  builds an image for callback testing
- trng-test [soc.svd]     builds an image for TRNG testing - urandom source seeded by TRNG+AV
- ro-test [soc.svd]       builds an image for ring oscillator only TRNG testing
- av-test [soc.svd]       builds an image for avalanche generater only TRNG testing
- sr-test [soc.svd]       builds the suspend/resume testing image
+ trng-test               builds an image for TRNG testing - urandom source seeded by TRNG+AV
+ ro-test                 builds an image for ring oscillator only TRNG testing
+ av-test                 builds an image for avalanche generater only TRNG testing
+ sr-test                 builds the suspend/resume testing image
  wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
  pddb-dev                PDDB testing only for live hardware
  pddb-hosted             PDDB testing in a hosted environment
@@ -821,142 +775,6 @@ Note: By default, the `ticktimer` will get rebuilt every time. You can skip this
     )
 }
 
-fn update_usb(
-    do_kernel: bool,
-    do_loader: bool,
-    nuke_soc: bool,
-    stage_soc: bool,
-) -> Result<(), DynError> {
-    use std::io::{BufRead, BufReader, Error, ErrorKind};
-    use std::process::Stdio;
-
-    if do_kernel {
-        println!("Burning kernel. After this is done, you must select 'Sign xous update' to self-sign the image.");
-        let stdout = if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args([
-                    "/C",
-                    "python",
-                    "tools/usb_update.py",
-                    "-k",
-                    "target/riscv32imac-unknown-xous-elf/release/xous.img",
-                ])
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        } else {
-            Command::new("python3")
-                .arg("tools/usb_update.py")
-                .arg("-k")
-                .arg("target/riscv32imac-unknown-xous-elf/release/xous.img")
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        };
-
-        let reader = BufReader::new(stdout);
-        reader
-            .lines()
-            .for_each(|line| println!("{}", line.unwrap()));
-    }
-    if do_loader {
-        println!("Burning loader. After this is done, you must select 'Sign xous update' to self-sign the image.");
-        let stdout = if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args([
-                    "/C",
-                    "python",
-                    "tools/usb_update.py",
-                    "-l",
-                    "target/riscv32imac-unknown-xous-elf/release/loader.bin",
-                ])
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        } else {
-            Command::new("python3")
-                .arg("tools/usb_update.py")
-                .arg("-l")
-                .arg("target/riscv32imac-unknown-xous-elf/release/loader.bin")
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        };
-
-        let reader = BufReader::new(stdout);
-        reader
-            .lines()
-            .for_each(|line| println!("{}", line.unwrap()));
-    }
-    if stage_soc {
-        println!("Staging SoC gateware. After this is done, you must select 'Install Gateware Update' from the root menu of your Precursor device.");
-        let stdout = if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args([
-                    "/C",
-                    "python",
-                    "tools/usb_update.py",
-                    "-s",
-                    "precursors/soc_csr.bin",
-                ])
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        } else {
-            Command::new("python3")
-                .arg("tools/usb_update.py")
-                .arg("-s")
-                .arg("precursors/soc_csr.bin")
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        };
-
-        let reader = BufReader::new(stdout);
-        reader
-            .lines()
-            .for_each(|line| println!("{}", line.unwrap()));
-    }
-    if nuke_soc {
-        println!("Installing factory-reset SoC gateware (secrets will be lost)!");
-        let stdout = if cfg!(traget_os = "windows") {
-            Command::new("cmd")
-                .args([
-                    "/C",
-                    "python",
-                    "tools/usb_update.py",
-                    "--soc",
-                    "precursors/soc_csr.bin",
-                ])
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        } else {
-            Command::new("python3")
-                .arg("tools/usb_update.py")
-                .arg("--soc")
-                .arg("precursors/soc_csr.bin")
-                .stdout(Stdio::piped())
-                .spawn()?
-                .stdout
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?
-        };
-        let reader = BufReader::new(stdout);
-        reader
-            .lines()
-            .for_each(|line| println!("{}", line.unwrap()));
-    }
-
-    Ok(())
-}
-
 fn build_hw_image(
     debug: bool,
     svd: Option<String>,
@@ -968,26 +786,50 @@ fn build_hw_image(
     loader_features: Option<&[&str]>,
     kernel_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
-    let svd_file = match svd {
-        Some(s) => s,
-        None => return Err("svd file not specified".into()),
+    let mut svd_feat = vec!["--features"];
+    let mut svd_path = String::from("utralib/");
+    let svd_file: Option<&[&str]> = match svd {
+        Some(s) => {
+            svd_path.push_str(&s);
+            svd_feat.push(&svd_path);
+            Some(&svd_feat)
+        },
+        None => {
+            svd_path.push_str(SOC_SVD_VERSION);
+            svd_feat.push(&svd_path);
+            Some(&svd_feat)
+        },
     };
-
-    let path = std::path::Path::new(&svd_file);
-    if !path.exists() {
-        return Err("svd file does not exist".into());
+    let mut kernel_features_finalized = Vec::<&str>::new();
+    let mut loader_features_finalized = Vec::<&str>::new();
+    if let Some(svd) = svd_file {
+        for s in svd {
+            kernel_features_finalized.push(s);
+            loader_features_finalized.push(s);
+        }
+    }
+    if let Some(lf) = loader_features {
+        for &s in lf {
+            loader_features_finalized.push(s);
+        }
+    }
+    if let Some(kf) = kernel_features {
+        for &s in kf {
+            kernel_features_finalized.push(s);
+        }
     }
 
-    // Tools use this environment variable to know when to rebuild the UTRA crate.
-    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
-    println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
     // std::env::set_var("RUST_LOG", "debug"); // set this to debug the image creation process
 
     // extract key file names; replace with defaults if not specified
     let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
     let kernelkey_file = kkey.unwrap_or_else(|| "devkey/dev.key".into());
 
-    let kernel = build_kernel(debug, kernel_features)?;
+    // ------ build the kernel ------
+    println!("kernel_features_finalized: {:?}", kernel_features_finalized);
+    let kernel = build_kernel(debug, Some(&kernel_features_finalized))?;
+
+    // ------ build the services ------
     let mut init = vec![];
     let base_path = build(
         packages,
@@ -995,7 +837,7 @@ fn build_hw_image(
         Some(PROGRAM_TARGET),
         None,
         extra_args,
-        None,
+        svd_file,
     )?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
@@ -1015,6 +857,8 @@ fn build_hw_image(
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
+
+    // ------ build the loader ------
     // stash any LTO settings applied to the kernel; proper layout of the loader
     // block depends on the loader being compact and highly optimized.
     let existing_lto = std::env::var("CARGO_PROFILE_RELEASE_LTO")
@@ -1026,13 +870,14 @@ fn build_hw_image(
     // these settings will generate the most compact code (but also the hardest to debug)
     std::env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
     std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
+    println!("loader_features_finalized: {:?}", loader_features_finalized);
     let mut loader = build(
         &["loader"],
         debug,
         Some(KERNEL_TARGET),
         None,
         None,
-        loader_features,
+        Some(&loader_features_finalized),
     )?;
     // restore the LTO settings
     if let Some(existing) = existing_lto {
@@ -1043,7 +888,57 @@ fn build_hw_image(
     }
     loader.push(PathBuf::from("loader"));
 
-    let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
+    // ---------- extract the size and length of RAM for packaging ----------
+    // this is done by manually parsing the generated utralib file. Previously, we
+    // just handed off an SVD file but now the SVD file is opaque to xtask, as it is
+    // specified with a feature flag. However, the resulting generated utralib file
+    // contains the correct information, so we manually search through it and insert the
+    // correct parameters here.
+    let utra_path = std::path::Path::new("./utralib/src/generated.rs");
+    let utra_file = File::open(utra_path)?;
+    use std::io::BufRead;
+    let mut maybe_ram_offset: Option<u32> = None;
+    let mut maybe_ram_length: Option<u32> = None;
+    for maybe_line in std::io::BufReader::new(utra_file).lines() {
+        if let Ok(line) = maybe_line {
+            if line.contains("HW_SRAM_EXT_MEM:") {
+                let tokens: Vec<&str> = line.split(&['=', ';']).collect();
+                if tokens.len() >= 2 {
+                    match if tokens[1].contains("0x") {
+                        u32::from_str_radix(tokens[1].trim().trim_start_matches("0x"), 16)
+                    } else {
+                        u32::from_str_radix(tokens[1].trim(), 10)
+                    } {
+                        Ok(offset) => maybe_ram_offset = Some(offset),
+                        _ => return Err("Couldn't extract RAM offset from utra file".into()),
+                    }
+                }
+            } else if line.contains("HW_SRAM_EXT_MEM_LEN:") {
+                let tokens: Vec<&str> = line.split(&['=', ';']).collect();
+                if tokens.len() >= 2 {
+                    match if tokens[1].contains("0x") {
+                        u32::from_str_radix(tokens[1].trim().trim_start_matches("0x"), 16)
+                    } else {
+                        u32::from_str_radix(tokens[1].trim(), 10)
+                    } {
+                        Ok(len) => maybe_ram_length = Some(len),
+                        _ => return Err("Couldn't extract RAM length from utra file".into()),
+                    }
+                }
+            }
+            if maybe_ram_length.is_some() && maybe_ram_offset.is_some() {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    if maybe_ram_length.is_none() || maybe_ram_offset.is_none() {
+        return Err("Couldn't extract RAM size parameters from UTRA file".into());
+    }
+
+    // --------- package up and sign a binary image ----------
+    let output_bundle = create_image(&kernel, &init, debug, MemorySpec::Spec(maybe_ram_offset.unwrap(), maybe_ram_length.unwrap()))?;
     println!();
     println!(
         "Kernel+Init bundle is available at {}",
@@ -1670,10 +1565,16 @@ fn create_image(
         args.push(i.to_str().ok_or(BuildError::PathConversionError)?);
     }
 
+    let mut arg_storage = String::new();
     match memory_spec {
         MemorySpec::SvdFile(ref s) => {
             args.push("--svd");
             args.push(s);
+        }
+        MemorySpec::Spec(offset, size) => {
+            args.push("--ram");
+            arg_storage.push_str(&format!("{}:{}", offset, size));
+            args.push(&arg_storage);
         }
     }
 
