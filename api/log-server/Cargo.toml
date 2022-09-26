@@ -1,0 +1,22 @@
+[package]
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Log server API"
+edition = "2018"
+name = "xousapi-log-server"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/xous-book/"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+log = "0.4.14"
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+xous = "0.9.8"
+xous-ipc = "0.9.7"
+
+[features]
+debugprint = [] # adding this allocates the UART for debugging the logger
+logging = [] # adding this allocates the hardware UART for console interactions
+default = ["logging"]
