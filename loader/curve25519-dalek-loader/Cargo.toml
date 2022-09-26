@@ -66,6 +66,7 @@ optional = true
 [dependencies.utralib]
 version = "0.1.0" # this is bogus -- must be patched in the invoking build environment
 path = "../../utralib/"
+default-features = false
 optional = true
 
 [dependencies.engine25519-as]

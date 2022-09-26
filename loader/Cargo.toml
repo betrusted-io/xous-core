@@ -10,7 +10,7 @@ ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false
 curve25519-dalek-loader = { path = "curve25519-dalek-loader", default-features = false, features = ["u32e_backend"] }
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
-utralib = { path = "../utralib", default_features = false }
+utralib = { path = "../utralib", default-features = false }
 
 [dependencies.com_rs]
 git = "https://github.com/betrusted-io/com_rs"
