@@ -109,6 +109,8 @@ incremental = true
 #opt-level = 1  # z,s: Optimize for size instead of performance; 1 for easier debugging
 
 # Activate these patches to use local versions of xous kernel core files instead of crates.io sourced versions.
+# Activating these also reduces your dependency on crates.io for critical source APIs, if that's part of your
+# threat model; but for now we're favoring sources from crates.io to facility third party adoption of Xous.
 # [patch.crates-io]
 # xous = {path = "xous-rs"}
 # xous-ipc = {path = "xous-ipc"}
