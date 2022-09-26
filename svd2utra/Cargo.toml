@@ -1,7 +1,7 @@
 [package]
 name = "svd2utra"
 version = "0.1.0"
-authors = ["Sean Cross <sean@xobs.io>"]
+authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@kosagi.com>"]
 description = "SVD to UTRA library generator"
 edition = "2018"
 license = "MIT OR Apache-2.0"
