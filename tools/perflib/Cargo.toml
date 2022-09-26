@@ -9,7 +9,7 @@ description = "Performance counter tooling"
 [dependencies]
 xous = "0.9.9"
 log = "0.4.14"
-utralib = { path = "../../utralib"}
+utralib = { path = "../../utralib", default-features = false }
 
 [features]
 default = []
