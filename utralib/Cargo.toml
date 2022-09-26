@@ -1,8 +1,11 @@
 [package]
 name = "utralib"
 version = "0.1.0"
-authors = ["Sean Cross <sean@xobs.io>"]
+authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@kosagi.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/xous-book/"
 
 [features]
 std = []
@@ -13,4 +16,7 @@ default_features = ["std"]
 [dependencies]
 
 [build-dependencies]
-svd2utra = { path = "../svd2utra" }
+svd2utra = "0.1.0"
+
+# UTRA pre-generated version tracker
+# 0.1.0 - betrusted-soc v0.9.9-7-gc809403 without performance profiling
