@@ -786,20 +786,55 @@ fn build_hw_image(
     loader_features: Option<&[&str]>,
     kernel_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
+    // ------ configure UTRA generation feature flags ------
     let mut svd_feat = vec!["--features"];
     let mut svd_path = String::from("utralib/");
+    let svd_filename: String;
     let svd_file: Option<&[&str]> = match svd {
         Some(s) => {
             svd_path.push_str(&s);
+            svd_filename = s.to_string();
             svd_feat.push(&svd_path);
             Some(&svd_feat)
         },
         None => {
             svd_path.push_str(SOC_SVD_VERSION);
+            svd_filename = SOC_SVD_VERSION.to_string();
             svd_feat.push(&svd_path);
             Some(&svd_feat)
         },
     };
+
+    // LAST_CONFIG tracks the last SVD configuration. It's used by utralib to track if it
+    // should rebuild itself based on a change in SVD configs. Note that for some reason
+    // it takes two consecutive builds with the same SVD config before the build system
+    // figures out that it doesn't need to rebuild everything. After then, it behaves as expected.
+    let stream = if debug { "debug" } else { "release" };
+    let last_config = format!("target/{}/{}/build/LAST_CONFIG", PROGRAM_TARGET, stream);
+    let changed = match OpenOptions::new()
+        .read(true)
+        .open(&last_config) {
+        Ok(mut file) => {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            if contents != svd_filename {
+                true
+            } else {
+                false
+            }
+        }
+        _ => true
+    };
+    if changed {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&last_config).unwrap();
+        write!(file, "{}", svd_filename).unwrap();
+    }
+
+    // concatenate the passed in feature flags with the computed utra feature flags
     let mut kernel_features_finalized = Vec::<&str>::new();
     let mut loader_features_finalized = Vec::<&str>::new();
     if let Some(svd) = svd_file {
@@ -826,7 +861,6 @@ fn build_hw_image(
     let kernelkey_file = kkey.unwrap_or_else(|| "devkey/dev.key".into());
 
     // ------ build the kernel ------
-    println!("kernel_features_finalized: {:?}", kernel_features_finalized);
     let kernel = build_kernel(debug, Some(&kernel_features_finalized))?;
 
     // ------ build the services ------
@@ -870,7 +904,6 @@ fn build_hw_image(
     // these settings will generate the most compact code (but also the hardest to debug)
     std::env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
     std::env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
-    println!("loader_features_finalized: {:?}", loader_features_finalized);
     let mut loader = build(
         &["loader"],
         debug,
