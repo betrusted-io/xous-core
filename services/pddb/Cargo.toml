@@ -10,7 +10,7 @@ description = "Plausibly Deniable Database"
 bitflags = {version = "1"}
 xous = "0.9.9"
 xous-ipc = "0.9.9"
-log-server = { version = "0.1.1", package = "xous-api-log-server" }
+log-server = { version = "0.1.2", package = "xous-api-log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4.14"

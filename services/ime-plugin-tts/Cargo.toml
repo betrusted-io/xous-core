@@ -9,7 +9,7 @@ version = "0.1.0"
 [dependencies]
 ime-plugin-api = {path = "../ime-plugin-api"}
 log = "0.4.14"
-log-server = {version = "0.1.1", package = "xous-api-log-server"}
+log-server = {version = "0.1.2", package = "xous-api-log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = "0.9.9"
 xous-ipc = "0.9.9"

@@ -11,7 +11,7 @@ xous = "0.9.9"
 graphics-server = { path = "../graphics-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
-log-server = { version = "0.1.1", package = "xous-api-log-server" }
+log-server = { version = "0.1.2", package = "xous-api-log-server" }
 log = "0.4.14"
 benchmark-target = { path = "../benchmark-target" }
 
