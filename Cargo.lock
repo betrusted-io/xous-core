@@ -3766,6 +3766,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "svd2utra"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d43b83067e415e08dc4c31f88f58b0445a5ff18d3bc8e73e75900205db968ea"
+dependencies = [
+ "anyhow",
+ "clap 2.34.0",
+ "convert_case",
+ "quick-xml",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3951,7 +3963,7 @@ dependencies = [
  "log",
  "pem",
  "ring",
- "svd2utra",
+ "svd2utra 0.1.0",
  "xmas-elf",
  "xous-semver",
 ]
@@ -4280,7 +4292,7 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 name = "utralib"
 version = "0.1.0"
 dependencies = [
- "svd2utra",
+ "svd2utra 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

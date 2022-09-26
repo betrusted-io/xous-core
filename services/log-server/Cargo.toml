@@ -4,6 +4,9 @@ description = "Log output program"
 edition = "2018"
 name = "log-server"
 version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
