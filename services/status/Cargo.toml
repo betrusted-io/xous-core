@@ -15,7 +15,7 @@ ticktimer-server = {path = "../ticktimer-server"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
 xous = "0.9.9"
-xous-ipc = "0.9.9"
+xous-ipc = "0.9.7"
 xous-names = {path = "../xous-names"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}

@@ -18,7 +18,7 @@ com = { path = "../com" }
 llio = { path = "../llio" }
 
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
-xous-ipc = "0.9.9"
+xous-ipc = "0.9.7"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 

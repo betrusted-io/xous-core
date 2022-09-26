@@ -108,8 +108,10 @@ incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
 #opt-level = 1  # z,s: Optimize for size instead of performance; 1 for easier debugging
 
-[patch.crates-io]
-xous = {path = "xous-rs"}
+# Activate these patches to use local versions of xous kernel core files instead of crates.io sourced versions.
+# [patch.crates-io]
+# xous = {path = "xous-rs"}
+# xous-ipc = {path = "xous-ipc"}
 
 # prefer hardware-accelerated versions of services
 [patch.crates-io.sha2]

@@ -15,7 +15,7 @@ susres = {path = "../susres"}
 trng = {path = "../trng"}
 ticktimer-server = {path = "../ticktimer-server"}
 
-xous-ipc = "0.9.9"
+xous-ipc = "0.9.7"
 xous-names = {path = "../xous-names"}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
