@@ -12,7 +12,9 @@ fn main() {
     let svd_filename = "precursor/soc-perf-c809403.svd";
 
     let last_config = out_dir().join("../../LAST_CONFIG");
-    println!("cargo:rerun-if-changed={}", last_config.canonicalize().unwrap().display());
+    if last_config.exists() {
+        println!("cargo:rerun-if-changed={}", last_config.canonicalize().unwrap().display());
+    }
     let svd_file_path = std::path::Path::new(&svd_filename);
     println!("cargo:rerun-if-changed={}", svd_file_path.canonicalize().unwrap().display());
 
