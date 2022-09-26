@@ -14,7 +14,7 @@ ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
-log-server = {path = "../log-server"}
+log-server = {version = "0.1.1", package = "xous-api-log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 trng = {path = "../trng"}
 xous = {path = "../../xous-rs"}

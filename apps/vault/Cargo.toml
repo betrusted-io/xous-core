@@ -10,7 +10,7 @@ num-traits = {version = "0.2.14", default-features = false}
 xous = { path = "../../xous-rs" }
 xous-ipc = { path = "../../xous-ipc" }
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-log-server = { path = "../../services/log-server" }
+log-server = { version = "0.1.1", package = "xous-api-log-server" }
 xous-names = { path = "../../services/xous-names" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }

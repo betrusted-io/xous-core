@@ -8,7 +8,7 @@ description = "Xous root keys server"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = { path = "../../xous-rs" }
-log-server = { path = "../log-server" }
+log-server = { version = "0.1.1", package = "xous-api-log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4.14"

@@ -31,8 +31,8 @@ dependencies = [
  "cipher 0.4.3",
  "hex-literal",
  "log",
- "log-server",
  "xous",
+ "xous-api-log-server",
 ]
 
 [[package]]
@@ -65,8 +65,8 @@ version = "0.1.0"
 dependencies = [
  "hex-literal",
  "log",
- "log-server",
  "xous",
+ "xous-api-log-server",
 ]
 
 [[package]]
@@ -171,13 +171,13 @@ dependencies = [
  "gam",
  "locales",
  "log",
- "log-server",
  "modals",
  "num-derive",
  "num-traits",
  "ticktimer-server",
  "trng",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -533,7 +533,6 @@ version = "0.1.0"
 dependencies = [
  "llio",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -542,6 +541,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -553,7 +553,6 @@ dependencies = [
  "com_rs-ref",
  "llio",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -563,6 +562,7 @@ dependencies = [
  "typenum",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-semver",
@@ -1046,7 +1046,6 @@ name = "dns"
 version = "0.1.0"
 dependencies = [
  "log",
- "log-server",
  "net",
  "num-derive",
  "num-traits",
@@ -1055,6 +1054,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1170,7 +1170,6 @@ dependencies = [
  "engine25519-as",
  "llio",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -1178,6 +1177,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1288,13 +1288,13 @@ dependencies = [
  "ffi-sys",
  "keyboard",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "susres",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-names",
 ]
 
@@ -1500,7 +1500,6 @@ dependencies = [
  "keyboard",
  "locales",
  "log",
- "log-server",
  "miniz_oxide 0.4.4",
  "num-derive",
  "num-traits",
@@ -1513,6 +1512,7 @@ dependencies = [
  "tts-frontend",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1590,7 +1590,6 @@ version = "0.1.0"
 dependencies = [
  "keyboard",
  "log",
- "log-server",
  "minifb",
  "num-derive",
  "num-traits",
@@ -1600,6 +1599,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1683,11 +1683,11 @@ dependencies = [
  "graphics-server",
  "locales",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "tts-frontend",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1818,7 +1818,6 @@ dependencies = [
  "keyboard",
  "locales",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -1826,6 +1825,7 @@ dependencies = [
  "tts-frontend",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1850,13 +1850,13 @@ version = "0.1.0"
 dependencies = [
  "ime-plugin-api",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1868,7 +1868,6 @@ dependencies = [
  "ime-plugin-api",
  "locales",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -1876,6 +1875,7 @@ dependencies = [
  "tts-frontend",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1953,7 +1953,6 @@ name = "jtag"
 version = "0.1.0"
 dependencies = [
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -1961,6 +1960,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -1994,10 +1994,10 @@ name = "kernel-test"
 version = "0.1.0"
 dependencies = [
  "log",
- "log-server",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
 ]
 
 [[package]]
@@ -2006,7 +2006,6 @@ version = "0.1.0"
 dependencies = [
  "llio",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -2015,6 +2014,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -2063,13 +2063,13 @@ dependencies = [
  "com",
  "dns",
  "log",
- "log-server",
  "net",
  "num-derive",
  "num-traits",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-names",
 ]
 
@@ -2081,7 +2081,6 @@ dependencies = [
  "chrono",
  "locales",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -2089,6 +2088,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-semver",
@@ -2145,7 +2145,8 @@ dependencies = [
  "num-traits",
  "utralib",
  "xous",
- "xous-ipc 0.9.7",
+ "xous-api-log-server",
+ "xous-ipc 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2256,7 +2257,6 @@ dependencies = [
  "gam",
  "locales",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
@@ -2265,6 +2265,7 @@ dependencies = [
  "tts-frontend",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -2294,7 +2295,6 @@ dependencies = [
  "llio",
  "locales",
  "log",
- "log-server",
  "modals",
  "num-derive",
  "num-traits",
@@ -2306,6 +2306,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-semver",
@@ -2567,7 +2568,6 @@ dependencies = [
  "llio",
  "locales",
  "log",
- "log-server",
  "modals",
  "num-derive",
  "num-traits",
@@ -2584,6 +2584,7 @@ dependencies = [
  "tts-frontend",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "zeroize",
@@ -3052,12 +3053,12 @@ dependencies = [
  "llio",
  "locales",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "ticktimer-server",
  "trng",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -3177,7 +3178,6 @@ dependencies = [
  "llio",
  "locales",
  "log",
- "log-server",
  "modals",
  "num-derive",
  "num-traits",
@@ -3192,6 +3192,7 @@ dependencies = [
  "usb-device-xous",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-semver",
@@ -3451,7 +3452,6 @@ dependencies = [
  "block-buffer 0.9.0",
  "digest 0.9.0",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "opaque-debug",
@@ -3461,6 +3461,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -3511,7 +3512,6 @@ dependencies = [
  "llio",
  "locales",
  "log",
- "log-server",
  "modals",
  "net",
  "num-derive",
@@ -3543,6 +3543,7 @@ dependencies = [
  "webpki-roots",
  "x25519-dalek",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -3632,7 +3633,6 @@ dependencies = [
  "lazy_static",
  "llio",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rand 0.7.3",
@@ -3642,6 +3642,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -3690,7 +3691,6 @@ dependencies = [
  "llio",
  "locales",
  "log",
- "log-server",
  "modals",
  "net",
  "num-derive",
@@ -3706,6 +3706,7 @@ dependencies = [
  "usb-device-xous",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-semver",
@@ -3734,12 +3735,12 @@ name = "susres"
 version = "0.1.0"
 dependencies = [
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -3881,13 +3882,13 @@ name = "ticktimer-server"
 version = "0.1.0"
 dependencies = [
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
  "susres",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-semver",
@@ -4028,7 +4029,6 @@ name = "trng"
 version = "0.1.0"
 dependencies = [
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rand 0.8.5",
@@ -4038,6 +4038,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -4048,13 +4049,13 @@ version = "0.1.0"
 dependencies = [
  "codec",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-tts-backend",
@@ -4191,7 +4192,6 @@ dependencies = [
  "keyboard",
  "llio",
  "log",
- "log-server",
  "modals",
  "num-derive",
  "num-traits",
@@ -4207,6 +4207,7 @@ dependencies = [
  "utralib",
  "vcell",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
  "xous-semver",
@@ -4220,7 +4221,6 @@ dependencies = [
  "embedded-time",
  "keyboard",
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rand 0.7.3",
@@ -4232,6 +4232,7 @@ dependencies = [
  "utralib",
  "vcell",
  "xous",
+ "xous-api-log-server",
  "xous-names",
 ]
 
@@ -4311,7 +4312,6 @@ dependencies = [
  "ime-plugin-api",
  "locales",
  "log",
- "log-server",
  "modals",
  "net",
  "num-derive",
@@ -4332,6 +4332,7 @@ dependencies = [
  "usb-device-xous",
  "usbd-human-interface-device 0.2.1",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
  "xous-names",
 ]
@@ -4785,6 +4786,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "xous-api-log-server"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae2f3edf2847f0845bc9544eb726400f6aeb979dcf15a105579d50f1da93fe2c"
+dependencies = [
+ "log",
+ "num-derive",
+ "num-traits",
+ "xous",
+ "xous-ipc 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "xous-ipc"
 version = "0.9.7"
 dependencies = [
@@ -4809,12 +4823,12 @@ name = "xous-names"
 version = "0.9.7"
 dependencies = [
  "log",
- "log-server",
  "num-derive",
  "num-traits",
  "rkyv",
  "utralib",
  "xous",
+ "xous-api-log-server",
  "xous-ipc 0.9.7",
 ]
 

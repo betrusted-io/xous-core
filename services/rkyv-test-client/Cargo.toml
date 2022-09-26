@@ -8,7 +8,7 @@ version = "0.1.0"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
-log-server = {path = "../log-server"}
+log-server = {version = "0.1.1", package = "xous-api-log-server"}
 rkyv-test-server = {path = "../rkyv-test-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}

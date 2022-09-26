@@ -9,7 +9,7 @@ version = "0.1.0"
 [dependencies]
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 log = "0.4.14"
-log-server = {path = "../log-server"}
+log-server = {version = "0.1.1", package = "xous-api-log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 susres = {path = "../susres"}
 typenum = "1.12"

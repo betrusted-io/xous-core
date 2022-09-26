@@ -13,7 +13,7 @@ homepage = "https://betrusted.io/"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 log = "0.4.14"
-log-server = {path = "../log-server"}
+log-server = {version = "0.1.1", package = "xous-api-log-server"}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}

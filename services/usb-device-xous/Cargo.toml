@@ -9,7 +9,7 @@ description = "Xous USB device drivers"
 [dependencies]
 xous = { path = "../../xous-rs" }
 xous-ipc = { path = "../../xous-ipc" }
-log-server = { path = "../log-server" }
+log-server = { version = "0.1.1", package = "xous-api-log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4.14"

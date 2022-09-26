@@ -1,8 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
-use api::*;
+use xous_api_log_server::api;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 #[macro_use]
@@ -311,7 +310,7 @@ fn handle_opcode(
             api::Opcode::LogRecord => {
                 // This transmute is safe because even if the resulting buffer is garbage,
                 // there are no invalid values in the resulting struct.
-                let lr = unsafe { &*(mem.buf.as_ptr() as *const LogRecord) };
+                let lr = unsafe { &*(mem.buf.as_ptr() as *const api::LogRecord) };
                 let level = if log::Level::Error as u32 == lr.level {
                     "ERR "
                 } else if log::Level::Warn as u32 == lr.level {
