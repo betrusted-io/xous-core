@@ -2,7 +2,7 @@
 authors = ["Sean Cross <sean@xobs.io>"]
 description = "Log server API"
 edition = "2018"
-name = "xousapi-log-server"
+name = "xous-api-log-server"
 version = "0.1.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
