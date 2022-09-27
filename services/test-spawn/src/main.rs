@@ -6,7 +6,6 @@ fn main() {
     let args = xous::ProcessArgs::new(
         spawn_stub,
         xous::MemoryAddress::new(0x2050_1000).unwrap(),
-        xous::MemoryAddress::new(0x2050_1000).unwrap(),
     );
     let process = xous::create_process(args).unwrap();
     println!(
