@@ -8,7 +8,7 @@ fn out_dir() -> PathBuf {
 }
 
 fn main() {
-    // check that the feature flags are sane
+    // ------ check that the feature flags are sane -----
     #[cfg(
         all(feature="precursor",
             not(any(
@@ -32,12 +32,18 @@ fn main() {
     ))]
     panic!("Multiple gitrevs specified for Precursor target. This is disallowed");
 
-    // now select an SVD file based on a specific revision
+    // ----- select an SVD file based on a specific revision -----
     #[cfg(feature="precursor-c809403")]
     let svd_filename = "precursor/soc-c809403.svd";
+    #[cfg(feature="precursor-c809403")]
+    let generated_filename = "src/generated/precursor_c809403.rs";
+
     #[cfg(feature="precursor-c809403-perflib")]
     let svd_filename = "precursor/soc-perf-c809403.svd";
+    #[cfg(feature="precursor-c809403-perflib")]
+    let generated_filename = "src/generated/precursor_perf_c809403.rs";
 
+    // ----- control file generation and rebuild sequence -----
     // check and see if the configuration has changed since the last build. This should be
     // passed by the build system (e.g. xtask) if the feature is used.
     let last_config = out_dir().join("../../LAST_CONFIG");
@@ -48,9 +54,10 @@ fn main() {
     println!("cargo:rerun-if-changed={}", svd_file_path.canonicalize().unwrap().display());
 
     let src_file = std::fs::File::open(svd_filename).expect("couldn't open src file");
-    let mut dest_file = std::fs::File::create("src/generated.rs").expect("couldn't open dest file");
+    let mut dest_file = std::fs::File::create(generated_filename).expect("couldn't open dest file");
     svd2utra::generate(src_file, &mut dest_file).unwrap();
 
+    // ----- feedback SVD path to build framework -----
     // pass the computed SVD filename back to the build system, so that we can pass this
     // on to the image creation program. This is necessary so we can extract all the memory
     // regions and create the whitelist of memory pages allowed to the kernel; any page not
