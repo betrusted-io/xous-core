@@ -1,6 +1,7 @@
 [package]
 authors = ["Sean Cross <sean@xobs.io>"]
 description = "Core kernel for Xous, including task switching and memory management"
+license = "MIT OR Apache-2.0"
 edition = "2018"
 name = "xous-kernel"
 version = "0.9.0"
