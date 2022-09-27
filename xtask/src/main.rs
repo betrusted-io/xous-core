@@ -89,10 +89,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "modals",
         "usb-device-xous",
     ];
-    let app_pkgs = [
-        // "standard" demo apps
-        "ball", "repl",
-    ];
     let minimal_pkgs = [
         "ticktimer-server",
         "log-server",
@@ -515,30 +511,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ]),
             )?
         }
-        Some("hw-image") => {
-            let mut pkgs = vec![];
-            for pkg in hw_pkgs {
-                pkgs.push(pkg);
-            }
-            for app in app_pkgs {
-                pkgs.push(app);
-            }
-            let mut app_strs = Vec::<String>::new();
-            for app in app_pkgs {
-                app_strs.push(app.to_string());
-            }
-            generate_app_menus(&app_strs);
-            build_hw_image(
-                false,
-                env::args().nth(2),
-                &pkgs,
-                lkey,
-                kkey,
-                None,
-                &[],
-                None, None,
-            )?
-        }
         Some("gfx-dev") => run(
             true,
             &gfx_dev_pkgs,
@@ -616,9 +588,6 @@ fn print_help() {
     eprintln!(
         "Tasks:
 Hardware images:
- hw-image [soc.svd]      builds an image for real hardware with baseline demo apps
-       -- [loader.key]   plus signing key options
-          [kernel.key]
  app-image [app1] [..]   builds an image for real hardware of baseline kernel + specified apps
  perf-image [app1] [..]  builds an image for real hardware assuming a performance counter variant of the SOC.
 
@@ -671,7 +640,15 @@ fn build_hw_image(
     // ------ configure UTRA generation feature flags ------
     // note: once we switch over to hosted/precursor as first-class flags, the ["--features", "precursor"] should be added here
     // for now that throws an error because we don't use that flag anywhere.
-    let mut svd_feat = vec!["--features", "utralib/precursor", "--features"];
+    let mut svd_feat = if let Some(spec) = &svd {
+        if spec.contains("renode") {
+            vec!["--features"]
+        } else {
+            vec!["--features", "utralib/precursor", "--features"]
+        }
+    } else {
+        vec!["--features", "utralib/precursor", "--features"]
+    };
     let mut svd_path = String::from("utralib/");
     let svd_filename: String;
     match svd {
@@ -929,7 +906,7 @@ fn renode_image(
             "svd2repl",
             "--",
             "-i",
-            "emulation/soc/renode.svd",
+            "utralib/renode/renode.svd",
             "-o",
             "emulation/soc/betrusted-soc.repl",
         ])
@@ -939,7 +916,7 @@ fn renode_image(
     }
     build_hw_image(
         debug,
-        Some("emulation/soc/renode.svd".to_owned()),
+        Some("renode".to_string()),
         packages,
         None,
         None,
