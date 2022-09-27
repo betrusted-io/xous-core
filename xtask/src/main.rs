@@ -1029,17 +1029,6 @@ fn build_hw_image(
     Ok(())
 }
 
-/*
-fn sign_loader(in_path: Pathbuf, out_path: Pathbuf) -> Result<(), DynError> {
-    let mut in_file = File::open(in_path)?;
-    let mut out_file = File::open(out_path)?;
-
-    let mut loader = Vec::<u8>::new();
-    in_file.read_to_end(&mut loader);
-
-
-}*/
-
 fn renode_image(
     debug: bool,
     packages: &[&str],
@@ -1117,7 +1106,7 @@ fn run(
     }
 
     let mut dir = project_root();
-    dir.push("xous-kernel");
+    dir.push("kernel");
 
     if !dry_run {
         println!("Building and running kernel...");
