@@ -119,31 +119,6 @@ impl Uart {
     }
 }
 
-#[cfg(all(feature = "gdbserver", baremetal))]
-mod gdb_server;
-
-#[cfg(all(feature = "gdbserver", baremetal))]
-impl gdbstub::Connection for Uart {
-    type Error = ();
-
-    fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
-        if unsafe { DEBUG_OUTPUT.is_none() } {
-            return Err(());
-        }
-        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
-        // Wait until TXFULL is not `0`
-        while uart_csr.r(utra::uart::TXFULL) != 0 {}
-        uart_csr.wo(utra::uart::RXTX, byte as u32);
-        Ok(())
-    }
-    fn peek(&mut self) -> Result<Option<u8>, Self::Error> {
-        Ok(None)
-    }
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
 #[cfg(all(
     baremetal,
     not(test),
@@ -163,11 +138,6 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
     any(feature = "debug-print", feature = "print-panics")
 ))]
 fn process_irq_character(b: u8) {
-    #[cfg(all(feature = "gdbserver", baremetal))]
-    if gdb_server::handle(b) {
-        return;
-    }
-
     match b {
         b'i' => {
             println!("Interrupt handlers:");
@@ -301,17 +271,10 @@ fn process_irq_character(b: u8) {
                 }
             });
         }
-        #[cfg(all(feature = "gdbserver", baremetal))]
-        b'g' => {
-            println!("Starting GDB server -- attach your debugger now");
-            gdb_server::setup();
-        }
         b'h' => {
             println!("Xous Kernel Debug");
             println!("key | command");
             println!("--- + -----------------------");
-            #[cfg(all(feature = "gdbserver", baremetal))]
-            println!(" g  | enter the gdb server");
             println!(" i  | print irq handlers");
             println!(" m  | print MMU page tables of all processes");
             println!(" p  | print all processes");
