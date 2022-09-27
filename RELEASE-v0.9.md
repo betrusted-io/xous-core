@@ -259,7 +259,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - `xtask` cleanup - old/unused targets removed
 - Cleanup to facilitate more targets that Precursor:
   - `api` directory created. Split `log-server` into a platform-indpendent API and platform-dependent service.
-  - `xous-kernel`, `xous-ipc`, `xous-rs` updated, packaged, and pushed to crates.io
+  - `xous-kernel`, `xous-ipc`, `xous-rs` updated, packaged, and pushed to crates.io; kernel has gdb-stub removed since it doesn't work and creates a crates.io incompatible dependency.
   - `utralib` refactored to be the domicile for platform-specific artifacts:
     - SVD files are now located here
     - `renode`, `hosted`, `precusor` targets now added
