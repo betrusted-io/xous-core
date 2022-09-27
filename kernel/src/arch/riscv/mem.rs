@@ -451,6 +451,7 @@ pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {
     Ok(())
 }
 
+#[cfg(feature="gdb-stub")]
 pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
     let virt = addr as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
@@ -495,6 +496,7 @@ pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
     Ok(val)
 }
 
+#[cfg(feature="gdb-stub")]
 pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
     let virt = addr as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);

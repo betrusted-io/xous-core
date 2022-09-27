@@ -1117,7 +1117,7 @@ fn run(
     }
 
     let mut dir = project_root();
-    dir.push("kernel");
+    dir.push("xous-kernel");
 
     if !dry_run {
         println!("Building and running kernel...");
@@ -1139,8 +1139,8 @@ fn run(
 }
 
 fn build_kernel(debug: bool, features: Option<&[&str]>) -> Result<PathBuf, DynError> {
-    let mut path = build(&["kernel"], debug, Some(KERNEL_TARGET), None, None, features)?;
-    path.push("kernel");
+    let mut path = build(&["xous-kernel"], debug, Some(KERNEL_TARGET), None, None, features)?;
+    path.push("xous-kernel");
     Ok(path)
 }
 

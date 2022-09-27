@@ -2,42 +2,38 @@
 authors = ["Sean Cross <sean@xobs.io>"]
 description = "Core kernel for Xous, including task switching and memory management"
 edition = "2018"
-name = "kernel"
-version = "0.8.2"
+name = "xous-kernel"
+version = "0.9.9"
 resolver = "2"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = "1.2.1"
-# gdbstub branch "dev/0.6"
-gdbstub = { git = "https://github.com/daniel5151/gdbstub.git", optional = true, default_features = false, rev = "9227dfd0b78db5b20859d13c890f6f47e597029e" }
-gdbstub_arch = { git = "https://github.com/daniel5151/gdbstub.git", optional = true, rev = "9227dfd0b78db5b20859d13c890f6f47e597029e" }
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", path = "../xous-rs", features = [
+xous-kernel = { package = "xous", version = "0.9.9", features = [
     "forget-memory-messages",
 ] }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", path = "../xous-rs", features = [
+xous-kernel = { package = "xous", version = "0.9.9", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
-utralib = { path = "../utralib", default_features = false }
+utralib = { version = "0.1.1", default_features = false }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = { version = "0.5.6", path = "../imports/riscv-0.5.6" }
 
 [features]
 debug-print = []
-gdbserver = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
 v2p = ["xous-kernel/v2p"]
 # default = ["print-panics", "debug-print", "wrap-print"]
-default = ["print-panics", "gdbserver"]
+default = ["print-panics"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
 crossbeam-channel = "0.5"

@@ -2122,7 +2122,7 @@ impl SystemServices {
         Ok(parent_pid)
     }
 
-    #[cfg(baremetal)]
+    #[cfg(feature="gdb-stub")]
     pub fn suspend_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let (process_state, parent_pid) = {
             let process = self.get_process_mut(pid)?;
@@ -2176,7 +2176,7 @@ impl SystemServices {
         Ok(())
     }
 
-    #[cfg(baremetal)]
+    #[cfg(feature="gdb-stub")]
     pub fn continue_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // let old_state = process.state;

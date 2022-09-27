@@ -45,6 +45,7 @@ pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
     PREVIOUS_PAIR = Some((pid, tid));
 }
 
+#[cfg(feature="gdb-stub")]
 pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
     PREVIOUS_PAIR.take()
 }
@@ -327,14 +328,8 @@ pub extern "C" fn trap_handler(
 
         // If it's not a failure in the kernel, terminate or debug the current process.
         SystemServices::with_mut(|ss| {
-            if cfg!(feature = "gdbserver") {
-                ss.suspend_process(pid)
-                    .expect("couldn't debug current process");
-                println!("Program suspended. You may inspect it using gdb.");
-            } else {
-                ss.terminate_process(pid)
-                    .expect("couldn't terminate current process");
-            };
+            ss.terminate_process(pid)
+                .expect("couldn't terminate current process");
             crate::syscall::reset_switchto_caller();
         });
 

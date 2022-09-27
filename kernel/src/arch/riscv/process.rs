@@ -230,6 +230,7 @@ impl Process {
         &process.threads[thread]
     }
 
+    #[cfg(feature="gdb-stub")]
     pub fn for_each_thread_mut<F>(&self, mut op: F)
     where
         F: FnMut(TID, &Thread),
