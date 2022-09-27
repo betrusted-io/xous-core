@@ -87,7 +87,7 @@ sysbus SilenceRange <0xF0014000 100>
 sysbus.spinor.flash BackingFile $ORIGIN/../tools/pddb-images/renode.bin
 
 # Load the SPI flash into RAM
-sysbus LoadBinary @precursors/soc_csr.bin 0x20000000
+sysbus LoadBinary @../utralib/renode/soc_csr.bin 0x20000000
 
 # Connect the SoC to the SPI bus
 connector Connect sysbus.com com
