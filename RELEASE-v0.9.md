@@ -256,6 +256,15 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - WLAN submenu added, thanks to a huge effort by @gsora.
 - fix/close various old issues (in particular, RTC interrupts stripped out and suspend lock fails now trigger a notification)
 - move RTC resume handler to the secure/private server - hopefully resolves a susres failure case
+- `xtask` cleanup - old/unused targets removed
+- Cleanup to facilitate more targets that Precursor:
+  - `api` directory created. Split `log-server` into a platform-indpendent API and platform-dependent service.
+  - `xous-kernel`, `xous-ipc`, `xous-rs` updated, packaged, and pushed to crates.io
+  - `utralib` refactored to be the domicile for platform-specific artifacts:
+    - SVD files are now located here
+    - `renode`, `hosted`, `precusor` targets now added
+    - targets are selected by a feature flag passed through the build system
+    - this new template still needs to be propagated through the overall system
 
 ## Roadmap to 1.0
 
