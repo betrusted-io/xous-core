@@ -14,8 +14,6 @@ use std::{
 // updated every time the SoC version is bumped.
 const SOC_SVD_VERSION: &str = "precursor-c809403";
 
-///// TODO: BRING BACK THE UTRA SWAP BUILD TARGET
-
 // This is the minimum Xous version required to read a PDDB backup generated
 // by the current kernel revision.
 const MIN_XOUS_VERSION: &str = "v0.9.8-791";
@@ -95,18 +93,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // "standard" demo apps
         "ball", "repl",
     ];
-    let benchmark_pkgs = [
-        "benchmark",
-        "benchmark-target",
-        "graphics-server",
-        "ticktimer-server",
-        "log-server",
-        "xous-names",
-        "keyboard",
-        "trng",
-        "susres",
-        "llio",
-    ];
     let minimal_pkgs = [
         "ticktimer-server",
         "log-server",
@@ -124,28 +110,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "susres",
         "xous-names",
         "trng",
-    ];
-    let cbtest_pkgs = [
-        "ticktimer-server",
-        "log-server",
-        "xous-names",
-        "trng",
-        "llio",
-        "cb-test-srv",
-        "cb-test-c1",
-        "cb-test-c2",
-        "susres",
-    ];
-    let sr_pkgs = [
-        "ticktimer-server",
-        "log-server",
-        "xous-names",
-        "trng",
-        "llio",
-        "rkyv-test-client",
-        "rkyv-test-server",
-        "com",
-        "susres",
     ];
     let pddb_dev_pkgs = [
         // just for checking compilation
@@ -182,8 +146,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "keyboard",
         "spinor",
     ];
-
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
+
     let mut args = env::args();
     let task = args.nth(1);
     // extract lkey/kkey args only after a "--" separator
@@ -249,7 +213,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pkgs.push(app);
             }
             generate_app_menus(&apps);
-            renode_image(false, &cbtest_pkgs, &[], None, None)?
+            renode_image(false, &minimal_pkgs, &[], None, None)?
         }
         Some("tts") => {
             let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
@@ -417,33 +381,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&["--features", "renode-bypass"]),
             )?;
         }
-        Some("pddb-flamegraph") => {
-            let mut args = env::args();
-            args.nth(1);
-            let mut pkgs = pddb_dev_pkgs.to_vec();
-            // add pkgs required for functional testing. Quite a bit. :-/
-            pkgs.push("llio");
-            pkgs.push("root-keys");
-            pkgs.push("jtag");
-            pkgs.push("com");
-            pkgs.push("gam");
-            pkgs.push("net");
-            pkgs.push("dns");
-            pkgs.push("graphics-server");
-            pkgs.push("modals");
-            pkgs.push("keyboard");
-            pkgs.push("ime-frontend");
-            pkgs.push("ime-plugin-shell");
-            pkgs.push("status");
-            pkgs.push("usb-device-xous");
-            generate_app_menus(&vec![]);
-            run(false, &pkgs,
-                Some(&[
-                    "--features", "pddbtest",
-                    "--features", "pddb-flamegraph",
-                ]), false)?
-
-        }
         Some("renode-aes-test") => {
             generate_app_menus(&Vec::<String>::new());
             renode_image(false, &aestest_pkgs, &[], None, None)?
@@ -541,6 +478,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 lkey,
                 kkey,
                 None,
+                // Some(&["--features", "ditherpunk"]), // swap for extra_args if you want ditherpunk in the app-image
                 &[],
                 None, None,
             )?
@@ -575,28 +513,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(&[
                     "--features", "v2p",
                 ]),
-            )?
-        }
-        Some("ditherpunk-image") => {
-            let mut args = env::args();
-            args.nth(1);
-            let mut pkgs = hw_pkgs.to_vec();
-            let apps = get_packages();
-            for app in &apps {
-                pkgs.push(app);
-            }
-            generate_app_menus(&apps);
-            build_hw_image(
-                false,
-                None,
-                &pkgs,
-                lkey,
-                kkey,
-                Some(&[
-                    "--features", "ditherpunk",
-                    ]),
-                &[],
-                None, None,
             )?
         }
         Some("hw-image") => {
@@ -640,30 +556,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None, None,
         )?,
         Some("pddb-hosted") => run(false, &pddb_dev_pkgs, None, false)?,
-        Some("benchmark") => build_hw_image(
-            false,
-            env::args().nth(2),
-            &benchmark_pkgs,
-            lkey,
-            kkey,
-            None,
-            &[],
-            None, None,
-        )?,
         Some("minimal") => build_hw_image(
             false,
             env::args().nth(2),
             &minimal_pkgs,
-            lkey,
-            kkey,
-            None,
-            &[],
-            None, None,
-        )?,
-        Some("cbtest") => build_hw_image(
-            false,
-            env::args().nth(2),
-            &cbtest_pkgs,
             lkey,
             kkey,
             None,
@@ -709,16 +605,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None, None,
             )?
         }
-        Some("sr-test") => build_hw_image(
-            false,
-            env::args().nth(2),
-            &sr_pkgs,
-            lkey,
-            kkey,
-            None,
-            &[],
-            None, None,
-        )?,
         Some("generate-locales") => generate_locales()?,
         Some("wycheproof-import") => whycheproof_import()?,
         _ => print_help(),
@@ -751,21 +637,19 @@ Locale (re-)generation:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
 
 Various debug configurations (high chance of bitrot):
- debug                   runs a debug build using a hosted environment
- benchmark               builds a benchmarking image for real hardware
- minimal                 builds a minimal image for API testing
- cbtest                  builds an image for callback testing
- trng-test               builds an image for TRNG testing - urandom source seeded by TRNG+AV
- ro-test                 builds an image for ring oscillator only TRNG testing
- av-test                 builds an image for avalanche generater only TRNG testing
- sr-test                 builds the suspend/resume testing image
+ tts                     builds an image with text to speech support via externally linked C executable
  wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
+ debug                   runs a debug build using a hosted environment
+ minimal                 builds a minimal image for API testing
+ ffi-test                builds an image for testing C-FFI bindings and integration
+ gfx-dev                 minimal configuration for graphics primitive testing
  pddb-dev                PDDB testing only for live hardware
  pddb-hosted             PDDB testing in a hosted environment
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors)
- ffi-test                builds an image for testing C-FFI bindings and integration
- tts                     builds an image with text to speech support via externally linked C executable
  usbdev                  minimal, insecure build for new USB core bringup
+ trng-test               builds an image for TRNG testing - urandom source seeded by TRNG+AV
+ ro-test                 builds an image for ring oscillator only TRNG testing
+ av-test                 builds an image for avalanche generater only TRNG testing
  install-toolkit         installs Xous toolkit with no prompt, useful in CI. Specify `--force` to remove existing toolchains
 
 Note: By default, the `ticktimer` will get rebuilt every time. You can skip this by appending `--no-timestamp` to the command.

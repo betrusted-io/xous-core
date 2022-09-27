@@ -705,7 +705,7 @@ dependencies = [
  "bare-metal 1.0.0",
  "cfg-if",
  "cortex-m",
- "riscv 0.7.0",
+ "riscv",
 ]
 
 [[package]]
@@ -3054,14 +3054,6 @@ dependencies = [
 
 [[package]]
 name = "riscv"
-version = "0.5.6"
-dependencies = [
- "bare-metal 0.2.4",
- "bit_field 0.9.0",
-]
-
-[[package]]
-name = "riscv"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6907ccdd7a31012b70faf2af85cd9e5ba97657cc3987c4f13f8e4d2c2a088aba"
@@ -4806,10 +4798,10 @@ dependencies = [
  "lazy_static",
  "rand 0.7.3",
  "rand_chacha 0.3.1",
- "riscv 0.5.6",
  "stats_alloc",
  "utralib 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-riscv",
 ]
 
 [[package]]
@@ -4824,6 +4816,16 @@ dependencies = [
  "xous 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log-server",
  "xous-ipc 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "xous-riscv"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63ec51bd5669f944bc375cc2c8ba93e28d7e697d13605a3454c331ea5f0b461a"
+dependencies = [
+ "bare-metal 0.2.4",
+ "bit_field 0.9.0",
 ]
 
 [[package]]
