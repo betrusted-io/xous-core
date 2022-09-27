@@ -12,6 +12,11 @@ mod precursor_perf_c809403;
 #[cfg(feature="precursor-c809403-perflib")]
 pub use precursor_perf_c809403::*;
 
+#[cfg(feature="renode")]
+mod renode;
+#[cfg(feature="renode")]
+pub use renode::*;
+
 // Hosted mode includes nothing, as it relies on the abstract host
 // architecture for I/O; so this file is empty when the "hosted"
 // configuration is selected and there are no corresponding "hosted"

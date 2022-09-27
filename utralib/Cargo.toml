@@ -1,6 +1,6 @@
 [package]
 name = "utralib"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -41,6 +41,7 @@ precursor-c809403-perflib = []
 # checks inside build.rs to ensure consistency.
 precursor = []
 hosted = []
+renode = []
 
 # Specify a Precusor default so that we can pass packaging CI tests.
 default = ["precursor-c809403", "precursor"]
