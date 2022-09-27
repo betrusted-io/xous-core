@@ -27,9 +27,7 @@ const KERNEL_TARGET: &str = "riscv32imac-unknown-xous-elf";
 const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 
 enum MemorySpec {
-    #[allow(dead_code)]
     SvdFile(String),
-    Spec(u32, u32),
 }
 
 #[derive(Debug)]
@@ -787,21 +785,21 @@ fn build_hw_image(
     kernel_features: Option<&[&str]>,
 ) -> Result<(), DynError> {
     // ------ configure UTRA generation feature flags ------
-    let mut svd_feat = vec!["--features"];
+    // note: once we switch over to hosted/precursor as first-class flags, the ["--features", "precursor"] should be added here
+    // for now that throws an error because we don't use that flag anywhere.
+    let mut svd_feat = vec!["--features", "utralib/precursor", "--features"];
     let mut svd_path = String::from("utralib/");
     let svd_filename: String;
-    let svd_file: Option<&[&str]> = match svd {
+    match svd {
         Some(s) => {
             svd_path.push_str(&s);
             svd_filename = s.to_string();
             svd_feat.push(&svd_path);
-            Some(&svd_feat)
         },
         None => {
             svd_path.push_str(SOC_SVD_VERSION);
             svd_filename = SOC_SVD_VERSION.to_string();
             svd_feat.push(&svd_path);
-            Some(&svd_feat)
         },
     };
 
@@ -811,6 +809,7 @@ fn build_hw_image(
     // figures out that it doesn't need to rebuild everything. After then, it behaves as expected.
     let stream = if debug { "debug" } else { "release" };
     let last_config = format!("target/{}/{}/build/LAST_CONFIG", PROGRAM_TARGET, stream);
+    std::fs::create_dir_all(format!("target/{}/{}/build/", PROGRAM_TARGET, stream)).unwrap();
     let changed = match OpenOptions::new()
         .read(true)
         .open(&last_config) {
@@ -827,8 +826,8 @@ fn build_hw_image(
     };
     if changed {
         let mut file = OpenOptions::new()
-            .write(true)
             .create(true)
+            .write(true)
             .truncate(true)
             .open(&last_config).unwrap();
         write!(file, "{}", svd_filename).unwrap();
@@ -837,11 +836,9 @@ fn build_hw_image(
     // concatenate the passed in feature flags with the computed utra feature flags
     let mut kernel_features_finalized = Vec::<&str>::new();
     let mut loader_features_finalized = Vec::<&str>::new();
-    if let Some(svd) = svd_file {
-        for s in svd {
-            kernel_features_finalized.push(s);
-            loader_features_finalized.push(s);
-        }
+    for &s in svd_feat.iter() {
+        kernel_features_finalized.push(s);
+        loader_features_finalized.push(s);
     }
     if let Some(lf) = loader_features {
         for &s in lf {
@@ -864,6 +861,8 @@ fn build_hw_image(
     let kernel = build_kernel(debug, Some(&kernel_features_finalized))?;
 
     // ------ build the services ------
+    svd_feat.push("--features");
+    svd_feat.push("utralib/std");
     let mut init = vec![];
     let base_path = build(
         packages,
@@ -871,7 +870,7 @@ fn build_hw_image(
         Some(PROGRAM_TARGET),
         None,
         extra_args,
-        svd_file,
+        Some(&svd_feat),
     )?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
@@ -921,57 +920,18 @@ fn build_hw_image(
     }
     loader.push(PathBuf::from("loader"));
 
-    // ---------- extract the size and length of RAM for packaging ----------
-    // this is done by manually parsing the generated utralib file. Previously, we
-    // just handed off an SVD file but now the SVD file is opaque to xtask, as it is
-    // specified with a feature flag. However, the resulting generated utralib file
-    // contains the correct information, so we manually search through it and insert the
-    // correct parameters here.
-    let utra_path = std::path::Path::new("./utralib/src/generated.rs");
-    let utra_file = File::open(utra_path)?;
-    use std::io::BufRead;
-    let mut maybe_ram_offset: Option<u32> = None;
-    let mut maybe_ram_length: Option<u32> = None;
-    for maybe_line in std::io::BufReader::new(utra_file).lines() {
-        if let Ok(line) = maybe_line {
-            if line.contains("HW_SRAM_EXT_MEM:") {
-                let tokens: Vec<&str> = line.split(&['=', ';']).collect();
-                if tokens.len() >= 2 {
-                    match if tokens[1].contains("0x") {
-                        u32::from_str_radix(tokens[1].trim().trim_start_matches("0x"), 16)
-                    } else {
-                        u32::from_str_radix(tokens[1].trim(), 10)
-                    } {
-                        Ok(offset) => maybe_ram_offset = Some(offset),
-                        _ => return Err("Couldn't extract RAM offset from utra file".into()),
-                    }
-                }
-            } else if line.contains("HW_SRAM_EXT_MEM_LEN:") {
-                let tokens: Vec<&str> = line.split(&['=', ';']).collect();
-                if tokens.len() >= 2 {
-                    match if tokens[1].contains("0x") {
-                        u32::from_str_radix(tokens[1].trim().trim_start_matches("0x"), 16)
-                    } else {
-                        u32::from_str_radix(tokens[1].trim(), 10)
-                    } {
-                        Ok(len) => maybe_ram_length = Some(len),
-                        _ => return Err("Couldn't extract RAM length from utra file".into()),
-                    }
-                }
-            }
-            if maybe_ram_length.is_some() && maybe_ram_offset.is_some() {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    if maybe_ram_length.is_none() || maybe_ram_offset.is_none() {
-        return Err("Couldn't extract RAM size parameters from UTRA file".into());
-    }
+    // ---------- extract SVD file path, as computed by utralib ----------
+    let svd_spec_path = format!("target/{}/{}/build/SVD_PATH", PROGRAM_TARGET, stream);
+    let mut svd_spec_file = OpenOptions::new()
+        .read(true)
+        .open(&svd_spec_path)?;
+    let mut svd_path = String::new();
+    svd_spec_file.read_to_string(&mut svd_path)?;
 
     // --------- package up and sign a binary image ----------
-    let output_bundle = create_image(&kernel, &init, debug, MemorySpec::Spec(maybe_ram_offset.unwrap(), maybe_ram_length.unwrap()))?;
+    let output_bundle = create_image(&kernel, &init, debug,
+        MemorySpec::SvdFile(svd_path)
+    )?;
     println!();
     println!(
         "Kernel+Init bundle is available at {}",
@@ -1598,16 +1558,10 @@ fn create_image(
         args.push(i.to_str().ok_or(BuildError::PathConversionError)?);
     }
 
-    let mut arg_storage = String::new();
     match memory_spec {
         MemorySpec::SvdFile(ref s) => {
             args.push("--svd");
             args.push(s);
-        }
-        MemorySpec::Spec(offset, size) => {
-            args.push("--ram");
-            arg_storage.push_str(&format!("{}:{}", offset, size));
-            args.push(&arg_storage);
         }
     }
 
