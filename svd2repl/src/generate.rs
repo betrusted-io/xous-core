@@ -508,7 +508,7 @@ flash: SPI.MXIC_MX66UM1G45G @ spinor
 
 sysbus:
     init:
-        ApplySVD @soc/renode.svd
+        ApplySVD @../utralib/renode/renode.svd
 "####;
     out.write_all(s.as_bytes())
 }
