@@ -919,9 +919,7 @@ fn renode_image(
             "-p",
             "svd2repl",
             "--",
-            "-i",
             "utralib/renode/renode.svd",
-            "-o",
             "emulation/soc/betrusted-soc.repl",
         ])
         .status()?;

@@ -1,44 +1,17 @@
 mod generate;
 
-use anyhow::Context;
-use clap::{App, Arg};
-use std::fs::File;
-use std::io::{Read, Write};
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().count() != 3 {
+        println!("Usage: svd2repl <input SVD> <output repl>");
+        return Ok(())
+    }
+    let svd_filename = std::env::args().nth(1).ok_or("Must specify SVD input filename")?;
+    let generated_filename = std::env::args().nth(2).ok_or("Must specify destination utralib filename")?;
 
-fn main() -> anyhow::Result<()> {
-    let matches = App::new("svd2repl")
-        .about("Generate a Renode Platform description from SVD files")
-        .arg(
-            Arg::with_name("input")
-                .help("Input SVD file")
-                .short("i")
-                .takes_value(true)
-                .value_name("FILE"),
-        )
-        .arg(
-            Arg::with_name("output")
-                .help("Output .repl file or directory")
-                .short("o")
-                .takes_value(true)
-                .value_name("FILE"),
-        )
-        .version(concat!(
-            env!("CARGO_PKG_VERSION"),
-            include_str!(concat!(env!("OUT_DIR"), "/commit-info.txt"))
-        ))
-        .get_matches();
+    let src_file = std::fs::File::open(svd_filename).expect("couldn't open src file");
+    let mut dest_file = std::fs::File::create(generated_filename).expect("couldn't open dest file");
 
-    let src: Box<dyn Read> = match matches.value_of("input") {
-        Some(file) => Box::new(File::open(file).context("Cannot open the SVD file")?),
-        None => Box::new(std::io::stdin()),
-    };
-
-    let mut dest: Box<dyn Write> = match matches.value_of("output") {
-        None => Box::new(std::io::stdout()),
-        Some(path) => Box::new(File::create(path).context("Cannot open destination file")?),
-    };
-
-    generate::generate(src, &mut dest).context("Cannot generate output file")?;
+    generate::generate(src_file, &mut dest_file)?;
 
     Ok(())
 }
