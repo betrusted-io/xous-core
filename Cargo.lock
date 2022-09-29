@@ -3689,8 +3689,6 @@ dependencies = [
 name = "svd2repl"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "clap 2.34.0",
  "convert_case",
  "quick-xml",
 ]
