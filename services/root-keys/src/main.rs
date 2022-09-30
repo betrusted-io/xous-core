@@ -41,6 +41,9 @@ pub enum SignatureResult {
     ThirdPartyOk,
     DevKeyOk,
     Invalid,
+    MalformedSignature,
+    InvalidSignatureType,
+    InvalidPubKey,
 }
 #[allow(dead_code)]
 pub enum GatewareRegion {
