@@ -4,6 +4,8 @@ mod versioning;
 use versioning::*;
 mod utils;
 use utils::*;
+mod builder;
+use builder::*;
 
 use std::fs::OpenOptions;
 use std::{
@@ -16,6 +18,8 @@ use std::{
 // This is the default SVD file to be used to generate Xous. This must be manually
 // updated every time the SoC version is bumped.
 const SOC_SVD_VERSION: &str = "precursor-c809403";
+// gitrev of the current precursor SoC version targeted by this build
+const PRECURSOR_SOC_VERSION: &str = "c809403";
 
 // This is the minimum Xous version required to read a PDDB backup generated
 // by the current kernel revision.
@@ -25,6 +29,7 @@ type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
 const KERNEL_TARGET: &str = "riscv32imac-unknown-xous-elf";
+const TARGET_TRIPLE: &str = "riscv32imac-unknown-xous-elf";
 
 enum MemorySpec {
     SvdFile(String),
@@ -73,6 +78,7 @@ fn get_packages() -> Vec<String> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut builder = Builder::new();
     generate_version(env::args().filter(|x| x == "--no-timestamp").count() == 0); // really brute force way to try and get a version into the build system.
 
     let hw_pkgs = [
@@ -192,115 +198,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?
         }
         Some("renode-image") => {
-            let mut args = env::args();
-            args.nth(1);
-            let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = get_packages();
-            if apps.len() == 0 {
-                // add the standard demo apps if none are specified
-                println!("No apps specified, adding default apps...");
-                apps.push("ball".to_string());
-                apps.push("repl".to_string());
-            }
-            for app in &apps {
-                pkgs.push(app);
-            }
-            generate_app_menus(&apps);
-            renode_image(false, &pkgs, &[], None, None)?
+            builder.target_renode()
+                   .add_services(&hw_pkgs.to_vec())
+                   .add_apps(&get_packages());
         }
         Some("renode-test") => {
-            let mut args = env::args();
-            args.nth(1);
-            let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = get_packages();
-            if apps.len() == 0 {
-                // add the standard demo apps if none are specified
-                println!("No apps specified, adding default apps...");
-                apps.push("ball".to_string());
-                apps.push("repl".to_string());
-            }
-            for app in &apps {
-                pkgs.push(app);
-            }
-            generate_app_menus(&apps);
-            renode_image(false, &minimal_pkgs, &[], None, None)?
+            builder.target_renode()
+                   .add_services(&minimal_pkgs.to_vec())
+                   .add_apps(&get_packages());
         }
         Some("tts") => {
-            let tmp_dir = tempfile::Builder::new().prefix("bins").tempdir()?;
-            let tts_exec_string = if true {
-                println!("Fetching tts executable from build server...");
-                let tts_exec_name = tmp_dir.path().join("espeak-embedded");
-                let tts_exec_string = tts_exec_name
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap();
-                let mut tts_exec_file = OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(tts_exec_name)
-                    .expect("Can't open our version file for writing");
-                let mut freader = ureq::get("https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
-                .call()?
-                .into_reader();
-                std::io::copy(&mut freader, &mut tts_exec_file)?;
-                println!(
-                    "TTS exec is {} bytes",
-                    tts_exec_file.metadata().unwrap().len()
-                );
-                tts_exec_string
-            } else {
-                println!("****** WARNING: using local dev image. Do not check this configuration in! ******");
-                "../espeak-embedded/target/riscv32imac-unknown-xous-elf/release/espeak-embedded"
-                    .to_string()
-            };
+            builder.target_precursor(PRECURSOR_SOC_VERSION);
 
-            let mut locale_override = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open("xous-rs/src/locale.rs")
-                .expect("Can't open locale for modification");
-            write!(
-                locale_override,
-                "{}",
-                "pub const LANG: &str = \"en-tts\";\n"
-            )
-            .unwrap();
-
-            let mut args = env::args();
-            args.nth(1);
             let mut pkgs = hw_pkgs.to_vec();
-            //let mut pkgs = gfx_dev_pkgs.to_vec();
-            let apps: Vec<String> = get_packages();
-            for app in &apps {
-                pkgs.push(app);
-            }
             pkgs.push("tts-frontend");
             pkgs.push("ime-plugin-tts");
             pkgs.retain(|&pkg| pkg != "ime-plugin-shell");
-            generate_app_menus(&apps);
-            build_hw_image(
-                false,
-                None,
-                &pkgs,
-                None,
-                None,
-                Some(&["--features", "tts", "--features", "braille"]),
-                &[&tts_exec_string],
-                None, None,
-            )?;
-            let mut locale_revert = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open("xous-rs/src/locale.rs")
-                .expect("Can't open locale for modification");
-            write!(locale_revert, "{}", "pub const LANG: &str = \"en\";\n").unwrap();
+
+            builder.add_services(&pkgs)
+                .add_apps(&get_packages())
+                .add_service("espeak-embedded#https://ci.betrusted.io/job/espeak-embedded/lastSuccessfulBuild/artifact/target/riscv32imac-unknown-xous-elf/release/espeak-embedded")
+                .override_locale("en-tts")
+                .add_feature("tts")
+                .add_feature("braille");
         }
         Some("usbdev") => {
             let mut args = env::args();
@@ -420,29 +340,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ]), false)?
         }
         Some("run") => {
-            let mut args = env::args();
-            args.nth(1);
-            let mut pkgs = hw_pkgs.to_vec();
-            let mut apps: Vec<String> = get_packages();
-            if apps.len() == 0 {
-                // add the standard demo apps if none are specified
-                println!("No apps specified, adding default apps...");
-                apps.push("ball".to_string());
-                apps.push("repl".to_string());
-            }
-            for app in &apps {
-                pkgs.push(app);
-            }
-            generate_app_menus(&apps);
-            // for hosted runs, compile in the pddb test routines by default...for now.
-            run(false, &pkgs,
-                Some(&[
-                    "--features", "pddbtest",
-                    "--features", "ditherpunk",
-                    "--features", "tracking-alloc",
-                    "--features", "tls",
-                    // "--features", "test-rekey",
-                ]), false)?
+            builder.target_hosted()
+                   .add_services(&hw_pkgs.to_vec())
+                   .add_feature("pddbtest")
+                   .add_feature("ditherpunk")
+                   .add_feature("tracking-alloc")
+                   .add_feature("tls")
+                   // .add_feature("test-rekey")
+                   .add_apps(&get_packages());
         }
         Some("hosted-ci") => {
             let mut pkgs = hw_pkgs.to_vec();
@@ -473,25 +378,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             run(true, &pkgs, None, false)?
         }
         Some("app-image") => {
-            let mut args = env::args();
-            args.nth(1);
-            let mut pkgs = hw_pkgs.to_vec();
-            let apps = get_packages();
-            for app in &apps {
-                pkgs.push(app);
-            }
-            generate_app_menus(&apps);
-            build_hw_image(
-                false,
-                None,
-                &pkgs,
-                lkey,
-                kkey,
-                None,
-                // Some(&["--features", "ditherpunk"]), // swap for extra_args if you want ditherpunk in the app-image
-                &[],
-                None, None,
-            )?
+            builder.target_precursor(PRECURSOR_SOC_VERSION)
+                   .add_services(&hw_pkgs.to_vec())
+                   .add_apps(&get_packages());
         }
         Some("perf-image") => {
             // note: to use this image, you need to load a version of the SOC that has the performance counters built in.
@@ -595,12 +484,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("wycheproof-import") => whycheproof_import()?,
         _ => print_help(),
     }
-    Ok(())
+    builder.build()
 }
 
 fn print_help() {
     eprintln!(
-        "Tasks:
+        "cargo xtask [base config] [[pkg or app 1] [pkg or app 2] ...]
+        [--feature [feature name]] [--lkey [loader key]] [--kkey [kernel key]] [--no-timestamp] [--force]
 Hardware images:
  app-image [app1] [..]   builds an image for real hardware of baseline kernel + specified apps
  perf-image [app1] [..]  builds an image for real hardware assuming a performance counter variant of the SOC.
