@@ -14,6 +14,7 @@ xous-names = { path = "../xous-names" }
 log = "0.4.14"
 susres = {path = "../susres"}
 llio =  {path = "../llio"} # temporary for testing some power stuff
+utralib = { version = "0.1.3", optional = true, default-features = false }
 
 xous-ipc = "0.9.9"
 num-derive = {version = "0.3.3", default-features = false}
@@ -26,8 +27,8 @@ rev="d249c967556b02ab5439eacb5078fa00c60b93d6"
 default-features = false
 features = []
 
-[target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib", default-features = false }
-
 [features]
+precursor = ["utralib/precursor"]
+hosted = ["utralib/hosted"]
+renode = ["utralib/renode"]
 default = []

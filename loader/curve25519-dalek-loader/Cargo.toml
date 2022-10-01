@@ -64,8 +64,7 @@ rev = "63d3d1f30736022e791deaacf4dd62c00b42fe2e"
 optional = true
 
 [dependencies.utralib]
-version = "0.1.0" # this is bogus -- must be patched in the invoking build environment
-path = "../../utralib/"
+version = "0.1.3"
 default-features = false
 optional = true
 
@@ -88,6 +87,9 @@ alloc = ["zeroize/alloc"]
 
 # The u32 backend uses u32s with u64 products.
 u32_backend = []
+# add target specifiers for the loader
+precursor = ["utralib/precursor"]
+renode = ["utralib/renode"]
 # The u32e backend uses u32s with u64 products + field25519 accelerator.
 u32e_backend = ["engine25519-as", "utralib"]
 # The u64 backend uses u64s with u128 products.

@@ -45,8 +45,7 @@ gam = {path="../gam"}
 locales = {path = "../../locales"}
 modals = {path="../modals"}
 
-[target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib", default-features = false }
+utralib = { version = "0.1.3", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.7.3"
@@ -55,6 +54,9 @@ rand_chacha = "0.3.1"
 hex = { version = "0.4.3", default-features = false, features = ["alloc"], optional = true }
 
 [features]
+precursor = ["utralib/precursor"]
+hosted = ["utralib/hosted"]
+renode = ["utralib/renode"]
 # when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
 # 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
 u64_pa = []

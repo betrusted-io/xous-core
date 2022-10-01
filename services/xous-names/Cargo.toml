@@ -18,11 +18,13 @@ xous = "0.9.9"
 xous-ipc = "0.9.9"
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
-[target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = {path = "../../utralib", default-features = false }
+utralib = {version = "0.1.3", optional = true, default-features = false }
 
 [target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
+precursor = ["utralib/precursor"]
+hosted = ["utralib/hosted"]
+renode = ["utralib/renode"]
 debugprint = []
 default = [] # "debugprint"

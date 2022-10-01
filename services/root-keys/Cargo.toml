@@ -18,6 +18,7 @@ spinor = {path="../spinor"}
 llio = {path="../llio"}
 com = {path="../com"}
 xous-semver = "0.1.2"
+utralib = { version = "0.1.3", optional = true, default-features = false }
 
 xous-ipc = "0.9.9"
 num-derive = {version = "0.3.3", default-features = false}
@@ -73,10 +74,10 @@ version = "1.0.1"
 default-features = false
 features = ["u32_backend", "rand"]
 
-[target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib", default-features = false }
-
 [features]
+precursor = ["utralib/precursor"]
+hosted = ["utralib/hosted"]
+renode = ["utralib/renode"]
 policy-menu = [] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
 hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
 tts = []
