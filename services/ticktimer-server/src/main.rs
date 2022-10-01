@@ -61,7 +61,7 @@ impl core::cmp::PartialEq for TimerRequest {
     }
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::TimerRequest;
@@ -283,7 +283,7 @@ mod implementation {
     }
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use crate::RequestKind;
 

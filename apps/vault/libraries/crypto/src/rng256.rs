@@ -54,10 +54,10 @@ impl Rng256 for XousRng256 {
 }
 
 // For tests on the desktop, we use the cryptographically secure thread rng as entropy source.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 pub struct ThreadRng256 {}
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 impl Rng256 for ThreadRng256 {
     fn gen_uniform_u8x32(&mut self) -> [u8; 32] {
         use rand_chacha::ChaCha8Rng;

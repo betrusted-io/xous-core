@@ -4,20 +4,20 @@
 mod api;
 
 use api::*;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod kbd;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod hw;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 use hw::*;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod spinal_udc;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 use spinal_udc::*;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod hosted;
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 use hosted::*;
 
 

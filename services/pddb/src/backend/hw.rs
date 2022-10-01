@@ -112,15 +112,15 @@ struct MigrationCiphers {
 }
 
 // emulated
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 type EmuMemoryRange = EmuStorage;
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 type EmuSpinor = HostedSpinor;
 
 // native hardware
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 type EmuMemoryRange = xous::MemoryRange;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 type EmuSpinor = spinor::Spinor;
 
 pub(crate) struct PddbOs {
@@ -167,7 +167,7 @@ pub(crate) struct PddbOs {
 impl PddbOs {
     pub fn new(trngpool: Rc<RefCell<TrngPool>>, pw_cid: xous::CID) -> PddbOs {
         let xns = xous_names::XousNames::new().unwrap();
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(feature="precursor", feature="renode"))]
         let pddb = xous::syscall::map_memory(
             xous::MemoryAddress::new(xous::PDDB_LOC as usize + xous::FLASH_PHYS_BASE as usize),
             None,
@@ -175,7 +175,7 @@ impl PddbOs {
             xous::MemoryFlags::R | xous::MemoryFlags::RESERVE,
         )
         .expect("Couldn't map the PDDB memory range");
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(feature="precursor", feature="renode"))]
         log::info!("pddb slice len: {}, PDDB_A_LEN: {}, raw len: {}", pddb.as_slice::<u8>().len(), PDDB_A_LEN, pddb.len()); // sanity check the PDDB size on init
 
         // the mbbb is located one page off from the Page Table
@@ -189,7 +189,7 @@ impl PddbOs {
         let llio = llio::Llio::new(&xns);
         let dna = llio.soc_dna().unwrap();
         // native hardware
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(feature="precursor", feature="renode"))]
         let ret = PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
@@ -216,7 +216,7 @@ impl PddbOs {
             testnames: HashSet::new(),
         };
         // emulated
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(any(feature="hosted"))]
         let ret = {
             PddbOs {
                 spinor: HostedSpinor::new(),
@@ -247,7 +247,7 @@ impl PddbOs {
         ret
     }
 
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     pub fn dbg_dump(&self, name: Option<String>, extra_keys: Option<&Vec::<KeyExport>>) {
         self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
@@ -273,12 +273,12 @@ impl PddbOs {
         self.pddb_mr.dump_keys(&export, &name);
     }
     #[allow(dead_code)]
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
     }
     #[allow(dead_code)]
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
     pub fn test_reset(&mut self) {
         self.fspace_cache = FspaceSet::new();
@@ -1581,7 +1581,7 @@ impl PddbOs {
             self.rootkeys.decrypt_block(GenericArray::from_mut_slice(&mut checkblock_a));
 
             log::info!("{}PDDB.CHECKPASS,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-            #[cfg(any(target_os = "none", target_os = "xous"))] // skip this dialog in hosted mode
+            #[cfg(any(feature="precursor", feature="renode"))] // skip this dialog in hosted mode
             modals.show_notification(t!("pddb.checkpass", xous::LANG), None).expect("notification failed");
 
             self.clear_password();
@@ -1762,7 +1762,7 @@ impl PddbOs {
         }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(any(feature="hosted"))]
         self.tt.sleep_ms(500).unwrap(); // delay for UX to catch up in emulation
 
         // step 4. mbbb handling
@@ -1794,7 +1794,7 @@ impl PddbOs {
             self.tt.sleep_ms(100).unwrap();
         }
 
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(any(feature="hosted"))]
         self.tt.sleep_ms(500).unwrap();
 
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
@@ -2742,7 +2742,7 @@ impl PddbOs {
         log::info!("v1 PDDB detected. Attempting to migrate from v1->v2.");
         log::info!("old SCD block: {:x?}", &scd.deref()[..128]); // this is not hazardous because the keys were wrapped
 
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(any(feature="hosted"))]
         let mut export = Vec::<KeyExport>::new(); // export any basis keys for verification in hosted mode
 
         // derive a v1 key
@@ -2883,7 +2883,7 @@ impl PddbOs {
                                                 &basis_data_cipher_2,
                                                 &mut used_pages,
                                             ) {
-                                                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                                                #[cfg(any(feature="hosted"))]
                                                 {
                                                     let mut name = [0 as u8; 64];
                                                     for (&src, dst) in bname.first().as_str().as_bytes().iter().zip(name.iter_mut()) {
@@ -2957,7 +2957,7 @@ impl PddbOs {
                 }
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-                #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                #[cfg(any(feature="hosted"))]
                 self.dbg_dump(Some("migration".to_string()), Some(&export));
 
                 // indicate the migration worked

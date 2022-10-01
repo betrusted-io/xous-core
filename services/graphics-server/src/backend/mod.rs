@@ -3,7 +3,7 @@ mod minifb;
 #[cfg(any(windows, unix))]
 pub use crate::backend::minifb::*;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod betrusted;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub use crate::backend::betrusted::*;

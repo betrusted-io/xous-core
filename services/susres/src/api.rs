@@ -1,6 +1,6 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code))]
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 use utralib::generated::*;
 
 pub(crate) const SERVER_NAME_SUSRES: &str     = "_Suspend/resume manager_";
@@ -85,14 +85,14 @@ pub(crate) enum SuspendEventCallback {
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////// suspend-resume hardware management primitives
 /////////////////////////////////////////////////////////////////////////
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum RegOrField {
     Field(Field),
     Reg(Register),
 }
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub struct ManagedReg {
@@ -108,13 +108,13 @@ pub struct ManagedReg {
 
 #[derive(Debug)]
 #[allow(dead_code)]
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub struct RegManager<const N: usize> {
     pub csr: CSR<u32>,
     pub registers: [Option<ManagedReg>; N],
 }
 #[allow(dead_code)]
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 impl<const N: usize> RegManager::<N> where ManagedReg: core::marker::Copy {
     pub fn new(reg_base: *mut u32) -> RegManager::<N> {
         RegManager::<N> {
@@ -156,12 +156,12 @@ impl<const N: usize> RegManager::<N> where ManagedReg: core::marker::Copy {
         panic!("Ran out of space pushing to suspend/resume manager structure. Please increase the allocated size!");
     }
 }
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub trait SuspendResume {
     fn suspend(&mut self);
     fn resume(&mut self);
 }
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 impl<const N: usize> SuspendResume for RegManager<N> {
     fn suspend(&mut self) {
         for entry in self.registers.iter_mut().rev() {
@@ -207,13 +207,13 @@ impl<const N: usize> SuspendResume for RegManager<N> {
 // because the volatile memory regions can be potentially large (128kiB), but fewer (maybe 5-6 total in the system),
 // we allocate these as stand-alone structures and manage them explicitly.
 #[derive(Debug)]
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub struct ManagedMem<const N: usize> {
     pub mem: xous::MemoryRange,
     pub backing: [u32; N],
 }
 #[allow(dead_code)]
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 impl<const N: usize> ManagedMem<N> {
     pub fn new(src: xous::MemoryRange) -> Self {
         ManagedMem {
@@ -222,7 +222,7 @@ impl<const N: usize> ManagedMem<N> {
         }
     }
 }
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 impl<const N: usize> SuspendResume for ManagedMem<N> {
     fn suspend(&mut self) {
         let src = self.mem.as_ptr() as *const u32;

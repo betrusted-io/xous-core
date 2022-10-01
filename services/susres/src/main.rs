@@ -30,7 +30,7 @@ macro_rules! println
 }
 
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
     use crate::murmur3::murmur3_32;
@@ -424,7 +424,7 @@ mod implementation {
 
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use num_traits::ToPrimitive;
 
@@ -474,23 +474,23 @@ static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(5000); // this is gated by the p
 static TIMEOUT_CONN: AtomicU32 = AtomicU32::new(0);
 pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     use utralib::generated::*;
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let mut csr: Option<CSR::<u32>> = None;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            #[cfg(any(target_os = "none", target_os = "xous"))]
+            #[cfg(any(feature="precursor", feature="renode"))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, base, _, _, _, {
                 csr = Some(CSR::new(base as *mut u32));
             }),
-            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            #[cfg(any(feature="hosted"))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, _base, _, _, _, {
                 // ignore the opcode in hosted mode
             }),
             Some(TimeoutOpcode::Run) => {
-                #[cfg(any(target_os = "none", target_os = "xous"))]
+                #[cfg(any(feature="precursor", feature="renode"))]
                 {
                     // we have to re-implement the ticktimer time reading here because as we wait for the timeout,
                     // the ticktimer goes away! so we use the susres local copy with direct hardware ops to keep track of time in this phase
@@ -846,7 +846,7 @@ fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder)
     log::info!("Sending suspend to {:?} stage", order);
     /*
     // abortive attempt to get suspend to shut down the system. Doesn't work, results in a panic because too many messages are still moving around.
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     {
         if order == crate::api::SuspendOrder::Last {
             let tt_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();

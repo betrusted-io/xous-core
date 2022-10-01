@@ -12,7 +12,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use std::collections::HashSet;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
     use crate::api::*;
@@ -571,7 +571,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use crate::api::*;
     pub struct Spinor {
@@ -662,9 +662,9 @@ fn main() -> ! {
           - PDDB
           - keyboard (for updating the key map setting, which needs to be loaded upstream of the PDDB)
     */
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(5)).expect("can't register server");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 

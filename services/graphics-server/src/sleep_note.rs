@@ -1,4 +1,4 @@
-#[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(dead_code))]
+#[cfg_attr(feature = "hosted", allow(dead_code))]
 pub const LOGO_MAP: [u32; 11 * 160] = [
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0x00000000, 0x00000000, 0xffff0000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,

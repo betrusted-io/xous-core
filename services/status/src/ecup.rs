@@ -58,37 +58,37 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
         log::error!("couldn't acquire exclusive access to the EC updater mechanism. All other operations will fail!");
     }
 
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let ec_package = xous::syscall::map_memory(
         xous::MemoryAddress::new((xous::EC_FW_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let wf_package = xous::syscall::map_memory(
         xous::MemoryAddress::new((xous::EC_WF200_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
         None,
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     let mut ec_package = xous::syscall::map_memory(
         None,
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     for d in ec_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF } // simulate blank flash
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     let mut wf_package = xous::syscall::map_memory(
         None,
         None,
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     for d in wf_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF }
 
     loop {

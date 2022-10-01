@@ -1,7 +1,7 @@
 use crate::{ShellCmdApi, CommonEnv};
 use com::api::NET_MTU;
 use xous_ipc::String;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 use net::XousServerId;
 use net::NetPingCallback;
 use xous::MessageEnvelope;
@@ -28,7 +28,7 @@ pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,
     dns: Dns,
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     ping: Option<net::Ping>,
     #[cfg(feature="tls")]
     ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
@@ -49,7 +49,7 @@ impl NetCmd {
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             dns: dns::Dns::new(&xns).unwrap(),
-            #[cfg(any(target_os = "none", target_os = "xous"))]
+            #[cfg(any(feature="precursor", feature="renode"))]
             ping: None,
             #[cfg(feature="tls")]
             ws: None,
@@ -77,10 +77,10 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(feature="precursor", feature="renode"))]
         let helpstring = "net [udp [rx socket] [tx dest socket]] [ping [host] [count]] [tcpget host/path]";
         // no ping in hosted mode -- why would you need it? we're using the host's network connection.
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(any(feature="hosted"))]
         let helpstring = "net [udp [port]] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -406,7 +406,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 // only valid for hardware configs with TLS enabled
-                #[cfg(all(any(target_os = "none", target_os = "xous"),feature="tls"))]
+                #[cfg(all(any(feature="precursor", feature="renode"),feature="tls"))]
                 "rt" => {
                     log::set_max_level(log::LevelFilter::Trace);
                     ring::xous_test::p256_elem_add_test();
@@ -629,7 +629,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
-                #[cfg(any(target_os = "none", target_os = "xous"))]
+                #[cfg(any(feature="precursor", feature="renode"))]
                 "ping" => {
                     if let Some(name) = tokens.next() {
                         match self.dns.lookup(name) {

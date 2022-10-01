@@ -27,7 +27,7 @@ use xous_ipc::Buffer;
 mod fontmap;
 use api::BulkRead;
 
-#[cfg(any(target_os = "none", target_os = "xous"))] // only install for hardware targets; hosted mode uses host's panic handler
+#[cfg(any(feature="precursor", feature="renode"))] // only install for hardware targets; hosted mode uses host's panic handler
 mod panic;
 
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -43,7 +43,7 @@ fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(&poweron::LOGO_MAP);
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 fn map_fonts() -> MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
@@ -83,7 +83,7 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 fn map_fonts() -> MemoryRange {
     // does nothing
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
@@ -117,7 +117,7 @@ fn wrapped_main() -> ! {
     // install the graphical panic handler. It won't catch really early panics, or panics in this crate,
     // but it'll do the job 90% of the time and it's way better than having none at all.
     let is_panic = Arc::new(AtomicBool::new(false));
-    #[cfg(any(target_os = "none", target_os = "xous"))] // only install for hardware targets; hosted mode uses host's panic handler
+    #[cfg(any(feature="precursor", feature="renode"))] // only install for hardware targets; hosted mode uses host's panic handler
     {
         let (hwfb, control) = unsafe{
             // this is safe because we are extracting these for use in a Mutex-protected panic handler
@@ -130,11 +130,11 @@ fn wrapped_main() -> ! {
     // these connections should be established:
     // - GAM
     // - keyrom (for verifying font maps)
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
         .expect("can't register server");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(1))
         .expect("can't register server");

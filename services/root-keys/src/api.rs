@@ -120,7 +120,7 @@ pub enum PasswordType {
     Boot = 1,
     Update = 2,
 }
-#[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(dead_code))]
+#[cfg_attr(not(any(feature="precursor", feature="renode")), allow(dead_code))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum RootkeyResult {
     AlignmentError = 0,

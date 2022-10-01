@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use xous::msg_blocking_scalar_unpack;
 use xous_ipc::Buffer;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 #[macro_use]
 extern crate engine25519_as;
 
@@ -19,7 +19,7 @@ static RUN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static DISALLOW_SUSPEND: AtomicBool = AtomicBool::new(false);
 static SUSPEND_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
     use crate::api::*;
@@ -708,7 +708,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use crate::api::*;
 

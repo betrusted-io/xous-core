@@ -14,7 +14,7 @@ use log::info;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use crate::api::Sha2Config;
     use utralib::generated::*;
@@ -261,7 +261,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use crate::Sha2Config;
     use log::info;

@@ -26,14 +26,14 @@ use std::format;
 use std::str;
 use std::convert::TryInto;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation;
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 use implementation::*;
 /// used by the bbram helper/console protocol to indicate the start of a console message
 const CONSOLE_SENTINEL: &'static str = "CONS_SENTINEL|";
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod bcrypt;
 
 pub enum SignatureResult {
@@ -91,7 +91,7 @@ pub struct MetadataInFlash {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
@@ -403,7 +403,7 @@ mod implementation {
 
 
 fn main() -> ! {
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();

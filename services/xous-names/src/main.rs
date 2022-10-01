@@ -43,7 +43,7 @@ enum ConnectSuccess {
     // AuthenticationRequest
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
 
@@ -79,7 +79,7 @@ mod implementation {
     }
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     pub struct D11cTimeout {}
     impl D11cTimeout {

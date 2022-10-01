@@ -3,14 +3,14 @@
 
 use xous_api_log_server::api;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 #[macro_use]
 mod debug;
 
 use core::fmt::Write;
 use num_traits::FromPrimitive;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use core::fmt::{Error, Write};
     use std::sync::mpsc::{channel, Receiver, Sender};
@@ -110,7 +110,7 @@ mod implementation {
     }
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use core::fmt::{Error, Write};
     use utralib::generated::*;
@@ -286,7 +286,7 @@ fn handle_scalar(
         }
         1200 => writeln!(output, "Terminating process").unwrap(),
         2000 => {
-            #[cfg(any(target_os = "none", target_os = "xous"))]
+            #[cfg(any(feature="precursor", feature="renode"))]
             crate::debug::DEFAULT.enable_rx();
             writeln!(output, "Resuming logger").unwrap();
         }

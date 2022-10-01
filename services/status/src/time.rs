@@ -154,7 +154,7 @@ pub fn start_time_server() {
     let self_cid = xous::connect(pub_sid).unwrap();
 
     // this thread handles more sensitive operations on the RTC.
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     thread::spawn({
         let rtc_checked = rtc_checked.clone();
         let self_cid = self_cid.clone();
@@ -445,7 +445,7 @@ pub fn start_time_server() {
         }
     });
 
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     thread::spawn({
         let rtc_checked = rtc_checked.clone();
         move || {

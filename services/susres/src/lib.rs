@@ -16,7 +16,7 @@ pub struct Susres {
     suspend_cb_sid: Option<xous::SID>,
 }
 impl Susres {
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     pub fn new(order: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
@@ -44,7 +44,7 @@ impl Susres {
     // of concurrency introduced by suspend/resume, as its underlying IPC mechanisms are quite
     // different and have a lot of overhead; it seems like the system goes into a form of deadlock
     // during boot when all the hosted mode servers try to connect. This isn't an issue on real hardware.
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     pub fn new(_ordering: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         Ok(Susres {
