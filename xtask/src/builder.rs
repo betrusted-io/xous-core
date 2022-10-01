@@ -243,6 +243,9 @@ impl Builder {
         self
     }
 
+    /// The builder sets up all the cargo arguments to build a set of packages with features for a respective
+    /// target and stream. It also runs the build as well. It's meant to be called only by the `build()`
+    /// method, and it gets called repeatedly to build the kernel, loader, and services.
     fn builder(
         &self,
         packages: &Vec::<CrateSpec>,
@@ -368,7 +371,8 @@ impl Builder {
         Ok(artifacts)
     }
 
-    /// Consume the builder and execute the task
+    /// Consume the builder and execute the configured build task. This handles dispatching all configurations,
+    /// including renode, hosted, and hardware targets.
     pub fn build(mut self) -> Result<(), DynError> {
         if self.apps.len() == 0 && self.services.len() == 0 {
             // no services were specified - don't build anything
