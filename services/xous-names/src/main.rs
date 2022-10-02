@@ -1,8 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
-use api::*;
+use xous_api_names::*;
+use xous_api_names::api::*;
 
 use num_traits::FromPrimitive;
 use xous::{msg_blocking_scalar_unpack, MessageEnvelope};
