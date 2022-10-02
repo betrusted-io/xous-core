@@ -9,10 +9,10 @@ version = "0.1.0"
 [dependencies]
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
-log-server = {version = "0.1.2", package = "xous-api-log-server"}
+log-server = {version = "0.1.3", package = "xous-api-log"}
 xous = "0.9.9"
-susres = {path = "../susres"}
-ticktimer-server = {path = "../ticktimer-server"}
+susres = {path = "../susres", package = "xous-susres"}
+ticktimer-server = {path = "../ticktimer-server", package = "xous-ticktimer"}
 
 xous-ipc = "0.9.9"
 xous-names = {path = "../xous-names"}

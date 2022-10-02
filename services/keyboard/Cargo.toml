@@ -8,13 +8,13 @@ version = "0.1.0"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
-log-server = {version = "0.1.2", package = "xous-api-log-server"}
-ticktimer-server = {path = "../ticktimer-server"}
+log-server = {version = "0.1.3", package = "xous-api-log"}
+ticktimer-server = {path = "../ticktimer-server", package = "xous-ticktimer"}
 xous = "0.9.9"
 xous-ipc = "0.9.9"
 xous-names = {path = "../xous-names"}
 llio = {path = "../llio"}
-susres = {path = "../susres"}
+susres = {path = "../susres", package = "xous-susres"}
 spinor = {path = "../spinor"}
 
 num-derive = {version = "0.3.3", default-features = false}

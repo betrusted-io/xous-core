@@ -12,8 +12,8 @@ graphics-server = {path = "../graphics-server"}
 ime-plugin-api = {path = "../ime-plugin-api"}
 keyboard = {path = "../keyboard"}
 log = "0.4.14"
-log-server = {version = "0.1.2", package = "xous-api-log-server"}
-ticktimer-server = {path = "../ticktimer-server"}
+log-server = {version = "0.1.3", package = "xous-api-log"}
+ticktimer-server = {path = "../ticktimer-server", package = "xous-ticktimer"}
 xous = "0.9.9"
 locales = {path = "../../locales"}
 xous-ipc = "0.9.9"
