@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use xous_api_log_server::api;
+use xous_api_log::api;
 
 #[cfg(any(feature="precursor", feature="renode"))]
 #[macro_use]

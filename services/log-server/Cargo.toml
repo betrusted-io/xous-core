@@ -2,7 +2,7 @@
 authors = ["Sean Cross <sean@xobs.io>"]
 description = "Log output program"
 edition = "2018"
-name = "log-server"
+name = "xous-log"
 version = "0.1.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
@@ -10,7 +10,7 @@ homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous-api-log-server = {version = "0.1.2", package = "xous-api-log-server"}
+xous-api-log = {version = "0.1.2", package = "xous-api-log"}
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
