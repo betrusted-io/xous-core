@@ -96,6 +96,8 @@ pub(crate) struct Builder {
     run_svd2repl: bool,
     locale_override: Option<String>,
     locale_stash: String,
+    /// when set to true, hosted mode builds but does not run
+    dry_run: bool,
 }
 
 impl Builder {
@@ -119,6 +121,7 @@ impl Builder {
             run_svd2repl: false,
             locale_override: None,
             locale_stash: String::new(),
+            dry_run: false,
         }
     }
     /// Specify an alternate loader key, as a String that can encode a file name
@@ -258,6 +261,11 @@ impl Builder {
     #[allow(dead_code)]
     pub fn add_kernel_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.kernel_features.push(feature.into());
+        self
+    }
+    /// only build a hosted target. don't run it. Used exclusively to confirm that hosted mode builds in CI.
+    pub fn hosted_build_only<'a>(&'a mut self) -> &'a mut Builder {
+        self.dry_run = true;
         self
     }
 
@@ -484,7 +492,11 @@ impl Builder {
                     service.push_str(".exe")
                 }
             }
-            let mut hosted_args = vec!["run"];
+            let mut hosted_args = if self.dry_run {
+                vec!["build"]
+            } else {
+                vec!["run"]
+            };
             match self.stream {
                 BuildStream::Release => hosted_args.push("--release"),
                 _ => {}

@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "susres",     // suspend/resume manager
     ].to_vec();
     // minimal set of packages to do bare-iron graphical I/O
-    let gfx_dev_pkgs = [
+    let gfx_base_pkgs = [
         &base_pkgs[..],
         &[
             "graphics-server",  // raw (unprotected) frame buffer primitives
@@ -48,8 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ].concat();
     // packages in the user image
     let user_pkgs = [
-        &base_pkgs[..],
-        &gfx_dev_pkgs[..],
+        &gfx_base_pkgs[..],
         &[
             // net services
             "com",
@@ -190,10 +189,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("gfx-dev") => {
             builder.target_hosted()
-                   .add_services(&gfx_dev_pkgs.into_iter().map(String::from).collect())
+                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs())
                    .add_feature("graphics-server/testing");
         },
+        Some("hosted-ci") => {
+            builder.target_hosted()
+                   .add_services(&user_pkgs.into_iter().map(String::from).collect())
+                   .hosted_build_only()
+                   .add_apps(&get_cratespecs());
+        }
 
         // ------ Precursor hardware image configs ------
         Some("app-image") => {
@@ -232,13 +237,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("usbdev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&gfx_dev_pkgs.into_iter().map(String::from).collect())
+                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
             builder.add_service("usb-test");
         }
         Some("ffi-test") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&gfx_dev_pkgs.into_iter().map(String::from).collect())
+                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
             builder.add_service("ffi-test");
             builder.add_loader_feature("renode-bypass");
