@@ -486,7 +486,9 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, base, _, _, _, {
                 csr = Some(CSR::new(base as *mut u32));
             }),
-            #[cfg(any(feature="hosted"))]
+            #[cfg(any(feature="hosted",
+              not(any(feature="precursor", feature="renode", feature="hosted")) // default for crates.io
+            ))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, _base, _, _, _, {
                 // ignore the opcode in hosted mode
             }),
