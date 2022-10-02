@@ -283,7 +283,9 @@ mod implementation {
     }
 }
 
-#[cfg(any(feature="hosted"))]
+#[cfg(any(feature="hosted",
+  not(any(feature="precursor", feature="renode", feature="hosted"))
+))]
 mod implementation {
     use crate::RequestKind;
 
