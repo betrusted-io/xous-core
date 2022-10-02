@@ -11,7 +11,7 @@ keyboard = {path = "../keyboard"}
 log = "0.4.14"
 log-server = {version = "0.1.3", package = "xous-api-log"}
 xous = "0.9.9"
-susres = {version = "0.9.0", package = "xous-api-susres"}
+susres = {version = "0.9.1", package = "xous-api-susres"}
 ticktimer-server = {version = "0.9.0", package = "xous-api-ticktimer"}
 
 xous-ipc = "0.9.9"

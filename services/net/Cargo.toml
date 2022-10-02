@@ -15,7 +15,7 @@ xous-names = { version = "0.9.3", package = "xous-api-names" }
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-susres = {version = "0.9.0", package = "xous-api-susres"}
+susres = {version = "0.9.1", package = "xous-api-susres"}
 #rkyv = "0.7.18"
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 llio = {path = "../llio"}

@@ -21,7 +21,7 @@ usbd-human-interface-device = "0.2.1"
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 trng = {path="../../services/trng"}
-susres = {version = "0.9.0", package = "xous-api-susres"}
+susres = {version = "0.9.1", package = "xous-api-susres"}
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
 ctap-crypto = {path = "libraries/crypto"}

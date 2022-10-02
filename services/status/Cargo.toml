@@ -20,7 +20,7 @@ xous-names = {version = "0.9.3", package = "xous-api-names"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}
 locales = {path = "../../locales"}
-susres = {version = "0.9.0", package = "xous-api-susres"}
+susres = {version = "0.9.1", package = "xous-api-susres"}
 root-keys = {path = "../root-keys"}
 modals = {path = "../modals"}
 pddb = {path = "../pddb"}

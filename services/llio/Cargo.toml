@@ -13,7 +13,7 @@ ticktimer-server = {version = "0.9.0", package = "xous-api-ticktimer"}
 xous = "0.9.9"
 xous-ipc = "0.9.9"
 xous-names = {version = "0.9.3", package = "xous-api-names"}
-susres = {version = "0.9.0", package = "xous-api-susres"}
+susres = {version = "0.9.1", package = "xous-api-susres"}
 
 # RTC dependencies
 bitflags = "1.2.1"
