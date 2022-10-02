@@ -20,7 +20,7 @@ log-server = {version = "0.1.3", package = "xous-api-log"}
 ticktimer-server = {path = "../ticktimer-server", package = "xous-ticktimer"}
 xous = "0.9.9"
 xous-ipc = "0.9.9"
-xous-names = {path = "../xous-names"}
+xous-names = {version = "0.9.3", package = "xous-api-names"}
 keyboard = {path = "../keyboard"}
 susres = {path = "../susres", package = "xous-susres"}
 codec = {path = "../codec"}

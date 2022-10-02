@@ -10,7 +10,7 @@ description = "Xous root keys server"
 xous = "0.9.9"
 log-server = { version = "0.1.3", package = "xous-api-log" }
 ticktimer-server = { path = "../ticktimer-server", package = "xous-ticktimer" }
-xous-names = { path = "../xous-names" }
+xous-names = { version = "0.9.3", package = "xous-api-names" }
 log = "0.4.14"
 susres = {path = "../susres", package = "xous-susres"}
 trng = {path= "../trng"}

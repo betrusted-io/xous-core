@@ -14,7 +14,7 @@ xous = "0.9.9"
 xous-ipc = "0.9.9"
 log-server = { version = "0.1.3", package = "xous-api-log" }
 ticktimer-server = { path = "../../services/ticktimer-server", package = "xous-ticktimer" }
-xous-names = { path = "../../services/xous-names" }
+xous-names = { version = "0.9.3", package = "xous-api-names" }
 gam = {path = "../../services/gam" }
 trng = {path = "../../services/trng"}
 modals = {path = "../../services/modals"}

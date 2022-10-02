@@ -10,7 +10,7 @@ description = "JTAG port server"
 xous = "0.9.9"
 log-server = { version = "0.1.3", package = "xous-api-log" }
 ticktimer-server = { path = "../ticktimer-server", package = "xous-ticktimer" }
-xous-names = { path = "../xous-names" }
+xous-names = { version = "0.9.3", package = "xous-api-names" }
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
