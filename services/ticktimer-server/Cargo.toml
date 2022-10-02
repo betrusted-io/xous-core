@@ -4,6 +4,9 @@ description = "Provide high-resolution, non-rollover system time"
 edition = "2018"
 name = "xous-ticktimer"
 version = "0.1.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
@@ -21,7 +24,6 @@ xous-semver = "0.1.2"
 
 utralib = {version = "0.1.3", optional = true, default-features = false }
 
-[target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
 precursor = ["utralib/precursor", "susres/precursor"]
