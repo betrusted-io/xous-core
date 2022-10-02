@@ -10,7 +10,9 @@ mod debug;
 use core::fmt::Write;
 use num_traits::FromPrimitive;
 
-#[cfg(any(feature="hosted"))]
+#[cfg(any(feature="hosted",
+    not(any(feature="precursor", feature="renode", feature="hosted")) // makes this the default implementation
+))]
 mod implementation {
     use core::fmt::{Error, Write};
     use std::sync::mpsc::{channel, Receiver, Sender};
@@ -110,9 +112,7 @@ mod implementation {
     }
 }
 
-#[cfg(any(feature="precursor", feature="renode",
-    not(any(feature="precursor", feature="renode", feature="hosted")) // makes this the default implementation
-))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use core::fmt::{Error, Write};
     use utralib::generated::*;
