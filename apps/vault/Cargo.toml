@@ -31,7 +31,7 @@ byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
 rand_core = "0.6.3"
-ticktimer-server = {version = "0.9.0", package = "xous-api-ticktimer"}
+ticktimer-server = {version = "0.9.1", package = "xous-api-ticktimer"}
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }

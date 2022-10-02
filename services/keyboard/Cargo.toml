@@ -9,7 +9,7 @@ version = "0.1.0"
 [dependencies]
 log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
 log-server = {version = "0.1.3", package = "xous-api-log"}
-ticktimer-server = {version = "0.9.0", package = "xous-api-ticktimer"}
+ticktimer-server = {version = "0.9.1", package = "xous-api-ticktimer"}
 xous = "0.9.9"
 xous-ipc = "0.9.9"
 xous-names = {version = "0.9.3", package = "xous-api-names"}
