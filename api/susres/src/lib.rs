@@ -54,6 +54,13 @@ impl Susres {
     #[cfg(any(feature="hosted",
         not(any(feature="precursor", feature="renode", feature="hosted"))
     ))]
+    /// When created, the `susres` object can be configured with a `SuspendOrder` to enforce
+    /// sequencing rules in shutdown. It also requires arguments to define a callback which is
+    /// pinged when a suspend event arrives. The callback takes the form of a `CID, discriminant`
+    /// pair, where the CID is the local connection ID to the caller (in other words, a self-connection
+    /// to the caller), and the discriminant is the number placed into the Xous message's `body.id()`
+    /// field. This is typically just the descriminant of the main loop's opcode enum for the
+    /// suspend-resume opcode.
     pub fn new(_ordering: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         Ok(Susres {
