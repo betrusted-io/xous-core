@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
+use xous_api_ticktimer::*;
 mod version;
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
