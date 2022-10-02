@@ -29,6 +29,8 @@ pub(crate) enum CrateSpec {
     CratesIo(String, String),
     /// a prebuilt package: (name of executable, URL for download)
     Prebuilt(String, String),
+    /// a prebuilt binary, done using command line tools
+    BinaryFile(String),
     /// an empty entry
     None,
 }
@@ -38,6 +40,7 @@ impl Clone for CrateSpec {
             CrateSpec::Local(s) => CrateSpec::Local(s.to_string()),
             CrateSpec::CratesIo(n, v) => CrateSpec::CratesIo(n.to_string(), v.to_string()),
             CrateSpec::Prebuilt(n, u) => CrateSpec::Prebuilt(n.to_string(), u.to_string()),
+            CrateSpec::BinaryFile(path) => CrateSpec::BinaryFile(path.to_string()),
             CrateSpec::None => CrateSpec::None,
         }
     }
@@ -59,6 +62,12 @@ impl CrateSpec {
                 name.to_string(),
                 url.to_string()
             )
+        // local files are specified as paths, which, at a minimum include one directory separator "/" or "\"
+        // i.e. "./local_file"
+        // Note that this is after a test for the '#' character, so that disambiguates URL slashes
+        // It does mean that files with a '#' character in them are mistaken for URL coded paths, and '@' as remote crates.
+        } else if spec.contains('/') || spec.contains('\\') {
+            CrateSpec::BinaryFile(spec.to_string())
         } else {
             CrateSpec::Local(spec.to_string())
         }
@@ -214,9 +223,8 @@ impl Builder {
         self
     }
     /// Add a list of services
-    #[allow(dead_code)]
-    pub fn add_services<'a>(&'a mut self, service_list: &Vec::<&str>) -> &'a mut Builder {
-        for &service in service_list {
+    pub fn add_services<'a>(&'a mut self, service_list: &Vec::<String>) -> &'a mut Builder {
+        for service in service_list {
             self.services.push(CrateSpec::from_str(service));
         }
         self
@@ -229,7 +237,6 @@ impl Builder {
         self
     }
     /// Add a list of apps
-    #[allow(dead_code)]
     pub fn add_apps<'a>(&'a mut self, app_list: &Vec::<String>) -> &'a mut Builder {
         for app in app_list {
             self.apps.push(CrateSpec::from_str(app));
@@ -240,6 +247,17 @@ impl Builder {
     /// add a feature to be passed on to services
     pub fn add_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.features.push(feature.into());
+        self
+    }
+    /// add a feature to be passed on to just the loader
+    pub fn add_loader_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
+        self.loader_features.push(feature.into());
+        self
+    }
+    /// add a feature to be passed on to just the loader
+    #[allow(dead_code)]
+    pub fn add_kernel_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
+        self.kernel_features.push(feature.into());
         self
     }
 
@@ -475,6 +493,11 @@ impl Builder {
             for service in services_path.iter() {
                 hosted_args.push(service);
             }
+            // jam in any pre-built local binary files that were specified
+            let binary_files_string = self.enumerate_binary_files()?;
+            let mut binary_files: Vec<&str> = binary_files_string.iter().map(|s| s.as_ref()).collect();
+            hosted_args.append(&mut binary_files);
+
             let mut dir = project_root();
             dir.push("kernel");
             println!("Starting hosted mode...");
@@ -560,6 +583,7 @@ impl Builder {
 
             // ---------- install any pre-built packages ----------
             services_path.append(&mut self.fetch_prebuilds()?);
+            services_path.append(&mut self.enumerate_binary_files()?);
 
             // --------- package up and sign a binary image ----------
             let output_bundle = self.create_image(
@@ -728,6 +752,19 @@ impl Builder {
                         exec_file.metadata().unwrap().len()
                     );
                     paths.push(exec_name);
+                }
+                _ => {}
+            }
+        }
+        Ok(paths)
+    }
+
+    fn enumerate_binary_files(&self) -> Result<Vec::<String>, DynError> {
+        let mut paths = Vec::<String>::new();
+        for item in [&self.services[..], &self.apps[..]].concat() {
+            match item {
+                CrateSpec::BinaryFile(path) => {
+                    paths.push(path);
                 }
                 _ => {}
             }

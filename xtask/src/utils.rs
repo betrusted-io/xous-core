@@ -5,7 +5,7 @@ use std::{
     process::Command,
 };
 
-use crate::{cargo, project_root, PROGRAM_TARGET};
+use crate::{cargo, project_root, TARGET_TRIPLE};
 
 const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 
@@ -85,12 +85,12 @@ pub(crate) fn ensure_compiler(
     }
 
     // If the sysroot exists, then we're good.
-    let target = target.unwrap_or(PROGRAM_TARGET);
+    let target = target.unwrap_or(TARGET_TRIPLE);
     if let Some(path) = get_sysroot(Some(target))? {
         let mut version_path = PathBuf::from(&path);
         version_path.push("lib");
         version_path.push("rustlib");
-        version_path.push(PROGRAM_TARGET);
+        version_path.push(TARGET_TRIPLE);
         if remove_existing {
             println!("Target path exists, removing it");
             std::fs::remove_dir_all(version_path)
@@ -98,13 +98,13 @@ pub(crate) fn ensure_compiler(
             println!("Also removing target directories for existing toolchain");
             let mut target_main = project_root();
             target_main.push("target");
-            target_main.push(PROGRAM_TARGET);
+            target_main.push(TARGET_TRIPLE);
             std::fs::remove_dir_all(target_main).ok();
 
             let mut target_loader = project_root();
             target_loader.push("loader");
             target_loader.push("target");
-            target_loader.push(PROGRAM_TARGET);
+            target_loader.push(TARGET_TRIPLE);
             std::fs::remove_dir_all(target_loader).ok();
         } else {
             DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
