@@ -52,8 +52,6 @@ impl Clock for EmbeddedClock {
 }
 
 fn main() -> ! {
-    use crate::SpinalUsbDevice;
-
     let _gpio_base = crate::log_init();
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
