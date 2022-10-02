@@ -1,4 +1,4 @@
-# Xous API: xous-names
+# Xous API: names
 
 `xous-names` resolves plaintext server names to 128-bit randomly
 assigned server IDs. It is also the front-line gatekeeper for
