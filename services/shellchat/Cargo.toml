@@ -22,7 +22,7 @@ xous = "0.9.9"
 xous-ipc = "0.9.9"
 xous-names = {version = "0.9.3", package = "xous-api-names"}
 keyboard = {path = "../keyboard"}
-susres = {path = "../susres", package = "xous-susres"}
+susres = {version = "0.9.0", package = "xous-api-susres"}
 codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}

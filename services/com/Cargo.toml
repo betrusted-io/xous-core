@@ -11,7 +11,7 @@ com_rs-ref = {path = "../../imports/com_rs-ref"}
 log = "0.4.14"
 log-server = {version = "0.1.3", package = "xous-api-log"}
 ticktimer-server = {path = "../ticktimer-server", package = "xous-ticktimer"}
-susres = {path = "../susres", package = "xous-susres"}
+susres = {version = "0.9.0", package = "xous-api-susres"}
 typenum = "1.12"
 xous = "0.9.9"
 xous-ipc = "0.9.9"
