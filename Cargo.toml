@@ -57,6 +57,7 @@ members = [
   "services/ime-plugin-api",
   "services/content-plugin-api",
   "services/llio",
+  "services/susres",
   "services/codec",
   "services/engine-sha512",
   "services/engine-25519",
@@ -97,7 +98,8 @@ exclude = [
   "xtask",
   # exclude the API crates, as they are domiciled here but referenced via crates.io
   "api/log-server",
-  "api/xous-names"
+  "api/xous-names",
+  "api/susres",
 ]
 
 [profile.release]
