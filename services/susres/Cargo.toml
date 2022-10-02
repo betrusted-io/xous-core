@@ -3,10 +3,14 @@ name = "xous-susres"
 version = "0.1.0"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
-description = "Manager of suspend/resume operations"
+description = "Manager of suspend/resume operations implementation"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
+xous-api-susres = { version = "0.9.0", path = "../../api/susres" }
 xous = "0.9.9"
 log-server = { version = "0.1.3", package = "xous-api-log" }
 xous-names = { version = "0.9.3", package = "xous-api-names" }

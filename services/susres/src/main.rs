@@ -5,8 +5,7 @@
 
 mod murmur3;
 
-mod api;
-use api::{Opcode, ScalarHook, SuspendEventCallback};
+use xous_api_susres::*;
 
 use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
@@ -460,7 +459,7 @@ struct ScalarCallback {
     ready_to_suspend: bool,
     token: u32,
     failed_to_suspend: bool,
-    order: crate::api::SuspendOrder,
+    order: xous_api_susres::api::SuspendOrder,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
