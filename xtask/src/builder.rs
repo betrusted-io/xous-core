@@ -492,11 +492,7 @@ impl Builder {
                     service.push_str(".exe")
                 }
             }
-            let mut hosted_args = if self.dry_run {
-                vec!["build"]
-            } else {
-                vec!["run"]
-            };
+            let mut hosted_args = vec!["run"];
             match self.stream {
                 BuildStream::Release => hosted_args.push("--release"),
                 _ => {}
@@ -510,20 +506,32 @@ impl Builder {
             let mut binary_files: Vec<&str> = binary_files_string.iter().map(|s| s.as_ref()).collect();
             hosted_args.append(&mut binary_files);
 
-            let mut dir = project_root();
-            dir.push("kernel");
-            println!("Starting hosted mode...");
-            print!("    Command: cargo");
-            for arg in &hosted_args {
-                print!(" {}", arg);
-            }
-            println!();
-            let status = Command::new(cargo())
-                .current_dir(dir)
-                .args(&hosted_args)
-                .status()?;
-            if !status.success() {
-                return Err("cargo run failed to launch hosted mode".into());
+            if !self.dry_run {
+                let mut dir = project_root();
+                dir.push("kernel");
+                println!("Starting hosted mode...");
+                print!("    Command: cargo");
+                for arg in &hosted_args {
+                    print!(" {}", arg);
+                }
+                println!();
+                let status = Command::new(cargo())
+                    .current_dir(dir)
+                    .args(&hosted_args)
+                    .status()?;
+                if !status.success() {
+                    return Err("cargo run failed to launch hosted mode".into());
+                }
+            } else {
+                // confirm the kernel can build before quitting
+                let _ = self.builder(
+                    &vec![CrateSpec::Local("xous-kernel".into())],
+                    &self.features,
+                    &target,
+                    self.stream,
+                    &vec![],
+                )?;
+                println!("Dry run requested: only building and not running");
             }
         } else {
             // ------ build the kernel ------
