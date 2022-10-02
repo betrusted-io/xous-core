@@ -4,7 +4,7 @@ pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has t
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
 #[non_exhaustive]
 #[repr(C)]
-pub(crate) enum Opcode {
+pub enum Opcode {
     /// Create a new server with the given name and return its SID.
     Register = 0,
 
@@ -55,7 +55,7 @@ pub(crate) enum Opcode {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[non_exhaustive]
 #[repr(C)]
-pub(crate) enum Return {
+pub enum Return {
     /// The caller must perform an AuthenticatedLookup using this challenge
     AuthenticateRequest(AuthenticateRequest),
 
@@ -73,19 +73,19 @@ pub(crate) enum Return {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct Registration {
+pub struct Registration {
     pub name: xous_ipc::String<64>,
     pub conn_limit: Option<u32>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct Disconnect {
+pub struct Disconnect {
     pub name: xous_ipc::String<64>,
     pub token: [u32; 4],
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct AuthenticatedLookup {
+pub struct AuthenticatedLookup {
     pub name: xous_ipc::String<64>,
     pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
     pub response: [u32; 8],
@@ -93,7 +93,7 @@ pub(crate) struct AuthenticatedLookup {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[repr(C)]
-pub(crate) struct AuthenticateRequest {
+pub struct AuthenticateRequest {
     pub name: xous_ipc::String<64>, // a copy of the originally requested lookup
     pub pubkey_id: [u8; 20],        // 160-bit pubkey ID encoded in network order (big endian)
     pub challenge: [u32; 4],
