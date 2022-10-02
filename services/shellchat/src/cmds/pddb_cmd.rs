@@ -30,6 +30,10 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "askpassword" => {
+                    let res = self.pddb.lock_and_ensure_password();
+                    write!(ret, "result: {}", res);
+                },
                 "basislist" => {
                     let bases = self.pddb.list_basis();
                     for basis in bases {

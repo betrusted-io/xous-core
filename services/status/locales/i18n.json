@@ -150,6 +150,10 @@
         "zh": "睡眠模式",
         "en-tts": "Sleep now"
     },
+    "mainmenu.lock": {
+        "en": "Lock device",
+        "en-tts": "Lock device"
+    },
     "mainmenu.wifimenu": {
         "en": "WiFi submenu...",
         "en-tts": "WiFi submenu...",

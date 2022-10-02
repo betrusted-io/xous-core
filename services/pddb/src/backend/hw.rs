@@ -606,6 +606,9 @@ impl PddbOs {
     pub(crate) fn clear_password(&self) {
         self.rootkeys.clear_password(AesRootkeyType::User0);
     }
+    pub(crate) fn lock(&mut self) {
+        self.syskey_erase();
+    }
     pub (crate) fn try_login(&mut self) -> PasswordState {
         use root_keys::api::KeywrapError;
         if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {

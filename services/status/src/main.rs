@@ -89,6 +89,9 @@ pub(crate) enum StatusOpcode {
     /// for returning wifi stats
     WifiStats,
 
+    /// Lock device with device password
+    LockDevice,
+
     /// Raise the wifi menu
     WifiMenu,
     Quit,
@@ -1012,6 +1015,12 @@ fn wrapped_main() -> ! {
                     }
                 }
             },
+            Some(StatusOpcode::LockDevice) => {
+                let pddb = pddb::Pddb::new();
+                
+                // TODO(gsora): what to do with this result? do we need it even?
+                let _lock_result = pddb.lock_and_ensure_password();
+            }
             Some(StatusOpcode::BatteryDisconnect) => {
                 if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");

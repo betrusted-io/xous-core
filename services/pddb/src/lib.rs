@@ -160,6 +160,12 @@ impl Pddb {
             _ => panic!("Internal error"),
         }
     }
+    pub fn lock_and_ensure_password(&self) -> bool {
+        send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::UncacheAndAskPassword.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+
+        return true;
+    }
     /// return a list of all open bases
     pub fn list_basis(&self) -> Vec::<String> {
         let list_alloc = PddbBasisList {

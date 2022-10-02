@@ -607,6 +607,9 @@ fn wrapped_main() -> ! {
             Opcode::SuspendResume => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 basis_cache.suspend(&mut pddb_os);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                log::debug!("calling pasword modal after wakeup");
+
+                lock_and_ensure_password(&modals, &mut pddb_os, pw_cid);
             }),
             Opcode::IsEfuseSecured => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if pddb_os.is_efuse_secured() {
@@ -1501,6 +1504,10 @@ fn wrapped_main() -> ! {
                 ).unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
                 break
+            },
+            Opcode::UncacheAndAskPassword => {
+                lock_and_ensure_password(&modals, &mut pddb_os, pw_cid);
+                xous::return_scalar(msg.sender, 1).unwrap();
             }
             Opcode::InvalidOpcode => {
                 log::error!("couldn't convert opcode: {:?}", msg);
@@ -1514,6 +1521,29 @@ fn wrapped_main() -> ! {
     xous::destroy_server(pddb_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+fn lock_and_ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, pw_cid: xous::CID) {
+    log::debug!("closing .System basis");
+    pddb_os.lock();
+    log::debug!("clearing password cache...");
+    pddb_os.clear_password();
+    log::debug!("cleared password cache...");
+
+    log::debug!("calling TryMount...");
+    loop {
+        let res = ensure_password(&modals, pddb_os, pw_cid);
+        match res {
+            PasswordState::Correct => {
+                break
+            },
+            PasswordState::Incorrect => continue,
+            others => {
+                log::info!("while unlocking, encountered {:?}", others);
+                break;
+            },
+        }
+    }
 }
 
 fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous::CID) -> PasswordState {

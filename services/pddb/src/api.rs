@@ -213,6 +213,9 @@ pub(crate) enum Opcode {
     /// change unlock PIN
     MenuChangePin = 46,
 
+    /// Clear password cache and ask for it again
+    UncacheAndAskPassword = 47,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
