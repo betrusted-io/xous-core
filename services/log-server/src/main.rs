@@ -110,7 +110,9 @@ mod implementation {
     }
 }
 
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature="precursor", feature="renode",
+    not(any(feature="precursor", feature="renode", feature="hosted")) // makes this the default implementation
+))]
 mod implementation {
     use core::fmt::{Error, Write};
     use utralib::generated::*;
