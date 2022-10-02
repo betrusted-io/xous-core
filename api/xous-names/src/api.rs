@@ -2,7 +2,6 @@
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
-#[non_exhaustive]
 #[repr(C)]
 pub enum Opcode {
     /// Create a new server with the given name and return its SID.
@@ -53,7 +52,6 @@ pub enum Opcode {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[non_exhaustive]
 #[repr(C)]
 pub enum Return {
     /// The caller must perform an AuthenticatedLookup using this challenge
