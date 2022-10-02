@@ -22,13 +22,10 @@ impl XousNames {
         Ok(XousNames { conn })
     }
 
+    /// Searches the name table and removes a given SID from the table.
+    /// It's considered "secure" because you'd have to guess a random 128-bit SID
+    /// to destroy someone else's SID.
     pub fn unregister_server(&self, sid: xous::SID) -> Result<(), xous::Error> {
-        // searches the name table and removes a given SID from the table.
-        // It's considered "secure" because you'd have to guess a random 128-bit SID
-        // to destroy someone else's SID.
-
-        // note that with the current implementation, the destroy call will have to be an O(N) search through
-        // the server table, but this is OK as we expect <100 servers on a device
         let s = sid.to_array();
         let response = xous::send_message(
             self.conn,
@@ -52,6 +49,10 @@ impl XousNames {
         }
     }
 
+    /// Register a server with a plaintext `name`. When specified, xous-names will
+    /// limit the number of connections brokered to the value in `max_conns`. This
+    /// effectively blocks further services from connecting to the server in a
+    /// Trust-On-First-Use (TOFU) model.
     pub fn register_name(
         &self,
         name: &str,
@@ -80,6 +81,10 @@ impl XousNames {
         }
     }
 
+    /// Request a connection to the server with `name`. If the connection is allowed,
+    /// a 128-bit token is provided (in the form of a `[u32; 4]`) which can be used
+    /// later on to disconnect from the server, effectively decrementing the total
+    /// number of counts in against the `max_count` limit.
     pub fn request_connection_with_token(
         &self,
         name: &str,
@@ -97,6 +102,8 @@ impl XousNames {
             _ => Err(xous::Error::ServerNotFound),
         }
     }
+    /// Disconnects from server with `name`. Must provide the same `token` returned on
+    /// connection, or else the call will be disregarded.
     pub fn disconnect_with_token(&self, name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
         let disconnect = Disconnect {
             name: String::<64>::from_str(name),
@@ -111,7 +118,13 @@ impl XousNames {
             _ => Err(xous::Error::ServerNotFound),
         }
     }
-
+    /// Requests a permanent connection to server with `name`. Xous names brokers the
+    /// entire connection, so the return value is the process-local CID (connection ID);
+    /// the 128-bit server ID is never revealed.
+    ///
+    /// This call will fail if the server has not yet started up, which is a common
+    /// problem during the boot process as the server start order is not guaranteed. Refer to
+    /// `request_connection_blocking()` for a call that will automatically retry.
     pub fn request_connection(&self, name: &str) -> Result<xous::CID, xous::Error> {
         let mut lookup_name = xous_ipc::String::<64>::new();
         write!(lookup_name, "{}", name).expect("name problably too long");
@@ -128,7 +141,12 @@ impl XousNames {
         }
     }
 
-    /// note: you probably want to use this one, to avoid synchronization issues on startup as servers register asynhcronously
+    /// Requests a permanent connection to server with `name`. Xous names brokers the
+    /// entire connection, so the return value is the process-local CID (connection ID);
+    /// the 128-bit server ID is never revealed.
+    ///
+    /// This call avoids synchronization issues on startup as servers register asynhcronously
+    /// by retrying the connection call until the server appears.
     pub fn request_connection_blocking(&self, name: &str) -> Result<xous::CID, xous::Error> {
         loop {
             match self.request_connection(name) {
@@ -141,6 +159,9 @@ impl XousNames {
         }
     }
 
+    /// Returns `true` if every server that specified a `max_conn` count has filled
+    /// every slot available. Once all the limited slots are filled, the system has
+    /// finished TOFU initialization and can begin regular operations.
     pub fn trusted_init_done(&self) -> Result<bool, xous::Error> {
         let response = xous::send_message(
             self.conn,
@@ -163,11 +184,6 @@ impl XousNames {
             Err(xous::Error::InternalError)
         }
     }
-
-    // todo:
-    // pub fn authenticated_connection(&self, name: &str, key: Authkey)
-    // this function will create an authenticated connection, if such are allowed
-    // it's intended for use by dynamically-loaded third-party apps. As of Xous 0.8 this isn't supported, so it's just a "todo"
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
