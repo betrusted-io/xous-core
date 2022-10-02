@@ -300,13 +300,14 @@ impl Builder {
         );
         remote_args.push(&output_root);
 
-        // modify the stream if release (debug is the default)
+        // modify the stream if release (debug is the default for builds; release is the default for installs)
         match stream {
             BuildStream::Release => {
                 local_args.push("--release");
-                remote_args.push("--release");
             }
-            _ => {}
+            BuildStream::Debug => {
+                remote_args.push("--debug");
+            }
         }
 
         // add any extra args. These are cargo-specific args, such as "--no-default-features"
@@ -365,9 +366,6 @@ impl Builder {
         }
         if remote_pkgs.len() > 0 {
             // remote packages are installed one at a time
-
-            // TODO: check registry if the package is already installed with the correct version, and don't rebuild it if it is!
-
             if features.len() > 0 {
                 for feature in features {
                     remote_args.push("--features");
@@ -379,9 +377,9 @@ impl Builder {
                 // emit debug
                 print!("    Command: cargo");
                 for &arg in remote_args.iter() {
-                    print!(" {} {} --version {}", arg, name, version);
+                    print!(" {}", arg);
                 }
-                println!();
+                println!(" {} {}", name, version);
                 // build
                 let status = Command::new(cargo())
                 .current_dir(project_root())

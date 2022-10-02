@@ -30,10 +30,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // A base set of packages. This is all you need for a normal
     // operating system that can run libstd
     let base_pkgs = [
-        "ticktimer-server",  // "well known" server: thread scheduling
-        "log-server", // "well known" server: debug logging
-        "xous-names", // "well known" server: manage inter-server connection lookup
-        "susres",     // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-ticktimer",  // "well known" service: thread scheduling
+        "xous-log",        // "well known" service: debug logging
+        "xous-names",      // "well known" service: manage inter-server connection lookup
+        "xous-susres",     // ticktimer registers with susres to coordinate time continuity across sleeps
     ].to_vec();
     // minimal set of packages to do bare-iron graphical I/O
     let gfx_base_pkgs = [
@@ -84,6 +84,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ].concat();
     // for fast checking of AES hardware accelerator
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"].to_vec();
+
+    // packages located on crates.io. For testing non-local build configs that are less
+    // concerned about software supply chain and more focused on developer convenience.
+    let base_pkgs_remote = [
+        "xous-ticktimer",  // "well known" service: thread scheduling
+        "xous-log@0.1.0",        // "well known" service: debug logging
+        "xous-names",      // "well known" service: manage inter-server connection lookup
+        "xous-susres",     // ticktimer registers with susres to coordinate time continuity across sleeps
+    ].to_vec();
+    let xous_kernel_remote = "xous-kernel@0.9.2";
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
@@ -157,6 +167,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_services(&get_cratespecs());
             builder.add_service("ffi-test");
             builder.add_loader_feature("renode-bypass");
+        }
+        Some("renode-remote") => {
+            builder.target_renode()
+                   .add_services(&base_pkgs_remote.into_iter().map(String::from).collect())
+                   .use_kernel(xous_kernel_remote);
         }
 
         // ------- hosted mode configs -------
@@ -338,6 +353,7 @@ Renode emulation:
  libstd-net              Renode test image for testing network functions. Bypasses sig checks, keys locked out.
  ffi-test                builds an image for testing C-FFI bindings and integration. [cratespecs] are services
  renode-aes-test         Renode image for AES emulation development. Extremely minimal.
+ renode-remote           Renode test image that pulls its crates from crates.io
 
 Other commands:
  generate-locales        (re)generate the locales include for the language selected in xous-rs/src/locale.rs
