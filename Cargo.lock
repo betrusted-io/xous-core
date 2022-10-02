@@ -1568,7 +1568,6 @@ dependencies = [
  "rkyv",
  "susres",
  "ticktimer-server",
- "trng",
  "utralib",
  "xous 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log-server",
