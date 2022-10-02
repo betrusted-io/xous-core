@@ -96,7 +96,8 @@ exclude = [
   "locales",  # exclude because it is machine-generated
   "xtask",
   # exclude the API crates, as they are domiciled here but referenced via crates.io
-  "api/log-server"
+  "api/log-server",
+  "api/xous-names"
 ]
 
 [profile.release]
