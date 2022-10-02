@@ -33,8 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "ticktimer-server",  // "well known" server: thread scheduling
         "log-server", // "well known" server: debug logging
         "xous-names", // "well known" server: manage inter-server connection lookup
-        "trng",       // most process will need to generate secure ID numbers
-        "susres",     // suspend/resume manager
+        "susres",     // ticktimer registers with susres to coordinate time continuity across sleeps
     ].to_vec();
     // minimal set of packages to do bare-iron graphical I/O
     let gfx_base_pkgs = [
@@ -46,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "llio",       // required by spinor
         ]
     ].concat();
-    // packages in the user image
+    // packages in the user image - most of the services at this layer have cross-dependencies
     let user_pkgs = [
         &gfx_base_pkgs[..],
         &[
@@ -62,6 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "modals",
             // security
             "root-keys",
+            "trng",
             "sha2",
             "engine-25519",
             "jtag",
@@ -151,6 +151,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_services(&aestest_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
         }
+        Some("ffi-test") => {
+            builder.target_renode()
+                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
+                   .add_services(&get_cratespecs());
+            builder.add_service("ffi-test");
+            builder.add_loader_feature("renode-bypass");
+        }
 
         // ------- hosted mode configs -------
         Some("run") => {
@@ -235,18 +242,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_feature("tts")
                 .add_feature("braille");
         }
+        Some("tiny") => {
+            builder.target_precursor(PRECURSOR_SOC_VERSION)
+                   .add_services(&base_pkgs.into_iter().map(String::from).collect())
+                   .add_services(&get_cratespecs());
+        }
         Some("usbdev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
                    .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
                    .add_services(&get_cratespecs());
             builder.add_service("usb-test");
-        }
-        Some("ffi-test") => {
-            builder.target_precursor(PRECURSOR_SOC_VERSION)
-                   .add_services(&gfx_base_pkgs.into_iter().map(String::from).collect())
-                   .add_services(&get_cratespecs());
-            builder.add_service("ffi-test");
-            builder.add_loader_feature("renode-bypass");
         }
         Some("pddb-dev") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION)
@@ -310,11 +315,11 @@ Hardware images:
  app-image               Precursor user image. [cratespecs] are apps
  perf-image              Precursor user image, with performance profiling. [cratespecs] are apps
  tts                     builds an image with text to speech support via externally linked C executable. [cratespecs] are apps
- ffi-test                builds an image for testing C-FFI bindings and integration. [cratespecs] are services
  usbdev                  minimal, insecure build for new USB core bringup. [cratespecs] are services
  trng-test               automation framework for TRNG testing (CPRNG seeded by RO^AV). [cratespecs] ignored.
  ro-test                 automation framework for TRNG testing (RO directly, no CPRNG). [cratespecs] ignored.
  av-test                 automation framework for TRNG testing (AV dircetly, no CPRNG). [cratespecs] ignored.
+ tiny                    Precursor tiny image. For testing with services built out-of-tree.
 
 Hosted emulation:
  run                     Run user image in hosted mode with release flags. [cratespecs] are apps
@@ -331,6 +336,7 @@ Renode emulation:
  libstd-test             Renode test image that includes the minimum packages. [cratespecs] are services
                          Bypasses sig checks, keys locked out.
  libstd-net              Renode test image for testing network functions. Bypasses sig checks, keys locked out.
+ ffi-test                builds an image for testing C-FFI bindings and integration. [cratespecs] are services
  renode-aes-test         Renode image for AES emulation development. Extremely minimal.
 
 Other commands:
