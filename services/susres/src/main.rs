@@ -423,7 +423,9 @@ mod implementation {
 
 }
 
-#[cfg(any(feature="hosted"))]
+#[cfg(any(feature="hosted",
+    not(any(feature="precursor", feature="renode", feature="hosted")) // default for crates.io
+))]
 mod implementation {
     use num_traits::ToPrimitive;
 
