@@ -5,7 +5,8 @@ use std::{
     process::Command,
 };
 
-use crate::{cargo, project_root, TARGET_TRIPLE};
+use crate::TARGET_TRIPLE;
+use crate::{cargo, project_root};
 
 const TOOLCHAIN_RELEASE_URL: &str = "https://api.github.com/repos/betrusted-io/rust/releases";
 

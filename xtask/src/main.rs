@@ -5,11 +5,10 @@ mod utils;
 use utils::*;
 mod builder;
 use builder::*;
+mod verifier;
+use verifier::*;
 
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::env;
 
 /// gitrev of the current precursor SoC version targeted by this build. This must
 /// be manually updated every time the SoC version is bumped.
@@ -369,18 +368,6 @@ type DynError = Box<dyn std::error::Error>;
 
 enum MemorySpec {
     SvdFile(String),
-}
-
-fn cargo() -> String {
-    env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
-}
-
-fn project_root() -> PathBuf {
-    Path::new(&env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(1)
-        .unwrap()
-        .to_path_buf()
 }
 
 /// [cratespecs] are positional arguments, and is a list of 0 to N tokens that immediately

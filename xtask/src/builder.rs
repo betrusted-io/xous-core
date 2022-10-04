@@ -22,7 +22,7 @@ impl BuildStream {
     }
 }
 
-pub(crate) enum CrateSpec {
+pub enum CrateSpec {
     /// name of the crate
     Local(String),
     /// crates.io: (name of crate, version)
@@ -45,8 +45,8 @@ impl Clone for CrateSpec {
         }
     }
 }
-impl CrateSpec {
-    pub fn from_str(spec: &str) -> CrateSpec {
+impl From<&str> for CrateSpec {
+    fn from(spec: &str) -> CrateSpec {
         // remote crates are specified as "name@version", i.e. "xous-names@0.9.9"
         if spec.contains('@') {
             let (name, version) = spec.split_once('@').expect("couldn't parse crate specifier");
@@ -209,26 +209,26 @@ impl Builder {
     /// Override the default kernel. For example, to use the kernel from crates.io, specify as "xous-kernel@0.9.9"
     #[allow(dead_code)]
     pub fn use_kernel<'a>(&'a mut self, spec: &str) -> &'a mut Builder {
-        self.kernel = CrateSpec::from_str(spec);
+        self.kernel = spec.into();
         self
     }
     /// Override the default loader
     #[allow(dead_code)]
     pub fn use_loader<'a>(&'a mut self, spec: &str) -> &'a mut Builder {
-        self.loader = CrateSpec::from_str(spec);
+        self.loader = spec.into();
         self
     }
 
     /// Add just one service
     #[allow(dead_code)]
     pub fn add_service<'a>(&'a mut self, service_spec: &str) -> &'a mut Builder {
-        self.services.push(CrateSpec::from_str(service_spec));
+        self.services.push(service_spec.into());
         self
     }
     /// Add a list of services
     pub fn add_services<'a>(&'a mut self, service_list: &Vec::<String>) -> &'a mut Builder {
         for service in service_list {
-            self.services.push(CrateSpec::from_str(service));
+            self.services.push(service.as_str().into());
         }
         self
     }
@@ -236,13 +236,13 @@ impl Builder {
     /// Add just one app
     #[allow(dead_code)]
     pub fn add_app<'a>(&'a mut self, app_spec: &str) -> &'a mut Builder {
-        self.apps.push(CrateSpec::from_str(app_spec));
+        self.apps.push(app_spec.into());
         self
     }
     /// Add a list of apps
     pub fn add_apps<'a>(&'a mut self, app_list: &Vec::<String>) -> &'a mut Builder {
         for app in app_list {
-            self.apps.push(CrateSpec::from_str(app));
+            self.apps.push(app.as_str().into());
         }
         self
     }
@@ -833,11 +833,11 @@ impl Builder {
     }
 }
 
-fn cargo() -> String {
+pub fn cargo() -> String {
     env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
 }
 
-fn project_root() -> PathBuf {
+pub fn project_root() -> PathBuf {
     Path::new(&env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .nth(1)
