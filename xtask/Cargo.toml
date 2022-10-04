@@ -18,3 +18,4 @@ serde = { version = "1.0.130", features = ["derive"] }
 tempfile = "3.3.0"
 ureq = { version = "2.5.0", features = ["json"] }
 svd2utra = {path="../svd2utra"}
+# toml_edit = "0.14.4" # would be used to verify Cargo.toml files, but it's too hard to do this right now.

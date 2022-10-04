@@ -22,6 +22,7 @@ const MIN_XOUS_VERSION: &str = "v0.9.8-791";
 const TARGET_TRIPLE: &str = "riscv32imac-unknown-xous-elf";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // verify("xous-api-names@0.9.3".into()).expect("things don't match");
     let mut builder = Builder::new();
     // encodes a timestamp into the build, unless '--no-timestamp' is passed
     generate_version(env::args().filter(|x| x == "--no-timestamp").count() == 0);
