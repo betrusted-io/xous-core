@@ -228,9 +228,10 @@ fn compare_files(a: &Path, b: &Path) -> Result<bool, DynError> {
     let f2 = File::open(b)?;
 
     // check if file sizes are the same
-    if f1.metadata().unwrap().len() != f2.metadata().unwrap().len() {
-        return Ok(false);
-    }
+    // HAHA joke is on me, this doesn't work because CRLF->LF conversions.
+    // if f1.metadata().unwrap().len() != f2.metadata().unwrap().len() {
+    //     return Ok(false);
+    // }
 
     let s1 = fs::read_to_string(a);
     let s2 = fs::read_to_string(b);
