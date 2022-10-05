@@ -7,6 +7,25 @@ use std::io::{BufReader, Read};
 
 use crate::DynError;
 
+pub fn check_project_consistency() -> Result<(), DynError> {
+    let check_pkgs = [
+        "xous-api-names@0.9.4",
+        "xous-api-log@0.1.4",
+        "xous-api-susres@0.9.2",
+        "xous-api-ticktimer@0.9.2",
+        "xous-ticktimer@0.1.3",
+        "xous-log@0.1.1",
+        "xous-names@0.9.9",
+        "xous-susres@0.1.3",
+        "xous-ipc@0.9.10",
+        "xous@0.9.10",
+    ];
+    for pkg in check_pkgs {
+        verify(pkg.into())?;
+    }
+    Ok(())
+}
+
 pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
     if let CrateSpec::CratesIo(name, version) = spec {
         let mut cache_path = Path::new(&env::var("CARGO_HOME").unwrap()).to_path_buf();
@@ -29,6 +48,10 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
         cache_path.push(cache_leaf);
         // form the package source name
         cache_path.push(format!("{}-{}", name, version));
+        if !cache_path.exists() {
+            println!("Package not in registry, skipping consistency check: {}", cache_path.as_os_str().to_str().unwrap());
+            return Ok(());
+        }
 
         // form the local source path
         let subdir = if name.contains("-api-") {
@@ -37,9 +60,21 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
             "services"
         };
         let subdir = format!("./{}/{}/", subdir, name);
-        let src_path = Path::new(&subdir);
+        // handle special cases of xous kernel and ipc crates
+        let src_path = if name != "xous" && name != "xous-ipc" {
+            Path::new(&subdir)
+        } else {
+            if name == "xous" {
+                Path::new("./xous-rs")
+            } else if name == "xous-ipc" {
+                Path::new("./xous-ipc")
+            } else {
+                panic!("Consistency error: special case handling did not find either xous or xous-ipc");
+            }
+        };
 
         // now recurse through the source path and check that it matches the cache, except for Cargo.toml
+        println!("Comparing {} <-> {}", src_path.as_os_str().to_str().unwrap(), cache_path.as_os_str().to_str().unwrap());
         match compare_dirs(src_path, &cache_path) {
             Ok(true) => Ok(()),
             Ok(false) => Err("Crates.io downloaded data does not match local source".into()),
@@ -164,7 +199,7 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
             other_dir.push(&dname);
             let mut src_dir = src.to_path_buf();
             src_dir.push(&dname);
-            println!("comparing {}/ <-> {}/", src_dir.as_os_str().to_str().unwrap(), &other_dir.as_os_str().to_str().unwrap());
+            // println!("comparing {}/ <-> {}/", src_dir.as_os_str().to_str().unwrap(), &other_dir.as_os_str().to_str().unwrap());
             match compare_dirs(&src_dir, &other_dir) {
                 Ok(true) => {},
                 Ok(false) => {

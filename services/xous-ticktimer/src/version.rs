@@ -14,5 +14,5 @@ pub(crate) fn get_version() -> crate::api::VersionString {
     v
 }
 #[allow(dead_code)]
-pub const TIMESTAMP: &'static str = "Wed, 05 Oct 2022 17:27:42 +0800";
-pub const SEMVER: &'static str = "v0.9.9-425-g0ae89626";
+pub const TIMESTAMP: &'static str = "Wed, 05 Oct 2022 18:25:35 +0800";
+pub const SEMVER: &'static str = "v0.9.9-441-g113d4c2d";

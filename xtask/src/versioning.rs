@@ -23,7 +23,7 @@ pub(crate) fn generate_version(add_timestamp: bool) {
     let gitver = output.stdout;
     let semver = String::from_utf8_lossy(&gitver);
 
-    let version_file = "services/ticktimer-server/src/version.rs";
+    let version_file = "services/xous-ticktimer/src/version.rs";
 
     // Read the existing file to see if it needs to be updated.
     let mut existing_data = Vec::new();

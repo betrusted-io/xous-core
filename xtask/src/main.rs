@@ -22,7 +22,6 @@ const MIN_XOUS_VERSION: &str = "v0.9.8-791";
 const TARGET_TRIPLE: &str = "riscv32imac-unknown-xous-elf";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // verify("xous-api-names@0.9.3".into()).expect("things don't match");
     let mut builder = Builder::new();
     // encodes a timestamp into the build, unless '--no-timestamp' is passed
     generate_version(env::args().filter(|x| x == "--no-timestamp").count() == 0);
@@ -88,12 +87,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // packages located on crates.io. For testing non-local build configs that are less
     // concerned about software supply chain and more focused on developer convenience.
     let base_pkgs_remote = [
-        "xous-ticktimer@0.1.0",   // "well known" service: thread scheduling
-        "xous-log@0.1.0",         // "well known" service: debug logging
-        "xous-names@0.9.8",       // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.0",      // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-ticktimer@0.1.3",   // "well known" service: thread scheduling
+        "xous-log@0.1.1",         // "well known" service: debug logging
+        "xous-names@0.9.9",       // "well known" service: manage inter-server connection lookup
+        "xous-susres@0.1.3",      // ticktimer registers with susres to coordinate time continuity across sleeps
     ].to_vec();
-    let xous_kernel_remote = "xous-kernel@0.9.2";
+    let xous_kernel_remote = "xous-kernel@0.9.3";
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
@@ -294,7 +293,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("wycheproof-import") => whycheproof_import()?,
         _ => print_help(),
     }
-    builder.build()
+    builder.build()?;
+
+    // the intent of this call is to check that crates we are sourcing from crates.io
+    // match the crates in our local source. The usual cause of an inconsistency is
+    // a maintainer forgot to publish a change to crates.io.
+    //
+    // Note a key problem is that we don't check that the Cargo.toml files are correct,
+    // because the manifest format is heavily modified on upload to crates.io.
+    // This means that an attacker who controlls crates.io (or any part of the chain
+    // from manifest upload to download) can freely modify dependencies, rendering
+    // source code equivalence checking moot.
+    //
+    // this has to be called after the build because the crates need to be downloaded for
+    // checking before you can check them!
+    let do_verify = env::args().filter(|x| x == "--no-verify").count() == 0;
+    if do_verify {
+        check_project_consistency()
+    } else {
+        Ok(())
+    }
 }
 
 fn print_help() {
@@ -305,6 +323,7 @@ fn print_help() {
     [--app [cratespec]]
     [--service [cratespec]]
     [--no-timestamp]
+    [--no-verify]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -320,6 +339,7 @@ be merged in with explicit app/service treatment with the following flags:
 
 [--lkey] and [--kkey]    Paths to alternate private key files for loader and kernel key signing (defaults to developer key)
 [--no-timestamp]         Do not include a timestamp in the build. By default, `ticktimer` is rebuilt on every run to encode a timestamp.
+[--no-verify]            Do not verify that local sources match crates.io downloaded sources
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.

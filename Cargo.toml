@@ -1,9 +1,10 @@
 [workspace]
 default-members = [
-  "services/log-server",
-  "services/graphics-server",
-  "services/ticktimer-server",
+  "services/xous-log",
+  "services/xous-ticktimer",
   "services/xous-names",
+  "services/xous-susres",
+  "services/graphics-server",
   "services/keyboard",
   "services/com",
   "services/trng",
@@ -16,7 +17,6 @@ default-members = [
   "services/content-plugin-api",
   "services/shellchat",
   "services/llio",
-  "services/susres",
   "services/codec",
   "services/engine-sha512",
   "services/engine-25519",
@@ -34,12 +34,13 @@ members = [
   "xous-ipc",
   "xous-rs",
   "tools",
-  "services/aes-test",
   "services/graphics-server",
-  "services/log-server",
-  "services/ticktimer-server",
-  "services/com",
+  "services/xous-log",
+  "services/xous-ticktimer",
+  "services/xous-susres",
   "services/xous-names",
+  "services/aes-test",
+  "services/com",
   "services/keyboard",
   "services/kernel-test",
   "services/trng",
@@ -57,7 +58,6 @@ members = [
   "services/ime-plugin-api",
   "services/content-plugin-api",
   "services/llio",
-  "services/susres",
   "services/codec",
   "services/engine-sha512",
   "services/engine-25519",
@@ -97,10 +97,10 @@ exclude = [
   "locales",  # exclude because it is machine-generated
   "xtask",
   # exclude the API crates, as they are domiciled here but referenced via crates.io
-  "api/log-server",
-  "api/xous-names",
-  "api/susres",
-  "api/ticktimer",
+  "api/xous-api-log",
+  "api/xous-api-names",
+  "api/xous-api-susres",
+  "api/xous-api-ticktimer",
 ]
 
 [profile.release]
@@ -154,3 +154,6 @@ path = "imports/getrandom"
 git="https://github.com/betrusted-io/ring-xous"
 rev="36e419d05ce1d6957a3cc25092f2d68feba8e9a3" # use the commitref because we're still updating the branch
 #branch="0.16.20-cleanup"
+
+# [patch.crates-io.xous]
+# path = "./xous-rs"
