@@ -9,6 +9,8 @@ import sys
 import hashlib
 import csv
 import urllib.request
+from datetime import datetime
+from datetime import date
 
 from progressbar.bar import ProgressBar
 
@@ -414,6 +416,96 @@ class PrecursorUsb:
 
         self.ping_wdt()
 
+LANGUAGE = {
+    0: "en",
+    1: "en-tts",
+    2: "ja",
+    3: "zh",
+}
+
+def bytes_to_semverstr(b):
+    maj = int.from_bytes(b[0:2], 'little')
+    min = int.from_bytes(b[2:4], 'little')
+    rev = int.from_bytes(b[4:6], 'little')
+    extra = int.from_bytes(b[6:8], 'little')
+    has_commit = int.from_bytes(b[12:16], 'little')
+    if has_commit != 0:
+        commit = int.from_bytes(b[8:12], 'little')
+        return "v{}.{}.{}-{}-g{:x}".format(maj, min, rev, extra, commit)
+    else:
+        return "v{}.{}.{}-{}".format(maj, min, rev, extra)
+
+class SemVer:
+    def __init__(self, b):
+        self.maj = int.from_bytes(b[0:2], 'little')
+        self.min = int.from_bytes(b[2:4], 'little')
+        self.rev = int.from_bytes(b[4:6], 'little')
+        self.extra = int.from_bytes(b[6:8], 'little')
+        self.has_commit = int.from_bytes(b[12:16], 'little')
+        # note: very old kernel will return a version of 0.0.0
+        if self.has_commit != 0:
+            self.commit = int.from_bytes(b[8:12], 'little')
+
+    def ord(self): # returns a number that you can use to compare if versions are bigger or smaller than each other
+        return self.maj << 48 | self.min << 32 | self.rev << 16 | self.extra
+
+    def as_str(self):
+        if self.has_commit == 0:
+            return "v{}.{}.{}-{}".format(self.maj, self.min, self.rev, self.extra)
+        else:
+            return "v{}.{}.{}-{}-g{:x}".format(self.maj, self.min, self.rev, self.extra, self.commit)
+
+def check_header(backup):
+    i = 0
+    print("Backup protocol version: 0x{:08x}".format(int.from_bytes(backup[i:i+4], 'little')))
+    if int.from_bytes(backup[i:i+4], 'little') != 0x00010000:
+        print("Backup protocol version is not correct.")
+        return False
+    i += 4
+    print("Xous version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+    backup_xous_ver = SemVer(backup[i:i+16])
+    i += 16
+    print("SOC version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+    i += 16
+    print("EC version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+    i += 16
+    print("WF200 version: {}".format(bytes_to_semverstr(backup[i:i+16])))
+    i += 16
+    i += 4 # padding because align=8
+    ts = int.from_bytes(backup[i:i+8], 'little') / 1000
+    print("Timestamp: {} / {}".format(ts, datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
+    if (datetime.utcfromtimestamp(ts) - datetime.now()).total_seconds() > 600:
+        print("Backup timestamp is in the future. Is the RTC and timezone set correctly on the device?")
+        print("Note: UTC time of the host must not be more than 10 minutes ahead of the device")
+        return False
+    if datetime.utcfromtimestamp(ts).year < 2021:
+        print("Backup timestamp is from before 2021. Is the RTC and timezone set correctly on the device?")
+        return False
+    i += 8
+    lcode = int.from_bytes(backup[i:i+4], 'little')
+    print("Language code: {}".format(lcode))
+    if lcode < len(LANGUAGE):
+        language = LANGUAGE[lcode]
+    else:
+        print("Language code is incorrect.")
+        return False
+    i += 4
+    print("Keyboard layout code: {}".format(int.from_bytes(backup[i:i+4], 'little')))
+    i += 4
+    print("DNA: 0x{:x}".format(int.from_bytes(backup[i:i+8], 'little')))
+    i += 8
+    i += 48 # reserved
+
+    backup[i:i+4] = (2).to_bytes(4, 'little')
+    op = int.from_bytes(backup[i:i+4], 'little')
+    print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
+    if op != 2:
+        print("Opcode is incorrect.")
+        return False
+
+    print("Backup header passes sanity check!")
+    return True
+
 def auto_int(x):
     return int(x, 0)
 
@@ -492,6 +584,7 @@ def main():
     print("Halting CPU.")
     pc_usb.poke(vexdbg_addr, 0x00020000)
 
+    header_checked = False
     flash_region = int(pc_usb.regions['spiflash'][0], 0)
     if args.peek:
         pc_usb.peek(args.peek + flash_region, display=True)
@@ -506,6 +599,11 @@ def main():
                 if amount_read % (block_size * 16) == 0:
                     pc_usb.ping_wdt()
                 backup = pc_usb.burst_read(start_addr + amount_read + flash_region, block_size)
+                if header_checked is False:
+                    if check_header(backup):
+                        header_checked = True
+                    else:
+                        break
                 amount_read += block_size
                 if amount_read < total_length:
                     progress.update(amount_read)
@@ -522,6 +620,9 @@ def main():
     except usb.core.USBError:
         pass # we expect an error because we reset the SOC and that includes the USB core
 
+    if header_checked is False:
+        print("--- BACKUP FAILED ---")
+        print("Backup header did not pass basic integrity tests. Did you run 'Prepare Backups' on the device? Is the device time and timezone set correctly?")
     # print("If you need to run more commands, please unplug and re-plug your device in, as the Precursor USB core was just reset")
 
 if __name__ == "__main__":
