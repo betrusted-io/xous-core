@@ -9,16 +9,17 @@ use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
-        "xous-api-names@0.9.4",
-        "xous-api-log@0.1.4",
-        "xous-api-susres@0.9.2",
-        "xous-api-ticktimer@0.9.2",
-        "xous-ticktimer@0.1.3",
-        "xous-log@0.1.1",
-        "xous-names@0.9.9",
-        "xous-susres@0.1.3",
-        "xous-ipc@0.9.10",
-        "xous@0.9.10",
+        "xous-api-names@0.9.5",
+        "xous-api-log@0.1.5",
+        "xous-api-susres@0.9.3",
+        "xous-api-ticktimer@0.9.3",
+        "xous-ticktimer@0.1.4",
+        "xous-log@0.1.2",
+        "xous-names@0.9.10",
+        "xous-susres@0.1.4",
+        "xous-ipc@0.9.11",
+        "xous@0.9.11",
+        "xous-kernel@0.9.4",
     ];
     for pkg in check_pkgs {
         verify(pkg.into())?;
@@ -61,13 +62,15 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
         };
         let subdir = format!("./{}/{}/", subdir, name);
         // handle special cases of xous kernel and ipc crates
-        let src_path = if name != "xous" && name != "xous-ipc" {
+        let src_path = if name != "xous" && name != "xous-ipc" && name != "xous-kernel" {
             Path::new(&subdir)
         } else {
             if name == "xous" {
                 Path::new("./xous-rs")
             } else if name == "xous-ipc" {
                 Path::new("./xous-ipc")
+            } else if name == "xous-kernel" {
+                Path::new("./kernel")
             } else {
                 panic!("Consistency error: special case handling did not find either xous or xous-ipc");
             }
@@ -175,19 +178,26 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
                 */
                 // things matched, go to the next file
                 continue;
-            }
-            let mut other_file = other.to_path_buf();
-            other_file.push(&fname);
-            let mut src_file = src.to_path_buf();
-            src_file.push(&fname);
-            // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
-            match compare_files(&src_file, &other_file) {
-                Ok(true) => {},
-                Ok(false) => {
-                    println!("DIFF FAIL: {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
-                    return Ok(false)
-                },
-                Err(_) => return Err("Access error comparing remote and local crates".into())
+            } else {
+                let mut other_file = other.to_path_buf();
+                other_file.push(&fname);
+                let mut src_file = src.to_path_buf();
+                src_file.push(&fname);
+                // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
+                if src_file.as_os_str().to_str().unwrap().contains("ticktimer")
+                    && fname.as_os_str().to_str().unwrap() == "version.rs" {
+                    // don't compare the version.rs, as it's supposed to be different due to the timestamp
+                    // println!("skipping ticktimer version.rs");
+                } else {
+                    match compare_files(&src_file, &other_file) {
+                        Ok(true) => {},
+                        Ok(false) => {
+                            println!("DIFF FAIL: {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
+                            return Ok(false)
+                        },
+                        Err(_) => return Err("Access error comparing remote and local crates".into())
+                    }
+                }
             }
         } else if entry.file_type()?.is_dir() {
             let dname = entry.file_name();
