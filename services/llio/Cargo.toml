@@ -10,8 +10,8 @@ version = "0.1.0"
 log = "0.4.14"
 log-server = {package = "xous-api-log", version = "0.1.4"}
 ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.2"}
-xous = "0.9.11"
-xous-ipc = "0.9.11"
+xous = "0.9.12"
+xous-ipc = "0.9.12"
 xous-names = {package = "xous-api-names", version = "0.9.4"}
 susres = {package = "xous-api-susres", version = "0.9.2"}
 

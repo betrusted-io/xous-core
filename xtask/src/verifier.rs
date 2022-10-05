@@ -9,17 +9,17 @@ use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
-        "xous-api-names@0.9.5",
-        "xous-api-log@0.1.5",
-        "xous-api-susres@0.9.3",
-        "xous-api-ticktimer@0.9.3",
-        "xous-ticktimer@0.1.4",
-        "xous-log@0.1.2",
-        "xous-names@0.9.10",
-        "xous-susres@0.1.4",
-        "xous-ipc@0.9.11",
-        "xous@0.9.11",
-        "xous-kernel@0.9.4",
+        "xous-api-names@0.9.6",
+        "xous-api-log@0.1.6",
+        "xous-api-susres@0.9.4",
+        "xous-api-ticktimer@0.9.4",
+        "xous-ticktimer@0.1.5",
+        "xous-log@0.1.3",
+        "xous-names@0.9.11",
+        "xous-susres@0.1.5",
+        "xous-ipc@0.9.12",
+        "xous@0.9.12",
+        "xous-kernel@0.9.5",
     ];
     for pkg in check_pkgs {
         verify(pkg.into())?;
