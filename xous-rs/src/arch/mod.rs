@@ -3,9 +3,13 @@ pub mod riscv;
 #[cfg(any(feature="precursor", feature="renode"))]
 pub use riscv::*;
 
-#[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
+#[cfg(any(all(feature="hosted", not(feature = "processes-as-threads")),
+    not(any(feature="precursor", feature="renode"))
+))]
 pub mod hosted;
-#[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
+#[cfg(any(all(feature="hosted", not(feature = "processes-as-threads")),
+    not(any(feature="precursor", feature="renode"))
+))]
 pub use hosted::*;
 
 #[cfg(feature = "processes-as-threads")]
