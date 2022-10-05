@@ -232,16 +232,29 @@ fn compare_files(a: &Path, b: &Path) -> Result<bool, DynError> {
         return Ok(false);
     }
 
-    // Use buf readers since they are much faster
-    let f1 = BufReader::new(f1);
-    let f2 = BufReader::new(f2);
+    let s1 = fs::read_to_string(a);
+    let s2 = fs::read_to_string(b);
 
-    // Do a byte to byte comparison of the two files
-    for (b1, b2) in f1.bytes().zip(f2.bytes()) {
-        if b1.unwrap() != b2.unwrap() {
-            return Ok(false);
+    if s1.is_ok() && s2.is_ok() {
+        // text do CRLF substitutions
+        let f1 = s1?.replace("\r\n", "\n");
+        let f2 = s2?.replace("\r\n", "\n");
+        if f1 == f2 {
+            Ok(true)
+        } else {
+            Ok(false)
         }
-    }
+    } else {
+        // do a binary compare
+        let f1 = BufReader::new(f1);
+        let f2 = BufReader::new(f2);
 
-    return Ok(true);
+        // Do a byte to byte comparison of the two files
+        for (b1, b2) in f1.bytes().zip(f2.bytes()) {
+            if b1.unwrap() != b2.unwrap() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
 }
