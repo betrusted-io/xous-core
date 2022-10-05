@@ -18,7 +18,7 @@ xous-ipc = "0.9.10"
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-susres = {package = "xous-api-surses", version = "0.9.2"}
+susres = {package = "xous-api-susres", version = "0.9.2"}
 xous-names = {package = "xous-api-names", version = "0.9.4"}
 xous-semver = "0.1.2"
 
