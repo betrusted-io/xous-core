@@ -16,7 +16,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
         "xous-ticktimer@0.1.5",
         "xous-log@0.1.3",
         "xous-names@0.9.11",
-        "xous-susres@0.1.5",
+        "xous-susres@0.1.6",
         "xous-ipc@0.9.12",
         "xous@0.9.12",
         "xous-kernel@0.9.5",

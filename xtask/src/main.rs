@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "xous-ticktimer@0.1.5",   // "well known" service: thread scheduling
         "xous-log@0.1.3",         // "well known" service: debug logging
         "xous-names@0.9.11",       // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.5",      // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-susres@0.1.6",      // ticktimer registers with susres to coordinate time continuity across sleeps
     ].to_vec();
     let xous_kernel_remote = "xous-kernel@0.9.5";
 
