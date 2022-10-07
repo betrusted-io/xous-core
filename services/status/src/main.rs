@@ -1061,6 +1061,13 @@ fn wrapped_main() -> ! {
                 // sync the PDDB to disk prior to making backups
                 let pddb = pddb::Pddb::new();
                 pddb.sync().expect("couldn't synchronize PDDB to disk");
+
+                // TODO: add PDDB hash map computations here + UX flow to indicate pause
+
+                // TODO: add a call to PDDB that blocks the PDDB forever. The system is rebooted
+                // after the backup is done. However, this call ensures that the PDDB does not
+                // get updated mid-way through a backup
+
                 let mut metadata = root_keys::api::BackupHeader::default();
                 // note: default() should set the language correctly by default since it's a systemwide constant
                 metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);

@@ -11,6 +11,7 @@ import csv
 import urllib.request
 from datetime import datetime
 from datetime import date
+from Crypto.Hash import SHA512
 
 from progressbar.bar import ProgressBar
 
@@ -457,8 +458,9 @@ class SemVer:
 
 def check_header(backup):
     i = 0
-    print("Backup protocol version: 0x{:08x}".format(int.from_bytes(backup[i:i+4], 'little')))
-    if int.from_bytes(backup[i:i+4], 'little') != 0x00010000:
+    backup_version = int.from_bytes(backup[i:i+4], 'little')
+    print("Backup protocol version: 0x{:08x}".format(backup_version))
+    if backup_version != 0x00010000 and backup_version != 0x00010001:
         print("Backup protocol version is not correct.")
         return False
     i += 4
@@ -475,12 +477,11 @@ def check_header(backup):
     ts = int.from_bytes(backup[i:i+8], 'little') / 1000
     print("Timestamp: {} / {}".format(ts, datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
     if (datetime.utcfromtimestamp(ts) - datetime.now()).total_seconds() > 600:
-        print("Backup timestamp is in the future. Is the RTC and timezone set correctly on the device?")
-        print("Note: UTC time of the host must not be more than 10 minutes ahead of the device")
-        return False
+        print("WARNING: Backup timestamp is in the future. Is the RTC and timezone set correctly on the device?")
+        # return False # non-fatal, because we have hash checks now
     if datetime.utcfromtimestamp(ts).year < 2021:
-        print("Backup timestamp is from before 2021. Is the RTC and timezone set correctly on the device?")
-        return False
+        print("WARNING: Backup timestamp is from before 2021. Is the RTC and timezone set correctly on the device?")
+        # return False
     i += 8
     lcode = int.from_bytes(backup[i:i+4], 'little')
     print("Language code: {}".format(lcode))
@@ -494,14 +495,42 @@ def check_header(backup):
     i += 4
     print("DNA: 0x{:x}".format(int.from_bytes(backup[i:i+8], 'little')))
     i += 8
-    i += 48 # reserved
-
+    checksum_region_len = int.from_bytes(backup[i:i+4], 'little') * 4096
+    print("Checksum region length: 0x{:x}".format(checksum_region_len))
+    i += 4
+    total_checksums = int.from_bytes(backup[i:i+4], 'little') + 1
+    print("Number of checksums, including the header checksum itself: {}".format(total_checksums))
+    i += 4
+    header_total_size = int.from_bytes(backup[i:i+4], 'little')
+    print("Header total length in bytes: {}".format(header_total_size))
+    i += 36 # reserved
     backup[i:i+4] = (2).to_bytes(4, 'little')
     op = int.from_bytes(backup[i:i+4], 'little')
     print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
     if op != 2:
         print("Opcode is incorrect.")
         return False
+
+    if backup_version == 0x10001:
+        print("Checksums found in backup image, checking...")
+        PT_HEADER_LEN = 4 + 16 * 4 + 4 + 8 + 64 + 4 + 4
+        NONCE_LEN = 12
+        CT_LEN = PT_HEADER_LEN + 1024 + 64
+        TAG_LEN = 16
+        COMMIT_NONCE_LEN = 32
+        COMMIT_LEN = 32
+        CHECKSUM_LEN = 32
+        checksum_loc = PT_HEADER_LEN + NONCE_LEN + CT_LEN + TAG_LEN + COMMIT_NONCE_LEN + COMMIT_LEN
+        check_region = backup[:checksum_loc]
+        checksum = backup[checksum_loc:checksum_loc + CHECKSUM_LEN]
+        hasher = SHA512.new(truncate="256")
+        hasher.update(check_region)
+        computed_checksum = hasher.digest()
+        if computed_checksum != checksum:
+            print("Header failed hash integrity check!")
+            return False
+
+        # TODO: checksums on data region
 
     print("Backup header passes sanity check!")
     return True

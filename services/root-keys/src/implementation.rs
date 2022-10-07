@@ -2729,9 +2729,19 @@ impl<'a> RootKeys {
         header.op = BackupOp::Backup;  // set the "we're backing up" flag
 
         // condense the data into a single block, to reduce read/write cycles on the block
-        let mut block = [0u8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()];
+        const HASH_LEN: usize = 32;
+        let mut block = [0u8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>() + HASH_LEN];
         block[..size_of::<BackupHeader>()].copy_from_slice(header.as_ref());
-        block[size_of::<BackupHeader>()..].copy_from_slice(backup_ct.as_ref());
+        block[size_of::<BackupHeader>()..size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()].copy_from_slice(backup_ct.as_ref());
+
+        // compute a hash of the data, for fast verification of the backup header integrity to detect media errors, etc.
+        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
+        hasher.update(&block[..size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()]);
+        let digest = hasher.finalize();
+        assert!(digest.len() == HASH_LEN, "Wrong length hash selected! Check your code.");
+        block[size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()..]
+            .copy_from_slice(digest.as_slice());
+
         self.spinor.patch(
             self.kernel(),
             self.kernel_base(),

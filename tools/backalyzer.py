@@ -112,6 +112,7 @@ def main():
             TAG_LEN = 16
             COMMIT_NONCE_LEN = 32
             COMMIT_LEN = 32
+            CHECKSUM_LEN = 32
             offset = PT_HEADER_LEN
             nonce = backup[offset:offset+NONCE_LEN]
             offset += NONCE_LEN
@@ -122,6 +123,9 @@ def main():
             commit_nonce = backup[offset:offset+COMMIT_NONCE_LEN]
             offset += COMMIT_NONCE_LEN
             commit = backup[offset:offset+COMMIT_LEN]
+            offset += COMMIT_LEN
+            check_region = backup[:offset]
+            checksum = backup[offset:offset+CHECKSUM_LEN]
 
             h_enc = SHA512.new(truncate="256")
             h_enc.update(key)
@@ -149,7 +153,8 @@ def main():
                 exit(1)
 
             i = 0
-            logging.info("Backup version: 0x{:08x}".format(int.from_bytes(pt_data[i:i+4], 'little')))
+            backup_version = int.from_bytes(pt_data[i:i+4], 'little')
+            logging.info("Backup version: 0x{:08x}".format(backup_version))
             i += 4
             logging.info("Xous version: {}".format(bytes_to_semverstr(pt_data[i:i+16])))
             i += 16
@@ -171,10 +176,28 @@ def main():
             dna = pt_data[i:i+8]
             dna_int = int.from_bytes(dna, 'little')
             i += 8
-            i += 48 # reserved
+            checksum_region_len = int.from_bytes(pt_data[i:i+4], 'little') * 4096
+            logging.info("Checksum region length: 0x{:x}".format(checksum_region_len))
+            i += 4
+            total_checksums = int.from_bytes(pt_data[i:i+4], 'little')
+            logging.info("Number of checksums, including the header checksum itself: {}".format(total_checksums))
+            i += 4
+            header_total_size = int.from_bytes(pt_data[i:i+4], 'little')
+            logging.info("Header total length in bytes: {}".format(header_total_size))
+            i += 36 # reserved
             op = int.from_bytes(pt_data[i:i+4], 'little')
             logging.info("Stored Backup Opcode: {}".format(op))
             i += 8 # padding because align=8
+
+            if backup_version == 0x10001:
+                logging.info("Doing hash verification of pt+ct metadata")
+                hasher = SHA512.new(truncate="256")
+                hasher.update(check_region)
+                computed_checksum = hasher.digest()
+                if computed_checksum != checksum:
+                    print("Header failed hash integrity check!")
+
+                # TODO: sector checks
 
             keyrom = pt_data[i:i+1024]
             user_key_enc = get_key(40, keyrom, 32)

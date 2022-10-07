@@ -256,7 +256,7 @@ impl Default for BackupHeaderIpc {
     }
 }
 
-pub const BACKUP_VERSION: u32 = 0x00_01_00_00;
+pub const BACKUP_VERSION: u32 = 0x00_01_00_01;
 
 #[repr(u32)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -359,6 +359,21 @@ impl From::<[u8; 4]> for BackupKeyboardLayout {
     }
 }
 
+pub const HEADER_TOTAL_SIZE: u32 = 4096;
+/// Size of a checksummed block in pages. 0x100 = 256 pages,
+/// or 1 MiB for a checksummed block. This is specified in 4kiB pages
+/// because it really doesn't make sense to checksum anything smaller
+/// than that, and it allows us to grow the size of a single checksummed
+/// block to well over 4GiB.
+pub const CHECKSUM_BLOCKLEN_PAGE: u32 = 0x100;
+/// The total number of checksums required to cover the length of the PDDB
+/// divided by the length of a checksummed page. This number does not count
+/// the single additional checksum that is included to check the integrity of the
+/// plaintext + ciphertext header itself.
+///
+/// Total number of checksums has to divide evenly into the size of the PDDB region
+pub const TOTAL_CHECKSUMS: u32 = xous::PDDB_LEN / CHECKSUM_BLOCKLEN_PAGE;
+
 #[repr(C, align(8))]
 #[derive(Copy, Clone, Debug)]
 pub struct BackupHeader {
@@ -372,11 +387,26 @@ pub struct BackupHeader {
     pub language: [u8; 4],
     pub kbd_layout: [u8; 4],
     pub dna: [u8; 8],
-    pub _reserved: [u8; 48],
+    /// Length of a checksummed region, in 4kiB pages
+    pub checksum_len_page: [u8; 4],
+    /// Number of checksummed pages
+    ///
+    /// The location of the first header is computed as follows:
+    /// `header_start_address + header_total_size - (total_checksums) * 16`
+    /// The backup data starts at `header_start_address + header_total_size`
+    ///
+    /// In other words, checksums are aligned to the highest address in the header
+    /// while the header plaintext+ciphertext data is aligned to the lowest address
+    /// in the header region.
+    pub total_checksums: [u8; 4],
+    /// Total size of the header in bytes, including unused space
+    pub header_total_size: [u8; 4],
+    pub _reserved: [u8; 36],
     pub op: BackupOp,
 }
 impl Default for BackupHeader {
     fn default() -> Self {
+        assert!(xous::PDDB_LEN & ((CHECKSUM_BLOCKLEN_PAGE * 0x1000) - 1) == 0, "PDDB_LEN is not an integer multiple of CHECKSUM_LEN_PAGE");
         BackupHeader {
             version: BACKUP_VERSION,
             xous_ver: [0u8; 16],
@@ -387,7 +417,10 @@ impl Default for BackupHeader {
             language: BackupLanguage::default().into(), // this is "correct by default"
             kbd_layout: BackupKeyboardLayout::default().into(), // this has to be adjusted
             dna: [0u8; 8],
-            _reserved: [0u8; 48],
+            checksum_len_page: CHECKSUM_BLOCKLEN_PAGE.to_le_bytes(),
+            total_checksums: TOTAL_CHECKSUMS.to_le_bytes(),
+            header_total_size: HEADER_TOTAL_SIZE.to_le_bytes(),
+            _reserved: [0u8; 36],
             op: BackupOp::Archive,
         }
     }
