@@ -372,7 +372,7 @@ pub const CHECKSUM_BLOCKLEN_PAGE: u32 = 0x100;
 /// plaintext + ciphertext header itself.
 ///
 /// Total number of checksums has to divide evenly into the size of the PDDB region
-pub const TOTAL_CHECKSUMS: u32 = xous::PDDB_LEN / CHECKSUM_BLOCKLEN_PAGE;
+pub const TOTAL_CHECKSUMS: u32 = xous::PDDB_LEN / (CHECKSUM_BLOCKLEN_PAGE * 4096);
 
 #[repr(C, align(8))]
 #[derive(Copy, Clone, Debug)]
