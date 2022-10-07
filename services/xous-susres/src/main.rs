@@ -329,7 +329,14 @@ mod implementation {
                     xous::syscall::map_memory(
                         None,
                         None,
-                        512 * 1024, // L2 cache is 128k, but emperically it doesn't fully flush until 512k is written. Maybe has to do with write-back behavior??
+                        // L2 cache is 128k, but it takes 512k to flush it, because the L1 D$ has 4 ways
+                        // If for some reason we can't allocate 512k we can re-write this to use
+                        // unsafe { core::arch::asm!(".word 0x500F"); }
+                        // to flush the L1 cache after every 4k of data written (one way size)
+                        // however, the memory is de-allocated on resume, so this isn't
+                        // a permanent penalty to pay, and changing this could would require
+                        // a validation cycle that I don't want to go through right now.
+                        512 * 1024,
                         xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
                     ).expect("couldn't allocate RAM for cache flushing")
                 );
