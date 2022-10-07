@@ -186,6 +186,7 @@ def main():
             i += 4
             header_total_size = int.from_bytes(pt_data[i:i+4], 'little')
             logging.info("Header total length in bytes: {}".format(header_total_size))
+            i += 4
             i += 36 # reserved
             op = int.from_bytes(pt_data[i:i+4], 'little')
             logging.info("Stored Backup Opcode: {}".format(op))
@@ -194,6 +195,10 @@ def main():
             if backup_version == 0x10001:
                 logging.info("Doing hash verification of pt+ct metadata")
                 hasher = SHA512.new(truncate="256")
+                check_region = bytearray(check_region)
+                # patch the backup opcode back to the one used to compute the checksum, because the version
+                # written to disk had the opcode manipulated to "2" which instructs the system to do a restore
+                check_region[140:144] = [0, 0, 0, 0]
                 hasher.update(check_region)
                 computed_checksum = hasher.digest()
                 if computed_checksum != checksum:
