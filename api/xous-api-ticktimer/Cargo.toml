@@ -1,0 +1,27 @@
+[package]
+authors = ["bunnie <bunnie@kosagi.com>", "Sean Cross <sean@xobs.io>"]
+description = "Provide high-resolution, non-rollover system time"
+edition = "2018"
+name = "xous-api-ticktimer"
+version = "0.9.4"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/xous-book/"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+log = "0.4.14"
+log-server = {package = "xous-api-log", version = "0.1.4"}
+xous = "0.9.12"
+xous-ipc = "0.9.12"
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+num-derive = {version = "0.3.3", default-features = false}
+num-traits = {version = "0.2.14", default-features = false}
+susres = {package = "xous-api-susres", version = "0.9.2"}
+xous-names = {package = "xous-api-names", version = "0.9.4"}
+xous-semver = "0.1.2"
+
+[features]
+debug-print = []
+no-timestamp = [] # turns off embedded timestamp for reproducible builds
+default = []

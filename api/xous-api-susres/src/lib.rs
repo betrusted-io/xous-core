@@ -16,7 +16,14 @@ pub struct Susres {
     suspend_cb_sid: Option<xous::SID>,
 }
 impl Susres {
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
+    /// When created, the `susres` object can be configured with a `SuspendOrder` to enforce
+    /// sequencing rules in shutdown. It also requires arguments to define a callback which is
+    /// pinged when a suspend event arrives. The callback takes the form of a `CID, discriminant`
+    /// pair, where the CID is the local connection ID to the caller (in other words, a self-connection
+    /// to the caller), and the discriminant is the number placed into the Xous message's `body.id()`
+    /// field. This is typically just the descriminant of the main loop's opcode enum for the
+    /// suspend-resume opcode.
     pub fn new(order: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
@@ -40,11 +47,20 @@ impl Susres {
         })
     }
     // suspend/resume is not implemented in hosted mode, and will break if you try to do it.
-    // the main reason this was doen is actually it seems hosted mode can't handle the level
+    // the main reason this was done is actually it seems hosted mode can't handle the level
     // of concurrency introduced by suspend/resume, as its underlying IPC mechanisms are quite
     // different and have a lot of overhead; it seems like the system goes into a form of deadlock
     // during boot when all the hosted mode servers try to connect. This isn't an issue on real hardware.
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted",
+        not(any(feature="precursor", feature="renode", feature="hosted"))
+    ))]
+    /// When created, the `susres` object can be configured with a `SuspendOrder` to enforce
+    /// sequencing rules in shutdown. It also requires arguments to define a callback which is
+    /// pinged when a suspend event arrives. The callback takes the form of a `CID, discriminant`
+    /// pair, where the CID is the local connection ID to the caller (in other words, a self-connection
+    /// to the caller), and the discriminant is the number placed into the Xous message's `body.id()`
+    /// field. This is typically just the descriminant of the main loop's opcode enum for the
+    /// suspend-resume opcode.
     pub fn new(_ordering: Option<SuspendOrder>, xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         Ok(Susres {
@@ -52,8 +68,9 @@ impl Susres {
             suspend_cb_sid: None,
         })
     }
-    pub fn conn(&self) -> CID { self.conn }
-
+    /// Creates a connection to the `susres` server, but without a callback. This is useful
+    /// for services that are suspend-insensitive, but need to manipulate the state of
+    /// the machine (such as initiating a suspend).
     pub fn new_without_hook(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.fetch_add(1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES)?;
@@ -62,7 +79,13 @@ impl Susres {
             suspend_cb_sid: None,
         })
     }
-
+    /// This call initiates a suspend. It will sequence through the suspend events; and
+    /// if any services are unable to suspend within a defined time-out window, the call
+    /// will fail with a `xous::Error::Timeout`.
+    ///
+    /// NB: services such as the SHA engine and
+    /// the Curve25519 engine can deny a suspend because they have large internal state
+    /// that can't be saved to battery-backed RAM.
     pub fn initiate_suspend(&self) -> Result<(), xous::Error> {
         log::trace!("suspend initiated");
         match send_message(self.conn,
@@ -80,6 +103,15 @@ impl Susres {
         }
     }
 
+    /// This call is used by services that are suspend-sensitive. They are used to
+    /// acknowledge the callback from the suspend sequencer; calling this function
+    /// basically tells the sequencer "I'm ready to suspend immediately". Likewise,
+    /// this call blocks until the system resumes.
+    ///
+    /// Note that from the perspective of the caller, this call magically appears
+    /// like it returns almost immediately, because, the time spent in suspend does
+    /// not increment the ticktimer or system time. The only evidence of a suspend
+    /// would be a difference in the current RTC timestamp.
     pub fn suspend_until_resume(&mut self, token: usize) -> Result<bool, xous::Error> {
         if self.suspend_cb_sid.is_none() { // this happens if you created without a hook
             return Err(xous::Error::UseBeforeInit)
@@ -115,6 +147,10 @@ impl Susres {
         }
     }
 
+    /// This is a call that a service can make to inform the suspend sequencer that
+    /// it is currently suspendable (or not suspendable). This is typically used to
+    /// book-end calls to hardware that contains large amount of state that cannot
+    /// be efficiently saved to battery-backed RAM.
     pub fn set_suspendable(&mut self, allow_suspend: bool) -> Result<(), xous::Error> {
         if allow_suspend {
             send_message(self.conn,

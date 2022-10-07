@@ -375,9 +375,9 @@ use menu::*;
 
 mod libstd;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod tests;
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 #[allow(unused_imports)]
 use tests::*;
 
@@ -511,7 +511,7 @@ fn wrapped_main() -> ! {
 
     // run the CI tests if the option has been selected
     #[cfg(all(
-        not(any(target_os = "none", target_os = "xous")),
+        feature = "hosted",
         feature = "ci"
     ))]
     ci_tests(&mut pddb_os).map_err(|e| log::error!("{}", e)).ok();
@@ -1457,7 +1457,7 @@ fn wrapped_main() -> ! {
                 pddb_os.reset_dont_ask_init();
                 xous::return_scalar(msg.sender, 1).ok();
             }
-            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            #[cfg(any(feature="hosted"))]
             Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dbg = buffer.to_original::<PddbDangerousDebug, _>().unwrap();
@@ -1495,6 +1495,16 @@ fn wrapped_main() -> ! {
                     }
                 }
                 pddb_os.basis_testing(&mut basis_cache, &config);
+            }),
+            #[allow(unused_variables)]
+            Opcode::InternalTest => xous::msg_blocking_scalar_unpack!(msg, a0, a1, a2, a3, {
+                #[cfg(feature="hwtest")]
+                {
+                    let errs = pddb_os.stresstest_read(a0 as u32, a1 as u32);
+                    xous::return_scalar2(msg.sender, errs as usize, 0).ok();
+                }
+                #[cfg(not(feature="hwtest"))]
+                xous::return_scalar2(msg.sender, 0, 0).ok();
             }),
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
@@ -1601,7 +1611,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
-        #[cfg(any(target_os = "none", target_os = "xous", feature="test-rekey"))]
+        #[cfg(any(feature = "precursor", feature = "renode", feature="test-rekey"))]
         {
             log::debug!("PDDB did not mount; requesting format");
             modals.add_list_item(t!("pddb.okay", xous::LANG)).expect("couldn't build radio item list");
@@ -1670,7 +1680,7 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                 false
             }
         }
-        #[cfg(not(any(target_os = "none", target_os = "xous", feature="test-rekey")))]
+        #[cfg(not(any(feature = "precursor", feature = "renode", feature="test-rekey")))]
         {
             pddb_os.pddb_format(false, Some(&modals)).expect("couldn't format PDDB");
             let _ = xous::send_message(time_resetter,
@@ -1760,7 +1770,7 @@ pub(crate) fn manual_testcase(hw: &mut PddbOs) {
 #[allow(dead_code)]
 pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
     log::info!("Running `hw` test case");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     pddb_os.test_reset();
 
     manual_testcase(pddb_os);
@@ -1785,7 +1795,7 @@ pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
         }
     }
 
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     pddb_os.dbg_dump(Some("manual".to_string()), None);
 }
 

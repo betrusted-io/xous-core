@@ -8,9 +8,9 @@ version = "0.1.0"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 log = "0.4.14"
-log-server = {version = "0.1.2", package = "xous-api-log-server"}
+log-server = {package = "xous-api-log", version = "0.1.4"}
 hex-literal = "0.3.1"
-xous = "0.9.9"
+xous = "0.9.12"
 
 [features]
 default = []

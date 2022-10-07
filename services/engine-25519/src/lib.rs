@@ -3,10 +3,10 @@
 //! Detailed docs are parked under Structs/Engine25519 down below
 
 /*
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 pub use curve25519_dalek_hw::*;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 pub use curve25519_dalek::*;
 */
 

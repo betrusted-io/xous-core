@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg_attr(
-    not(any(target_os = "none", target_os = "xous")),
+    feature="hosted",
     allow(unused_imports)
 )]
 use std::thread;
@@ -628,7 +628,7 @@ fn wrapped_main() -> ! {
             {} // could be bbram, could be an error. could be keys are secured and disabled for readout. could be disabled-readout zero keys!
         }
     }
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
 
     // spawn a thread to auto-mount the PDDB

@@ -62,3 +62,6 @@ legacy_compatibility = []
 u64_backend = ["curve25519-dalek-loader/u64_backend"]
 u32_backend = ["curve25519-dalek-loader/u32_backend"]
 simd_backend = ["curve25519-dalek-loader/simd_backend"]
+# add target specifiers for the loader
+precursor = ["sha2-loader/precursor"]
+renode = ["sha2-loader/renode"]

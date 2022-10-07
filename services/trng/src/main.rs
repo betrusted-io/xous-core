@@ -17,7 +17,7 @@ struct ScalarCallback {
     cb_to_client_id: u32,
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use crate::api::{ExcursionTest, HealthTests, MiniRunsTest, NistTests, TrngBuf, TrngErrors};
     use num_traits::*;
@@ -465,7 +465,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;

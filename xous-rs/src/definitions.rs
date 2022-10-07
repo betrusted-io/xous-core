@@ -55,7 +55,9 @@ pub const BASE_QUANTA_MS: u32 = 10;
 pub const BOOKEND_START: &'static str = "_|TT|_";
 pub const BOOKEND_END: &'static str = "_|TE|_";
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted",
+    not(any(feature="precursor", feature="renode"))
+))]
 use core::sync::atomic::AtomicU64;
 
 // Secretly, you can change this by setting the XOUS_SEED environment variable.
@@ -64,7 +66,9 @@ use core::sync::atomic::AtomicU64;
 // The code that reads the varable this is all the way over in xous-rs\src\arch\hosted\mod.rs#29, and
 // it's glommed onto some other static process initialization code because I don't fully understand
 // what's going on over there.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted",
+    not(any(feature="precursor", feature="renode"))
+))]
 pub static TESTING_RNG_SEED: AtomicU64 = AtomicU64::new(0);
 
 pub mod exceptions;

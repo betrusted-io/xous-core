@@ -154,7 +154,7 @@ pub(crate) enum Opcode {
     /// quit the server
     Quit = 24,
     /// Write debug dump (only available in hosted mode)
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     DangerousDebug = 25,
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     BasisTesting = 26,
@@ -213,8 +213,11 @@ pub(crate) enum Opcode {
     /// change unlock PIN
     MenuChangePin = 46,
 
+    /// run a test or diagnostic command (depends on the build)
+    InternalTest = 47,
+
     /// Clear password cache and ask for it again
-    UncacheAndAskPassword = 47,
+    UncacheAndAskPassword = 48,
 
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
@@ -478,13 +481,13 @@ pub enum PddbRekeyOp {
 }
 
 /// Debugging commands, available only in hosted mode
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDangerousDebug {
     pub request: DebugRequest,
     pub dump_name: xous_ipc::String::<128>,
 }
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum DebugRequest {
     Dump = 0,

@@ -5,8 +5,7 @@
 
 mod murmur3;
 
-mod api;
-use api::{Opcode, ScalarHook, SuspendEventCallback};
+use xous_api_susres::*;
 
 use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
@@ -30,7 +29,7 @@ macro_rules! println
 }
 
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
     use crate::murmur3::murmur3_32;
@@ -330,7 +329,14 @@ mod implementation {
                     xous::syscall::map_memory(
                         None,
                         None,
-                        512 * 1024, // L2 cache is 128k, but emperically it doesn't fully flush until 512k is written. Maybe has to do with write-back behavior??
+                        // L2 cache is 128k, but it takes 512k to flush it, because the L1 D$ has 4 ways
+                        // If for some reason we can't allocate 512k we can re-write this to use
+                        // unsafe { core::arch::asm!(".word 0x500F"); }
+                        // to flush the L1 cache after every 4k of data written (one way size)
+                        // however, the memory is de-allocated on resume, so this isn't
+                        // a permanent penalty to pay, and changing this could would require
+                        // a validation cycle that I don't want to go through right now.
+                        512 * 1024,
                         xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
                     ).expect("couldn't allocate RAM for cache flushing")
                 );
@@ -424,7 +430,9 @@ mod implementation {
 
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted",
+    not(any(feature="precursor", feature="renode", feature="hosted")) // default for crates.io
+))]
 mod implementation {
     use num_traits::ToPrimitive;
 
@@ -460,7 +468,7 @@ struct ScalarCallback {
     ready_to_suspend: bool,
     token: u32,
     failed_to_suspend: bool,
-    order: crate::api::SuspendOrder,
+    order: xous_api_susres::api::SuspendOrder,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -474,23 +482,25 @@ static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(5000); // this is gated by the p
 static TIMEOUT_CONN: AtomicU32 = AtomicU32::new(0);
 pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     use utralib::generated::*;
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let mut csr: Option<CSR::<u32>> = None;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            #[cfg(any(target_os = "none", target_os = "xous"))]
+            #[cfg(any(feature="precursor", feature="renode"))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, base, _, _, _, {
                 csr = Some(CSR::new(base as *mut u32));
             }),
-            #[cfg(not(any(target_os = "none", target_os = "xous")))]
+            #[cfg(any(feature="hosted",
+              not(any(feature="precursor", feature="renode", feature="hosted")) // default for crates.io
+            ))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, _base, _, _, _, {
                 // ignore the opcode in hosted mode
             }),
             Some(TimeoutOpcode::Run) => {
-                #[cfg(any(target_os = "none", target_os = "xous"))]
+                #[cfg(any(feature="precursor", feature="renode"))]
                 {
                     // we have to re-implement the ticktimer time reading here because as we wait for the timeout,
                     // the ticktimer goes away! so we use the susres local copy with direct hardware ops to keep track of time in this phase
@@ -846,7 +856,7 @@ fn send_event(cb_conns: &Vec::<ScalarCallback>, order: crate::api::SuspendOrder)
     log::info!("Sending suspend to {:?} stage", order);
     /*
     // abortive attempt to get suspend to shut down the system. Doesn't work, results in a panic because too many messages are still moving around.
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     {
         if order == crate::api::SuspendOrder::Last {
             let tt_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();

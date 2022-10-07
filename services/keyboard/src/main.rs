@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 #[cfg(feature="rawserial")]
 const BLOCKING_QUEUE_LEN: usize = 128;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
     use crate::{RowCol, KeyRawStates, api::*};
@@ -661,7 +661,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     use crate::*;
 
@@ -740,9 +740,9 @@ fn main() -> ! {
     //  - oqc (for factory test)
     //  - status sub system (for setting the layout, autobacklight feature)
     //  - USB (for getting layout)
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 

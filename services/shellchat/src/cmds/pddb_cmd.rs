@@ -263,6 +263,33 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
                     log::info!("{}PDDB.SYNCDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 }
+                "test" => {
+                    let mut args = [0u32; 4];
+                    for (index, token) in tokens.enumerate() {
+                        if index > 3 {
+                            log::info!("Too many arguments, ignoring extras");
+                            break;
+                        }
+                        let a = if token.contains("0x") {
+                            u32::from_str_radix(token.strip_prefix("0x").unwrap_or("0"), 16).unwrap_or(0)
+                        } else {
+                            u32::from_str_radix(token, 10).unwrap_or(0)
+                        };
+                        args[index] = a;
+                    }
+                    log::info!("Calling test with args: {:x?}", args);
+                    writeln!(ret, "Calling test with args (in hex): {:x?}", args).ok();
+                    match self.pddb.run_test([args[0], args[1], args[2], args[3]]) {
+                        Ok((a, b)) => {
+                            write!(ret, "Test result: 0x{:x}, 0x{:x}", a, b).ok();
+                            log::info!("Test result: 0x{:x}, 0x{:x}", a, b);
+                        }
+                        Err(e) => {
+                            write!(ret, "Test failed with {:?}", e).ok();
+                            log::info!("Test failed with {:?}", e);
+                        }
+                    }
+                }
                 #[cfg(feature="test-rekey")]
                 "rekey" => {
                     let old_dna = if let Some(dna_str) = tokens.next() {

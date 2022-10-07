@@ -1313,6 +1313,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
                 }
             }
         }
+        use utralib::generated::*;
+        let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
+        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERNEL(hw reset default))
+
         unsafe {
             start_kernel(
                 arg_offset,

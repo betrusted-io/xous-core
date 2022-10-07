@@ -7,11 +7,11 @@ edition = "2018"
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-xous = "0.9.9"
-xous-ipc = "0.9.9"
+xous = "0.9.12"
+xous-ipc = "0.9.12"
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-log-server = { version = "0.1.2", package = "xous-api-log-server" }
-xous-names = { path = "../../services/xous-names" }
+log-server = { package = "xous-api-log", version = "0.1.4" }
+xous-names = { package = "xous-api-names", version = "0.9.4" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
 locales = {path = "../../locales"}
@@ -21,7 +21,7 @@ usbd-human-interface-device = "0.2.1"
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 trng = {path="../../services/trng"}
-susres = {path = "../../services/susres"}
+susres = {package = "xous-api-susres", version = "0.9.2"}
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
 ctap-crypto = {path = "libraries/crypto"}
@@ -31,7 +31,7 @@ byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
 rand_core = "0.6.3"
-ticktimer-server = {path = "../../services/ticktimer-server"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.2"}
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
@@ -57,6 +57,9 @@ random-pick = {version = "1.2.15", optional = true}
 enum-iterator = "0.6.0"
 
 [features]
+precursor = []
+hosted = []
+renode = []
 tts = []
 with_ctap1 = ["ctap-crypto/with_ctap1"]
 with_ctap2_1 = []

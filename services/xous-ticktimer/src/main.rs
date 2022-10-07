@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
+use xous_api_ticktimer::*;
 mod version;
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -61,7 +61,7 @@ impl core::cmp::PartialEq for TimerRequest {
     }
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::TimerRequest;
@@ -283,7 +283,9 @@ mod implementation {
     }
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted",
+  not(any(feature="precursor", feature="renode", feature="hosted"))
+))]
 mod implementation {
     use crate::RequestKind;
 

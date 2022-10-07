@@ -31,6 +31,10 @@ pub type Block8 = GenericArray<Block, U8>;
 
 // vex patches
 mod vex;
+// Note that we can't use 'feature' flags (for precursor, renode, hosted) because the AES
+// library is patched into functions that are oblivious to these features.
+// so this library has to fall back on the legacy method of determining which build target
+// is being specified.
 #[cfg(any(target_os = "none", target_os = "xous"))]
 pub use vex::{Aes128, Aes256};
 #[cfg(not(any(target_os = "none", target_os = "xous")))]

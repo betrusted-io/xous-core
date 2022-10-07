@@ -17,7 +17,18 @@ impl Ticktimer {
         Ok(Ticktimer { conn })
     }
 
-    /// note special case for elapsed_ms() is "infalliable". it really should never fail so get rid of the Error
+    /// Return the number of milliseconds that have elapsed since boot. The returned
+    /// value is guaranteed to always be the same or greater than the previous value,
+    /// even through suspend/resume cycles. During suspend, the counter does not
+    /// advance, so loops which rely on this value will not perceive any extra time
+    /// passing through a suspend/resume cycle.
+    ///
+    /// This call is expected to be infalliable, and removing the error handling
+    /// path makes it a little more efficient in a tight loop.
+    ///
+    /// # Returns:
+    ///
+    ///     * A `u64` that is the number of milliseconds elapsed since boot.
     pub fn elapsed_ms(&self) -> u64 {
         let response = send_message(
             self.conn,
@@ -34,12 +45,16 @@ impl Ticktimer {
             upper as u64 | ((lower as u64) << 32)
         } else {
             panic!(
-                "Ticktimer elapsed_ms(): unexpected return value: {:#?}",
-                response
+                "Ticktimer elapsed_ms(): unexpected return value."
             );
         }
     }
 
+    /// Sleep for at least `ms` milliseconds. Blocks until the requested time has passed.
+    ///
+    /// # Arguments:
+    ///
+    ///     * ms: A `usize` specifying how many milliseconds to sleep for
     pub fn sleep_ms(&self, ms: usize) -> Result<(), Error> {
         send_message(
             self.conn,
@@ -54,6 +69,9 @@ impl Ticktimer {
         .map(|_| ())
     }
 
+    /// Ping the watchdog timer. Processes may use this to periodically ping the WDT to prevent
+    /// the system from resetting itself. Note that every call to `sleep_ms()` also implicitly
+    /// pings the WDT, so in more complicated systems an explicit call is not needed.
     pub fn ping_wdt(&self) {
         send_message(
             self.conn,
@@ -62,6 +80,11 @@ impl Ticktimer {
         .expect("Couldn't send WDT ping");
     }
 
+    /// Query version information embedded in this implementation crate by the build system.
+    ///
+    /// # Returns:
+    ///
+    ///     * A `String` containing the version information of the latest build
     pub fn get_version(&self) -> String {
         let alloc = api::VersionString {
             version: xous_ipc::String::new(),
@@ -125,14 +148,14 @@ impl Ticktimer {
     }
 
     /// Wait for a Condition on the given condvar, with an optional Duration
-    /// 
+    ///
     /// # Arguments:
     ///
     ///     * condvar: A `usize` referring to the Condvar. This is probably a pointer, but can be any `usize`
     ///     * duration: The amount of time to wait for a signal, if any
-    /// 
+    ///
     /// # Returns:
-    /// 
+    ///
     ///     * true: the condition was successfully received
     ///     * false: the condition was not received and the operation itmed out
     pub fn wait_condition(&self, condvar: usize, duration: Option<core::time::Duration>) -> bool {
@@ -151,12 +174,12 @@ impl Ticktimer {
     }
 
     /// Notify a condition to one or more Waiters
-    /// 
+    ///
     /// # Arguments:
     ///
     ///     * condvar: A `usize` referring to the Condvar. This is probably a pointer, but can be any `usize`
     ///     * count: The number of Waiters to wake up
-    /// 
+    ///
     pub fn notify_condition(&self, condvar: usize, count: usize) {
         send_message(
             self.conn,

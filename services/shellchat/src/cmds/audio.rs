@@ -24,7 +24,7 @@ pub struct Audio {
 }
 impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(feature="precursor", feature="renode"))]
         let sample = xous::syscall::map_memory(
             // 0x2634_0000 is the long sample. 0x2600_0000 is the short sample.
             Some(core::num::NonZeroUsize::new(0x2634_0000).unwrap()), // it's here, because we know it's here!
@@ -32,7 +32,7 @@ impl Audio {
             0x1c4_0000, // 0x8_0000 is length of short sample, 0x1C4_0000 is the long sample
             xous::MemoryFlags::R,
         ).expect("couldn't map in the audio sample");
-        #[cfg(not(any(target_os = "none", target_os = "xous")))] // just make a dummy mapping to keep things from crashing in hosted mode
+        #[cfg(any(feature="hosted"))] // just make a dummy mapping to keep things from crashing in hosted mode
         let sample = xous::syscall::map_memory(
             None,
             None,

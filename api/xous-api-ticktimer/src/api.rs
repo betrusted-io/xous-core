@@ -1,6 +1,6 @@
 /// Do not modify the discriminants in this structure. They are used in `libstd` directly.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-pub(crate) enum Opcode {
+pub enum Opcode {
     /// Get the elapsed time in milliseconds
     ElapsedMs = 0,
 

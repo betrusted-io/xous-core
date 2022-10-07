@@ -37,7 +37,7 @@ pub struct Test {
     oqc_cid: Option<xous::CID>,
     kbd: Option<keyboard::Keyboard>,
     oqc_start: u64,
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     jtag: jtag::Jtag,
 }
 impl Test {
@@ -73,7 +73,7 @@ impl Test {
             oqc_cid: None,
             kbd: Some(keyboard::Keyboard::new(&xns).unwrap()), // allocate and save for use in the oqc_tester, so that the xous_names table is fully allocated
             oqc_start: 0,
-            #[cfg(any(target_os = "none", target_os = "xous"))]
+            #[cfg(any(feature="precursor", feature="renode"))]
             jtag: jtag::Jtag::new(&xns).unwrap(),
         }
     }
@@ -465,7 +465,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.com.set_ssid_scanning(true).expect("couldn't turn on SSID scanning");
                     //xous::rsyscall(xous::SysCall::IncreaseHeap(65536, xous::MemoryFlags::R | xous::MemoryFlags::W)).expect("couldn't increase our heap");
                     ret.clear();
-                    #[cfg(any(target_os = "none", target_os = "xous"))]
+                    #[cfg(any(feature="precursor", feature="renode"))]
                     if 0x362f093 != self.jtag.get_id().unwrap() {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));

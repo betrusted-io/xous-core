@@ -597,7 +597,7 @@ pub(crate) fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
                 log::trace!("invalid line skipped: {:?}", line);
             }
         }
-        #[cfg(any(target_os = "none", target_os = "xous"))]
+        #[cfg(any(feature="precursor", feature="renode"))]
         if appinfo.name.len() > 0
         && appinfo.id != [0u8; 32]
         && appinfo.ctime != 0 { // atime can be 0 - indicates never used
@@ -605,7 +605,7 @@ pub(crate) fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
         } else {
             None
         }
-        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+        #[cfg(any(feature="hosted"))]
         if appinfo.name.len() > 0
         && appinfo.id != [0u8; 32] { // atime can be 0 - indicates never used. In hosted mode, ctime is 0.
             Some(appinfo)

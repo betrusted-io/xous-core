@@ -70,13 +70,13 @@ impl SpinalUsbMgmt {
         assert!(4096 == self.regs.ramsize(), "hardware ramsize parameter does not match our expectations");
     }
     pub fn connect_device_core(&mut self, state: bool) {
-        log::info!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_USBSELECT));
+        log::info!("previous state: {}", self.csr.rf(utra::usbdev::USBSELECT_SELECT_DEVICE));
         if state {
             log::info!("connecting USB device core");
-            self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 1);
+            self.csr.wfo(utra::usbdev::USBSELECT_SELECT_DEVICE, 1);
         } else {
             log::info!("connecting USB debug core");
-            self.csr.wfo(utra::usbdev::USBSELECT_USBSELECT, 0);
+            self.csr.wfo(utra::usbdev::USBSELECT_SELECT_DEVICE, 0);
         }
     }
     pub fn xous_suspend(&mut self) {

@@ -1,8 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
-use api::*;
+use xous_api_names::*;
+use xous_api_names::api::*;
 
 use num_traits::FromPrimitive;
 use xous::{msg_blocking_scalar_unpack, MessageEnvelope};
@@ -43,7 +43,7 @@ enum ConnectSuccess {
     // AuthenticationRequest
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
 
@@ -79,7 +79,9 @@ mod implementation {
     }
 }
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted",
+    not(any(feature="precursor", feature="renode", feature="hosted")) // default to pass crates.io build
+))]
 mod implementation {
     pub struct D11cTimeout {}
     impl D11cTimeout {

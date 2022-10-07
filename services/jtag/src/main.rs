@@ -437,7 +437,7 @@ impl JtagMach {
     }
 }
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
+#[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
 
@@ -483,7 +483,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(any(feature="hosted"))]
 mod implementation {
     pub struct JtagPhy {
     }
@@ -510,9 +510,9 @@ fn main() -> ! {
     //   - one connection from the key server
     //   - one connection from shellchat for command line
     //   - another connection from shellchat for oqc testing
-    #[cfg(any(target_os = "none", target_os = "xous"))]
+    #[cfg(any(feature="precursor", feature="renode"))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(3)).expect("can't register server");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    #[cfg(any(feature="hosted"))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", jtag_sid);
 

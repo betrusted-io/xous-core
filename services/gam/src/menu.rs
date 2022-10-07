@@ -323,7 +323,7 @@ impl<'a> Menu<'a> {
                     // give up focus before issuing the command, as some commands conflict with loss of focus...
                     if mi.close_on_select {
                         self.gam.relinquish_focus().unwrap();
-                        #[cfg(not(any(target_os = "none", target_os = "xous")))]
+                        #[cfg(any(feature="hosted"))]
                         ticktimer_server::Ticktimer::new().unwrap().sleep_ms(100).unwrap();
                     }
                     if let Some(action) = mi.action_conn {
