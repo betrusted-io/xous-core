@@ -80,6 +80,8 @@ migration1 = []
 # hazardous debug flag decorates any debug paths that might accidentally leak key material
 hazardous-debug = []
 test-rekey = []
+# hardware tests
+hwtest = []
 # routines to help with performance profiling of the PDDB in hosted mode
 pddb-flamegraph = ["hex"]
 default = ["mbbb"]

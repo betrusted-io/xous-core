@@ -1493,6 +1493,16 @@ fn wrapped_main() -> ! {
                 }
                 pddb_os.basis_testing(&mut basis_cache, &config);
             }),
+            #[allow(unused_variables)]
+            Opcode::InternalTest => xous::msg_blocking_scalar_unpack!(msg, a0, a1, a2, a3, {
+                #[cfg(feature="hwtest")]
+                {
+                    let errs = pddb_os.stresstest_read(a0 as u32, a1 as u32);
+                    xous::return_scalar2(msg.sender, errs as usize, 0).ok();
+                }
+                #[cfg(not(feature="hwtest"))]
+                xous::return_scalar2(msg.sender, 0, 0).ok();
+            }),
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
                 send_message(

@@ -213,6 +213,9 @@ pub(crate) enum Opcode {
     /// change unlock PIN
     MenuChangePin = 46,
 
+    /// run a test or diagnostic command (depends on the build)
+    InternalTest = 47,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }

@@ -683,6 +683,20 @@ impl Pddb {
             _ => Err(Error::new(ErrorKind::Unsupported, "Return code was never set")),
         }
     }
+
+    pub fn run_test(&self, args: [u32; 4]) -> Result<(u32, u32)> {
+        match send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::InternalTest.to_usize().unwrap(),
+            args[0] as usize,
+            args[1] as usize,
+            args[2] as usize,
+            args[3] as usize,
+        )) {
+            Ok(xous::Result::Scalar2(a, b)) => Ok((a as u32, b as u32)),
+            Ok(xous::Result::Scalar1(a)) => Ok((a as u32, 0)),
+            _ => Err(Error::new(ErrorKind::Other, "Return type not recognized")),
+        }
+    }
     /// Triggers a dump of the PDDB to host disk
     #[cfg(any(feature="hosted"))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {

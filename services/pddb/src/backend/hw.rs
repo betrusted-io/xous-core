@@ -804,7 +804,7 @@ impl PddbOs {
             let patch_data = [&nonce_array, ct_to_flash].concat();
             assert!(patch_data.len() % PAGE_SIZE == 0); // should be guaranteed by design, if not, throw an error during early testing.
             let dest_page_end = dest_page_start + (patch_data.len() / PAGE_SIZE) as u32;
-            log::info!("picking random pages [{}-{}) out of {} pages for fscb", dest_page_start, dest_page_end, page_search_limit);
+            log::info!("picking random pages [{}-{}) out of {} pages for fscb", dest_page_start, dest_page_end, FSCB_PAGES);
             { // this is where we begin the "it would be bad if we lost power about now" code region
                 let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE]; // prep a "blank" page for the loop
                 for offset in 0..FSCB_PAGES as u32 {
@@ -812,11 +812,90 @@ impl PddbOs {
                         // patch the FSCB data in when we find it, and skip on later iterations that are within the page range of the FSCB
                         if offset == dest_page_start {
                             self.patch_fscb(&patch_data, dest_page_start * PAGE_SIZE as u32);
+
+                            // Catch cache coherence issues. For now, we do a "hard panic" so that we know there is a cache coherence problem.
+                            // We could "paper over" this by re-reading the data, but really, this problem should be solved by the d-cache
+                            // flush in the SPINOR primitive.
+                            let page_start = dest_page_start as usize * PAGE_SIZE;
+                            let fscb_slice = &self.pddb_mr.as_slice()[self.fscb_phys_base.as_usize()..self.fscb_phys_base.as_usize() + FSCB_PAGES * PAGE_SIZE];
+                            let mut fscb_buf = [0; FASTSPACE_PAGES * PAGE_SIZE - size_of::<Nonce>()];
+                            // copy the encrypted data to the decryption buffer
+                            fscb_buf.copy_from_slice(&fscb_slice[page_start + size_of::<Nonce>() .. page_start + FASTSPACE_PAGES * PAGE_SIZE]);
+                            let mut errcount = 0;
+                            for (index, (&buf, &flash)) in fscb_buf.iter().zip(&patch_data[size_of::<Nonce>()..]).enumerate() {
+                                if buf != flash {
+                                    if errcount < 128 {
+                                        log::warn!("Cache coherence issue at 0x{:x}: buf 0x{:x} -> rbk 0x{:x}", index, buf, flash);
+                                    }
+                                    errcount += 1;
+                                }
+                            }
+                            if errcount != 0 {
+                                log::warn!("Cache coherence issue detected: total buf<->rbk errors: {}", errcount);
+                                panic!("FSCB write to pages [{}-{}) failed: cache coherence failure, with {} errors", dest_page_start, dest_page_end, errcount);
+                            }
+                            /*
+                            let mut daad = Vec::<u8>::new();
+                            self.fast_space_aad(&mut daad);
+                            let payload = Payload {
+                                msg: &fscb_buf,
+                                aad: &daad,
+                            };
+                            match cipher.decrypt(
+                                Nonce::from_slice(&fscb_slice[page_start..page_start + size_of::<Nonce>()]),
+                             payload
+                            ) {
+                                Ok(_) => log::info!("FSCB readback successful"),
+                                Err(e) => {
+                                    log::warn!("FSCB update at page {}({}) did not write successfully. Error: {:?}", dest_page_start, page_start, e);
+                                    log::warn!("Patch data len {}, readback len {}", patch_data.len(), FASTSPACE_PAGES * PAGE_SIZE);
+                                    let mut errcount = 0;
+                                    for (index, (&patch, &flash)) in
+                                    patch_data.iter().zip(&fscb_slice[page_start..page_start + FASTSPACE_PAGES * PAGE_SIZE]).enumerate() {
+                                        if patch != flash {
+                                            if errcount < 128 {
+                                                log::warn!("Mismatch at 0x{:x}: patch 0x{:x} -> rbk 0x{:x}", index, patch, flash);
+                                            }
+                                            errcount += 1;
+                                        }
+                                    }
+                                    log::warn!("Total errors: {}", errcount);
+                                    if errcount == 0 {
+                                        match cipher.decrypt(
+                                            Nonce::from_slice(&patch_data[..size_of::<Nonce>()]),
+                                            Payload {
+                                                msg: &patch_data[size_of::<Nonce>()..],
+                                                aad: &daad,
+                                            }
+                                        ) {
+                                            Ok(_) => {
+                                                log::warn!("0 readback errors detected, and source data decrypts correctly. Suspect read error on FLASH!");
+                                                let mut errcount = 0;
+                                                for (index, (&buf, &flash)) in fscb_buf.iter().zip(&patch_data[size_of::<Nonce>()..]).enumerate() {
+                                                    if buf != flash {
+                                                        if errcount < 128 {
+                                                            log::warn!("Mismatch at 0x{:x}: buf 0x{:x} -> rbk 0x{:x}", index, buf, flash);
+                                                        }
+                                                        errcount += 1;
+                                                    }
+                                                }
+                                                log::warn!("Total buf<->rbk errors: {}", errcount);
+                                                if errcount == 0 {
+                                                    log::warn!("Suspect AAD issue: patch aad {:?}, rbk aad {:?}", aad, daad);
+                                                }
+                                            },
+                                            Err(_e) => log::warn!("Source patch data was not encrypted correctly!"),
+                                        }
+                                    }
+                                    panic!("FSCB write to pages [{}-{}) failed integrity check with {} errors", dest_page_start, dest_page_end, errcount);
+                                }
+                            }
+                            */
                         } else {
                             // skip, because we already patched it in the first page we hit
                         }
                     } else {
-                        // erase all the other pages in hte FSCB
+                        // erase all the other pages in the FSCB
                         self.patch_fscb(&blank_sector, offset * PAGE_SIZE as u32);
                     }
                 }
@@ -831,6 +910,41 @@ impl PddbOs {
         }
     }
 
+    #[cfg(feature="hwtest")]
+    pub fn stresstest_read(&mut self, pagecount: u32, iters: u32) -> u32 {
+        let pagecount = if pagecount == 0 {
+            2
+        } else {
+            pagecount
+        };
+        let iters = if iters == 0 {
+            16
+        } else {
+            iters
+        };
+        let test_slice = &self.pddb_mr.as_slice()[
+            self.data_phys_base.as_usize()..
+            self.data_phys_base.as_usize() + pagecount as usize * PAGE_SIZE
+        ];
+        let mut total_errs = 0;
+        for attempt in 0..iters {
+            log::info!("Attempt {} of {}", attempt + 1, iters);
+            let mut dest_mem = vec![0u8; pagecount as usize * PAGE_SIZE]; // do a fresh alloc at every loop
+            dest_mem.copy_from_slice(test_slice);
+            let mut errcount = 0;
+            for (index, (&flash, &mem)) in test_slice.iter().zip(dest_mem.iter()).enumerate() {
+                if flash != mem {
+                    errcount += 1;
+                    if errcount < 128 {
+                        log::warn!("Attempt {}: Mismatch at 0x:{:x}: flash:{:x} <-> mem {:x}", attempt, index, flash, mem);
+                    }
+                }
+            }
+            total_errs += errcount;
+            dest_mem.zeroize();
+        }
+        total_errs
+    }
     /// Sweeps through the entire set of known data (as indicated in `page_heap`) and
     /// returns a subset of the total free space in a PhysPage vector that is a list of physical pages,
     /// in random order, that can be used by PDDB operations in the future without worry about
@@ -998,7 +1112,7 @@ impl PddbOs {
                                 }
                             },
                             Err(e) => {
-                                log::warn!("FSCB data was found, but it did not decrypt correctly. Ignoring FSCB record. Error: {:?}", e);
+                                log::warn!("FSCB data was found at page {}, but it did not decrypt correctly. Ignoring FSCB record. Error: {:?}", page_start, e);
                                 log::info!("FSCB nonce: {:?}, aad: {:?}, len: {}, msg: {:?}", Nonce::from_slice(&fscb_slice[page_start..page_start + size_of::<Nonce>()]), &aad, fscb_buf.len(), &fscb_buf);
                             }
                         }
