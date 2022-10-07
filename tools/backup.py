@@ -503,6 +503,7 @@ def check_header(backup):
     i += 4
     header_total_size = int.from_bytes(backup[i:i+4], 'little')
     print("Header total length in bytes: {}".format(header_total_size))
+    i += 4
     i += 36 # reserved
 
     if backup_version == 0x10001:
@@ -527,10 +528,9 @@ def check_header(backup):
 
         # TODO: checksums on data region
 
-    backup[i:i+4] = (2).to_bytes(4, 'little')
     op = int.from_bytes(backup[i:i+4], 'little')
-    print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
-    if op != 2:
+    print("Opcode (should be 0): {}".format(op))
+    if op != 0:
         print("Opcode is incorrect.")
         return False
 
