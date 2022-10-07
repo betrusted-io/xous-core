@@ -270,6 +270,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
     - targets are selected by a feature flag passed through the build system
 - Added a sanity check to the backup.py to make sure that the backup preparation was run: you must prepare backups every time before doing a backup. The exported key headers are erased after the backup is run, because you don't want the exported keys just laying around where anyone can read it out by plugging in a USB cable. Unfortunately, a user lost data because this check was missing :(
 - Added crates.io package verification to `xtask`. Note: Cargo.toml files are munged by `cargo publish`, so it's difficult to prove equivalence of your source file and what you're sent from crates.io. Instead, there's now a check in CI to confirm that Cargo.lock did not change, which should change with a tampered Cargo.toml.
+- Fixed cache coherence issue in FLASH. Writes to flash memory need to also invalidate D$ because they are out of band to the regular memory hierarchy.
 
 ## Roadmap to 1.0
 
