@@ -84,7 +84,7 @@
         "en-tts": "Preparing backup state..."
     },
     "rootkeys.backup_staged": {
-        "en": "Backup data is prepared.\nConnect to a host computer by USB, and download the backup data bundle.\nScan the QR code for instructions:",
+        "en": "Backup data is prepared, and PDDB operation halted.\nConnect to a host computer by USB, and download the backup data bundle.\nScan the QR code for instructions:",
         "ja": "バックアップデータを用意します。 これで、ホストコンピューターに接続して、バックアップデータバンドルをダウンロードできます。",
         "zh": "备份数据已准备好。 您现在可以连接到主机并下载备份数据包。",
         "en-tts": "Backup data is prepared. You may now connect to a host computer and download the backup data bundle."
