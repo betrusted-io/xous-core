@@ -504,12 +504,6 @@ def check_header(backup):
     header_total_size = int.from_bytes(backup[i:i+4], 'little')
     print("Header total length in bytes: {}".format(header_total_size))
     i += 36 # reserved
-    backup[i:i+4] = (2).to_bytes(4, 'little')
-    op = int.from_bytes(backup[i:i+4], 'little')
-    print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
-    if op != 2:
-        print("Opcode is incorrect.")
-        return False
 
     if backup_version == 0x10001:
         print("Checksums found in backup image, checking...")
@@ -520,7 +514,8 @@ def check_header(backup):
         COMMIT_NONCE_LEN = 32
         COMMIT_LEN = 32
         CHECKSUM_LEN = 32
-        checksum_loc = PT_HEADER_LEN + NONCE_LEN + CT_LEN + TAG_LEN + COMMIT_NONCE_LEN + COMMIT_LEN
+        PADDING = 4
+        checksum_loc = PT_HEADER_LEN + NONCE_LEN + CT_LEN + TAG_LEN + COMMIT_NONCE_LEN + COMMIT_LEN + PADDING
         check_region = backup[:checksum_loc]
         checksum = backup[checksum_loc:checksum_loc + CHECKSUM_LEN]
         hasher = SHA512.new(truncate="256")
@@ -531,6 +526,13 @@ def check_header(backup):
             return False
 
         # TODO: checksums on data region
+
+    backup[i:i+4] = (2).to_bytes(4, 'little')
+    op = int.from_bytes(backup[i:i+4], 'little')
+    print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
+    if op != 2:
+        print("Opcode is incorrect.")
+        return False
 
     print("Backup header passes sanity check!")
     return True

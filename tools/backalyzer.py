@@ -113,6 +113,7 @@ def main():
             COMMIT_NONCE_LEN = 32
             COMMIT_LEN = 32
             CHECKSUM_LEN = 32
+            PADDING = 4 # structure is padded to 8-byte boundary
             offset = PT_HEADER_LEN
             nonce = backup[offset:offset+NONCE_LEN]
             offset += NONCE_LEN
@@ -124,6 +125,7 @@ def main():
             offset += COMMIT_NONCE_LEN
             commit = backup[offset:offset+COMMIT_LEN]
             offset += COMMIT_LEN
+            offset += PADDING
             check_region = backup[:offset]
             checksum = backup[offset:offset+CHECKSUM_LEN]
 
