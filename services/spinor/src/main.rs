@@ -476,6 +476,52 @@ mod implementation {
             SPINOR_RESULT.load(Ordering::Relaxed)
         }
 
+        /// This routine flushes the dcache.
+        /// The first implementation just flushes the *whole* dcache, but the method
+        /// signature includes the start/length of a region of interest to flush, so that
+        /// later on we could make this more efficient for small patches. This may require an update
+        /// to the CPU core (per Charles Papon):
+        ///    you can invalidate a given line of cache matching a byte address contained by a
+        ///    register :  0x500F | regfile_register_id << 15 .
+        ///    But that one was added recently, so it may not be present in the VexRiscv you have
+        ///
+        /// Manual flushing notes (reading a memory region):
+        /// https://github.com/betrusted-io/pythondata-cpu-vexriscv/blob/f9e81adc9d415f8a2d6d5875ca587cc27866e1aa/pythondata_cpu_vexriscv/verilog/src/main/scala/vexriscv/GenBetrustedSoC.scala#L79-L99
+        /// and
+        /// https://github.com/SpinalHDL/SpinalHDL/blob/aeaeece704fe43c766e0d36a93f2ecbb8a9f2003/lib/src/main/scala/spinal/lib/cpu/riscv/impl/DCache.scala#L12-L27
+        /// D-cache specifics:
+        ///  - 16kiB total capacity
+        ///  - 32 bytes per line -> 5-bit offset
+        ///  - 4 ways
+        ///
+        /// 16kiB capacity / 32 bytes per line = 512 lines
+        /// 512 lines / 4 ways = 128 lines per set, or a 7-bit index field
+        ///
+        /// | 31 .. 12   | 11 10 09 08 07 06 05 | 04 03 02 01 00 |
+        /// |    tag     |  index               |  offset        |
+        /// The tag has 4 ways, so, the tag number may be aliased up to
+        /// 3 times before it is evicted to make way for the 4th alias
+        ///
+        /// So, in theory, this should work with 16k of RAM. But in practice,
+        /// we don't get a "clean cache" until we have visited a span equivalent to 64k.
+        /// Not sure why :-/, but, I stopped caring because ".word 0x500F" works!
+        fn flush_dcache(&self, _start: u32, _len: u32) {
+            unsafe {
+                core::arch::asm!(
+                    ".word 0x500F"
+                );
+            }
+            /* manual flushing:
+            let flush_ptr = self.flusher.as_ptr() as *const u32;
+            let mut dummy: u32 = 0;
+            // only visit the first word of every line
+            for i in (0..FLUSH_SIZE_BYTES / core::mem::size_of::<u32>()).step_by(CACHE_LINE_WIDTH / core::mem::size_of::<u32>()) {
+                dummy += unsafe{flush_ptr.add(i).read_volatile()};
+            }
+            log::trace!("Dcache flush completed: {}", dummy);
+            */
+        }
+
         pub(crate) fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
             /*let log_level = log::max_level();
             if wr.start >= 0x27_5000 && wr.start <= 0x28_8000 { // trigger a debug if we are doing a certain type of transaction
@@ -516,6 +562,7 @@ mod implementation {
                     return SpinorError::WriteFailed;
                 }
                 //log::set_max_level(log_level);
+                self.flush_dcache(wr.start, wr.len);
                 SpinorError::NoError
             } else {
                 // clean patch path:
@@ -534,6 +581,7 @@ mod implementation {
                     return SpinorError::WriteFailed;
                 }
                 //log::set_max_level(log_level);
+                self.flush_dcache(wr.start, wr.len);
                 SpinorError::NoError
             }
         }
@@ -556,6 +604,7 @@ mod implementation {
                     return SpinorError::EraseFailed;
                 }
             }
+            self.flush_dcache(0, 4096);
             return SpinorError::NoError
         }
 
