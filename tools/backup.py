@@ -498,8 +498,8 @@ def check_header(backup):
     checksum_region_len = int.from_bytes(backup[i:i+4], 'little') * 4096
     print("Checksum region length: 0x{:x}".format(checksum_region_len))
     i += 4
-    total_checksums = int.from_bytes(backup[i:i+4], 'little') + 1
-    print("Number of checksums, including the header checksum itself: {}".format(total_checksums))
+    total_checksums = int.from_bytes(backup[i:i+4], 'little')
+    print("Number of checksum blocks: {}".format(total_checksums))
     i += 4
     header_total_size = int.from_bytes(backup[i:i+4], 'little')
     print("Header total length in bytes: {}".format(header_total_size))
@@ -529,8 +529,8 @@ def check_header(backup):
         # TODO: checksums on data region
 
     op = int.from_bytes(backup[i:i+4], 'little')
-    print("Opcode (should be 0): {}".format(op))
-    if op != 0:
+    print("Opcode (should be 1): {}".format(op))
+    if op != 1:
         print("Opcode is incorrect.")
         return False
 
