@@ -195,9 +195,9 @@ def main():
             if backup_version == 0x10001:
                 logging.info("Doing hash verification of pt+ct metadata")
                 hasher = SHA512.new(truncate="256")
-                # this is where the backup upcode is located. It should be 0
+                # this is where the backup upcode is located. It should be 1
                 # check_region = bytearray(check_region)
-                # check_region[140:144] = [0, 0, 0, 0]
+                # check_region[144:148] = [1, 0, 0, 0] # should be at 0x90 offset
                 hasher.update(check_region)
                 computed_checksum = hasher.digest()
                 if computed_checksum != checksum:

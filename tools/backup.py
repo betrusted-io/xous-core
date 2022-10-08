@@ -457,12 +457,13 @@ class SemVer:
             return "v{}.{}.{}-{}-g{:x}".format(self.maj, self.min, self.rev, self.extra, self.commit)
 
 def check_header(backup):
+    checksums = []
     i = 0
     backup_version = int.from_bytes(backup[i:i+4], 'little')
     print("Backup protocol version: 0x{:08x}".format(backup_version))
     if backup_version != 0x00010000 and backup_version != 0x00010001:
         print("Backup protocol version is not correct.")
-        return False
+        return (False, checksums)
     i += 4
     print("Xous version: {}".format(bytes_to_semverstr(backup[i:i+16])))
     backup_xous_ver = SemVer(backup[i:i+16])
@@ -489,7 +490,7 @@ def check_header(backup):
         language = LANGUAGE[lcode]
     else:
         print("Language code is incorrect.")
-        return False
+        return (False, checksums)
     i += 4
     print("Keyboard layout code: {}".format(int.from_bytes(backup[i:i+4], 'little')))
     i += 4
@@ -499,7 +500,7 @@ def check_header(backup):
     print("Checksum region length: 0x{:x}".format(checksum_region_len))
     i += 4
     total_checksums = int.from_bytes(backup[i:i+4], 'little')
-    print("Number of checksum blocks: {}".format(total_checksums))
+    print("Number of checksum blocks: {}".format(total_checksums)) # if this is 0, checksumming was skipped
     i += 4
     header_total_size = int.from_bytes(backup[i:i+4], 'little')
     print("Header total length in bytes: {}".format(header_total_size))
@@ -524,18 +525,23 @@ def check_header(backup):
         computed_checksum = hasher.digest()
         if computed_checksum != checksum:
             print("Header failed hash integrity check!")
-            return False
+            return (False, checksums)
 
-        # TODO: checksums on data region
+        # Checksums are aligned to the end of the first 4096-byte block
+        if header_total_size != len(backup):
+            print("Header length does not match expected length")
+            return (False, checksums)
+        raw_checksums = backup[:-(total_checksums * 16)]
+        checksums = [raw_checksums[i:i+16] for i in range(0, len(raw_checksums), 16)]
 
     op = int.from_bytes(backup[i:i+4], 'little')
     print("Opcode (should be 1): {}".format(op))
     if op != 1:
         print("Opcode is incorrect.")
-        return False
+        return (False, checksums)
 
     print("Backup header passes sanity check!")
-    return True
+    return (True, checksums)
 
 def auto_int(x):
     return int(x, 0)
@@ -621,23 +627,42 @@ def main():
         pc_usb.peek(args.peek + flash_region, display=True)
     else:
         with open(args.output, "wb") as file:
+            checksum = []
             start_addr = locs['LOC_PDDB'][0] - 0x1000
             total_length = locs['LOC_WF200'][0] - locs['LOC_PDDB'][0] + 0x1000
             progress = ProgressBar(min_value=0, max_value=total_length, prefix='Backing up ').start()
             block_size = 4096
             amount_read = 0
+            check_block = bytearray(1024*1024) # the size of this is encoded in the header, but, it doesn't change so we hard code it here
+            check_block_num = 0
+            check_block_offset = 0
             while amount_read < total_length:
                 if amount_read % (block_size * 16) == 0:
                     pc_usb.ping_wdt()
                 backup = pc_usb.burst_read(start_addr + amount_read + flash_region, block_size)
                 if header_checked is False:
-                    if check_header(backup):
+                    (header_ok, checksum) = check_header(backup)
+                    if header_ok:
                         header_checked = True
                     else:
                         break
                 amount_read += block_size
                 if amount_read < total_length:
                     progress.update(amount_read)
+
+                # block check logic
+                if len(checksum) > 0: # this check inherently skips the header block, while also suppressing the check if no checksums are provided
+                    check_block[check_block_offset:check_block_offset + block_size] = backup
+                    check_block_offset += block_size
+                    if check_block_offset >= len(check_block):
+                        hasher = SHA512.new(truncate="256")
+                        hasher.update(check_block)
+                        sum = hasher.digest()
+                        if sum != checksum[check_block_num]:
+                            print("Bad checksum on block {} at offset 0x{:x}. Re-run backup!".format(check_block_num, amount_read - block_size))
+                        check_block_offset = 0
+                        check_block_num += 1
+
                 file.write(backup)
             progress.finish()
             file.close()

@@ -573,6 +573,7 @@ def main():
             i += 8
             i += 48 # reserved
 
+            assert(i == 0x90, "Plaintext operand offset calculated incorrectly! Check data structure sizes.")
             backup[i:i+4] = (2).to_bytes(4, 'little')
             op = int.from_bytes(backup[i:i+4], 'little')
             print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
