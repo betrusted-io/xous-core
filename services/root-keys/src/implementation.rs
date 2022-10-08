@@ -2725,7 +2725,11 @@ impl<'a> RootKeys {
             }
         }
     }
-    pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+    pub fn write_backup(&mut self,
+        mut header: BackupHeader,
+        backup_ct: backups::BackupDataCt,
+        checksums: Option<Checksums>
+    ) -> Result<(), xous::Error> {
         header.op = BackupOp::Backup;  // set the "we're backing up" flag
 
         // condense the data into a single block, to reduce read/write cycles on the block
@@ -2742,10 +2746,22 @@ impl<'a> RootKeys {
         block[size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()..]
             .copy_from_slice(digest.as_slice());
 
+        // stage the artifacts into a full page header
+        const PAGE_LEN: usize = 4096;
+        let mut page = [0xFFu8; PAGE_LEN];
+        // place the metadata at the top of the block
+        page[..block.len()].copy_from_slice(&block);
+        if let Some(cs) = checksums {
+            use std::ops::Deref;
+            let cs_slice = cs.deref();
+            // stage the checksums, if any, aligned to the end of the block
+            assert!(block.len() + cs_slice.len() < PAGE_LEN, "Error: checksum block has outgrown the available space");
+            page[PAGE_LEN - cs_slice.len()..].copy_from_slice(cs_slice);
+        }
         self.spinor.patch(
             self.kernel(),
             self.kernel_base(),
-            &block,
+            &page,
             xous::KERNEL_BACKUP_OFFSET
         ).map_err(|_| xous::Error::InternalError)?;
         Ok(())

@@ -249,10 +249,15 @@ pub (crate) struct KeyWrapper {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub (crate) struct BackupHeaderIpc {
     pub data: Option<[u8; core::mem::size_of::<BackupHeader>()]>,
+    pub checksums: Option<Checksums>,
+
 }
 impl Default for BackupHeaderIpc {
     fn default() -> Self {
-        BackupHeaderIpc { data: None::<[u8; core::mem::size_of::<BackupHeader>()]> }
+        BackupHeaderIpc {
+            data: None::<[u8; core::mem::size_of::<BackupHeader>()]>,
+            checksums: None,
+        }
     }
 }
 
@@ -439,6 +444,52 @@ impl DerefMut for BackupHeader {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
             core::slice::from_raw_parts_mut(self as *mut BackupHeader as *mut u8, size_of::<BackupHeader>())
+                as &mut [u8]
+        }
+    }
+}
+
+/// The Checksums structure is an array of 16-byte (128-bit) checksums that
+/// are applied to backed up data. There is one checksum per block region
+/// (currently set to 1MiB).
+///
+/// The actual checksum is a SHA512 of the region, but with only the first
+/// 128 bits stored. The goal of the checksum isn't a cryptographic tamper
+/// proofing -- this is already handled by the underlying AEAD's that are
+/// applied to the PDDB. The utility of the checksum is to detect media
+/// or transmission errors in storage, without having to fully decrypt
+/// the entire PDDB to look for corruption. We use SHA512 and truncate it to
+/// 128 bits not because it's the optimal hash, but because it's what we
+/// have a hardware accelerator for. We don't truncate to 256 bits because
+/// we're trying to pack as many checksums into a 4k header, and going to
+/// 128 bits is still "strong" for a checksum and allows us to get the region
+/// size down to 1MiB, which is a reasonably sized region for a retry-download
+/// in case a checksum error is found.
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C, align(8))]
+pub struct Checksums {
+    pub checksums: [[u8; 16]; crate::api::TOTAL_CHECKSUMS as usize],
+}
+impl Default for Checksums {
+    fn default() -> Self {
+        Checksums {
+            checksums: [[0u8; 16]; crate::api::TOTAL_CHECKSUMS as usize],
+        }
+    }
+}
+impl Deref for Checksums {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const Checksums as *const u8, size_of::<Checksums>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for Checksums {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut Checksums as *mut u8, size_of::<Checksums>())
                 as &mut [u8]
         }
     }

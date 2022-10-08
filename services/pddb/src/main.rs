@@ -597,6 +597,8 @@ fn wrapped_main() -> ! {
         panic!("Unsupported syscall!");
     }
 
+    let tt = ticktimer_server::Ticktimer::new().unwrap();
+
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
         Opcode::SuspendResume as u32, my_cid).expect("couldn't create suspend/resume object");
@@ -1503,6 +1505,39 @@ fn wrapped_main() -> ! {
                 #[cfg(not(feature="hwtest"))]
                 xous::return_scalar2(msg.sender, 0, 0).ok();
             }),
+            Opcode::TryUnmount => {
+                basis_cache.sync(&mut pddb_os, None).expect("can't sync for unmount");
+                // unmount all the open basis first
+                let mut mounted_bases = basis_cache.basis_list();
+                mounted_bases.retain(|x| x != PDDB_DEFAULT_SYSTEM_BASIS);
+                for basis in mounted_bases {
+                    basis_cache.basis_unmount(&mut pddb_os, &basis).expect("can't unmount extra bases");
+                }
+                if basis_cache.basis_list().len() != 1 {
+                    log::warn!("Couldn't unmount extra bases before unmounting the system basis. Failing unmount operation!");
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+                // finally, unmount the system basis
+                basis_cache.basis_unmount(&mut pddb_os, PDDB_DEFAULT_SYSTEM_BASIS).expect("can't unmount system basis");
+                if basis_cache.basis_list().len() == 0 {
+                    log::info!(".System basis is unmounted.");
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    log::warn!("Couldn't unmount the .System basis!");
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }
+            Opcode::PddbHalt => {
+                loop {
+                    log::info!("PDDB operation halted. No new PDDB requests will be honored!");
+                    tt.sleep_ms(10_000).unwrap();
+                }
+            }
+            Opcode::ComputeBackupHashes => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let result = pddb_os.checksums(Some(&modals));
+                buffer.replace(result).unwrap();
+            }
             Opcode::Quit => {
                 log::warn!("quitting the PDDB server");
                 send_message(
@@ -1511,6 +1546,10 @@ fn wrapped_main() -> ! {
                 ).unwrap();
                 xous::return_scalar(msg.sender, 0).unwrap();
                 break
+            }
+            Opcode::UncacheAndAskPassword => {
+                // lock_and_ensure_password(&modals, &mut pddb_os, pw_cid);
+                xous::return_scalar(msg.sender, 1).unwrap();
             }
             Opcode::InvalidOpcode => {
                 log::error!("couldn't convert opcode: {:?}", msg);

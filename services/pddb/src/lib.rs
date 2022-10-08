@@ -150,6 +150,8 @@ impl Pddb {
             _ => panic!("Internal error"),
         }
     }
+    /// Attempts to mount the system basis. Returns `true` on success, `false` on failure.
+    /// This call may cause a password request box to pop up, in the case that the boot PIN is not currently cached.
     pub fn try_mount(&self) -> bool {
         let ret = send_message(self.conn, Message::new_blocking_scalar(
             Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
@@ -159,6 +161,36 @@ impl Pddb {
             },
             _ => panic!("Internal error"),
         }
+    }
+    /// Unmounts the PDDB. First attempts to unmount any open secret bases, and then finally unmounts
+    /// the system basis. Returns `true` on success, `false` on failure.
+    pub fn try_unmount(&self) -> bool {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::TryUnmount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+        match ret {
+            xous::Result::Scalar1(code) => {
+                if code == 0 {false} else {true}
+            },
+            _ => panic!("Internal error"),
+        }
+    }
+    /// This is a non-blocking message that permanently halts the PDDB server by wedging it in an infinite loop.
+    /// It is meant to be called prior to system shutdows or backups, to ensure that other auto-mounting procesess
+    /// don't undo the shutdown procedure because of an ill-timed "cron" job (the system doesn't literally have
+    /// a cron daemon, but it does have the notion of long-running background jobs that might do something like
+    /// trigger an NTP update, which would then try to write the updated time to the PDDB).
+    pub fn pddb_halt(&self) {
+        send_message(self.conn, Message::new_scalar(
+            Opcode::PddbHalt.to_usize().unwrap(), 0, 0, 0, 0)).expect("Couldn't halt the PDDB");
+    }
+    /// Computes checksums on the entire PDDB database. This operation can take some time and causes a progress
+    /// bar to pop up. This should be called only after the PDDB has been unmounted, to ensure that the disk
+    /// contents do not change after the checksums have been computed.
+    pub fn compute_checksums(&self) -> root_keys::api::Checksums {
+        let alloc = root_keys::api::Checksums::default();
+        let mut buf = Buffer::into_buf(alloc).expect("Couldn't convert memory structure");
+        buf.lend_mut(self.conn, Opcode::ComputeBackupHashes.to_u32().unwrap()).expect("Couldn't execute ComputeBackupHashes");
+        buf.to_original::<root_keys::api::Checksums, _>().expect("Couldn't convert IPC structure")
     }
     /// return a list of all open bases
     pub fn list_basis(&self) -> Vec::<String> {

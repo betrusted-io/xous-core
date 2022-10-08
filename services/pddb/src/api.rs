@@ -216,6 +216,19 @@ pub(crate) enum Opcode {
     /// run a test or diagnostic command (depends on the build)
     InternalTest = 47,
 
+    /// Clear password cache and ask for it again
+    UncacheAndAskPassword = 48,
+
+    /// Unmount the PDDB.
+    TryUnmount = 49,
+
+    /// Compute a block of backup hashes
+    ComputeBackupHashes = 50,
+
+    /// Halt PDDB operation. This is used to prevent any further actions on the PDDB, i.e.
+    /// in prepration for a system shutdown or backup event.
+    PddbHalt = 51,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }

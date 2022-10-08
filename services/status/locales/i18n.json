@@ -23,6 +23,12 @@
         "zh": "忽略此更新",
         "en-tts": "Ignore this update"
     },
+    "socup.unmount_fail": {
+        "ja": "バックアップの準備で PDDB をアンマウントできませんでした。 バックアップが中止されました。",
+        "en": "Couldn't unmount PDDB in preparation for backup. Backup aborted.",
+        "zh": "无法卸载 PDDB 以准备备份。 备份中止。",
+        "en-tts": "Couldn't unmount PDDB in preparation for backup. Backup aborted."
+    },
     "ecup.invalid": {
         "ja": "ECファームウェアパッケージが破損しているか無効です: ",
         "en": "EC firmware package is corrupted or invalid: ",

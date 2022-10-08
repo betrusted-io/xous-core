@@ -70,6 +70,7 @@ pub(crate) enum StatusOpcode {
 
     /// Prepare for a backup
     PrepareBackup,
+    PrepareBackupPhase2,
 
     /// Tells keyboard watching thread that a new keypress happened.
     Keypress,
@@ -562,6 +563,8 @@ fn wrapped_main() -> ! {
         0, 0, 0, 0,)
     ).expect("couldn't exit the gutter server");
     gutter.join().expect("status boot gutter server did not exit gracefully");
+    // allocate some storage for backup checksums
+    let checksums: Arc::<Mutex::<Option<root_keys::api::Checksums>>> = Arc::new(Mutex::new(None));
 
     // --------------------------- graphical loop timing
     let mut stats_phase: usize = 0;
@@ -1058,16 +1061,45 @@ fn wrapped_main() -> ! {
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
             Some(StatusOpcode::PrepareBackup) => {
-                // sync the PDDB to disk prior to making backups
-                let pddb = pddb::Pddb::new();
-                pddb.sync().expect("couldn't synchronize PDDB to disk");
+                // disconnect from the network, so that incoming network packets don't trigger any processes that
+                // could write to the PDDB.
+                netmgr.connection_manager_wifi_off_and_stop().ok();
 
-                // TODO: add PDDB hash map computations here + UX flow to indicate pause
+                // close the active app and switch to shellchat
+                ticktimer.sleep_ms(100).ok();
+                sec_notes.lock().unwrap().remove(&"current_app".to_string());
+                sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string());
+                gam.switch_to_app(gam::APP_NAME_SHELLCHAT, security_tv.token.unwrap()).expect("couldn't raise shellchat");
+                secnotes_force_redraw = true;
 
-                // TODO: add a call to PDDB that blocks the PDDB forever. The system is rebooted
-                // after the backup is done. However, this call ensures that the PDDB does not
-                // get updated mid-way through a backup
+                // unmount the PDDB and compute a checksum; then halt the PDDB to freeze its state
+                thread::spawn({
+                    // thread the checksum process, because it can take a long time.
+                    // we might also want to make it optional down the road, in case people want a "fast" backup option
+                    let checksums = checksums.clone();
+                    move || {
+                        // sync the PDDB to disk prior to making backups
+                        let pddb = pddb::Pddb::new();
+                        if !pddb.try_unmount() {
+                            // this is a rare case path...not worth turning the modals object into a mutex-wrapped thing just for this
+                            let xns = xous_names::XousNames::new().unwrap();
+                            let modals = modals::Modals::new(&xns).unwrap();
+                            modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
+                        } else {
+                            *checksums.lock().unwrap() = Some(pddb.compute_checksums());
+                            // PDDB is halted forever. However, the system is reset after a backup is run.
+                            pddb.pddb_halt();
 
+                            // now trigger phase 2 of the backup
+                            log::info!("{}BACKUP.PHASE2,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                            send_message(cb_cid,
+                                Message::new_scalar(StatusOpcode::PrepareBackupPhase2.to_usize().unwrap(), 0, 0, 0, 0)
+                            ).expect("couldn't initiate phase 2 backup");
+                        }
+                    }
+                });
+            },
+            Some(StatusOpcode::PrepareBackupPhase2) => {
                 let mut metadata = root_keys::api::BackupHeader::default();
                 // note: default() should set the language correctly by default since it's a systemwide constant
                 metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);
@@ -1080,7 +1112,13 @@ fn wrapped_main() -> ! {
                 let map = kbd.get_keymap().expect("couldn't get key mapping");
                 let map_serialize: BackupKeyboardLayout = map.into();
                 metadata.kbd_layout = map_serialize.into();
-                keys.lock().unwrap().do_create_backup_ux_flow(metadata);
+                // the backup process is coded to accept the option of no checksums, but the UX currently
+                // always computes it.
+                if let Some(checksums) = checksums.lock().unwrap().take() {
+                    keys.lock().unwrap().do_create_backup_ux_flow(metadata, Some(checksums));
+                } else {
+                    keys.lock().unwrap().do_create_backup_ux_flow(metadata, None);
+                }
             }
             Some(StatusOpcode::Quit) => {
                 xous::return_scalar(msg.sender, 1).ok();

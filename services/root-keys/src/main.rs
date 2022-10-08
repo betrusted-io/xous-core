@@ -503,6 +503,7 @@ fn main() -> ! {
     let mut aes_sender: Option<xous::MessageSender> = None;
     let mut backup_header: Option<BackupHeader> = None;
     let mut deferred_response: Option<xous::MessageSender> = None;
+    let mut checksums: Option<Checksums> = None; // storage for PDDB backup checksums
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
@@ -1408,6 +1409,7 @@ fn main() -> ! {
                     log::error!("Create backup was called, but no header data was provided");
                     continue;
                 }
+                checksums = ipc.checksums;
                 keys.set_ux_password_type(Some(PasswordType::Update));
                 password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
@@ -1468,7 +1470,7 @@ fn main() -> ! {
                     // now write out the backup
                     let backup_ct = backups::create_backup(fpga_key, backup_header.unwrap(), keyrom);
                     // this final statement has a take/unwrap to set backup_header back to None
-                    match keys.write_backup(backup_header.take().unwrap(), backup_ct) {
+                    match keys.write_backup(backup_header.take().unwrap(), backup_ct, checksums.take()) {
                         Ok(_) => {
                             // this switchover takes a couple seconds, give some user feedback
                             modals.dynamic_notification(Some(t!("rootkeys.backup_prepwait", xous::LANG)), None).ok();
@@ -1477,7 +1479,10 @@ fn main() -> ! {
                             usbd.debug_usb(Some(false)).unwrap();
                             modals.dynamic_notification_close().ok();
                             // there will be a bit of a pause while the QR text renders, but we'll have to fix that with other optimizations...
+                            log::info!("{}BACKUP.STAGED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                             modals.show_notification(t!("rootkeys.backup_staged", xous::LANG), Some("https://github.com/betrusted-io/betrusted-wiki/wiki/Backups")).ok();
+                            // this informs users who dismiss the QR code that they must reboot to resume normal operation
+                            modals.show_notification(t!("rootkeys.backup_waiting", xous::LANG), None).ok();
                         }
                         Err(_) => {
                             modals.show_notification(t!("rootkeys.backup_staging_error", xous::LANG), None).ok();
@@ -1511,7 +1516,7 @@ fn main() -> ! {
                 let mut showed_zero_key_notice = false;
                 if let Ok((mut header, ct)) = keys.read_backup() {
                     if header.op != BackupOp::Restore {
-                        log::warn!("Header op was not Restore. Aborting!");
+                        log::warn!("Header op was not Restore. Found {:?} instead. Aborting!", header.op);
                         modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
@@ -1542,6 +1547,9 @@ fn main() -> ! {
                         header.op = pt.header.op;
                         // now check that the two records are identical
                         if pt.header.deref() != header.deref() {
+                            log::warn!("Corruption detected:");
+                            log::info!("plaintext header: {:?}", pt.header);
+                            log::info!("encrypted header: {:?}", header);
                             modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
                             if let Some(sender) = deferred_response {
                                 xous::return_scalar(sender, 1).ok();

@@ -413,7 +413,9 @@ pub fn start_time_server() {
                         utc_offset_ms = offset;
                         offset_key.seek(SeekFrom::Start(0)).expect("couldn't seek");
                         log::info!("setting offset to {} secs", offset / 1000);
-                        assert_eq!(offset_key.write(&offset.to_le_bytes()).unwrap_or(0), 8, "couldn't commit UTC time offset to PDDB");
+                        if offset_key.write(&offset.to_le_bytes()).unwrap_or(0) != 8 {
+                            log::warn!("Couldn't commit the latest time update. Is the PDDB mounted?");
+                        }
                         offset_key.flush().expect("couldn't flush PDDB");
                     }),
                     Some(TimeOp::SetTzOffsetMs) => xous::msg_scalar_unpack!(msg, tz_hi_ms, tz_lo_ms, _, _, {
@@ -428,7 +430,9 @@ pub fn start_time_server() {
                             tz_offset_ms = tz_ms;
                             tz_key.seek(SeekFrom::Start(0)).expect("couldn't seek");
                             log::info!("setting tz offset to {} secs", tz_ms / 1000);
-                            assert_eq!(tz_key.write(&tz_ms.to_le_bytes()).unwrap_or(0), 8, "couldn't commit TZ time offset to PDDB");
+                            if tz_key.write(&tz_ms.to_le_bytes()).unwrap_or(0) != 8 {
+                                log::warn!("Couldn't commit the latest timezone update. Is the PDDB mounted?");
+                            }
                             tz_key.flush().expect("couldn't flush PDDB");
                         }
                     }),

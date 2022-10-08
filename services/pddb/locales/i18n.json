@@ -83,6 +83,12 @@
         "zh": "枚举完成。\n\n我们要继续搅拌吗？ 这个过程大约需要 20 分钟。",
         "en-tts": "Enumeration finished.\n\nShall we proceed to churning? This process takes about 20 minutes."
     },
+    "pddb.checksums": {
+        "en": "PDDB computing checksums...",
+        "ja": "PDDB はチェックサムを計算しています...",
+        "zh": "PDDB 正在计算校验和...",
+        "en-tts": "PDDB computing checksums..."
+    },
     "pddb.okay": {
         "en": "Okay",
         "ja": "OK",
