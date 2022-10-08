@@ -369,10 +369,11 @@ mod implementation {
         }
         pub fn should_prompt_for_update(&self) -> bool {true}
         pub fn set_prompt_for_update(&self, _state: bool) {}
-        pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+        pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt, checksums: Option::<Checksums>) -> Result<(), xous::Error> {
             header.op = BackupOp::Backup;
             log::info!("backup header: {:?}", header);
             log::info!("backup ciphertext: {:x?}", backup_ct.as_ref());
+            log::info!("backup checksums: {:x?}", checksums);
             Ok(())
         }
         pub fn write_restore_dna(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
