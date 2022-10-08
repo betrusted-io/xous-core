@@ -70,9 +70,12 @@ def main():
     parser.add_argument(
         "-f", "--file", help="Input file (defaults to backup.pddb; note that hosted is in pddb-images/hosted.bin).", type=str, default="backup.pddb"
     )
+    parser.add_argument(
+        "-c", "--checksum-only", help="Only perform checks for media errors. Does not authenticate the backup; does not require passwords.", action="store_true"
+    )
 
     args = parser.parse_args()
-    if args.hosted == False and args.pin == None:
+    if args.hosted == False and args.pin == None and args.checksum_only == False:
         print("Unlock PIN argument is required, please specified with `-p [pin]`")
         exit(0)
 
@@ -193,6 +196,7 @@ def main():
             i += 8 # padding because align=8
 
             if backup_version == 0x10001:
+                checksum_errors = False
                 logging.info("Doing hash verification of pt+ct metadata")
                 hasher = SHA512.new(truncate="256")
                 # this is where the backup upcode is located. It should be 1
@@ -201,9 +205,48 @@ def main():
                 hasher.update(check_region)
                 computed_checksum = hasher.digest()
                 if computed_checksum != checksum:
-                    print("Header failed hash integrity check!")
+                    logging.error("Header failed hash integrity check!")
+                    logging.error("Calculated: {}".format(computed_checksum.hex()))
+                    logging.error("Expected:   {}".format(checksum.hex()))
+                    exit(1)
+                else:
+                    logging.info("Header passed integrity check.")
 
-                # TODO: sector checks
+                if total_checksums != 0:
+                    raw_checksums = backup[header_total_size-(total_checksums * 16):header_total_size]
+                    checksums = [raw_checksums[i:i+16] for i in range(0, len(raw_checksums), 16)]
+                    check_block_num = 0
+                    while check_block_num < total_checksums:
+                        hasher = SHA512.new(truncate="256")
+                        hasher.update(
+                            backup[
+                                header_total_size + check_block_num * checksum_region_len:
+                                header_total_size + (check_block_num + 1) * checksum_region_len
+                            ])
+                        sum = hasher.digest()
+                        if sum[:16] != checksums[check_block_num]:
+                            logging.error("Bad checksum on block {} at offset 0x{:x}".format(check_block_num, check_block_num * checksum_region_len))
+                            logging.error("  Calculated: {}".format(sum[:16].hex()))
+                            logging.error("  Expected:   {}".format(checksums[check_block_num].hex()))
+                            checksum_errors = True
+                        check_block_num += 1
+
+                    if checksum_errors:
+                        logging.error("Media errors were detected! Backup may be unusable.")
+                        exit(1)
+                    else:
+                        logging.info("No media errors detected, {} blocks passed checksum tests".format(total_checksums))
+                        if args.checksum_only:
+                            exit(0)
+                else:
+                    if args.checksum_only:
+                        logging.error("Can't perform checksum verification on backups that do not include checksums")
+                        exit(1)
+                    else:
+                        logging.info("Backup has no checksum block, skipping media integrity checks")
+            elif args.checksum_only:
+                logging.error("Can't perform checksum verification on backups with a version older than 1.1")
+                exit(1)
 
             keyrom = pt_data[i:i+1024]
             user_key_enc = get_key(40, keyrom, 32)

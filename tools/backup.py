@@ -531,7 +531,7 @@ def check_header(backup):
         if header_total_size != len(backup):
             print("Header length does not match expected length")
             return (False, checksums)
-        raw_checksums = backup[:-(total_checksums * 16)]
+        raw_checksums = backup[-(total_checksums * 16):]
         checksums = [raw_checksums[i:i+16] for i in range(0, len(raw_checksums), 16)]
 
     op = int.from_bytes(backup[i:i+4], 'little')
@@ -622,6 +622,7 @@ def main():
     pc_usb.poke(vexdbg_addr, 0x00020000)
 
     header_checked = False
+    checksum_error = False
     flash_region = int(pc_usb.regions['spiflash'][0], 0)
     if args.peek:
         pc_usb.peek(args.peek + flash_region, display=True)
@@ -640,6 +641,31 @@ def main():
                 if amount_read % (block_size * 16) == 0:
                     pc_usb.ping_wdt()
                 backup = pc_usb.burst_read(start_addr + amount_read + flash_region, block_size)
+
+                # block check logic
+                if len(checksum) > 0: # this check inherently skips the header block, while also suppressing the check if no checksums are provided
+                    check_block[check_block_offset:check_block_offset + block_size] = backup
+                    check_block_offset += block_size
+                    if check_block_offset >= len(check_block):
+                        hasher = SHA512.new(truncate="256")
+                        #print("hashing block of {} len".format(len(check_block)))
+                        #print("start: {}".format(check_block[:64].hex()))
+                        #print("end: {}".format(check_block[-64:].hex()))
+                        hasher.update(check_block)
+                        sum = hasher.digest()
+                        if sum[:16] != checksum[check_block_num]:
+                            print("Calculated: {}\nExpected: {}".format(sum[:16].hex(), bytes(checksum[check_block_num]).hex()))
+                            print("Bad checksum on block {} at offset 0x{:x}. Re-run backup!".format(check_block_num, amount_read - block_size))
+                            # TODO: automatic retry of the download. However, for now, this condition *should* be very rare
+                            # (not even sure how to trigger it for testing) that we just print the error message for now.
+                            checksum_error = True
+                        else:
+                            # print("Block {}/{} downloaded OK".format(check_block_num + 1, len(checksum)))
+                            pass
+                        check_block_offset = 0
+                        check_block_num += 1
+
+                # header check - putting it after the above skips incorporating the header data into check_block
                 if header_checked is False:
                     (header_ok, checksum) = check_header(backup)
                     if header_ok:
@@ -650,25 +676,16 @@ def main():
                 if amount_read < total_length:
                     progress.update(amount_read)
 
-                # block check logic
-                if len(checksum) > 0: # this check inherently skips the header block, while also suppressing the check if no checksums are provided
-                    check_block[check_block_offset:check_block_offset + block_size] = backup
-                    check_block_offset += block_size
-                    if check_block_offset >= len(check_block):
-                        hasher = SHA512.new(truncate="256")
-                        hasher.update(check_block)
-                        sum = hasher.digest()
-                        if sum != checksum[check_block_num]:
-                            print("Bad checksum on block {} at offset 0x{:x}. Re-run backup!".format(check_block_num, amount_read - block_size))
-                        check_block_offset = 0
-                        check_block_num += 1
-
                 file.write(backup)
             progress.finish()
             file.close()
 
         print("Resuming CPU.")
         pc_usb.poke(vexdbg_addr, 0x02000000)
+
+    if checksum_error:
+        print("Link errors detected while downloading the backup. Data is likely corrupted, please try again!")
+        # Either that, or possibly the PDDB got into an inconsistent state after preparing the backup!
 
     print("Resetting SOC...")
     try:
