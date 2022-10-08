@@ -16,6 +16,9 @@ const PRECURSOR_SOC_VERSION: &str = "c809403";
 
 /// This is the minimum Xous version required to read a PDDB backup generated
 /// by the current kernel revision.
+/// NOTE: this actually doesn't work. This field needed to find its way into
+/// the backup header, but instead it's just attached to the metadata of the
+/// kernel file itself.
 const MIN_XOUS_VERSION: &str = "v0.9.9-466-gc471ca0f";
 
 /// target triple for precursor builds
