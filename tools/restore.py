@@ -582,6 +582,7 @@ def main():
             # this list should visit kernels in order from newest to oldest.
             URL_LIST = [
                 'https://ci.betrusted.io/releases/v0.9.9/',
+                'https://ci.betrusted.io/latest-ci/', # prefer stable, but fallback to latest-ci if the kernels are too old
                 'https://ci.betrusted.io/releases/v0.9.8/',
                 'https://ci.betrusted.io/releases/v0.9.7/'
             ]

@@ -257,6 +257,7 @@ impl Default for BackupHeaderIpc {
 }
 
 pub const BACKUP_VERSION: u32 = 0x00_01_00_01;
+pub const BACKUP_VERSION_MASK: u32 = 0xFF_FF_00_00; // mask off bits that are cross-compatible
 
 #[repr(u32)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

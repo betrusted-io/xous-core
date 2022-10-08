@@ -2645,7 +2645,7 @@ impl<'a> RootKeys {
         let backup = &kernel[KERNEL_BACKUP_OFFSET as usize..KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()];
         let mut header = BackupHeader::default();
         header.as_mut().copy_from_slice(backup);
-        if header.version == BACKUP_VERSION {
+        if (header.version & BACKUP_VERSION_MASK) == (BACKUP_VERSION & BACKUP_VERSION_MASK) {
             Some(header)
         } else {
             None

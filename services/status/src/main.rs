@@ -464,7 +464,7 @@ fn wrapped_main() -> ! {
                 _ => log::warn!("backup record was found, but it has an improper operation field: {:?}", header.op),
             }
         }
-        _ => {}, // no backup header found, continue with boot
+        _ => log::info!("No backup header found"), // no backup header found, continue with boot
     }
 
     // check for gateware updates
