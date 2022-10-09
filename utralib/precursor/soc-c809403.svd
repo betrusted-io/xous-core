@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2022-07-19 17:21:18]]></description>
+    <description><![CDATA[Litex SoC 2022-10-09 15:13:02]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1174,7 +1174,7 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_MAJOR</name>
                     <description><![CDATA[Major git tag version.  For example, this firmware was built from git tag
-``v0.9.9``, so this value is ``0``.]]></description>
+``v0.9.10``, so this value is ``0``.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1190,7 +1190,7 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_MINOR</name>
                     <description><![CDATA[Minor git tag version.  For example, this firmware was built from git tag
-``v0.9.9``, so this value is ``9``.]]></description>
+``v0.9.10``, so this value is ``9``.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x09</resetValue>
                     <size>32</size>
@@ -1206,9 +1206,9 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_REVISION</name>
                     <description><![CDATA[Revision git tag version.  For example, this firmware was built from git tag
-``v0.9.9``, so this value is ``9``.]]></description>
+``v0.9.10``, so this value is ``10``.]]></description>
                     <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x09</resetValue>
+                    <resetValue>0x0a</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1222,10 +1222,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``29e25ebd``, so this value is 702701245, which should be enough to check out
+``c8094038``, so this value is 3356049464, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x29e25ebd</resetValue>
+                    <resetValue>0xc8094038</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3577,7 +3577,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x3bd8f44d</resetValue>
+                    <resetValue>0x37ad92d4</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3592,7 +3592,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x2ab432b3</resetValue>
+                    <resetValue>0x306c4ed0</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
