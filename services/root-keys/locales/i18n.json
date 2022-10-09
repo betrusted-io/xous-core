@@ -12,10 +12,10 @@
         "en-tts": "Would you like to verify that you wrote the backup key down correctly by re-entering it now?"
     },
     "rootkeys.backup_badpass": {
-        "en": "Password incorrect. Aborting backup!",
+        "en": "Password incorrect.\n\nPlease try again, or reboot by inserting a paperclip in the hard reset hole.",
         "ja": "正しくないパスワード。 バックアップを中止します！",
         "zh": "密码错误。 中止备份！",
-        "en-tts": "Password incorrect. Aborting backup!"
+        "en-tts": "Password incorrect.\n\nPlease try again, or reboot by inserting a paperclip in the hard reset hole."
     },
     "rootkeys.restore_badpass": {
         "en": "BIP-39 entry was not valid. Aborting restore!",

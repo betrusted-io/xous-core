@@ -29,6 +29,12 @@
         "zh": "无法卸载 PDDB 以准备备份。 备份中止。",
         "en-tts": "Couldn't unmount PDDB in preparation for backup. Backup aborted."
     },
+    "backup.confirm": {
+        "ja": "PDDB とルート キーのバックアップの準備をしますか?\n\nプロセスは、いったん開始すると中止できません。",
+        "en": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
+        "zh": "准备 PDDB 和根密钥备份吗？\n\n进程一旦启动就不能中止。",
+        "en-tts": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started."
+    },
     "ecup.invalid": {
         "ja": "ECファームウェアパッケージが破損しているか無効です: ",
         "en": "EC firmware package is corrupted or invalid: ",

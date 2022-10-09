@@ -1061,6 +1061,21 @@ fn wrapped_main() -> ! {
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
             Some(StatusOpcode::PrepareBackup) => {
+                log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
+                    Ok(response) => {
+                        if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                            {}
+                        } else {
+                            // abort the flow now by returning to the main dispatch handler
+                            continue;
+                        }
+                    }
+                    _ => (),
+                }
+
                 // disconnect from the network, so that incoming network packets don't trigger any processes that
                 // could write to the PDDB.
                 netmgr.connection_manager_wifi_off_and_stop().ok();

@@ -1411,6 +1411,7 @@ fn main() -> ! {
                     continue;
                 }
                 checksums = ipc.checksums;
+
                 keys.set_ux_password_type(Some(PasswordType::Update));
                 password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
@@ -1491,6 +1492,20 @@ fn main() -> ! {
                     }
                 } else {
                     modals.show_notification(t!("rootkeys.backup_badpass", xous::LANG), None).ok();
+                    // Prompt the user again for the password. It will do this until a correct password is entered.
+                    // maybe it would be thoughtful to add a yes/no box for rebooting in case someone decides they
+                    // don't want to run the backup right now. But I think this is an edge case that few will run into.
+                    keys.set_ux_password_type(Some(PasswordType::Update));
+                    password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::TextEntry(password_action.clone())),
+                        Some(t!("rootkeys.get_update_password_backup", xous::LANG)), false,
+                        None, true, None
+                    );
+                    #[cfg(feature="tts")]
+                    tts.tts_blocking(t!("rootkeys.get_update_password_backup", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    rootkeys_modal.activate();
                 }
             }
             Some(Opcode::DoRestore) => {
