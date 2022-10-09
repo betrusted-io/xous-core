@@ -1,7 +1,7 @@
 #!/bin/bash
 
 declare -a Crates=(
-    "kernel"
+    "xous-kernel"
     "loader"
     "gam"
     "status"
@@ -9,14 +9,14 @@ declare -a Crates=(
     "ime-frontend"
     "ime-plugin-shell"
     "graphics-server"
-    "ticktimer-server"
-    "log-server"
+    "xous-ticktimer"
+    "xous-log"
     "com"
     "xous-names"
     "keyboard"
     "trng"
     "llio"
-    "susres"
+    "xous-susres"
     "codec"
     "sha2"
     "engine-25519"
