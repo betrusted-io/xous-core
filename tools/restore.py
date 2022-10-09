@@ -474,6 +474,9 @@ def main():
     parser.add_argument(
         "--peek", required=False, help="Inspect an address", type=auto_int, metavar=('ADDR')
     )
+    parser.add_argument(
+        "--file", required=False, help="File to restore from. Defaults to backup.pddb", default="backup.pddb", type=str
+    )
     args = parser.parse_args()
 
     dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
@@ -542,7 +545,7 @@ def main():
         3: "zh",
     }
     try:
-        with open("backup.pddb", "rb") as backup_file:
+        with open(args.file, "rb") as backup_file:
             backup = bytearray(backup_file.read())
 
             i = 0
@@ -638,12 +641,12 @@ def main():
             # now try to download all the artifacts and check their versions
             # this list should visit kernels in order from newest to oldest.
             URL_LIST = [
+                'https://ci.betrusted.io/releases/v0.9.10/',
                 'https://ci.betrusted.io/releases/v0.9.9/',
                 'https://ci.betrusted.io/releases/v0.9.8/',
                 'https://ci.betrusted.io/releases/v0.9.7/'
             ]
-            if backup_version == 0x10001:
-                # insert bleeding-edge build for pre-release testing
+            if False: # insert bleeding-edge build for pre-release testing
                 URL_LIST.insert(0, 'https://ci.betrusted.io/latest-ci/')
 
             attempt = 0
