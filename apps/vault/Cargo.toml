@@ -11,7 +11,7 @@ xous = "0.9.13"
 xous-ipc = "0.9.13"
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 log-server = { package = "xous-api-log", version = "0.1.7" }
-xous-names = { package = "xous-api-names", version = "0.9.7" }
+xous-names = { package = "xous-api-names", version = "0.9.8" }
 gam = {path = "../../services/gam" }
 graphics-server = {path = "../../services/graphics-server" }
 locales = {path = "../../locales"}

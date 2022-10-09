@@ -9,7 +9,7 @@ use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
-        "xous-api-names@0.9.7",
+        "xous-api-names@0.9.8",
         "xous-api-log@0.1.7",
         "xous-api-susres@0.9.5",
         "xous-api-ticktimer@0.9.5",

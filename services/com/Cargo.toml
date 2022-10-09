@@ -15,7 +15,7 @@ susres = {package = "xous-api-susres", version = "0.9.5"}
 typenum = "1.12"
 xous = "0.9.13"
 xous-ipc = "0.9.13"
-xous-names = {package = "xous-api-names", version = "0.9.7"}
+xous-names = {package = "xous-api-names", version = "0.9.8"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
 

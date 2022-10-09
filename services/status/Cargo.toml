@@ -16,7 +16,7 @@ trng = {path = "../trng"}
 llio = {path = "../llio"}
 xous = "0.9.13"
 xous-ipc = "0.9.13"
-xous-names = {package = "xous-api-names", version = "0.9.7"}
+xous-names = {package = "xous-api-names", version = "0.9.8"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}
 locales = {path = "../../locales"}
