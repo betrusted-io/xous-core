@@ -346,7 +346,7 @@ fn wrapped_main() -> ! {
     let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
     let kbd = keyboard::Keyboard::new(&xns).unwrap();
 
-    // ---------------------------- Automatic backlight-related variables.
+    // ---------------------------- Background processes that claim contexts
     // must be upstream of the update check, because we need to occupy the keyboard
     // server slot to prevent e.g. a keyboard logger from taking our passwords!
     kbd.register_observer(
@@ -361,6 +361,8 @@ fn wrapped_main() -> ! {
 
     let thread_already_running = Arc::new(Mutex::new(false));
     let thread_conn = xous::connect(status_sid).unwrap();
+
+    wifi::start_background_thread();
 
     // ------------------------ check firmware status and apply updates
     // all security sensitive servers must be occupied at this point in time.
@@ -639,8 +641,6 @@ fn wrapped_main() -> ! {
             pddb::Pddb::new().try_mount();
         }
     });
-
-    wifi::start_background_thread();
 
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
