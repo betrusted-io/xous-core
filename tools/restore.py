@@ -639,10 +639,12 @@ def main():
             # this list should visit kernels in order from newest to oldest.
             URL_LIST = [
                 'https://ci.betrusted.io/releases/v0.9.9/',
-                'https://ci.betrusted.io/latest-ci/', # prefer stable, but fallback to latest-ci if the kernels are too old
                 'https://ci.betrusted.io/releases/v0.9.8/',
                 'https://ci.betrusted.io/releases/v0.9.7/'
             ]
+            if backup_version == 0x10001:
+                # insert bleeding-edge build for pre-release testing
+                URL_LIST.insert(0, 'https://ci.betrusted.io/latest-ci/')
 
             attempt = 0
             while attempt < len(URL_LIST):
