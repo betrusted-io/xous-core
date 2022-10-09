@@ -1,5 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+mod rkyv_enum;
+pub use rkyv_enum::*;
+
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous::{send_message, Message, CID};
 use xous_ipc::{Buffer, String};
@@ -81,12 +84,6 @@ pub enum Opcode {
     Release,
 
     Quit,
-}
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum Return {
-    Prediction(Prediction),
-    Failure,
 }
 
 pub trait PredictionApi {

@@ -1,17 +1,13 @@
-use graphics_server::api::{Rectangle, TextView, Line, RoundedRectangle, Circle, Point, Gid};
+mod rkyv_enum;
+// note: many enums in the API are isolated to this file.
+pub use rkyv_enum::*;
+
+use graphics_server::api::{Point, Gid};
 #[cfg(feature="ditherpunk")]
 use graphics_server::api::Tile;
 use xous_ipc::String;
 
 pub(crate) const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-pub enum GamObjectType {
-    Line(Line),
-    Circ(Circle),
-    Rect(Rectangle),
-    RoundRect(RoundedRectangle),
-}
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct GamObject {
@@ -207,32 +203,10 @@ pub(crate) enum Opcode {
     Bip39Suggestions = 32,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) enum Return {
-    UxToken(Option<[u32; 4]>),
-    RenderReturn(TextView),
-    SetCanvasBoundsReturn(SetCanvasBoundsRequest),
-    ContentCanvasReturn(Option<Gid>),
-    Failure,
-    NotCurrentlyDrawable,
-}
-
 // small wart -- we have to reset the size of a modal to max size for resize computations
 // reveal the max size globally, since it's a constant
 pub const MODAL_Y_MAX: i16 = 350; // in absolute screen coords, not relative to top pad
 
-#[derive(Debug, Eq, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) enum MenuMgrOp {
-    // incoming is one of these ops
-    AddItem,
-    InsertItem(usize),
-    DeleteItem,
-    SetIndex(usize),
-    Quit,
-    // response must be one of these
-    Ok,
-    Err,
-}
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Eq)]
 pub enum ActivationResult {
     Success,
@@ -250,15 +224,6 @@ pub(crate) struct MenuManagement {
     pub(crate) op: MenuMgrOp,
 }
 
-#[allow(dead_code)] // here until Memory types are implemented
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum MenuPayload {
-    /// memorized scalar payload
-    Scalar([u32; 4]),
-    /// this a nebulous-but-TBD maybe way of bodging in a more complicated record, which would involve
-    /// casting this memorized, static payload into a Buffer and passing it on. Let's not worry too much about it for now, it's mostly apirational...
-    Memory(([u8; 256], usize)),
-}
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct MenuItem {
     pub name: String::<64>,

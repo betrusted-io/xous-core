@@ -1,3 +1,6 @@
+mod rkyv_enum;
+pub use rkyv_enum::*;
+
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
@@ -155,12 +158,6 @@ pub enum AesRootkeyType {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]
-pub enum AesBlockType {
-    SingleBlock([u8; 16]),
-    ParBlock([[u8; 16]; PAR_BLOCKS]),
-}
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
-#[zeroize(drop)]
 pub enum AesOpType {
     Encrypt = 0,
     Decrypt = 1,
@@ -192,17 +189,6 @@ impl AesOp {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq, Copy, Clone)]
-pub enum KeywrapError {
-    InvalidDataSize,
-    InvalidKekSize,
-    InvalidOutputSize,
-    IntegrityCheckFailed,
-    /// this is a bodge to return an error code that upgrades from a faulty early version of AES-KWP
-    /// only works for 256-bit keys, but that is also all we used.
-    /// The return tuple is: (unwrapped key, correctly wrapped key)
-    UpgradeToNew(([u8; 32], [u8; 40])),
-}
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum KeyWrapOp {
     Wrap = 0,

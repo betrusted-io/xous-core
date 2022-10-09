@@ -53,6 +53,9 @@ pub struct MontgomeryJob {
     pub scalar: [u8; 32],
 }
 
+mod rkyv_enum;
+pub use rkyv_enum::*;
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Runs a job, if the server is not already occupied
@@ -81,19 +84,6 @@ pub(crate) enum Opcode {
 pub(crate) enum Return {
     Result,
     Quit,
-}
-
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum JobResult {
-    /// returns a copy of the entire register file as a result
-    Result([u32; RF_SIZE_IN_U32]),
-    SingleResult([u8; 32]),
-    Started,
-    EngineUnavailable,
-    NotAsyncObject, // attempt to run an async job on an object that was setup for sync jobs
-    IllegalOpcodeException,
-    SuspendError,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
