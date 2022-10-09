@@ -10,13 +10,13 @@ use chrono::Local;
 pub(crate) fn generate_version(add_timestamp: bool) {
     let output = if cfg!(target_os = "windows") {
         Command::new("cmd")
-            .args(["/C", "git describe --tags"])
+            .args(["/C", "git describe --tags --long"])
             .output()
             .expect("failed to execute process")
     } else {
         Command::new("sh")
             .arg("-c")
-            .arg("git describe --tags")
+            .arg("git describe --tags --long")
             .output()
             .expect("failed to execute process")
     };
