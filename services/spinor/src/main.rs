@@ -15,6 +15,7 @@ use std::collections::HashSet;
 #[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
+    use xous::MemoryRange;
     use crate::api::*;
     use susres::{RegManager, RegOrField, SuspendResume};
     use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -387,6 +388,8 @@ mod implementation {
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
+    const CACHE_LINE_WIDTH: usize = 32;
+    const FLUSH_SIZE_BYTES: usize = 16384 * 4; // cache capacity * 4 ways
     pub struct Spinor {
         id: u32,
         handler_conn: xous::CID,
@@ -396,6 +399,7 @@ mod implementation {
         cur_op: Option<FlashOp>,
         ticktimer: ticktimer_server::Ticktimer,
         // TODO: refactor ecup command to use spinor to operate the reads
+        flusher: MemoryRange,
     }
 
     impl Spinor {
@@ -414,6 +418,13 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map SPINOR soft interrupt CSR range");
+            let flusher = xous::syscall::map_memory(
+                None,
+                None,
+                FLUSH_SIZE_BYTES,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map flusher memory");
 
             let mut spinor = Spinor {
                 id: 0,
@@ -423,6 +434,7 @@ mod implementation {
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 cur_op: None,
                 ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+                flusher,
             };
 
             xous::claim_interrupt(
@@ -473,6 +485,7 @@ mod implementation {
             }
             self.ticktimer.ping_wdt();
             xous::arch::cache_flush(); // flush the CPU caches in case the SPINOR call modified memory that's cached
+            self.flush_dcache(0, 4096); // the arch call doesn't use the Vex-specific instruction for cache flush; this one does.
             SPINOR_RESULT.load(Ordering::Relaxed)
         }
 
@@ -511,7 +524,7 @@ mod implementation {
                     ".word 0x500F"
                 );
             }
-            /* manual flushing:
+            // augment with manual flushing, because the above instruction didn't seem to do the trick??
             let flush_ptr = self.flusher.as_ptr() as *const u32;
             let mut dummy: u32 = 0;
             // only visit the first word of every line
@@ -519,7 +532,6 @@ mod implementation {
                 dummy += unsafe{flush_ptr.add(i).read_volatile()};
             }
             log::trace!("Dcache flush completed: {}", dummy);
-            */
         }
 
         pub(crate) fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
@@ -549,6 +561,7 @@ mod implementation {
                     log::error!("E_FAIL set, erase failed: result 0x{:02x}, sector addr 0x{:08x}", erase_result, wr.start);
                     return SpinorError::EraseFailed;
                 }
+                self.flush_dcache(wr.start, wr.len);
 
                 // now write the data sector
                 self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
