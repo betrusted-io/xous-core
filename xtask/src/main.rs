@@ -43,6 +43,10 @@ const MIN_XOUS_VERSION: &str = "v0.9.8-791";
 /// target triple for precursor builds
 const TARGET_TRIPLE: &str = "riscv32imac-unknown-xous-elf";
 
+// because I have nowhere else to note this. The commit that contains the rkyv-enum derive
+// refactor to work around warnings thrown by Rust 1.64.0 is: f815ed85b58b671178fbf53b4cea34186fc406eb
+// We could undo this if it turns out to be a compiler regression.
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = Builder::new();
     // encodes a timestamp into the build, unless '--no-timestamp' is passed
