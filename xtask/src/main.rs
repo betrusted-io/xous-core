@@ -134,6 +134,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     builder.add_apps(&extra_apps);
     let extra_services = get_flag("--service")?;
     builder.add_services(&extra_services);
+    // extract features, and especially track language features
+    let features = get_flag("--feature")?;
+    let mut language_set = false;
+    for feature in features {
+        builder.add_feature(&feature);
+        if feature.starts_with("xous/lang-") {
+            track_language_changes(&feature)?;
+            language_set = true;
+        }
+    }
+    if !language_set { // the default language is english
+        track_language_changes("en")?;
+    }
 
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
