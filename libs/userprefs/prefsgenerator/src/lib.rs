@@ -15,6 +15,7 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
             syn::Fields::Named(FieldsNamed { named, .. }) => {
                 for field in &named {
                     let ident = field.ident.as_ref().unwrap().clone();
+                    let ident_str = ident.to_string();
                     let typ = field.ty.clone();
 
                     let set_fn_name = format_ident!("set_{}", ident);
@@ -22,27 +23,17 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
 
                     let read = quote! {
                         impl Manager {
-                            // pub fn #set_fn_name(&mut self, value: #typ) {
-                            //     self.prefs.#ident = value;
-                            //     self.pddb_store(&self.prefs).unwrap()
-                            // }
-
-                            // pub fn #fn_name(&mut self) -> #typ {
-                            //     self.prefs = self.pddb_get().unwrap();
-                            //     self.prefs.#ident
-                            // }
-
                             pub fn #set_fn_name(&mut self, value: #typ) -> Result<(), Error> {
                                 let bytes: Vec<u8> = match bincode::encode_to_vec(value, bincode::config::standard()) {
-                                    Ok(ret) => Ok(ret),
+                                    Ok(ret) => ret,
                                     Err(err) => return Err(Error::EncodeError(err)),
                                 };
 
-                                self.pddb_store_key(#fn_name, &bytes)
+                                self.pddb_store_key(#ident_str, &bytes)
                             }
 
                             pub fn #fn_name(&mut self) -> Result<#typ, Error> {
-                                let bytes = self.pddb_get_key("#fn_name")?;
+                                let bytes = self.pddb_get_key(#ident_str)?;
                                 let ret: #typ = match bincode::decode_from_slice(&bytes, bincode::config::standard()) {
                                     Ok((data, _)) => data,
                                     Err(err) => return Err(Error::DecodeError(err)),
@@ -52,9 +43,8 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
                             }
                         }
                     };
-                    println!("code: {}", read);
-                    panic!();
-                    //rw_methods.extend(read);
+
+                    rw_methods.extend(read);
                 }
             }
             _ => (),

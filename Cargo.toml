@@ -29,7 +29,7 @@ default-members = [
   "services/dns",
   "services/modals",
   "services/usb-device-xous",
-  "lib/userprefs"
+  "libs/userprefs"
 ]
 members = [
   "xous-ipc",
