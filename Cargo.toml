@@ -29,6 +29,7 @@ default-members = [
   "services/dns",
   "services/modals",
   "services/usb-device-xous",
+  "lib/userprefs"
 ]
 members = [
   "xous-ipc",
@@ -85,6 +86,7 @@ members = [
   "tools/perflib",
   "kernel",
   "loader",
+  "libs/userprefs"
 ]
 resolver = "2"
 
