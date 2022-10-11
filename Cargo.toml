@@ -29,6 +29,7 @@ default-members = [
   "services/dns",
   "services/modals",
   "services/usb-device-xous",
+  "apps/mtxcli",
 ]
 members = [
   "xous-ipc",
@@ -72,6 +73,7 @@ members = [
   "services/modals",
   "apps/ball",
   "apps/hello",
+  "apps/mtxcli",
   "apps/repl",
   "apps/vault",
   "apps/vault/tools/vaultbackup-rs",

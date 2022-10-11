@@ -43,5 +43,16 @@
                 "en-tts": "Basic REPL demo"
             }
         }
+    },
+    "mtxcli": {
+        "context_name": "Matrix chat",
+        "menu_name": {
+            "appmenu.repl": {
+                "en": "Matrix chat",
+                "ja": "シンプルなMATRIXデモ",
+                "zh": "基本 MATRIX 演示",
+                "en-tts": "Basic MATRIX demo"
+            }
+        }
     }
 }

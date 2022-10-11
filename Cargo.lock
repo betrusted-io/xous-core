@@ -2211,6 +2211,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "mtxcli"
+version = "0.1.0"
+dependencies = [
+ "codec",
+ "com",
+ "content-plugin-api",
+ "gam",
+ "graphics-server",
+ "ime-plugin-api",
+ "ime-plugin-shell",
+ "llio",
+ "locales",
+ "log",
+ "num-derive",
+ "num-traits",
+ "trng",
+ "xous 0.9.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-ipc 0.9.13 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "nb"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
