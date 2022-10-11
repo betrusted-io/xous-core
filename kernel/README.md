@@ -1,5 +1,6 @@
 <!--
 SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+SPDX-FileCopyrightText: 2022 Foundation Devices, Inc <hello@foundationdevices.com>
 SPDX-License-Identifier: Apache-2.0
 -->
 
@@ -12,16 +13,25 @@ Supervisor mode.
 
 ## Building
 
+1. Decide what target you want.  This can be either RISC-V or ARMv7-A.
+2. Get Rust.  Go to https://rustup.rs/ and follow its instructions.
+3. Install the proper toolchain: `rustup target add ${target_arch}`
+4. Build the kernel: `cargo build --release --target ${target_arch}`
+
+### RISC-V
+
 To build the kernel, you will need a riscv32 target for Rust.  Possible
 targets include `riscv32i-unknown-none-elf`, `riscv32imac-unknown-none-elf`,
 or `riscv32imac-unknown-xous-elf`.
 
-1. Decide what target you want.  For simple, embedded systems this could
-   be `riscv32i-unknown-none-elf`, and for more complex systems with
-   compressed instructions you could use `riscv32imac-unknown-none-elf`.
-2. Get Rust.  Go to https://rustup.rs/ and follow its instructions.
-3. Install the proper toolchain: `rustup target add ${target_arch}`
-4. Build the kernel: `cargo build --release --target ${target_arch}`
+For simple, embedded systems `riscv32i-unknown-none-elf` could be used and for
+more complex systems with compressed instructions you could use
+`riscv32imac-unknown-none-elf`.
+
+## ARMv7-A
+
+To build for ARMv7-A targets tou will need the `armv7a-none-eabi` target for
+Rust.
 
 ## Using
 
