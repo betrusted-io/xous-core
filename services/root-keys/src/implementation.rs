@@ -2401,8 +2401,10 @@ impl<'a> RootKeys {
             }
         }
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()};
-        let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
-
+        let sig = match Signature::from_bytes(&sig_rec.signature) {
+            Ok(sig) => sig,
+            Err(_) => return SignatureResult::MalformedSignature,
+        };
         let mut sigtype = SignatureResult::SelfSignOk;
         // check against all the known signature types in detail
         loop {
@@ -2417,7 +2419,7 @@ impl<'a> RootKeys {
                     self.read_key_256(KeyRomLocs::DEVELOPER_PUBKEY)
                 },
                 _ => {
-                    panic!("Invalid state during check gateware signature")
+                    return SignatureResult::InvalidSignatureType
                 }
             };
             // check for uninitialized signature records
@@ -2436,7 +2438,10 @@ impl<'a> RootKeys {
                 }
                 continue;
             }
-            let pubkey = PublicKey::from_bytes(&pubkey_bytes).expect("public key was not valid");
+            let pubkey = match PublicKey::from_bytes(&pubkey_bytes) {
+                Ok(pubkey) => pubkey,
+                Err(_) => return SignatureResult::InvalidPubKey,
+            };
 
             let region = match region_enum {
                 GatewareRegion::Boot => self.gateware(),
