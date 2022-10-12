@@ -836,12 +836,11 @@ impl VaultUx {
                                     }
                                 }
                                 // update the "extra" field, because the timestep field has been altered
-                                let alg: String = hotp_rec.algorithm.into();
                                 self.filtered_list[self.selection_index].extra = format!("{}:{}:{}:{}:{}",
                                     hotp_rec.secret,
                                     hotp_rec.digits,
                                     hotp_rec.timestep,
-                                    alg,
+                                    hotp_rec.algorithm,
                                     if hotp_rec.is_hotp {"HOTP"} else {"TOTP"}
                                 );
                                 self.filtered_list[self.selection_index].dirty = true;

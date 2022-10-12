@@ -551,14 +551,13 @@ impl ActionManager {
                     }
                 };
 
-                let alg: String = pw.algorithm.into();
                 let edit_data = self.modals
                     .alert_builder(t!("vault.edit_dialog", xous::LANG))
                     .field(Some(pw.name), Some(password_validator))
                     .field(Some(pw.secret), Some(password_validator))
                     .field(Some(pw.notes), Some(password_validator))
                     .field(Some(pw.timestep.to_string()), Some(password_validator))
-                    .field(Some(alg), Some(password_validator))
+                    .field(Some(pw.algorithm.to_string()), Some(password_validator))
                     .field(Some(pw.digits.to_string()), Some(password_validator))
                     .field(Some(if pw.is_hotp {"HOTP".to_string()} else {"TOTP".to_string()}), Some(password_validator))
                     .build().expect("modals error in edit");
@@ -845,12 +844,11 @@ impl ActionManager {
                             match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
-                                        let alg: String = totp.algorithm.into();
                                         let extra = format!("{}:{}:{}:{}:{}",
                                             totp.secret,
                                             totp.digits,
                                             totp.timestep,
-                                            alg,
+                                            totp.algorithm,
                                             if totp.is_hotp {"HOTP"} else {"TOTP"}
                                         );
                                         let desc = format!("{}", totp.name);
