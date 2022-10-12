@@ -52,7 +52,7 @@ pub struct ProcessInit {
     // 6
 }
 
-impl Into<[usize; 7]> for &ProcessInit {
+impl From<&ProcessInit> for [usize; 7] {
     fn into(self) -> [usize; 7] {
         [
             self.stack.addr.get(),
@@ -121,7 +121,7 @@ impl From<[usize; 8]> for ProcessStartup {
     }
 }
 
-impl Into<[usize; 7]> for &ProcessStartup {
+impl From<&ProcessStartup> for [usize; 7] {
     fn into(self) -> [usize; 7] {
         [self.pid.get() as _, self.connection as _, 0, 0, 0, 0, 0]
     }

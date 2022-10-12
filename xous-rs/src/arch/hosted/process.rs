@@ -53,13 +53,13 @@ impl ProcessArgs {
     }
 }
 
-impl Into<[usize; 7]> for &ProcessInit {
-    fn into(self) -> [usize; 7] {
+impl From<&ProcessInit> for [usize; 7] {
+    fn from(init: &ProcessInit) -> [usize; 7] {
         [
-            u32::from_le_bytes(self.key.0[0..4].try_into().unwrap()) as _,
-            u32::from_le_bytes(self.key.0[4..8].try_into().unwrap()) as _,
-            u32::from_le_bytes(self.key.0[8..12].try_into().unwrap()) as _,
-            u32::from_le_bytes(self.key.0[12..16].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[0..4].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[4..8].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[8..12].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[12..16].try_into().unwrap()) as _,
             0,
             0,
             0,
@@ -120,9 +120,9 @@ impl From<[usize; 8]> for ProcessStartup {
     }
 }
 
-impl Into<[usize; 7]> for &ProcessStartup {
-    fn into(self) -> [usize; 7] {
-        [self.pid.get() as _, 0, 0, 0, 0, 0, 0]
+impl From<&ProcessStartup> for [usize; 7] {
+    fn from(startup: &ProcessStartup) -> [usize; 7] {
+        [startup.pid.get() as _, 0, 0, 0, 0, 0, 0]
     }
 }
 
