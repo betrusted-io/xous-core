@@ -58,9 +58,9 @@ pub enum TextOp {
     Render,
     ComputeBounds, // maybe we don't need this
 }
-impl Into<usize> for TextOp {
-    fn into(self) -> usize {
-        match self {
+impl From<TextOp> for usize {
+    fn from(op: TextOp) -> usize {
+        match op {
             TextOp::Nop => 0,
             TextOp::Render => 1,
             TextOp::ComputeBounds => 2,

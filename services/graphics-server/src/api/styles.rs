@@ -16,9 +16,9 @@ impl From<bool> for PixelColor {
     }
 }
 
-impl Into<bool> for PixelColor {
-    fn into(self) -> bool {
-        if self == PixelColor::Dark {
+impl From<PixelColor> for bool {
+    fn from(pc: PixelColor) -> bool {
+        if pc == PixelColor::Dark {
             true
         } else {
             false
@@ -36,9 +36,9 @@ impl From<usize> for PixelColor {
     }
 }
 
-impl Into<usize> for PixelColor {
-    fn into(self) -> usize {
-        if self == PixelColor::Light {
+impl From<PixelColor> for usize {
+    fn from(pc: PixelColor) -> usize {
+        if pc == PixelColor::Light {
             0
         } else {
             1
@@ -103,11 +103,11 @@ impl From<usize> for DrawStyle {
     }
 }
 
-impl Into<usize> for DrawStyle {
-    fn into(self) -> usize {
+impl From<DrawStyle> for usize {
+    fn from(draw_style: DrawStyle) -> usize {
         let sc: usize;
-        if self.stroke_color.is_some() {
-            if self.stroke_color.unwrap() == PixelColor::Dark {
+        if draw_style.stroke_color.is_some() {
+            if draw_style.stroke_color.unwrap() == PixelColor::Dark {
                 sc = 0b11;
             } else {
                 sc = 0b10;
@@ -116,8 +116,8 @@ impl Into<usize> for DrawStyle {
             sc = 0;
         }
         let fc: usize;
-        if self.fill_color.is_some() {
-            if self.fill_color.unwrap() == PixelColor::Dark {
+        if draw_style.fill_color.is_some() {
+            if draw_style.fill_color.unwrap() == PixelColor::Dark {
                 fc = 0b11;
             } else {
                 fc = 0b10;
@@ -126,7 +126,7 @@ impl Into<usize> for DrawStyle {
         } else {
             fc = 0;
         }
-        (self.stroke_width as usize) << 16 | sc << 2 | fc
+        (draw_style.stroke_width as usize) << 16 | sc << 2 | fc
     }
 }
 

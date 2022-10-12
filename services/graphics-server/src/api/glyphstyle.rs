@@ -29,9 +29,9 @@ impl From<usize> for GlyphStyle {
 
 /// Convert style to number for use with register-based message passing sytems
 // [by bunnie for Xous]
-impl Into<usize> for GlyphStyle {
-    fn into(self) -> usize {
-        match self {
+impl From<GlyphStyle> for usize {
+    fn from(g: GlyphStyle) -> usize {
+        match g {
             GlyphStyle::Small => 0,
             GlyphStyle::Regular => 1,
             GlyphStyle::Bold => 2,
