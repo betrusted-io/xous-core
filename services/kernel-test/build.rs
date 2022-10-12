@@ -2,9 +2,7 @@
 use std::env;
 
 fn main() {
-    let target = env::var("TARGET").unwrap();
-
-    let target_os = target.split('-').nth(2).unwrap_or("none");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
 
     // If we're not running on a desktop-class operating system, emit the "baremetal"
     // config setting. This will enable software to do tasks such as
