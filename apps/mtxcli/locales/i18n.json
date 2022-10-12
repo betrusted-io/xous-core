@@ -1,0 +1,32 @@
+{
+    "mtxcli.greeting": {
+        "en": "Welcome to the simple MTXCLI demo.",
+        "ja": "シンプルなMTXCLIデモへようこそ",
+        "zh": "简单的 mtxcli 演示活动",
+        "en-tts": "Welcome to the simple MTXCLI demo."
+    },
+    "mtxcli.audio.start": {
+        "en": "tone started...",
+        "ja": "トーン開始…",
+        "zh": "哔声开始...",
+        "en-tts": "tone started..."
+    },
+    "mtxcli.audio.help": {
+        "en": "audio [tone [freq [duration]]]",
+        "ja": "オーディオ [ トーン [ 周波数 [ 間隔 ]]]",
+        "zh": "audio [tone [音频 [时长]]]",
+        "en-tts": "audio tone, then optional frequency plus optional duration."
+    },
+    "mtxcli.audio.completion_a": {
+        "en": "Playback stopped at",
+        "ja": "再生停止位置: ",
+        "zh": "播放停止在",
+        "en-tts": "Playback stopped at"
+    },
+    "mtxcli.audio.completion_b": {
+        "en": "frames",
+        "ja": "フレーム",
+        "zh": "帧",
+        "en-tts": "frames"
+    }
+}
