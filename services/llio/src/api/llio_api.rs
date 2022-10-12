@@ -15,9 +15,9 @@ impl From<usize> for VibePattern {
         }
     }
 }
-impl Into<usize> for VibePattern {
-    fn into(self) -> usize {
-        match self {
+impl From<VibePattern> for usize {
+    fn from(pat: VibePattern) -> usize {
+        match pat {
             VibePattern::Long => 0,
             VibePattern::Double => 1,
             VibePattern::Short => 0xffff_ffff,
@@ -39,9 +39,9 @@ impl From<usize> for ClockMode {
         }
     }
 }
-impl Into<usize> for ClockMode {
-    fn into(self) -> usize {
-        match self {
+impl From<ClockMode> for usize {
+    fn from(mode: ClockMode) -> usize {
+        match mode {
             ClockMode::Low => 0,
             ClockMode::AllOn => 0xffff_ffff,
         }
