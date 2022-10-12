@@ -7,43 +7,71 @@ fn out_dir() -> PathBuf {
     PathBuf::from(env::var_os("OUT_DIR").unwrap())
 }
 
+/// Helper macro that returns a constant number of features enabled among specified list.
+macro_rules! count_enabled_features {
+    ($($feature:literal),*) => {
+        {
+            let mut enabled_features = 0;
+            $(
+                enabled_features += cfg!(feature = $feature) as u32;
+            )*
+            enabled_features
+        }
+    }
+}
+
+/// Helper macro that returns a compile-time error if multiple or none of the
+/// features of some caterogy are defined.
+///
+/// # Example
+///
+/// Given the following code:
+///
+/// ```
+/// allow_single_feature!("feature-category-name", "a", "b", "c");
+/// ```
+///
+/// These runs fail compilation check:
+/// $ cargo check --features a,b # error msg: 'Multiple feature-category-name specified. Only one is allowed.
+/// $ cargo check # error msg: 'None of the feature-category-name specified. Pick one.'
+///
+/// This compiles:
+/// $ cargo check --feature a
+macro_rules! allow_single_feature {
+    ($name:literal, $($feature:literal),*) => {
+        const _: () = {
+            const MSG_MULTIPLE: &str = concat!("\nMultiple ", $name, " specified. Only one is allowed.");
+            const MSG_NONE: &str = concat!("\nNone of the ", $name, " specified. Pick one.");
+
+            match count_enabled_features!($($feature),*) {
+                0 => std::panic!("{}", MSG_NONE),
+                1 => {}
+                2.. => std::panic!("{}", MSG_MULTIPLE),
+            }
+        };
+    }
+}
+
+macro_rules! allow_single_target_feature {
+    ($($args:tt)+) => {
+        allow_single_feature!("targets", $($args)+);
+    }
+}
+
+#[cfg(feature = "precursor")] // Gitrevs are only relevant for Precursor target
+macro_rules! allow_single_gitrev_feature {
+    ($($args:tt)+) => {
+        allow_single_feature!("gitrevs", $($args)+);
+    }
+}
+
 fn main() {
     // ------ check that the feature flags are sane -----
-    #[cfg(
-        all(feature="precursor",
-            not(any(
-                    feature="precursor-c809403",
-                    feature="precursor-c809403-perflib"
-                )
-            )
-        )
-    )]
-    panic!("Precursor target specified, but no corresponding gitrev specified");
 
-    // this list grows O(N) as we add more targets. :-/ I don't know of a better way
-    // to express "only one of N should be selected" using cfg syntax
-    #[cfg(all(
-        feature="precursor",
-        any(feature="hosted", feature="renode")
-    ))]
-    panic!("Multiple targets specified. This is disallowed");
-    #[cfg(all(
-        feature="hosted",
-        any(feature="precursor", feature="renode")
-    ))]
-    panic!("Multiple targets specified. This is disallowed");
-    #[cfg(all(
-        feature="renode",
-        any(feature="precursor", feature="hosted")
-    ))]
-    panic!("Multiple targets specified. This is disallowed");
+    allow_single_target_feature!("precursor", "hosted", "renode");
 
-    // also grows O(N) as we add more gitrevs
-    #[cfg(all(
-        feature="precursor-c809403",
-        feature="precursor-c809403-perflib"
-    ))]
-    panic!("Multiple gitrevs specified for Precursor target. This is disallowed");
+    #[cfg(feature="precursor")]
+    allow_single_gitrev_feature!("precursor-c809403", "precursor-c809403-perflib");
 
     // ----- select an SVD file based on a specific revision -----
     #[cfg(feature="precursor-c809403")]
