@@ -36,12 +36,12 @@ impl From<[usize; 2]> for BattStats {
     }
 }
 
-impl Into<[usize; 2]> for BattStats {
-    fn into(self) -> [usize; 2] {
+impl From<BattStats> for [usize; 2]{
+    fn from(stats: BattStats) -> [usize; 2] {
         [
-            (self.voltage as usize & 0xffff) | ((self.soc as usize) << 16) & 0xFF_0000,
-            (self.remaining_capacity as usize & 0xffff)
-                | ((self.current as usize) << 16) & 0xffff_0000,
+            (stats.voltage as usize & 0xffff) | ((stats.soc as usize) << 16) & 0xFF_0000,
+            (stats.remaining_capacity as usize & 0xffff)
+                | ((stats.current as usize) << 16) & 0xffff_0000,
         ]
     }
 }
