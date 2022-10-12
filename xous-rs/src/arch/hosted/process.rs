@@ -12,13 +12,13 @@ impl ProcessKey {
     }
 }
 
-impl Into<String> for ProcessKey {
-    fn into(self) -> String {
-        let mut out = String::new();
+impl core::fmt::Display for ProcessKey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for i in self.0 {
-            out.push_str(&format!("{:02x}", i));
+            write!(f, "{:02x}", i)?;
         }
-        out
+
+        Ok(())
     }
 }
 
