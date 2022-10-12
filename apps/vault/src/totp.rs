@@ -48,13 +48,13 @@ impl TryFrom<&str> for TotpAlgorithm {
         }
     }
 }
-impl Into<String> for TotpAlgorithm {
-    fn into(self) -> String {
+impl core::fmt::Display for TotpAlgorithm {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            TotpAlgorithm::HmacSha1 => "SHA1".to_string(),
-            TotpAlgorithm::HmacSha256 => "SHA256".to_string(),
-            TotpAlgorithm::HmacSha512 => "SHA512".to_string(),
-            TotpAlgorithm::None => "None".to_string(),
+            TotpAlgorithm::HmacSha1 => write!(f, "SHA1"),
+            TotpAlgorithm::HmacSha256 => write!(f, "SHA256"),
+            TotpAlgorithm::HmacSha512 => write!(f, "SHA512"),
+            TotpAlgorithm::None => write!(f, "None"),
         }
     }
 }
