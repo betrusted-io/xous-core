@@ -315,9 +315,9 @@ impl From::<KeyMap> for BackupKeyboardLayout {
         }
     }
 }
-impl Into::<KeyMap> for BackupKeyboardLayout {
-    fn into(self) -> KeyMap {
-        match self {
+impl From<BackupKeyboardLayout> for KeyMap {
+    fn from(layout: BackupKeyboardLayout) -> KeyMap {
+        match layout {
             BackupKeyboardLayout::Qwerty => KeyMap::Qwerty,
             BackupKeyboardLayout::Braille => KeyMap::Braille,
             BackupKeyboardLayout::Dvorak => KeyMap::Dvorak,

@@ -35,9 +35,9 @@ impl From<usize> for KeyMap {
         }
     }
 }
-impl Into<usize> for KeyMap {
-    fn into(self) -> usize {
-        match self {
+impl From<KeyMap> for usize {
+    fn from(map: KeyMap) -> usize {
+        match map {
             // note: these indicese correspond to the position on the keyboard menu
             KeyMap::Qwerty => 0,
             KeyMap::Azerty => 1,
