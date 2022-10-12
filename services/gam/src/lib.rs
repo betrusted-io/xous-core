@@ -43,7 +43,6 @@ pub const APP_NAME_SHELLCHAT: &'static str = "shellchat";
 pub const APP_MENU_NAME: &'static str = "app menu";
 pub const KBD_MENU_NAME: &'static str = "keyboard menu";
 pub const WIFI_MENU_NAME: &'static str = "WLAN menu";
-pub const APP_NAME_MTXCLI: &'static str = "mtxcli";
 
 /// UX context registry. Names here are authorized by the GAM to have Canvases.
 pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
@@ -58,7 +57,6 @@ pub const EXPECTED_BOOT_CONTEXTS: &[&'static str] = &[
     APP_MENU_NAME,
     KBD_MENU_NAME,
     WIFI_MENU_NAME,
-    APP_NAME_MTXCLI,
 ];
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
