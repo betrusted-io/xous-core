@@ -34,16 +34,16 @@ pub struct PredictionTriggers {
     /// trigger word predictions on whitespace
     pub whitespace: bool,
 }
-impl Into<usize> for PredictionTriggers {
-    fn into(self) -> usize {
+impl From<PredictionTriggers> for usize {
+    fn from(pt: PredictionTriggers) -> usize {
         let mut ret: usize = 0;
-        if self.newline {
+        if pt.newline {
             ret |= 0x1;
         }
-        if self.punctuation {
+        if pt.punctuation {
             ret |= 0x2;
         }
-        if self.whitespace {
+        if pt.whitespace {
             ret |= 0x4;
         }
         ret
