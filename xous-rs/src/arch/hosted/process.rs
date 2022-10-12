@@ -145,7 +145,7 @@ pub fn create_process_post(
     let server_env = format!("{}", CHILD_PROCESS_ADDRESS.lock().unwrap());
     let pid_env = format!("{}", startup.pid);
     let process_name_env = args.name.to_string();
-    let process_key_env: String = init.key.into();
+    let process_key_env: String = format!("{}", init.key);
     let (shell, args) = if cfg!(windows) {
         ("cmd", ["/C", &args.command])
     } else if cfg!(unix) {
