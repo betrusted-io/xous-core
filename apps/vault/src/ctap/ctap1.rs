@@ -18,7 +18,6 @@ use super::status_code::Ctap2StatusCode;
 use super::CtapState;
 use std::vec::Vec;
 use arrayref::array_ref;
-use core::convert::Into;
 use core::convert::TryFrom;
 use ctap_crypto::rng256::Rng256;
 use crate::shims::ClockValue;
@@ -51,9 +50,9 @@ impl TryFrom<u8> for Ctap1Flags {
     }
 }
 
-impl Into<u8> for Ctap1Flags {
-    fn into(self) -> u8 {
-        self as u8
+impl From<Ctap1Flags> for u8 {
+    fn from(flags: Ctap1Flags) -> u8 {
+        flags as u8
     }
 }
 
