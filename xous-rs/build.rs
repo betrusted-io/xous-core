@@ -1,4 +1,3 @@
-use core::panic;
 // NOTE: Adapted from cortex-m/build.rs
 use std::env;
 use std::fs;
