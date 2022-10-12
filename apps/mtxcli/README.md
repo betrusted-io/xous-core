@@ -2,6 +2,9 @@
 
 This is a new Matrix chat application which will be derived from REPL.
 
+_NOTE_: constant is in gam/src/lib.rs (APP_NAME_MTXCLI) is generated automatically
+with `cargo xtask app-image mtxcli` or `cargo xtask run mtxcli`.
+
 # Inherited from REPL
 
 A simple demo application that provides a bare-bones REPL framework.
