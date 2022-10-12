@@ -317,6 +317,12 @@
         "zh": "取消",
         "en-tts": "No"
     },
+    "rootkeys.gwup.sig_problem": {
+        "en": "Invalid signature on update, aborting.",
+        "ja": "更新時の署名が無効です。中止します。",
+        "zh": "更新时签名无效，正在中止。",
+        "en-tts": "Invalid signature on update, aborting."
+    },
     "rootkeys.gwup_starting": {
         "en": "Updating gateware. This takes a few minutes.\nDo not reset or sleep!",
         "ja": "ゲートウェアをアップデート中です。これには数分かかります。\nリセットやスリープはしないでください。",

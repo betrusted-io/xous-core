@@ -884,6 +884,17 @@ fn main() -> ! {
                     SignatureResult::SelfSignOk => t!("rootkeys.gwup.viewinfo_ss", xous::LANG),
                     SignatureResult::ThirdPartyOk => t!("rootkeys.gwup.viewinfo_tp", xous::LANG),
                     SignatureResult::DevKeyOk => t!("rootkeys.gwup.viewinfo_dk", xous::LANG),
+                    SignatureResult::MalformedSignature
+                    | SignatureResult::InvalidPubKey
+                    | SignatureResult::InvalidSignatureType
+                        => {
+                        modals.dynamic_notification_close().expect("modals error");
+                        modals.show_notification(t!("rootkeys.gwup.sig_problem", xous::LANG), None).expect("modals error");
+                        if let Some(dr) = deferred_response.take() {
+                            xous::return_scalar(dr, 0).unwrap();
+                        }
+                        continue;
+                    }
                     _ => {
                         modals.dynamic_notification_close().expect("modals error");
                         modals.show_notification(t!("rootkeys.gwup.no_update_found", xous::LANG), None).expect("modals error");
