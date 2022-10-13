@@ -123,7 +123,7 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                     .unescape_and_decode(reader)
                     .map_err(|_| ParseError::NonUTF8)?;
                 match tag_name.as_str() {
-                    "name" => name = Some(extract_contents(reader)?),
+                    "name" if name.is_none() => name = Some(extract_contents(reader)?),
                     "lsb" => lsb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "msb" => msb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     _ => (),
