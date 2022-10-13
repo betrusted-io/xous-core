@@ -1,7 +1,9 @@
 #! /usr/bin/env python3
 import argparse
-from pathlib import Path, PurePath
+from pathlib import Path
 import re
+import subprocess
+import time
 
 # format is {crate : path}
 CRATES = {
@@ -46,7 +48,7 @@ class PatchInfo:
                         if name in CRATES:
                             name_check = True
             if name_check:
-                assert(version is not None, "Target name found but no version was extracted!")
+                assert version is not None # "Target name found but no version was extracted!"
                 VERSIONS[name] = version
 
             return name_check
@@ -54,8 +56,8 @@ class PatchInfo:
     # assumes that VERSIONS has been initialized.
     def increment_versions(self):
         # check that global variables are in sane states
-        assert(len(VERSIONS) > 0, "No VERSIONS found, something is weird.")
-        assert(len(VERSIONS) == len(CRATES), "Not all VERSIONS were extracted. You probably didn't mean to do this.")
+        assert len(VERSIONS) > 0 # "No VERSIONS found, something is weird."
+        assert len(VERSIONS) == len(CRATES) # "Not all VERSIONS were extracted. You probably didn't mean to do this."
         with open(self.filepath, 'r') as file:
             lines = file.readlines()
         with open(self.filepath, 'w') as file:
@@ -179,6 +181,18 @@ def main():
 
         for patch in patches:
             patch.increment_versions()
+
+    if args.publish:
+        for (crate, path) in CRATES.items():
+            print("Publishing {} in {}".format(crate, path))
+            try:
+                subprocess.run(["cargo",  "publish", "--dry-run", "--allow-dirty"], cwd=path, check=True)
+            except subprocess.CalledProcessError:
+                print("Process failed, waiting for crates.io to update and retrying...")
+                time.sleep(10)
+                # just try running it again
+                subprocess.run(["cargo",  "publish", "--dry-run", "--allow-dirty"], cwd=path, check=True)
+            time.sleep(10)
 
 if __name__ == "__main__":
     main()
