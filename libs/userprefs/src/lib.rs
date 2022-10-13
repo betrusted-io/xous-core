@@ -48,7 +48,7 @@ pub struct Manager {
 }
 
 impl Manager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             pddb_handle: Pddb::new(),
         }
