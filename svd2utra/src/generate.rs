@@ -837,7 +837,7 @@ pub mod utra {
                 out,
                 "            {} = {},",
                 register.name.to_case(Case::UpperCamel),
-                register.offset / 4
+                register.offset
             )?;
         }
         writeln!(out, "        }}")?;
