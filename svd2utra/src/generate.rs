@@ -2,6 +2,7 @@ use convert_case::{Case, Casing};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::{BufRead, BufReader, Read, Write};
+
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedTag,
@@ -9,6 +10,7 @@ pub enum ParseError {
     ParseIntError,
     NonUTF8,
     WriteError,
+    UnexpectedValue,
 }
 
 #[derive(Default, Debug)]
@@ -66,6 +68,7 @@ impl core::fmt::Display for ParseError {
         use ParseError::*;
         match *self {
             UnexpectedTag => write!(f, "unexpected XML tag encountered"),
+            UnexpectedValue => write!(f, "unexpected XML tag value encountered"),
             MissingValue => write!(f, "XML tag should have contained a value"),
             ParseIntError => write!(f, "unable to parse number"),
             NonUTF8 => write!(f, "file is not UTF-8"),
@@ -126,6 +129,18 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                     "name" if name.is_none() => name = Some(extract_contents(reader)?),
                     "lsb" => lsb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "msb" => msb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
+                    "bitRange" => {
+                        let range = extract_contents(reader)?;
+                        if !range.starts_with("[") || !range.ends_with("]") {
+                            return Err(ParseError::UnexpectedValue)
+                        }
+
+                        let mut parts = range[1..range.len() - 1].split(':');
+                        msb = Some(parts.next().ok_or_else(|| ParseError::UnexpectedValue)?
+                            .parse::<usize>().or_else(|_| Err(ParseError::ParseIntError))?);
+                        lsb = Some(parts.next().ok_or_else(|| ParseError::UnexpectedValue)?
+                            .parse::<usize>().or_else(|_| Err(ParseError::ParseIntError))?);
+                    }
                     _ => (),
                 }
             }
