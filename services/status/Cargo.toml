@@ -27,6 +27,7 @@ pddb = {path = "../pddb"}
 net = {path = "../net"}
 keyboard = {path = "../keyboard"}
 usb-device-xous = {path="../usb-device-xous"}
+userprefs = {path = "../../libs/userprefs"}
 
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}

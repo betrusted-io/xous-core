@@ -213,11 +213,42 @@ fn wrapped_main() -> ! {
         }
     });
 
+    // load system preferences
+    let prefs = userprefs::Manager::new();
+
     // ------------------ render initial graphical display, so we don't seem broken on boot
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
+
+    match prefs.radio_on_on_boot() {
+        Ok(value) => if let true = value {
+            netmgr.connection_manager_wifi_off_and_stop()
+        } else {
+            netmgr.connection_manager_wifi_on()
+        },
+        Err(error) => {
+            log::error!("cannot read preference value for radio_on_on_boot: {}", error);
+            Ok(())
+        }
+    }.unwrap_or_else(|error| {
+        log::error!("cannot set radio status: {}", error)
+    });
+
+    match prefs.connect_known_networks_on_boot() {
+        Ok(value) => if let true = value {
+            netmgr.connection_manager_run()
+        } else {
+            netmgr.connection_manager_stop()
+        },
+        Err(error) => {
+            log::error!("cannot read preference value for connect_known_networks_on_boot: {}", error);
+            Ok(())
+        }
+    }.unwrap_or_else(|error| {
+        log::error!("cannot set radio status: {}", error)
+    });
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
     let screensize = gam

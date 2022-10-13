@@ -3657,6 +3657,7 @@ dependencies = [
  "sntpc",
  "trng",
  "usb-device-xous",
+ "userprefs",
  "utralib",
  "xous 0.9.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
