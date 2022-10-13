@@ -2103,7 +2103,7 @@ fn main() -> ! {
                             0,
                         ),
                     )
-                    .expect("couldn't send stop message");
+                    .expect("couldn't send scan stop message");
                 } else if code == 1 {
                     send_message(
                         cm_cid,
@@ -2117,7 +2117,7 @@ fn main() -> ! {
                             0,
                         ),
                     )
-                    .expect("couldn't send stop message");
+                    .expect("couldn't send scan run message");
                 } else if code == 2 {
                     send_message(
                         cm_cid,
@@ -2131,7 +2131,7 @@ fn main() -> ! {
                             0,
                         ),
                     )
-                    .expect("couldn't send disconnect and stop message");
+                    .expect("couldn't send wifi disconnect and stop message");
                 } else if code == 3 {
                     send_message(
                         cm_cid,
@@ -2145,7 +2145,21 @@ fn main() -> ! {
                             0,
                         ),
                     )
-                    .expect("couldn't send disconnect and stop message");
+                    .expect("couldn't send wifi on and run message");
+                } else if code == 4 {
+                    send_message(
+                        cm_cid,
+                        Message::new_scalar(
+                            connection_manager::ConnectionManagerOpcode::WifiOn
+                                .to_usize()
+                                .unwrap(),
+                            0,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    .expect("couldn't send wifi on message");
                 } else {
                     log::error!("Got incorrect start/stop code: {}", code);
                 }
