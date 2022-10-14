@@ -213,6 +213,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("renode-remote") => {
             builder.target_renode()
                    .add_services(&base_pkgs_remote.into_iter().map(String::from).collect())
+                   .remove_feature("timestamp") // crates.io package can't have a timestamp
                    .use_kernel(xous_kernel_remote);
         }
 

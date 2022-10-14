@@ -252,6 +252,11 @@ impl Builder {
         self.features.push(feature.into());
         self
     }
+    /// remove a feature previously added by a previous call
+    pub fn remove_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
+        self.features.retain(|x| x != feature);
+        self
+    }
     /// add a feature to be passed on to just the loader
     pub fn add_loader_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.loader_features.push(feature.into());
@@ -524,7 +529,7 @@ impl Builder {
                 // confirm the kernel can build before quitting
                 let _ = self.builder(
                     &vec![CrateSpec::Local("xous-kernel".into())],
-                    &self.features,
+                    &self.kernel_features,
                     &target,
                     self.stream,
                     &vec![],
