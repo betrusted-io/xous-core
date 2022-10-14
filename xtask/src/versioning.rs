@@ -82,9 +82,7 @@ pub(crate) fn get_version() -> crate::api::VersionString {
         version: xous_ipc::String::new()
     };
     v.version.append(SEMVER).ok();
-    #[cfg(not(feature="no-timestamp"))]
     v.version.append("\n").ok();
-    #[cfg(not(feature="no-timestamp"))]
     v.version.append(TIMESTAMP).ok();
     v
 }
