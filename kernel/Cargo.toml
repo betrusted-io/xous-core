@@ -4,20 +4,20 @@ description = "Core kernel for Xous, including task switching and memory managem
 license = "MIT OR Apache-2.0"
 edition = "2018"
 name = "xous-kernel"
-version = "0.9.9"
+version = "0.9.10"
 resolver = "2"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = "1.2.1"
 stats_alloc = { version = "0.1.8", optional = true }
-xous-kernel = { package = "xous", version = "0.9.16", features = [
+xous-kernel = { package = "xous", version = "0.9.17", features = [
     "forget-memory-messages",
 ] }
-utralib = { version = "0.1.4", optional = true, default_features = false }
+utralib = { version = "0.1.5", optional = true, default_features = false }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = { package = "xous", version = "0.9.16", features = [
+xous-kernel = { package = "xous", version = "0.9.17", features = [
     "forget-memory-messages",
     "processes-as-threads",
 ] }
