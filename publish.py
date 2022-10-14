@@ -138,6 +138,11 @@ def bump_version(semver):
             retver += "."
     return retver
 
+def merge_two_dicts(x, y):
+    z = x.copy()
+    z.update(y)
+    return z
+
 def main():
     parser = argparse.ArgumentParser(description="Update and publish crates")
     parser.add_argument(
@@ -153,30 +158,30 @@ def main():
 
     cratelist = {}
     if args.xous_bump:
-        cratelist += CRATES
+        cratelist = merge_two_dicts(cratelist, CRATES)
     if args.utralib_bump:
-        cratelist += UTRA_CRATES
+        cratelist = merge_two_dicts(cratelist, UTRA_CRATES)
         if not args.xous_bump: # most Xous crates are also affected by this, so they need a bump as well
-            cratelist += CRATES
+            cratelist = merge_two_dicts(cratelist, CRATES)
 
     if args.xous_bump or args.utralib_bump:
         cargo_toml_paths = []
         for path in Path('.').rglob('Cargo.toml'):
             if 'target' not in str(path):
                 not_core_path = True
-                for editpath in CRATES.values():
+                for editpath in cratelist.values():
                     if editpath in str(Path(path)).replace('\\', '/'): # fix windows paths
                         not_core_path = False
                 if not_core_path:
                     cargo_toml_paths += [path]
 
-        #import pprint
-        #pp = pprint.PrettyPrinter(indent=2)
-        #pp.pprint(cargo_toml_paths)
+        # import pprint
+        # pp = pprint.PrettyPrinter(indent=2)
+        # pp.pprint(cargo_toml_paths)
 
         patches = []
         # extract the versions of crates to patch
-        for (crate, path) in CRATES.items():
+        for (crate, path) in cratelist.items():
             #print("extracting {}".format(path))
             patchinfo = PatchInfo(path + '/Cargo.toml', cratelist, crate)
             if not patchinfo.get_version():
