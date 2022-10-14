@@ -336,8 +336,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum RebootOffset {
             SocReset = 0,
-            Addr = 1,
-            CpuReset = 2,
+            Addr = 4,
+            CpuReset = 8,
         }
         pub const REBOOT_NUMREGS: usize = 3;
 
@@ -358,11 +358,11 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum Timer0Offset {
             Load = 0,
-            Reload = 1,
-            En = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
+            Reload = 4,
+            En = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
         }
         pub const TIMER0_NUMREGS: usize = 6;
 
@@ -393,13 +393,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum CrgOffset {
             MmcmDrpReset = 0,
-            MmcmDrpLocked = 1,
-            MmcmDrpRead = 2,
-            MmcmDrpWrite = 3,
-            MmcmDrpDrdy = 4,
-            MmcmDrpAdr = 5,
-            MmcmDrpDatW = 6,
-            MmcmDrpDatR = 7,
+            MmcmDrpLocked = 4,
+            MmcmDrpRead = 8,
+            MmcmDrpWrite = 12,
+            MmcmDrpDrdy = 16,
+            MmcmDrpAdr = 20,
+            MmcmDrpDatW = 24,
+            MmcmDrpDatR = 28,
         }
         pub const CRG_NUMREGS: usize = 8;
 
@@ -435,15 +435,15 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum GpioOffset {
             Output = 0,
-            Input = 1,
-            Drive = 2,
-            Intena = 3,
-            Intpol = 4,
-            Uartsel = 5,
-            Debug = 6,
-            EvStatus = 7,
-            EvPending = 8,
-            EvEnable = 9,
+            Input = 4,
+            Drive = 8,
+            Intena = 12,
+            Intpol = 16,
+            Uartsel = 20,
+            Debug = 24,
+            EvStatus = 28,
+            EvPending = 32,
+            EvEnable = 36,
         }
         pub const GPIO_NUMREGS: usize = 10;
 
@@ -508,13 +508,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum UartOffset {
             Rxtx = 0,
-            Txfull = 1,
-            Rxempty = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Txempty = 6,
-            Rxfull = 7,
+            Txfull = 4,
+            Rxempty = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Txempty = 24,
+            Rxfull = 28,
         }
         pub const UART_NUMREGS: usize = 8;
 
@@ -554,13 +554,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum ConsoleOffset {
             Rxtx = 0,
-            Txfull = 1,
-            Rxempty = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Txempty = 6,
-            Rxfull = 7,
+            Txfull = 4,
+            Rxempty = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Txempty = 24,
+            Rxfull = 28,
         }
         pub const CONSOLE_NUMREGS: usize = 8;
 
@@ -600,13 +600,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum AppUartOffset {
             Rxtx = 0,
-            Txfull = 1,
-            Rxempty = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Txempty = 6,
-            Rxfull = 7,
+            Txfull = 4,
+            Rxempty = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Txempty = 24,
+            Rxfull = 28,
         }
         pub const APP_UART_NUMREGS: usize = 8;
 
@@ -646,17 +646,17 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum InfoOffset {
             DnaId1 = 0,
-            DnaId0 = 1,
-            GitMajor = 2,
-            GitMinor = 3,
-            GitRevision = 4,
-            GitGitrev = 5,
-            GitGitextra = 6,
-            GitDirty = 7,
-            PlatformPlatform1 = 8,
-            PlatformPlatform0 = 9,
-            PlatformTarget1 = 10,
-            PlatformTarget0 = 11,
+            DnaId0 = 4,
+            GitMajor = 8,
+            GitMinor = 12,
+            GitRevision = 16,
+            GitGitrev = 20,
+            GitGitextra = 24,
+            GitDirty = 28,
+            PlatformPlatform1 = 32,
+            PlatformPlatform0 = 36,
+            PlatformTarget1 = 40,
+            PlatformTarget0 = 44,
         }
         pub const INFO_NUMREGS: usize = 12;
 
@@ -704,7 +704,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SramExtOffset {
             ConfigStatus = 0,
-            ReadConfig = 1,
+            ReadConfig = 4,
         }
         pub const SRAM_EXT_NUMREGS: usize = 2;
 
@@ -722,13 +722,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum MemlcdOffset {
             Command = 0,
-            Busy = 1,
-            Prescaler = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Devboot = 6,
-            Devstatus = 7,
+            Busy = 4,
+            Prescaler = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Devboot = 24,
+            Devstatus = 28,
         }
         pub const MEMLCD_NUMREGS: usize = 8;
 
@@ -765,12 +765,12 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum ComOffset {
             Tx = 0,
-            Rx = 1,
-            Control = 2,
-            Status = 3,
-            EvStatus = 4,
-            EvPending = 5,
-            EvEnable = 6,
+            Rx = 4,
+            Control = 8,
+            Status = 12,
+            EvStatus = 16,
+            EvPending = 20,
+            EvEnable = 24,
         }
         pub const COM_NUMREGS: usize = 7;
 
@@ -809,15 +809,15 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum I2COffset {
             Prescale = 0,
-            Control = 1,
-            Txr = 2,
-            Rxr = 3,
-            Command = 4,
-            Status = 5,
-            CoreReset = 6,
-            EvStatus = 7,
-            EvPending = 8,
-            EvEnable = 9,
+            Control = 4,
+            Txr = 8,
+            Rxr = 12,
+            Command = 16,
+            Status = 20,
+            CoreReset = 24,
+            EvStatus = 28,
+            EvPending = 32,
+            EvEnable = 36,
         }
         pub const I2C_NUMREGS: usize = 10;
 
@@ -876,8 +876,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum BteventsOffset {
             EvStatus = 0,
-            EvPending = 1,
-            EvEnable = 2,
+            EvPending = 4,
+            EvEnable = 8,
         }
         pub const BTEVENTS_NUMREGS: usize = 3;
 
@@ -902,8 +902,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum MessibleOffset {
             In = 0,
-            Out = 1,
-            Status = 2,
+            Out = 4,
+            Status = 8,
         }
         pub const MESSIBLE_NUMREGS: usize = 3;
 
@@ -925,8 +925,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum Messible2Offset {
             In = 0,
-            Out = 1,
-            Status = 2,
+            Out = 4,
+            Status = 8,
         }
         pub const MESSIBLE2_NUMREGS: usize = 3;
 
@@ -948,13 +948,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TicktimerOffset {
             Control = 0,
-            Time1 = 1,
-            Time0 = 2,
-            MsleepTarget1 = 3,
-            MsleepTarget0 = 4,
-            EvStatus = 5,
-            EvPending = 6,
-            EvEnable = 7,
+            Time1 = 4,
+            Time0 = 8,
+            MsleepTarget1 = 12,
+            MsleepTarget0 = 16,
+            EvStatus = 20,
+            EvPending = 24,
+            EvEnable = 28,
         }
         pub const TICKTIMER_NUMREGS: usize = 8;
 
@@ -991,18 +991,18 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SusresOffset {
             Control = 0,
-            ResumeTime1 = 1,
-            ResumeTime0 = 2,
-            Time1 = 3,
-            Time0 = 4,
-            Status = 5,
-            State = 6,
-            Powerdown = 7,
-            Wfi = 8,
-            Interrupt = 9,
-            EvStatus = 10,
-            EvPending = 11,
-            EvEnable = 12,
+            ResumeTime1 = 4,
+            ResumeTime0 = 8,
+            Time1 = 12,
+            Time0 = 16,
+            Status = 20,
+            State = 24,
+            Powerdown = 28,
+            Wfi = 32,
+            Interrupt = 36,
+            EvStatus = 40,
+            EvPending = 44,
+            EvEnable = 48,
         }
         pub const SUSRES_NUMREGS: usize = 13;
 
@@ -1056,14 +1056,14 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum PowerOffset {
             Power = 0,
-            ClkStatus = 1,
-            WakeupSource = 2,
-            ActivityRate = 3,
-            SamplingPeriod = 4,
-            Vibe = 5,
-            EvStatus = 6,
-            EvPending = 7,
-            EvEnable = 8,
+            ClkStatus = 4,
+            WakeupSource = 8,
+            ActivityRate = 12,
+            SamplingPeriod = 16,
+            Vibe = 20,
+            EvStatus = 24,
+            EvPending = 28,
+            EvEnable = 32,
         }
         pub const POWER_NUMREGS: usize = 9;
 
@@ -1127,9 +1127,9 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SpinorSoftIntOffset {
             EvStatus = 0,
-            EvPending = 1,
-            EvEnable = 2,
-            Softint = 3,
+            EvPending = 4,
+            EvEnable = 8,
+            Softint = 12,
         }
         pub const SPINOR_SOFT_INT_NUMREGS: usize = 4;
 
@@ -1154,18 +1154,18 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SpinorOffset {
             Config = 0,
-            DelayConfig = 1,
-            DelayStatus = 2,
-            Command = 3,
-            CmdArg = 4,
-            CmdRbkData = 5,
-            Status = 6,
-            Wdata = 7,
-            EvStatus = 8,
-            EvPending = 9,
-            EvEnable = 10,
-            EccAddress = 11,
-            EccStatus = 12,
+            DelayConfig = 4,
+            DelayStatus = 8,
+            Command = 12,
+            CmdArg = 16,
+            CmdRbkData = 20,
+            Status = 24,
+            Wdata = 28,
+            EvStatus = 32,
+            EvPending = 36,
+            EvEnable = 40,
+            EccAddress = 44,
+            EccStatus = 48,
         }
         pub const SPINOR_NUMREGS: usize = 13;
 
@@ -1225,18 +1225,18 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum KeyboardOffset {
             UartChar = 0,
-            Row0Dat = 1,
-            Row1Dat = 2,
-            Row2Dat = 3,
-            Row3Dat = 4,
-            Row4Dat = 5,
-            Row5Dat = 6,
-            Row6Dat = 7,
-            Row7Dat = 8,
-            Row8Dat = 9,
-            EvStatus = 10,
-            EvPending = 11,
-            EvEnable = 12,
+            Row0Dat = 4,
+            Row1Dat = 8,
+            Row2Dat = 12,
+            Row3Dat = 16,
+            Row4Dat = 20,
+            Row5Dat = 24,
+            Row6Dat = 28,
+            Row7Dat = 32,
+            Row8Dat = 36,
+            EvStatus = 40,
+            EvPending = 44,
+            EvEnable = 48,
         }
         pub const KEYBOARD_NUMREGS: usize = 13;
 
@@ -1292,7 +1292,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum KeyinjectOffset {
             UartChar = 0,
-            Disable = 1,
+            Disable = 4,
         }
         pub const KEYINJECT_NUMREGS: usize = 2;
 
@@ -1310,7 +1310,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SeedOffset {
             Seed1 = 0,
-            Seed0 = 1,
+            Seed0 = 4,
         }
         pub const SEED_NUMREGS: usize = 2;
 
@@ -1328,9 +1328,9 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum KeyromOffset {
             Address = 0,
-            Data = 1,
-            Lockaddr = 2,
-            Lockstat = 3,
+            Data = 4,
+            Lockaddr = 8,
+            Lockstat = 12,
         }
         pub const KEYROM_NUMREGS: usize = 4;
 
@@ -1354,14 +1354,14 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum AudioOffset {
             EvStatus = 0,
-            EvPending = 1,
-            EvEnable = 2,
-            RxCtl = 3,
-            RxStat = 4,
-            RxConf = 5,
-            TxCtl = 6,
-            TxStat = 7,
-            TxConf = 8,
+            EvPending = 4,
+            EvEnable = 8,
+            RxCtl = 12,
+            RxStat = 16,
+            RxConf = 20,
+            TxCtl = 24,
+            TxStat = 28,
+            TxConf = 32,
         }
         pub const AUDIO_NUMREGS: usize = 9;
 
@@ -1431,12 +1431,12 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TrngKernelOffset {
             Status = 0,
-            Data = 1,
-            Urandom = 2,
-            UrandomValid = 3,
-            EvStatus = 4,
-            EvPending = 5,
-            EvEnable = 6,
+            Data = 4,
+            Urandom = 8,
+            UrandomValid = 12,
+            EvStatus = 16,
+            EvPending = 20,
+            EvEnable = 24,
         }
         pub const TRNG_KERNEL_NUMREGS: usize = 7;
 
@@ -1476,63 +1476,63 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TrngServerOffset {
             Control = 0,
-            Data = 1,
-            Status = 2,
-            AvConfig = 3,
-            RoConfig = 4,
-            AvNist = 5,
-            RoNist = 6,
-            Underruns = 7,
-            NistErrors = 8,
-            NistRoStat0 = 9,
-            NistRoStat1 = 10,
-            NistRoStat2 = 11,
-            NistRoStat3 = 12,
-            NistAvStat0 = 13,
-            NistAvStat1 = 14,
-            RoRunslimit1 = 15,
-            RoRunslimit2 = 16,
-            RoRunslimit3 = 17,
-            RoRunslimit4 = 18,
-            RoRun0Ctrl = 19,
-            RoRun0Fresh = 20,
-            RoRun0Count1 = 21,
-            RoRun0Count2 = 22,
-            RoRun0Count3 = 23,
-            RoRun0Count4 = 24,
-            RoRun1Ctrl = 25,
-            RoRun1Fresh = 26,
-            RoRun1Count1 = 27,
-            RoRun1Count2 = 28,
-            RoRun1Count3 = 29,
-            RoRun1Count4 = 30,
-            RoRun2Ctrl = 31,
-            RoRun2Fresh = 32,
-            RoRun2Count1 = 33,
-            RoRun2Count2 = 34,
-            RoRun2Count3 = 35,
-            RoRun2Count4 = 36,
-            RoRun3Ctrl = 37,
-            RoRun3Fresh = 38,
-            RoRun3Count1 = 39,
-            RoRun3Count2 = 40,
-            RoRun3Count3 = 41,
-            RoRun3Count4 = 42,
-            AvExcursion0Ctrl = 43,
-            AvExcursion0Stat = 44,
-            AvExcursion0LastErr = 45,
-            AvExcursion1Ctrl = 46,
-            AvExcursion1Stat = 47,
-            AvExcursion1LastErr = 48,
-            Ready = 49,
-            EvStatus = 50,
-            EvPending = 51,
-            EvEnable = 52,
-            Chacha = 53,
-            Seed = 54,
-            Urandom = 55,
-            UrandomValid = 56,
-            Test = 57,
+            Data = 4,
+            Status = 8,
+            AvConfig = 12,
+            RoConfig = 16,
+            AvNist = 20,
+            RoNist = 24,
+            Underruns = 28,
+            NistErrors = 32,
+            NistRoStat0 = 36,
+            NistRoStat1 = 40,
+            NistRoStat2 = 44,
+            NistRoStat3 = 48,
+            NistAvStat0 = 52,
+            NistAvStat1 = 56,
+            RoRunslimit1 = 60,
+            RoRunslimit2 = 64,
+            RoRunslimit3 = 68,
+            RoRunslimit4 = 72,
+            RoRun0Ctrl = 76,
+            RoRun0Fresh = 80,
+            RoRun0Count1 = 84,
+            RoRun0Count2 = 88,
+            RoRun0Count3 = 92,
+            RoRun0Count4 = 96,
+            RoRun1Ctrl = 100,
+            RoRun1Fresh = 104,
+            RoRun1Count1 = 108,
+            RoRun1Count2 = 112,
+            RoRun1Count3 = 116,
+            RoRun1Count4 = 120,
+            RoRun2Ctrl = 124,
+            RoRun2Fresh = 128,
+            RoRun2Count1 = 132,
+            RoRun2Count2 = 136,
+            RoRun2Count3 = 140,
+            RoRun2Count4 = 144,
+            RoRun3Ctrl = 148,
+            RoRun3Fresh = 152,
+            RoRun3Count1 = 156,
+            RoRun3Count2 = 160,
+            RoRun3Count3 = 164,
+            RoRun3Count4 = 168,
+            AvExcursion0Ctrl = 172,
+            AvExcursion0Stat = 176,
+            AvExcursion0LastErr = 180,
+            AvExcursion1Ctrl = 184,
+            AvExcursion1Stat = 188,
+            AvExcursion1LastErr = 192,
+            Ready = 196,
+            EvStatus = 200,
+            EvPending = 204,
+            EvEnable = 208,
+            Chacha = 212,
+            Seed = 216,
+            Urandom = 220,
+            UrandomValid = 224,
+            Test = 228,
         }
         pub const TRNG_SERVER_NUMREGS: usize = 58;
 
@@ -1781,25 +1781,25 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TrngOffset {
             XadcTemperature = 0,
-            XadcVccint = 1,
-            XadcVccaux = 2,
-            XadcVccbram = 3,
-            XadcVbus = 4,
-            XadcUsbP = 5,
-            XadcUsbN = 6,
-            XadcNoise0 = 7,
-            XadcNoise1 = 8,
-            XadcEoc = 9,
-            XadcEos = 10,
-            XadcGpio5 = 11,
-            XadcGpio2 = 12,
-            XadcDrpEnable = 13,
-            XadcDrpRead = 14,
-            XadcDrpWrite = 15,
-            XadcDrpDrdy = 16,
-            XadcDrpAdr = 17,
-            XadcDrpDatW = 18,
-            XadcDrpDatR = 19,
+            XadcVccint = 4,
+            XadcVccaux = 8,
+            XadcVccbram = 12,
+            XadcVbus = 16,
+            XadcUsbP = 20,
+            XadcUsbN = 24,
+            XadcNoise0 = 28,
+            XadcNoise1 = 32,
+            XadcEoc = 36,
+            XadcEos = 40,
+            XadcGpio5 = 44,
+            XadcGpio2 = 48,
+            XadcDrpEnable = 52,
+            XadcDrpRead = 56,
+            XadcDrpWrite = 60,
+            XadcDrpDrdy = 64,
+            XadcDrpAdr = 68,
+            XadcDrpDatW = 72,
+            XadcDrpDatR = 76,
         }
         pub const TRNG_NUMREGS: usize = 20;
 
@@ -1871,30 +1871,30 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum Sha512Offset {
             Power = 0,
-            Config = 1,
-            Command = 2,
-            Digest01 = 3,
-            Digest00 = 4,
-            Digest11 = 5,
-            Digest10 = 6,
-            Digest21 = 7,
-            Digest20 = 8,
-            Digest31 = 9,
-            Digest30 = 10,
-            Digest41 = 11,
-            Digest40 = 12,
-            Digest51 = 13,
-            Digest50 = 14,
-            Digest61 = 15,
-            Digest60 = 16,
-            Digest71 = 17,
-            Digest70 = 18,
-            MsgLength1 = 19,
-            MsgLength0 = 20,
-            EvStatus = 21,
-            EvPending = 22,
-            EvEnable = 23,
-            Fifo = 24,
+            Config = 4,
+            Command = 8,
+            Digest01 = 12,
+            Digest00 = 16,
+            Digest11 = 20,
+            Digest10 = 24,
+            Digest21 = 28,
+            Digest20 = 32,
+            Digest31 = 36,
+            Digest30 = 40,
+            Digest41 = 44,
+            Digest40 = 48,
+            Digest51 = 52,
+            Digest50 = 56,
+            Digest61 = 60,
+            Digest60 = 64,
+            Digest71 = 68,
+            Digest70 = 72,
+            MsgLength1 = 76,
+            MsgLength0 = 80,
+            EvStatus = 84,
+            EvPending = 88,
+            EvEnable = 92,
+            Fifo = 96,
         }
         pub const SHA512_NUMREGS: usize = 25;
 
@@ -2000,16 +2000,16 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum EngineOffset {
             Window = 0,
-            Mpstart = 1,
-            Mplen = 2,
-            Control = 3,
-            Mpresume = 4,
-            Power = 5,
-            Status = 6,
-            EvStatus = 7,
-            EvPending = 8,
-            EvEnable = 9,
-            Instruction = 10,
+            Mpstart = 4,
+            Mplen = 8,
+            Control = 12,
+            Mpresume = 16,
+            Power = 20,
+            Status = 24,
+            EvStatus = 28,
+            EvPending = 32,
+            EvEnable = 36,
+            Instruction = 40,
         }
         pub const ENGINE_NUMREGS: usize = 11;
 
@@ -2067,7 +2067,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum JtagOffset {
             Next = 0,
-            Tdo = 1,
+            Tdo = 4,
         }
         pub const JTAG_NUMREGS: usize = 2;
 
@@ -2087,8 +2087,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum WdtOffset {
             Watchdog = 0,
-            Period = 1,
-            State = 2,
+            Period = 4,
+            State = 8,
         }
         pub const WDT_NUMREGS: usize = 3;
 
@@ -2113,10 +2113,10 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum UsbdevOffset {
             Usbdisable = 0,
-            Usbselect = 1,
-            EvStatus = 2,
-            EvPending = 3,
-            EvEnable = 4,
+            Usbselect = 4,
+            EvStatus = 8,
+            EvPending = 12,
+            EvEnable = 16,
         }
         pub const USBDEV_NUMREGS: usize = 5;
 
@@ -2145,7 +2145,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum D11CtimeOffset {
             Control = 0,
-            Heartbeat = 1,
+            Heartbeat = 4,
         }
         pub const D11CTIME_NUMREGS: usize = 2;
 
@@ -2163,7 +2163,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum WfiOffset {
             Wfi = 0,
-            IgnoreLocked = 1,
+            IgnoreLocked = 4,
         }
         pub const WFI_NUMREGS: usize = 2;
 
@@ -2251,13 +2251,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum PerfcounterOffset {
             Config = 0,
-            SaturateLimit1 = 1,
-            SaturateLimit0 = 2,
-            Run = 3,
-            Status = 4,
-            EventIndex = 5,
-            EventRaw1 = 6,
-            EventRaw0 = 7,
+            SaturateLimit1 = 4,
+            SaturateLimit0 = 8,
+            Run = 12,
+            Status = 16,
+            EventIndex = 20,
+            EventRaw1 = 24,
+            EventRaw0 = 28,
         }
         pub const PERFCOUNTER_NUMREGS: usize = 8;
 
