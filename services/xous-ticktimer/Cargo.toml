@@ -21,9 +21,10 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 xous-semver = "0.1.2"
-
 utralib = {version = "0.1.3", optional = true, default-features = false }
 
+[build-dependencies]
+chrono = "0.4"
 
 [features]
 precursor = ["utralib/precursor", "xous/precursor", "susres/precursor"]
@@ -31,7 +32,7 @@ hosted = ["utralib/hosted", "susres/hosted"]
 renode = ["utralib/renode", "xous/renode", "susres/renode"]
 debug-print = []
 watchdog = []
-no-timestamp = [] # turns off embedded timestamp for reproducible builds
+timestamp = []
 # you may want to remove the watchdog feature if you're debugging a crash, as it will force the system to reboot automatically
 default = ["watchdog"]
 # default = []
