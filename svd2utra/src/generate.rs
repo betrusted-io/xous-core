@@ -900,16 +900,20 @@ fn print_tests<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::io::Re
     let test_header = r####"
 #[cfg(test)]
 mod tests {
-    #[test]
-    #[ignore]
-    fn compile_check() {
-        use super::*;
 "####
         .as_bytes();
     out.write_all(test_header)?;
+
     for peripheral in peripherals {
         let mod_name = peripheral.name.to_lowercase();
         let per_name = peripheral.name.to_lowercase() + "_csr";
+
+        write!(out, r####"
+    #[test]
+    #[ignore]
+    fn compile_check_{}() {{
+        use super::*;"####, per_name)?;
+
         writeln!(
             out,
             "        let mut {} = CSR::new(HW_{}_BASE as *mut u32);",
@@ -958,9 +962,11 @@ mod tests {
                 )?;
             }
         }
+
+        writeln!(out, "  }}")?;
     }
-    writeln!(out, "    }}")?;
     writeln!(out, "}}")?;
+
     Ok(())
 }
 
