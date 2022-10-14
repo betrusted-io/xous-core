@@ -146,25 +146,35 @@ def merge_two_dicts(x, y):
 def main():
     parser = argparse.ArgumentParser(description="Update and publish crates")
     parser.add_argument(
-        "-x", "--xous-bump", help="Bump version numbers on Xous kernel dependent crates", action="store_true",
+        "-x", "--xous", help="Process Xous kernel dependent crates", action="store_true",
     )
     parser.add_argument(
-        "-u", "--utralib-bump", help="Bump version numbers on UTRA dependent crates", action="store_true",
+        "-u", "--utralib", help="Process UTRA dependent crates", action="store_true",
+    )
+    parser.add_argument(
+        "-b", "--bump", help="Do a version bump", action="store_true",
     )
     parser.add_argument(
         "-p", "--publish", help="Publish crates", action="store_true",
     )
+    parser.add_argument(
+        "-w", "--wet-run", help="Used in conjunction with --publish to do a 'wet run'", action="store_true"
+    )
     args = parser.parse_args()
 
+    if not(args.xous or args.utralib):
+        print("Warning: no dependencies selected, operation is a no-op. Use -x/-u/... to select dependency trees")
+        exit(1)
+
     cratelist = {}
-    if args.xous_bump:
+    if args.xous:
         cratelist = merge_two_dicts(cratelist, CRATES)
-    if args.utralib_bump:
+    if args.utralib:
         cratelist = merge_two_dicts(cratelist, UTRA_CRATES)
-        if not args.xous_bump: # most Xous crates are also affected by this, so they need a bump as well
+        if not args.xous: # most Xous crates are also affected by this, so they need a bump as well
             cratelist = merge_two_dicts(cratelist, CRATES)
 
-    if args.xous_bump or args.utralib_bump:
+    if args.bump:
         cargo_toml_paths = []
         for path in Path('.').rglob('Cargo.toml'):
             if 'target' not in str(path):
@@ -203,15 +213,29 @@ def main():
             patch.increment_versions()
 
     if args.publish:
+        # small quirk: if you're doing a utralib update, just use -u only.
+        # there is some order-sensitivity in how the dictionaries are accessed
+        # but of course dictionaries are unordered. I think we need to re-do
+        # the specifier from a dictionary to an ordered list, to gurantee that
+        # publishing happens in the correct operation order.
+        wet_cmd = ["cargo",  "publish"]
+        dry_cmd = ["cargo",  "publish", "--dry-run", "--allow-dirty"]
+        if args.wet_run:
+            cmd = wet_cmd
+        else:
+            cmd = dry_cmd
         for (crate, path) in cratelist.items():
             print("Publishing {} in {}".format(crate, path))
             try:
-                subprocess.run(["cargo",  "publish", "--dry-run", "--allow-dirty"], cwd=path, check=True)
+                subprocess.run(cmd, cwd=path, check=True)
             except subprocess.CalledProcessError:
                 print("Process failed, waiting for crates.io to update and retrying...")
                 time.sleep(10)
                 # just try running it again
-                subprocess.run(["cargo",  "publish", "--dry-run", "--allow-dirty"], cwd=path, check=True)
+                try:
+                    subprocess.run(cmd, cwd=path, check=True)
+                except:
+                    print("Retry failed, moving on anyways...")
             time.sleep(10)
 
 if __name__ == "__main__":
