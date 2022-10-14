@@ -19,14 +19,19 @@ CRATES = {
     "xous-susres" : "services/xous-susres",
     "xous-ticktimer" : "services/xous-ticktimer",
 }
+UTRA_CRATES = {
+    "svd2utra" : "svd2utra",
+    "utralib" : "utralib",
+}
 VERSIONS = {}
 
 class PatchInfo:
-    def __init__(self, filename, cratename=None):
+    def __init__(self, filename, cratelist=None, cratename=None):
         self.filepath = Path(filename)
         if not self.filepath.is_file():
             print("Bad crate path: {}".format(filename))
         self.cratename = cratename
+        self.cratelist = cratelist
 
     def get_version(self):
         with open(self.filepath, 'r') as file:
@@ -45,7 +50,7 @@ class PatchInfo:
                         version = line.split('=')[1].replace('"', '').strip()
                     if line.strip().startswith('name'):
                         name = line.split('=')[1].replace('"', '').strip()
-                        if name in CRATES:
+                        if name in self.cratelist:
                             name_check = True
             if name_check:
                 assert version is not None # "Target name found but no version was extracted!"
@@ -57,7 +62,6 @@ class PatchInfo:
     def increment_versions(self):
         # check that global variables are in sane states
         assert len(VERSIONS) > 0 # "No VERSIONS found, something is weird."
-        assert len(VERSIONS) == len(CRATES) # "Not all VERSIONS were extracted. You probably didn't mean to do this."
         with open(self.filepath, 'r') as file:
             lines = file.readlines()
         with open(self.filepath, 'w') as file:
@@ -137,14 +141,25 @@ def bump_version(semver):
 def main():
     parser = argparse.ArgumentParser(description="Update and publish crates")
     parser.add_argument(
-        "-b", "--bump-versions", help="Bump version numbers on all affected crates", action="store_true",
+        "-x", "--xous-bump", help="Bump version numbers on Xous kernel dependent crates", action="store_true",
+    )
+    parser.add_argument(
+        "-u", "--utralib-bump", help="Bump version numbers on UTRA dependent crates", action="store_true",
     )
     parser.add_argument(
         "-p", "--publish", help="Publish crates", action="store_true",
     )
     args = parser.parse_args()
 
-    if args.bump_versions:
+    cratelist = {}
+    if args.xous_bump:
+        cratelist += CRATES
+    if args.utralib_bump:
+        cratelist += UTRA_CRATES
+        if not args.xous_bump: # most Xous crates are also affected by this, so they need a bump as well
+            cratelist += CRATES
+
+    if args.xous_bump or args.utralib_bump:
         cargo_toml_paths = []
         for path in Path('.').rglob('Cargo.toml'):
             if 'target' not in str(path):
@@ -163,7 +178,7 @@ def main():
         # extract the versions of crates to patch
         for (crate, path) in CRATES.items():
             #print("extracting {}".format(path))
-            patchinfo = PatchInfo(path + '/Cargo.toml', crate)
+            patchinfo = PatchInfo(path + '/Cargo.toml', cratelist, crate)
             if not patchinfo.get_version():
                 print("Couldn't extract version info from {} crate".format(crate))
                 exit(1)
@@ -183,7 +198,7 @@ def main():
             patch.increment_versions()
 
     if args.publish:
-        for (crate, path) in CRATES.items():
+        for (crate, path) in cratelist.items():
             print("Publishing {} in {}".format(crate, path))
             try:
                 subprocess.run(["cargo",  "publish", "--dry-run", "--allow-dirty"], cwd=path, check=True)
