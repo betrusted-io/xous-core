@@ -64,7 +64,8 @@ pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, r
 
     // Either map memory using a syscall, or if we're debugging the syscall
     // handler then directly map it.
-    #[cfg(any(feature = "debug-print", feature = "print-panics"))]
+    // TODO: support arm arch.
+    #[cfg(all(any(feature = "debug-print", feature = "print-panics"), not(target_arch = "arm")))]
     {
         use utralib::generated::*;
         xous_kernel::claim_interrupt(

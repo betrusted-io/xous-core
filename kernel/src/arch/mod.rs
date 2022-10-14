@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
+#[cfg(target_arch = "arm")]
+mod arm;
+#[cfg(target_arch = "arm")]
+pub use crate::arch::arm::*;
+
 #[cfg(any(windows, unix))]
 mod hosted;
 #[cfg(any(windows, unix))]

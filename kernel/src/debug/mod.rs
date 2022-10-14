@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 use core::fmt::{Error, Write};
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 use utralib::generated::*;
 
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
 
 pub use crate::arch::process::Process as ArchProcess;
@@ -15,7 +15,8 @@ pub use crate::arch::process::Process as ArchProcess;
 #[cfg(all(
     not(test),
     baremetal,
-    any(feature = "debug-print", feature = "print-panics")
+    any(feature = "debug-print", feature = "print-panics"),
+    not(target_arch = "arm")
 ))]
 pub mod debug_print_hardware {
     // the HW device mapping is done in main.rs/init(); the virtual address has to be in the top 4MiB as it is the only page shared among all processes
@@ -24,11 +25,12 @@ pub mod debug_print_hardware {
 #[cfg(all(
     not(test),
     baremetal,
-    any(feature = "debug-print", feature = "print-panics")
+    any(feature = "debug-print", feature = "print-panics"),
+    not(target_arch = "arm")
 ))]
 pub use crate::debug::debug_print_hardware::SUPERVISOR_UART_ADDR;
 
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
@@ -39,6 +41,10 @@ macro_rules! print {
             }
         }
     }};
+}#[cfg(all(baremetal, target_arch = "arm"))]
+#[macro_export]
+macro_rules! print {
+    ($($args:tt)+) => {{}};
 }
 
 #[cfg(baremetal)]
@@ -56,15 +62,15 @@ macro_rules! println
 	});
 }
 
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 pub struct Uart {}
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 pub static mut UART: Uart = Uart {};
 
-#[cfg(all(baremetal, feature = "wrap-print"))]
+#[cfg(all(baremetal, feature = "wrap-print", not(target_arch = "arm")))]
 static mut CHAR_COUNT: usize = 0;
 
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 impl Uart {
     #[allow(dead_code)]
     pub fn init(self) {
@@ -122,7 +128,8 @@ impl Uart {
 #[cfg(all(
     baremetal,
     not(test),
-    any(feature = "debug-print", feature = "print-panics")
+    any(feature = "debug-print", feature = "print-panics"),
+    not(target_arch = "arm")
 ))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
     let uart = Uart {};
@@ -286,7 +293,7 @@ fn process_irq_character(b: u8) {
     }
 }
 
-#[cfg(baremetal)]
+#[cfg(all(baremetal, not(target_arch = "arm")))]
 impl Write for Uart {
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
         for c in s.bytes() {
