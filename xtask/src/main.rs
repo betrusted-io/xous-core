@@ -50,7 +50,11 @@ const TARGET_TRIPLE: &str = "riscv32imac-unknown-xous-elf";
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = Builder::new();
     // encodes a timestamp into the build, unless '--no-timestamp' is passed
-    generate_version(env::args().filter(|x| x == "--no-timestamp").count() == 0);
+    let do_version = env::args().filter(|x| x == "--no-timestamp").count() == 0;
+    generate_version(do_version);
+    if do_version {
+        builder.add_feature("timestamp");
+    };
 
     // A base set of packages. This is all you need for a normal
     // operating system that can run libstd
@@ -115,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_pkgs_remote = [
         "xous-ticktimer@0.1.8",   // "well known" service: thread scheduling
         "xous-log@0.1.6",         // "well known" service: debug logging
-        "xous-names@0.9.14",       // "well known" service: manage inter-server connection lookup
+        "xous-names@0.9.14",      // "well known" service: manage inter-server connection lookup
         "xous-susres@0.1.9",      // ticktimer registers with susres to coordinate time continuity across sleeps
     ].to_vec();
     let xous_kernel_remote = "xous-kernel@0.9.8";
