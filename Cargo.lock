@@ -3046,7 +3046,7 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.16.20"
-source = "git+https://github.com/betrusted-io/ring-xous?rev=36e419d05ce1d6957a3cc25092f2d68feba8e9a3#36e419d05ce1d6957a3cc25092f2d68feba8e9a3"
+source = "git+https://github.com/betrusted-io/ring-xous?rev=09207048c393d524a34f63cf65c85a973012a21d#09207048c393d524a34f63cf65c85a973012a21d"
 dependencies = [
  "cc",
  "libc",
@@ -3058,8 +3058,8 @@ dependencies = [
  "web-sys",
  "winapi",
  "xous 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-names",
  "xous-ipc 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-names",
 ]
 
 [[package]]
