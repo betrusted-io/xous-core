@@ -118,14 +118,6 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::S
     }
 
     menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.reboot", xous::LANG)),
-        action_conn: Some(status_conn),
-        action_opcode: StatusOpcode::Reboot.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    });
-
-    menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.pddb", xous::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::SubmenuPddb.to_u32().unwrap(),
@@ -145,6 +137,14 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::S
         name: String::from_str(t!("mainmenu.wifimenu", xous::LANG)),
         action_conn: Some(status_conn),
         action_opcode: StatusOpcode::WifiMenu.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+        close_on_select: true,
+    });
+
+    menuitems.push(MenuItem {
+        name: String::from_str(t!("mainmenu.lockdevice", xous::LANG)),
+        action_conn: Some(status_conn),
+        action_opcode: StatusOpcode::Reboot.to_u32().unwrap(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });

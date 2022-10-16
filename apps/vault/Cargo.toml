@@ -21,7 +21,7 @@ usbd-human-interface-device = "0.2.1"
 pddb = {path = "../../services/pddb" }
 modals = {path = "../../services/modals" }
 trng = {path="../../services/trng"}
-susres = {package = "xous-api-susres", version = "0.9.9"}
+susres = {package = "xous-api-susres", version = "0.9.10"}
 ime-plugin-api = {path = "../../services/ime-plugin-api"}
 content-plugin-api = {path = "../../services/content-plugin-api"} # all content canvas providers must provide this API
 ctap-crypto = {path = "libraries/crypto"}
@@ -31,7 +31,7 @@ byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.2.3", default-features = false, features = ["nightly"] }
 rand_core = "0.6.3"
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.9"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.10"}
 
 # ux formatting
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }

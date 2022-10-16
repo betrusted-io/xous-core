@@ -654,7 +654,14 @@ fn main() -> ! {
                     //info!("0x{:04x}", word);
                 }
             }
-            Some(Opcode::PowerOffSoc) => {
+            Some(Opcode::PowerOffSoc) => { // NOTE: this is deprecated, use susres.immediate_poweroff() instead. Power sequencing requirements have changed since this was created, this routine does not actually cut power anymore.
+                com.txrx(ComState::CHG_BOOST_OFF.verb);
+                com.txrx(ComState::LINK_SET_INTMASK.verb);
+                com.txrx(0); // suppress interrupts on suspend
+
+                if bl_main != 0 || bl_sec != 0 {
+                    com.txrx(ComState::BL_START.verb); // this will turn off the backlights
+                }
                 info!("power off called");
                 com.txrx(ComState::POWER_OFF.verb);
                 com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)); // consume the obligatory return value, even if not used

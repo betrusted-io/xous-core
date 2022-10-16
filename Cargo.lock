@@ -4750,9 +4750,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.9"
+version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c47a29537ce9434dfdfd64ca8abf157889c897a676cbcb1eae38c1f7084597c1"
+checksum = "63c258187d512557e8d397fed8eb6e497e2dcf1039a7ae5b1e175c74dff5f40d"
 dependencies = [
  "log",
  "num-derive",
@@ -4767,9 +4767,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.9"
+version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a237a68e5a71354be3038cfd2cf44d31606dc0a54c597326ebce6437b3ecc86"
+checksum = "586bbc9882e36c4cb3a0b34f95796e60aceeb21b8abd42ca8dae9def03c8cb8e"
 dependencies = [
  "log",
  "num-derive",
@@ -4865,7 +4865,7 @@ checksum = "6ed3278bb4e7be4895c1c597434e5269f7357ffb800ebc644f0398bb008a15ad"
 
 [[package]]
 name = "xous-susres"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "log",
  "num-derive",
@@ -4881,7 +4881,7 @@ dependencies = [
 
 [[package]]
 name = "xous-ticktimer"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "log",
  "num-derive",

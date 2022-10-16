@@ -278,10 +278,13 @@ perform the Xous firmware upgrade. This requires running manual update commands,
   - backups now take about an extra minute to run, due to the inclusion of the extra checksums
   - backups are no longer abortable, because in order to do the checksums, we have to unmount the PDDB and put the system into a semi-shutdown state. A confirmation screen now gates backups to avoid users accidentally triggering backups with a fat-fingered menu selection.
 
+## New in 0.9.11
+- Various infrastructure fixes contributed by @eupn and @jeandudey
+- "Lock device" feature added; PDDB unmount before reboots
+- Successive failed PIN attempts will re-suspend the device if it is suspendable, or reboot if not
+- Fix bug in device auto-shutdown; COM/LLIO method deprecated as susres method does the correct sequencing. This should help with some of the "insert paperclip" scenarios after updating SoC, hopefully.
 
-## Roadmap to 1.0
-
+## Roadmap
 - Lots of testing and bug fixes
-- Understanding what the gap is to get TLS working
 - Fixing performance issues in `pddb`
 - Refactoring `modals` to not have N^2 space growth with feature set

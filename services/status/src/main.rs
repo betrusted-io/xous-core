@@ -638,7 +638,33 @@ fn wrapped_main() -> ! {
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             tt.sleep_ms(2000).unwrap(); // a brief pause, to allow the other startup bits to finish running
-            pddb::Pddb::new().try_mount();
+            loop {
+                let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
+                if no_retry_failure {
+                    // this includes both successfully mounted, and user abort of mount attempt
+                    break;
+                } else {
+                    // this indicates system was guttered due to a retry failure
+                    let xns = xous_names::XousNames::new().unwrap();
+                    let susres = susres::Susres::new_without_hook(&xns).unwrap();
+                    let llio = llio::Llio::new(&xns);
+                    if ((llio.adc_vbus().unwrap() as u32) * 503) < 150_000 {
+                        // try to force suspend if possible, so that users who are just playing around with
+                        // the device don't run the battery down accidentally.
+                        susres.initiate_suspend().ok();
+                        tt.sleep_ms(1000).unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.show_notification(
+                            &t!("login.fail", xous::LANG).replace("{fails}", &count.to_string()),
+                            None
+                        ).ok();
+                    } else {
+                        // otherwise force a reboot cycle to slow down guessers
+                        susres.reboot(true).expect("Couldn't reboot after too many failed password attempts");
+                        tt.sleep_ms(5000).unwrap();
+                    }
+                }
+            }
         }
     });
 
@@ -936,23 +962,13 @@ fn wrapped_main() -> ! {
 
                 stats_phase = stats_phase.wrapping_add(1);
             }
-            Some(StatusOpcode::Reboot) => {
-                if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 0.005033 * 100_000 against 1.5V * 100_000
-                    // power plugged in, do a reboot using a warm boot method
-                    susres.reboot(true).expect("couldn't issue reboot command");
+            Some(StatusOpcode::Reboot) => { // this is described as "Lock device" on the menu
+                let pddb = pddb::Pddb::new();
+                if !pddb.try_unmount() { // sync the pddb prior to lock
+                    modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
                 } else {
-                    // ensure the self-boosting facility is turned off, this interferes with a cold boot
-                    com.set_boost(false).ok();
-                    llio.boost_on(false).ok();
-                    // do a full cold-boot if the power is cut. This will force a re-load of the SoC contents.
-                    gam.shipmode_blank_request().ok();
-                    ticktimer.sleep_ms(500).ok(); // screen redraw time after the blank request
-                    llio.set_wakeup_alarm(4).expect("couldn't set wakeup alarm");
-                    llio.allow_ec_snoop(true).ok();
-                    llio.allow_power_off(true).ok();
-                    com.power_off_soc().ok();
-                    ticktimer.sleep_ms(4000).ok();
-                    panic!("system did not reboot");
+                    pddb.pddb_halt();
+                    susres.reboot(true).expect("couldn't issue reboot command");
                 }
             }
             Some(StatusOpcode::SubmenuPddb) => {
@@ -1015,16 +1031,37 @@ fn wrapped_main() -> ! {
                     }
                 }
             },
-            Some(StatusOpcode::BatteryDisconnect) => {
+            Some(StatusOpcode::BatteryDisconnect) => { // this is described as "Shutdown" on the menu
                 if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
-                    gam.shipmode_blank_request().ok();
-                    ticktimer.sleep_ms(500).unwrap();
-                    llio.allow_ec_snoop(true).unwrap();
-                    llio.allow_power_off(true).unwrap();
-                    com.ship_mode().unwrap();
-                    com.power_off_soc().unwrap();
+                    // show a note to inform the user that you can't turn it on without an external power source...
+                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                    match modals.get_radiobutton(t!("mainmenu.shutdown_confirm", xous::LANG)) {
+                        Ok(response) => {
+                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                {}
+                            } else {
+                                // abort the flow now by returning to the main dispatch handler
+                                continue;
+                            }
+                        }
+                        _ => (),
+                    }
+                    // unmount things before shutting down
+                    let pddb = pddb::Pddb::new();
+                    if !pddb.try_unmount() {
+                        modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
+                    } else {
+                        pddb.pddb_halt();
+                        gam.shipmode_blank_request().ok();
+                        ticktimer.sleep_ms(500).unwrap();
+                        llio.allow_ec_snoop(true).unwrap();
+                        llio.allow_power_off(true).unwrap();
+                        com.ship_mode().unwrap();
+                        susres.immediate_poweroff().unwrap();
+                    }
                 }
             },
 

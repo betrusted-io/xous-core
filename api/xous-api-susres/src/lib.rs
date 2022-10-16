@@ -180,6 +180,13 @@ impl Susres {
             ).map(|_|())
         }
     }
+
+    /// Pulls power from the SoC without attempting to save state
+    pub fn immediate_poweroff(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::PowerOff.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_|())
+    }
 }
 fn drop_conn(sid: xous::SID) {
     let cid = xous::connect(sid).unwrap();

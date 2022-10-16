@@ -805,7 +805,7 @@ fn main() -> ! {
                     // allow the EC to power me down
                     llio.allow_power_off(true).unwrap();
                     // now send the power off command
-                    com.power_off_soc().unwrap(); // not that at this point, the screen freezes with the last thing displayed...
+                    susres.immediate_poweroff().unwrap();
 
                     log::info!("rebooting now!");
                     reboot_initiated = true;

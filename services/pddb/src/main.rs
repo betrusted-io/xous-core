@@ -405,8 +405,14 @@ pub(crate) struct BasisRequestPassword {
 }
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PasswordState {
+    /// Mounted successfully.
     Correct,
-    Incorrect,
+    /// User-initiated aborted. The main purpose for this path is to facilitate
+    /// developers who want shellchat access but don't want to mount the PDDB.
+    Incorrect(u64),
+    /// Abort initiated by system policy due to too many failed attempts
+    ForcedAbort(u64),
+    /// Failure because the PDDB hasn't been initialized yet (can't mount because nothing to mount)
     Uninit,
 }
 
@@ -617,51 +623,66 @@ fn wrapped_main() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
+            // IsMounted follows the same return code pattern as TryMount, because the return value
+            // is stuck into the TryMount notification queue
             Opcode::IsMounted => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
-                    xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
+                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
                     mount_notifications.push(msg.sender); // defer response until later
                 }
             }),
+            // The return code from this is a scalar2 with the following meanings:
+            // (code, count):
+            //    - code = 0 -> successful mount
+            //    - code = 1 -> mount failed, for any reason other than too many retried PINs. `count` is the number of retries, if any.
+            //    - code = 2 -> mount failed, because too many PINs were retried. `count` is the number of retries.
+            // If we need more nuance out of this routine, consider creating a custom public enum type to help marshall this.
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 {
-                    xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
+                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
                     if !pddb_os.rootkeys_initialized() {
                         // can't mount if we have no root keys
                         log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                        xous::return_scalar(msg.sender, 0).expect("could't return scalar");
+                        xous::return_scalar2(msg.sender, 1, 0).expect("could't return scalar");
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
                             PasswordState::Correct => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
                                     for requester in mount_notifications.drain(..) {
-                                        xous::return_scalar(requester, 1).expect("couldn't return scalar");
+                                        xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                                     }
                                     assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                                    xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
+                                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                                 } else {
-                                    xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
+                                    xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                                 }
                             },
                             PasswordState::Uninit => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
                                     for requester in mount_notifications.drain(..) {
-                                        xous::return_scalar(requester, 1).expect("couldn't return scalar");
+                                        xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                                     }
                                     assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                                    xous::return_scalar(msg.sender, 1).expect("couldn't return scalar");
+                                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                                 } else {
-                                    xous::return_scalar(msg.sender, 0).expect("couldn't return scalar");
+                                    xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                                 }
                             },
-                            // user aborted procedure
-                            _ => xous::return_scalar(msg.sender, 0).expect("couldn't return scalar"),
+                            PasswordState::ForcedAbort(failcount) => {
+                                xous::return_scalar2(msg.sender, 2,
+                                    // failcount is a u64, but on u32-archs, this gets truncated going to usize. clip to u32::MAX.
+                                    failcount.min(u32::MAX as u64) as usize
+                                ).expect("couldn't return scalar");
+                            }
+                            PasswordState::Incorrect(failcount) => xous::return_scalar2(msg.sender, 1,
+                                    failcount.min(u32::MAX as u64) as usize
+                                ).expect("couldn't return scalar"),
                         }
                         initial_heap = heap_usage();
                         latest_heap = initial_heap;
@@ -1506,6 +1527,11 @@ fn wrapped_main() -> ! {
                 xous::return_scalar2(msg.sender, 0, 0).ok();
             }),
             Opcode::TryUnmount => {
+                // only proceed if anything was mounted
+                if basis_cache.basis_list().len() == 0 {
+                    xous::return_scalar(msg.sender, 1).unwrap(); // nothing to do, nothing mounted. success!
+                    continue;
+                }
                 basis_cache.sync(&mut pddb_os, None).expect("can't sync for unmount");
                 // unmount all the open basis first
                 let mut mounted_bases = basis_cache.basis_list();
@@ -1572,23 +1598,39 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
             PasswordState::Correct => {
                 return PasswordState::Correct
             }
-            PasswordState::Incorrect => {
+            PasswordState::Incorrect(failcount) => {
                 pddb_os.clear_password(); // clear the bad password entry
                 log::info!("{}PDDB.BADPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
-                // check if the user wants to re-try or not.
-                modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
-                modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
-                match modals.get_radiobutton(t!("pddb.badpass", xous::LANG)) {
-                    Ok(response) => {
-                        if response.as_str() == t!("pddb.yes", xous::LANG) {
-                            continue;
-                        } else if response.as_str() == t!("pddb.no", xous::LANG) {
-                            return PasswordState::Incorrect;
-                        } else {
-                            panic!("Got unexpected return from radiobutton");
+                if failcount % 3 == 0 {
+                    // every three failures kick the failure back up the stack
+                    return PasswordState::ForcedAbort(failcount);
+                } else {
+                    // check if the user wants to re-try or not.
+                    modals.add_list_item(t!("pddb.yes", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("pddb.no", xous::LANG)).expect("couldn't build radio item list");
+                    let fail_string = format!(
+                        "{}\n{}",
+                        t!("pddb.badpass", xous::LANG),
+                        t!("pddb.failed_attempts", xous::LANG)
+                        .replace("{fails}", &failcount.to_string())
+                    );
+                    let prompt = if failcount == 0 {
+                        t!("pddb.badpass", xous::LANG)
+                    } else {
+                        &fail_string
+                    };
+                    match modals.get_radiobutton(prompt) {
+                        Ok(response) => {
+                            if response.as_str() == t!("pddb.yes", xous::LANG) {
+                                continue;
+                            } else if response.as_str() == t!("pddb.no", xous::LANG) {
+                                return PasswordState::Incorrect(failcount);
+                            } else {
+                                panic!("Got unexpected return from radiobutton");
+                            }
                         }
+                        _ => panic!("get_radiobutton failed"),
                     }
-                    _ => panic!("get_radiobutton failed"),
                 }
             }
             PasswordState::Uninit => {
@@ -1606,6 +1648,7 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
                 }
                 return PasswordState::Uninit;
             }
+            PasswordState::ForcedAbort(_) => panic!("ForcedAbort is not expecetd from try_login()"),
         }
     }
 }

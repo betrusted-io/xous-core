@@ -212,6 +212,12 @@ mod implementation {
         pub fn set_reboot_vector(&mut self, vector: u32) {
             self.reboot_csr.wfo(utra::reboot::ADDR_ADDR, vector);
         }
+        pub fn force_power_off(&mut self) {
+            loop {
+                self.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
+                xous::yield_slice();
+            } // block forever here
+        }
 
         pub fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
             xous::send_message(cid,
@@ -444,6 +450,7 @@ mod implementation {
         }
         pub fn reboot(&self, _reboot_soc: bool) {}
         pub fn set_reboot_vector(&self, _vector: u32) {}
+        pub fn force_power_off(&mut self) {}
         pub fn do_suspend(&mut self, _forced: bool) {
         }
         pub fn do_resume(&mut self) -> bool {
@@ -808,6 +815,9 @@ fn main() -> ! {
                 Some(Opcode::SuspendDeny) => {
                     allow_suspend = false;
                 },
+                Some(Opcode::PowerOff) => {
+                    susres_hw.force_power_off();
+                }
                 Some(Opcode::Quit) => {
                     break
                 }

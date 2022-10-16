@@ -67,6 +67,7 @@ impl Com {
     pub fn conn(&self) -> CID {self.conn}
     pub fn getop_backlight(&self) -> u32 {Opcode::SetBackLight.to_u32().unwrap()}
 
+    #[deprecated(note = "Uses susres.immediate_poweroff() instead, as power sequencing requirements have changed.")]
     pub fn power_off_soc(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::PowerOffSoc.to_usize().unwrap(), 0, 0, 0, 0)
