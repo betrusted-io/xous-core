@@ -281,7 +281,8 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 ## New in 0.9.11
 - Various infrastructure fixes contributed by @eupn and @jeandudey
 - "Lock device" feature added; PDDB unmount before reboots
-- Successive failed PIN attempts will re-suspend the device if it is suspendable
+- Successive failed PIN attempts will re-suspend the device if it is suspendable, or reboot if not
+- Fix bug in device auto-shutdown; COM/LLIO method deprecated as susres method does the correct sequencing. This should help with some of the "insert paperclip" scenarios after updating SoC, hopefully.
 
 ## Roadmap
 - Lots of testing and bug fixes
