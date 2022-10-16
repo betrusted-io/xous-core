@@ -119,6 +119,12 @@
         "zh": "密码错误。 再试一次？",
         "en-tts": "Incorrect PIN. Try again?"
     },
+    "pddb.failed_attempts": {
+        "en": "⚠{fails} failed login attempts",
+        "ja": "⚠{fails}回のログイン試行の失敗",
+        "zh": "⚠{fails}次失败的登录尝试",
+        "en-tts": "⚠{fails} failed login attempts"
+    },
     "pddb.checkpass": {
         "en": "Press any key, then re-enter your PIN to confirm.",
         "ja": "任意キーを押して、パスワードを再入力してセットアップを確認してください。",

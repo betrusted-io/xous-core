@@ -166,6 +166,8 @@ pub(crate) struct PddbOs {
     entropy: Rc<RefCell<TrngPool>>,
     /// connection to the password request manager
     pw_cid: xous::CID,
+    /// Number of consecutive failed login attempts
+    failed_logins: u64,
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     testnames: HashSet::<String>,
 }
@@ -218,6 +220,7 @@ impl PddbOs {
             dna_mode: DnaMode::Normal,
             entropy: trngpool,
             pw_cid,
+            failed_logins: 0,
             #[cfg(all(feature="pddbtest", feature="autobasis"))]
             testnames: HashSet::new(),
         };
@@ -246,6 +249,7 @@ impl PddbOs {
                 dna_mode: DnaMode::Normal,
                 entropy: trngpool,
                 pw_cid,
+                failed_logins: 0,
                 #[cfg(all(feature="pddbtest", feature="autobasis"))]
                 testnames: HashSet::new(),
             }
@@ -660,7 +664,8 @@ impl PddbOs {
                     }
                     _ => {
                         log::error!("Couldn't unwrap our system key: {:?}", e);
-                        return PasswordState::Incorrect;
+                        self.failed_logins = self.failed_logins.saturating_add(1);
+                        return PasswordState::Incorrect(self.failed_logins);
                     }
                 }
             }
@@ -675,7 +680,8 @@ impl PddbOs {
                     }
                     _ => {
                         log::error!("Couldn't unwrap our system key: {:?}", e);
-                        return PasswordState::Incorrect;
+                        self.failed_logins = self.failed_logins.saturating_add(1);
+                        return PasswordState::Incorrect(self.failed_logins);
                     }
                 }
             }
@@ -708,8 +714,10 @@ impl PddbOs {
             for i in 0..syskey_pt.len() {
                 unsafe{nuke.add(i).write_volatile(0)};
             }
+            self.failed_logins = 0;
             PasswordState::Correct
         } else {
+            self.failed_logins = 0;
             PasswordState::Correct
         }
     }
@@ -3098,11 +3106,12 @@ impl PddbOs {
                 self.dbg_dump(Some("migration".to_string()), Some(&export));
 
                 // indicate the migration worked
+                self.failed_logins = 0;
                 PasswordState::Correct
             }
             Err(e) => {
                 log::error!("Couldn't unwrap our system key: {:?}", e);
-                PasswordState::Incorrect
+                PasswordState::Incorrect(self.failed_logins)
             }
         }
     }

@@ -135,38 +135,55 @@ impl Pddb {
             self.cb_handle.replace(Some(handle));
         }
     }
-    /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
-    /// A random interval between 1 and 2 seconds is chosen for the poll wait time. Randomizing the waiting time
-    /// helps to level out the task scheduler in the case that many threads are waiting on the PDDB simultaneously.
+    /// This blocks until the PDDB is mounted by the end user. It blocks using the deferred-response pattern,
+    /// so the blocking does not spin-wait; the caller does not consume CPU cycles.
     ///
     /// This is typically the API call one would use to hold execution of a service until the PDDB is mounted.
     pub fn is_mounted_blocking(&self) {
-        let ret = send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
-        match ret {
-            xous::Result::Scalar1(_code) => {
-                ()
-            },
-            _ => panic!("Internal error"),
+        loop {
+            let ret = send_message(self.conn, Message::new_blocking_scalar(
+                Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+            match ret {
+                xous::Result::Scalar2(code, _count) => {
+                    if code == 0 { // mounted successfully
+                        break;
+                    }
+                },
+                _ => panic!("Internal error"),
+            }
         }
     }
     /// Attempts to mount the system basis. Returns `true` on success, `false` on failure.
     /// This call may cause a password request box to pop up, in the case that the boot PIN is not currently cached.
-    pub fn try_mount(&self) -> bool {
+    ///
+    /// Returns:
+    ///   Ok(true) on successful mount
+    ///   Ok(false) on user-directed abort of mount
+    ///   Ok(usize) on system-forced abort of mount, with `count` failures
+    pub fn try_mount(&self) -> (bool, usize) {
         let ret = send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+            Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute TryMounted query");
         match ret {
-            xous::Result::Scalar1(code) => {
-                if code == 0 {false} else {true}
+            xous::Result::Scalar2(code, count) => {
+                if code == 0 {
+                    // mounted successfully
+                    (true, count)
+                } else if code == 1 {
+                    // user aborted
+                    (true, count)
+                } else {
+                    // system aborted with `count` retries
+                    (false, count)
+                }
             },
-            _ => panic!("Internal error"),
+            _ => panic!("TryMount unexpected return result"),
         }
     }
     /// Unmounts the PDDB. First attempts to unmount any open secret bases, and then finally unmounts
     /// the system basis. Returns `true` on success, `false` on failure.
     pub fn try_unmount(&self) -> bool {
         let ret = send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::TryUnmount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+            Opcode::TryUnmount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute TryUnmount query");
         match ret {
             xous::Result::Scalar1(code) => {
                 if code == 0 {false} else {true}

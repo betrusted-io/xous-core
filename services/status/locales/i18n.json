@@ -17,6 +17,12 @@
         "zh": "重新生成密钥操作失败，请重新启动并重试。\n原因：",
         "en-tts": "Rekey operation failed, please reboot and try again.\nReason: "
     },
+    "login.fail": {
+        "ja": "⚠ログインに {fails} 回失敗した後、システムが中断されました",
+        "en": "⚠System was suspended after {fails} failed login attempts.",
+        "zh": "⚠{fails}次登录尝试失败后系统被挂起",
+        "en-tts": "⚠System was suspended after {fails} failed login attempts."
+    },
     "socup.ignore": {
         "ja": "この更新を無視する",
         "en": "Ignore this update",
@@ -247,10 +253,10 @@
         "en-tts": "Shutdown"
     },
     "mainmenu.shutdown_confirm": {
-        "en": "Confirm shutdown:\nDevice will reamin off until a charging cable is plugged in. Proceed?",
-        "ja": "シャットダウンの確認:\n充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
-        "zh": "确认关机：\n设备将保持关闭状态，直到插入充电线。继续？",
-        "en-tts": "Confirm shutdown:\nDevice will reamin off until a charging cable is plugged in. Proceed?"
+        "en": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
+        "ja": "シャットダウンの確認:\n🔌充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
+        "zh": "确认关机：\n🔌设备将保持关闭状态，直到插入充电线。继续？",
+        "en-tts": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?"
     },
     "mainmenu.reboot": {
         "en": "Reboot",
