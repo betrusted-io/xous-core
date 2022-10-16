@@ -1060,7 +1060,7 @@ fn wrapped_main() -> ! {
                         llio.allow_ec_snoop(true).unwrap();
                         llio.allow_power_off(true).unwrap();
                         com.ship_mode().unwrap();
-                        com.power_off_soc().unwrap();
+                        susres.immediate_poweroff().unwrap();
                     }
                 }
             },

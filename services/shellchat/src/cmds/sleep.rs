@@ -32,7 +32,9 @@ fn kill_thread(bounce: usize) {
         }
         llio.self_destruct(0x2718_2818).unwrap();
         llio.self_destruct(0x3141_5926).unwrap();
-        com.power_off_soc().unwrap();
+        let susres = susres::Susres::new_without_hook(&xns).unwrap();
+        susres.immediate_poweroff().unwrap();
+
         ticktimer.sleep_ms(1000).unwrap();
         log::info!("If you can read this, we failed to destroy ourselves!");
     }
@@ -112,6 +114,9 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                         write!(ret, "System can't sleep while charging. Unplug charging cable and try again.").unwrap();
                     } else {
                         if Ok(true) == env.gam.powerdown_request() {
+                            let pddb = pddb::Pddb::new();
+                            pddb.try_unmount();
+
                             env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
 
                             // allow EC to snoop, so that it can wake up the system
@@ -119,7 +124,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             // allow the EC to power me down
                             env.llio.allow_power_off(true).unwrap();
                             // now send the power off command
-                            env.com.power_off_soc().unwrap();
+                            self.susres.immediate_poweroff().unwrap();
 
                             log::info!("CMD: powering down now!");
                             // pause execution, nothing after this should be reachable
@@ -142,6 +147,9 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                         write!(ret, "System can't go into ship mode while charging. Unplug charging cable and try again.").unwrap();
                     } else {
                         if Ok(true) == env.gam.shipmode_blank_request() {
+                            let pddb = pddb::Pddb::new();
+                            pddb.try_unmount();
+
                             env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
 
                             // allow EC to snoop, so that it can wake up the system
@@ -152,7 +160,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             env.com.ship_mode().unwrap();
 
                             // now send the power off command
-                            env.com.power_off_soc().unwrap();
+                            self.susres.immediate_poweroff().unwrap();
 
                             log::info!("CMD: ship mode now!");
                             // pause execution, nothing after this should be reachable
@@ -168,6 +176,9 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                         write!(ret, "System can't cold boot while charging. Unplug charging cable and try again.").unwrap();
                     } else {
                         if Ok(true) == env.gam.powerdown_request() {
+                            let pddb = pddb::Pddb::new();
+                            pddb.try_unmount();
+
                             env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
 
                             // set a wakeup alarm a couple seconds from now -- this is the coldboot
@@ -178,7 +189,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             // allow the EC to power me down
                             env.llio.allow_power_off(true).unwrap();
                             // now send the power off command
-                            env.com.power_off_soc().unwrap();
+                            self.susres.immediate_poweroff().unwrap();
 
                             log::info!("CMD: reboot in 3 seconds!");
                             // pause execution, nothing after this should be reachable
