@@ -1506,6 +1506,11 @@ fn wrapped_main() -> ! {
                 xous::return_scalar2(msg.sender, 0, 0).ok();
             }),
             Opcode::TryUnmount => {
+                // only proceed if anything was mounted
+                if basis_cache.basis_list().len() == 0 {
+                    xous::return_scalar(msg.sender, 1).unwrap(); // nothing to do, nothing mounted. success!
+                    continue;
+                }
                 basis_cache.sync(&mut pddb_os, None).expect("can't sync for unmount");
                 // unmount all the open basis first
                 let mut mounted_bases = basis_cache.basis_list();
