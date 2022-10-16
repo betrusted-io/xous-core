@@ -162,3 +162,7 @@ rev="09207048c393d524a34f63cf65c85a973012a21d" # use the commitref because we're
 # path = "./utralib"
 # [patch.crates-io.svd2utra]
 # path = "./svd2utra"
+# [patch.crates-io.xous-api-susres]
+# path = "./api/xous-api-susres"
+# [patch.crates-io.xous-susres]
+# path = "./services/xous-susres"
