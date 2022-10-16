@@ -24,10 +24,10 @@
         "en-tts": "Ignore this update"
     },
     "socup.unmount_fail": {
-        "ja": "バックアップの準備で PDDB をアンマウントできませんでした。 バックアップが中止されました。",
-        "en": "Couldn't unmount PDDB in preparation for backup. Backup aborted.",
-        "zh": "无法卸载 PDDB 以准备备份。 备份中止。",
-        "en-tts": "Couldn't unmount PDDB in preparation for backup. Backup aborted."
+        "ja": "PDDB をアンマウントできませんでした。\n操作は中止されました!",
+        "en": "Couldn't unmount PDDB.\nOperation aborted!",
+        "zh": "无法卸载 PDDB。\n操作中止！",
+        "en-tts": "Couldn't unmount PDDB.\nOperation aborted!"
     },
     "backup.confirm": {
         "ja": "PDDB とルート キーのバックアップの準備をしますか?\n\nプロセスは、いったん開始すると中止できません。",
@@ -241,16 +241,28 @@
         "en-tts": "Keyboard layout submenu"
     },
     "mainmenu.battery_disconnect": {
-        "en": "Disconnect battery",
-        "ja": "バッテリーを外します",
-        "zh": "断开电池",
-        "en-tts": "Disconnect battery"
+        "en": "Shutdown",
+        "ja": "シャットダウン",
+        "zh": "关闭",
+        "en-tts": "Shutdown"
+    },
+    "mainmenu.shutdown_confirm": {
+        "en": "Confirm shutdown:\nDevice will reamin off until a charging cable is plugged in. Proceed?",
+        "ja": "シャットダウンの確認:\n充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
+        "zh": "确认关机：\n设备将保持关闭状态，直到插入充电线。继续？",
+        "en-tts": "Confirm shutdown:\nDevice will reamin off until a charging cable is plugged in. Proceed?"
     },
     "mainmenu.reboot": {
         "en": "Reboot",
         "ja": "リブート",
         "zh": "重启",
         "en-tts": "Reboot"
+    },
+    "mainmenu.lockdevice": {
+        "en": "Lock device",
+        "ja": "ロック装置",
+        "zh": "锁定装置",
+        "en-tts": "Lock device"
     },
     "mainmenu.prep_backup": {
         "en": "Prepare for backup...",
@@ -265,10 +277,10 @@
         "en-tts": "Close menu"
     },
     "mainmenu.cant_sleep": {
-        "en": "Can't sleep while charging",
+        "en": "Can't power off while charging",
         "ja": "充電中は眠れません",
         "zh": "充电时睡不着",
-        "en-tts": "Can't sleep while charging"
+        "en-tts": "Can't power off while charging"
     },
     "appmenu.shellchat": {
         "en": "Shellchat",
