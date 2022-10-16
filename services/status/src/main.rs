@@ -660,7 +660,7 @@ fn wrapped_main() -> ! {
                         ).ok();
                     } else {
                         // otherwise force a reboot cycle to slow down guessers
-                        susres.reboot(true);
+                        susres.reboot(true).expect("Couldn't reboot after too many failed password attempts");
                         tt.sleep_ms(5000).unwrap();
                     }
                 }

@@ -405,9 +405,14 @@ pub(crate) struct BasisRequestPassword {
 }
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PasswordState {
+    /// Mounted successfully.
     Correct,
+    /// User-initiated aborted. The main purpose for this path is to facilitate
+    /// developers who want shellchat access but don't want to mount the PDDB.
     Incorrect(u64),
+    /// Abort initiated by system policy due to too many failed attempts
     ForcedAbort(u64),
+    /// Failure because the PDDB hasn't been initialized yet (can't mount because nothing to mount)
     Uninit,
 }
 
@@ -618,6 +623,8 @@ fn wrapped_main() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
+            // IsMounted follows the same return code pattern as TryMount, because the return value
+            // is stuck into the TryMount notification queue
             Opcode::IsMounted => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted.
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
@@ -625,6 +632,12 @@ fn wrapped_main() -> ! {
                     mount_notifications.push(msg.sender); // defer response until later
                 }
             }),
+            // The return code from this is a scalar2 with the following meanings:
+            // (code, count):
+            //    - code = 0 -> successful mount
+            //    - code = 1 -> mount failed, for any reason other than too many retried PINs. `count` is the number of retries, if any.
+            //    - code = 2 -> mount failed, because too many PINs were retried. `count` is the number of retries.
+            // If we need more nuance out of this routine, consider creating a custom public enum type to help marshall this.
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if basis_cache.basis_count() > 0 {
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
@@ -662,10 +675,14 @@ fn wrapped_main() -> ! {
                                 }
                             },
                             PasswordState::ForcedAbort(failcount) => {
-                                xous::return_scalar2(msg.sender, 2, failcount.min(u32::MAX as u64) as usize).expect("couldn't return scalar");
+                                xous::return_scalar2(msg.sender, 2,
+                                    // failcount is a u64, but on u32-archs, this gets truncated going to usize. clip to u32::MAX.
+                                    failcount.min(u32::MAX as u64) as usize
+                                ).expect("couldn't return scalar");
                             }
-                            // user aborted procedure
-                            _ => xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar"),
+                            PasswordState::Incorrect(failcount) => xous::return_scalar2(msg.sender, 1,
+                                    failcount.min(u32::MAX as u64) as usize
+                                ).expect("couldn't return scalar"),
                         }
                         initial_heap = heap_usage();
                         latest_heap = initial_heap;
