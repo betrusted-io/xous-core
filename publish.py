@@ -72,7 +72,7 @@ class PatchInfo:
             self.file.write(line)
 
     # assumes that VERSIONS has been initialized.
-    def increment_versions(self):
+    def increment_versions(self, mode='bump'):
         # check that global variables are in sane states
         assert len(VERSIONS) > 0 # "No VERSIONS found, something is weird."
         with open(self.filepath, 'r') as file:
@@ -95,8 +95,8 @@ class PatchInfo:
                 elif line.strip().startswith('#'): # skip comments
                     self.output(line)
                 elif in_package:
-                    # increment my own version, if I'm in the listed crates
-                    if self.cratename is not None:
+                    # increment my own version, if I'm in the listed crates and we're in 'bump' mode
+                    if (self.cratename is not None) and (mode == 'bump'):
                         if line.strip().startswith('version'):
                             self.output('version = "{}"\n'.format(bump_version(VERSIONS[self.cratename])))
                         else:
@@ -130,13 +130,57 @@ class PatchInfo:
 
                     # print("{}:{}".format(this_crate, depcrate))
                     if depcrate in VERSIONS:
-                        oldver = VERSIONS[depcrate]
-                        (newline, numsubs) = re.subn(oldver, bump_version(oldver), line)
-                        if numsubs != 1 and not "\"*\"" in newline:
-                            print("Warning! Version substitution failed for {}:{} in crate {} ({})".format(depcrate, oldver, this_crate, numsubs))
+                        if mode == 'bump':
+                            oldver = VERSIONS[depcrate]
+                            (newline, numsubs) = re.subn(oldver, bump_version(oldver), line)
+                            if numsubs != 1 and not "\"*\"" in newline:
+                                print("Warning! Version substitution failed for {}:{} in crate {} ({})".format(depcrate, oldver, this_crate, numsubs))
 
-                        # print("orig: {}\nnew: {}".format(line, newline))
-                        self.output(newline)
+                            # print("orig: {}\nnew: {}".format(line, newline))
+                            self.output(newline)
+                        elif mode == 'to_local':
+                            if 'path' in line:
+                                self.output(line) # already local path, do nothing
+                            else:
+                                for [name, path] in self.cratelist:
+                                    if depcrate == name:
+                                        # print("self.file: {}".format(self.file.name))
+                                        depth = self.file.name.count('/')
+                                        base = '../' * (depth)
+                                        subpath = 'path = "{}{}"'.format(base, path)
+                                if subpath is None:
+                                    print("Error: couldn't find substitution path for dependency {}".format(depcrate))
+
+                                if 'version' in line:
+                                    oldver = 'version = "{}"'.format(VERSIONS[depcrate])
+                                    newpath = subpath
+                                else:
+                                    oldver = '"{}"'.format(VERSIONS[depcrate])
+                                    newpath = '{{ {} }}'.format(subpath)
+
+                                (newline, numsubs) = re.subn(oldver, newpath, line)
+                                if numsubs != 1 and not "\"*\"" in newline:
+                                    print("Warning! Path substitution failed for {}:{} in crate {} ({})".format(depcrate, oldver, this_crate, numsubs))
+
+                                self.output(newline)
+                        elif mode == 'to_remote':
+                            if 'path' not in line:
+                                self.output(line) # already remote, nothing to do
+                            else:
+                                if 'package' in line:
+                                    specs = re.split(',|}|{', line) # line.split(',')
+                                    for spec in specs:
+                                        if 'path' in spec:
+                                            oldpath = spec
+                                    if oldpath is None:
+                                        print("Error! couldn't parse out path to substitute for dependency {}".format(depcrate))
+                                    newver = ' version = "{}" '.format(VERSIONS[depcrate])
+                                    (newline, numsubs) = re.subn(oldpath, newver, line)
+                                    if numsubs != 1 and not "\"*\"" in newline:
+                                        print("Warning! Path substitution failed for {}:{} in crate {} ({})".format(depcrate, oldver, this_crate, numsubs))
+                                    self.output(newline)
+                                else:
+                                    self.output('{} = "{}"\n'.format(depcrate, VERSIONS[depcrate]))
                     else:
                         self.output(line)
                 else:
@@ -170,6 +214,12 @@ def main():
         "-p", "--publish", help="Publish crates", action="store_true",
     )
     parser.add_argument(
+        "-l", "--local-paths", help="Convert crate references to local paths", action="store_true"
+    )
+    parser.add_argument(
+        "-r", "--remote-paths", help="Convert crate references to remote paths", action="store_true"
+    )
+    parser.add_argument(
         "-w", "--wet-run", help="Used in conjunction with --publish to do a 'wet run'", action="store_true"
     )
     args = parser.parse_args()
@@ -186,7 +236,14 @@ def main():
     if args.xous:
         cratelist += CRATES
 
-    if args.bump:
+    if (args.bump or args.publish) and (args.local_paths or args.remote_paths):
+        print("Do not mix path changes with bump and publish operations. Do them serially.")
+        exit(1)
+    if args.local_paths and args.remote_paths:
+        print("Can't simultaneously change to local and remote paths. Pick only one operation.")
+        exit(1)
+
+    if args.bump or args.local_paths or args.remote_paths:
         cargo_toml_paths = []
         for path in Path('.').rglob('Cargo.toml'):
             if 'target' not in str(path):
@@ -215,16 +272,27 @@ def main():
         # now extract all the *other* crates
         for path in cargo_toml_paths:
             #print("{}".format(str(path)))
-            patchinfo = PatchInfo(path)
+            patchinfo = PatchInfo(path, cratelist)
             patches += [patchinfo]
 
-        print(VERSIONS)
-        for (name, ver) in VERSIONS.items():
-            print("{}: {} -> {}".format(name, ver, bump_version(ver)))
+        if args.bump:
+            for (name, ver) in VERSIONS.items():
+                print("{}: {} -> {}".format(name, ver, bump_version(ver)))
+        if args.local_paths or args.remote_paths:
+            print("Target crate list")
+            for (name, ver) in VERSIONS.items():
+                print("{}: {}".format(name, ver))
+
+        if args.bump:
+            mode = 'bump'
+        elif args.local_paths:
+            mode = 'to_local'
+        elif args.remote_paths:
+            mode = 'to_remote'
 
         for patch in patches:
             patch.debug_mode(not args.wet_run)
-            patch.increment_versions()
+            patch.increment_versions(mode)
 
     if args.publish:
         # small quirk: if you're doing a utralib update, just use -u only.
