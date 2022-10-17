@@ -68,6 +68,7 @@ class PatchInfo:
     def output(self, line):
         if self.debug:
             print("Dry run: {}".format(line.rstrip()))
+            # pass
         else:
             self.file.write(line)
 
@@ -167,17 +168,22 @@ class PatchInfo:
                             if 'path' not in line:
                                 self.output(line) # already remote, nothing to do
                             else:
-                                if 'package' in line:
+                                if '{' in line and ',' in line:
                                     specs = re.split(',|}|{', line) # line.split(',')
                                     for spec in specs:
                                         if 'path' in spec:
-                                            oldpath = spec
+                                            oldpath = spec.rstrip().lstrip()
                                     if oldpath is None:
                                         print("Error! couldn't parse out path to substitute for dependency {}".format(depcrate))
-                                    newver = ' version = "{}" '.format(VERSIONS[depcrate])
+                                    newver = 'version = "{}"'.format(VERSIONS[depcrate])
                                     (newline, numsubs) = re.subn(oldpath, newver, line)
                                     if numsubs != 1 and not "\"*\"" in newline:
-                                        print("Warning! Path substitution failed for {}:{} in crate {} ({})".format(depcrate, oldver, this_crate, numsubs))
+                                        print("Warning! Path substitution failed for {}:{} in crate {} ({})".format(depcrate, oldpath, this_crate, numsubs))
+                                    else:
+                                        # print("Substitute {}:{} in crate {} ({})".format(depcrate, oldpath, this_crate, newver))
+                                        # print("  " + oldpath)
+                                        # print("  " + newline)
+                                        pass
                                     self.output(newline)
                                 else:
                                     self.output('{} = "{}"\n'.format(depcrate, VERSIONS[depcrate]))
