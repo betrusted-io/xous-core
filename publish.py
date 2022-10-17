@@ -256,7 +256,10 @@ def main():
                 not_core_path = True
                 for cratespec in cratelist:
                     editpath = cratespec[1]
-                    if editpath in str(Path(path)).replace('\\', '/'): # fix windows paths
+                    normpath = str(Path(path)).replace('\\', '/').rpartition('/')[0]  # fix windows paths
+                    # print(editpath)
+                    # print(normpath)
+                    if editpath == normpath:
                         not_core_path = False
                 if not_core_path:
                     cargo_toml_paths += [path]
