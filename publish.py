@@ -5,24 +5,26 @@ import re
 import subprocess
 import time
 
-# format is {crate : path}
-CRATES = {
-    "xous" : "xous-rs",
-    "xous-kernel" : "kernel",
-    "xous-ipc" : "xous-ipc",
-    "xous-api-log" : "api/xous-api-log",
-    "xous-api-names" : "api/xous-api-names",
-    "xous-api-susres" : "api/xous-api-susres",
-    "xous-api-ticktimer" : "api/xous-api-ticktimer",
-    "xous-log" : "services/xous-log",
-    "xous-names" : "services/xous-names",
-    "xous-susres" : "services/xous-susres",
-    "xous-ticktimer" : "services/xous-ticktimer",
-}
-UTRA_CRATES = {
-    "svd2utra" : "svd2utra",
-    "utralib" : "utralib",
-}
+# format is [crate : path]
+# this is an ordered list that also prescribes the publication order to crates.io
+UTRA_CRATES = [
+    ["svd2utra", "svd2utra"],
+    ["utralib", "utralib"],
+]
+CRATES = [
+    ["xous", "xous-rs"],
+    ["xous-kernel", "kernel"],
+    ["xous-ipc", "xous-ipc"],
+    ["xous-api-log", "api/xous-api-log"],
+    ["xous-api-names", "api/xous-api-names"],
+    ["xous-api-susres", "api/xous-api-susres"],
+    ["xous-api-ticktimer", "api/xous-api-ticktimer"],
+    ["xous-log", "services/xous-log"],
+    ["xous-names", "services/xous-names"],
+    ["xous-susres", "services/xous-susres"],
+    ["xous-ticktimer", "services/xous-ticktimer"],
+]
+# dictionary of crate names -> version strings
 VERSIONS = {}
 
 class PatchInfo:
@@ -32,6 +34,7 @@ class PatchInfo:
             print("Bad crate path: {}".format(filename))
         self.cratename = cratename
         self.cratelist = cratelist
+        self.debug = False
 
     def get_version(self):
         with open(self.filepath, 'r') as file:
@@ -50,13 +53,23 @@ class PatchInfo:
                         version = line.split('=')[1].replace('"', '').strip()
                     if line.strip().startswith('name'):
                         name = line.split('=')[1].replace('"', '').strip()
-                        if name in self.cratelist:
-                            name_check = True
+                        for [item_name, path] in self.cratelist:
+                            if name == item_name:
+                                name_check = True
             if name_check:
                 assert version is not None # "Target name found but no version was extracted!"
                 VERSIONS[name] = version
 
             return name_check
+
+    def debug_mode(self, arg):
+        self.debug = arg
+
+    def output(self, line):
+        if self.debug:
+            print("Dry run: {}".format(line.rstrip()))
+        else:
+            self.file.write(line)
 
     # assumes that VERSIONS has been initialized.
     def increment_versions(self):
@@ -64,7 +77,8 @@ class PatchInfo:
         assert len(VERSIONS) > 0 # "No VERSIONS found, something is weird."
         with open(self.filepath, 'r') as file:
             lines = file.readlines()
-        with open(self.filepath, 'w') as file:
+        with open(self.filepath, 'w', newline='\n') as file:
+            self.file = file
             in_package = False
             in_dependencies = False
             for line in lines:
@@ -77,18 +91,18 @@ class PatchInfo:
                         in_dependencies = True
                     else:
                         in_dependencies = False
-                    file.write(line)
+                    self.output(line)
                 elif line.strip().startswith('#'): # skip comments
-                    file.write(line)
+                    self.output(line)
                 elif in_package:
                     # increment my own version, if I'm in the listed crates
                     if self.cratename is not None:
                         if line.strip().startswith('version'):
-                            file.write('version = "{}"\n'.format(bump_version(VERSIONS[self.cratename])))
+                            self.output('version = "{}"\n'.format(bump_version(VERSIONS[self.cratename])))
                         else:
-                            file.write(line)
+                            self.output(line)
                     else:
-                        file.write(line)
+                        self.output(line)
 
                     if line.strip().startswith('name'):
                         this_crate = line.split('=')[1].replace('"', '').strip()
@@ -122,11 +136,14 @@ class PatchInfo:
                             print("Warning! Version substitution failed for {}:{} in crate {} ({})".format(depcrate, oldver, this_crate, numsubs))
 
                         # print("orig: {}\nnew: {}".format(line, newline))
-                        file.write(newline)
+                        self.output(newline)
                     else:
-                        file.write(line)
+                        self.output(line)
                 else:
-                    file.write(line)
+                    self.output(line)
+                # if debug mode, just write the line unharmed
+                if self.debug:
+                    self.file.write(line)
 
 def bump_version(semver):
     components = semver.split('.')
@@ -137,11 +154,6 @@ def bump_version(semver):
         if index < len(components) - 1:
             retver += "."
     return retver
-
-def merge_two_dicts(x, y):
-    z = x.copy()
-    z.update(y)
-    return z
 
 def main():
     parser = argparse.ArgumentParser(description="Update and publish crates")
@@ -166,20 +178,21 @@ def main():
         print("Warning: no dependencies selected, operation is a no-op. Use -x/-u/... to select dependency trees")
         exit(1)
 
-    cratelist = {}
-    if args.xous:
-        cratelist = merge_two_dicts(cratelist, CRATES)
-    if args.utralib:
-        cratelist = merge_two_dicts(cratelist, UTRA_CRATES)
+    cratelist = []
+    if args.utralib: # ordering is important, the UTRA crates need to publish before Xous crates
+        cratelist += UTRA_CRATES
         if not args.xous: # most Xous crates are also affected by this, so they need a bump as well
-            cratelist = merge_two_dicts(cratelist, CRATES)
+            cratelist += CRATES
+    if args.xous:
+        cratelist += CRATES
 
     if args.bump:
         cargo_toml_paths = []
         for path in Path('.').rglob('Cargo.toml'):
             if 'target' not in str(path):
                 not_core_path = True
-                for editpath in cratelist.values():
+                for cratespec in cratelist:
+                    editpath = cratespec[1]
                     if editpath in str(Path(path)).replace('\\', '/'): # fix windows paths
                         not_core_path = False
                 if not_core_path:
@@ -191,7 +204,7 @@ def main():
 
         patches = []
         # extract the versions of crates to patch
-        for (crate, path) in cratelist.items():
+        for [crate, path] in cratelist:
             #print("extracting {}".format(path))
             patchinfo = PatchInfo(path + '/Cargo.toml', cratelist, crate)
             if not patchinfo.get_version():
@@ -210,6 +223,7 @@ def main():
             print("{}: {} -> {}".format(name, ver, bump_version(ver)))
 
         for patch in patches:
+            patch.debug_mode(not args.wet_run)
             patch.increment_versions()
 
     if args.publish:
@@ -224,7 +238,7 @@ def main():
             cmd = wet_cmd
         else:
             cmd = dry_cmd
-        for (crate, path) in cratelist.items():
+        for [crate, path] in cratelist:
             print("Publishing {} in {}".format(crate, path))
             try:
                 subprocess.run(cmd, cwd=path, check=True)
