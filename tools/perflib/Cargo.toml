@@ -7,9 +7,9 @@ description = "Performance counter tooling"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.17"
+xous = "0.9.18"
 log = "0.4.14"
-utralib = { version = "0.1.5", default-features = false }
+utralib = { version = "0.1.6", default-features = false }
 
 [features]
 precursor = ["utralib/precursor", "xous/precursor"]

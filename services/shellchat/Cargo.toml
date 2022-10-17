@@ -16,13 +16,13 @@ ime-plugin-shell = {path = "../ime-plugin-shell"}
 ime-plugin-tts = {path = "../ime-plugin-tts"}
 llio = {path = "../llio"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.11"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.10"}
-xous = "0.9.17"
-xous-ipc = "0.9.17"
-xous-names = {package = "xous-api-names", version = "0.9.12"}
+log-server = {package = "xous-api-log", version = "0.1.12"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.11"}
+xous = "0.9.18"
+xous-ipc = "0.9.18"
+xous-names = {package = "xous-api-names", version = "0.9.13"}
 keyboard = {path = "../keyboard"}
-susres = {package = "xous-api-susres", version = "0.9.10"}
+susres = {package = "xous-api-susres", version = "0.9.11"}
 codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}
@@ -38,7 +38,7 @@ dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
 usb-device-xous = {path="../usb-device-xous"}
-utralib = {version = "0.1.5", optional = true, default-features = false }
+utralib = {version = "0.1.6", optional = true, default-features = false }
 
 tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}
