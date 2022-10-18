@@ -285,6 +285,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_feature("perfcounter")
                    .add_kernel_feature("v2p");
         }
+        Some("dvt-image") => {
+            // this image targets a mostly deprecated DVT hardware generation. The purpose of it is to re-use some
+            // of the now-defunct hardware for eFuse code testing, especially since FPGAs have gotten very scarce.
+            // Once the eFuse path is validated, we could remove this target.
+            let mut services: Vec<String> = user_pkgs
+                .into_iter()
+                .map(String::from).collect();
+            services.retain(|x| x != "codec"); // codec is not compatible with DVT boards
+
+            builder.target_precursor("2753c12-dvt")
+                   .add_services(&services)
+                   .add_apps(&get_cratespecs());
+        }
         Some("tts") => {
             builder.target_precursor(PRECURSOR_SOC_VERSION);
 

@@ -32,6 +32,7 @@ std = []
 # Maintainer note: add checks in build.rs to ensure only one is selected.
 precursor-c809403 = []
 precursor-c809403-perflib = []
+precursor-2753c12-dvt = []
 
 # The SVD gitrev as specified above is only invoked to track fine-grained
 # changes between target revisions. Below is the overall target switch,

@@ -71,7 +71,7 @@ fn main() {
     allow_single_target_feature!("precursor", "hosted", "renode");
 
     #[cfg(feature="precursor")]
-    allow_single_gitrev_feature!("precursor-c809403", "precursor-c809403-perflib");
+    allow_single_gitrev_feature!("precursor-c809403", "precursor-c809403-perflib", "precursor-2753c12-dvt");
 
     // ----- select an SVD file based on a specific revision -----
     #[cfg(feature="precursor-c809403")]
@@ -88,6 +88,11 @@ fn main() {
     let svd_filename = "renode/renode.svd";
     #[cfg(feature="renode")]
     let generated_filename = "src/generated/renode.rs";
+
+    #[cfg(feature="precursor-2753c12-dvt")]
+    let svd_filename = "precursor/soc-dvt-2753c12.svd";
+    #[cfg(feature="precursor-2753c12-dvt")]
+    let generated_filename = "src/generated/precursor_dvt_2753c12.rs";
 
     // ----- control file generation and rebuild sequence -----
     // check and see if the configuration has changed since the last build. This should be

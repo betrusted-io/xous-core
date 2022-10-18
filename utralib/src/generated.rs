@@ -12,6 +12,11 @@ mod precursor_perf_c809403;
 #[cfg(feature="precursor-c809403-perflib")]
 pub use precursor_perf_c809403::*;
 
+#[cfg(feature="precursor-2753c12-dvt")]
+mod precursor_dvt_2753c12;
+#[cfg(feature="precursor-2753c12-dvt")]
+pub use precursor_dvt_2753c12::*;
+
 #[cfg(feature="renode")]
 mod renode;
 #[cfg(feature="renode")]
