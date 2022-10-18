@@ -35,12 +35,12 @@ impl From<DecodeError> for Error {
 /// To add a new preference setting just drop a new struct entry in here.
 /// The struct field type must be serializable by bincode.
 #[derive(prefsgenerator::GetterSetter)]
+#[allow(dead_code)] // Allowing dead code here because UserPrefs is used to generate getter/setters.
 struct UserPrefs {
     radio_on_on_boot: bool,
     connect_known_networks_on_boot: bool,
     autobacklight_on_boot: bool,
-    password_after_sleep: bool,
-    close_bases_on_lock: bool,
+    autobacklight_timeout: u64,
 }
 
 pub struct Manager {
