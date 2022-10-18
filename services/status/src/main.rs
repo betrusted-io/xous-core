@@ -384,12 +384,12 @@ fn wrapped_main() -> ! {
         StatusOpcode::Keypress.to_u32().unwrap() as usize,
     );
 
-    let enabled = Arc::new(Mutex::new(false));
+    let autobacklight_enabled = Arc::new(Mutex::new(false));
     let (tx, rx): (Sender<BacklightThreadOps>, Receiver<BacklightThreadOps>) = unbounded();
 
     let rx = Box::new(rx);
 
-    let thread_already_running = Arc::new(Mutex::new(false));
+    let autobacklight_thread_already_running = Arc::new(Mutex::new(false));
     let thread_conn = xous::connect(status_sid).unwrap();
 
     // ------------------------ check firmware status and apply updates
@@ -694,7 +694,7 @@ fn wrapped_main() -> ! {
         log::debug!("{:?}", opcode);
         match opcode {
             Some(StatusOpcode::EnableAutomaticBacklight) => {
-                *enabled.lock().unwrap() = true;
+                *autobacklight_enabled.lock().unwrap() = true;
 
                 // second: delete the first three elements off the menu
                 menu_manager.delete_item(t!("mainmenu.backlighton", xous::LANG));
@@ -711,7 +711,7 @@ fn wrapped_main() -> ! {
                 }, 0);
             }
             Some(StatusOpcode::DisableAutomaticBacklight) => {
-                *enabled.lock().unwrap() = false;
+                *autobacklight_enabled.lock().unwrap() = false;
                 tx.send(BacklightThreadOps::Stop).unwrap();
 
                 // second: delete the first element off the menu.
@@ -1074,11 +1074,11 @@ fn wrapped_main() -> ! {
             },
 
             Some(StatusOpcode::Keypress) => {
-                if !*enabled.lock().unwrap() {
+                if !*autobacklight_enabled.lock().unwrap() {
                     log::trace!("ignoring keypress, automatic backlight is disabled");
                     continue
                 }
-                let mut run_lock = thread_already_running.lock().unwrap();
+                let mut run_lock = autobacklight_thread_already_running.lock().unwrap();
                 match *run_lock {
                     true => {
                         log::trace!("renewing backlight timer");
@@ -1087,10 +1087,22 @@ fn wrapped_main() -> ! {
                     },
                     false => {
                         *run_lock = true;
+
+                        // TODO(gsora): this code queries PDDB every time autobacklight timeout expired
+                        // and user presses a button.
+                        // Too intensive? Needs a dirty bit+cache?
+                        let abl_timeout = match prefs.autobacklight_timeout() {
+                            Ok(timeout) => timeout,
+                            Err(error) => {
+                                log::error!("cannot fetch autobacklight timeout, {:?}, defaulting to 10s", error);
+                                10
+                            }
+                        };
+
                         com.set_backlight(255, 128).expect("cannot set backlight on");
                         std::thread::spawn({
                             let rx = rx.clone();
-                            move || turn_lights_on(rx, thread_conn)
+                            move || turn_lights_on(rx, thread_conn, abl_timeout)
                         });
                     },
                 }
@@ -1101,7 +1113,7 @@ fn wrapped_main() -> ! {
             },
             Some(StatusOpcode::TurnLightsOff) => {
                 log::trace!("turning lights off");
-                let mut run_lock = thread_already_running.lock().unwrap();
+                let mut run_lock = autobacklight_thread_already_running.lock().unwrap();
                 *run_lock = false;
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
@@ -1155,8 +1167,8 @@ enum BacklightThreadOps {
     Stop,
 }
 
-fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID) {
-    let standard_duration = std::time::Duration::from_secs(10);
+fn turn_lights_on(rx: Box<Receiver<BacklightThreadOps>>, cid: xous::CID, timeout: u64) {
+    let standard_duration = std::time::Duration::from_secs(timeout);
 
     let mut timeout = std::time::Instant::now() + standard_duration;
 
