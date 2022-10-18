@@ -75,10 +75,6 @@ pub struct SwitchToApp {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-pub struct DefaultApp {
-}
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum UxType {
     Chat,
     Menu,
