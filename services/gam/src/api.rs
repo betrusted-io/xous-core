@@ -75,6 +75,10 @@ pub struct SwitchToApp {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct DefaultApp {
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum UxType {
     Chat,
     Menu,
@@ -201,6 +205,9 @@ pub(crate) enum Opcode {
     Bip39toBytes = 30,
     BytestoBip39 = 31,
     Bip39Suggestions = 32,
+
+    /// Request switching to the default app
+    DefaultApp = 33,
 }
 
 // small wart -- we have to reset the size of a modal to max size for resize computations

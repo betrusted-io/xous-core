@@ -664,6 +664,10 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(spec).unwrap();
             }
+            Some(Opcode::DefaultApp) => {
+                // FIXME: Switch to shellchat here
+                log::error!("not implemented yet, switch to shellchat: {:?}", msg);
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

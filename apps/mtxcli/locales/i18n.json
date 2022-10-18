@@ -1,32 +1,38 @@
 {
     "mtxcli.greeting": {
-        "en": "Welcome to the simple MTXCLI demo.",
+        "en": "Welcome to the MTXCLI demo.",
         "ja": "シンプルなMTXCLIデモへようこそ",
         "zh": "简单的 mtxcli 演示活动",
         "en-tts": "Welcome to the simple MTXCLI demo."
     },
-    "mtxcli.audio.start": {
-        "en": "tone started...",
-        "ja": "トーン開始…",
-        "zh": "哔声开始...",
-        "en-tts": "tone started..."
+    "mtxcli.help.help": {
+        "en": "help [cmd]",
+        "ja": "TBD help [cmd]",
+        "zh": "TBD help [cmd]",
+        "en-tts": "help [cmd]"
     },
-    "mtxcli.audio.help": {
-        "en": "audio [tone [freq [duration]]]",
-        "ja": "オーディオ [ トーン [ 周波数 [ 間隔 ]]]",
-        "zh": "audio [tone [音频 [时长]]]",
-        "en-tts": "audio tone, then optional frequency plus optional duration."
+    "mtxcli.help.overview": {
+        "en": "available mtxcli commands:",
+        "ja": "TBD available mtxcli commands:",
+        "zh": "TBD available mtxcli commands:",
+        "en-tts": "available mtxcli commands:"
     },
-    "mtxcli.audio.completion_a": {
-        "en": "Playback stopped at",
-        "ja": "再生停止位置: ",
-        "zh": "播放停止在",
-        "en-tts": "Playback stopped at"
+    "mtxcli.quit.help": {
+        "en": "quit (returns to shellchat)",
+        "ja": "TBD quit...",
+        "zh": "TBD quit...",
+        "en-tts": "quit (returns to shellchat)"
     },
-    "mtxcli.audio.completion_b": {
-        "en": "frames",
-        "ja": "フレーム",
-        "zh": "帧",
-        "en-tts": "frames"
+    "mtxcli.quit.quitting": {
+        "en": "quitting...",
+        "ja": "TBD quitting...",
+        "zh": "TBD quitting...",
+        "en-tts": "quitting.."
+    },
+    "mtxcli.unknown.help": {
+        "en": "unknown command",
+        "ja": "TBD unknown command",
+        "zh": "TBD unknown command",
+        "en-tts": "unknown command"
     }
 }
