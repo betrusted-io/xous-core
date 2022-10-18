@@ -394,12 +394,6 @@ impl Gam {
         let buf = Buffer::into_buf(switchapp).or(Err(xous::Error::InternalError))?;
         buf.send(self.conn, Opcode::SwitchToApp.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_|())
     }
-    /// Allows applications to "quit" and switch to a default application
-    pub fn request_default_app(&self) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::DefaultApp.to_usize().unwrap(), 0, 0, 0, 0)
-        ).map(|_|())
-    }
     pub fn raise_menu(&self, menu_name_str: &str) -> Result<(), xous::Error> {
         let menu_name = GamActivation {
             name: String::<128>::from_str(menu_name_str),

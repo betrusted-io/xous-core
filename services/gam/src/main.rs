@@ -664,16 +664,6 @@ fn wrapped_main() -> ! {
                 }
                 buffer.replace(spec).unwrap();
             }
-            Some(Opcode::DefaultApp) => {
-                if let Some(new_app_token) = context_mgr.find_app_token_by_name(INITIAL_APP_FOCUS) {
-                    match context_mgr.activate(&gfx, &mut canvases, new_app_token, true) {
-                        Ok(_) => (),
-                        Err(_) => log::warn!("failed to switch to {}, silent error!", switchapp.app_name.as_str().unwrap()),
-                    }
-                } else {
-                    log::warn!("Request to switch to default app, but the default app has not registered itself yet!");
-                }
-            }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

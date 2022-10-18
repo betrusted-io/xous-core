@@ -27,13 +27,9 @@ impl<'a> ShellCmdApi<'a> for Help {
                 "help" => {
                     write!(ret, "{}", t!("mtxcli.help.help", xous::LANG)).unwrap();
                 }
-                "quit" => {
-                    write!(ret, "{}", t!("mtxcli.quit.help", xous::LANG)).unwrap();
-                }
                 "" => {
                     write!(ret, "{}\n", t!("mtxcli.help.overview", xous::LANG)).unwrap();
-                    write!(ret, "{}\n", t!("mtxcli.help.help", xous::LANG)).unwrap();
-                    write!(ret, "{}", t!("mtxcli.quit.help", xous::LANG)).unwrap();
+                    write!(ret, "{}", t!("mtxcli.help.help", xous::LANG)).unwrap();
                 }
                 _ => {
                     write!(ret, "{}: {}",

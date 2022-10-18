@@ -81,14 +81,12 @@ impl CommonEnv {
 
 ///// 1. add your module here, and pull its namespace into the local crate
 mod help;      use help::*;
-mod quit;      use quit::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
     lastverb: String::<256>,
     ///// 2. declare storage for your command here.
     help_cmd: Help,
-    quit_cmd: Quit,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -110,7 +108,6 @@ impl CmdEnv {
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             help_cmd: Help::new(&xns),
-            quit_cmd: Quit::new(&xns),
         }
     }
 
@@ -120,7 +117,6 @@ impl CmdEnv {
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut self.help_cmd,
-            &mut self.quit_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {

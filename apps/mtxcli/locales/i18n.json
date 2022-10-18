@@ -17,18 +17,6 @@
         "zh": "TBD available mtxcli commands:",
         "en-tts": "available mtxcli commands:"
     },
-    "mtxcli.quit.help": {
-        "en": "quit (returns to shellchat)",
-        "ja": "TBD quit...",
-        "zh": "TBD quit...",
-        "en-tts": "quit (returns to shellchat)"
-    },
-    "mtxcli.quit.quitting": {
-        "en": "quitting...",
-        "ja": "TBD quitting...",
-        "zh": "TBD quitting...",
-        "en-tts": "quitting.."
-    },
     "mtxcli.unknown.help": {
         "en": "unknown command",
         "ja": "TBD unknown command",
