@@ -47,11 +47,11 @@
     "mtxcli": {
         "context_name": "Matrix chat",
         "menu_name": {
-            "appmenu.repl": {
+            "appmenu.mtxcli": {
                 "en": "Matrix chat",
                 "ja": "シンプルなMATRIXデモ",
                 "zh": "基本 MATRIX 演示",
-                "en-tts": "Basic MATRIX demo"
+                "en-tts": "MATRIX demo"
             }
         }
     }

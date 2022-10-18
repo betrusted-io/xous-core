@@ -51,6 +51,7 @@ pub struct CommonEnv {
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
+    /* currently unused
     pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
         let mut key: u32;
         loop {
@@ -63,6 +64,7 @@ impl CommonEnv {
         self.cb_registrations.insert(key, verb);
         key
     }
+     */
 }
 
 /*
@@ -78,13 +80,13 @@ impl CommonEnv {
 */
 
 ///// 1. add your module here, and pull its namespace into the local crate
-mod audio;     use audio::*;
+mod help;      use help::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
     lastverb: String::<256>,
     ///// 2. declare storage for your command here.
-    audio_cmd: Audio,
+    help_cmd: Help,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -105,7 +107,7 @@ impl CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
-            audio_cmd: Audio::new(&xns),
+            help_cmd: Help::new(&xns),
         }
     }
 
@@ -114,7 +116,7 @@ impl CmdEnv {
 
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
-            &mut self.audio_cmd,
+            &mut self.help_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {
