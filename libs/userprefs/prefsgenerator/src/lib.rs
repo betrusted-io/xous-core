@@ -23,7 +23,7 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
 
                     let read = quote! {
                         impl Manager {
-                            pub fn #set_fn_name(&mut self, value: #typ) -> Result<(), Error> {
+                            pub fn #set_fn_name(&self, value: #typ) -> Result<(), Error> {
                                 let bytes: Vec<u8> = match bincode::encode_to_vec(value, bincode::config::standard()) {
                                     Ok(ret) => ret,
                                     Err(err) => return Err(Error::EncodeError(err)),
@@ -32,7 +32,7 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
                                 self.pddb_store_key(#ident_str, &bytes)
                             }
 
-                            pub fn #fn_name(&mut self) -> Result<#typ, Error> {
+                            pub fn #fn_name(&self) -> Result<#typ, Error> {
                                 let bytes = self.pddb_get_key(#ident_str)?;
                                 let ret: #typ = match bincode::decode_from_slice(&bytes, bincode::config::standard()) {
                                     Ok((data, _)) => data,
