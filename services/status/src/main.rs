@@ -670,6 +670,23 @@ fn wrapped_main() -> ! {
 
     wifi::start_background_thread();
 
+    match prefs.autobacklight_on_boot() {
+        Ok(value) => if let true = value {
+            send_message(status_cid, Message::new_scalar(
+                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
+        } else {
+            send_message(status_cid, Message::new_scalar(
+                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
+        },
+        Err(error) => {
+            log::error!("cannot read preference value for autobacklight_on_boot: {:?}", error);
+            Ok(xous::Result::Ok)
+        }
+    }.unwrap_or_else(|error| {
+        log::error!("cannot set autobacklight status: {:?}", error);
+        xous::Result::Ok
+    });
+    
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
