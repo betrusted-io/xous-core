@@ -153,7 +153,7 @@ impl WLANMan {
         match self.pddb.get(
             net::AP_DICT_NAME,
             &ssid,
-            None,
+            Some(".System"),
             true,
             true,
             Some(com::api::WF200_PASS_MAX_LEN),
