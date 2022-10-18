@@ -229,11 +229,11 @@ fn wrapped_main() -> ! {
             netmgr.connection_manager_wifi_on()
         },
         Err(error) => {
-            log::error!("cannot read preference value for radio_on_on_boot: {}", error);
+            log::error!("cannot read preference value for radio_on_on_boot: {:?}", error);
             Ok(())
         }
     }.unwrap_or_else(|error| {
-        log::error!("cannot set radio status: {}", error)
+        log::error!("cannot set radio status: {:?}", error)
     });
 
     match prefs.connect_known_networks_on_boot() {
@@ -243,11 +243,11 @@ fn wrapped_main() -> ! {
             netmgr.connection_manager_stop()
         },
         Err(error) => {
-            log::error!("cannot read preference value for connect_known_networks_on_boot: {}", error);
+            log::error!("cannot read preference value for connect_known_networks_on_boot: {:?}", error);
             Ok(())
         }
     }.unwrap_or_else(|error| {
-        log::error!("cannot set radio status: {}", error)
+        log::error!("cannot set radio status: {:?}", error)
     });
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
