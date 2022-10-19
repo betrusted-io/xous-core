@@ -15,6 +15,7 @@ use std::collections::HashSet;
 #[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
+    #[cfg(feature="extra_flush")]
     use xous::MemoryRange;
     use crate::api::*;
     use susres::{RegManager, RegOrField, SuspendResume};
@@ -388,8 +389,11 @@ mod implementation {
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
+    #[cfg(feature="extra_flush")]
     const CACHE_LINE_WIDTH: usize = 32; // in bytes
+    #[cfg(feature="extra_flush")]
     const FLUSH_SIZE_BYTES: usize = 16384 * 4; // cache capacity * 4 ways
+
     pub struct Spinor {
         id: u32,
         handler_conn: xous::CID,
@@ -399,6 +403,7 @@ mod implementation {
         cur_op: Option<FlashOp>,
         ticktimer: ticktimer_server::Ticktimer,
         // TODO: refactor ecup command to use spinor to operate the reads
+        #[cfg(feature="extra_flush")]
         flusher: MemoryRange,
     }
 
@@ -418,6 +423,7 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map SPINOR soft interrupt CSR range");
+            #[cfg(feature="extra_flush")]
             let flusher = xous::syscall::map_memory(
                 None,
                 None,
@@ -434,6 +440,7 @@ mod implementation {
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 cur_op: None,
                 ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+                #[cfg(feature="extra_flush")]
                 flusher,
             };
 
@@ -521,20 +528,31 @@ mod implementation {
         #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
             // This instruction seems to be causing instability, omit it...
-            /*
             unsafe {
                 core::arch::asm!(
-                    ".word 0x500F"
+                    ".word 0x500F",
+                    "nop",
+                    "nop",
+                    "nop",
+                    "nop",
+                    "fence",
+                    "nop",
+                    "nop",
+                    "nop",
+                    "nop",
                 );
-            }*/
-            // augment with manual flushing, because the above instruction didn't seem to do the trick??
-            let flush_ptr = self.flusher.as_ptr() as *const u32;
-            let mut dummy: u32 = 0;
-            // only visit the first word of every line
-            for i in (0..FLUSH_SIZE_BYTES / core::mem::size_of::<u32>()).step_by(CACHE_LINE_WIDTH / core::mem::size_of::<u32>()) {
-                dummy += unsafe{flush_ptr.add(i).read_volatile()};
             }
-            log::trace!("Dcache flush completed: {}", dummy);
+            // augment with manual flushing, because the above instruction didn't seem to do the trick??
+            #[cfg(feature="extra_flush")]
+            {
+                let flush_ptr = self.flusher.as_ptr() as *const u32;
+                let mut dummy: u32 = 0;
+                // only visit the first word of every line
+                for i in (0..FLUSH_SIZE_BYTES / core::mem::size_of::<u32>()).step_by(CACHE_LINE_WIDTH / core::mem::size_of::<u32>()) {
+                    dummy += unsafe{flush_ptr.add(i).read_volatile()};
+                }
+                log::trace!("Dcache flush completed: {}", dummy);
+            }
             core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         }
 

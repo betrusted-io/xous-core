@@ -32,6 +32,7 @@ rand = "0.7.3"
 precursor = ["utralib/precursor", "xous/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode", "xous/renode"]
+extra_flush = []
 default = []
 
 [lib]
