@@ -10,11 +10,6 @@ use std::path::PathBuf;
 /// PDDB Dict for mtxcli keys
 const MTXCLI_DICT: &str = "mtxcli";
 
-#[cfg(any(feature="precursor", feature="renode"))]
-/// PDDB make directories in path, as needed
-fn pddb_mkdirp<P: AsRef<Path> + Clone>(path: P) {
-}
-
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
