@@ -5,28 +5,10 @@ use core::fmt::Write;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write as StdWrite, Error};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-#[cfg(not(any(feature="precursor", feature="renode")))]
 /// PDDB Dict for mtxcli keys
 const MTXCLI_DICT: &str = "mtxcli";
-#[cfg(any(feature="precursor", feature="renode"))]
-/// PDDB Dict for mtxcli keys
-const MTXCLI_DICT: &str = "mtxcli:";
-
-#[cfg(not(any(feature="precursor", feature="renode")))]
-/// PDDB make directories in path, as needed
-fn pddb_mkdirp<P: AsRef<Path> + Clone>(path: P) {
-    if ! std::fs::metadata(path.clone()).is_ok() { // path does not exist
-        match std::fs::create_dir_all(path) {
-            Ok(()) => {
-            },
-            Err(e) => {
-                log::error!("error creating directory path: {:?}", e);
-            }
-        }
-    }
-}
 
 #[cfg(any(feature="precursor", feature="renode"))]
 /// PDDB make directories in path, as needed
@@ -86,7 +68,7 @@ impl CommonEnv {
         log::info!("set '{}' = '{}'", key, value);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        pddb_mkdirp(keypath.clone());
+        std::fs::create_dir_all(keypath.clone())?;
         keypath.push(key);
         File::create(keypath)?.write_all(value.as_bytes())?;
         Ok(())
@@ -96,7 +78,7 @@ impl CommonEnv {
         log::info!("unset '{}'", key);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        pddb_mkdirp(keypath.clone());
+        std::fs::create_dir_all(keypath.clone())?;
         keypath.push(key);
         if std::fs::metadata(keypath.clone()).is_ok() { // keypath exists
             std::fs::remove_file(keypath)?;
@@ -107,7 +89,7 @@ impl CommonEnv {
     pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        pddb_mkdirp(keypath.clone());
+        std::fs::create_dir_all(keypath.clone())?;
         keypath.push(key);
         if let Ok(mut file)= File::open(keypath) {
             let mut value = String::new();
