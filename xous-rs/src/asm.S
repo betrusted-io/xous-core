@@ -101,5 +101,14 @@ vex_aes_dec_id_last_3:
 
 .global riscv_cache_flush
 riscv_cache_flush:
+    .word 0x500F
+    nop
+    nop
+    nop
+    nop
     fence
+    nop
+    nop
+    nop
+    nop
     ret
