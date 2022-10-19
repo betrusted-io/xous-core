@@ -37,3 +37,5 @@ The following commands are available in **mtxcli**:
 
 Any line not starting with a slash ('/') will be sent to the current room.
 New messages from the current room will be displayed.
+
+_NOTE:_ chatting is not implemented yet

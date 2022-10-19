@@ -2,6 +2,7 @@ use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
 
+use std::fs;
 use std::io::Write as StdWrite;
 use std::io::Read as StdRead;
 use std::string::String as StdString;
@@ -66,7 +67,16 @@ impl CommonEnv {
 
     pub fn unset(&mut self, key: &str) -> Result<Option<String::<256>>, xous::Error> {
         log::info!("unset '{}'", key);
-        std::fs::remove_file(format!("mtxcli:{}",key)).unwrap();
+        let keypath: StdString = format!("mtxcli:{}",key);
+        if fs::metadata(keypath.clone()).is_ok() { // file exists
+            match std::fs::remove_file(keypath) {
+                Ok(()) => {
+                }
+                Err(error) => {
+                    log::info!("unable to unset '{}': {}", key, error);
+                }
+            }
+        }
         Ok(None)
     }
 
