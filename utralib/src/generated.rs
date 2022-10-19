@@ -6,10 +6,10 @@ mod precursor_c809403;
 #[cfg(feature="precursor-c809403")]
 pub use precursor_c809403::*;
 
-#[cfg(feature="precursor-6156e49")]
-mod precursor_6156e49;
-#[cfg(feature="precursor-6156e49")]
-pub use precursor_6156e49::*;
+#[cfg(feature="precursor-a0912d6")]
+mod precursor_a0912d6;
+#[cfg(feature="precursor-a0912d6")]
+pub use precursor_a0912d6::*;
 
 #[cfg(feature="precursor-c809403-perflib")]
 mod precursor_perf_c809403;
