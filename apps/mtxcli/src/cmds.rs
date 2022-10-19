@@ -1,15 +1,22 @@
 use xous::{MessageEnvelope};
-use xous_ipc::String;
+use xous_ipc::String as XousString;
 use core::fmt::Write;
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Read, Write as StdWrite, Error};
+use std::path::PathBuf;
+
+/// PDDB Dict for mtxcli keys
+const MTXCLI_DICT: &str = "mtxcli";
+
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
+    fn process(&mut self, args: XousString::<1024>, env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -46,25 +53,49 @@ pub struct CommonEnv {
     codec: codec::Codec,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: HashMap::<u32, String::<256>>,
+    cb_registrations: HashMap::<u32, XousString::<256>>,
     trng: Trng,
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
-    /* currently unused
-    pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
-        let mut key: u32;
-        loop {
-            key = self.trng.get_u32().unwrap();
-            // reserve the bottom 1000 IDs for the main loop enums.
-            if !self.cb_registrations.contains_key(&key) && (key > 1000) {
-                break;
-            }
-        }
-        self.cb_registrations.insert(key, verb);
-        key
+
+    pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
+        log::info!("set '{}' = '{}'", key, value);
+        let mut keypath = PathBuf::new();
+        keypath.push(MTXCLI_DICT);
+        std::fs::create_dir_all(&keypath)?;
+        keypath.push(key);
+        File::create(keypath)?.write_all(value.as_bytes())?;
+        Ok(())
     }
-     */
+
+    pub fn unset(&mut self, key: &str) -> Result<(), Error> {
+        log::info!("unset '{}'", key);
+        let mut keypath = PathBuf::new();
+        keypath.push(MTXCLI_DICT);
+        std::fs::create_dir_all(&keypath)?;
+        keypath.push(key);
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            std::fs::remove_file(keypath)?;
+        }
+        Ok(())
+    }
+
+    pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
+        let mut keypath = PathBuf::new();
+        keypath.push(MTXCLI_DICT);
+        std::fs::create_dir_all(&keypath)?;
+        keypath.push(key);
+        if let Ok(mut file)= File::open(keypath) {
+            let mut value = String::new();
+            file.read_to_string(&mut value)?;
+            log::info!("get '{}' = '{}'", key, value);
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
+    }
+
 }
 
 /*
@@ -80,13 +111,21 @@ impl CommonEnv {
 */
 
 ///// 1. add your module here, and pull its namespace into the local crate
+mod get;       use get::*;
 mod help;      use help::*;
+mod set;       use set::*;
+mod status;    use status::*;
+mod unset;     use unset::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: String::<256>,
+    lastverb: XousString::<256>,
     ///// 2. declare storage for your command here.
+    get_cmd: Get,
     help_cmd: Help,
+    set_cmd: Set,
+    status_cmd: Status,
+    unset_cmd: Unset,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -105,59 +144,75 @@ impl CmdEnv {
         log::info!("done creating CommonEnv");
         CmdEnv {
             common_env: common,
-            lastverb: String::<256>::new(),
+            lastverb: XousString::<256>::new(),
             ///// 3. initialize your storage, by calling new()
+            get_cmd: Get::new(&xns),
             help_cmd: Help::new(&xns),
+            set_cmd: Set::new(&xns),
+            status_cmd: Status::new(&xns),
+            unset_cmd: Unset::new(&xns),
         }
     }
 
-    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut String::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut XousString::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<XousString::<1024>>, xous::Error> {
+        let mut ret = XousString::<1024>::new();
 
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
+            &mut self.get_cmd,
             &mut self.help_cmd,
+            &mut self.set_cmd,
+            &mut self.status_cmd,
+            &mut self.unset_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
                 let verb = verb_string.to_str();
 
-                // search through the list of commands linearly until one matches,
-                // then run it.
-                let mut match_found = false;
-                for cmd in commands.iter_mut() {
-                    if cmd.matches(verb) {
-                        match_found = true;
-                        cmd_ret = cmd.process(*cmdline, &mut self.common_env);
-                        self.lastverb.clear();
-                        write!(self.lastverb, "{}", verb).expect("couldn't record last verb");
-                    };
-                }
-
-                // if none match, create a list of available commands
-                if !match_found {
-                    let mut first = true;
-                    write!(ret, "Commands: ").unwrap();
-                    for cmd in commands.iter() {
-                        if !first {
-                            ret.append(", ")?;
-                        }
-                        ret.append(cmd.verb())?;
-                        first = false;
+                // if verb starts with a slash then it's a command (else chat)
+                if verb.starts_with("/") {
+                    // search through the list of commands linearly until one
+                    // matches, then run it.
+                    let command = &verb[1..];
+                    let mut match_found = false;
+                    for cmd in commands.iter_mut() {
+                        if cmd.matches(command) {
+                            match_found = true;
+                            cmd_ret = cmd.process(*cmdline, &mut self.common_env);
+                            self.lastverb.clear();
+                            write!(self.lastverb, "{}", verb).expect("couldn't record last verb");
+                        };
                     }
+
+                    // if none match, create a list of available commands
+                    if !match_found {
+                        let mut first = true;
+                        write!(ret, "Commands: ").unwrap();
+                        for cmd in commands.iter() {
+                            if !first {
+                                ret.append(", ")?;
+                            }
+                            ret.append("/")?;
+                            ret.append(cmd.verb())?;
+                            first = false;
+                        }
+                        Ok(Some(ret))
+                    } else {
+                        cmd_ret
+                    }
+                } else { // chat
+                    write!(ret, "SAY: {} {}", verb, cmdline.to_str()).unwrap();
                     Ok(Some(ret))
-                } else {
-                    cmd_ret
                 }
             } else {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
                 Some(verb) => {
@@ -190,9 +245,9 @@ impl CmdEnv {
 /// extract the first token, as delimited by spaces
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
-pub fn tokenize(line: &mut String::<1024>) -> Option<String::<1024>> {
-    let mut token = String::<1024>::new();
-    let mut retline = String::<1024>::new();
+pub fn tokenize(line: &mut XousString::<1024>) -> Option<XousString::<1024>> {
+    let mut token = XousString::<1024>::new();
+    let mut retline = XousString::<1024>::new();
 
     let lineiter = line.as_str().unwrap().chars();
     let mut foundspace = false;
