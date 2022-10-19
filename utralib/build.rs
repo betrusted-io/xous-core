@@ -71,13 +71,18 @@ fn main() {
     allow_single_target_feature!("precursor", "hosted", "renode");
 
     #[cfg(feature="precursor")]
-    allow_single_gitrev_feature!("precursor-c809403", "precursor-c809403-perflib", "precursor-2753c12-dvt");
+    allow_single_gitrev_feature!("precursor-c809403", "precursor-c809403-perflib", "precursor-2753c12-dvt", "precursor-6156e49");
 
     // ----- select an SVD file based on a specific revision -----
     #[cfg(feature="precursor-c809403")]
     let svd_filename = "precursor/soc-c809403.svd";
     #[cfg(feature="precursor-c809403")]
     let generated_filename = "src/generated/precursor_c809403.rs";
+
+    #[cfg(feature="precursor-6156e49")]
+    let svd_filename = "precursor/soc-6156e49.svd";
+    #[cfg(feature="precursor-6156e49")]
+    let generated_filename = "src/generated/precursor_6156e49.rs";
 
     #[cfg(feature="precursor-c809403-perflib")]
     let svd_filename = "precursor/soc-perf-c809403.svd";
