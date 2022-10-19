@@ -5,10 +5,16 @@
         "zh": "简单的 mtxcli 演示活动",
         "en-tts": "Welcome to the simple MTXCLI demo."
     },
+    "mtxcli.get.help": {
+        "en": "/get key",
+        "ja": "TBD /get key",
+        "zh": "TBD /get key",
+        "en-tts": "get key"
+    },
     "mtxcli.help.help": {
-        "en": "help [cmd]",
-        "ja": "TBD help [cmd]",
-        "zh": "TBD help [cmd]",
+        "en": "/help [cmd]",
+        "ja": "TBD /help [cmd]",
+        "zh": "TBD /help [cmd]",
         "en-tts": "help [cmd]"
     },
     "mtxcli.help.overview": {
@@ -16,6 +22,24 @@
         "ja": "TBD available mtxcli commands:",
         "zh": "TBD available mtxcli commands:",
         "en-tts": "available mtxcli commands:"
+    },
+    "mtxcli.set.help": {
+        "en": "/set key value",
+        "ja": "TBD /set key value",
+        "zh": "TBD /set key value",
+        "en-tts": "set key value"
+    },
+    "mtxcli.status.help": {
+        "en": "/status",
+        "ja": "TBD /status",
+        "zh": "TBD /status",
+        "en-tts": "status"
+    },
+    "mtxcli.unset.help": {
+        "en": "/unset key",
+        "ja": "TBD /unset key",
+        "zh": "TBD /unset key",
+        "en-tts": "unset key"
     },
     "mtxcli.unknown.help": {
         "en": "unknown command",
