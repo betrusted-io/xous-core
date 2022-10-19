@@ -63,7 +63,7 @@ impl CommonEnv {
         log::info!("set '{}' = '{}'", key, value);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(keypath.clone())?;
+        std::fs::create_dir_all(&keypath)?;
         keypath.push(key);
         File::create(keypath)?.write_all(value.as_bytes())?;
         Ok(())
@@ -73,9 +73,9 @@ impl CommonEnv {
         log::info!("unset '{}'", key);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(keypath.clone())?;
+        std::fs::create_dir_all(&keypath)?;
         keypath.push(key);
-        if std::fs::metadata(keypath.clone()).is_ok() { // keypath exists
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
             std::fs::remove_file(keypath)?;
         }
         Ok(())
@@ -84,7 +84,7 @@ impl CommonEnv {
     pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(keypath.clone())?;
+        std::fs::create_dir_all(&keypath)?;
         keypath.push(key);
         if let Ok(mut file)= File::open(keypath) {
             let mut value = String::new();
