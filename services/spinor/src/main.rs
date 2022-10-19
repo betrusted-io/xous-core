@@ -528,6 +528,7 @@ mod implementation {
         #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
             // This instruction seems to be causing instability, omit it...
+            #[cfg(not(feature="extra_flush"))]
             unsafe {
                 core::arch::asm!(
                     ".word 0x500F",
