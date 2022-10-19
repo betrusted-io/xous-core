@@ -1,20 +1,45 @@
 use xous::{MessageEnvelope};
-use xous_ipc::String;
+use xous_ipc::String as XousString;
 use core::fmt::Write;
 
-use std::fs;
-use std::io::Write as StdWrite;
-use std::io::Read as StdRead;
-use std::string::String as StdString;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Read, Write as StdWrite, Error};
+use std::path::{Path, PathBuf};
+
+#[cfg(not(any(feature="precursor", feature="renode")))]
+/// PDDB Dict for mtxcli keys
+const MTXCLI_DICT: &str = "mtxcli";
+#[cfg(any(feature="precursor", feature="renode"))]
+/// PDDB Dict for mtxcli keys
+const MTXCLI_DICT: &str = "mtxcli:";
+
+#[cfg(not(any(feature="precursor", feature="renode")))]
+/// PDDB make directories in path, as needed
+fn pddb_mkdirp<P: AsRef<Path> + Clone>(path: P) {
+    if ! std::fs::metadata(path.clone()).is_ok() { // path does not exist
+        match std::fs::create_dir_all(path) {
+            Ok(()) => {
+            },
+            Err(e) => {
+                log::error!("error creating directory path: {:?}", e);
+            }
+        }
+    }
+}
+
+#[cfg(any(feature="precursor", feature="renode"))]
+/// PDDB make directories in path, as needed
+fn pddb_mkdirp<P: AsRef<Path> + Clone>(path: P) {
+}
 
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
+    fn process(&mut self, args: XousString::<1024>, env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
         log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
@@ -51,42 +76,42 @@ pub struct CommonEnv {
     codec: codec::Codec,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: HashMap::<u32, String::<256>>,
+    cb_registrations: HashMap::<u32, XousString::<256>>,
     trng: Trng,
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
 
-    pub fn set(&mut self, key: &str, value: &str) -> Result<Option<String::<256>>, xous::Error> {
+    pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
         log::info!("set '{}' = '{}'", key, value);
-        let mut file = std::fs::File::create(format!("mtxcli:{}",key)).unwrap();
-        file.write_all(value.as_bytes()).unwrap();
-        core::mem::drop(file);
-        Ok(None)
+        let mut keypath = PathBuf::new();
+        keypath.push(MTXCLI_DICT);
+        pddb_mkdirp(keypath.clone());
+        keypath.push(key);
+        File::create(keypath)?.write_all(value.as_bytes())?;
+        Ok(())
     }
 
-    pub fn unset(&mut self, key: &str) -> Result<Option<String::<256>>, xous::Error> {
+    pub fn unset(&mut self, key: &str) -> Result<(), Error> {
         log::info!("unset '{}'", key);
-        let keypath: StdString = format!("mtxcli:{}",key);
-        if fs::metadata(keypath.clone()).is_ok() { // file exists
-            match std::fs::remove_file(keypath) {
-                Ok(()) => {
-                }
-                Err(error) => {
-                    log::info!("unable to unset '{}': {}", key, error);
-                }
-            }
+        let mut keypath = PathBuf::new();
+        keypath.push(MTXCLI_DICT);
+        pddb_mkdirp(keypath.clone());
+        keypath.push(key);
+        if std::fs::metadata(keypath.clone()).is_ok() { // keypath exists
+            std::fs::remove_file(keypath)?;
         }
-        Ok(None)
+        Ok(())
     }
 
-    pub fn get(&mut self, key: &str) -> Result<Option<String::<256>>, xous::Error>{
-        if let Ok(mut file)= std::fs::File::open(format!("mtxcli:{}",key)) {
-            let mut contents = StdString::new();
-            file.read_to_string(&mut contents).unwrap();
-            let mut value = String::<256>::new();
-            write!(value, "{}", contents).unwrap();
-            core::mem::drop(file);
+    pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
+        let mut keypath = PathBuf::new();
+        keypath.push(MTXCLI_DICT);
+        pddb_mkdirp(keypath.clone());
+        keypath.push(key);
+        if let Ok(mut file)= File::open(keypath) {
+            let mut value = String::new();
+            file.read_to_string(&mut value)?;
             log::info!("get '{}' = '{}'", key, value);
             Ok(Some(value))
         } else {
@@ -117,7 +142,7 @@ mod unset;     use unset::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
-    lastverb: String::<256>,
+    lastverb: XousString::<256>,
     ///// 2. declare storage for your command here.
     get_cmd: Get,
     help_cmd: Help,
@@ -142,7 +167,7 @@ impl CmdEnv {
         log::info!("done creating CommonEnv");
         CmdEnv {
             common_env: common,
-            lastverb: String::<256>::new(),
+            lastverb: XousString::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             get_cmd: Get::new(&xns),
             help_cmd: Help::new(&xns),
@@ -152,8 +177,8 @@ impl CmdEnv {
         }
     }
 
-    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut String::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut XousString::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<XousString::<1024>>, xous::Error> {
+        let mut ret = XousString::<1024>::new();
 
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
@@ -167,7 +192,7 @@ impl CmdEnv {
         if let Some(cmdline) = maybe_cmdline {
             let maybe_verb = tokenize(cmdline);
 
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);
             if let Some(verb_string) = maybe_verb {
                 let verb = verb_string.to_str();
 
@@ -210,7 +235,7 @@ impl CmdEnv {
                 Ok(None)
             }
         } else if let Some(callback) = maybe_callback {
-            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);
             // first check and see if we have a callback registration; if not, just map to the last verb
             let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
                 Some(verb) => {
@@ -243,9 +268,9 @@ impl CmdEnv {
 /// extract the first token, as delimited by spaces
 /// modifies the incoming line by removing the token and returning the remainder
 /// returns the found token
-pub fn tokenize(line: &mut String::<1024>) -> Option<String::<1024>> {
-    let mut token = String::<1024>::new();
-    let mut retline = String::<1024>::new();
+pub fn tokenize(line: &mut XousString::<1024>) -> Option<XousString::<1024>> {
+    let mut token = XousString::<1024>::new();
+    let mut retline = XousString::<1024>::new();
 
     let lineiter = line.as_str().unwrap().chars();
     let mut foundspace = false;

@@ -1,5 +1,5 @@
 use crate::{ShellCmdApi,CommonEnv};
-use xous_ipc::String;
+use xous_ipc::String as XousString;
 use core::fmt::Write;
 use locales::t;
 
@@ -16,8 +16,8 @@ impl Get {
 impl<'a> ShellCmdApi<'a> for Get {
     cmd_api!(get);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: XousString::<1024>, env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
+        let mut ret = XousString::<1024>::new();
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(key) = tokens.next() {
@@ -26,14 +26,17 @@ impl<'a> ShellCmdApi<'a> for Get {
                     write!(ret, "{}", t!("mtxcli.get.help", xous::LANG)).unwrap();
                 }
                 _ => {
-                    let maybe_value = env.get(key);
-                    if Ok(None) == maybe_value {
-                        write!(ret, "{} is UNSET", key).unwrap();
-                    } else if let Ok(Some(value)) = maybe_value {
-                        // write!(ret, "{} = {}", key, value).unwrap();
-                        write!(ret, "{}", value).unwrap();
-                    } else {
-                        write!(ret, "error getting key {}", key).unwrap();
+                    match env.get(key) {
+                        Ok(None) => {
+                            write!(ret, "{} is UNSET", key).unwrap();
+                        },
+                        Ok(Some(value)) => {
+                            write!(ret, "{}", value).unwrap();
+                        }
+                        Err(e) => {
+                            write!(ret, "error getting key {}: {:?}", key, e).unwrap();
+                            log::error!("error getting key {}: {:?}", key, e);
+                        }
                     }
                 }
             }

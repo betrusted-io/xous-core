@@ -1,5 +1,5 @@
 use crate::{ShellCmdApi,CommonEnv};
-use xous_ipc::String;
+use xous_ipc::String as XousString;
 use core::fmt::Write;
 use locales::t;
 
@@ -16,8 +16,8 @@ impl Help {
 impl<'a> ShellCmdApi<'a> for Help {
     cmd_api!(help);
 
-    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: XousString::<1024>, _env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
+        let mut ret = XousString::<1024>::new();
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(slashcmd) = tokens.next() {

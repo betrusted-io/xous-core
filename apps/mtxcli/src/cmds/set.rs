@@ -1,5 +1,5 @@
 use crate::{ShellCmdApi,CommonEnv};
-use xous_ipc::String;
+use xous_ipc::String as XousString;
 use core::fmt::Write;
 use locales::t;
 
@@ -16,8 +16,8 @@ impl Set {
 impl<'a> ShellCmdApi<'a> for Set {
     cmd_api!(set);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: XousString::<1024>, env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
+        let mut ret = XousString::<1024>::new();
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(key) = tokens.next() {
@@ -30,12 +30,18 @@ impl<'a> ShellCmdApi<'a> for Set {
                         match value {
                             "" => {
                                 write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
-                            }
+                           }
                             _ => {
-                                if Ok(None) == env.set(key, value) {
-                                    write!(ret, "set {} = {}", key, value).unwrap();
-                                } else {
-                                    write!(ret, "error setting key {}", key).unwrap();
+                                match env.set(key, value) {
+                                    Ok(()) => {
+                                        write!(ret, "set {} = {}", key, value).unwrap();
+                                    },
+                                    Err(e) => {
+                                        write!(ret, "error setting key {}: {:?}",
+                                               key, e).unwrap();
+                                        log::error!("error setting key {}: {:?}",
+                                                    key, e);
+                                    }
                                 }
                             }
                         }

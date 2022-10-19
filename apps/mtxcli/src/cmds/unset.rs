@@ -1,5 +1,5 @@
 use crate::{ShellCmdApi,CommonEnv};
-use xous_ipc::String;
+use xous_ipc::String as XousString;
 use core::fmt::Write;
 use locales::t;
 
@@ -16,8 +16,8 @@ impl Unset {
 impl<'a> ShellCmdApi<'a> for Unset {
     cmd_api!(unset);
 
-    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
+    fn process(&mut self, args: XousString::<1024>, env: &mut CommonEnv) -> Result<Option<XousString::<1024>>, xous::Error> {
+        let mut ret = XousString::<1024>::new();
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(key) = tokens.next() {
@@ -26,10 +26,15 @@ impl<'a> ShellCmdApi<'a> for Unset {
                     write!(ret, "{}", t!("mtxcli.unset.help", xous::LANG)).unwrap();
                 }
                 _ => {
-                    if Ok(None) == env.unset(key) {
-                        write!(ret, "unset {}", key).unwrap();
-                    } else {
-                        write!(ret, "error unsetting key {}", key).unwrap();
+                    match env.unset(key) {
+                        Ok(()) => {
+                            write!(ret, "unset {}", key).unwrap();
+                        },
+                        Err(e) => {
+                            write!(ret, "error unsetting key {}: {:?}",
+                                   key, e).unwrap();
+                            log::error!("error unsetting key {}: {:?}", key, e);
+                        }
                     }
                 }
             }
