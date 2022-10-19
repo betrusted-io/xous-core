@@ -106,8 +106,8 @@ exclude = [
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations
-debug = true # normally false for smaller size
-strip = false # normally true for smaller size
+debug = false
+strip = true
 lto = "fat"
 incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
