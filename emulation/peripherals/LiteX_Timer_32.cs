@@ -6,11 +6,10 @@
 //
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
-using Antmicro.Renode.Utilities;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.Bus;
 
-namespace Antmicro.Renode.Peripherals.Timers
+namespace Antmicro.Renode.Peripherals.Timers.Betrusted
 {
     // this is a model of LiteX timer in the Betrusted configuration:
     // * width: 32 bits

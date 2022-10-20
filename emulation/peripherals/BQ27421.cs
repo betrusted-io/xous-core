@@ -6,18 +6,14 @@
 //
 
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.I2C;
 using Antmicro.Renode.Peripherals.Sensor;
 using Antmicro.Renode.Utilities;
-using Antmicro.Renode.Exceptions;
 
-namespace Antmicro.Renode.Peripherals.Sensors
+namespace Antmicro.Renode.Peripherals.Sensors.Betrusted
 {
     public class BQ27421 : II2CPeripheral, IProvidesRegisterCollection<ByteRegisterCollection>, ISensor, ITemperatureSensor
     {

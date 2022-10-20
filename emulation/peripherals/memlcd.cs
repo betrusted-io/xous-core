@@ -12,7 +12,7 @@ using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Peripherals.Bus;
 
-namespace Antmicro.Renode.Peripherals.Video
+namespace Antmicro.Renode.Peripherals.Video.Betrusted
 {
 
     public class VideoRam : IBytePeripheral, IDoubleWordPeripheral, IWordPeripheral, IKnownSize
