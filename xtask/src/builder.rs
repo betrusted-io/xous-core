@@ -665,20 +665,7 @@ impl Builder {
             }
 
             let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
-            let mut xous_img_presign_path = xous_img_path.clone();
             xous_img_path.push("xous.img");
-            xous_img_presign_path.push("xous_presign.img");
-            let mut xous_img =
-                std::fs::File::create(&xous_img_presign_path).expect("couldn't create xous.img");
-            let mut bundle_file = std::fs::File::open(output_bundle).expect("couldn't open output bundle");
-            let mut buf = vec![];
-            bundle_file
-                .read_to_end(&mut buf)
-                .expect("couldn't read output bundle file");
-            xous_img
-                .write_all(&buf)
-                .expect("couldn't write bundle file to xous.img");
-            println!("Bundled image file created at {}", xous_img_path.display());
 
             let status = Command::new(cargo())
                 .current_dir(project_root())
@@ -690,7 +677,7 @@ impl Builder {
                     "sign-image",
                     "--",
                     "--kernel-image",
-                    xous_img_presign_path.to_str().unwrap(),
+                    output_bundle.to_str().unwrap(),
                     "--kernel-key",
                     &self.kernel_key,
                     "--kernel-output",
@@ -722,8 +709,12 @@ impl Builder {
         let stream = self.stream.to_str();
         let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
 
-        let output_file = format!("target/{}/{}/args.bin", TARGET_TRIPLE, stream);
-        args.push(&output_file);
+        let mut output_file = PathBuf::new();
+        output_file.push("target");
+        output_file.push(TARGET_TRIPLE);
+        output_file.push(stream);
+        output_file.push("xous_presign.img");
+        args.push(output_file.to_str().unwrap());
 
         args.push("--kernel");
         args.push(kernel);
@@ -748,7 +739,7 @@ impl Builder {
         if !status.success() {
             return Err("cargo build failed".into());
         }
-        Ok(project_root().join(&format!("target/{}/{}/args.bin", TARGET_TRIPLE, stream)))
+        Ok(project_root().join(output_file))
     }
 
     fn fetch_prebuilds(&self) -> Result<Vec::<String>, DynError> {
