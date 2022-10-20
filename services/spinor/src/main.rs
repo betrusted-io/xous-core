@@ -532,15 +532,7 @@ mod implementation {
             unsafe {
                 core::arch::asm!(
                     ".word 0x500F",
-                    "nop",
-                    "nop",
-                    "nop",
-                    "nop",
                     "fence",
-                    "nop",
-                    "nop",
-                    "nop",
-                    "nop",
                 );
             }
             // augment with manual flushing, because the above instruction didn't seem to do the trick??
