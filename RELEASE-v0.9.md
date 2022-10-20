@@ -283,6 +283,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - "Lock device" feature added; PDDB unmount before reboots
 - Successive failed PIN attempts will re-suspend the device if it is suspendable, or reboot if not
 - Fix bug in device auto-shutdown; COM/LLIO method deprecated as susres method does the correct sequencing. This should help with some of the "insert paperclip" scenarios after updating SoC, hopefully.
+- Updated VexRiscv core to the latest version. STATIC branch prediction enabled and slightly faster I$ gives a small performance bump. Also fixes a bug with cache flushing that was causing coherence problems with the PDDB.
 
 ## Roadmap
 - Lots of testing and bug fixes
