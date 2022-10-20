@@ -527,12 +527,18 @@ mod implementation {
         /// Not sure why :-/, but, I stopped caring because ".word 0x500F" works!
         #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
-            // This instruction seems to be causing instability, omit it...
-            #[cfg(not(feature="extra_flush"))]
             unsafe {
                 core::arch::asm!(
                     ".word 0x500F",
+                    "nop",
+                    "nop",
+                    "nop",
+                    "nop",
                     "fence",
+                    "nop",
+                    "nop",
+                    "nop",
+                    "nop",
                 );
             }
             // augment with manual flushing, because the above instruction didn't seem to do the trick??
