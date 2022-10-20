@@ -428,7 +428,7 @@ impl Pddb {
             PddbRequestCode::NoFreeSpace => Err(Error::new(ErrorKind::OutOfMemory, "No more space on disk")),
             PddbRequestCode::NotMounted => Err(Error::new(ErrorKind::ConnectionReset, "PDDB was unmounted")),
             PddbRequestCode::NotFound => Err(Error::new(ErrorKind::NotFound, "Dictionary or key was not found")),
-            _ => Err(Error::new(ErrorKind::Other, "Internal error"))
+            _ => Err(Error::new(ErrorKind::Other, format!("Unhandled return code: {:?}", response.result))),
         }
     }
 

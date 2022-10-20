@@ -252,7 +252,7 @@ pub struct PddbBasisList {
     pub num: u32,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
 pub enum PddbRequestCode {
     Create = 0,
     Open = 1,

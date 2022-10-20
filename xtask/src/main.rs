@@ -117,12 +117,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // packages located on crates.io. For testing non-local build configs that are less
     // concerned about software supply chain and more focused on developer convenience.
     let base_pkgs_remote = [
-        "xous-log@0.1.8",         // "well known" service: debug logging
-        "xous-names@0.9.16",      // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.12",     // ticktimer registers with susres to coordinate time continuity across sleeps
-        "xous-ticktimer@0.1.11",   // "well known" service: thread scheduling
+        "xous-log@0.1.9",         // "well known" service: debug logging
+        "xous-names@0.9.17",      // "well known" service: manage inter-server connection lookup
+        "xous-susres@0.1.13",     // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-ticktimer@0.1.12",   // "well known" service: thread scheduling
     ].to_vec();
-    let xous_kernel_remote = "xous-kernel@0.9.10";
+    let xous_kernel_remote = "xous-kernel@0.9.11";
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;
@@ -366,7 +366,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // checking before you can check them!
     let do_verify = env::args().filter(|x| x == "--no-verify").count() == 0;
     if do_verify {
-        check_project_consistency()
+        match check_project_consistency() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // Explain to developers why this step is important.
+                println!("Local source changes have not been published. If you meant to modify core components,");
+                println!("activate patches in top-level Cargo.toml to redirect crates.io to the local source tree.");
+                println!("Otherwise, your local changes are IGNORED.");
+                println!("Use the `--no-verify` argument to suppress this warning.");
+                Err(e)
+            }
+        }
     } else {
         Ok(())
     }

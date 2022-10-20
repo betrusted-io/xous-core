@@ -115,13 +115,6 @@ incremental = true
 #panic = "abort" # Remove panic output, which can reduce file size
 #opt-level = 1  # z,s: Optimize for size instead of performance; 1 for easier debugging
 
-# Activate these patches to use local versions of xous kernel core files instead of crates.io sourced versions.
-# Activating these also reduces your dependency on crates.io for critical source APIs, if that's part of your
-# threat model; but for now we're favoring sources from crates.io to facility third party adoption of Xous.
-# [patch.crates-io]
-# xous = {path = "xous-rs"}
-# xous-ipc = {path = "xous-ipc"}
-
 # prefer hardware-accelerated versions of services
 [patch.crates-io.sha2]
 path = "services/engine-sha512"
@@ -143,9 +136,8 @@ engine-25519 = {path = "services/engine-25519"}
 [patch.crates-io.usb-device]
 git="https://github.com/betrusted-io/usb-device.git"
 branch="main"
+# local dev shortcuts
 #path = "../usb-device"
-
-# for local dev
 #[patch.crates-io.usbd-human-interface-device]
 #path = "../usbd-human-interface-device"
 
@@ -158,14 +150,27 @@ git="https://github.com/betrusted-io/ring-xous"
 rev="09207048c393d524a34f63cf65c85a973012a21d" # use the commitref because we're still updating the branch
 #branch="0.16.20-cleanup"
 
-# required for ring-xous
-[patch.crates-io.xous]
-path = "./xous-rs"
-[patch.crates-io.xous-ipc]
-path = "./xous-ipc"
-[patch.crates-io.xous-api-names]
-path = "./api/xous-api-names"
+######################################################
+### PATCHES TO DEV/TEST XOUS KERNEL CODE
+###
+### The kernel is published to crates.io, and all the packages in Xous are configured to get
+### the kernel from crates.io and NOT the local tree.
+###
+### When making changes to the kernel, you must activate some or all of the patches below
+### for the local sources to "see" the changes.
+### You will also need to compile with `--no-verify` to acknowledge that you are doing local
+### source development and accept that what's on crates.io doesn't match what's inside this tree.
+#######################################################
 
+### Minimum recommended patch set: this causes xous-ring to behave correctly when doing local dev
+# [patch.crates-io.xous]
+# path = "./xous-rs"
+# [patch.crates-io.xous-ipc]
+# path = "./xous-ipc"
+# [patch.crates-io.xous-api-names]
+# path = "./api/xous-api-names"
+
+### Selectively patch in these crates, or more, as needed depending on your dev activity
 # [patch.crates-io.utralib]
 # path = "./utralib"
 # [patch.crates-io.svd2utra]
