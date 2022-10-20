@@ -643,8 +643,10 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 /// Copy program data from the SPI flash into newly-allocated RAM
 /// located at the end of memory space.
 fn copy_processes(cfg: &mut BootConfig) {
+    let mut _pid = 1;
     for tag in cfg.args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniE") {
+            _pid += 1;
             let mut page_addr: usize = 0;
             let mut previous_addr: usize = 0;
             let mut top = core::ptr::null_mut::<u8>();
@@ -668,7 +670,7 @@ fn copy_processes(cfg: &mut BootConfig) {
             //
             // Example: Page starts at oxf0c0 and is 128 bytes long
             // 1. Copy 128 bytes to page 1
-            println!("IniE has {} sections", inie.sections.len());
+            println!("\n\nIniE {} has {} sections", _pid, inie.sections.len());
             for section in inie.sections.iter() {
                 if (section.virt as usize) < previous_addr {
                     panic!("init section addresses are not strictly increasing (new virt: {:08x}, last virt: {:08x})", section.virt, previous_addr);
@@ -784,14 +786,19 @@ fn copy_processes(cfg: &mut BootConfig) {
                 if VDBG {println!("Looping to the next section");}
             }
 
-            println!("Done with sections, zeroing out remaining data");
-            // Zero-out the trailing bytes
-            unsafe {
-                bzero(
-                    top.add(previous_addr as usize & (PAGE_SIZE - 1)),
-                    top.add(PAGE_SIZE as usize),
-                )
-            };
+            println!("Done with sections");
+            if previous_addr as usize & (PAGE_SIZE - 1) != 0 {
+                println!("Zeroing out remaining data");
+                // Zero-out the trailing bytes
+                unsafe {
+                    bzero(
+                        top.add(previous_addr as usize & (PAGE_SIZE - 1)),
+                        top.add(PAGE_SIZE as usize),
+                    )
+                };
+            } else {
+                println!("Skipping zero step -- we ended on a page boundary");
+            }
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
             let prog = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
 
