@@ -48,6 +48,7 @@ pub struct CommonEnv {
     cb_registrations: HashMap::<u32, String::<256>>,
     trng: Trng,
     netmgr: net::NetManager,
+    #[allow(dead_code)]
     xns: xous_names::XousNames,
     boot_instant: std::time::Instant,
     /// make this communal so any number of commands can trigger or reset the performance counter, and/or perform logging
@@ -86,7 +87,6 @@ impl CommonEnv {
 
 ///// 1. add your module here, and pull its namespace into the local crate
 mod echo;     use echo::*;
-mod test;     use test::*;
 mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
 // mod callback; use callback::*;
@@ -110,6 +110,11 @@ mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
 mod usb; use usb::*;
+
+#[cfg(not(feature="no-codec"))]
+mod test;
+#[cfg(not(feature="no-codec"))]
+use test::*;
 
 #[cfg(feature="tts")]
 mod tts;
@@ -135,7 +140,6 @@ pub struct CmdEnv {
     common_env: CommonEnv,
     lastverb: String::<256>,
     ///// 2. declare storage for your command here.
-    test_cmd: Test,
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
     //callback_cmd: CallBack,
@@ -153,6 +157,9 @@ pub struct CmdEnv {
     pddb_cmd: PddbCmd,
     wlan_cmd: Wlan,
     usb_cmd: Usb,
+
+    #[cfg(not(feature="no-codec"))]
+    test_cmd: Test,
 
     #[cfg(feature="tts")]
     tts_cmd: Tts,
@@ -226,7 +233,6 @@ impl CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
-            test_cmd: Test::new(&xns),
             sleep_cmd: Sleep::new(&xns),
             sensors_cmd: Sensors::new(),
             //callback_cmd: CallBack::new(),
@@ -244,6 +250,9 @@ impl CmdEnv {
             pddb_cmd: PddbCmd::new(&xns),
             wlan_cmd: Wlan::new(),
             usb_cmd: Usb::new(),
+
+            #[cfg(not(feature="no-codec"))]
+            test_cmd: Test::new(&xns),
 
             #[cfg(feature="tts")]
             tts_cmd: Tts::new(&xns),
@@ -269,7 +278,6 @@ impl CmdEnv {
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
-            &mut self.test_cmd,
             &mut self.sleep_cmd,
             &mut self.sensors_cmd,
             //&mut self.callback_cmd,
@@ -291,6 +299,9 @@ impl CmdEnv {
             &mut self.net_cmd,
             &mut self.pddb_cmd,
             &mut self.usb_cmd,
+
+            #[cfg(not(feature="no-codec"))]
+            &mut self.test_cmd,
 
             #[cfg(feature="tts")]
             &mut self.tts_cmd,
