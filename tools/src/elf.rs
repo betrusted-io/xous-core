@@ -55,8 +55,8 @@ impl fmt::Display for MiniElfSection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Section {}: {} bytes loading @ {:08x} flags: {:?}",
-            self.name, self.size, self.virt, self.flags
+            "Section {:13} {:6} bytes loading into {:08x}..{:08x} flags: {:?}",
+            self.name, self.size, self.virt, self.virt + self.size, self.flags
         )
     }
 }
