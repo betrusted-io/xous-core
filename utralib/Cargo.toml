@@ -31,7 +31,7 @@ std = []
 #
 # Maintainer note: add checks in build.rs to ensure only one is selected.
 precursor-c809403 = []
-precursor-6156e49 = []
+precursor-a0912d6 = []
 precursor-c809403-perflib = []
 precursor-2753c12-dvt = []
 
