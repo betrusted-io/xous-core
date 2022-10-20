@@ -366,7 +366,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // checking before you can check them!
     let do_verify = env::args().filter(|x| x == "--no-verify").count() == 0;
     if do_verify {
-        check_project_consistency()
+        match check_project_consistency() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // Explain to developers why this step is important.
+                println!("Local source changes have not been published. If you meant to modify core components,");
+                println!("activate patches in top-level Cargo.toml to redirect crates.io to the local source tree.");
+                println!("Otherwise, your local changes are IGNORED.");
+                println!("Use the `--no-verify` argument to suppress this warning.");
+                Err(e)
+            }
+        }
     } else {
         Ok(())
     }
