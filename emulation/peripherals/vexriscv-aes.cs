@@ -5,12 +5,10 @@
 // Full license text is available in 'licenses/MIT.txt'.
 //
 using System;
-using ELFSharp.ELF;
 using Antmicro.Renode.Utilities;
-using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.Timers;
 
-namespace Antmicro.Renode.Peripherals.CPU
+namespace Antmicro.Renode.Peripherals.CPU.Betrusted
 {
     public class AesVexRiscv : VexRiscv
     {

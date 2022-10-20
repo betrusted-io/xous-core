@@ -9,7 +9,7 @@ using Antmicro.Renode.Logging;
 using Antmicro.Renode.Utilities;
 using Antmicro.Renode.Peripherals.I2C;
 
-namespace Antmicro.Renode.Peripherals.Mocks
+namespace Antmicro.Renode.Peripherals.Mocks.Betrusted
 {
     public class BQ24157 : II2CPeripheral
     {

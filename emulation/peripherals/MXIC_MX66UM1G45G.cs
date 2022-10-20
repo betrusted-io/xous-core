@@ -13,7 +13,7 @@ using Antmicro.Renode.Peripherals.Memory;
 using Antmicro.Renode.Peripherals.SPI.NORFlash;
 using Antmicro.Renode.Utilities;
 
-namespace Antmicro.Renode.Peripherals.SPI
+namespace Antmicro.Renode.Peripherals.SPI.Betrusted
 {
     public class MXIC_MX66UM1G45G : ISPIPeripheral
     {

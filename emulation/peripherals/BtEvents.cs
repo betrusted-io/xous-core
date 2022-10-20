@@ -5,13 +5,12 @@
 // Full license text is available in 'licenses/MIT.txt'.
 
 using System;
-using System.Linq;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Peripherals.Bus;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Logging;
 
-namespace Antmicro.Renode.Peripherals.GPIOPort
+namespace Antmicro.Renode.Peripherals.GPIOPort.Betrusted
 {
     public class BtEvents : BaseGPIOPort, IProvidesRegisterCollection<DoubleWordRegisterCollection>, IDoubleWordPeripheral, IKnownSize
     {
