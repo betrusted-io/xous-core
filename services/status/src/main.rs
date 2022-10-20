@@ -214,42 +214,13 @@ fn wrapped_main() -> ! {
         }
     });
 
-    // load system preferences
-    let prefs = userprefs::Manager::new();
-
     // ------------------ render initial graphical display, so we don't seem broken on boot
     let gam = gam::Gam::new(&xns).expect("|status: can't connect to GAM");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
-
-    match prefs.radio_on_on_boot() {
-        Ok(value) => if let true = value {
-            netmgr.connection_manager_wifi_off_and_stop()
-        } else {
-            netmgr.connection_manager_wifi_on()
-        },
-        Err(error) => {
-            log::error!("cannot read preference value for radio_on_on_boot: {:?}", error);
-            Ok(())
-        }
-    }.unwrap_or_else(|error| {
-        log::error!("cannot set radio status: {:?}", error)
-    });
-
-    match prefs.connect_known_networks_on_boot() {
-        Ok(value) => if let true = value {
-            netmgr.connection_manager_run()
-        } else {
-            netmgr.connection_manager_stop()
-        },
-        Err(error) => {
-            log::error!("cannot read preference value for connect_known_networks_on_boot: {:?}", error);
-            Ok(())
-        }
-    }.unwrap_or_else(|error| {
-        log::error!("cannot set radio status: {:?}", error)
-    });
+    
+    
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
     let screensize = gam
@@ -394,6 +365,76 @@ fn wrapped_main() -> ! {
     let thread_conn = xous::connect(status_sid).unwrap();
 
     wifi::start_background_thread();
+    
+    // load system preferences
+    let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
+    let prefs_thread_clone = prefs.clone();
+    
+    /*
+    This thread handles preference loading.
+    It'll wait until PDDB is ready to load stuff off the preference
+    dictionary.
+    */
+    std::thread::spawn(move || {
+        let pddb_poller = pddb::PddbMountPoller::new();
+        let prefs = prefs_thread_clone.lock().unwrap();
+        let netmgr = net::NetManager::new();
+
+        loop {
+            if !pddb_poller.is_mounted_nonblocking() {
+                continue
+            }
+            
+            log::debug!("pddb ready, loading preferences now!");
+            
+            match prefs.radio_on_on_boot_or_default() {
+                Ok(value) => if let true = value {
+                    netmgr.connection_manager_wifi_off_and_stop()
+                } else {
+                    netmgr.connection_manager_wifi_on()
+                },
+                Err(error) => {
+                    log::error!("cannot read preference value for radio_on_on_boot: {:?}", error);
+                    Ok(())
+                }
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set radio status: {:?}", error)
+            });
+        
+            match prefs.connect_known_networks_on_boot_or_default() {
+                Ok(value) => if let true = value {
+                    netmgr.connection_manager_run()
+                } else {
+                    netmgr.connection_manager_stop()
+                },
+                Err(error) => {
+                    log::error!("cannot read preference value for connect_known_networks_on_boot: {:?}", error);
+                    Ok(())
+                }
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set radio status: {:?}", error)
+            });
+            
+            match prefs.autobacklight_on_boot_or_default() {
+                Ok(value) => if let true = value {
+                    send_message(status_cid, Message::new_scalar(
+                        StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
+                } else {
+                    send_message(status_cid, Message::new_scalar(
+                        StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
+                },
+                Err(error) => {
+                    log::error!("cannot read preference value for autobacklight_on_boot: {:?}", error);
+                    Ok(xous::Result::Ok)
+                }
+            }.unwrap_or_else(|error| {
+                log::error!("cannot set autobacklight status: {:?}", error);
+                xous::Result::Ok
+            });
+            
+            break
+        }
+    });
 
     // ------------------------ check firmware status and apply updates
     // all security sensitive servers must be occupied at this point in time.
@@ -423,7 +464,9 @@ fn wrapped_main() -> ! {
                     // restore interrupts and connection manager
                     llio.com_event_enable(true).ok();
                     netmgr.reset();
-                    netmgr.connection_manager_run().ok();
+                    
+                    // TODO(gsora): I'm commenting this out because user preferences might say otherwise.
+                    //netmgr.connection_manager_run().ok();
                 }
                 Some(ecup::UpdateResult::NothingToDo) => log::info!("EC update check: nothing to do, firmware is up to date."),
                 Some(ecup::UpdateResult::Abort) => {
@@ -700,23 +743,6 @@ fn wrapped_main() -> ! {
     });
 
     wifi::start_background_thread();
-
-    match prefs.autobacklight_on_boot() {
-        Ok(value) => if let true = value {
-            send_message(status_cid, Message::new_scalar(
-                StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
-        } else {
-            send_message(status_cid, Message::new_scalar(
-                StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
-        },
-        Err(error) => {
-            log::error!("cannot read preference value for autobacklight_on_boot: {:?}", error);
-            Ok(xous::Result::Ok)
-        }
-    }.unwrap_or_else(|error| {
-        log::error!("cannot set autobacklight status: {:?}", error);
-        xous::Result::Ok
-    });
     
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
@@ -1133,6 +1159,8 @@ fn wrapped_main() -> ! {
                         // TODO(gsora): this code queries PDDB every time autobacklight timeout expired
                         // and user presses a button.
                         // Too intensive? Needs a dirty bit+cache?
+                        let prefs = prefs.clone();
+                        let prefs = prefs.lock().unwrap();
                         let abl_timeout = match prefs.autobacklight_timeout() {
                             Ok(timeout) => timeout,
                             Err(error) => {
