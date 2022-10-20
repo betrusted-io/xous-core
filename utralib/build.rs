@@ -107,6 +107,9 @@ fn main() {
     // ----- control file generation and rebuild sequence -----
     // check and see if the configuration has changed since the last build. This should be
     // passed by the build system (e.g. xtask) if the feature is used.
+    //
+    // Debug this using:
+    //  $env:CARGO_LOG="cargo::core::compiler::fingerprint=info"
     #[cfg(not(feature = "hosted"))]
     {
         let svd_file_path = std::path::Path::new(&svd_filename);
