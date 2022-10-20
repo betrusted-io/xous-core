@@ -93,7 +93,7 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 fn main () -> ! {
-    #[cfg(not(feature="ditherpunk"))]
+    #[cfg(any(not(feature = "ditherpunk"), target_os = "macos"))]
     wrapped_main();
 
     #[cfg(feature="ditherpunk")]

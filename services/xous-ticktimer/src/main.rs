@@ -3,6 +3,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 use xous_api_ticktimer::*;
+#[cfg(feature="timestamp")]
 mod version;
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -523,11 +524,20 @@ fn main() -> ! {
     log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
-    log::info!("****************************************************************");
-    log::info!("Welcome to Xous {}", version::SEMVER);
-    #[cfg(not(feature = "no-timestamp"))]
-    log::info!("Built on {}", version::TIMESTAMP);
-    log::info!("****************************************************************");
+    #[cfg(feature="timestamp")]
+    {
+        log::info!("****************************************************************");
+        log::info!("Welcome to Xous {}", version::SEMVER);
+        log::info!("Built on {}", version::TIMESTAMP);
+        log::info!("****************************************************************");
+    }
+    #[cfg(not(feature="timestamp"))]
+    {
+        log::info!("****************************************************************");
+        log::info!("Welcome to Xous");
+        log::info!("Reproducible build without timestamps");
+        log::info!("****************************************************************");
+    }
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
         .expect("Couldn't create Ticktimer server");
@@ -673,7 +683,15 @@ fn main() -> ! {
                         msg.body.memory_message_mut().unwrap(),
                     )
                 };
+                #[cfg(feature="timestamp")]
                 buf.replace(version::get_version()).unwrap();
+                #[cfg(not(feature="timestamp"))]
+                {
+                    let v = crate::api::VersionString {
+                        version: xous_ipc::String::from_str("--no-timestamp requested for build")
+                    };
+                    buf.replace(v).unwrap();
+                }
             }
             Some(api::Opcode::LockMutex) => {
                 let pid = msg.sender.pid();

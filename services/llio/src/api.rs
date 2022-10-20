@@ -27,9 +27,9 @@ impl From<usize> for UartType {
         }
     }
 }
-impl Into<usize> for UartType {
-    fn into(self) -> usize {
-        match self {
+impl From<UartType> for usize {
+    fn from(uart_type: UartType) -> usize {
+        match uart_type {
             UartType::Kernel => 0,
             UartType::Log => 1,
             UartType::Application => 2,
@@ -38,9 +38,9 @@ impl Into<usize> for UartType {
     }
 }
 // for the actual bitmask going to hardware
-impl Into<u32> for UartType {
-    fn into(self) -> u32 {
-        match self {
+impl From<UartType> for u32 {
+    fn from(uart_type: UartType) -> u32 {
+        match uart_type {
             UartType::Kernel => 0,
             UartType::Log => 1,
             UartType::Application => 2,

@@ -25,6 +25,7 @@ buildpush.ps1
 /*.sh
 # notes to myself
 /*.txt
+tools/test-backup-analyze.sh
 
 # SSH id file for convenience
 /id_pi
@@ -35,6 +36,9 @@ tools/__pycache__
 
 # PDDB backup files
 *.pddb
+
+# PDDB for mtxcli (only for testing in hosted mode)
+/kernel/mtxcli
 
 # performance monitoring page table
 tools/ct_data/v2p.txt
@@ -71,4 +75,3 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-

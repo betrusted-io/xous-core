@@ -135,30 +135,79 @@ impl Pddb {
             self.cb_handle.replace(Some(handle));
         }
     }
-    /// This blocks until the PDDB is mounted by the end user. If `None` is specified for the poll_interval_ms,
-    /// A random interval between 1 and 2 seconds is chosen for the poll wait time. Randomizing the waiting time
-    /// helps to level out the task scheduler in the case that many threads are waiting on the PDDB simultaneously.
+    /// This blocks until the PDDB is mounted by the end user. It blocks using the deferred-response pattern,
+    /// so the blocking does not spin-wait; the caller does not consume CPU cycles.
     ///
     /// This is typically the API call one would use to hold execution of a service until the PDDB is mounted.
     pub fn is_mounted_blocking(&self) {
-        let ret = send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
-        match ret {
-            xous::Result::Scalar1(_code) => {
-                ()
-            },
-            _ => panic!("Internal error"),
+        loop {
+            let ret = send_message(self.conn, Message::new_blocking_scalar(
+                Opcode::IsMounted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+            match ret {
+                xous::Result::Scalar2(code, _count) => {
+                    if code == 0 { // mounted successfully
+                        break;
+                    }
+                },
+                _ => panic!("Internal error"),
+            }
         }
     }
-    pub fn try_mount(&self) -> bool {
+    /// Attempts to mount the system basis. Returns `true` on success, `false` on failure.
+    /// This call may cause a password request box to pop up, in the case that the boot PIN is not currently cached.
+    ///
+    /// Returns:
+    ///   Ok(true) on successful mount
+    ///   Ok(false) on user-directed abort of mount
+    ///   Ok(usize) on system-forced abort of mount, with `count` failures
+    pub fn try_mount(&self) -> (bool, usize) {
         let ret = send_message(self.conn, Message::new_blocking_scalar(
-            Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+            Opcode::TryMount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute TryMounted query");
+        match ret {
+            xous::Result::Scalar2(code, count) => {
+                if code == 0 {
+                    // mounted successfully
+                    (true, count)
+                } else if code == 1 {
+                    // user aborted
+                    (true, count)
+                } else {
+                    // system aborted with `count` retries
+                    (false, count)
+                }
+            },
+            _ => panic!("TryMount unexpected return result"),
+        }
+    }
+    /// Unmounts the PDDB. First attempts to unmount any open secret bases, and then finally unmounts
+    /// the system basis. Returns `true` on success, `false` on failure.
+    pub fn try_unmount(&self) -> bool {
+        let ret = send_message(self.conn, Message::new_blocking_scalar(
+            Opcode::TryUnmount.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute TryUnmount query");
         match ret {
             xous::Result::Scalar1(code) => {
                 if code == 0 {false} else {true}
             },
             _ => panic!("Internal error"),
         }
+    }
+    /// This is a non-blocking message that permanently halts the PDDB server by wedging it in an infinite loop.
+    /// It is meant to be called prior to system shutdows or backups, to ensure that other auto-mounting procesess
+    /// don't undo the shutdown procedure because of an ill-timed "cron" job (the system doesn't literally have
+    /// a cron daemon, but it does have the notion of long-running background jobs that might do something like
+    /// trigger an NTP update, which would then try to write the updated time to the PDDB).
+    pub fn pddb_halt(&self) {
+        send_message(self.conn, Message::new_scalar(
+            Opcode::PddbHalt.to_usize().unwrap(), 0, 0, 0, 0)).expect("Couldn't halt the PDDB");
+    }
+    /// Computes checksums on the entire PDDB database. This operation can take some time and causes a progress
+    /// bar to pop up. This should be called only after the PDDB has been unmounted, to ensure that the disk
+    /// contents do not change after the checksums have been computed.
+    pub fn compute_checksums(&self) -> root_keys::api::Checksums {
+        let alloc = root_keys::api::Checksums::default();
+        let mut buf = Buffer::into_buf(alloc).expect("Couldn't convert memory structure");
+        buf.lend_mut(self.conn, Opcode::ComputeBackupHashes.to_u32().unwrap()).expect("Couldn't execute ComputeBackupHashes");
+        buf.to_original::<root_keys::api::Checksums, _>().expect("Couldn't convert IPC structure")
     }
     /// return a list of all open bases
     pub fn list_basis(&self) -> Vec::<String> {

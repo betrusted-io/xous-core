@@ -91,12 +91,12 @@ fn process_tags(b8: *mut u8) {
     }
 }
 
-fn doit() -> io::Result<()> {
+fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         println!(
-            "Usage: {} args.bin",
-            args.get(0).unwrap_or(&"read-tags".to_owned())
+            "Usage: {} [xous_presign.img]",
+            args.get(0).map(|a| a.as_str()).unwrap_or("read-tags")
         );
         process::exit(1);
     }
@@ -112,7 +112,4 @@ fn doit() -> io::Result<()> {
     let byte_buffer = tag_buf.as_mut_ptr();
     process_tags(byte_buffer);
     Ok(())
-}
-fn main() {
-    doit().unwrap();
 }

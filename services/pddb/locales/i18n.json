@@ -83,6 +83,12 @@
         "zh": "枚举完成。\n\n我们要继续搅拌吗？ 这个过程大约需要 20 分钟。",
         "en-tts": "Enumeration finished.\n\nShall we proceed to churning? This process takes about 20 minutes."
     },
+    "pddb.checksums": {
+        "en": "PDDB computing checksums...",
+        "ja": "PDDB はチェックサムを計算しています...",
+        "zh": "PDDB 正在计算校验和...",
+        "en-tts": "PDDB computing checksums..."
+    },
     "pddb.okay": {
         "en": "Okay",
         "ja": "OK",
@@ -112,6 +118,12 @@
         "ja": "パスワードを認証失敗でした。\n\nもう一度実行しませんか。\n",
         "zh": "密码错误。 再试一次？",
         "en-tts": "Incorrect PIN. Try again?"
+    },
+    "pddb.failed_attempts": {
+        "en": "⚠{fails} failed login attempts",
+        "ja": "⚠{fails}回のログイン試行の失敗",
+        "zh": "⚠{fails}次失败的登录尝试",
+        "en-tts": "⚠{fails} failed login attempts"
     },
     "pddb.checkpass": {
         "en": "Press any key, then re-enter your PIN to confirm.",

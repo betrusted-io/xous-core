@@ -632,7 +632,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                             env.com.ship_mode().unwrap();
 
                             // now send the power off command
-                            env.com.power_off_soc().unwrap();
+                            let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
+                            susres.immediate_poweroff().unwrap();
 
                             log::info!("CMD: ship mode now!");
                             // pause execution, nothing after this should be reachable
@@ -758,7 +759,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                         env.com.ship_mode().unwrap();
 
                         // now send the power off command
-                        env.com.power_off_soc().unwrap();
+                        let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
+                        susres.immediate_poweroff().unwrap();
 
                         log::info!("CMD: ship mode now!");
                         // pause execution, nothing after this should be reachable

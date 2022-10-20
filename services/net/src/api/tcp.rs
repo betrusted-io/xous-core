@@ -31,18 +31,6 @@ pub(crate) struct NetTcpListenCallback {
     pub(crate) local_port: u16,
 }
 
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum TcpMgmtCode {
-    SetRxShutdown,
-    SetNoDelay(bool),
-    GetNoDelay(bool),
-    SetTtl(u32),
-    GetTtl(u32),
-    ErrorCheck(NetMemResponse),
-    Flush(bool),
-    CloseListener,
-}
-
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetTcpCallback {
     RxData,

@@ -2,6 +2,7 @@ use convert_case::{Case, Casing};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::{BufRead, BufReader, Read, Write};
+
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedTag,
@@ -9,6 +10,7 @@ pub enum ParseError {
     ParseIntError,
     NonUTF8,
     WriteError,
+    UnexpectedValue,
 }
 
 #[derive(Default, Debug)]
@@ -66,6 +68,7 @@ impl core::fmt::Display for ParseError {
         use ParseError::*;
         match *self {
             UnexpectedTag => write!(f, "unexpected XML tag encountered"),
+            UnexpectedValue => write!(f, "unexpected XML tag value encountered"),
             MissingValue => write!(f, "XML tag should have contained a value"),
             ParseIntError => write!(f, "unable to parse number"),
             NonUTF8 => write!(f, "file is not UTF-8"),
@@ -123,9 +126,21 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                     .unescape_and_decode(reader)
                     .map_err(|_| ParseError::NonUTF8)?;
                 match tag_name.as_str() {
-                    "name" => name = Some(extract_contents(reader)?),
+                    "name" if name.is_none() => name = Some(extract_contents(reader)?),
                     "lsb" => lsb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "msb" => msb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
+                    "bitRange" => {
+                        let range = extract_contents(reader)?;
+                        if !range.starts_with("[") || !range.ends_with("]") {
+                            return Err(ParseError::UnexpectedValue)
+                        }
+
+                        let mut parts = range[1..range.len() - 1].split(':');
+                        msb = Some(parts.next().ok_or_else(|| ParseError::UnexpectedValue)?
+                            .parse::<usize>().or_else(|_| Err(ParseError::ParseIntError))?);
+                        lsb = Some(parts.next().ok_or_else(|| ParseError::UnexpectedValue)?
+                            .parse::<usize>().or_else(|_| Err(ParseError::ParseIntError))?);
+                    }
                     _ => (),
                 }
             }
@@ -822,7 +837,7 @@ pub mod utra {
                 out,
                 "            {} = {},",
                 register.name.to_case(Case::UpperCamel),
-                register.offset / 4
+                register.offset
             )?;
         }
         writeln!(out, "        }}")?;
@@ -885,16 +900,20 @@ fn print_tests<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::io::Re
     let test_header = r####"
 #[cfg(test)]
 mod tests {
-    #[test]
-    #[ignore]
-    fn compile_check() {
-        use super::*;
 "####
         .as_bytes();
     out.write_all(test_header)?;
+
     for peripheral in peripherals {
         let mod_name = peripheral.name.to_lowercase();
         let per_name = peripheral.name.to_lowercase() + "_csr";
+
+        write!(out, r####"
+    #[test]
+    #[ignore]
+    fn compile_check_{}() {{
+        use super::*;"####, per_name)?;
+
         writeln!(
             out,
             "        let mut {} = CSR::new(HW_{}_BASE as *mut u32);",
@@ -943,9 +962,11 @@ mod tests {
                 )?;
             }
         }
+
+        writeln!(out, "  }}")?;
     }
-    writeln!(out, "    }}")?;
     writeln!(out, "}}")?;
+
     Ok(())
 }
 

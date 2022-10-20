@@ -427,7 +427,6 @@ impl StorageContent for TotpRecord {
         Ok(())
     }
     fn to_vec(&self) -> Vec<u8> {
-        let ta: String = self.algorithm.into();
         format!(
             "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
             "version",
@@ -437,7 +436,7 @@ impl StorageContent for TotpRecord {
             "name",
             self.name,
             "algorithm",
-            ta,
+            self.algorithm,
             "notes",
             self.notes,
             "digits",
@@ -551,7 +550,6 @@ impl TryFrom<Vec<u8>> for TotpRecord {
 
 impl From<TotpRecord> for Vec<u8> {
     fn from(tr: TotpRecord) -> Self {
-        let ta: String = tr.algorithm.into();
         format!(
             "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
             "version",
@@ -561,7 +559,7 @@ impl From<TotpRecord> for Vec<u8> {
             "name",
             tr.name,
             "algorithm",
-            ta,
+            tr.algorithm,
             "notes",
             tr.notes,
             "digits",

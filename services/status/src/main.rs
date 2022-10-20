@@ -70,6 +70,7 @@ pub(crate) enum StatusOpcode {
 
     /// Prepare for a backup
     PrepareBackup,
+    PrepareBackupPhase2,
 
     /// Tells keyboard watching thread that a new keypress happened.
     Keypress,
@@ -376,7 +377,7 @@ fn wrapped_main() -> ! {
     let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
     let kbd = keyboard::Keyboard::new(&xns).unwrap();
 
-    // ---------------------------- Automatic backlight-related variables.
+    // ---------------------------- Background processes that claim contexts
     // must be upstream of the update check, because we need to occupy the keyboard
     // server slot to prevent e.g. a keyboard logger from taking our passwords!
     kbd.register_observer(
@@ -391,6 +392,8 @@ fn wrapped_main() -> ! {
 
     let autobacklight_thread_already_running = Arc::new(Mutex::new(false));
     let thread_conn = xous::connect(status_sid).unwrap();
+
+    wifi::start_background_thread();
 
     // ------------------------ check firmware status and apply updates
     // all security sensitive servers must be occupied at this point in time.
@@ -495,7 +498,7 @@ fn wrapped_main() -> ! {
                 _ => log::warn!("backup record was found, but it has an improper operation field: {:?}", header.op),
             }
         }
-        _ => {}, // no backup header found, continue with boot
+        _ => log::info!("No backup header found"), // no backup header found, continue with boot
     }
 
     // check for gateware updates
@@ -593,6 +596,8 @@ fn wrapped_main() -> ! {
         0, 0, 0, 0,)
     ).expect("couldn't exit the gutter server");
     gutter.join().expect("status boot gutter server did not exit gracefully");
+    // allocate some storage for backup checksums
+    let checksums: Arc::<Mutex::<Option<root_keys::api::Checksums>>> = Arc::new(Mutex::new(None));
 
     // --------------------------- graphical loop timing
     let mut stats_phase: usize = 0;
@@ -664,7 +669,33 @@ fn wrapped_main() -> ! {
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
             tt.sleep_ms(2000).unwrap(); // a brief pause, to allow the other startup bits to finish running
-            pddb::Pddb::new().try_mount();
+            loop {
+                let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
+                if no_retry_failure {
+                    // this includes both successfully mounted, and user abort of mount attempt
+                    break;
+                } else {
+                    // this indicates system was guttered due to a retry failure
+                    let xns = xous_names::XousNames::new().unwrap();
+                    let susres = susres::Susres::new_without_hook(&xns).unwrap();
+                    let llio = llio::Llio::new(&xns);
+                    if ((llio.adc_vbus().unwrap() as u32) * 503) < 150_000 {
+                        // try to force suspend if possible, so that users who are just playing around with
+                        // the device don't run the battery down accidentally.
+                        susres.initiate_suspend().ok();
+                        tt.sleep_ms(1000).unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.show_notification(
+                            &t!("login.fail", xous::LANG).replace("{fails}", &count.to_string()),
+                            None
+                        ).ok();
+                    } else {
+                        // otherwise force a reboot cycle to slow down guessers
+                        susres.reboot(true).expect("Couldn't reboot after too many failed password attempts");
+                        tt.sleep_ms(5000).unwrap();
+                    }
+                }
+            }
         }
     });
 
@@ -981,23 +1012,13 @@ fn wrapped_main() -> ! {
 
                 stats_phase = stats_phase.wrapping_add(1);
             }
-            Some(StatusOpcode::Reboot) => {
-                if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 { // 0.005033 * 100_000 against 1.5V * 100_000
-                    // power plugged in, do a reboot using a warm boot method
-                    susres.reboot(true).expect("couldn't issue reboot command");
+            Some(StatusOpcode::Reboot) => { // this is described as "Lock device" on the menu
+                let pddb = pddb::Pddb::new();
+                if !pddb.try_unmount() { // sync the pddb prior to lock
+                    modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
                 } else {
-                    // ensure the self-boosting facility is turned off, this interferes with a cold boot
-                    com.set_boost(false).ok();
-                    llio.boost_on(false).ok();
-                    // do a full cold-boot if the power is cut. This will force a re-load of the SoC contents.
-                    gam.shipmode_blank_request().ok();
-                    ticktimer.sleep_ms(500).ok(); // screen redraw time after the blank request
-                    llio.set_wakeup_alarm(4).expect("couldn't set wakeup alarm");
-                    llio.allow_ec_snoop(true).ok();
-                    llio.allow_power_off(true).ok();
-                    com.power_off_soc().ok();
-                    ticktimer.sleep_ms(4000).ok();
-                    panic!("system did not reboot");
+                    pddb.pddb_halt();
+                    susres.reboot(true).expect("couldn't issue reboot command");
                 }
             }
             Some(StatusOpcode::SubmenuPddb) => {
@@ -1060,16 +1081,37 @@ fn wrapped_main() -> ! {
                     }
                 }
             },
-            Some(StatusOpcode::BatteryDisconnect) => {
+            Some(StatusOpcode::BatteryDisconnect) => { // this is described as "Shutdown" on the menu
                 if ((llio.adc_vbus().unwrap() as u32) * 503) > 150_000 {
                     modals.show_notification(t!("mainmenu.cant_sleep", xous::LANG), None).expect("couldn't notify that power is plugged in");
                 } else {
-                    gam.shipmode_blank_request().ok();
-                    ticktimer.sleep_ms(500).unwrap();
-                    llio.allow_ec_snoop(true).unwrap();
-                    llio.allow_power_off(true).unwrap();
-                    com.ship_mode().unwrap();
-                    com.power_off_soc().unwrap();
+                    // show a note to inform the user that you can't turn it on without an external power source...
+                    modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                    modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                    match modals.get_radiobutton(t!("mainmenu.shutdown_confirm", xous::LANG)) {
+                        Ok(response) => {
+                            if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                                {}
+                            } else {
+                                // abort the flow now by returning to the main dispatch handler
+                                continue;
+                            }
+                        }
+                        _ => (),
+                    }
+                    // unmount things before shutting down
+                    let pddb = pddb::Pddb::new();
+                    if !pddb.try_unmount() {
+                        modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
+                    } else {
+                        pddb.pddb_halt();
+                        gam.shipmode_blank_request().ok();
+                        ticktimer.sleep_ms(500).unwrap();
+                        llio.allow_ec_snoop(true).unwrap();
+                        llio.allow_power_off(true).unwrap();
+                        com.ship_mode().unwrap();
+                        susres.immediate_poweroff().unwrap();
+                    }
                 }
             },
 
@@ -1118,9 +1160,60 @@ fn wrapped_main() -> ! {
                 com.set_backlight(0, 0).expect("cannot set backlight off");
             },
             Some(StatusOpcode::PrepareBackup) => {
-                // sync the PDDB to disk prior to making backups
-                let pddb = pddb::Pddb::new();
-                pddb.sync().expect("couldn't synchronize PDDB to disk");
+                log::info!("{}BACKUP.CONFIRM,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                modals.add_list_item(t!("rootkeys.gwup.yes", xous::LANG)).expect("couldn't build radio item list");
+                modals.add_list_item(t!("rootkeys.gwup.no", xous::LANG)).expect("couldn't build radio item list");
+                match modals.get_radiobutton(t!("backup.confirm", xous::LANG)) {
+                    Ok(response) => {
+                        if response.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                            {}
+                        } else {
+                            // abort the flow now by returning to the main dispatch handler
+                            continue;
+                        }
+                    }
+                    _ => (),
+                }
+
+                // disconnect from the network, so that incoming network packets don't trigger any processes that
+                // could write to the PDDB.
+                netmgr.connection_manager_wifi_off_and_stop().ok();
+
+                // close the active app and switch to shellchat
+                ticktimer.sleep_ms(100).ok();
+                sec_notes.lock().unwrap().remove(&"current_app".to_string());
+                sec_notes.lock().unwrap().insert("current_app".to_string(), format!("Running: Shellchat").to_string());
+                gam.switch_to_app(gam::APP_NAME_SHELLCHAT, security_tv.token.unwrap()).expect("couldn't raise shellchat");
+                secnotes_force_redraw = true;
+
+                // unmount the PDDB and compute a checksum; then halt the PDDB to freeze its state
+                thread::spawn({
+                    // thread the checksum process, because it can take a long time.
+                    // we might also want to make it optional down the road, in case people want a "fast" backup option
+                    let checksums = checksums.clone();
+                    move || {
+                        // sync the PDDB to disk prior to making backups
+                        let pddb = pddb::Pddb::new();
+                        if !pddb.try_unmount() {
+                            // this is a rare case path...not worth turning the modals object into a mutex-wrapped thing just for this
+                            let xns = xous_names::XousNames::new().unwrap();
+                            let modals = modals::Modals::new(&xns).unwrap();
+                            modals.show_notification(t!("socup.unmount_fail", xous::LANG), None).ok();
+                        } else {
+                            *checksums.lock().unwrap() = Some(pddb.compute_checksums());
+                            // PDDB is halted forever. However, the system is reset after a backup is run.
+                            pddb.pddb_halt();
+
+                            // now trigger phase 2 of the backup
+                            log::info!("{}BACKUP.PHASE2,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                            send_message(cb_cid,
+                                Message::new_scalar(StatusOpcode::PrepareBackupPhase2.to_usize().unwrap(), 0, 0, 0, 0)
+                            ).expect("couldn't initiate phase 2 backup");
+                        }
+                    }
+                });
+            },
+            Some(StatusOpcode::PrepareBackupPhase2) => {
                 let mut metadata = root_keys::api::BackupHeader::default();
                 // note: default() should set the language correctly by default since it's a systemwide constant
                 metadata.timestamp = localtime.get_local_time_ms().unwrap_or(0);
@@ -1133,7 +1226,13 @@ fn wrapped_main() -> ! {
                 let map = kbd.get_keymap().expect("couldn't get key mapping");
                 let map_serialize: BackupKeyboardLayout = map.into();
                 metadata.kbd_layout = map_serialize.into();
-                keys.lock().unwrap().do_create_backup_ux_flow(metadata);
+                // the backup process is coded to accept the option of no checksums, but the UX currently
+                // always computes it.
+                if let Some(checksums) = checksums.lock().unwrap().take() {
+                    keys.lock().unwrap().do_create_backup_ux_flow(metadata, Some(checksums));
+                } else {
+                    keys.lock().unwrap().do_create_backup_ux_flow(metadata, None);
+                }
             }
             Some(StatusOpcode::Quit) => {
                 xous::return_scalar(msg.sender, 1).ok();

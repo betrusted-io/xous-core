@@ -2401,8 +2401,10 @@ impl<'a> RootKeys {
             }
         }
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()};
-        let sig = Signature::from_bytes(&sig_rec.signature).expect("Signature malformed");
-
+        let sig = match Signature::from_bytes(&sig_rec.signature) {
+            Ok(sig) => sig,
+            Err(_) => return SignatureResult::MalformedSignature,
+        };
         let mut sigtype = SignatureResult::SelfSignOk;
         // check against all the known signature types in detail
         loop {
@@ -2417,7 +2419,7 @@ impl<'a> RootKeys {
                     self.read_key_256(KeyRomLocs::DEVELOPER_PUBKEY)
                 },
                 _ => {
-                    panic!("Invalid state during check gateware signature")
+                    return SignatureResult::InvalidSignatureType
                 }
             };
             // check for uninitialized signature records
@@ -2436,7 +2438,10 @@ impl<'a> RootKeys {
                 }
                 continue;
             }
-            let pubkey = PublicKey::from_bytes(&pubkey_bytes).expect("public key was not valid");
+            let pubkey = match PublicKey::from_bytes(&pubkey_bytes) {
+                Ok(pubkey) => pubkey,
+                Err(_) => return SignatureResult::InvalidPubKey,
+            };
 
             let region = match region_enum {
                 GatewareRegion::Boot => self.gateware(),
@@ -2645,7 +2650,7 @@ impl<'a> RootKeys {
         let backup = &kernel[KERNEL_BACKUP_OFFSET as usize..KERNEL_BACKUP_OFFSET as usize + size_of::<BackupHeader>()];
         let mut header = BackupHeader::default();
         header.as_mut().copy_from_slice(backup);
-        if header.version == BACKUP_VERSION {
+        if (header.version & BACKUP_VERSION_MASK) == (BACKUP_VERSION & BACKUP_VERSION_MASK) {
             Some(header)
         } else {
             None
@@ -2725,17 +2730,43 @@ impl<'a> RootKeys {
             }
         }
     }
-    pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+    pub fn write_backup(&mut self,
+        mut header: BackupHeader,
+        backup_ct: backups::BackupDataCt,
+        checksums: Option<Checksums>
+    ) -> Result<(), xous::Error> {
         header.op = BackupOp::Backup;  // set the "we're backing up" flag
 
         // condense the data into a single block, to reduce read/write cycles on the block
-        let mut block = [0u8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()];
+        const HASH_LEN: usize = 32;
+        let mut block = [0u8; size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>() + HASH_LEN];
         block[..size_of::<BackupHeader>()].copy_from_slice(header.as_ref());
-        block[size_of::<BackupHeader>()..].copy_from_slice(backup_ct.as_ref());
+        block[size_of::<BackupHeader>()..size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()].copy_from_slice(backup_ct.as_ref());
+
+        // compute a hash of the data, for fast verification of the backup header integrity to detect media errors, etc.
+        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
+        hasher.update(&block[..size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()]);
+        let digest = hasher.finalize();
+        assert!(digest.len() == HASH_LEN, "Wrong length hash selected! Check your code.");
+        block[size_of::<BackupHeader>() + size_of::<backups::BackupDataCt>()..]
+            .copy_from_slice(digest.as_slice());
+
+        // stage the artifacts into a full page header
+        const PAGE_LEN: usize = 4096;
+        let mut page = [0xFFu8; PAGE_LEN];
+        // place the metadata at the top of the block
+        page[..block.len()].copy_from_slice(&block);
+        if let Some(cs) = checksums {
+            use std::ops::Deref;
+            let cs_slice = cs.deref();
+            // stage the checksums, if any, aligned to the end of the block
+            assert!(block.len() + cs_slice.len() < PAGE_LEN, "Error: checksum block has outgrown the available space");
+            page[PAGE_LEN - cs_slice.len()..].copy_from_slice(cs_slice);
+        }
         self.spinor.patch(
             self.kernel(),
             self.kernel_base(),
-            &block,
+            &page,
             xous::KERNEL_BACKUP_OFFSET
         ).map_err(|_| xous::Error::InternalError)?;
         Ok(())

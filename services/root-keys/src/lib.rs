@@ -133,11 +133,12 @@ impl RootKeys {
         ).expect("couldn't send message to root keys");
     }
 
-    pub fn do_create_backup_ux_flow(&self, metadata: BackupHeader) {
+    pub fn do_create_backup_ux_flow(&self, metadata: BackupHeader, checksums: Option<Checksums>) {
         let mut alloc = BackupHeaderIpc::default();
         let mut data = [0u8; core::mem::size_of::<BackupHeader>()];
         data.copy_from_slice(metadata.as_ref());
         alloc.data = Some(data);
+        alloc.checksums = checksums;
         let buf = Buffer::into_buf(alloc).unwrap();
         buf.send(self.conn, Opcode::CreateBackup.to_u32().unwrap()).unwrap();
     }

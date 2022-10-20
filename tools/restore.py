@@ -11,6 +11,7 @@ import csv
 import urllib.request
 from datetime import datetime
 import requests
+from Crypto.Hash import SHA512
 
 from progressbar.bar import ProgressBar
 
@@ -473,6 +474,9 @@ def main():
     parser.add_argument(
         "--peek", required=False, help="Inspect an address", type=auto_int, metavar=('ADDR')
     )
+    parser.add_argument(
+        "--file", required=False, help="File to restore from. Defaults to backup.pddb", default="backup.pddb", type=str
+    )
     args = parser.parse_args()
 
     dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
@@ -541,11 +545,12 @@ def main():
         3: "zh",
     }
     try:
-        with open("backup.pddb", "rb") as backup_file:
+        with open(args.file, "rb") as backup_file:
             backup = bytearray(backup_file.read())
 
             i = 0
-            print("Backup protocol version: 0x{:08x}".format(int.from_bytes(backup[i:i+4], 'little')))
+            backup_version = int.from_bytes(backup[i:i+4], 'little')
+            print("Backup protocol version: 0x{:08x}".format(backup_version))
             i += 4
             print("Xous version: {}".format(bytes_to_semverstr(backup[i:i+16])))
             backup_xous_ver = SemVer(backup[i:i+16])
@@ -571,8 +576,63 @@ def main():
             i += 4
             print("DNA: 0x{:x}".format(int.from_bytes(backup[i:i+8], 'little')))
             i += 8
-            i += 48 # reserved
+            checksum_region_len = int.from_bytes(backup[i:i+4], 'little') * 4096
+            print("Checksum region length: 0x{:x}".format(checksum_region_len))
+            i += 4
+            total_checksums = int.from_bytes(backup[i:i+4], 'little')
+            print("Number of checksum blocks: {}".format(total_checksums)) # if this is 0, checksumming was skipped
+            i += 4
+            header_total_size = int.from_bytes(backup[i:i+4], 'little')
+            print("Header total length in bytes: {}".format(header_total_size))
+            i += 4
+            i += 36 # reserved
 
+            if backup_version == 0x10001:
+                checksum_errors = False
+                check_region = backup[:0x5d0]
+                checksum = backup[0x5d0:0x5f0]
+                print("Doing hash verification of pt+ct metadata...")
+                hasher = SHA512.new(truncate="256")
+                hasher.update(check_region)
+                computed_checksum = hasher.digest()
+                if computed_checksum != checksum:
+                    print("Header failed hash integrity check!")
+                    print("Calculated: {}".format(computed_checksum.hex()))
+                    print("Expected:   {}".format(checksum.hex()))
+                    exit(1)
+                else:
+                    print("Header passed integrity check.")
+
+                if total_checksums != 0:
+                    raw_checksums = backup[header_total_size-(total_checksums * 16):header_total_size]
+                    checksums = [raw_checksums[i:i+16] for i in range(0, len(raw_checksums), 16)]
+                    check_block_num = 0
+                    while check_block_num < total_checksums:
+                        hasher = SHA512.new(truncate="256")
+                        hasher.update(
+                            backup[
+                                header_total_size + check_block_num * checksum_region_len:
+                                header_total_size + (check_block_num + 1) * checksum_region_len
+                            ])
+                        sum = hasher.digest()
+                        if sum[:16] != checksums[check_block_num]:
+                            print("Bad checksum on block {} at offset 0x{:x}".format(check_block_num, check_block_num * checksum_region_len))
+                            print("  Calculated: {}".format(sum[:16].hex()))
+                            print("  Expected:   {}".format(checksums[check_block_num].hex()))
+                            checksum_errors = True
+                        check_block_num += 1
+
+                    if checksum_errors:
+                        print("Media errors were detected! Backup may be unusable, aborting restore.")
+                        exit(1)
+                    else:
+                        print("No media errors detected, {} blocks passed checksum tests".format(total_checksums))
+
+            if i != 0x90:
+                # this is a sanity check for myself, and python doesn't like it when i make this an assert
+                # because it does the math and realizes it's always true but the point is I don't want to do the math.
+                print("Plaintext operand offset calculated incorrectly! Check data structure sizes.")
+                exit(1)
             backup[i:i+4] = (2).to_bytes(4, 'little')
             op = int.from_bytes(backup[i:i+4], 'little')
             print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
@@ -581,10 +641,13 @@ def main():
             # now try to download all the artifacts and check their versions
             # this list should visit kernels in order from newest to oldest.
             URL_LIST = [
+                'https://ci.betrusted.io/releases/v0.9.10/',
                 'https://ci.betrusted.io/releases/v0.9.9/',
                 'https://ci.betrusted.io/releases/v0.9.8/',
                 'https://ci.betrusted.io/releases/v0.9.7/'
             ]
+            if False: # insert bleeding-edge build for pre-release testing
+                URL_LIST.insert(0, 'https://ci.betrusted.io/latest-ci/')
 
             attempt = 0
             while attempt < len(URL_LIST):
@@ -610,6 +673,8 @@ def main():
                 # alright, we should now be at a base URL where everything is a match. We skip checking
                 # the rest of the versions because it "should" be an ensemble.
                 curver = SemVer(candidate_kernel[curver_loc:curver_loc + 16])
+                # print("Min ver: {}".format(min_compat_kernel.as_str()))
+                # print("Cur ver: {}".format(curver.as_str()))
                 print("Found viable kernel!")
                 kernel = candidate_kernel
                 print("Downloading loader...")

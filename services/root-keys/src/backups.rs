@@ -23,6 +23,7 @@ impl Default for KeyRomExport {
     }
 }
 
+/// This is the plaintext portion of the backup header
 #[derive(Zeroize)]
 #[zeroize(drop)]
 #[repr(C, align(8))]
@@ -62,6 +63,9 @@ impl DerefMut for BackupDataPt {
     }
 }
 
+/// This is the ciphertext portion of the backup header. Note that there is an additional
+/// 32-byte section that is a SHA512/256 hash of the pt+ct region, appended directly to
+/// the end of the ct region.
 #[repr(C, align(8))]
 pub(crate) struct BackupDataCt {
     pub nonce: [u8; 12],

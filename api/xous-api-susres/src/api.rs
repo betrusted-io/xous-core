@@ -63,6 +63,9 @@ pub enum Opcode {
     /// used by processes to indicate they are suspending now; this blocks until resume using the "execution gate"
     SuspendingNow,
 
+    /// used to power off the system without suspend
+    PowerOff,
+
     /// exit the server
     Quit,
 }

@@ -1,13 +1,6 @@
 pub(crate) const SERVER_NAME_SHA512: &str = "_Sha512 hardware accelerator server_";
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) enum Sha2Result {
-    Sha512Result([u8; 64]),
-    Sha512Trunc256Result([u8; 32]),
-    SuspendError,
-    Uninitialized,
-    IdMismatch,
-}
+mod rkyv_enum;
+pub use rkyv_enum::*;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Sha2Finalize {

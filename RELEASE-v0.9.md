@@ -271,10 +271,20 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Added a sanity check to the backup.py to make sure that the backup preparation was run: you must prepare backups every time before doing a backup. The exported key headers are erased after the backup is run, because you don't want the exported keys just laying around where anyone can read it out by plugging in a USB cable. Unfortunately, a user lost data because this check was missing :(
 - Added crates.io package verification to `xtask`. Note: Cargo.toml files are munged by `cargo publish`, so it's difficult to prove equivalence of your source file and what you're sent from crates.io. Instead, there's now a check in CI to confirm that Cargo.lock did not change, which should change with a tampered Cargo.toml.
 - Fixed cache coherence issue in FLASH. Writes to flash memory need to also invalidate D$ because they are out of band to the regular memory hierarchy.
+- Add checksums to backups
+  - every 1MiB block of the PDDB is checksummed with a SHA-512 hash, of which the first 128 bits are stored in a table
+  - checksums are included in the backup header
+  - `backalyzer.py`, `backup.py`, and `restore.py` now parse the header and if checksums are there, it will flag if there is a checksum error
+  - backups now take about an extra minute to run, due to the inclusion of the extra checksums
+  - backups are no longer abortable, because in order to do the checksums, we have to unmount the PDDB and put the system into a semi-shutdown state. A confirmation screen now gates backups to avoid users accidentally triggering backups with a fat-fingered menu selection.
 
-## Roadmap to 1.0
+## New in 0.9.11
+- Various infrastructure fixes contributed by @eupn and @jeandudey
+- "Lock device" feature added; PDDB unmount before reboots
+- Successive failed PIN attempts will re-suspend the device if it is suspendable, or reboot if not
+- Fix bug in device auto-shutdown; COM/LLIO method deprecated as susres method does the correct sequencing. This should help with some of the "insert paperclip" scenarios after updating SoC, hopefully.
 
+## Roadmap
 - Lots of testing and bug fixes
-- Understanding what the gap is to get TLS working
 - Fixing performance issues in `pddb`
 - Refactoring `modals` to not have N^2 space growth with feature set

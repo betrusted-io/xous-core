@@ -12,10 +12,10 @@
         "en-tts": "Would you like to verify that you wrote the backup key down correctly by re-entering it now?"
     },
     "rootkeys.backup_badpass": {
-        "en": "Password incorrect. Aborting backup!",
+        "en": "Password incorrect.\n\nPlease try again, or reboot by inserting a paperclip in the hard reset hole.",
         "ja": "正しくないパスワード。 バックアップを中止します！",
         "zh": "密码错误。 中止备份！",
-        "en-tts": "Password incorrect. Aborting backup!"
+        "en-tts": "Password incorrect.\n\nPlease try again, or reboot by inserting a paperclip in the hard reset hole."
     },
     "rootkeys.restore_badpass": {
         "en": "BIP-39 entry was not valid. Aborting restore!",
@@ -84,10 +84,16 @@
         "en-tts": "Preparing backup state..."
     },
     "rootkeys.backup_staged": {
-        "en": "Backup data is prepared.\nConnect to a host computer by USB, and download the backup data bundle.\nScan the QR code for instructions:",
+        "en": "Backup data is prepared; PDDB is unmounted.\nConnect to a host computer by USB, and download the backup data bundle.\nScan the QR code for instructions:",
         "ja": "バックアップデータを用意します。 これで、ホストコンピューターに接続して、バックアップデータバンドルをダウンロードできます。",
         "zh": "备份数据已准备好。 您现在可以连接到主机并下载备份数据包。",
         "en-tts": "Backup data is prepared. You may now connect to a host computer and download the backup data bundle."
+    },
+    "rootkeys.backup_waiting": {
+        "en": "⚠ System in backup mode! ⚠\nTo resume normal function, either initiate a backup via USB, or reboot the device.",
+        "ja": "⚠ システムはバックアップモードです! ⚠\n通常の機能を再開するには、USB 経由でバックアップを開始するか、デバイスを再起動してください。",
+        "zh": "⚠ 系统处于备份模式！ ⚠\n要恢复正常功能，请通过 USB 启动备份，或重新启动设备。",
+        "en-tts": "System in backup mode! To resume normal function, either initiate a backup via USB, or reboot the device."
     },
     "rootkeys.backup_staging_error": {
         "en": "Internal error performing backup. Process aborted.",
@@ -310,6 +316,12 @@
         "ja": "いいえ",
         "zh": "取消",
         "en-tts": "No"
+    },
+    "rootkeys.gwup.sig_problem": {
+        "en": "Invalid signature on update, aborting.",
+        "ja": "更新時の署名が無効です。中止します。",
+        "zh": "更新时签名无效，正在中止。",
+        "en-tts": "Invalid signature on update, aborting."
     },
     "rootkeys.gwup_starting": {
         "en": "Updating gateware. This takes a few minutes.\nDo not reset or sleep!",

@@ -36,7 +36,7 @@ macro reset
 
     sysbus LoadELF $bin false
 
-    sysbus LoadAtags "console=ttyAMA0,115200 root=/dev/mtdblock0 rw rootfstype=jffs2 mtdparts=armflash.0:64m@0x0 earlyprintk mem=256M" 0x10000000 0x100
+    sysbus LoadAtags "console=ttyAMA0,115200 root=/dev/mtdblock0 ro rootfstype=jffs2 mtdparts=armflash.0:64m@0x0 earlyprintk mem=256M" 0x10000000 0x100
     cpu PC 0x8000
 """
 

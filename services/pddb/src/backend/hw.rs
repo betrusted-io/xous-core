@@ -1,10 +1,13 @@
 use std::convert::TryInto;
 
 use crate::*;
+use backend::bcrypt::*;
 use aes_gcm_siv::{Nonce, Tag, Aes256GcmSiv};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes::{Aes256, Block, BLOCK_SIZE};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
+use modals::Modals;
+use root_keys::api::KeywrapError;
 use root_keys::api::AesRootkeyType;
 use spinor::SPINOR_BULK_ERASE_SIZE;
 use subtle::ConstantTimeEq;
@@ -26,6 +29,9 @@ type FspaceSet = HashSet::<PhysPage>;
 type FspaceSet = BTreeSet::<PhysPage>;
 
 use zeroize::Zeroize;
+
+use sha2::{FallbackStrategy, Sha512Trunc256};
+use digest::Digest;
 
 #[cfg(feature="migration1")]
 use crate::backend::migration1to2::*;
@@ -160,6 +166,8 @@ pub(crate) struct PddbOs {
     entropy: Rc<RefCell<TrngPool>>,
     /// connection to the password request manager
     pw_cid: xous::CID,
+    /// Number of consecutive failed login attempts
+    failed_logins: u64,
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     testnames: HashSet::<String>,
 }
@@ -212,6 +220,7 @@ impl PddbOs {
             dna_mode: DnaMode::Normal,
             entropy: trngpool,
             pw_cid,
+            failed_logins: 0,
             #[cfg(all(feature="pddbtest", feature="autobasis"))]
             testnames: HashSet::new(),
         };
@@ -240,6 +249,7 @@ impl PddbOs {
                 dna_mode: DnaMode::Normal,
                 entropy: trngpool,
                 pw_cid,
+                failed_logins: 0,
                 #[cfg(all(feature="pddbtest", feature="autobasis"))]
                 testnames: HashSet::new(),
             }
@@ -607,7 +617,6 @@ impl PddbOs {
         self.rootkeys.clear_password(AesRootkeyType::User0);
     }
     pub (crate) fn try_login(&mut self) -> PasswordState {
-        use root_keys::api::KeywrapError;
         if self.system_basis_key.is_none() || self.cipher_ecb.is_none() {
             let scd = self.static_crypto_data_get();
             if scd.version == 0xFFFF_FFFF { // system is in the blank state
@@ -655,7 +664,8 @@ impl PddbOs {
                     }
                     _ => {
                         log::error!("Couldn't unwrap our system key: {:?}", e);
-                        return PasswordState::Incorrect;
+                        self.failed_logins = self.failed_logins.saturating_add(1);
+                        return PasswordState::Incorrect(self.failed_logins);
                     }
                 }
             }
@@ -670,7 +680,8 @@ impl PddbOs {
                     }
                     _ => {
                         log::error!("Couldn't unwrap our system key: {:?}", e);
-                        return PasswordState::Incorrect;
+                        self.failed_logins = self.failed_logins.saturating_add(1);
+                        return PasswordState::Incorrect(self.failed_logins);
                     }
                 }
             }
@@ -703,8 +714,10 @@ impl PddbOs {
             for i in 0..syskey_pt.len() {
                 unsafe{nuke.add(i).write_volatile(0)};
             }
+            self.failed_logins = 0;
             PasswordState::Correct
         } else {
+            self.failed_logins = 0;
             PasswordState::Correct
         }
     }
@@ -1613,8 +1626,6 @@ impl PddbOs {
     fn kcom_func(&self,
         key: &[u8; 32],
         nonce_com: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-        use sha2::{FallbackStrategy, Sha512Trunc256};
-        use digest::Digest;
 
         let mut h_enc = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
         h_enc.update(key);
@@ -2467,10 +2478,6 @@ impl PddbOs {
     /// Derives a 256-bit AES encryption key for a basis given a basis name and its password.
     /// You will also need to derive the AAD for the basis using the basis_name.
     pub(crate) fn basis_derive_key(&self, basis_name: &str, password: &str) -> BasisKeys {
-        use sha2::{FallbackStrategy, Sha512Trunc256};
-        use digest::Digest;
-        use backend::bcrypt::*;
-
         // 1. derive the salt from the "key" region. First step is to create the salt lookup
         // table, which is done by hashing the name and password together with SHA-512
         // manage the allocation of the data for the basis & password explicitly so that we may wipe them later
@@ -2544,6 +2551,34 @@ impl PddbOs {
 
     pub(crate) fn reset_dont_ask_init(&self) {
         self.rootkeys.do_reset_dont_ask_init();
+    }
+
+    pub(crate) fn checksums(&self, modals: Option::<&Modals>) -> root_keys::api::Checksums {
+        let mut checksums = root_keys::api::Checksums::default();
+        let pddb = self.pddb_mr.as_slice();
+        if let Some(m) = modals {
+            m.start_progress(
+                t!("pddb.checksums", xous::LANG),
+                0,
+                checksums.checksums.len() as u32,
+                0
+            ).ok();
+        }
+        for (index, region) in pddb.chunks(root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE).enumerate() {
+            assert!(region.len() == root_keys::api::CHECKSUM_BLOCKLEN_PAGE as usize * PAGE_SIZE, "CHECKSUM_BLOCKLEN_PAGE is not an even divisor of the PDDB size");
+            let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
+            hasher.update(region); // reserve the first 32 bytes of salt for the HKDF
+            let digest = hasher.finalize();
+            // copy only the first 128 bits of the hash into the checksum array
+            checksums.checksums[index].copy_from_slice(&digest.as_slice()[..16]);
+            if let Some(m) = modals {
+                m.update_progress(index as u32).ok();
+            }
+        }
+        if let Some(m) = modals {
+            m.finish_progress().ok();
+        }
+        checksums
     }
     //-------------------------------- TESTING -----------------------------------------
     // always gated behind a feature flag. Includes routines that are nonsensicle in normal operation at best,
@@ -2660,10 +2695,6 @@ impl PddbOs {
     /// by updated keys by the time this routine is called.
     #[cfg(feature="migration1")]
     pub(crate) fn basis_derive_key_v00_00_01_01(&self, basis_name: &str, password: &str, scd: &StaticCryptoDataV1) -> [u8; AES_KEYSIZE] {
-        use sha2::{FallbackStrategy, Sha512Trunc256};
-        use digest::Digest;
-        use backend::bcrypt::*;
-
         // 1. derive the salt from the "key" region. First step is to create the salt lookup
         // table, which is done by hashing the name and password together with SHA-512
         // manage the allocation of the data for the basis & password explicitly so that we may wipe them later
@@ -3075,11 +3106,12 @@ impl PddbOs {
                 self.dbg_dump(Some("migration".to_string()), Some(&export));
 
                 // indicate the migration worked
+                self.failed_logins = 0;
                 PasswordState::Correct
             }
             Err(e) => {
                 log::error!("Couldn't unwrap our system key: {:?}", e);
-                PasswordState::Incorrect
+                PasswordState::Incorrect(self.failed_logins)
             }
         }
     }

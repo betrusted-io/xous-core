@@ -41,6 +41,9 @@ pub enum SignatureResult {
     ThirdPartyOk,
     DevKeyOk,
     Invalid,
+    MalformedSignature,
+    InvalidSignatureType,
+    InvalidPubKey,
 }
 #[allow(dead_code)]
 pub enum GatewareRegion {
@@ -369,10 +372,11 @@ mod implementation {
         }
         pub fn should_prompt_for_update(&self) -> bool {true}
         pub fn set_prompt_for_update(&self, _state: bool) {}
-        pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
+        pub fn write_backup(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt, checksums: Option::<Checksums>) -> Result<(), xous::Error> {
             header.op = BackupOp::Backup;
             log::info!("backup header: {:?}", header);
             log::info!("backup ciphertext: {:x?}", backup_ct.as_ref());
+            log::info!("backup checksums: {:x?}", checksums);
             Ok(())
         }
         pub fn write_restore_dna(&mut self, mut header: BackupHeader, backup_ct: backups::BackupDataCt) -> Result<(), xous::Error> {
@@ -503,6 +507,7 @@ fn main() -> ! {
     let mut aes_sender: Option<xous::MessageSender> = None;
     let mut backup_header: Option<BackupHeader> = None;
     let mut deferred_response: Option<xous::MessageSender> = None;
+    let mut checksums: Option<Checksums> = None; // storage for PDDB backup checksums
     loop {
         let mut msg = xous::receive_message(keys_sid).unwrap();
         let opcode: Option<Opcode> = FromPrimitive::from_usize(msg.body.id());
@@ -800,7 +805,7 @@ fn main() -> ! {
                     // allow the EC to power me down
                     llio.allow_power_off(true).unwrap();
                     // now send the power off command
-                    com.power_off_soc().unwrap(); // not that at this point, the screen freezes with the last thing displayed...
+                    susres.immediate_poweroff().unwrap();
 
                     log::info!("rebooting now!");
                     reboot_initiated = true;
@@ -879,6 +884,17 @@ fn main() -> ! {
                     SignatureResult::SelfSignOk => t!("rootkeys.gwup.viewinfo_ss", xous::LANG),
                     SignatureResult::ThirdPartyOk => t!("rootkeys.gwup.viewinfo_tp", xous::LANG),
                     SignatureResult::DevKeyOk => t!("rootkeys.gwup.viewinfo_dk", xous::LANG),
+                    SignatureResult::MalformedSignature
+                    | SignatureResult::InvalidPubKey
+                    | SignatureResult::InvalidSignatureType
+                        => {
+                        modals.dynamic_notification_close().expect("modals error");
+                        modals.show_notification(t!("rootkeys.gwup.sig_problem", xous::LANG), None).expect("modals error");
+                        if let Some(dr) = deferred_response.take() {
+                            xous::return_scalar(dr, 0).unwrap();
+                        }
+                        continue;
+                    }
                     _ => {
                         modals.dynamic_notification_close().expect("modals error");
                         modals.show_notification(t!("rootkeys.gwup.no_update_found", xous::LANG), None).expect("modals error");
@@ -1408,6 +1424,8 @@ fn main() -> ! {
                     log::error!("Create backup was called, but no header data was provided");
                     continue;
                 }
+                checksums = ipc.checksums;
+
                 keys.set_ux_password_type(Some(PasswordType::Update));
                 password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
@@ -1468,7 +1486,7 @@ fn main() -> ! {
                     // now write out the backup
                     let backup_ct = backups::create_backup(fpga_key, backup_header.unwrap(), keyrom);
                     // this final statement has a take/unwrap to set backup_header back to None
-                    match keys.write_backup(backup_header.take().unwrap(), backup_ct) {
+                    match keys.write_backup(backup_header.take().unwrap(), backup_ct, checksums.take()) {
                         Ok(_) => {
                             // this switchover takes a couple seconds, give some user feedback
                             modals.dynamic_notification(Some(t!("rootkeys.backup_prepwait", xous::LANG)), None).ok();
@@ -1477,7 +1495,10 @@ fn main() -> ! {
                             usbd.debug_usb(Some(false)).unwrap();
                             modals.dynamic_notification_close().ok();
                             // there will be a bit of a pause while the QR text renders, but we'll have to fix that with other optimizations...
+                            log::info!("{}BACKUP.STAGED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                             modals.show_notification(t!("rootkeys.backup_staged", xous::LANG), Some("https://github.com/betrusted-io/betrusted-wiki/wiki/Backups")).ok();
+                            // this informs users who dismiss the QR code that they must reboot to resume normal operation
+                            modals.show_notification(t!("rootkeys.backup_waiting", xous::LANG), None).ok();
                         }
                         Err(_) => {
                             modals.show_notification(t!("rootkeys.backup_staging_error", xous::LANG), None).ok();
@@ -1485,6 +1506,20 @@ fn main() -> ! {
                     }
                 } else {
                     modals.show_notification(t!("rootkeys.backup_badpass", xous::LANG), None).ok();
+                    // Prompt the user again for the password. It will do this until a correct password is entered.
+                    // maybe it would be thoughtful to add a yes/no box for rebooting in case someone decides they
+                    // don't want to run the backup right now. But I think this is an edge case that few will run into.
+                    keys.set_ux_password_type(Some(PasswordType::Update));
+                    password_action.set_action_opcode(Opcode::UxCreateBackupPwReturn.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::TextEntry(password_action.clone())),
+                        Some(t!("rootkeys.get_update_password_backup", xous::LANG)), false,
+                        None, true, None
+                    );
+                    #[cfg(feature="tts")]
+                    tts.tts_blocking(t!("rootkeys.get_update_password_backup", xous::LANG)).unwrap();
+                    log::info!("{}ROOTKEY.UPDPW,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                    rootkeys_modal.activate();
                 }
             }
             Some(Opcode::DoRestore) => {
@@ -1511,7 +1546,7 @@ fn main() -> ! {
                 let mut showed_zero_key_notice = false;
                 if let Ok((mut header, ct)) = keys.read_backup() {
                     if header.op != BackupOp::Restore {
-                        log::warn!("Header op was not Restore. Aborting!");
+                        log::warn!("Header op was not Restore. Found {:?} instead. Aborting!", header.op);
                         modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
                         if let Some(sender) = deferred_response {
                             xous::return_scalar(sender, 1).ok();
@@ -1542,6 +1577,9 @@ fn main() -> ! {
                         header.op = pt.header.op;
                         // now check that the two records are identical
                         if pt.header.deref() != header.deref() {
+                            log::warn!("Corruption detected:");
+                            log::info!("plaintext header: {:?}", pt.header);
+                            log::info!("encrypted header: {:?}", header);
                             modals.show_notification(t!("rootkeys.restore_corrupt", xous::LANG), None).ok();
                             if let Some(sender) = deferred_response {
                                 xous::return_scalar(sender, 1).ok();

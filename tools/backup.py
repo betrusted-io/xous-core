@@ -11,6 +11,7 @@ import csv
 import urllib.request
 from datetime import datetime
 from datetime import date
+from Crypto.Hash import SHA512
 
 from progressbar.bar import ProgressBar
 
@@ -456,11 +457,13 @@ class SemVer:
             return "v{}.{}.{}-{}-g{:x}".format(self.maj, self.min, self.rev, self.extra, self.commit)
 
 def check_header(backup):
+    checksums = []
     i = 0
-    print("Backup protocol version: 0x{:08x}".format(int.from_bytes(backup[i:i+4], 'little')))
-    if int.from_bytes(backup[i:i+4], 'little') != 0x00010000:
+    backup_version = int.from_bytes(backup[i:i+4], 'little')
+    print("Backup protocol version: 0x{:08x}".format(backup_version))
+    if backup_version != 0x00010000 and backup_version != 0x00010001:
         print("Backup protocol version is not correct.")
-        return False
+        return (False, checksums)
     i += 4
     print("Xous version: {}".format(bytes_to_semverstr(backup[i:i+16])))
     backup_xous_ver = SemVer(backup[i:i+16])
@@ -475,12 +478,11 @@ def check_header(backup):
     ts = int.from_bytes(backup[i:i+8], 'little') / 1000
     print("Timestamp: {} / {}".format(ts, datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')))
     if (datetime.utcfromtimestamp(ts) - datetime.now()).total_seconds() > 600:
-        print("Backup timestamp is in the future. Is the RTC and timezone set correctly on the device?")
-        print("Note: UTC time of the host must not be more than 10 minutes ahead of the device")
-        return False
+        print("WARNING: Backup timestamp is in the future. Is the RTC and timezone set correctly on the device?")
+        # return False # non-fatal, because we have hash checks now
     if datetime.utcfromtimestamp(ts).year < 2021:
-        print("Backup timestamp is from before 2021. Is the RTC and timezone set correctly on the device?")
-        return False
+        print("WARNING: Backup timestamp is from before 2021. Is the RTC and timezone set correctly on the device?")
+        # return False
     i += 8
     lcode = int.from_bytes(backup[i:i+4], 'little')
     print("Language code: {}".format(lcode))
@@ -488,23 +490,58 @@ def check_header(backup):
         language = LANGUAGE[lcode]
     else:
         print("Language code is incorrect.")
-        return False
+        return (False, checksums)
     i += 4
     print("Keyboard layout code: {}".format(int.from_bytes(backup[i:i+4], 'little')))
     i += 4
     print("DNA: 0x{:x}".format(int.from_bytes(backup[i:i+8], 'little')))
     i += 8
-    i += 48 # reserved
+    checksum_region_len = int.from_bytes(backup[i:i+4], 'little') * 4096
+    print("Checksum region length: 0x{:x}".format(checksum_region_len))
+    i += 4
+    total_checksums = int.from_bytes(backup[i:i+4], 'little')
+    print("Number of checksum blocks: {}".format(total_checksums)) # if this is 0, checksumming was skipped
+    i += 4
+    header_total_size = int.from_bytes(backup[i:i+4], 'little')
+    print("Header total length in bytes: {}".format(header_total_size))
+    i += 4
+    i += 36 # reserved
 
-    backup[i:i+4] = (2).to_bytes(4, 'little')
+    if backup_version == 0x10001:
+        print("Checksums found in backup image, checking...")
+        PT_HEADER_LEN = 4 + 16 * 4 + 4 + 8 + 64 + 4 + 4
+        NONCE_LEN = 12
+        CT_LEN = PT_HEADER_LEN + 1024 + 64
+        TAG_LEN = 16
+        COMMIT_NONCE_LEN = 32
+        COMMIT_LEN = 32
+        CHECKSUM_LEN = 32
+        PADDING = 4
+        checksum_loc = PT_HEADER_LEN + NONCE_LEN + CT_LEN + TAG_LEN + COMMIT_NONCE_LEN + COMMIT_LEN + PADDING
+        check_region = backup[:checksum_loc]
+        checksum = backup[checksum_loc:checksum_loc + CHECKSUM_LEN]
+        hasher = SHA512.new(truncate="256")
+        hasher.update(check_region)
+        computed_checksum = hasher.digest()
+        if computed_checksum != checksum:
+            print("Header failed hash integrity check!")
+            return (False, checksums)
+
+        # Checksums are aligned to the end of the first 4096-byte block
+        if header_total_size != len(backup):
+            print("Header length does not match expected length")
+            return (False, checksums)
+        raw_checksums = backup[-(total_checksums * 16):]
+        checksums = [raw_checksums[i:i+16] for i in range(0, len(raw_checksums), 16)]
+
     op = int.from_bytes(backup[i:i+4], 'little')
-    print("Opcode (should be 2, to trigger the next phase of restore): {}".format(op))
-    if op != 2:
+    print("Opcode (should be 1): {}".format(op))
+    if op != 1:
         print("Opcode is incorrect.")
-        return False
+        return (False, checksums)
 
     print("Backup header passes sanity check!")
-    return True
+    return (True, checksums)
 
 def auto_int(x):
     return int(x, 0)
@@ -585,34 +622,70 @@ def main():
     pc_usb.poke(vexdbg_addr, 0x00020000)
 
     header_checked = False
+    checksum_error = False
     flash_region = int(pc_usb.regions['spiflash'][0], 0)
     if args.peek:
         pc_usb.peek(args.peek + flash_region, display=True)
     else:
         with open(args.output, "wb") as file:
+            checksum = []
             start_addr = locs['LOC_PDDB'][0] - 0x1000
             total_length = locs['LOC_WF200'][0] - locs['LOC_PDDB'][0] + 0x1000
             progress = ProgressBar(min_value=0, max_value=total_length, prefix='Backing up ').start()
             block_size = 4096
             amount_read = 0
+            check_block = bytearray(1024*1024) # the size of this is encoded in the header, but, it doesn't change so we hard code it here
+            check_block_num = 0
+            check_block_offset = 0
             while amount_read < total_length:
                 if amount_read % (block_size * 16) == 0:
                     pc_usb.ping_wdt()
                 backup = pc_usb.burst_read(start_addr + amount_read + flash_region, block_size)
+
+                # block check logic
+                if len(checksum) > 0: # this check inherently skips the header block, while also suppressing the check if no checksums are provided
+                    check_block[check_block_offset:check_block_offset + block_size] = backup
+                    check_block_offset += block_size
+                    if check_block_offset >= len(check_block):
+                        hasher = SHA512.new(truncate="256")
+                        #print("hashing block of {} len".format(len(check_block)))
+                        #print("start: {}".format(check_block[:64].hex()))
+                        #print("end: {}".format(check_block[-64:].hex()))
+                        hasher.update(check_block)
+                        sum = hasher.digest()
+                        if sum[:16] != checksum[check_block_num]:
+                            print("Calculated: {}\nExpected: {}".format(sum[:16].hex(), bytes(checksum[check_block_num]).hex()))
+                            print("Bad checksum on block {} at offset 0x{:x}. Re-run backup!".format(check_block_num, amount_read - block_size))
+                            # TODO: automatic retry of the download. However, for now, this condition *should* be very rare
+                            # (not even sure how to trigger it for testing) that we just print the error message for now.
+                            checksum_error = True
+                        else:
+                            # print("Block {}/{} downloaded OK".format(check_block_num + 1, len(checksum)))
+                            pass
+                        check_block_offset = 0
+                        check_block_num += 1
+
+                # header check - putting it after the above skips incorporating the header data into check_block
                 if header_checked is False:
-                    if check_header(backup):
+                    (header_ok, checksum) = check_header(backup)
+                    if header_ok:
                         header_checked = True
                     else:
                         break
                 amount_read += block_size
                 if amount_read < total_length:
                     progress.update(amount_read)
+
                 file.write(backup)
             progress.finish()
             file.close()
 
         print("Resuming CPU.")
         pc_usb.poke(vexdbg_addr, 0x02000000)
+
+    if checksum_error:
+        print("Link errors detected while downloading the backup. Data is likely corrupted, please try again!")
+        # Either that, or possibly the PDDB got into an inconsistent state after preparing the backup!
 
     print("Resetting SOC...")
     try:

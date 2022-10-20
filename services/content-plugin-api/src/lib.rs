@@ -21,9 +21,9 @@ impl core::convert::TryFrom<&Message> for Opcode {
     }
 }
 
-impl Into<Message> for Opcode {
-    fn into(self) -> Message {
-        match self {
+impl From<Opcode> for Message {
+    fn from(opcode: Opcode) -> Message {
+        match opcode {
             Opcode::Redraw => Message::Scalar(ScalarMessage {
                 id: 0,
                 arg1: 0,
@@ -31,7 +31,7 @@ impl Into<Message> for Opcode {
                 arg3: 0,
                 arg4: 0,
             }),
-            // _ => panic!("SHCH api: Opcode type not handled by Into(), refer to helper method"),
+            // _ => panic!("SHCH api: Opcode type not handled by From<Opcode>, refer to helper method"),
         }
     }
 }

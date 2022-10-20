@@ -52,15 +52,15 @@ pub struct ProcessInit {
     // 6
 }
 
-impl Into<[usize; 7]> for &ProcessInit {
-    fn into(self) -> [usize; 7] {
+impl From<&ProcessInit> for [usize; 7] {
+    fn from(src: &ProcessInit) -> [usize; 7] {
         [
-            self.stack.addr.get(),
-            self.stack.size.get(),
-            self.text.addr.get(),
-            self.text.size.get(),
-            self.text_destination.get(),
-            self.start.get(),
+            src.stack.addr.get(),
+            src.stack.size.get(),
+            src.text.addr.get(),
+            src.text.size.get(),
+            src.text_destination.get(),
+            src.start.get(),
             0,
         ]
     }
@@ -121,9 +121,9 @@ impl From<[usize; 8]> for ProcessStartup {
     }
 }
 
-impl Into<[usize; 7]> for &ProcessStartup {
-    fn into(self) -> [usize; 7] {
-        [self.pid.get() as _, self.connection as _, 0, 0, 0, 0, 0]
+impl From<&ProcessStartup> for [usize; 7] {
+    fn from(src: &ProcessStartup) -> [usize; 7] {
+        [src.pid.get() as _, src.connection as _, 0, 0, 0, 0, 0]
     }
 }
 

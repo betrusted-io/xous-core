@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
@@ -374,4 +374,37 @@ pub(crate) fn whycheproof_import() -> Result<(), crate::DynError> {
     println!("Wrote wycheproof x25519 testvectors to '{}'.", output_file);
 
     return Ok(());
+}
+
+pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynError> {
+    let last_config = format!("target/{}/LAST_LANG", TARGET_TRIPLE);
+    std::fs::create_dir_all(format!("target/{}/", TARGET_TRIPLE)).unwrap();
+    let mut contents = String::new();
+
+    let changed = match OpenOptions::new()
+    .read(true)
+    .open(&last_config) {
+        Ok(mut file) => {
+            file.read_to_string(&mut contents).unwrap();
+            if contents != last_lang {
+                true
+            } else {
+                false
+            }
+        }
+        _ => true
+    };
+    if changed {
+        println!("Locale language changed to {}", last_lang);
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&last_config).unwrap();
+        write!(file, "{}", last_lang).unwrap();
+        generate_locales()?
+    } else {
+        println!("No change to the target locale language of {}", contents);
+    }
+    Ok(())
 }

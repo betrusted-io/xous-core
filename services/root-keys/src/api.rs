@@ -1,3 +1,6 @@
+mod rkyv_enum;
+pub use rkyv_enum::*;
+
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 
@@ -155,12 +158,6 @@ pub enum AesRootkeyType {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]
-pub enum AesBlockType {
-    SingleBlock([u8; 16]),
-    ParBlock([[u8; 16]; PAR_BLOCKS]),
-}
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
-#[zeroize(drop)]
 pub enum AesOpType {
     Encrypt = 0,
     Decrypt = 1,
@@ -192,17 +189,6 @@ impl AesOp {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq, Copy, Clone)]
-pub enum KeywrapError {
-    InvalidDataSize,
-    InvalidKekSize,
-    InvalidOutputSize,
-    IntegrityCheckFailed,
-    /// this is a bodge to return an error code that upgrades from a faulty early version of AES-KWP
-    /// only works for 256-bit keys, but that is also all we used.
-    /// The return tuple is: (unwrapped key, correctly wrapped key)
-    UpgradeToNew(([u8; 32], [u8; 40])),
-}
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum KeyWrapOp {
     Wrap = 0,
@@ -249,14 +235,21 @@ pub (crate) struct KeyWrapper {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub (crate) struct BackupHeaderIpc {
     pub data: Option<[u8; core::mem::size_of::<BackupHeader>()]>,
+    pub checksums: Option<Checksums>,
+
 }
 impl Default for BackupHeaderIpc {
     fn default() -> Self {
-        BackupHeaderIpc { data: None::<[u8; core::mem::size_of::<BackupHeader>()]> }
+        BackupHeaderIpc {
+            data: None::<[u8; core::mem::size_of::<BackupHeader>()]>,
+            checksums: None,
+        }
     }
 }
 
-pub const BACKUP_VERSION: u32 = 0x00_01_00_00;
+pub const BACKUP_VERSION: u32 = 0x00_01_00_01;
+#[cfg(any(feature="precursor", feature="renode"))]
+pub const BACKUP_VERSION_MASK: u32 = 0xFF_FF_00_00; // mask off bits that are cross-compatible
 
 #[repr(u32)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -322,9 +315,9 @@ impl From::<KeyMap> for BackupKeyboardLayout {
         }
     }
 }
-impl Into::<KeyMap> for BackupKeyboardLayout {
-    fn into(self) -> KeyMap {
-        match self {
+impl From<BackupKeyboardLayout> for KeyMap {
+    fn from(layout: BackupKeyboardLayout) -> KeyMap {
+        match layout {
             BackupKeyboardLayout::Qwerty => KeyMap::Qwerty,
             BackupKeyboardLayout::Braille => KeyMap::Braille,
             BackupKeyboardLayout::Dvorak => KeyMap::Dvorak,
@@ -359,6 +352,21 @@ impl From::<[u8; 4]> for BackupKeyboardLayout {
     }
 }
 
+pub const HEADER_TOTAL_SIZE: u32 = 4096;
+/// Size of a checksummed block in pages. 0x100 = 256 pages,
+/// or 1 MiB for a checksummed block. This is specified in 4kiB pages
+/// because it really doesn't make sense to checksum anything smaller
+/// than that, and it allows us to grow the size of a single checksummed
+/// block to well over 4GiB.
+pub const CHECKSUM_BLOCKLEN_PAGE: u32 = 0x100;
+/// The total number of checksums required to cover the length of the PDDB
+/// divided by the length of a checksummed page. This number does not count
+/// the single additional checksum that is included to check the integrity of the
+/// plaintext + ciphertext header itself.
+///
+/// Total number of checksums has to divide evenly into the size of the PDDB region
+pub const TOTAL_CHECKSUMS: u32 = xous::PDDB_LEN / (CHECKSUM_BLOCKLEN_PAGE * 4096);
+
 #[repr(C, align(8))]
 #[derive(Copy, Clone, Debug)]
 pub struct BackupHeader {
@@ -372,11 +380,26 @@ pub struct BackupHeader {
     pub language: [u8; 4],
     pub kbd_layout: [u8; 4],
     pub dna: [u8; 8],
-    pub _reserved: [u8; 48],
+    /// Length of a checksummed region, in 4kiB pages
+    pub checksum_len_page: [u8; 4],
+    /// Number of checksummed pages
+    ///
+    /// The location of the first header is computed as follows:
+    /// `header_start_address + header_total_size - (total_checksums) * 16`
+    /// The backup data starts at `header_start_address + header_total_size`
+    ///
+    /// In other words, checksums are aligned to the highest address in the header
+    /// while the header plaintext+ciphertext data is aligned to the lowest address
+    /// in the header region.
+    pub total_checksums: [u8; 4],
+    /// Total size of the header in bytes, including unused space
+    pub header_total_size: [u8; 4],
+    pub _reserved: [u8; 36],
     pub op: BackupOp,
 }
 impl Default for BackupHeader {
     fn default() -> Self {
+        assert!(xous::PDDB_LEN & ((CHECKSUM_BLOCKLEN_PAGE * 0x1000) - 1) == 0, "PDDB_LEN is not an integer multiple of CHECKSUM_LEN_PAGE");
         BackupHeader {
             version: BACKUP_VERSION,
             xous_ver: [0u8; 16],
@@ -387,7 +410,10 @@ impl Default for BackupHeader {
             language: BackupLanguage::default().into(), // this is "correct by default"
             kbd_layout: BackupKeyboardLayout::default().into(), // this has to be adjusted
             dna: [0u8; 8],
-            _reserved: [0u8; 48],
+            checksum_len_page: CHECKSUM_BLOCKLEN_PAGE.to_le_bytes(),
+            total_checksums: TOTAL_CHECKSUMS.to_le_bytes(),
+            header_total_size: HEADER_TOTAL_SIZE.to_le_bytes(),
+            _reserved: [0u8; 36],
             op: BackupOp::Archive,
         }
     }
@@ -405,6 +431,52 @@ impl DerefMut for BackupHeader {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
             core::slice::from_raw_parts_mut(self as *mut BackupHeader as *mut u8, size_of::<BackupHeader>())
+                as &mut [u8]
+        }
+    }
+}
+
+/// The Checksums structure is an array of 16-byte (128-bit) checksums that
+/// are applied to backed up data. There is one checksum per block region
+/// (currently set to 1MiB).
+///
+/// The actual checksum is a SHA512 of the region, but with only the first
+/// 128 bits stored. The goal of the checksum isn't a cryptographic tamper
+/// proofing -- this is already handled by the underlying AEAD's that are
+/// applied to the PDDB. The utility of the checksum is to detect media
+/// or transmission errors in storage, without having to fully decrypt
+/// the entire PDDB to look for corruption. We use SHA512 and truncate it to
+/// 128 bits not because it's the optimal hash, but because it's what we
+/// have a hardware accelerator for. We don't truncate to 256 bits because
+/// we're trying to pack as many checksums into a 4k header, and going to
+/// 128 bits is still "strong" for a checksum and allows us to get the region
+/// size down to 1MiB, which is a reasonably sized region for a retry-download
+/// in case a checksum error is found.
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C, align(8))]
+pub struct Checksums {
+    pub checksums: [[u8; 16]; crate::api::TOTAL_CHECKSUMS as usize],
+}
+impl Default for Checksums {
+    fn default() -> Self {
+        Checksums {
+            checksums: [[0u8; 16]; crate::api::TOTAL_CHECKSUMS as usize],
+        }
+    }
+}
+impl Deref for Checksums {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const Checksums as *const u8, size_of::<Checksums>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for Checksums {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut Checksums as *mut u8, size_of::<Checksums>())
                 as &mut [u8]
         }
     }

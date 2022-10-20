@@ -15,6 +15,8 @@ use std::collections::HashSet;
 #[cfg(any(feature="precursor", feature="renode"))]
 mod implementation {
     use utralib::generated::*;
+    #[cfg(feature="extra_flush")]
+    use xous::MemoryRange;
     use crate::api::*;
     use susres::{RegManager, RegOrField, SuspendResume};
     use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -223,9 +225,9 @@ mod implementation {
         }
 
         spinor.cur_op = None;
-        SPINOR_RESULT.store(result, Ordering::Relaxed);
+        SPINOR_RESULT.store(result, Ordering::SeqCst);
         spinor.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
-        SPINOR_RUNNING.store(false, Ordering::Relaxed);
+        SPINOR_RUNNING.store(false, Ordering::SeqCst);
     }
 
     fn ecc_handler(_irq_no: usize, arg: *mut usize) {
@@ -387,6 +389,11 @@ mod implementation {
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
+    #[cfg(feature="extra_flush")]
+    const CACHE_LINE_WIDTH: usize = 32; // in bytes
+    #[cfg(feature="extra_flush")]
+    const FLUSH_SIZE_BYTES: usize = 16384 * 4; // cache capacity * 4 ways
+
     pub struct Spinor {
         id: u32,
         handler_conn: xous::CID,
@@ -396,6 +403,8 @@ mod implementation {
         cur_op: Option<FlashOp>,
         ticktimer: ticktimer_server::Ticktimer,
         // TODO: refactor ecup command to use spinor to operate the reads
+        #[cfg(feature="extra_flush")]
+        flusher: MemoryRange,
     }
 
     impl Spinor {
@@ -414,6 +423,14 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map SPINOR soft interrupt CSR range");
+            #[cfg(feature="extra_flush")]
+            let flusher = xous::syscall::map_memory(
+                None,
+                None,
+                FLUSH_SIZE_BYTES,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map flusher memory");
 
             let mut spinor = Spinor {
                 id: 0,
@@ -423,6 +440,8 @@ mod implementation {
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 cur_op: None,
                 ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+                #[cfg(feature="extra_flush")]
+                flusher,
             };
 
             xous::claim_interrupt(
@@ -447,10 +466,10 @@ mod implementation {
 
             // now populate the id field
             spinor.cur_op = Some(FlashOp::ReadId);
-            SPINOR_RUNNING.store(true, Ordering::Relaxed);
+            SPINOR_RUNNING.store(true, Ordering::SeqCst);
             spinor.softirq.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
-            while SPINOR_RUNNING.load(Ordering::Relaxed) {}
-            spinor.id = SPINOR_RESULT.load(Ordering::Relaxed);
+            while SPINOR_RUNNING.load(Ordering::SeqCst) {}
+            spinor.id = SPINOR_RESULT.load(Ordering::SeqCst);
 
             spinor
         }
@@ -464,16 +483,17 @@ mod implementation {
                 panic!("called with no spinor op set.");
             }
             self.ticktimer.ping_wdt();
-            SPINOR_RUNNING.store(true, Ordering::Relaxed);
+            SPINOR_RUNNING.store(true, Ordering::SeqCst);
             self.softirq.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
-            while SPINOR_RUNNING.load(Ordering::Relaxed) {
+            while SPINOR_RUNNING.load(Ordering::SeqCst) {
                 // there is no timeout condition that makes sense. If we're in a very long flash op -- and they can take hundreds of ms --
                 // simply timing out and trying to move on could lead to hardware damage as we'd be accessing a ROM that is in progress.
                 // in other words: if the flash memory is broke, you're broke too, ain't nobody got time for that.
             }
             self.ticktimer.ping_wdt();
-            xous::arch::cache_flush(); // flush the CPU caches in case the SPINOR call modified memory that's cached
-            SPINOR_RESULT.load(Ordering::Relaxed)
+            self.flush_dcache(0, 4096); // the arch call doesn't use the Vex-specific instruction for cache flush; this one does.
+            // xous::arch::cache_flush(); // replace with flush_dcache routine
+            SPINOR_RESULT.load(Ordering::SeqCst)
         }
 
         /// This routine flushes the dcache.
@@ -505,21 +525,28 @@ mod implementation {
         /// So, in theory, this should work with 16k of RAM. But in practice,
         /// we don't get a "clean cache" until we have visited a span equivalent to 64k.
         /// Not sure why :-/, but, I stopped caring because ".word 0x500F" works!
+        #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
+            // This instruction seems to be causing instability, omit it...
+            #[cfg(not(feature="extra_flush"))]
             unsafe {
                 core::arch::asm!(
-                    ".word 0x500F"
+                    ".word 0x500F",
+                    "fence",
                 );
             }
-            /* manual flushing:
-            let flush_ptr = self.flusher.as_ptr() as *const u32;
-            let mut dummy: u32 = 0;
-            // only visit the first word of every line
-            for i in (0..FLUSH_SIZE_BYTES / core::mem::size_of::<u32>()).step_by(CACHE_LINE_WIDTH / core::mem::size_of::<u32>()) {
-                dummy += unsafe{flush_ptr.add(i).read_volatile()};
+            // augment with manual flushing, because the above instruction didn't seem to do the trick??
+            #[cfg(feature="extra_flush")]
+            {
+                let flush_ptr = self.flusher.as_ptr() as *const u32;
+                let mut dummy: u32 = 0;
+                // only visit the first word of every line
+                for i in (0..FLUSH_SIZE_BYTES / core::mem::size_of::<u32>()).step_by(CACHE_LINE_WIDTH / core::mem::size_of::<u32>()) {
+                    dummy += unsafe{flush_ptr.add(i).read_volatile()};
+                }
+                log::trace!("Dcache flush completed: {}", dummy);
             }
-            log::trace!("Dcache flush completed: {}", dummy);
-            */
+            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         }
 
         pub(crate) fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
@@ -562,7 +589,6 @@ mod implementation {
                     return SpinorError::WriteFailed;
                 }
                 //log::set_max_level(log_level);
-                self.flush_dcache(wr.start, wr.len);
                 SpinorError::NoError
             } else {
                 // clean patch path:
@@ -581,7 +607,6 @@ mod implementation {
                     return SpinorError::WriteFailed;
                 }
                 //log::set_max_level(log_level);
-                self.flush_dcache(wr.start, wr.len);
                 SpinorError::NoError
             }
         }
@@ -604,7 +629,6 @@ mod implementation {
                     return SpinorError::EraseFailed;
                 }
             }
-            self.flush_dcache(0, 4096);
             return SpinorError::NoError
         }
 

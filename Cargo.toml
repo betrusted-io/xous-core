@@ -73,6 +73,7 @@ members = [
   "services/modals",
   "apps/ball",
   "apps/hello",
+  "apps/mtxcli",
   "apps/repl",
   "apps/vault",
   "apps/vault/tools/vaultbackup-rs",
@@ -154,8 +155,22 @@ path = "imports/getrandom"
 [patch.crates-io.ring]
 # path = "../ring-xous"  # for local dev only
 git="https://github.com/betrusted-io/ring-xous"
-rev="36e419d05ce1d6957a3cc25092f2d68feba8e9a3" # use the commitref because we're still updating the branch
+rev="09207048c393d524a34f63cf65c85a973012a21d" # use the commitref because we're still updating the branch
 #branch="0.16.20-cleanup"
 
-# [patch.crates-io.xous]
-# path = "./xous-rs"
+# required for ring-xous
+[patch.crates-io.xous]
+path = "./xous-rs"
+[patch.crates-io.xous-ipc]
+path = "./xous-ipc"
+[patch.crates-io.xous-api-names]
+path = "./api/xous-api-names"
+
+# [patch.crates-io.utralib]
+# path = "./utralib"
+# [patch.crates-io.svd2utra]
+# path = "./svd2utra"
+# [patch.crates-io.xous-api-susres]
+# path = "./api/xous-api-susres"
+# [patch.crates-io.xous-susres]
+# path = "./services/xous-susres"

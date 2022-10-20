@@ -1,3 +1,6 @@
+mod rkyv_enum;
+pub use rkyv_enum::*;
+
 #[allow(dead_code)]
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
@@ -49,25 +52,6 @@ pub enum Opcode {
     /// }
     /// ```
     BlockingConnect = 6,
-}
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[repr(C)]
-pub enum Return {
-    /// The caller must perform an AuthenticatedLookup using this challenge
-    AuthenticateRequest(AuthenticateRequest),
-
-    /// The connection failed for some reason
-    Failure,
-
-    /// A server was successfully created with the given SID
-    SID([u32; 4]),
-
-    /// A connection was successfully made with the given CID; an optional "disconnect token" is provided
-    CID((xous::CID, Option<[u32; 4]>)),
-
-    /// Operation requested was otherwise successful (currently only used by disconnect to ack the disconnect)
-    Success,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

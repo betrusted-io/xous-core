@@ -1,3 +1,6 @@
+mod rkyv_enum;
+pub(crate) use rkyv_enum::*;
+
 // NOTE: the use of ComState "verbs" as commands is not meant as a 1:1 mapping of commands
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
@@ -33,33 +36,16 @@ impl From<[usize; 2]> for BattStats {
     }
 }
 
-impl Into<[usize; 2]> for BattStats {
-    fn into(self) -> [usize; 2] {
+impl From<BattStats> for [usize; 2]{
+    fn from(stats: BattStats) -> [usize; 2] {
         [
-            (self.voltage as usize & 0xffff) | ((self.soc as usize) << 16) & 0xFF_0000,
-            (self.remaining_capacity as usize & 0xffff)
-                | ((self.current as usize) << 16) & 0xffff_0000,
+            (stats.voltage as usize & 0xffff) | ((stats.soc as usize) << 16) & 0xFF_0000,
+            (stats.remaining_capacity as usize & 0xffff)
+                | ((stats.current as usize) << 16) & 0xffff_0000,
         ]
     }
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) enum FlashOp {
-    /// erase a region defined by (address, len)
-    Erase(u32, u32),
-    /// Send up to 1kiB of data at a time. This reduces messaging overhead and makes
-    /// programming more efficient, while taking full advantage of the 1280-deep receive FIFO on the EC.
-    /// Address + up to 4 pages. page 0 is at address, page 1 is at address + 256, etc.
-    /// Pages stored as None are skipped, yet the address pointer is still incremented.
-    Program(u32, [Option<[u8; 256]>; 4]),
-    /// Read a data at the `u32` address specified.
-    Verify(u32, [u8; 256]),
-}
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) enum FlashResult {
-    Pass,
-    Fail,
-}
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct FlashRecord {
     /// identifier to validate that we're authorized to do this

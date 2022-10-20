@@ -9,17 +9,21 @@ use crate::DynError;
 
 pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
-        "xous-api-names@0.9.6",
-        "xous-api-log@0.1.6",
-        "xous-api-susres@0.9.4",
-        "xous-api-ticktimer@0.9.4",
-        "xous-ticktimer@0.1.5",
-        "xous-log@0.1.3",
-        "xous-names@0.9.11",
-        "xous-susres@0.1.6",
-        "xous-ipc@0.9.12",
-        "xous@0.9.12",
-        "xous-kernel@0.9.5",
+        // this set updates with kernel API changes
+        "xous@0.9.17",
+        "xous-kernel@0.9.10",
+        "xous-ipc@0.9.17",
+        "xous-api-log@0.1.11",
+        "xous-api-names@0.9.12",
+        "xous-api-susres@0.9.10",
+        "xous-api-ticktimer@0.9.10",
+        "xous-log@0.1.8",
+        "xous-names@0.9.16",
+        "xous-susres@0.1.12",
+        "xous-ticktimer@0.1.11",
+        // this set is only updated if the utralib changes
+        "utralib@0.1.5",
+        "svd2utra@0.1.3",
     ];
     for pkg in check_pkgs {
         verify(pkg.into())?;
@@ -62,7 +66,8 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
         };
         let subdir = format!("./{}/{}/", subdir, name);
         // handle special cases of xous kernel and ipc crates
-        let src_path = if name != "xous" && name != "xous-ipc" && name != "xous-kernel" {
+        let src_path = if name != "xous" && name != "xous-ipc" && name != "xous-kernel"
+        && name != "utralib" && name != "svd2utra" {
             Path::new(&subdir)
         } else {
             if name == "xous" {
@@ -71,6 +76,10 @@ pub fn verify(spec: CrateSpec) -> Result<(), DynError> {
                 Path::new("./xous-ipc")
             } else if name == "xous-kernel" {
                 Path::new("./kernel")
+            } else if name == "utralib" {
+                Path::new("./utralib")
+            } else if name == "svd2utra" {
+                Path::new("./svd2utra")
             } else {
                 panic!("Consistency error: special case handling did not find either xous or xous-ipc");
             }
@@ -184,10 +193,12 @@ fn compare_dirs(src: &Path, other: &Path) -> Result<bool, DynError> {
                 let mut src_file = src.to_path_buf();
                 src_file.push(&fname);
                 // println!("comparing {} <-> {}", src_file.as_os_str().to_str().unwrap(), other_file.as_os_str().to_str().unwrap());
-                if src_file.as_os_str().to_str().unwrap().contains("ticktimer")
-                    && fname.as_os_str().to_str().unwrap() == "version.rs" {
+                if (src_file.as_os_str().to_str().unwrap().contains("ticktimer")
+                    && fname.as_os_str().to_str().unwrap() == "version.rs")
+                    || src_file.as_os_str().to_str().unwrap().contains("Cargo.lock") {
                     // don't compare the version.rs, as it's supposed to be different due to the timestamp
-                    // println!("skipping ticktimer version.rs");
+                    // don't compare Cargo.lock files that happen to be checked into packages
+                    // println!("skipping ticktimer version.rs or Cargo.lock file"); // this line is helpful to ensure our skip exception isn't too broad.
                 } else {
                     match compare_files(&src_file, &other_file) {
                         Ok(true) => {},

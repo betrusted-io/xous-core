@@ -99,9 +99,9 @@ impl From<&Point> for (i16, i16) {
     }
 }
 
-impl Into<usize> for Point {
-    fn into(self) -> usize {
-        (self.x as usize) << 16 | (self.y as usize)
+impl From<Point> for usize {
+    fn from(point: Point) -> usize {
+        (point.x as usize) << 16 | (point.y as usize)
     }
 }
 

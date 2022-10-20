@@ -259,7 +259,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                     write!(ret, "Sync result code: {:?}\n", self.pddb.sync()).ok();
                     log::info!("{}PDDB.SYNCDONE,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                 }
-                "test" => {
+                "hwtest" => {
                     let mut args = [0u32; 4];
                     for (index, token) in tokens.enumerate() {
                         if index > 3 {

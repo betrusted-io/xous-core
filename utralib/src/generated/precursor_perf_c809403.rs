@@ -336,8 +336,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum RebootOffset {
             SocReset = 0,
-            Addr = 1,
-            CpuReset = 2,
+            Addr = 4,
+            CpuReset = 8,
         }
         pub const REBOOT_NUMREGS: usize = 3;
 
@@ -358,11 +358,11 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum Timer0Offset {
             Load = 0,
-            Reload = 1,
-            En = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
+            Reload = 4,
+            En = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
         }
         pub const TIMER0_NUMREGS: usize = 6;
 
@@ -393,13 +393,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum CrgOffset {
             MmcmDrpReset = 0,
-            MmcmDrpLocked = 1,
-            MmcmDrpRead = 2,
-            MmcmDrpWrite = 3,
-            MmcmDrpDrdy = 4,
-            MmcmDrpAdr = 5,
-            MmcmDrpDatW = 6,
-            MmcmDrpDatR = 7,
+            MmcmDrpLocked = 4,
+            MmcmDrpRead = 8,
+            MmcmDrpWrite = 12,
+            MmcmDrpDrdy = 16,
+            MmcmDrpAdr = 20,
+            MmcmDrpDatW = 24,
+            MmcmDrpDatR = 28,
         }
         pub const CRG_NUMREGS: usize = 8;
 
@@ -435,15 +435,15 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum GpioOffset {
             Output = 0,
-            Input = 1,
-            Drive = 2,
-            Intena = 3,
-            Intpol = 4,
-            Uartsel = 5,
-            Debug = 6,
-            EvStatus = 7,
-            EvPending = 8,
-            EvEnable = 9,
+            Input = 4,
+            Drive = 8,
+            Intena = 12,
+            Intpol = 16,
+            Uartsel = 20,
+            Debug = 24,
+            EvStatus = 28,
+            EvPending = 32,
+            EvEnable = 36,
         }
         pub const GPIO_NUMREGS: usize = 10;
 
@@ -508,13 +508,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum UartOffset {
             Rxtx = 0,
-            Txfull = 1,
-            Rxempty = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Txempty = 6,
-            Rxfull = 7,
+            Txfull = 4,
+            Rxempty = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Txempty = 24,
+            Rxfull = 28,
         }
         pub const UART_NUMREGS: usize = 8;
 
@@ -554,13 +554,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum ConsoleOffset {
             Rxtx = 0,
-            Txfull = 1,
-            Rxempty = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Txempty = 6,
-            Rxfull = 7,
+            Txfull = 4,
+            Rxempty = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Txempty = 24,
+            Rxfull = 28,
         }
         pub const CONSOLE_NUMREGS: usize = 8;
 
@@ -600,13 +600,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum AppUartOffset {
             Rxtx = 0,
-            Txfull = 1,
-            Rxempty = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Txempty = 6,
-            Rxfull = 7,
+            Txfull = 4,
+            Rxempty = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Txempty = 24,
+            Rxfull = 28,
         }
         pub const APP_UART_NUMREGS: usize = 8;
 
@@ -646,17 +646,17 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum InfoOffset {
             DnaId1 = 0,
-            DnaId0 = 1,
-            GitMajor = 2,
-            GitMinor = 3,
-            GitRevision = 4,
-            GitGitrev = 5,
-            GitGitextra = 6,
-            GitDirty = 7,
-            PlatformPlatform1 = 8,
-            PlatformPlatform0 = 9,
-            PlatformTarget1 = 10,
-            PlatformTarget0 = 11,
+            DnaId0 = 4,
+            GitMajor = 8,
+            GitMinor = 12,
+            GitRevision = 16,
+            GitGitrev = 20,
+            GitGitextra = 24,
+            GitDirty = 28,
+            PlatformPlatform1 = 32,
+            PlatformPlatform0 = 36,
+            PlatformTarget1 = 40,
+            PlatformTarget0 = 44,
         }
         pub const INFO_NUMREGS: usize = 12;
 
@@ -704,7 +704,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SramExtOffset {
             ConfigStatus = 0,
-            ReadConfig = 1,
+            ReadConfig = 4,
         }
         pub const SRAM_EXT_NUMREGS: usize = 2;
 
@@ -722,13 +722,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum MemlcdOffset {
             Command = 0,
-            Busy = 1,
-            Prescaler = 2,
-            EvStatus = 3,
-            EvPending = 4,
-            EvEnable = 5,
-            Devboot = 6,
-            Devstatus = 7,
+            Busy = 4,
+            Prescaler = 8,
+            EvStatus = 12,
+            EvPending = 16,
+            EvEnable = 20,
+            Devboot = 24,
+            Devstatus = 28,
         }
         pub const MEMLCD_NUMREGS: usize = 8;
 
@@ -765,12 +765,12 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum ComOffset {
             Tx = 0,
-            Rx = 1,
-            Control = 2,
-            Status = 3,
-            EvStatus = 4,
-            EvPending = 5,
-            EvEnable = 6,
+            Rx = 4,
+            Control = 8,
+            Status = 12,
+            EvStatus = 16,
+            EvPending = 20,
+            EvEnable = 24,
         }
         pub const COM_NUMREGS: usize = 7;
 
@@ -809,15 +809,15 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum I2COffset {
             Prescale = 0,
-            Control = 1,
-            Txr = 2,
-            Rxr = 3,
-            Command = 4,
-            Status = 5,
-            CoreReset = 6,
-            EvStatus = 7,
-            EvPending = 8,
-            EvEnable = 9,
+            Control = 4,
+            Txr = 8,
+            Rxr = 12,
+            Command = 16,
+            Status = 20,
+            CoreReset = 24,
+            EvStatus = 28,
+            EvPending = 32,
+            EvEnable = 36,
         }
         pub const I2C_NUMREGS: usize = 10;
 
@@ -876,8 +876,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum BteventsOffset {
             EvStatus = 0,
-            EvPending = 1,
-            EvEnable = 2,
+            EvPending = 4,
+            EvEnable = 8,
         }
         pub const BTEVENTS_NUMREGS: usize = 3;
 
@@ -902,8 +902,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum MessibleOffset {
             In = 0,
-            Out = 1,
-            Status = 2,
+            Out = 4,
+            Status = 8,
         }
         pub const MESSIBLE_NUMREGS: usize = 3;
 
@@ -925,8 +925,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum Messible2Offset {
             In = 0,
-            Out = 1,
-            Status = 2,
+            Out = 4,
+            Status = 8,
         }
         pub const MESSIBLE2_NUMREGS: usize = 3;
 
@@ -948,13 +948,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TicktimerOffset {
             Control = 0,
-            Time1 = 1,
-            Time0 = 2,
-            MsleepTarget1 = 3,
-            MsleepTarget0 = 4,
-            EvStatus = 5,
-            EvPending = 6,
-            EvEnable = 7,
+            Time1 = 4,
+            Time0 = 8,
+            MsleepTarget1 = 12,
+            MsleepTarget0 = 16,
+            EvStatus = 20,
+            EvPending = 24,
+            EvEnable = 28,
         }
         pub const TICKTIMER_NUMREGS: usize = 8;
 
@@ -991,18 +991,18 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SusresOffset {
             Control = 0,
-            ResumeTime1 = 1,
-            ResumeTime0 = 2,
-            Time1 = 3,
-            Time0 = 4,
-            Status = 5,
-            State = 6,
-            Powerdown = 7,
-            Wfi = 8,
-            Interrupt = 9,
-            EvStatus = 10,
-            EvPending = 11,
-            EvEnable = 12,
+            ResumeTime1 = 4,
+            ResumeTime0 = 8,
+            Time1 = 12,
+            Time0 = 16,
+            Status = 20,
+            State = 24,
+            Powerdown = 28,
+            Wfi = 32,
+            Interrupt = 36,
+            EvStatus = 40,
+            EvPending = 44,
+            EvEnable = 48,
         }
         pub const SUSRES_NUMREGS: usize = 13;
 
@@ -1056,14 +1056,14 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum PowerOffset {
             Power = 0,
-            ClkStatus = 1,
-            WakeupSource = 2,
-            ActivityRate = 3,
-            SamplingPeriod = 4,
-            Vibe = 5,
-            EvStatus = 6,
-            EvPending = 7,
-            EvEnable = 8,
+            ClkStatus = 4,
+            WakeupSource = 8,
+            ActivityRate = 12,
+            SamplingPeriod = 16,
+            Vibe = 20,
+            EvStatus = 24,
+            EvPending = 28,
+            EvEnable = 32,
         }
         pub const POWER_NUMREGS: usize = 9;
 
@@ -1127,9 +1127,9 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SpinorSoftIntOffset {
             EvStatus = 0,
-            EvPending = 1,
-            EvEnable = 2,
-            Softint = 3,
+            EvPending = 4,
+            EvEnable = 8,
+            Softint = 12,
         }
         pub const SPINOR_SOFT_INT_NUMREGS: usize = 4;
 
@@ -1154,18 +1154,18 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SpinorOffset {
             Config = 0,
-            DelayConfig = 1,
-            DelayStatus = 2,
-            Command = 3,
-            CmdArg = 4,
-            CmdRbkData = 5,
-            Status = 6,
-            Wdata = 7,
-            EvStatus = 8,
-            EvPending = 9,
-            EvEnable = 10,
-            EccAddress = 11,
-            EccStatus = 12,
+            DelayConfig = 4,
+            DelayStatus = 8,
+            Command = 12,
+            CmdArg = 16,
+            CmdRbkData = 20,
+            Status = 24,
+            Wdata = 28,
+            EvStatus = 32,
+            EvPending = 36,
+            EvEnable = 40,
+            EccAddress = 44,
+            EccStatus = 48,
         }
         pub const SPINOR_NUMREGS: usize = 13;
 
@@ -1225,18 +1225,18 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum KeyboardOffset {
             UartChar = 0,
-            Row0Dat = 1,
-            Row1Dat = 2,
-            Row2Dat = 3,
-            Row3Dat = 4,
-            Row4Dat = 5,
-            Row5Dat = 6,
-            Row6Dat = 7,
-            Row7Dat = 8,
-            Row8Dat = 9,
-            EvStatus = 10,
-            EvPending = 11,
-            EvEnable = 12,
+            Row0Dat = 4,
+            Row1Dat = 8,
+            Row2Dat = 12,
+            Row3Dat = 16,
+            Row4Dat = 20,
+            Row5Dat = 24,
+            Row6Dat = 28,
+            Row7Dat = 32,
+            Row8Dat = 36,
+            EvStatus = 40,
+            EvPending = 44,
+            EvEnable = 48,
         }
         pub const KEYBOARD_NUMREGS: usize = 13;
 
@@ -1292,7 +1292,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum KeyinjectOffset {
             UartChar = 0,
-            Disable = 1,
+            Disable = 4,
         }
         pub const KEYINJECT_NUMREGS: usize = 2;
 
@@ -1310,7 +1310,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum SeedOffset {
             Seed1 = 0,
-            Seed0 = 1,
+            Seed0 = 4,
         }
         pub const SEED_NUMREGS: usize = 2;
 
@@ -1328,9 +1328,9 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum KeyromOffset {
             Address = 0,
-            Data = 1,
-            Lockaddr = 2,
-            Lockstat = 3,
+            Data = 4,
+            Lockaddr = 8,
+            Lockstat = 12,
         }
         pub const KEYROM_NUMREGS: usize = 4;
 
@@ -1354,14 +1354,14 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum AudioOffset {
             EvStatus = 0,
-            EvPending = 1,
-            EvEnable = 2,
-            RxCtl = 3,
-            RxStat = 4,
-            RxConf = 5,
-            TxCtl = 6,
-            TxStat = 7,
-            TxConf = 8,
+            EvPending = 4,
+            EvEnable = 8,
+            RxCtl = 12,
+            RxStat = 16,
+            RxConf = 20,
+            TxCtl = 24,
+            TxStat = 28,
+            TxConf = 32,
         }
         pub const AUDIO_NUMREGS: usize = 9;
 
@@ -1431,12 +1431,12 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TrngKernelOffset {
             Status = 0,
-            Data = 1,
-            Urandom = 2,
-            UrandomValid = 3,
-            EvStatus = 4,
-            EvPending = 5,
-            EvEnable = 6,
+            Data = 4,
+            Urandom = 8,
+            UrandomValid = 12,
+            EvStatus = 16,
+            EvPending = 20,
+            EvEnable = 24,
         }
         pub const TRNG_KERNEL_NUMREGS: usize = 7;
 
@@ -1476,63 +1476,63 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TrngServerOffset {
             Control = 0,
-            Data = 1,
-            Status = 2,
-            AvConfig = 3,
-            RoConfig = 4,
-            AvNist = 5,
-            RoNist = 6,
-            Underruns = 7,
-            NistErrors = 8,
-            NistRoStat0 = 9,
-            NistRoStat1 = 10,
-            NistRoStat2 = 11,
-            NistRoStat3 = 12,
-            NistAvStat0 = 13,
-            NistAvStat1 = 14,
-            RoRunslimit1 = 15,
-            RoRunslimit2 = 16,
-            RoRunslimit3 = 17,
-            RoRunslimit4 = 18,
-            RoRun0Ctrl = 19,
-            RoRun0Fresh = 20,
-            RoRun0Count1 = 21,
-            RoRun0Count2 = 22,
-            RoRun0Count3 = 23,
-            RoRun0Count4 = 24,
-            RoRun1Ctrl = 25,
-            RoRun1Fresh = 26,
-            RoRun1Count1 = 27,
-            RoRun1Count2 = 28,
-            RoRun1Count3 = 29,
-            RoRun1Count4 = 30,
-            RoRun2Ctrl = 31,
-            RoRun2Fresh = 32,
-            RoRun2Count1 = 33,
-            RoRun2Count2 = 34,
-            RoRun2Count3 = 35,
-            RoRun2Count4 = 36,
-            RoRun3Ctrl = 37,
-            RoRun3Fresh = 38,
-            RoRun3Count1 = 39,
-            RoRun3Count2 = 40,
-            RoRun3Count3 = 41,
-            RoRun3Count4 = 42,
-            AvExcursion0Ctrl = 43,
-            AvExcursion0Stat = 44,
-            AvExcursion0LastErr = 45,
-            AvExcursion1Ctrl = 46,
-            AvExcursion1Stat = 47,
-            AvExcursion1LastErr = 48,
-            Ready = 49,
-            EvStatus = 50,
-            EvPending = 51,
-            EvEnable = 52,
-            Chacha = 53,
-            Seed = 54,
-            Urandom = 55,
-            UrandomValid = 56,
-            Test = 57,
+            Data = 4,
+            Status = 8,
+            AvConfig = 12,
+            RoConfig = 16,
+            AvNist = 20,
+            RoNist = 24,
+            Underruns = 28,
+            NistErrors = 32,
+            NistRoStat0 = 36,
+            NistRoStat1 = 40,
+            NistRoStat2 = 44,
+            NistRoStat3 = 48,
+            NistAvStat0 = 52,
+            NistAvStat1 = 56,
+            RoRunslimit1 = 60,
+            RoRunslimit2 = 64,
+            RoRunslimit3 = 68,
+            RoRunslimit4 = 72,
+            RoRun0Ctrl = 76,
+            RoRun0Fresh = 80,
+            RoRun0Count1 = 84,
+            RoRun0Count2 = 88,
+            RoRun0Count3 = 92,
+            RoRun0Count4 = 96,
+            RoRun1Ctrl = 100,
+            RoRun1Fresh = 104,
+            RoRun1Count1 = 108,
+            RoRun1Count2 = 112,
+            RoRun1Count3 = 116,
+            RoRun1Count4 = 120,
+            RoRun2Ctrl = 124,
+            RoRun2Fresh = 128,
+            RoRun2Count1 = 132,
+            RoRun2Count2 = 136,
+            RoRun2Count3 = 140,
+            RoRun2Count4 = 144,
+            RoRun3Ctrl = 148,
+            RoRun3Fresh = 152,
+            RoRun3Count1 = 156,
+            RoRun3Count2 = 160,
+            RoRun3Count3 = 164,
+            RoRun3Count4 = 168,
+            AvExcursion0Ctrl = 172,
+            AvExcursion0Stat = 176,
+            AvExcursion0LastErr = 180,
+            AvExcursion1Ctrl = 184,
+            AvExcursion1Stat = 188,
+            AvExcursion1LastErr = 192,
+            Ready = 196,
+            EvStatus = 200,
+            EvPending = 204,
+            EvEnable = 208,
+            Chacha = 212,
+            Seed = 216,
+            Urandom = 220,
+            UrandomValid = 224,
+            Test = 228,
         }
         pub const TRNG_SERVER_NUMREGS: usize = 58;
 
@@ -1781,25 +1781,25 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum TrngOffset {
             XadcTemperature = 0,
-            XadcVccint = 1,
-            XadcVccaux = 2,
-            XadcVccbram = 3,
-            XadcVbus = 4,
-            XadcUsbP = 5,
-            XadcUsbN = 6,
-            XadcNoise0 = 7,
-            XadcNoise1 = 8,
-            XadcEoc = 9,
-            XadcEos = 10,
-            XadcGpio5 = 11,
-            XadcGpio2 = 12,
-            XadcDrpEnable = 13,
-            XadcDrpRead = 14,
-            XadcDrpWrite = 15,
-            XadcDrpDrdy = 16,
-            XadcDrpAdr = 17,
-            XadcDrpDatW = 18,
-            XadcDrpDatR = 19,
+            XadcVccint = 4,
+            XadcVccaux = 8,
+            XadcVccbram = 12,
+            XadcVbus = 16,
+            XadcUsbP = 20,
+            XadcUsbN = 24,
+            XadcNoise0 = 28,
+            XadcNoise1 = 32,
+            XadcEoc = 36,
+            XadcEos = 40,
+            XadcGpio5 = 44,
+            XadcGpio2 = 48,
+            XadcDrpEnable = 52,
+            XadcDrpRead = 56,
+            XadcDrpWrite = 60,
+            XadcDrpDrdy = 64,
+            XadcDrpAdr = 68,
+            XadcDrpDatW = 72,
+            XadcDrpDatR = 76,
         }
         pub const TRNG_NUMREGS: usize = 20;
 
@@ -1871,30 +1871,30 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum Sha512Offset {
             Power = 0,
-            Config = 1,
-            Command = 2,
-            Digest01 = 3,
-            Digest00 = 4,
-            Digest11 = 5,
-            Digest10 = 6,
-            Digest21 = 7,
-            Digest20 = 8,
-            Digest31 = 9,
-            Digest30 = 10,
-            Digest41 = 11,
-            Digest40 = 12,
-            Digest51 = 13,
-            Digest50 = 14,
-            Digest61 = 15,
-            Digest60 = 16,
-            Digest71 = 17,
-            Digest70 = 18,
-            MsgLength1 = 19,
-            MsgLength0 = 20,
-            EvStatus = 21,
-            EvPending = 22,
-            EvEnable = 23,
-            Fifo = 24,
+            Config = 4,
+            Command = 8,
+            Digest01 = 12,
+            Digest00 = 16,
+            Digest11 = 20,
+            Digest10 = 24,
+            Digest21 = 28,
+            Digest20 = 32,
+            Digest31 = 36,
+            Digest30 = 40,
+            Digest41 = 44,
+            Digest40 = 48,
+            Digest51 = 52,
+            Digest50 = 56,
+            Digest61 = 60,
+            Digest60 = 64,
+            Digest71 = 68,
+            Digest70 = 72,
+            MsgLength1 = 76,
+            MsgLength0 = 80,
+            EvStatus = 84,
+            EvPending = 88,
+            EvEnable = 92,
+            Fifo = 96,
         }
         pub const SHA512_NUMREGS: usize = 25;
 
@@ -2000,16 +2000,16 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum EngineOffset {
             Window = 0,
-            Mpstart = 1,
-            Mplen = 2,
-            Control = 3,
-            Mpresume = 4,
-            Power = 5,
-            Status = 6,
-            EvStatus = 7,
-            EvPending = 8,
-            EvEnable = 9,
-            Instruction = 10,
+            Mpstart = 4,
+            Mplen = 8,
+            Control = 12,
+            Mpresume = 16,
+            Power = 20,
+            Status = 24,
+            EvStatus = 28,
+            EvPending = 32,
+            EvEnable = 36,
+            Instruction = 40,
         }
         pub const ENGINE_NUMREGS: usize = 11;
 
@@ -2067,7 +2067,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum JtagOffset {
             Next = 0,
-            Tdo = 1,
+            Tdo = 4,
         }
         pub const JTAG_NUMREGS: usize = 2;
 
@@ -2087,8 +2087,8 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum WdtOffset {
             Watchdog = 0,
-            Period = 1,
-            State = 2,
+            Period = 4,
+            State = 8,
         }
         pub const WDT_NUMREGS: usize = 3;
 
@@ -2113,10 +2113,10 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum UsbdevOffset {
             Usbdisable = 0,
-            Usbselect = 1,
-            EvStatus = 2,
-            EvPending = 3,
-            EvEnable = 4,
+            Usbselect = 4,
+            EvStatus = 8,
+            EvPending = 12,
+            EvEnable = 16,
         }
         pub const USBDEV_NUMREGS: usize = 5;
 
@@ -2145,7 +2145,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum D11CtimeOffset {
             Control = 0,
-            Heartbeat = 1,
+            Heartbeat = 4,
         }
         pub const D11CTIME_NUMREGS: usize = 2;
 
@@ -2163,7 +2163,7 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum WfiOffset {
             Wfi = 0,
-            IgnoreLocked = 1,
+            IgnoreLocked = 4,
         }
         pub const WFI_NUMREGS: usize = 2;
 
@@ -2251,13 +2251,13 @@ pub mod utra {
         #[derive(Debug, Copy, Clone)]
         pub enum PerfcounterOffset {
             Config = 0,
-            SaturateLimit1 = 1,
-            SaturateLimit0 = 2,
-            Run = 3,
-            Status = 4,
-            EventIndex = 5,
-            EventRaw1 = 6,
-            EventRaw0 = 7,
+            SaturateLimit1 = 4,
+            SaturateLimit0 = 8,
+            Run = 12,
+            Status = 16,
+            EventIndex = 20,
+            EventRaw1 = 24,
+            EventRaw0 = 28,
         }
         pub const PERFCOUNTER_NUMREGS: usize = 8;
 
@@ -2348,11 +2348,11 @@ pub const LITEX_USBDEV_INTERRUPT: usize = 19;
 
 #[cfg(test)]
 mod tests {
+
     #[test]
     #[ignore]
-    fn compile_check() {
-        use super::*;
-        let mut reboot_csr = CSR::new(HW_REBOOT_BASE as *mut u32);
+    fn compile_check_reboot_csr() {
+        use super::*;        let mut reboot_csr = CSR::new(HW_REBOOT_BASE as *mut u32);
 
         let foo = reboot_csr.r(utra::reboot::SOC_RESET);
         reboot_csr.wo(utra::reboot::SOC_RESET, foo);
@@ -2377,7 +2377,12 @@ mod tests {
         let mut baz = reboot_csr.zf(utra::reboot::CPU_RESET_CPU_RESET, bar);
         baz |= reboot_csr.ms(utra::reboot::CPU_RESET_CPU_RESET, 1);
         reboot_csr.wfo(utra::reboot::CPU_RESET_CPU_RESET, baz);
-        let mut timer0_csr = CSR::new(HW_TIMER0_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_timer0_csr() {
+        use super::*;        let mut timer0_csr = CSR::new(HW_TIMER0_BASE as *mut u32);
 
         let foo = timer0_csr.r(utra::timer0::LOAD);
         timer0_csr.wo(utra::timer0::LOAD, foo);
@@ -2426,7 +2431,12 @@ mod tests {
         let mut baz = timer0_csr.zf(utra::timer0::EV_ENABLE_ZERO, bar);
         baz |= timer0_csr.ms(utra::timer0::EV_ENABLE_ZERO, 1);
         timer0_csr.wfo(utra::timer0::EV_ENABLE_ZERO, baz);
-        let mut crg_csr = CSR::new(HW_CRG_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_crg_csr() {
+        use super::*;        let mut crg_csr = CSR::new(HW_CRG_BASE as *mut u32);
 
         let foo = crg_csr.r(utra::crg::MMCM_DRP_RESET);
         crg_csr.wo(utra::crg::MMCM_DRP_RESET, foo);
@@ -2491,7 +2501,12 @@ mod tests {
         let mut baz = crg_csr.zf(utra::crg::MMCM_DRP_DAT_R_MMCM_DRP_DAT_R, bar);
         baz |= crg_csr.ms(utra::crg::MMCM_DRP_DAT_R_MMCM_DRP_DAT_R, 1);
         crg_csr.wfo(utra::crg::MMCM_DRP_DAT_R_MMCM_DRP_DAT_R, baz);
-        let mut gpio_csr = CSR::new(HW_GPIO_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_gpio_csr() {
+        use super::*;        let mut gpio_csr = CSR::new(HW_GPIO_BASE as *mut u32);
 
         let foo = gpio_csr.r(utra::gpio::OUTPUT);
         gpio_csr.wo(utra::gpio::OUTPUT, foo);
@@ -2682,7 +2697,12 @@ mod tests {
         let mut baz = gpio_csr.zf(utra::gpio::EV_ENABLE_EVENT7, bar);
         baz |= gpio_csr.ms(utra::gpio::EV_ENABLE_EVENT7, 1);
         gpio_csr.wfo(utra::gpio::EV_ENABLE_EVENT7, baz);
-        let mut uart_csr = CSR::new(HW_UART_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_uart_csr() {
+        use super::*;        let mut uart_csr = CSR::new(HW_UART_BASE as *mut u32);
 
         let foo = uart_csr.r(utra::uart::RXTX);
         uart_csr.wo(utra::uart::RXTX, foo);
@@ -2762,7 +2782,12 @@ mod tests {
         let mut baz = uart_csr.zf(utra::uart::RXFULL_RXFULL, bar);
         baz |= uart_csr.ms(utra::uart::RXFULL_RXFULL, 1);
         uart_csr.wfo(utra::uart::RXFULL_RXFULL, baz);
-        let mut console_csr = CSR::new(HW_CONSOLE_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_console_csr() {
+        use super::*;        let mut console_csr = CSR::new(HW_CONSOLE_BASE as *mut u32);
 
         let foo = console_csr.r(utra::console::RXTX);
         console_csr.wo(utra::console::RXTX, foo);
@@ -2842,7 +2867,12 @@ mod tests {
         let mut baz = console_csr.zf(utra::console::RXFULL_RXFULL, bar);
         baz |= console_csr.ms(utra::console::RXFULL_RXFULL, 1);
         console_csr.wfo(utra::console::RXFULL_RXFULL, baz);
-        let mut app_uart_csr = CSR::new(HW_APP_UART_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_app_uart_csr() {
+        use super::*;        let mut app_uart_csr = CSR::new(HW_APP_UART_BASE as *mut u32);
 
         let foo = app_uart_csr.r(utra::app_uart::RXTX);
         app_uart_csr.wo(utra::app_uart::RXTX, foo);
@@ -2922,7 +2952,12 @@ mod tests {
         let mut baz = app_uart_csr.zf(utra::app_uart::RXFULL_RXFULL, bar);
         baz |= app_uart_csr.ms(utra::app_uart::RXFULL_RXFULL, 1);
         app_uart_csr.wfo(utra::app_uart::RXFULL_RXFULL, baz);
-        let mut info_csr = CSR::new(HW_INFO_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_info_csr() {
+        use super::*;        let mut info_csr = CSR::new(HW_INFO_BASE as *mut u32);
 
         let foo = info_csr.r(utra::info::DNA_ID1);
         info_csr.wo(utra::info::DNA_ID1, foo);
@@ -3019,7 +3054,12 @@ mod tests {
         let mut baz = info_csr.zf(utra::info::PLATFORM_TARGET0_PLATFORM_TARGET, bar);
         baz |= info_csr.ms(utra::info::PLATFORM_TARGET0_PLATFORM_TARGET, 1);
         info_csr.wfo(utra::info::PLATFORM_TARGET0_PLATFORM_TARGET, baz);
-        let mut sram_ext_csr = CSR::new(HW_SRAM_EXT_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_sram_ext_csr() {
+        use super::*;        let mut sram_ext_csr = CSR::new(HW_SRAM_EXT_BASE as *mut u32);
 
         let foo = sram_ext_csr.r(utra::sram_ext::CONFIG_STATUS);
         sram_ext_csr.wo(utra::sram_ext::CONFIG_STATUS, foo);
@@ -3036,7 +3076,12 @@ mod tests {
         let mut baz = sram_ext_csr.zf(utra::sram_ext::READ_CONFIG_TRIGGER, bar);
         baz |= sram_ext_csr.ms(utra::sram_ext::READ_CONFIG_TRIGGER, 1);
         sram_ext_csr.wfo(utra::sram_ext::READ_CONFIG_TRIGGER, baz);
-        let mut memlcd_csr = CSR::new(HW_MEMLCD_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_memlcd_csr() {
+        use super::*;        let mut memlcd_csr = CSR::new(HW_MEMLCD_BASE as *mut u32);
 
         let foo = memlcd_csr.r(utra::memlcd::COMMAND);
         memlcd_csr.wo(utra::memlcd::COMMAND, foo);
@@ -3106,7 +3151,12 @@ mod tests {
         let mut baz = memlcd_csr.zf(utra::memlcd::DEVSTATUS_DEVSTATUS, bar);
         baz |= memlcd_csr.ms(utra::memlcd::DEVSTATUS_DEVSTATUS, 1);
         memlcd_csr.wfo(utra::memlcd::DEVSTATUS_DEVSTATUS, baz);
-        let mut com_csr = CSR::new(HW_COM_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_com_csr() {
+        use super::*;        let mut com_csr = CSR::new(HW_COM_BASE as *mut u32);
 
         let foo = com_csr.r(utra::com::TX);
         com_csr.wo(utra::com::TX, foo);
@@ -3188,7 +3238,12 @@ mod tests {
         let mut baz = com_csr.zf(utra::com::EV_ENABLE_SPI_HOLD, bar);
         baz |= com_csr.ms(utra::com::EV_ENABLE_SPI_HOLD, 1);
         com_csr.wfo(utra::com::EV_ENABLE_SPI_HOLD, baz);
-        let mut i2c_csr = CSR::new(HW_I2C_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_i2c_csr() {
+        use super::*;        let mut i2c_csr = CSR::new(HW_I2C_BASE as *mut u32);
 
         let foo = i2c_csr.r(utra::i2c::PRESCALE);
         i2c_csr.wo(utra::i2c::PRESCALE, foo);
@@ -3349,7 +3404,12 @@ mod tests {
         let mut baz = i2c_csr.zf(utra::i2c::EV_ENABLE_TXRX_DONE, bar);
         baz |= i2c_csr.ms(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
         i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, baz);
-        let mut btevents_csr = CSR::new(HW_BTEVENTS_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_btevents_csr() {
+        use super::*;        let mut btevents_csr = CSR::new(HW_BTEVENTS_BASE as *mut u32);
 
         let foo = btevents_csr.r(utra::btevents::EV_STATUS);
         btevents_csr.wo(utra::btevents::EV_STATUS, foo);
@@ -3389,7 +3449,12 @@ mod tests {
         let mut baz = btevents_csr.zf(utra::btevents::EV_ENABLE_RTC_INT, bar);
         baz |= btevents_csr.ms(utra::btevents::EV_ENABLE_RTC_INT, 1);
         btevents_csr.wfo(utra::btevents::EV_ENABLE_RTC_INT, baz);
-        let mut messible_csr = CSR::new(HW_MESSIBLE_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_messible_csr() {
+        use super::*;        let mut messible_csr = CSR::new(HW_MESSIBLE_BASE as *mut u32);
 
         let foo = messible_csr.r(utra::messible::IN);
         messible_csr.wo(utra::messible::IN, foo);
@@ -3419,7 +3484,12 @@ mod tests {
         let mut baz = messible_csr.zf(utra::messible::STATUS_HAVE, bar);
         baz |= messible_csr.ms(utra::messible::STATUS_HAVE, 1);
         messible_csr.wfo(utra::messible::STATUS_HAVE, baz);
-        let mut messible2_csr = CSR::new(HW_MESSIBLE2_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_messible2_csr() {
+        use super::*;        let mut messible2_csr = CSR::new(HW_MESSIBLE2_BASE as *mut u32);
 
         let foo = messible2_csr.r(utra::messible2::IN);
         messible2_csr.wo(utra::messible2::IN, foo);
@@ -3449,7 +3519,12 @@ mod tests {
         let mut baz = messible2_csr.zf(utra::messible2::STATUS_HAVE, bar);
         baz |= messible2_csr.ms(utra::messible2::STATUS_HAVE, 1);
         messible2_csr.wfo(utra::messible2::STATUS_HAVE, baz);
-        let mut ticktimer_csr = CSR::new(HW_TICKTIMER_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_ticktimer_csr() {
+        use super::*;        let mut ticktimer_csr = CSR::new(HW_TICKTIMER_BASE as *mut u32);
 
         let foo = ticktimer_csr.r(utra::ticktimer::CONTROL);
         ticktimer_csr.wo(utra::ticktimer::CONTROL, foo);
@@ -3514,7 +3589,12 @@ mod tests {
         let mut baz = ticktimer_csr.zf(utra::ticktimer::EV_ENABLE_ALARM, bar);
         baz |= ticktimer_csr.ms(utra::ticktimer::EV_ENABLE_ALARM, 1);
         ticktimer_csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, baz);
-        let mut susres_csr = CSR::new(HW_SUSRES_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_susres_csr() {
+        use super::*;        let mut susres_csr = CSR::new(HW_SUSRES_BASE as *mut u32);
 
         let foo = susres_csr.r(utra::susres::CONTROL);
         susres_csr.wo(utra::susres::CONTROL, foo);
@@ -3629,7 +3709,12 @@ mod tests {
         let mut baz = susres_csr.zf(utra::susres::EV_ENABLE_SOFT_INT, bar);
         baz |= susres_csr.ms(utra::susres::EV_ENABLE_SOFT_INT, 1);
         susres_csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, baz);
-        let mut power_csr = CSR::new(HW_POWER_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_power_csr() {
+        use super::*;        let mut power_csr = CSR::new(HW_POWER_BASE as *mut u32);
 
         let foo = power_csr.r(utra::power::POWER);
         power_csr.wo(utra::power::POWER, foo);
@@ -3822,7 +3907,12 @@ mod tests {
         let mut baz = power_csr.zf(utra::power::EV_ENABLE_ACTIVITY_UPDATE, bar);
         baz |= power_csr.ms(utra::power::EV_ENABLE_ACTIVITY_UPDATE, 1);
         power_csr.wfo(utra::power::EV_ENABLE_ACTIVITY_UPDATE, baz);
-        let mut spinor_soft_int_csr = CSR::new(HW_SPINOR_SOFT_INT_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_spinor_soft_int_csr() {
+        use super::*;        let mut spinor_soft_int_csr = CSR::new(HW_SPINOR_SOFT_INT_BASE as *mut u32);
 
         let foo = spinor_soft_int_csr.r(utra::spinor_soft_int::EV_STATUS);
         spinor_soft_int_csr.wo(utra::spinor_soft_int::EV_STATUS, foo);
@@ -3855,7 +3945,12 @@ mod tests {
         let mut baz = spinor_soft_int_csr.zf(utra::spinor_soft_int::SOFTINT_SOFTINT, bar);
         baz |= spinor_soft_int_csr.ms(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
         spinor_soft_int_csr.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, baz);
-        let mut spinor_csr = CSR::new(HW_SPINOR_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_spinor_csr() {
+        use super::*;        let mut spinor_csr = CSR::new(HW_SPINOR_BASE as *mut u32);
 
         let foo = spinor_csr.r(utra::spinor::CONFIG);
         spinor_csr.wo(utra::spinor::CONFIG, foo);
@@ -4000,7 +4095,12 @@ mod tests {
         let mut baz = spinor_csr.zf(utra::spinor::ECC_STATUS_ECC_OVERFLOW, bar);
         baz |= spinor_csr.ms(utra::spinor::ECC_STATUS_ECC_OVERFLOW, 1);
         spinor_csr.wfo(utra::spinor::ECC_STATUS_ECC_OVERFLOW, baz);
-        let mut keyboard_csr = CSR::new(HW_KEYBOARD_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_keyboard_csr() {
+        use super::*;        let mut keyboard_csr = CSR::new(HW_KEYBOARD_BASE as *mut u32);
 
         let foo = keyboard_csr.r(utra::keyboard::UART_CHAR);
         keyboard_csr.wo(utra::keyboard::UART_CHAR, foo);
@@ -4125,7 +4225,12 @@ mod tests {
         let mut baz = keyboard_csr.zf(utra::keyboard::EV_ENABLE_INJECT, bar);
         baz |= keyboard_csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1);
         keyboard_csr.wfo(utra::keyboard::EV_ENABLE_INJECT, baz);
-        let mut keyinject_csr = CSR::new(HW_KEYINJECT_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_keyinject_csr() {
+        use super::*;        let mut keyinject_csr = CSR::new(HW_KEYINJECT_BASE as *mut u32);
 
         let foo = keyinject_csr.r(utra::keyinject::UART_CHAR);
         keyinject_csr.wo(utra::keyinject::UART_CHAR, foo);
@@ -4142,7 +4247,12 @@ mod tests {
         let mut baz = keyinject_csr.zf(utra::keyinject::DISABLE_DISABLE, bar);
         baz |= keyinject_csr.ms(utra::keyinject::DISABLE_DISABLE, 1);
         keyinject_csr.wfo(utra::keyinject::DISABLE_DISABLE, baz);
-        let mut seed_csr = CSR::new(HW_SEED_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_seed_csr() {
+        use super::*;        let mut seed_csr = CSR::new(HW_SEED_BASE as *mut u32);
 
         let foo = seed_csr.r(utra::seed::SEED1);
         seed_csr.wo(utra::seed::SEED1, foo);
@@ -4159,7 +4269,12 @@ mod tests {
         let mut baz = seed_csr.zf(utra::seed::SEED0_SEED, bar);
         baz |= seed_csr.ms(utra::seed::SEED0_SEED, 1);
         seed_csr.wfo(utra::seed::SEED0_SEED, baz);
-        let mut keyrom_csr = CSR::new(HW_KEYROM_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_keyrom_csr() {
+        use super::*;        let mut keyrom_csr = CSR::new(HW_KEYROM_BASE as *mut u32);
 
         let foo = keyrom_csr.r(utra::keyrom::ADDRESS);
         keyrom_csr.wo(utra::keyrom::ADDRESS, foo);
@@ -4192,7 +4307,12 @@ mod tests {
         let mut baz = keyrom_csr.zf(utra::keyrom::LOCKSTAT_LOCKSTAT, bar);
         baz |= keyrom_csr.ms(utra::keyrom::LOCKSTAT_LOCKSTAT, 1);
         keyrom_csr.wfo(utra::keyrom::LOCKSTAT_LOCKSTAT, baz);
-        let mut audio_csr = CSR::new(HW_AUDIO_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_audio_csr() {
+        use super::*;        let mut audio_csr = CSR::new(HW_AUDIO_BASE as *mut u32);
 
         let foo = audio_csr.r(utra::audio::EV_STATUS);
         audio_csr.wo(utra::audio::EV_STATUS, foo);
@@ -4415,7 +4535,12 @@ mod tests {
         let mut baz = audio_csr.zf(utra::audio::TX_CONF_LRCK_FREQ, bar);
         baz |= audio_csr.ms(utra::audio::TX_CONF_LRCK_FREQ, 1);
         audio_csr.wfo(utra::audio::TX_CONF_LRCK_FREQ, baz);
-        let mut trng_kernel_csr = CSR::new(HW_TRNG_KERNEL_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_trng_kernel_csr() {
+        use super::*;        let mut trng_kernel_csr = CSR::new(HW_TRNG_KERNEL_BASE as *mut u32);
 
         let foo = trng_kernel_csr.r(utra::trng_kernel::STATUS);
         trng_kernel_csr.wo(utra::trng_kernel::STATUS, foo);
@@ -4502,7 +4627,12 @@ mod tests {
         let mut baz = trng_kernel_csr.zf(utra::trng_kernel::EV_ENABLE_ERROR, bar);
         baz |= trng_kernel_csr.ms(utra::trng_kernel::EV_ENABLE_ERROR, 1);
         trng_kernel_csr.wfo(utra::trng_kernel::EV_ENABLE_ERROR, baz);
-        let mut trng_server_csr = CSR::new(HW_TRNG_SERVER_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_trng_server_csr() {
+        use super::*;        let mut trng_server_csr = CSR::new(HW_TRNG_SERVER_BASE as *mut u32);
 
         let foo = trng_server_csr.r(utra::trng_server::CONTROL);
         trng_server_csr.wo(utra::trng_server::CONTROL, foo);
@@ -5277,7 +5407,12 @@ mod tests {
         let mut baz = trng_server_csr.zf(utra::trng_server::TEST_SIMULTANEOUS, bar);
         baz |= trng_server_csr.ms(utra::trng_server::TEST_SIMULTANEOUS, 1);
         trng_server_csr.wfo(utra::trng_server::TEST_SIMULTANEOUS, baz);
-        let mut trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_trng_csr() {
+        use super::*;        let mut trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
 
         let foo = trng_csr.r(utra::trng::XADC_TEMPERATURE);
         trng_csr.wo(utra::trng::XADC_TEMPERATURE, foo);
@@ -5438,7 +5573,12 @@ mod tests {
         let mut baz = trng_csr.zf(utra::trng::XADC_DRP_DAT_R_XADC_DRP_DAT_R, bar);
         baz |= trng_csr.ms(utra::trng::XADC_DRP_DAT_R_XADC_DRP_DAT_R, 1);
         trng_csr.wfo(utra::trng::XADC_DRP_DAT_R_XADC_DRP_DAT_R, baz);
-        let mut sha512_csr = CSR::new(HW_SHA512_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_sha512_csr() {
+        use super::*;        let mut sha512_csr = CSR::new(HW_SHA512_BASE as *mut u32);
 
         let foo = sha512_csr.r(utra::sha512::POWER);
         sha512_csr.wo(utra::sha512::POWER, foo);
@@ -5729,7 +5869,12 @@ mod tests {
         let mut baz = sha512_csr.zf(utra::sha512::FIFO_RUNNING, bar);
         baz |= sha512_csr.ms(utra::sha512::FIFO_RUNNING, 1);
         sha512_csr.wfo(utra::sha512::FIFO_RUNNING, baz);
-        let mut engine_csr = CSR::new(HW_ENGINE_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_engine_csr() {
+        use super::*;        let mut engine_csr = CSR::new(HW_ENGINE_BASE as *mut u32);
 
         let foo = engine_csr.r(utra::engine::WINDOW);
         engine_csr.wo(utra::engine::WINDOW, foo);
@@ -5878,7 +6023,12 @@ mod tests {
         let mut baz = engine_csr.zf(utra::engine::INSTRUCTION_IMMEDIATE, bar);
         baz |= engine_csr.ms(utra::engine::INSTRUCTION_IMMEDIATE, 1);
         engine_csr.wfo(utra::engine::INSTRUCTION_IMMEDIATE, baz);
-        let mut jtag_csr = CSR::new(HW_JTAG_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_jtag_csr() {
+        use super::*;        let mut jtag_csr = CSR::new(HW_JTAG_BASE as *mut u32);
 
         let foo = jtag_csr.r(utra::jtag::NEXT);
         jtag_csr.wo(utra::jtag::NEXT, foo);
@@ -5905,7 +6055,12 @@ mod tests {
         let mut baz = jtag_csr.zf(utra::jtag::TDO_READY, bar);
         baz |= jtag_csr.ms(utra::jtag::TDO_READY, 1);
         jtag_csr.wfo(utra::jtag::TDO_READY, baz);
-        let mut wdt_csr = CSR::new(HW_WDT_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_wdt_csr() {
+        use super::*;        let mut wdt_csr = CSR::new(HW_WDT_BASE as *mut u32);
 
         let foo = wdt_csr.r(utra::wdt::WATCHDOG);
         wdt_csr.wo(utra::wdt::WATCHDOG, foo);
@@ -5950,7 +6105,12 @@ mod tests {
         let mut baz = wdt_csr.zf(utra::wdt::STATE_DISARMED, bar);
         baz |= wdt_csr.ms(utra::wdt::STATE_DISARMED, 1);
         wdt_csr.wfo(utra::wdt::STATE_DISARMED, baz);
-        let mut usbdev_csr = CSR::new(HW_USBDEV_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_usbdev_csr() {
+        use super::*;        let mut usbdev_csr = CSR::new(HW_USBDEV_BASE as *mut u32);
 
         let foo = usbdev_csr.r(utra::usbdev::USBDISABLE);
         usbdev_csr.wo(utra::usbdev::USBDISABLE, foo);
@@ -5996,7 +6156,12 @@ mod tests {
         let mut baz = usbdev_csr.zf(utra::usbdev::EV_ENABLE_USB, bar);
         baz |= usbdev_csr.ms(utra::usbdev::EV_ENABLE_USB, 1);
         usbdev_csr.wfo(utra::usbdev::EV_ENABLE_USB, baz);
-        let mut d11ctime_csr = CSR::new(HW_D11CTIME_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_d11ctime_csr() {
+        use super::*;        let mut d11ctime_csr = CSR::new(HW_D11CTIME_BASE as *mut u32);
 
         let foo = d11ctime_csr.r(utra::d11ctime::CONTROL);
         d11ctime_csr.wo(utra::d11ctime::CONTROL, foo);
@@ -6013,7 +6178,12 @@ mod tests {
         let mut baz = d11ctime_csr.zf(utra::d11ctime::HEARTBEAT_BEAT, bar);
         baz |= d11ctime_csr.ms(utra::d11ctime::HEARTBEAT_BEAT, 1);
         d11ctime_csr.wfo(utra::d11ctime::HEARTBEAT_BEAT, baz);
-        let mut wfi_csr = CSR::new(HW_WFI_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_wfi_csr() {
+        use super::*;        let mut wfi_csr = CSR::new(HW_WFI_BASE as *mut u32);
 
         let foo = wfi_csr.r(utra::wfi::WFI);
         wfi_csr.wo(utra::wfi::WFI, foo);
@@ -6030,7 +6200,12 @@ mod tests {
         let mut baz = wfi_csr.zf(utra::wfi::IGNORE_LOCKED_IGNORE_LOCKED, bar);
         baz |= wfi_csr.ms(utra::wfi::IGNORE_LOCKED_IGNORE_LOCKED, 1);
         wfi_csr.wfo(utra::wfi::IGNORE_LOCKED_IGNORE_LOCKED, baz);
-        let mut event_source0_csr = CSR::new(HW_EVENT_SOURCE0_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_event_source0_csr() {
+        use super::*;        let mut event_source0_csr = CSR::new(HW_EVENT_SOURCE0_BASE as *mut u32);
 
         let foo = event_source0_csr.r(utra::event_source0::PERFEVENT);
         event_source0_csr.wo(utra::event_source0::PERFEVENT, foo);
@@ -6039,7 +6214,12 @@ mod tests {
         let mut baz = event_source0_csr.zf(utra::event_source0::PERFEVENT_CODE, bar);
         baz |= event_source0_csr.ms(utra::event_source0::PERFEVENT_CODE, 1);
         event_source0_csr.wfo(utra::event_source0::PERFEVENT_CODE, baz);
-        let mut event_source1_csr = CSR::new(HW_EVENT_SOURCE1_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_event_source1_csr() {
+        use super::*;        let mut event_source1_csr = CSR::new(HW_EVENT_SOURCE1_BASE as *mut u32);
 
         let foo = event_source1_csr.r(utra::event_source1::PERFEVENT);
         event_source1_csr.wo(utra::event_source1::PERFEVENT, foo);
@@ -6048,7 +6228,12 @@ mod tests {
         let mut baz = event_source1_csr.zf(utra::event_source1::PERFEVENT_CODE, bar);
         baz |= event_source1_csr.ms(utra::event_source1::PERFEVENT_CODE, 1);
         event_source1_csr.wfo(utra::event_source1::PERFEVENT_CODE, baz);
-        let mut event_source2_csr = CSR::new(HW_EVENT_SOURCE2_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_event_source2_csr() {
+        use super::*;        let mut event_source2_csr = CSR::new(HW_EVENT_SOURCE2_BASE as *mut u32);
 
         let foo = event_source2_csr.r(utra::event_source2::PERFEVENT);
         event_source2_csr.wo(utra::event_source2::PERFEVENT, foo);
@@ -6057,7 +6242,12 @@ mod tests {
         let mut baz = event_source2_csr.zf(utra::event_source2::PERFEVENT_CODE, bar);
         baz |= event_source2_csr.ms(utra::event_source2::PERFEVENT_CODE, 1);
         event_source2_csr.wfo(utra::event_source2::PERFEVENT_CODE, baz);
-        let mut event_source3_csr = CSR::new(HW_EVENT_SOURCE3_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_event_source3_csr() {
+        use super::*;        let mut event_source3_csr = CSR::new(HW_EVENT_SOURCE3_BASE as *mut u32);
 
         let foo = event_source3_csr.r(utra::event_source3::PERFEVENT);
         event_source3_csr.wo(utra::event_source3::PERFEVENT, foo);
@@ -6066,7 +6256,12 @@ mod tests {
         let mut baz = event_source3_csr.zf(utra::event_source3::PERFEVENT_CODE, bar);
         baz |= event_source3_csr.ms(utra::event_source3::PERFEVENT_CODE, 1);
         event_source3_csr.wfo(utra::event_source3::PERFEVENT_CODE, baz);
-        let mut event_source4_csr = CSR::new(HW_EVENT_SOURCE4_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_event_source4_csr() {
+        use super::*;        let mut event_source4_csr = CSR::new(HW_EVENT_SOURCE4_BASE as *mut u32);
 
         let foo = event_source4_csr.r(utra::event_source4::PERFEVENT);
         event_source4_csr.wo(utra::event_source4::PERFEVENT, foo);
@@ -6075,7 +6270,12 @@ mod tests {
         let mut baz = event_source4_csr.zf(utra::event_source4::PERFEVENT_CODE, bar);
         baz |= event_source4_csr.ms(utra::event_source4::PERFEVENT_CODE, 1);
         event_source4_csr.wfo(utra::event_source4::PERFEVENT_CODE, baz);
-        let mut perfcounter_csr = CSR::new(HW_PERFCOUNTER_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_perfcounter_csr() {
+        use super::*;        let mut perfcounter_csr = CSR::new(HW_PERFCOUNTER_BASE as *mut u32);
 
         let foo = perfcounter_csr.r(utra::perfcounter::CONFIG);
         perfcounter_csr.wo(utra::perfcounter::CONFIG, foo);
@@ -6170,7 +6370,12 @@ mod tests {
         let mut baz = perfcounter_csr.zf(utra::perfcounter::EVENT_RAW0_TIMESTAMP, bar);
         baz |= perfcounter_csr.ms(utra::perfcounter::EVENT_RAW0_TIMESTAMP, 1);
         perfcounter_csr.wfo(utra::perfcounter::EVENT_RAW0_TIMESTAMP, baz);
-        let mut identifier_mem_csr = CSR::new(HW_IDENTIFIER_MEM_BASE as *mut u32);
+  }
+
+    #[test]
+    #[ignore]
+    fn compile_check_identifier_mem_csr() {
+        use super::*;        let mut identifier_mem_csr = CSR::new(HW_IDENTIFIER_MEM_BASE as *mut u32);
 
         let foo = identifier_mem_csr.r(utra::identifier_mem::IDENTIFIER_MEM);
         identifier_mem_csr.wo(utra::identifier_mem::IDENTIFIER_MEM, foo);
@@ -6179,5 +6384,5 @@ mod tests {
         let mut baz = identifier_mem_csr.zf(utra::identifier_mem::IDENTIFIER_MEM_IDENTIFIER_MEM, bar);
         baz |= identifier_mem_csr.ms(utra::identifier_mem::IDENTIFIER_MEM_IDENTIFIER_MEM, 1);
         identifier_mem_csr.wfo(utra::identifier_mem::IDENTIFIER_MEM_IDENTIFIER_MEM, baz);
-    }
+  }
 }

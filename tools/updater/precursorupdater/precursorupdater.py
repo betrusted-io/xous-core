@@ -217,7 +217,8 @@ def main():
             ['prog', "Uploading kernel", locs['LOC_KERNEL'][0], kernel],
             ['prog', "Uploading EC", locs['LOC_EC'][0], ec_fw],
             ['prog', "Uploading wf200", locs['LOC_WF200'][0], wf200],
-            ['prog', "Overwriting gateware", locs['LOC_SOC'][0], soc_csr],
+            ['prog', "Overwriting boot gateware", locs['LOC_SOC'][0], soc_csr],
+            ['erase', "Erasing any staged gateware", locs['LOC_STAGING'][0], 0x28_0000],
         ]
         if args.paranoid:
             # erase the entire area -- about 10-15 minutes

@@ -20,13 +20,13 @@ impl ProcessKey {
     }
 }
 
-impl Into<String> for ProcessKey {
-    fn into(self) -> String {
-        let mut out = String::new();
+impl core::fmt::Display for ProcessKey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for i in self.0 {
-            out.push_str(&format!("{:02x}", i));
+            write!(f, "{:02x}", i)?;
         }
-        out
+
+        Ok(())
     }
 }
 
@@ -184,19 +184,19 @@ impl From<[usize; 8]> for ProcessStartup {
     }
 }
 
-impl Into<[usize; 7]> for &ProcessStartup {
-    fn into(self) -> [usize; 7] {
-        [self.pid.get() as _, 0, 0, 0, 0, 0, 0]
+impl From<&ProcessStartup> for [usize; 7] {
+    fn from(startup: &ProcessStartup) -> [usize; 7] {
+        [startup.pid.get() as _, 0, 0, 0, 0, 0, 0]
     }
 }
 
-impl Into<[usize; 7]> for &ProcessInit {
-    fn into(self) -> [usize; 7] {
+impl From<&ProcessInit> for [usize; 7] {
+    fn from(init: &ProcessInit) -> [usize; 7] {
         [
-            u32::from_le_bytes(self.key.0[0..4].try_into().unwrap()) as _,
-            u32::from_le_bytes(self.key.0[4..8].try_into().unwrap()) as _,
-            u32::from_le_bytes(self.key.0[8..12].try_into().unwrap()) as _,
-            u32::from_le_bytes(self.key.0[12..16].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[0..4].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[4..8].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[8..12].try_into().unwrap()) as _,
+            u32::from_le_bytes(init.key.0[12..16].try_into().unwrap()) as _,
             0,
             0,
             0,
@@ -246,7 +246,7 @@ pub fn create_process_post(
     let server_env = format!("{}", xous_address());
     let pid_env = format!("{}", startup.pid);
     let process_name_env = args.name.to_string();
-    let process_key_env: String = init.key.into();
+    let process_key_env: String = format!("{}", init.key);
     let (shell, args) = if cfg!(windows) {
         ("cmd", ["/C", &args.command])
     } else if cfg!(unix) {

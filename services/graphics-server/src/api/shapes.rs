@@ -248,13 +248,13 @@ impl Rectangle {
     }
 }
 
-impl Into<ClipRect> for Rectangle {
-    fn into(self) -> ClipRect {
+impl From<Rectangle> for ClipRect {
+    fn from(rectangle: Rectangle) -> ClipRect {
         ClipRect::new(
-            self.x0() as _,
-            self.y0() as _,
-            self.x1() as _,
-            self.y1() as _,
+            rectangle.x0() as _,
+            rectangle.y0() as _,
+            rectangle.x1() as _,
+            rectangle.y1() as _,
         )
     }
 }
