@@ -9,14 +9,13 @@ using System;
 using System.Threading;
 using System.Text;
 using System.Linq;
-using System.Globalization;
 using System.Numerics;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.Bus;
 
-namespace Antmicro.Renode.Peripherals.Miscellaneous
+namespace Antmicro.Renode.Peripherals.Miscellaneous.Betrusted
 {
     public class EngineRam : IDoubleWordPeripheral, IKnownSize
     {

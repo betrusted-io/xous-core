@@ -7,13 +7,10 @@
 
 using System;
 using Antmicro.Renode.Core.Structure.Registers;
-using Antmicro.Renode.Exceptions;
-using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.I2C;
 using Antmicro.Renode.Peripherals.Sensor;
-using Antmicro.Renode.Utilities;
 
-namespace Antmicro.Renode.Peripherals.Sensors
+namespace Antmicro.Renode.Peripherals.Timers.Betrusted
 {
     public class ABRTCMC : II2CPeripheral, IProvidesRegisterCollection<ByteRegisterCollection>, ISensor
     {

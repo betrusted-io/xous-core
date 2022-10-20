@@ -13,7 +13,7 @@ using System.Threading;
 using System.Collections.Generic;
 using System;
 
-namespace Antmicro.Renode.Peripherals.Timers
+namespace Antmicro.Renode.Peripherals.Timers.Betrusted
 {
     public sealed class BetrustedWatchdog : BasicDoubleWordPeripheral, IKnownSize
     {

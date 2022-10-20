@@ -4,18 +4,14 @@
 // This file is licensed under the MIT License.
 // Full license text is available in 'licenses/MIT.txt'.
 //
-using System.Collections.Generic;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure;
 using Antmicro.Renode.Exceptions;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Time;
 using Antmicro.Renode.Utilities;
-using Antmicro.Renode.Peripherals.Bus;
-using Antmicro.Renode.Core.Structure.Registers;
-using System.Collections.Concurrent;
 
-namespace Antmicro.Renode.Peripherals.SPI
+namespace Antmicro.Renode.Peripherals.SPI.Betrusted
 {
     public interface IComPeripheral : IPeripheral, IInterestingType
     {

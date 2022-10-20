@@ -17,7 +17,7 @@ using System.Threading;
 
 // This project is a reimplementation of the OpenCoresI2C module.
 
-namespace Antmicro.Renode.Peripherals.I2C
+namespace Antmicro.Renode.Peripherals.I2C.Betrusted
 {
     [AllowedTranslations(AllowedTranslation.ByteToDoubleWord)]
     public class BetrustedEcI2C : SimpleContainer<II2CPeripheral>, IDoubleWordPeripheral, IKnownSize
