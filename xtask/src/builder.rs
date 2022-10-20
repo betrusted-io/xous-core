@@ -433,35 +433,6 @@ impl Builder {
             return Err("Target unknown: please check your UTRA target".into());
         };
 
-        // LAST_CONFIG tracks the last SVD configuration. It's used by utralib to track if it
-        // should rebuild itself based on a change in SVD configs. Note that for some reason
-        // it takes two consecutive builds with the same SVD config before the build system
-        // figures out that it doesn't need to rebuild everything. After then, it behaves as expected.
-        let last_config = format!("target/{}/{}/build/LAST_CONFIG", TARGET_TRIPLE, self.stream.to_str());
-        std::fs::create_dir_all(format!("target/{}/{}/build/", TARGET_TRIPLE, self.stream.to_str())).unwrap();
-        let changed = match OpenOptions::new()
-            .read(true)
-            .open(&last_config) {
-            Ok(mut file) => {
-                let mut contents = String::new();
-                file.read_to_string(&mut contents).unwrap();
-                if contents != self.utra_target {
-                    true
-                } else {
-                    false
-                }
-            }
-            _ => true
-        };
-        if changed {
-            let mut file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(&last_config).unwrap();
-            write!(file, "{}", self.utra_target).unwrap();
-        }
-
         // ------ build the services & apps ------
         let mut app_names = Vec::<String>::new();
         for app in self.apps.iter() {
