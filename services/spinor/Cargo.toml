@@ -33,7 +33,7 @@ precursor = ["utralib/precursor", "xous/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode", "xous/renode"]
 extra_flush = []
-default = []
+default = ["extra_flush"]
 
 [lib]
 test = true

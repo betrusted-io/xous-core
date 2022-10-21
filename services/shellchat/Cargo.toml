@@ -118,6 +118,7 @@ ditherpunk = ["png"]
 tracking-alloc = ["tracking-allocator", "tracing", "tracing-subscriber"]
 dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX). Also need to enable this feature in the status crate. Intended for debug only.
 test-rekey = []
+no-codec = []
 nettest = [] # batch network tests
 tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
 perfcounter = ["ring", "perflib", "xous/v2p"]
