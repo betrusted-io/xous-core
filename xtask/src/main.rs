@@ -273,7 +273,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("perf-image") => {
             // `--feature vaultperf` will make `vault` the performance manager, in exclusion of shellchat
-            if !build.contains("shellperf") && !builder.contains("vaultperf") {
+            if !builder.has_feature("shellperf") && !builder.has_feature("vaultperf") {
                 // select `shellchat` as the performance manager by default.
                 builder.add_feature("shellperf");
             }
