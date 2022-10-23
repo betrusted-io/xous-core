@@ -1,11 +1,14 @@
-use crate::{api::*, FILE_ID_SERVICES_PDDB_SRC_DICTIONARY};
+use crate::api::*;
 use super::*;
 
 use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use aes_gcm_siv::Aes256GcmSiv;
+#[cfg(feature="perfcounter")]
 use perflib::{PERFMETA_STARTBLOCK, PERFMETA_NONE, PERFMETA_ENDBLOCK};
+#[cfg(feature="perfcounter")]
+use crate::FILE_ID_SERVICES_PDDB_SRC_DICTIONARY;
 use std::collections::{HashMap, BinaryHeap, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
