@@ -1,7 +1,7 @@
 use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
-#[cfg(feature="perfcounter")]
+#[cfg(feature="shellperf")]
 use utralib::generated::*;
 
 use std::collections::HashMap;
@@ -52,9 +52,9 @@ pub struct CommonEnv {
     xns: xous_names::XousNames,
     boot_instant: std::time::Instant,
     /// make this communal so any number of commands can trigger or reset the performance counter, and/or perform logging
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature="shellperf")]
     perf_csr: AtomicCsr<u32>,
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature="shellperf")]
     event_csr: AtomicCsr::<u32>,
 }
 impl CommonEnv {
@@ -175,7 +175,7 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature="shellperf")]
         let perf_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::perfcounter::HW_PERFCOUNTER_BASE),
             None,
@@ -183,7 +183,7 @@ impl CmdEnv {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map perfcounter CSR range");
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature="shellperf")]
         let event1_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::event_source1::HW_EVENT_SOURCE1_BASE),
             None,
@@ -202,9 +202,9 @@ impl CmdEnv {
             xns: xous_names::XousNames::new().unwrap(),
             netmgr: net::NetManager::new(),
             boot_instant: std::time::Instant::now(),
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature="shellperf")]
             perf_csr: AtomicCsr::new(perf_csr.as_mut_ptr() as *mut u32),
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature="shellperf")]
             event_csr: AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32),
         };
         //let fcc = Fcc::new(&mut common);
