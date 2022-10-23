@@ -708,10 +708,11 @@ impl<'a> ActionManager<'a> {
                 let klen = keylist.len();
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
+                let pddb = self.pddb.borrow();
                 for key in keylist {
                     #[cfg(feature="vaultperf")]
-                    self.perfentry(&self.pm, PERFMETA_NONE, 2, std::line!());
-                    match self.pddb.borrow().get(
+                    self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
+                    match pddb.get(
                         VAULT_PASSWORD_DICT,
                         &key,
                         None,
@@ -725,9 +726,13 @@ impl<'a> ActionManager<'a> {
                             let len = record.attributes().unwrap().len;
                             let mut data = Vec::<u8>::with_capacity(len);
                             data.resize(len, 0);
+                            #[cfg(feature="vaultperf")]
+                            self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                             match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                         let extra = format!("{}; {}{}",
                                             crate::ux::atime_to_str(pw.atime),
                                             t!("vault.u2f.appinfo.authcount", xous::LANG),
@@ -741,6 +746,8 @@ impl<'a> ActionManager<'a> {
                                             guid: key,
                                         };
                                         il.push(li);
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                     } else {
                                         log::error!("Couldn't deserialize password");
                                         self.report_err("Couldn't deserialize password:", Some(key));
@@ -757,6 +764,10 @@ impl<'a> ActionManager<'a> {
                             self.report_err("Couldn't access password key", Some(e))
                         },
                     }
+                    #[cfg(feature="vaultperf")]
+                    self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
+                    #[cfg(feature="vaultperf")]
+                    self.pm.flush().ok();
                 }
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
