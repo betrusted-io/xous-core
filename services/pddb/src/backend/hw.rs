@@ -36,6 +36,11 @@ use digest::Digest;
 #[cfg(feature="migration1")]
 use crate::backend::migration1to2::*;
 
+#[cfg(feature="perfcounter")]
+use perflib::*;
+#[cfg(feature="perfcounter")]
+use utralib::AtomicCsr;
+
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 pub(crate) const MBBB_PAGES: usize = 10;
 pub(crate) const FSCB_PAGES: usize = 16;
@@ -170,6 +175,14 @@ pub(crate) struct PddbOs {
     failed_logins: u64,
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     testnames: HashSet::<String>,
+    /// Performance counter elements
+    #[cfg(feature="perfcounter")]
+    perfclient: PerfClient,
+    #[cfg(feature="perfcounter")]
+    pc_id: u32,
+    #[cfg(feature="perfcounter")]
+    /// used to toggle performance profiling on or off
+    use_perf: bool,
 }
 
 impl PddbOs {
@@ -196,6 +209,21 @@ impl PddbOs {
 
         let llio = llio::Llio::new(&xns);
         let dna = llio.soc_dna().unwrap();
+
+        // performance counter infrastructure, if selected
+        #[cfg(feature="perfcounter")]
+        let event2_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utralib::generated::utra::event_source2::HW_EVENT_SOURCE2_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map event2 CSR range");
+        #[cfg(feature="perfcounter")]
+        let perfclient = PerfClient::new(AtomicCsr::new(event2_csr.as_mut_ptr() as *mut u32));
+        #[cfg(feature="perfcounter")]
+        let pc_id = xous::process::id() as u32;
+
         // native hardware
         #[cfg(any(feature="precursor", feature="renode"))]
         let ret = PddbOs {
@@ -223,6 +251,12 @@ impl PddbOs {
             failed_logins: 0,
             #[cfg(all(feature="pddbtest", feature="autobasis"))]
             testnames: HashSet::new(),
+            #[cfg(feature="perfcounter")]
+            perfclient,
+            #[cfg(feature="perfcounter")]
+            pc_id,
+            #[cfg(feature="perfcounter")]
+            use_perf: true,
         };
         // emulated
         #[cfg(any(feature="hosted"))]
@@ -286,6 +320,19 @@ impl PddbOs {
     #[cfg(any(feature="precursor", feature="renode"))]
     pub fn dbg_dump(&self, _name: Option<String>) {
         // placeholder
+    }
+    #[allow(dead_code)]
+    #[cfg(feature="perfcounter")]
+    pub fn set_use_perf(&mut self, use_perf: bool) {
+        self.use_perf = use_perf;
+    }
+    #[allow(dead_code)]
+    #[cfg(feature="perfcounter")]
+    pub fn perf_entry(&mut self, file_id: u32, meta: u32, index: u32, line: u32) {
+        if self.use_perf {
+            let entry = perf_entry!(self.pc_id, file_id, meta, index, line);
+            self.perfclient.log_event_unchecked(entry);
+        }
     }
     #[allow(dead_code)]
     #[cfg(any(feature="hosted"))]
