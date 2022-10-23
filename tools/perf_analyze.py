@@ -14,6 +14,10 @@ FILEMAP = {
         "reserved",
         "reserved",
         "services/shellchat/src/cmds/pddb_cmd.rs",
+    ],
+    'vault' : [
+        "reserved",
+        "app/vault/src/actions.rs",
     ]
 }
 # manually extracted from build log message
@@ -44,6 +48,7 @@ PID_DICT = {
         24: 'shellchat',
         25: 'pddb',
         26: 'usb-device-xous',
+        27: 'vault',
 }
 
 # display time in milliseconds
