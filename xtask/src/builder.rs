@@ -257,6 +257,10 @@ impl Builder {
         self.features.retain(|x| x != feature);
         self
     }
+    /// test if a feature is present
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.features.contains(feature)
+    }
     /// add a feature to be passed on to just the loader
     pub fn add_loader_feature<'a>(&'a mut self, feature: &str) -> &'a mut Builder {
         self.loader_features.push(feature.into());
