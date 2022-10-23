@@ -51,6 +51,10 @@ sntpc = {version = "0.3.1"}
 net = {path="../../services/net"}
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 
+# performance profiling
+perflib = {path="../../tools/perflib", optional = true}
+utralib = {version = "0.1.6", optional = true, default-features = false }
+
 # testing
 random-pick = {version = "1.2.15", optional = true}
 [dev-dependencies]
@@ -65,5 +69,7 @@ with_ctap1 = ["ctap-crypto/with_ctap1"]
 with_ctap2_1 = []
 autotest = []
 multireset = [] # allows credential reset more than once per boot
+vaultperf = ["perflib", "xous/v2p", "utralib", "utralib/precursor"] # vault is the performance logging manager. Do not use concurrently with "shellperf", as there can only be one manager.
+vault-testing = ["random-pick"]
+
 default = ["with_ctap1", "with_ctap2_1"] # testing removed for release tag
-testing = ["random-pick"]
