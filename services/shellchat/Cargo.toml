@@ -107,7 +107,7 @@ features = ["u32_backend", "rand"]
 
 [features]
 precursor = ["utralib/precursor"]
-hosted = ["utralib/hosted"]
+hosted = ["utralib/hosted", "random-pick"]
 renode = ["utralib/renode"]
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
