@@ -398,6 +398,11 @@ use std::sync::Arc;
 
 use locales::t;
 
+#[cfg(feature="perfcounter")]
+const FILE_ID_SERVICES_PDDB_SRC_MAIN: u32 = 0;
+#[cfg(feature="perfcounter")]
+const FILE_ID_SERVICES_PDDB_SRC_DICTIONARY: u32 = 1;
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct BasisRequestPassword {
     db_name: xous_ipc::String::<{crate::api::BASIS_NAME_LEN}>,
@@ -604,6 +609,9 @@ fn wrapped_main() -> ! {
     }
 
     let tt = ticktimer_server::Ticktimer::new().unwrap();
+    // turn on (or off) performance profiling, if the feature is enabled
+    #[cfg(feature="perfcounter")]
+    pddb_os.set_use_perf(true);
 
     // register a suspend/resume listener
     let mut susres = susres::Susres::new(Some(susres::SuspendOrder::Early), &xns,
@@ -905,6 +913,8 @@ fn wrapped_main() -> ! {
                 buffer.replace(mgmt).unwrap();
             }
             Opcode::KeyRequest => {
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 3, std::line!());
                 for basis in basis_cache.access_list().iter() {
                     let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                     let mut req: PddbKeyRequest = buffer.to_original::<PddbKeyRequest, _>().unwrap();
@@ -916,6 +926,8 @@ fn wrapped_main() -> ! {
                     let dict = req.dict.as_str().expect("dict utf-8 decode error");
                     let key = req.key.as_str().expect("key utf-8 decode error");
                     log::debug!("get: {:?} {}", bname, key);
+                    #[cfg(feature="perfcounter")]
+                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 3, std::line!());
                     if basis_cache.dict_attributes(&mut pddb_os, dict, bname).is_err() {
                         if req.create_dict {
                             match basis_cache.dict_add(&mut pddb_os, dict, bname) {
@@ -934,6 +946,8 @@ fn wrapped_main() -> ! {
                         }
                     }
                     let alloc_hint = if let Some(hint) = req.alloc_hint {Some(hint as usize)} else {None};
+                    #[cfg(feature="perfcounter")]
+                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 3, std::line!());
                     if basis_cache.key_attributes(&mut pddb_os, dict, key, bname).is_err() {
                         if !req.create_key {
                             req.result = PddbRequestCode::NotFound;
@@ -959,6 +973,8 @@ fn wrapped_main() -> ! {
                             }
                         }
                     }
+                    #[cfg(feature="perfcounter")]
+                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 3, std::line!());
                     // at this point, we have established a basis/dict/key tuple.
                     let token: ApiToken = [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()];
                     let cid = if let Some(cb_sid) = req.cb_sid {
@@ -979,6 +995,8 @@ fn wrapped_main() -> ! {
                     buffer.replace(req).unwrap();
                     break; // if we got here, entry was found, stop searching
                 }
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 3, std::line!());
             }
             Opcode::OpenKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
@@ -1177,6 +1195,8 @@ fn wrapped_main() -> ! {
                 }
             }
             Opcode::KeyCountInDict => {
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 0, std::line!());
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbDictRequest, _>().unwrap();
                 if key_token.is_some() {
@@ -1193,6 +1213,8 @@ fn wrapped_main() -> ! {
                 };
                 let dict = req.dict.as_str().expect("dict utf-8 decode error");
                 log::debug!("counting keys in dict {} basis {:?}", dict, bname);
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 0, std::line!());
                 key_list = match basis_cache.key_list(&mut pddb_os, dict, bname) {
                     Ok(list) => {
                         log::debug!("count: {}", list.len());
@@ -1209,8 +1231,12 @@ fn wrapped_main() -> ! {
                     }
                 };
                 buffer.replace(req).unwrap();
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 0, std::line!());
             }
             Opcode::ListKeyV2 => {
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 1, std::line!());
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut req = buffer.to_original::<PddbKeyList, _>().unwrap();
                 if let Some(token) = key_token {
@@ -1254,6 +1280,8 @@ fn wrapped_main() -> ! {
                     req.retcode = PddbRetcode::AccessDenied;
                 }
                 buffer.replace(req).unwrap();
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 1, std::line!());
             }
             Opcode::ListKeyStd => {
                 if let Some(mem) = msg.body.memory_message_mut() {
@@ -1324,6 +1352,8 @@ fn wrapped_main() -> ! {
                 }
             }
             Opcode::ReadKey => {
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 4, std::line!());
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let pbuf = PddbBuf::from_slice_mut(buffer.as_mut()); // direct translation, no serialization necessary for performance
                 let token = pbuf.token;
@@ -1331,6 +1361,8 @@ fn wrapped_main() -> ! {
                     for basis in basis_cache.access_list().iter() {
                         let temp = if let Some (name) = &rec.basis {Some(name)} else {Some(basis)};
                         log::debug!("read (spec: {:?}){:?} {} len {} pos {}", rec.basis, temp, rec.key, pbuf.len, pbuf.position);
+                        #[cfg(feature="perfcounter")]
+                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 4, std::line!());
                         match basis_cache.key_read(&mut pddb_os,
                             &rec.dict, &rec.key,
                             &mut pbuf.data[..pbuf.len as usize], Some(pbuf.position as usize),
@@ -1340,6 +1372,8 @@ fn wrapped_main() -> ! {
                             // the key will be a hit, so, we let it stand.
                             if let Some (name) = &rec.basis {Some(&name)} else {Some(basis)}) {
                             Ok(readlen) => {
+                                #[cfg(feature="perfcounter")]
+                                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 4, std::line!());
                                 pbuf.len = readlen as u16;
                                 pbuf.retcode = PddbRetcode::Ok;
                                 break;
@@ -1356,6 +1390,8 @@ fn wrapped_main() -> ! {
                     pbuf.retcode = PddbRetcode::BasisLost;
                 }
                 // we don't nede a "replace" operation because all ops happen in-place
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 4, std::line!());
             }
 
             Opcode::SeekKeyStd => {

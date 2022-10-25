@@ -272,6 +272,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                    .add_apps(&get_cratespecs());
         }
         Some("perf-image") => {
+            // `--feature vaultperf` will make `vault` the performance manager, in exclusion of shellchat
+            if !builder.has_feature("shellperf") && !builder.has_feature("vaultperf") {
+                // select `shellchat` as the performance manager by default.
+                builder.add_feature("shellperf");
+            }
             // note: to use this image, you need to load a version of the SOC that has the performance counters built in.
             // this can be generated using the command `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
             //

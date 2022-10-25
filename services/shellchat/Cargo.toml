@@ -80,7 +80,10 @@ webpki-roots = {version = "0.22.4", optional = true}
 ring = {version = "0.16.20", optional = true} # for testing ring math functions  # note requirement for patch to xous-ring in workspace Cargo.toml
 tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
 url = {version = "2.2.2", optional = true}
+
+# for performance testing
 perflib = {path="../../tools/perflib", optional = true}
+random-pick = {version = "1.2.15", optional = true}
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
@@ -121,5 +124,5 @@ test-rekey = []
 no-codec = []
 nettest = [] # batch network tests
 tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
-perfcounter = ["ring", "perflib", "xous/v2p"]
+shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 default = [] # "debugprint"

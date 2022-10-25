@@ -6,14 +6,45 @@ use xous_ipc::String;
 use std::io::{Write, Read, Seek, SeekFrom};
 use core::fmt::Write as FmtWrite;
 
+#[cfg(feature="shellperf")]
+const TEST_DICT: &'static str = "perftest";
+#[cfg(feature="shellperf")]
+use perflib::*;
+#[cfg(feature="shellperf")]
+use sha2::Digest;
+#[cfg(feature="shellperf")]
+const FILE_ID_SERVICES_SHELLCHAT_SRC_CMDS_PDDB_CMD: u32 = 2;
+
 pub struct PddbCmd {
     pddb: pddb::Pddb,
+    #[cfg(feature="shellperf")]
+    perfbuf: xous::MemoryRange,
+    #[cfg(feature="shellperf")]
+    my_pid: u32,
 }
 impl PddbCmd {
     pub fn new(_xns: &xous_names::XousNames) -> PddbCmd {
+        #[cfg(feature="shellperf")]
+        let perfbuf = xous::syscall::map_memory(
+            None,
+            None,
+            BUFLEN,
+            xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
+        ).expect("couldn't map in the performance buffer");
+
         PddbCmd {
             pddb: pddb::Pddb::new(),
+            #[cfg(feature="shellperf")]
+            perfbuf,
+            #[cfg(feature="shellperf")]
+            my_pid: xous::process::id() as u32,
         }
+    }
+    #[cfg(feature="shellperf")]
+    #[inline]
+    pub fn perfentry(&self, pm: &PerfMgr, meta: u32, index: u32, line: u32) {
+        let event = perf_entry!(self.my_pid, FILE_ID_SERVICES_SHELLCHAT_SRC_CMDS_PDDB_CMD, meta, index, line);
+        pm.log_event_unchecked(event);
     }
 }
 
@@ -896,6 +927,123 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
+                #[cfg(feature="shellperf")]
+                "v2p" => {
+                    // don't generate a new object since it clears the data, just do a raw dump
+                    log::info!("Buf vmem loc: {:x}", self.perfbuf.as_ptr() as u32);
+                    log::info!("Buf pmem loc: {:x}", xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize).unwrap_or(0));
+                    log::info!("PerfLogEntry size: {}", core::mem::size_of::<PerfLogEntry>());
+                    log::info!("Now printing the page table mapping for the performance buffer:");
+                    for page in (0..BUFLEN).step_by(4096) {
+                        log::info!("V|P {:x} {:x}",
+                            self.perfbuf.as_ptr() as usize + page,
+                            xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize + page).unwrap_or(0),
+                        );
+                    }
+                }
+                #[cfg(feature="shellperf")]
+                "perf" => {
+                    log::info!("PDDB performance profiling");
+
+                    // event_source0 is for the kernel
+                    // event_source1 is for shellchat
+                    // event_source2 is for pddb process
+
+                    let pm = PerfMgr::new(
+                        self.perfbuf.as_mut_ptr(),
+                        _env.perf_csr.clone(),
+                        _env.event_csr.clone() // event_source1
+                    );
+                    log::info!("cleaning out old records (some stale records are expected)");
+                    pm.stop_and_reset();
+                    log::info!("run starting...");
+
+                    // this starts the performance counter
+                    pm.start();
+
+                    for index in 0..10 {
+                        self.perfentry(&pm, PERFMETA_STARTBLOCK, index, std::line!());
+                        let pws = self.pddb.list_keys(TEST_DICT, None);
+                        self.perfentry(&pm, PERFMETA_NONE, index, std::line!());
+                        let entries = pws.unwrap_or(Vec::new());
+                        self.perfentry(&pm, PERFMETA_NONE, index, std::line!());
+                        log::info!("total pws found: {}", entries.len());
+                        self.perfentry(&pm, PERFMETA_ENDBLOCK, index, std::line!());
+                        pm.flush().ok();
+                    }
+
+                    match pm.stop_and_flush() {
+                        Ok(entries) => {
+                            log::info!("entries: {}", entries);
+                        }
+                        _ => {
+                            log::info!("Perfcounter OOM'd during run");
+                        }
+                    }
+                }
+                #[cfg(feature="shellperf")]
+                "perfprep" => {
+                    log::info!("Preparing test set for performance profiling");
+                    let words = [
+                        "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",
+                        "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
+                    let weights = [1; 21];
+                    const TARGET_ENTRIES: usize = 300;
+
+                    let pws = self.pddb.list_keys(TEST_DICT, None).unwrap_or(Vec::new());
+                    if pws.len() < TARGET_ENTRIES {
+                        let extra_count = TARGET_ENTRIES - pws.len();
+                        for _index in 0..extra_count {
+                            let desc = random_pick::pick_multiple_from_slice(&words, &weights, 3);
+                            let description = format!("{} {} {}", desc[0], desc[1], desc[2]);
+                            let username = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
+                            let notes = random_pick::pick_from_slice(&words, &weights).unwrap().to_string();
+                            let record = format!(
+                                "{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n{}:{}\n",
+                                "version",
+                                2,
+                                "description",
+                                description,
+                                "username",
+                                username,
+                                "password",
+                                "dummy password",
+                                "notes",
+                                notes,
+                                "ctime",
+                                0,
+                                "atime",
+                                0,
+                                "count",
+                                1,
+                            )
+                            .into_bytes();
+
+                            let mut h = sha2::Sha256::new();
+                            h.update(description.as_bytes());
+                            h.update(username.as_bytes());
+                            let hash = h.finalize().to_vec();
+
+                            match self.pddb.get(
+                                TEST_DICT,
+                                &hex(hash),
+                                None,
+                                true,
+                                true,
+                                Some(128),
+                                None::<fn()>,
+                            ) {
+                                Ok(mut data) => match data.write(&record) {
+                                    Ok(_) => {},
+                                    Err(e) => log::info!("error creating test keys: {:?}", e),
+                                },
+                                Err(e) => log::info!("error creating test keys: {:?}", e),
+                            }
+                        }
+                        log::info!("test dictionary should have {} keys", pws.len() + extra_count);
+                        self.pddb.sync().unwrap();
+                    }
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }
@@ -966,4 +1114,15 @@ fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>
             write!(buf, " {}", tok).unwrap();
         }
     }
+}
+
+#[cfg(feature="perflib")]
+fn hex(data: Vec<u8>) -> std::string::String {
+    use std::fmt::Write;
+    let mut s = std::string::String::with_capacity(2 * data.len());
+    for byte in data {
+        write!(s, "{:02X}", byte).unwrap();
+    }
+
+    s
 }

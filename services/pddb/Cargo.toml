@@ -47,6 +47,9 @@ modals = {path="../modals"}
 
 utralib = { version = "0.1.7", optional = true, default-features = false }
 
+# performance profiling
+perflib = {path="../../tools/perflib", optional = true}
+
 [target.'cfg(any(windows,unix))'.dependencies]
 rand = "0.7.3"
 rand_chacha = "0.3.1"
@@ -84,4 +87,5 @@ test-rekey = []
 hwtest = []
 # routines to help with performance profiling of the PDDB in hosted mode
 pddb-flamegraph = ["hex"]
+perfcounter = ["perflib"]
 default = ["mbbb"]

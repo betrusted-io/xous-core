@@ -36,7 +36,7 @@ use std::sync::Arc;
 use crate::wordwrap::*;
 use core::ops::Add;
 
-#[cfg(feature = "testing")]
+#[cfg(feature = "gfx-testing")]
 mod testing;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
@@ -154,7 +154,7 @@ fn wrapped_main() -> ! {
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
 
-    #[cfg(feature = "testing")]
+    #[cfg(feature = "gfx-testing")]
     testing::tests();
     loop {
         if !is_panic.load(Ordering::Relaxed) { // non-panic graphics operations if we are in a panic situation

@@ -5,6 +5,10 @@ use std::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::mem::size_of;
 use aes_gcm_siv::Aes256GcmSiv;
+#[cfg(feature="perfcounter")]
+use perflib::{PERFMETA_STARTBLOCK, PERFMETA_NONE, PERFMETA_ENDBLOCK};
+#[cfg(feature="perfcounter")]
+use crate::FILE_ID_SERVICES_PDDB_SRC_DICTIONARY;
 use std::collections::{HashMap, BinaryHeap, BTreeSet};
 use std::io::{Result, Error, ErrorKind};
 use bitfield::bitfield;
@@ -104,6 +108,8 @@ impl DictCacheEntry {
             // we've got an entry for every key, so we can safely skip the deep index search
             let mut smallkeys_to_fill = Vec::<String>::new(); // work around inner mutability problem by copying the names of keys to fill
             for (name, key) in self.keys.iter() {
+                // #[cfg(feature="perfcounter")]
+                // hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, key_count, std::line!());
                 if key.flags.valid() {
                     if key.start + key.reserved > alloc_top.get() {
                         // if the key is within the large pool space, note its allocation for the basis overall
@@ -119,6 +125,8 @@ impl DictCacheEntry {
             // the cache may not be very effectively used because the key order is random, but let's try anyways.
             let mut data_cache = PlaintextCache { data: None, tag: None };
             for key_to_fill in smallkeys_to_fill.iter() {
+                #[cfg(feature="perfcounter")]
+                hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, key_count, std::line!());
                 self.try_fill_small_key(hw, v2p_map, cipher, &mut data_cache, key_to_fill);
             }
         } else {
@@ -126,6 +134,8 @@ impl DictCacheEntry {
             let mut data_cache = PlaintextCache { data: None, tag: None };
             let mut errcnt = 0;
             while try_entry < KEY_MAXCOUNT && key_count < self.key_count {
+                #[cfg(feature="perfcounter")]
+                hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, key_count, std::line!());
                 // cache our decryption data -- there's about 32 entries per page, and the scan is largely linear/sequential, so this should
                 // be a substantial savings in effort.
                 let req_vaddr = dict_indices_to_vaddr(self.index, try_entry);
@@ -190,22 +200,32 @@ impl DictCacheEntry {
             self.last_disk_key_index = try_entry as u32;
 
             // now build the small_pool_free binary heap structure
+            #[cfg(feature="perfcounter")]
+            hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, key_count, std::line!());
             self.rebuild_free_pool();
+            #[cfg(feature="perfcounter")]
+            hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, key_count, std::line!());
         }
         alloc_top
     }
     /// merges the list of keys in this dict cache entry into a merge_list.
     /// The `merge_list` is used because keys are presented as a union across all open basis.
     pub(crate) fn key_list(&mut self, hw: &mut PddbOs, v2p_map: &HashMap::<VirtAddr, PhysPage>, cipher: &Aes256GcmSiv, merge_list: &mut BTreeSet<String>) {
+        #[cfg(feature="perfcounter")]
+        hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_STARTBLOCK, 0, std::line!());
         // ensure that the key cache is filled
         if self.keys.len() < self.key_count as usize {
             self.fill(hw, v2p_map, cipher);
         }
+        #[cfg(feature="perfcounter")]
+        hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_NONE, 0, std::line!());
         for (key, kcache) in self.keys.iter() {
             if kcache.flags.valid() {
                 merge_list.insert(key.to_string());
             }
         }
+        #[cfg(feature="perfcounter")]
+        hw.perf_entry(FILE_ID_SERVICES_PDDB_SRC_DICTIONARY, PERFMETA_ENDBLOCK, 0, std::line!());
     }
     /// Simply ensures we have the description of a key in cache. Only tries to load small key data.
     /// Required by meta-operations on the keys that operate only out of the cache.

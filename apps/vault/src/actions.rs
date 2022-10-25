@@ -17,6 +17,11 @@ use crate::{VaultMode, SelectedEntry};
 use crate::fido::U2F_APP_DICT;
 use crate::totp::TotpAlgorithm;
 
+#[cfg(feature="vaultperf")]
+use perflib::*;
+#[cfg(feature="vaultperf")]
+const FILE_ID_APPS_VAULT_SRC_ACTIONS: u32 = 1;
+
 pub(crate) const VAULT_PASSWORD_DICT: &'static str = "vault.passwords";
 pub(crate) const VAULT_TOTP_DICT: &'static str = "vault.totp";
 /// bytes to reserve for a key entry. Making this slightly larger saves on some churn as stuff gets updated
@@ -38,7 +43,7 @@ pub(crate) enum ActionOp {
     /// Internal ops
     UpdateMode,
     Quit,
-    #[cfg(feature="testing")]
+    #[cfg(feature="vault-testing")]
     /// Testing
     GenerateTests,
 }
@@ -107,7 +112,7 @@ pub(crate) fn start_actions_thread(
                     None => {
                         log::error!("msg could not be decoded {:?}", msg);
                     }
-                    #[cfg(feature="testing")]
+                    #[cfg(feature="vault-testing")]
                     Some(ActionOp::GenerateTests) => {
                         manager.populate_tests();
                         manager.retrieve_db();
@@ -119,11 +124,11 @@ pub(crate) fn start_actions_thread(
     });
 }
 
-struct ActionManager {
+struct ActionManager<'a> {
     modals: modals::Modals,
     storage: RefCell<storage::Manager>,
 
-    #[cfg(feature="testing")]
+    #[cfg(feature="vault-testing")]
     trng: RefCell::<trng::Trng>,
 
     mode: Arc::<Mutex::<VaultMode>>,
@@ -133,23 +138,43 @@ struct ActionManager {
     action_active: Arc::<AtomicBool>,
     mode_cache: VaultMode,
     main_conn: xous::CID,
+    #[cfg(feature="vaultperf")]
+    perfbuf: xous::MemoryRange,
+    #[cfg(feature="vaultperf")]
+    pm: PerfMgr<'a>,
+    #[cfg(feature="vaultperf")]
+    pid: u32,
+    // this is necessary to keep rustc quiet when not using `vaultperf` build option...
+    phantom: core::marker::PhantomData<&'a u32>,
 }
-impl ActionManager {
+impl<'a> ActionManager<'a> {
     pub fn new(
         main_conn: xous::CID,
         mode: Arc::<Mutex::<VaultMode>>,
         item_list: Arc::<Mutex::<Vec::<ListItem>>>,
         action_active: Arc::<AtomicBool>
-    ) -> ActionManager {
+    ) -> ActionManager<'a> {
         let xns = xous_names::XousNames::new().unwrap();
         let storage_manager = storage::Manager::new(&xns);
+
+        // notes: to use vault as the performance manager, build with `cargo xtask perf-image vault --feature vaultperf`.
+        // this will override shellchat as the performance manager, while enabling all the other performance reporting agents
+        #[cfg(feature="vaultperf")]
+        let perfbuf = xous::syscall::map_memory(
+            None,
+            None,
+            BUFLEN,
+            xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
+        ).expect("couldn't map in the performance buffer");
+        #[cfg(feature="vaultperf")]
+        let pm = build_perf_mgr(perfbuf.as_mut_ptr());
 
         let mc = (*mode.lock().unwrap()).clone();
         ActionManager {
             modals: modals::Modals::new(&xns).unwrap(),
             storage: RefCell::new(storage_manager),
 
-            #[cfg(feature="testing")]
+            #[cfg(feature="vault-testing")]
             trng: RefCell::new(trng::Trng::new(&xns).unwrap()),
 
             mode_cache: mc,
@@ -159,6 +184,13 @@ impl ActionManager {
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             action_active,
             main_conn,
+            #[cfg(feature="vaultperf")]
+            perfbuf,
+            #[cfg(feature="vaultperf")]
+            pm,
+            #[cfg(feature="vaultperf")]
+            pid: xous::process::id() as u32,
+            phantom: core::marker::PhantomData,
         }
     }
     pub(crate) fn activate(&mut self) {
@@ -626,10 +658,24 @@ impl ActionManager {
         }
     }
 
+    #[cfg(feature="vaultperf")]
+    #[inline]
+    /// create performance logger entries
+    pub fn perfentry(&self, pm: &PerfMgr, meta: u32, index: u32, line: u32) {
+        let event = perf_entry!(self.pid, FILE_ID_APPS_VAULT_SRC_ACTIONS, meta, index, line);
+        pm.log_event_unchecked(event);
+    }
 
     /// Populate the display list with data from the PDDB. Limited by total available RAM; probably
     /// would stop working if you have over 500-1k records with the current heap limits.
     pub(crate) fn retrieve_db(&mut self) {
+        #[cfg(feature="vaultperf")]
+        self.pm.stop_and_reset();
+        #[cfg(feature="vaultperf")]
+        self.pm.start();
+        #[cfg(feature="vaultperf")]
+        self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 0, std::line!());
+
         self.mode_cache = {
             (*self.mode.lock().unwrap()).clone()
         };
@@ -638,6 +684,8 @@ impl ActionManager {
         match self.mode_cache {
             VaultMode::Password => {
                 let start = self.tt.elapsed_ms();
+                #[cfg(feature="vaultperf")]
+                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
                 let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
@@ -653,11 +701,18 @@ impl ActionManager {
                         Vec::new()
                     }
                 };
+                #[cfg(feature="vaultperf")]
+                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
                 log::info!("listing took {} ms", self.tt.elapsed_ms() - start);
                 let start = self.tt.elapsed_ms();
                 let klen = keylist.len();
+                #[cfg(feature="vaultperf")]
+                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
+                let pddb = self.pddb.borrow();
                 for key in keylist {
-                    match self.pddb.borrow().get(
+                    #[cfg(feature="vaultperf")]
+                    self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
+                    match pddb.get(
                         VAULT_PASSWORD_DICT,
                         &key,
                         None,
@@ -671,9 +726,13 @@ impl ActionManager {
                             let len = record.attributes().unwrap().len;
                             let mut data = Vec::<u8>::with_capacity(len);
                             data.resize(len, 0);
+                            #[cfg(feature="vaultperf")]
+                            self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                             match record.read_exact(&mut data) {
                                 Ok(_len) => {
                                     if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                         let extra = format!("{}; {}{}",
                                             crate::ux::atime_to_str(pw.atime),
                                             t!("vault.u2f.appinfo.authcount", xous::LANG),
@@ -687,6 +746,8 @@ impl ActionManager {
                                             guid: key,
                                         };
                                         il.push(li);
+                                        #[cfg(feature="vaultperf")]
+                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
                                     } else {
                                         log::error!("Couldn't deserialize password");
                                         self.report_err("Couldn't deserialize password:", Some(key));
@@ -703,7 +764,13 @@ impl ActionManager {
                             self.report_err("Couldn't access password key", Some(e))
                         },
                     }
+                    #[cfg(feature="vaultperf")]
+                    self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
+                    #[cfg(feature="vaultperf")]
+                    self.pm.flush().ok();
                 }
+                #[cfg(feature="vaultperf")]
+                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
                 log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
             }
             VaultMode::Fido => {
@@ -872,6 +939,29 @@ impl ActionManager {
             }
         }
         il.sort();
+        #[cfg(feature="vaultperf")]
+        {
+            self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 0, std::line!());
+            self.pm.flush().ok();
+            match self.pm.stop_and_flush() {
+                Ok(entries) => {
+                    log::info!("entries: {}", entries);
+                }
+                _ => {
+                    log::info!("Perfcounter OOM'd during run");
+                }
+            }
+            log::info!("Buf vmem loc: {:x}", self.perfbuf.as_ptr() as u32);
+            log::info!("Buf pmem loc: {:x}", xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize).unwrap_or(0));
+            log::info!("PerfLogEntry size: {}", core::mem::size_of::<PerfLogEntry>());
+            log::info!("Now printing the page table mapping for the performance buffer:");
+            for page in (0..BUFLEN).step_by(4096) {
+                log::info!("V|P {:x} {:x}",
+                    self.perfbuf.as_ptr() as usize + page,
+                    xous::syscall::virt_to_phys(self.perfbuf.as_ptr() as usize + page).unwrap_or(0),
+                );
+            }
+        }
     }
 
     pub(crate) fn unlock_basis(&mut self) {
@@ -963,7 +1053,7 @@ impl ActionManager {
         }
     }
 
-    #[cfg(feature="testing")]
+    #[cfg(feature="vault-testing")]
     pub(crate) fn populate_tests(&mut self) {
         use crate::ux::serialize_app_info;
 
@@ -972,8 +1062,8 @@ impl ActionManager {
             "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",
             "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
         let weights = [1; 21];
-        const TARGET_ENTRIES: usize = 35;
-        const TARGET_ENTRIES_PW: usize = 100;
+        const TARGET_ENTRIES: usize = 15;
+        const TARGET_ENTRIES_PW: usize = 200;
         // for each database, populate up to TARGET_ENTRIES
         // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
         // --- passwords ---
@@ -1219,4 +1309,29 @@ fn count_validator(input: TextEntryPayload) -> Option<xous_ipc::String<256>> {
         Ok(_input_int) => None,
         _ => Some(xous_ipc::String::<256>::from_str(t!("vault.illegal_count", xous::LANG))),
     }
+}
+
+#[cfg(feature="vaultperf")]
+fn build_perf_mgr<'a>(bufptr: *mut u8) -> PerfMgr<'a> {
+    use utralib::generated::*;
+    let perf_csr = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::perfcounter::HW_PERFCOUNTER_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map perfcounter CSR range: check that no other performance managers are active");
+    // this is the range used by the shellchat performance manager
+    let event1_csr = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::event_source1::HW_EVENT_SOURCE1_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map event1 CSR range");
+    PerfMgr::new(
+        bufptr,
+        AtomicCsr::new(perf_csr.as_mut_ptr() as *mut u32),
+        AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32) // event_source1
+    )
 }
