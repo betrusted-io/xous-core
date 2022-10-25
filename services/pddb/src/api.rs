@@ -232,6 +232,9 @@ pub(crate) enum Opcode {
     /// in prepration for a system shutdown or backup event.
     PddbHalt = 51,
 
+    /// Bulk read of a dictionary
+    DictBulkRead = 52,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
@@ -372,9 +375,17 @@ pub struct PddbKeyRecord {
     pub data: Option<Vec::<u8>>,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct PddbKeyRecordWrapper {
-    pub keys: Vec::<PddbKeyRecord>,
+/// Return codes for Read/Write API calls to the main server
+#[repr(u32)]
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) enum PddbBulkReadCode {
+    Uninit = 0,
+    /// call already in progress, try again later
+    Busy = 1,
+    /// last return data structure
+    Last = 2,
+    /// return data structure, with more data to come
+    Streaming = 3,
 }
 
 #[allow(dead_code)]

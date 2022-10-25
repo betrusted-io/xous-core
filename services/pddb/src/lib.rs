@@ -750,9 +750,116 @@ impl Pddb {
         }
     }
 
-    pub fn read_dict(&self, dict: &str, basis: Option<&str>) -> Result<Vec::<PddbKeyRecord>> {
+    /// Retrieve an entire dictionary of data in a single call. Will return data records up to but not
+    /// over a total of `size_limit`. Keys that exceed the limit are still enumerated, but their
+    /// data sections are `None`, instead of `Some(Vec::<u8>)`.
+    pub fn read_dict(&self, dict: &str, basis: Option<&str>, size_limit: Option<usize>) -> Result<Vec::<PddbKeyRecord>> {
+        use rkyv::{
+            archived_value,
+            de::deserializers::AllocDeserializer,
+            ser::{Serializer, serializers::WriteSerializer},
+            AlignedVec,
+            Archive,
+            Archived,
+            Deserialize,
+            Serialize,
+        };
+        /*
+           The operation proceeds in two phases. All operations use the DictBulkRead opcode.
+
+           The first phase establishes the read request. The caller first decides how many
+           memory pages it will use to return data from the PDDB main thread, and allocates
+           an appropriately-sized buffer.
+
+           It then serializes a `PddbDictRequest` structure, where the token and index fields are disregarded.
+
+           The main server then receives this, and if there are no tokens pending for `DictBulkRead`, it allocates
+           a 128-bit token for this transaction and records it, locking out any other potential requests.
+           If a token is already allocated, it responds immedaitely with an error code.
+
+           The main server proceeds to serialize keys out of the dictionary into `PddbKeyRecord` structures.
+           It will serialize exactly as many as can fit into the given buffer. In case the data is larger than
+           the allocated buffer, the data will always be returned as `None`; in case the data is larger than
+           the available space, the serialization stops, and the record is returned.
+
+           The PddbKeyRecords are manually packed into the memory messages with the following format:
+           MemoryMessage-custom fields:
+                - `offset` field of memory message: the current index-offset that the return data starts at. Used as a sanity check.
+                - `valid` field of the memory message: number of records expected inside the return data structure.
+           Data slice:
+                - `code`: u32 containing the current transaction code
+                - `total`: u32 with total number of keys to be transmitted (shouldn't change over the life of the session)
+                - `token`: [u32; 4] confirming or establishing the session token (shouldn't change over the life of the session)
+                First record start at data[24]:
+                    - `size` of archived struct: u32
+                    - `pos` of archived struct, relative to the current start: u32
+                    - data[u8] of length `size`
+                Next record start at data[24 + size]:
+                    - `size` of archived struct: u32
+                    - `pos` of archived struct, relative to the current start: u32
+                    - data[u8] of length `size`
+                If `size` and `pos` are both zero, then, there are no more valid records in the return structure.
+
+           The caller shall repeatedly call `DictBulkRead` until the `code` is `Last`, at which point the token
+           is deleted from the server, freeing it to service a new transaction. The caller should then collate the
+           results into the corresponding return vector.
+         */
+        // allocate buffer, which is shuffled back and forth to the PDDB server
+        let alloc_target = if let Some(size_limit) = size_limit {
+            if size_limit < 4096 {
+                4096
+            } else {
+                // rounds *down* to the nearest page size, since it is a "guaranteed not to exceed" limit
+                size_limit & (4096 - 1)
+            }
+        } else {
+            // compromise between memory zeroing time and latency to send a message
+            32 * 1024
+        };
+        let msg_mem = xous::map_memory(
+            None,
+            None,
+            alloc_target,
+            MemoryFlags::R | MemoryFlags::W,
+        )
+        .expect("Likely OOM in allocating read_dict buffer");
+
+        // setup the request arguments
+        let request = PddbDictRequest {
+            basis_specified: basis.is_some(),
+            basis: xous_ipc::String::<BASIS_NAME_LEN>::from_str(basis.unwrap_or("")),
+            dict: xous_ipc::String::<DICT_NAME_LEN>::from_str(dict),
+            key: xous_ipc::String::<KEY_NAME_LEN>::new(),
+            index: 0,
+            token: [0u32; 4],
+            code: PddbRequestCode::BulkRead
+        };
+        let mut serializer = WriteSerializer::new(AlignedVec::new());
+        let pos = serializer.serialize_value(&request).unwrap();
+        let buf = serializer.into_inner();
+        msg_mem.as_slice_mut()[..buf.len()].copy_from_slice(buf.as_slice());
+        // initiate the request
+        let msg = MemoryMessage {
+            id: Opcode::DictBulkRead.to_usize().unwrap(),
+            buf: msg_mem,
+            offset: pos,
+            valid: buf.len(),
+        };
+
+        // main loop
+        loop {
+            let (pos, valid) = match xous::send_message(
+                self.conn,
+                msg
+            ) {
+                Ok(xous::Result::MemoryReturned(offset, valid)) => (offset, valid),
+                _ => return Err(Error::new(ErrorKind::Other, "Xous internal error"))
+            };
+        }
+
         Ok(Vec::new())
     }
+
     /// Triggers a dump of the PDDB to host disk
     #[cfg(not(target_os = "xous"))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {

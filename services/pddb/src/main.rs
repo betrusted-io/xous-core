@@ -1394,6 +1394,10 @@ fn wrapped_main() -> ! {
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 4, std::line!());
             }
 
+            Opcode::DictBulkRead => {
+
+            }
+
             Opcode::SeekKeyStd => {
                 let fd = (msg.body.id() >> 16) & 0xffff;
                 if let Some(scalar) = msg.body.scalar_message() {
