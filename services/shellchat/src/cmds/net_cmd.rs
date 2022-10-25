@@ -80,7 +80,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         #[cfg(any(feature="precursor", feature="renode"))]
         let helpstring = "net [udp [rx socket] [tx dest socket]] [ping [host] [count]] [tcpget host/path]";
         // no ping in hosted mode -- why would you need it? we're using the host's network connection.
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         let helpstring = "net [udp [port]] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');

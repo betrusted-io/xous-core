@@ -123,9 +123,9 @@ struct MigrationCiphers {
 }
 
 // emulated
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 type EmuMemoryRange = EmuStorage;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 type EmuSpinor = HostedSpinor;
 
 // native hardware
@@ -259,7 +259,7 @@ impl PddbOs {
             use_perf: true,
         };
         // emulated
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         let ret = {
             PddbOs {
                 spinor: HostedSpinor::new(),
@@ -291,7 +291,7 @@ impl PddbOs {
         ret
     }
 
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     pub fn dbg_dump(&self, name: Option<String>, extra_keys: Option<&Vec::<KeyExport>>) {
         self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
@@ -335,7 +335,7 @@ impl PddbOs {
         }
     }
     #[allow(dead_code)]
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
     pub fn test_reset(&mut self) {
         self.fspace_cache = FspaceSet::new();
@@ -1934,7 +1934,7 @@ impl PddbOs {
         }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         self.tt.sleep_ms(500).unwrap(); // delay for UX to catch up in emulation
 
         // step 4. mbbb handling
@@ -1966,7 +1966,7 @@ impl PddbOs {
             self.tt.sleep_ms(100).unwrap();
         }
 
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         self.tt.sleep_ms(500).unwrap();
 
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
@@ -2934,7 +2934,7 @@ impl PddbOs {
         log::info!("v1 PDDB detected. Attempting to migrate from v1->v2.");
         log::info!("old SCD block: {:x?}", &scd.deref()[..128]); // this is not hazardous because the keys were wrapped
 
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         let mut export = Vec::<KeyExport>::new(); // export any basis keys for verification in hosted mode
 
         // derive a v1 key
@@ -3075,7 +3075,7 @@ impl PddbOs {
                                                 &basis_data_cipher_2,
                                                 &mut used_pages,
                                             ) {
-                                                #[cfg(any(feature="hosted"))]
+                                                #[cfg(not(target_os = "xous"))]
                                                 {
                                                     let mut name = [0 as u8; 64];
                                                     for (&src, dst) in bname.first().as_str().as_bytes().iter().zip(name.iter_mut()) {
@@ -3149,7 +3149,7 @@ impl PddbOs {
                 }
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-                #[cfg(any(feature="hosted"))]
+                #[cfg(not(target_os = "xous"))]
                 self.dbg_dump(Some("migration".to_string()), Some(&export));
 
                 // indicate the migration worked

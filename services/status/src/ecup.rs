@@ -72,23 +72,23 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let mut ec_package = xous::syscall::map_memory(
         None,
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     for d in ec_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF } // simulate blank flash
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let mut wf_package = xous::syscall::map_memory(
         None,
         None,
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     for d in wf_package.as_slice_mut::<u8>().iter_mut() { *d = 0xFF }
 
     loop {

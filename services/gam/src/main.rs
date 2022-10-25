@@ -108,7 +108,7 @@ fn wrapped_main() -> ! {
     let mut did_test = false; // allow one go at the test pattern
     log::trace!("entering main loop");
 
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     {
         log::info!("********************************************************************************");
         log::info!("USAGE:");

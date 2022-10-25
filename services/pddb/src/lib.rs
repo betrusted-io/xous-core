@@ -754,7 +754,7 @@ impl Pddb {
         Ok(Vec::new())
     }
     /// Triggers a dump of the PDDB to host disk
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     pub fn dbg_dump(&self, name: &str) -> Result<()> {
         let ipc = PddbDangerousDebug {
             request: DebugRequest::Dump,
@@ -767,7 +767,7 @@ impl Pddb {
     }
     /// Triggers an umount/remount, forcing a read of the PDDB from disk back into the cache structures.
     /// It's a cheesy way to test a power cycle, without having to power cycle.
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     pub fn dbg_remount(&self) -> Result<()> {
         let ipc = PddbDangerousDebug {
             request: DebugRequest::Remount,

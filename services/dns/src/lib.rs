@@ -7,7 +7,7 @@ mod hw;
 #[cfg(any(feature="precursor", feature="renode"))]
 pub use hw::*;
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod hosted;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 pub use hosted::*;

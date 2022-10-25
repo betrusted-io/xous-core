@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg_attr(
-    feature="hosted",
+    not(target_os = "xous"),
     allow(unused_imports)
 )]
 use std::thread;

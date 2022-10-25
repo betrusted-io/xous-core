@@ -83,7 +83,7 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 fn map_fonts() -> MemoryRange {
     // does nothing
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
@@ -134,7 +134,7 @@ fn wrapped_main() -> ! {
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
         .expect("can't register server");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(1))
         .expect("can't register server");

@@ -157,7 +157,7 @@ pub(crate) enum Opcode {
     /// quit the server
     Quit = 24,
     /// Write debug dump (only available in hosted mode)
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     DangerousDebug = 25,
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     BasisTesting = 26,
@@ -474,13 +474,13 @@ impl PddbKeyAttrIpc {
 }
 
 /// Debugging commands, available only in hosted mode
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDangerousDebug {
     pub request: DebugRequest,
     pub dump_name: xous_ipc::String::<128>,
 }
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum DebugRequest {
     Dump = 0,

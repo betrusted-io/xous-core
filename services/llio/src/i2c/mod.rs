@@ -2,9 +2,9 @@
 #![cfg_attr(not(target_os = "none"), allow(unused_imports))]
 #![cfg_attr(not(target_os = "none"), allow(unused_variables))]
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod hosted;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 pub use crate::i2c::hosted::*;
 
 #[cfg(any(feature="precursor", feature="renode"))]
