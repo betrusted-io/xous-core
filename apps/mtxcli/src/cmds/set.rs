@@ -34,13 +34,11 @@ impl<'a> ShellCmdApi<'a> for Set {
                             _ => {
                                 match env.set(key, value) {
                                     Ok(()) => {
-                                        write!(ret, "set {} = {}", key, value).unwrap();
+                                        // write!(ret, "set {} = {}", key, value).unwrap();
                                     },
                                     Err(e) => {
-                                        write!(ret, "error setting key {}: {:?}",
-                                               key, e).unwrap();
-                                        log::error!("error setting key {}: {:?}",
-                                                    key, e);
+                                        // write!(ret, "error setting key {}: {:?}", key, e).unwrap();
+                                        log::error!("error setting key {}: {:?}", key, e);
                                     }
                                 }
                             }
