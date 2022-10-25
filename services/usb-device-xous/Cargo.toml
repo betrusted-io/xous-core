@@ -7,17 +7,17 @@ description = "Xous USB device drivers"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous = "0.9.19"
-xous-ipc = "0.9.19"
-log-server = { package = "xous-api-log", version = "0.1.13" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.12" }
-xous-names = { package = "xous-api-names", version = "0.9.14" }
+xous = "0.9.20"
+xous-ipc = "0.9.20"
+log-server = { package = "xous-api-log", version = "0.1.14" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.13" }
+xous-names = { package = "xous-api-names", version = "0.9.15" }
 log = "0.4.14"
 llio = {path="../llio"}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
-susres = {package = "xous-api-susres", version = "0.9.12"}
+susres = {package = "xous-api-susres", version = "0.9.13"}
 modals = {path = "../modals"}
 keyboard = {path = "../keyboard"}
 bitfield = "0.13.2"
@@ -40,8 +40,8 @@ rand = "0.7.3"
 rand_chacha = "0.3.1"
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 mjolnir = [] # the big hammer for debugging Spinal USB issues. A raw memory dump of config and descriptor space. Use with care.
 default = []
