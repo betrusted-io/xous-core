@@ -28,7 +28,7 @@ default-features = false
 features = []
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 default = []

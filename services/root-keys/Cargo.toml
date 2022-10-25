@@ -75,9 +75,9 @@ default-features = false
 features = ["u32_backend", "rand"]
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 policy-menu = [] # provisions for users to set their password retention policies (on the block for deprecation) (note: to re-enable you need to add "rootkeys menu" to the tokens.rs in the GAM)
 hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
 tts = []

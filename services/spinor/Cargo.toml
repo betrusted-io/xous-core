@@ -29,9 +29,9 @@ lazy_static = "1.4.0"
 rand = "0.7.3"
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 extra_flush = []
 default = ["extra_flush"]
 

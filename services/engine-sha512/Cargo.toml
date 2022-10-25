@@ -28,8 +28,8 @@ opaque-debug = "0.3.0" # prevents internal hash state leakage from debug structu
 utralib = { version = "0.1.7", optional = true, default-features = false }
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 event_wait = [] # in theory, event_wait should be more efficient, but the OS overhead is greater than the computation.
 default = []

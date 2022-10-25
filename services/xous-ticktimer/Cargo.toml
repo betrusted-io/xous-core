@@ -24,9 +24,9 @@ xous-semver = "0.1.2"
 utralib = {version = "0.1.7", optional = true, default-features = false }
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor", "susres/precursor"]
+precursor = ["utralib/precursor", "susres/precursor"]
 hosted = ["utralib/hosted", "susres/hosted"]
-renode = ["utralib/renode", "xous/renode", "susres/renode"]
+renode = ["utralib/renode", "susres/renode"]
 debug-print = []
 watchdog = []
 timestamp = []

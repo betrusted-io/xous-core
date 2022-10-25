@@ -16,11 +16,6 @@ compiler_builtins = { version = '0.1.0', optional = true }
 v2p = []
 default = []
 
-# various targets as features
-precursor = []
-hosted = []
-renode = []
-
 # alternative language targets. Only one may be specified at a time
 lang-ja = []
 lang-zh = []

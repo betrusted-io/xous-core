@@ -34,9 +34,9 @@ chrono = "0.4.19"
 "chrono" = "0.4.19"
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 debugprint = []
 wfi_off = [] # useful for serial port debugging, forces power on so the UART characters can finish printing
 tts = []

@@ -25,8 +25,8 @@ locales = {path = "../../locales"}
 utralib = {version = "0.1.7", optional = true, default-features = false }
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 debugprint = []
 default = [] # "debugprint"
