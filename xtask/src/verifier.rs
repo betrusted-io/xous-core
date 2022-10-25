@@ -22,8 +22,8 @@ pub fn check_project_consistency() -> Result<(), DynError> {
         "xous-susres@0.1.15",
         "xous-ticktimer@0.1.14",
         // this set is only updated if the utralib changes
-        "utralib@0.1.8",
-        "svd2utra@0.1.6",
+        "utralib@0.1.7",
+        "svd2utra@0.1.5",
     ];
     for pkg in check_pkgs {
         verify(pkg.into())?;
