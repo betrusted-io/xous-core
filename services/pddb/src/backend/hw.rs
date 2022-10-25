@@ -335,7 +335,7 @@ impl PddbOs {
         }
     }
     #[allow(dead_code)]
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
     pub fn test_reset(&mut self) {
         self.fspace_cache = FspaceSet::new();
