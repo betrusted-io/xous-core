@@ -6,7 +6,7 @@
 #[cfg(any(feature="precursor", feature="renode"))]
 pub use curve25519_dalek_hw::*;
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 pub use curve25519_dalek::*;
 */
 

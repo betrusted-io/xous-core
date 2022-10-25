@@ -10,8 +10,8 @@ mod debug;
 use core::fmt::Write;
 use num_traits::FromPrimitive;
 
-#[cfg(any(feature="hosted",
-    not(any(feature="precursor", feature="renode", feature="hosted")) // makes this the default implementation
+#[cfg(any(not(target_os = "xous"),
+    not(any(feature="precursor", feature="renode", not(target_os = "xous"))) // makes this the default implementation
 ))]
 mod implementation {
     use core::fmt::{Error, Write};

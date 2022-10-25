@@ -2,7 +2,7 @@ pub(crate) const SERVER_NAME_SPINOR: &str     = "_SPINOR Hardware Interface Serv
 
 #[cfg(any(feature="precursor", feature="renode"))]
 pub const SPINOR_SIZE_BYTES: u32 = 128 * 1024 * 1024; // physical size of the device, used for hardware sanity checks on requests
-#[cfg_attr(feature="hosted", allow(dead_code))]
+#[cfg_attr(not(target_os = "xous"), allow(dead_code))]
 pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size.
 // note: logical lengths of regions are in xous::definitions
 #[allow(dead_code)]

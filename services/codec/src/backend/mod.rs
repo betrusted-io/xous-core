@@ -1,6 +1,6 @@
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod hostaudio;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 pub use crate::backend::hostaudio::*;
 
 #[cfg(any(feature="precursor", feature="renode"))]

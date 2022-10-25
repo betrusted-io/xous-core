@@ -708,7 +708,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod implementation {
     use crate::api::*;
 

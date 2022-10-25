@@ -605,7 +605,7 @@ pub(crate) fn deserialize_app_info(descriptor: Vec::<u8>) -> Option::<AppInfo> {
         } else {
             None
         }
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         if appinfo.name.len() > 0
         && appinfo.id != [0u8; 32] { // atime can be 0 - indicates never used. In hosted mode, ctime is 0.
             Some(appinfo)

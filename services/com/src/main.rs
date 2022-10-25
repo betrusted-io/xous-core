@@ -248,7 +248,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
@@ -1034,7 +1034,7 @@ fn main() -> ! {
                 for dest in prealloc.iter_mut() {
                     *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 }
-                #[cfg(any(feature="hosted"))]
+                #[cfg(not(target_os = "xous"))]
                 { // assign a fake MAC address in hosted mode so we don't crash smoltcp
                     for i in 1..4 {
                         prealloc[i] = i as u16 - 1;
