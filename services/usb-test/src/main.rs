@@ -15,9 +15,9 @@ mod spinal_udc;
 #[cfg(any(feature="precursor", feature="renode"))]
 use spinal_udc::*;
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod hosted;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 use hosted::*;
 
 

@@ -650,7 +650,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod implementation {
     use crate::api::*;
     pub struct Spinor {
@@ -743,7 +743,7 @@ fn main() -> ! {
     */
     #[cfg(any(feature="precursor", feature="renode"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(5)).expect("can't register server");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 

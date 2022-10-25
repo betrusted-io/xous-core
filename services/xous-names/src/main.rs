@@ -79,8 +79,8 @@ mod implementation {
     }
 }
 
-#[cfg(any(feature="hosted",
-    not(any(feature="precursor", feature="renode", feature="hosted")) // default to pass crates.io build
+#[cfg(any(not(target_os = "xous"),
+    not(any(feature="precursor", feature="renode", not(target_os = "xous"))) // default to pass crates.io build
 ))]
 mod implementation {
     pub struct D11cTimeout {}

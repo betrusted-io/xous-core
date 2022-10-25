@@ -1,20 +1,16 @@
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(all(target_os = "xous", target_arch = "riscv32"))]
 pub mod riscv;
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(all(target_os = "xous", target_arch = "riscv32"))]
 pub use riscv::*;
 
 #[cfg(all(
     not(feature="processes-as-threads"),
-    any(feature="hosted",
-        not(any(feature="precursor", feature="renode"))
-    )
+    not(target_os = "xous")
 ))]
 pub mod hosted;
 #[cfg(all(
     not(feature="processes-as-threads"),
-    any(feature="hosted",
-        not(any(feature="precursor", feature="renode"))
-    )
+    not(target_os = "xous")
 ))]
 pub use hosted::*;
 

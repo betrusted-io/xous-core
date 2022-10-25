@@ -375,9 +375,9 @@ use menu::*;
 
 mod libstd;
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod tests;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 #[allow(unused_imports)]
 use tests::*;
 
@@ -522,7 +522,7 @@ fn wrapped_main() -> ! {
 
     // run the CI tests if the option has been selected
     #[cfg(all(
-        feature = "hosted",
+        not(target_os = "xous"),
         feature = "ci"
     ))]
     ci_tests(&mut pddb_os).map_err(|e| log::error!("{}", e)).ok();
@@ -1513,7 +1513,7 @@ fn wrapped_main() -> ! {
                 pddb_os.reset_dont_ask_init();
                 xous::return_scalar(msg.sender, 1).ok();
             }
-            #[cfg(any(feature="hosted"))]
+            #[cfg(not(target_os = "xous"))]
             Opcode::DangerousDebug => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dbg = buffer.to_original::<PddbDangerousDebug, _>().unwrap();
@@ -1858,7 +1858,7 @@ pub(crate) fn manual_testcase(hw: &mut PddbOs) {
 #[allow(dead_code)]
 pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
     log::info!("Running `hw` test case");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     pddb_os.test_reset();
 
     manual_testcase(pddb_os);
@@ -1883,7 +1883,7 @@ pub(crate) fn hw_testcase(pddb_os: &mut PddbOs) {
         }
     }
 
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     pddb_os.dbg_dump(Some("manual".to_string()), None);
 }
 

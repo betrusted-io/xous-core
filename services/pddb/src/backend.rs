@@ -23,9 +23,9 @@ mod hw;
 pub(crate) use hw::*;
 
 // hosted mode emulation structures
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod hosted;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 pub(crate) use hosted::*;
 
 #[cfg(feature="migration1")]

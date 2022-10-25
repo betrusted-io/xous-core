@@ -483,7 +483,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod implementation {
     pub struct JtagPhy {
     }
@@ -512,7 +512,7 @@ fn main() -> ! {
     //   - another connection from shellchat for oqc testing
     #[cfg(any(feature="precursor", feature="renode"))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(3)).expect("can't register server");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", jtag_sid);
 

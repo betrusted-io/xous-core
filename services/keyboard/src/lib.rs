@@ -105,7 +105,7 @@ impl Keyboard {
     /// Reveal the connection ID for use with unsafe FFI calls
     pub fn conn(&self) -> xous::CID { self.conn }
 
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     pub fn hostmode_inject_key(&self, c: char) {
         send_message(self.conn,
             Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(),
