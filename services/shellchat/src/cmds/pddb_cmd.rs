@@ -927,6 +927,54 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
+                #[cfg(feature="hosted")]
+                "rkyvtest" => {
+                    use rkyv::{
+                        archived_value,
+                        de::deserializers::AllocDeserializer,
+                        ser::{Serializer, serializers::WriteSerializer},
+                        AlignedVec,
+                        Archive,
+                        Archived,
+                        Deserialize,
+                        Serialize,
+                    };
+                    let test = pddb::PddbKeyRecord {
+                        name: "test".to_string(),
+                        len: 64,
+                        reserved: 128,
+                        age: 0,
+                        index: core::num::NonZeroU32::new(1).unwrap(),
+                        basis: ".System".to_string(),
+                        data: Some(vec![0; 64]),
+                    };
+                    let mut serializer = WriteSerializer::new(AlignedVec::new());
+                    let pos = serializer.serialize_value(&test).unwrap();
+                    let buf = serializer.into_inner();
+                    log::info!("serialized test len: {}", buf.len());
+                    log::info!("more buf props: {}, {}", buf.as_slice().len(), pos);
+                    let archived = unsafe { archived_value::<pddb::PddbKeyRecord>(buf.as_slice(), pos) };
+                    let deserialized = archived.deserialize(&mut AllocDeserializer).unwrap();
+                    log::info!("deserialized: {:?}", deserialized);
+
+                    let test2 = pddb::PddbKeyRecord {
+                        name: "test test test".to_string(),
+                        len: 5000,
+                        reserved: 128,
+                        age: 0,
+                        index: core::num::NonZeroU32::new(1).unwrap(),
+                        basis: ".System".to_string(),
+                        data: Some(vec![0; 5000]),
+                    };
+                    let mut serializer = WriteSerializer::new(AlignedVec::new());
+                    let pos = serializer.serialize_value(&test2).unwrap();
+                    let buf = serializer.into_inner();
+                    log::info!("serialized test2 len: {}", buf.len());
+                    log::info!("more buf props: {}, {}", buf.as_slice().len(), pos);
+                    let archived = unsafe { archived_value::<pddb::PddbKeyRecord>(buf.as_slice(), pos) };
+                    let deserialized = archived.deserialize(&mut AllocDeserializer).unwrap();
+                    log::info!("deserialized: {:?}", deserialized);
+                }
                 #[cfg(feature="shellperf")]
                 "v2p" => {
                     // don't generate a new object since it clears the data, just do a raw dump

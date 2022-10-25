@@ -266,6 +266,7 @@ pub enum PddbRequestCode {
     AccessDenied = 9,
     Uninit = 10,
     DuplicateEntry = 11,
+    BulkRead = 12,
 }
 // enum def is in rkyv_enum module
 impl BasisRetentionPolicy {
@@ -307,6 +308,8 @@ pub struct PddbKeyRequest {
     pub alloc_hint: Option<u64>, // this is a usize but for IPC we must have defined memory sizes, so we pick the big option.
     pub cb_sid: Option<[u32; 4]>,
     pub result: PddbRequestCode,
+    /// used only to specify a readback size limit for bulk-return requests
+    pub bulk_limit: Option<u64>,
 }
 
 pub(crate) const MAX_PDDBKLISTLEN: usize = 4064;
@@ -349,6 +352,29 @@ pub(crate) struct PddbBuf {
     /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
     pub(crate) position: u64,
     pub(crate) data: [u8; PDDB_BUF_DATA_LEN],
+}
+
+/// Returns key name, data, and attributes in a single record. For bulk reads.
+/// The `dict` field is not specified, because, this had to be defined for the bulk read.
+/// The `basis` field, however, must be specified because a dictionary can be composed of
+/// data from multiple Bases.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+pub struct PddbKeyRecord {
+    pub name: String,
+    pub len: usize,
+    pub reserved: usize,
+    pub age: usize,
+    pub index: NonZeroU32,
+    pub basis: String,
+    /// If this is None, it means that the data read exceeded the bulk read limit
+    /// and the record must be explicitly re-read with a non-bulk call to fetch its data.
+    /// If the key is actually zero-length, a zero-length Some(Vec) is returned.
+    pub data: Option<Vec::<u8>>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct PddbKeyRecordWrapper {
+    pub keys: Vec::<PddbKeyRecord>,
 }
 
 #[allow(dead_code)]

@@ -390,6 +390,7 @@ impl Pddb {
             result: PddbRequestCode::Uninit,
             cb_sid,
             alloc_hint: if let Some(a) = alloc_hint {Some(a as u64)} else {None},
+            bulk_limit: None,
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -468,6 +469,7 @@ impl Pddb {
             result: PddbRequestCode::Uninit,
             cb_sid,
             alloc_hint: None,
+            bulk_limit: None,
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -514,6 +516,7 @@ impl Pddb {
             result: PddbRequestCode::Uninit,
             cb_sid,
             alloc_hint: None,
+            bulk_limit: None,
         };
         let mut buf = Buffer::into_buf(request)
             .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
@@ -745,6 +748,10 @@ impl Pddb {
             Ok(xous::Result::Scalar1(a)) => Ok((a as u32, 0)),
             _ => Err(Error::new(ErrorKind::Other, "Return type not recognized")),
         }
+    }
+
+    pub fn read_dict(&self, dict: &str, basis: Option<&str>) -> Result<Vec::<PddbKeyRecord>> {
+        Ok(Vec::new())
     }
     /// Triggers a dump of the PDDB to host disk
     #[cfg(any(feature="hosted"))]
