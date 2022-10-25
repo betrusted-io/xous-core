@@ -398,6 +398,15 @@ use std::sync::Arc;
 
 use locales::t;
 
+use rkyv::{
+    de::deserializers::AllocDeserializer,
+    ser::{Serializer, serializers::WriteSerializer},
+    AlignedVec,
+    Deserialize,
+};
+use core::mem::size_of;
+use core::ops::Deref;
+
 #[cfg(feature="perfcounter")]
 const FILE_ID_SERVICES_PDDB_SRC_MAIN: u32 = 0;
 #[cfg(feature="perfcounter")]
@@ -574,6 +583,7 @@ fn wrapped_main() -> ! {
     let mut key_token: Option<[u32; 4]> = None;
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
+    let mut bulkread_state: Option<BulkReadState> = None;
 
     // the PDDB resets the hardware RTC to a new random starting point every time it is reformatted
     // it is the only server capable of doing this.
@@ -1394,8 +1404,205 @@ fn wrapped_main() -> ! {
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 4, std::line!());
             }
 
+            // Optimized bulk data read handler. See lib.rs for documentation.
             Opcode::DictBulkRead => {
+                const BULKREAD_TIMEOUT_MS: u64 = 5000;
+                let range = msg.body.memory_message_mut().unwrap();
+                let buf = unsafe { core::slice::from_raw_parts_mut(
+                    range.buf.as_mut_ptr(),
+                    range.buf.len(),
+                )};
+                // unpack the descriptor
+                let pos = range.offset.map(|o| o.get()).unwrap_or_default();
+                let r = unsafe { rkyv::archived_value::<PddbDictRequest>(buf, pos) };
+                let bulk_descriptor = r.deserialize(&mut AllocDeserializer).unwrap();
+                // check for a timeout; retire state if we did timeout
+                let mut timed_out = false;
+                if let Some(state) = &bulkread_state {
+                    if tt.elapsed_ms() - state.last_time > BULKREAD_TIMEOUT_MS {
+                        timed_out = true;
+                    }
+                }
+                if timed_out {
+                    bulkread_state = None;
+                }
+                // handle state initialization, if no call was previously initiated
+                let mut first_call = false;
+                if bulkread_state.is_none() {
+                    first_call = true;
+                    // confirm data exists; setup the tracking state
+                    let key_list: Vec<String> = match basis_cache.key_list(
+                        &mut pddb_os,
+                        bulk_descriptor.dict.as_str().unwrap(),
+                        if bulk_descriptor.basis_specified {
+                            Some(bulk_descriptor.basis.as_str().unwrap())
+                        } else {
+                            None
+                        }
+                    ) {
+                        Ok(list) => list.into_iter().rev().collect(), // reverse order so Vec can just pop and get "first" item
+                        Err(e) => {
+                            match e.kind() {
+                                std::io::ErrorKind::NotFound => {
+                                    buf[..4].copy_from_slice(&(PddbBulkReadCode::NotFound as u32).to_le_bytes())
+                                }
+                                _ => {
+                                    buf[..4].copy_from_slice(&(PddbBulkReadCode::InternalError as u32).to_le_bytes())
+                                }
+                            }
+                            // this will cause the return record to just have the error code copied to it. The rest is invalid.
+                            continue;
+                        }
+                    };
+                    let state = BulkReadState {
+                        token: [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()],
+                        is_basis_specified: bulk_descriptor.basis_specified,
+                        basis: if bulk_descriptor.basis_specified{ bulk_descriptor.basis.to_string() } else { String::new() },
+                        dict: bulk_descriptor.dict.to_string(),
+                        total_keys: key_list.len(),
+                        key_list,
+                        buf_starting_key_index: 0,
+                        last_time: tt.elapsed_ms(),
+                        serialized: None,
+                        read_limit: bulk_descriptor.bulk_limit.expect("bulk limit must be specified for bulk read calls"),
+                        read_total: 0,
+                    };
+                    bulkread_state = Some(state);
+                }
+                // handle data packing into the structure
+                if let Some(state) = &mut bulkread_state {
+                    // check that the token matches, if this isn't a first call to the function
+                    if !first_call {
+                        if state.token != bulk_descriptor.token {
+                            buf[..4].copy_from_slice(&(PddbBulkReadCode::Busy as u32).to_le_bytes());
+                            continue;
+                        }
+                    }
+                    // start filling in the return structure
+                    let mut header = BulkReadHeader::default();
+                    header.total = state.total_keys as u32;
+                    header.starting_key_index = state.buf_starting_key_index as u32;
+                    header.token = state.token;
 
+                    // now loop through and pack data into the slice
+                    let mut index = size_of::<BulkReadHeader>();
+                    let mut finished = false;
+                    loop {
+                        let (pos, sbuf) = if let Some((pos, sbuf)) = state.serialized.take() {
+                            (pos, sbuf)
+                        } else {
+                            // no data was serialized, create it.
+                            if let Some(key_name) = state.key_list.pop() {
+                                let attr = basis_cache.key_attributes(&mut pddb_os,
+                                    &state.dict,
+                                    &key_name,
+                                    if state.is_basis_specified{Some(&state.basis)} else {None}
+                                ).expect("Key went missing during bulk read"); // could be a concurrent process mutating. We don't handle this; flag with a panic.
+                                if attr.len < state.read_limit - state.read_total && // will it fit in the remaining read limit?
+                                // will it fit even in a single buffer?
+                                // computed as: 2x u32 for pos/len overhead
+                                // size of the base key record, archived
+                                // maximum length strings for basis name and key name
+                                // plus header size
+                                // 32 bytes "slop" to make sure we never fail to properly compute this limit
+                                attr.len <
+                                    buf.len()
+                                    - (size_of::<u32>() * 2 + size_of::<ArchivedPddbKeyRecord>() + BASIS_NAME_LEN + KEY_NAME_LEN + size_of::<BulkReadHeader>() + 32)
+                                {
+                                    let mut d = vec![0u8; attr.len];
+                                    match basis_cache.key_read(
+                                        &mut pddb_os,
+                                        &state.dict,
+                                        &key_name,
+                                        &mut d,
+                                        None,
+                                        Some(&attr.basis),
+                                    ) {
+                                        Ok(readlen) => {
+                                            assert!(readlen == attr.len, "Bulk read key length did not match expected length");
+                                            let rec = PddbKeyRecord {
+                                                name: key_name,
+                                                len: attr.len,
+                                                reserved: attr.reserved,
+                                                age: attr.age,
+                                                index: attr.index,
+                                                basis: attr.basis,
+                                                data: Some(d)
+                                            };
+                                            state.read_total += attr.len; // commit the read length early
+                                            let mut serializer = WriteSerializer::new(AlignedVec::new());
+                                            let pos = serializer.serialize_value(&rec).unwrap();
+                                            (pos, serializer.into_inner())
+                                        }
+                                        Err(e) => {
+                                            panic!("Error reading previously attributed key {}: {:?}", &key_name, e);
+                                        }
+                                    }
+                                } else {
+                                    // report the key, but with no data
+                                    let rec = PddbKeyRecord {
+                                        name: key_name,
+                                        len: attr.len,
+                                        reserved: attr.reserved,
+                                        age: attr.age,
+                                        index: attr.index,
+                                        basis: attr.basis,
+                                        data: None,
+                                    };
+                                    let mut serializer = WriteSerializer::new(AlignedVec::new());
+                                    let pos = serializer.serialize_value(&rec).unwrap();
+                                    (pos, serializer.into_inner())
+                                }
+                            } else {
+                                // no more keys; we're done.
+                                finished = true;
+                                break;
+                            }
+                        };
+                        // sbuf now contains some serialized data. will it fit? Need 2x`u32` as recordkeeeping overhead.
+                        assert!(sbuf.len() == sbuf.as_slice().len(), "remove this assert if it doesn't fail on first run");
+                        if sbuf.len() + size_of::<u32>() * 2 <= buf.len() - index {
+                            // data can fit, copy it into the buffer.
+                            state.buf_starting_key_index += 1;
+                            header.len += 1;
+                            // read length increment was handled when the data was copied into the serialization buffer.
+                            buf[index..index + 4].copy_from_slice(
+                                &(sbuf.len() as u32).to_le_bytes()
+                            );
+                            index += size_of::<u32>();
+                            buf[index..index + 4].copy_from_slice(
+                                &(pos as u32).to_le_bytes()
+                            );
+                            index += size_of::<u32>();
+                            buf[index..index + sbuf.len()].copy_from_slice(
+                                sbuf.as_slice()
+                            );
+                            index += sbuf.len();
+                        } else {
+                            assert!(
+                                sbuf.len() + size_of::<u32>() * 2 > buf.len(),
+                                // the remediation for this is to fix the "will it fit even in a single buffer?" test above
+                                "Edge case not handled correctly: we have a serialized record that can never fit in a buffer"
+                            );
+                            // save the data for the next round, when we have an empty buffer
+                            state.serialized = Some((pos, sbuf));
+                            // data didn't fit, quit with finished = false;
+                            break;
+                        }
+                    }
+                    if finished {
+                        header.code = PddbBulkReadCode::Last as u32;
+                    } else {
+                        header.code = PddbBulkReadCode::Streaming as u32;
+                    }
+                    buf[..size_of::<BulkReadHeader>()].copy_from_slice(
+                        header.deref()
+                    );
+                    // update the last access time
+                    state.last_time = tt.elapsed_ms();
+                } else {
+                    log::warn!("This should be unreachable, the state should always be initialized by this point");
+                }
             }
 
             Opcode::SeekKeyStd => {
@@ -1934,4 +2141,31 @@ pub(crate) fn heap_usage() -> usize {
             0
          },
     }
+}
+
+struct BulkReadState {
+    /// API token
+    token: [u32; 4],
+    /// determines if the basis was specified
+    is_basis_specified: bool,
+    /// the current basis, if specified
+    basis: String,
+    /// the dictionary to read
+    dict: String,
+    /// list of keys in the dictionary. Entries are removed as they are serialized.
+    key_list: Vec::<String>,
+    /// total number of keys to send (e.g. initial key_list.len())
+    total_keys: usize,
+    /// Each buffer can hold multiple keys; a single buffer may be re-used several
+    /// times to send a large dictionary with many keys. This tracks the starting index
+    /// of the current buffer's set of keys.
+    buf_starting_key_index: usize,
+    /// Total limit of bulk read data to return
+    read_limit: usize,
+    /// Amount of data read so far
+    read_total: usize,
+    /// last interaction time, so we can timeout the state in the case that the client is misbehaved
+    last_time: u64,
+    /// the proposed data to send. Can be aborted if it is too big to fit in the remaining space.
+    serialized: Option<(usize, AlignedVec)>,
 }

@@ -3,6 +3,7 @@ pub use rkyv_enum::*;
 
 use bitfield::bitfield;
 use std::num::NonZeroU32;
+use core::ops::{Deref, DerefMut};
 
 // on the "[allow(dead_code)]" directives: these constants are used to define the PDDB, and are
 // sometimes used by both `bin` (main.rs) and `lib` (lib.rs) views, but also, sometimes used
@@ -296,6 +297,8 @@ pub struct PddbDictRequest {
     pub index: u32,
     pub token: [u32; 4],
     pub code: PddbRequestCode,
+    /// used only to specify a readback size limit for bulk-return requests
+    pub bulk_limit: Option<usize>,
 }
 
 /// A structure for requesting a token to access a particular key/value pair
@@ -311,8 +314,6 @@ pub struct PddbKeyRequest {
     pub alloc_hint: Option<u64>, // this is a usize but for IPC we must have defined memory sizes, so we pick the big option.
     pub cb_sid: Option<[u32; 4]>,
     pub result: PddbRequestCode,
-    /// used only to specify a readback size limit for bulk-return requests
-    pub bulk_limit: Option<u64>,
 }
 
 pub(crate) const MAX_PDDBKLISTLEN: usize = 4064;
@@ -378,14 +379,46 @@ pub struct PddbKeyRecord {
 /// Return codes for Read/Write API calls to the main server
 #[repr(u32)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) enum PddbBulkReadCode {
+pub enum PddbBulkReadCode {
+    /// Uninitialized value
     Uninit = 0,
-    /// call already in progress, try again later
+    /// call already in progress or timed out (e.g. token does not match what's on record)
     Busy = 1,
     /// last return data structure
     Last = 2,
     /// return data structure, with more data to come
     Streaming = 3,
+    /// dictionary not found
+    NotFound = 4,
+    /// PDDB internal error
+    InternalError = 5,
+}
+
+#[derive(Default, Debug)]
+#[repr(C)]
+pub struct BulkReadHeader {
+    pub code: u32,
+    pub starting_key_index: u32,
+    pub len: u32,
+    pub total: u32,
+    pub token: [u32; 4],
+}
+impl Deref for BulkReadHeader {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const BulkReadHeader as *const u8, core::mem::size_of::<BulkReadHeader>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for BulkReadHeader {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut BulkReadHeader as *mut u8, core::mem::size_of::<BulkReadHeader>())
+                as &mut [u8]
+        }
+    }
 }
 
 #[allow(dead_code)]
