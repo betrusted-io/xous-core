@@ -2352,8 +2352,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_reboot_csr() {
-        use super::*;
-        let mut reboot_csr = CSR::new(HW_REBOOT_BASE as *mut u32);
+        use super::*;        let mut reboot_csr = CSR::new(HW_REBOOT_BASE as *mut u32);
 
         let foo = reboot_csr.r(utra::reboot::SOC_RESET);
         reboot_csr.wo(utra::reboot::SOC_RESET, foo);
@@ -2383,8 +2382,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_timer0_csr() {
-        use super::*;
-        let mut timer0_csr = CSR::new(HW_TIMER0_BASE as *mut u32);
+        use super::*;        let mut timer0_csr = CSR::new(HW_TIMER0_BASE as *mut u32);
 
         let foo = timer0_csr.r(utra::timer0::LOAD);
         timer0_csr.wo(utra::timer0::LOAD, foo);
@@ -2438,8 +2436,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_crg_csr() {
-        use super::*;
-        let mut crg_csr = CSR::new(HW_CRG_BASE as *mut u32);
+        use super::*;        let mut crg_csr = CSR::new(HW_CRG_BASE as *mut u32);
 
         let foo = crg_csr.r(utra::crg::MMCM_DRP_RESET);
         crg_csr.wo(utra::crg::MMCM_DRP_RESET, foo);
@@ -2509,8 +2506,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_gpio_csr() {
-        use super::*;
-        let mut gpio_csr = CSR::new(HW_GPIO_BASE as *mut u32);
+        use super::*;        let mut gpio_csr = CSR::new(HW_GPIO_BASE as *mut u32);
 
         let foo = gpio_csr.r(utra::gpio::OUTPUT);
         gpio_csr.wo(utra::gpio::OUTPUT, foo);
@@ -2706,8 +2702,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_uart_csr() {
-        use super::*;
-        let mut uart_csr = CSR::new(HW_UART_BASE as *mut u32);
+        use super::*;        let mut uart_csr = CSR::new(HW_UART_BASE as *mut u32);
 
         let foo = uart_csr.r(utra::uart::RXTX);
         uart_csr.wo(utra::uart::RXTX, foo);
@@ -2792,8 +2787,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_console_csr() {
-        use super::*;
-        let mut console_csr = CSR::new(HW_CONSOLE_BASE as *mut u32);
+        use super::*;        let mut console_csr = CSR::new(HW_CONSOLE_BASE as *mut u32);
 
         let foo = console_csr.r(utra::console::RXTX);
         console_csr.wo(utra::console::RXTX, foo);
@@ -2878,8 +2872,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_app_uart_csr() {
-        use super::*;
-        let mut app_uart_csr = CSR::new(HW_APP_UART_BASE as *mut u32);
+        use super::*;        let mut app_uart_csr = CSR::new(HW_APP_UART_BASE as *mut u32);
 
         let foo = app_uart_csr.r(utra::app_uart::RXTX);
         app_uart_csr.wo(utra::app_uart::RXTX, foo);
@@ -2964,8 +2957,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_info_csr() {
-        use super::*;
-        let mut info_csr = CSR::new(HW_INFO_BASE as *mut u32);
+        use super::*;        let mut info_csr = CSR::new(HW_INFO_BASE as *mut u32);
 
         let foo = info_csr.r(utra::info::DNA_ID1);
         info_csr.wo(utra::info::DNA_ID1, foo);
@@ -3067,8 +3059,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_sram_ext_csr() {
-        use super::*;
-        let mut sram_ext_csr = CSR::new(HW_SRAM_EXT_BASE as *mut u32);
+        use super::*;        let mut sram_ext_csr = CSR::new(HW_SRAM_EXT_BASE as *mut u32);
 
         let foo = sram_ext_csr.r(utra::sram_ext::CONFIG_STATUS);
         sram_ext_csr.wo(utra::sram_ext::CONFIG_STATUS, foo);
@@ -3090,8 +3081,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_memlcd_csr() {
-        use super::*;
-        let mut memlcd_csr = CSR::new(HW_MEMLCD_BASE as *mut u32);
+        use super::*;        let mut memlcd_csr = CSR::new(HW_MEMLCD_BASE as *mut u32);
 
         let foo = memlcd_csr.r(utra::memlcd::COMMAND);
         memlcd_csr.wo(utra::memlcd::COMMAND, foo);
@@ -3166,8 +3156,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_com_csr() {
-        use super::*;
-        let mut com_csr = CSR::new(HW_COM_BASE as *mut u32);
+        use super::*;        let mut com_csr = CSR::new(HW_COM_BASE as *mut u32);
 
         let foo = com_csr.r(utra::com::TX);
         com_csr.wo(utra::com::TX, foo);
@@ -3254,8 +3243,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_i2c_csr() {
-        use super::*;
-        let mut i2c_csr = CSR::new(HW_I2C_BASE as *mut u32);
+        use super::*;        let mut i2c_csr = CSR::new(HW_I2C_BASE as *mut u32);
 
         let foo = i2c_csr.r(utra::i2c::PRESCALE);
         i2c_csr.wo(utra::i2c::PRESCALE, foo);
@@ -3421,8 +3409,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_btevents_csr() {
-        use super::*;
-        let mut btevents_csr = CSR::new(HW_BTEVENTS_BASE as *mut u32);
+        use super::*;        let mut btevents_csr = CSR::new(HW_BTEVENTS_BASE as *mut u32);
 
         let foo = btevents_csr.r(utra::btevents::EV_STATUS);
         btevents_csr.wo(utra::btevents::EV_STATUS, foo);
@@ -3467,8 +3454,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_messible_csr() {
-        use super::*;
-        let mut messible_csr = CSR::new(HW_MESSIBLE_BASE as *mut u32);
+        use super::*;        let mut messible_csr = CSR::new(HW_MESSIBLE_BASE as *mut u32);
 
         let foo = messible_csr.r(utra::messible::IN);
         messible_csr.wo(utra::messible::IN, foo);
@@ -3503,8 +3489,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_messible2_csr() {
-        use super::*;
-        let mut messible2_csr = CSR::new(HW_MESSIBLE2_BASE as *mut u32);
+        use super::*;        let mut messible2_csr = CSR::new(HW_MESSIBLE2_BASE as *mut u32);
 
         let foo = messible2_csr.r(utra::messible2::IN);
         messible2_csr.wo(utra::messible2::IN, foo);
@@ -3539,8 +3524,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_ticktimer_csr() {
-        use super::*;
-        let mut ticktimer_csr = CSR::new(HW_TICKTIMER_BASE as *mut u32);
+        use super::*;        let mut ticktimer_csr = CSR::new(HW_TICKTIMER_BASE as *mut u32);
 
         let foo = ticktimer_csr.r(utra::ticktimer::CONTROL);
         ticktimer_csr.wo(utra::ticktimer::CONTROL, foo);
@@ -3610,8 +3594,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_susres_csr() {
-        use super::*;
-        let mut susres_csr = CSR::new(HW_SUSRES_BASE as *mut u32);
+        use super::*;        let mut susres_csr = CSR::new(HW_SUSRES_BASE as *mut u32);
 
         let foo = susres_csr.r(utra::susres::CONTROL);
         susres_csr.wo(utra::susres::CONTROL, foo);
@@ -3731,8 +3714,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_power_csr() {
-        use super::*;
-        let mut power_csr = CSR::new(HW_POWER_BASE as *mut u32);
+        use super::*;        let mut power_csr = CSR::new(HW_POWER_BASE as *mut u32);
 
         let foo = power_csr.r(utra::power::POWER);
         power_csr.wo(utra::power::POWER, foo);
@@ -3930,8 +3912,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_spinor_soft_int_csr() {
-        use super::*;
-        let mut spinor_soft_int_csr = CSR::new(HW_SPINOR_SOFT_INT_BASE as *mut u32);
+        use super::*;        let mut spinor_soft_int_csr = CSR::new(HW_SPINOR_SOFT_INT_BASE as *mut u32);
 
         let foo = spinor_soft_int_csr.r(utra::spinor_soft_int::EV_STATUS);
         spinor_soft_int_csr.wo(utra::spinor_soft_int::EV_STATUS, foo);
@@ -3969,8 +3950,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_spinor_csr() {
-        use super::*;
-        let mut spinor_csr = CSR::new(HW_SPINOR_BASE as *mut u32);
+        use super::*;        let mut spinor_csr = CSR::new(HW_SPINOR_BASE as *mut u32);
 
         let foo = spinor_csr.r(utra::spinor::CONFIG);
         spinor_csr.wo(utra::spinor::CONFIG, foo);
@@ -4120,8 +4100,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_keyboard_csr() {
-        use super::*;
-        let mut keyboard_csr = CSR::new(HW_KEYBOARD_BASE as *mut u32);
+        use super::*;        let mut keyboard_csr = CSR::new(HW_KEYBOARD_BASE as *mut u32);
 
         let foo = keyboard_csr.r(utra::keyboard::UART_CHAR);
         keyboard_csr.wo(utra::keyboard::UART_CHAR, foo);
@@ -4251,8 +4230,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_keyinject_csr() {
-        use super::*;
-        let mut keyinject_csr = CSR::new(HW_KEYINJECT_BASE as *mut u32);
+        use super::*;        let mut keyinject_csr = CSR::new(HW_KEYINJECT_BASE as *mut u32);
 
         let foo = keyinject_csr.r(utra::keyinject::UART_CHAR);
         keyinject_csr.wo(utra::keyinject::UART_CHAR, foo);
@@ -4274,8 +4252,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_seed_csr() {
-        use super::*;
-        let mut seed_csr = CSR::new(HW_SEED_BASE as *mut u32);
+        use super::*;        let mut seed_csr = CSR::new(HW_SEED_BASE as *mut u32);
 
         let foo = seed_csr.r(utra::seed::SEED1);
         seed_csr.wo(utra::seed::SEED1, foo);
@@ -4297,8 +4274,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_keyrom_csr() {
-        use super::*;
-        let mut keyrom_csr = CSR::new(HW_KEYROM_BASE as *mut u32);
+        use super::*;        let mut keyrom_csr = CSR::new(HW_KEYROM_BASE as *mut u32);
 
         let foo = keyrom_csr.r(utra::keyrom::ADDRESS);
         keyrom_csr.wo(utra::keyrom::ADDRESS, foo);
@@ -4336,8 +4312,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_audio_csr() {
-        use super::*;
-        let mut audio_csr = CSR::new(HW_AUDIO_BASE as *mut u32);
+        use super::*;        let mut audio_csr = CSR::new(HW_AUDIO_BASE as *mut u32);
 
         let foo = audio_csr.r(utra::audio::EV_STATUS);
         audio_csr.wo(utra::audio::EV_STATUS, foo);
@@ -4565,8 +4540,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_trng_kernel_csr() {
-        use super::*;
-        let mut trng_kernel_csr = CSR::new(HW_TRNG_KERNEL_BASE as *mut u32);
+        use super::*;        let mut trng_kernel_csr = CSR::new(HW_TRNG_KERNEL_BASE as *mut u32);
 
         let foo = trng_kernel_csr.r(utra::trng_kernel::STATUS);
         trng_kernel_csr.wo(utra::trng_kernel::STATUS, foo);
@@ -4658,8 +4632,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_trng_server_csr() {
-        use super::*;
-        let mut trng_server_csr = CSR::new(HW_TRNG_SERVER_BASE as *mut u32);
+        use super::*;        let mut trng_server_csr = CSR::new(HW_TRNG_SERVER_BASE as *mut u32);
 
         let foo = trng_server_csr.r(utra::trng_server::CONTROL);
         trng_server_csr.wo(utra::trng_server::CONTROL, foo);
@@ -5439,8 +5412,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_trng_csr() {
-        use super::*;
-        let mut trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
+        use super::*;        let mut trng_csr = CSR::new(HW_TRNG_BASE as *mut u32);
 
         let foo = trng_csr.r(utra::trng::XADC_TEMPERATURE);
         trng_csr.wo(utra::trng::XADC_TEMPERATURE, foo);
@@ -5606,8 +5578,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_sha512_csr() {
-        use super::*;
-        let mut sha512_csr = CSR::new(HW_SHA512_BASE as *mut u32);
+        use super::*;        let mut sha512_csr = CSR::new(HW_SHA512_BASE as *mut u32);
 
         let foo = sha512_csr.r(utra::sha512::POWER);
         sha512_csr.wo(utra::sha512::POWER, foo);
@@ -5903,8 +5874,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_engine_csr() {
-        use super::*;
-        let mut engine_csr = CSR::new(HW_ENGINE_BASE as *mut u32);
+        use super::*;        let mut engine_csr = CSR::new(HW_ENGINE_BASE as *mut u32);
 
         let foo = engine_csr.r(utra::engine::WINDOW);
         engine_csr.wo(utra::engine::WINDOW, foo);
@@ -6058,8 +6028,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_jtag_csr() {
-        use super::*;
-        let mut jtag_csr = CSR::new(HW_JTAG_BASE as *mut u32);
+        use super::*;        let mut jtag_csr = CSR::new(HW_JTAG_BASE as *mut u32);
 
         let foo = jtag_csr.r(utra::jtag::NEXT);
         jtag_csr.wo(utra::jtag::NEXT, foo);
@@ -6091,8 +6060,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_wdt_csr() {
-        use super::*;
-        let mut wdt_csr = CSR::new(HW_WDT_BASE as *mut u32);
+        use super::*;        let mut wdt_csr = CSR::new(HW_WDT_BASE as *mut u32);
 
         let foo = wdt_csr.r(utra::wdt::WATCHDOG);
         wdt_csr.wo(utra::wdt::WATCHDOG, foo);
@@ -6142,8 +6110,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_usbdev_csr() {
-        use super::*;
-        let mut usbdev_csr = CSR::new(HW_USBDEV_BASE as *mut u32);
+        use super::*;        let mut usbdev_csr = CSR::new(HW_USBDEV_BASE as *mut u32);
 
         let foo = usbdev_csr.r(utra::usbdev::USBDISABLE);
         usbdev_csr.wo(utra::usbdev::USBDISABLE, foo);
@@ -6194,8 +6161,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_d11ctime_csr() {
-        use super::*;
-        let mut d11ctime_csr = CSR::new(HW_D11CTIME_BASE as *mut u32);
+        use super::*;        let mut d11ctime_csr = CSR::new(HW_D11CTIME_BASE as *mut u32);
 
         let foo = d11ctime_csr.r(utra::d11ctime::CONTROL);
         d11ctime_csr.wo(utra::d11ctime::CONTROL, foo);
@@ -6217,8 +6183,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_wfi_csr() {
-        use super::*;
-        let mut wfi_csr = CSR::new(HW_WFI_BASE as *mut u32);
+        use super::*;        let mut wfi_csr = CSR::new(HW_WFI_BASE as *mut u32);
 
         let foo = wfi_csr.r(utra::wfi::WFI);
         wfi_csr.wo(utra::wfi::WFI, foo);
@@ -6240,8 +6205,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_event_source0_csr() {
-        use super::*;
-        let mut event_source0_csr = CSR::new(HW_EVENT_SOURCE0_BASE as *mut u32);
+        use super::*;        let mut event_source0_csr = CSR::new(HW_EVENT_SOURCE0_BASE as *mut u32);
 
         let foo = event_source0_csr.r(utra::event_source0::PERFEVENT);
         event_source0_csr.wo(utra::event_source0::PERFEVENT, foo);
@@ -6255,8 +6219,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_event_source1_csr() {
-        use super::*;
-        let mut event_source1_csr = CSR::new(HW_EVENT_SOURCE1_BASE as *mut u32);
+        use super::*;        let mut event_source1_csr = CSR::new(HW_EVENT_SOURCE1_BASE as *mut u32);
 
         let foo = event_source1_csr.r(utra::event_source1::PERFEVENT);
         event_source1_csr.wo(utra::event_source1::PERFEVENT, foo);
@@ -6270,8 +6233,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_event_source2_csr() {
-        use super::*;
-        let mut event_source2_csr = CSR::new(HW_EVENT_SOURCE2_BASE as *mut u32);
+        use super::*;        let mut event_source2_csr = CSR::new(HW_EVENT_SOURCE2_BASE as *mut u32);
 
         let foo = event_source2_csr.r(utra::event_source2::PERFEVENT);
         event_source2_csr.wo(utra::event_source2::PERFEVENT, foo);
@@ -6285,8 +6247,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_event_source3_csr() {
-        use super::*;
-        let mut event_source3_csr = CSR::new(HW_EVENT_SOURCE3_BASE as *mut u32);
+        use super::*;        let mut event_source3_csr = CSR::new(HW_EVENT_SOURCE3_BASE as *mut u32);
 
         let foo = event_source3_csr.r(utra::event_source3::PERFEVENT);
         event_source3_csr.wo(utra::event_source3::PERFEVENT, foo);
@@ -6300,8 +6261,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_event_source4_csr() {
-        use super::*;
-        let mut event_source4_csr = CSR::new(HW_EVENT_SOURCE4_BASE as *mut u32);
+        use super::*;        let mut event_source4_csr = CSR::new(HW_EVENT_SOURCE4_BASE as *mut u32);
 
         let foo = event_source4_csr.r(utra::event_source4::PERFEVENT);
         event_source4_csr.wo(utra::event_source4::PERFEVENT, foo);
@@ -6315,8 +6275,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_perfcounter_csr() {
-        use super::*;
-        let mut perfcounter_csr = CSR::new(HW_PERFCOUNTER_BASE as *mut u32);
+        use super::*;        let mut perfcounter_csr = CSR::new(HW_PERFCOUNTER_BASE as *mut u32);
 
         let foo = perfcounter_csr.r(utra::perfcounter::CONFIG);
         perfcounter_csr.wo(utra::perfcounter::CONFIG, foo);
@@ -6416,8 +6375,7 @@ mod tests {
     #[test]
     #[ignore]
     fn compile_check_identifier_mem_csr() {
-        use super::*;
-        let mut identifier_mem_csr = CSR::new(HW_IDENTIFIER_MEM_BASE as *mut u32);
+        use super::*;        let mut identifier_mem_csr = CSR::new(HW_IDENTIFIER_MEM_BASE as *mut u32);
 
         let foo = identifier_mem_csr.r(utra::identifier_mem::IDENTIFIER_MEM);
         identifier_mem_csr.wo(utra::identifier_mem::IDENTIFIER_MEM, foo);
