@@ -1,21 +1,17 @@
-#[macro_use]
-extern crate clap;
-
 extern crate crc;
 
+use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::fs::File;
+use std::io::Write;
 
-use tools::elf::{read_minielf, read_program};
-use tools::tags::bflg::Bflg;
+use tools::elf::{process_minielf, process_program, read_minielf};
+use tools::sign_image::sign_image;
 use tools::tags::inie::IniE;
 use tools::tags::memory::{MemoryRegion, MemoryRegions};
 use tools::tags::pnam::ProcessNames;
 use tools::tags::xkrn::XousKernel;
-use tools::utils::{parse_csr_csv, parse_u32};
 use tools::xous_arguments::XousArguments;
-
-use clap::{App, Arg};
 
 struct RamConfig {
     offset: u32,
@@ -63,53 +59,8 @@ fn csr_to_config(hv: tools::utils::CsrConfig, ram_config: &mut RamConfig) {
             .add(MemoryRegion::new(v.start, round_mem(v.length), region_name));
     }
 }
-fn main() {
+fn create_image(init_programs: &[String]) -> std::io::Result<Vec<u8>> {
     env_logger::init();
-    let matches = App::new("Xous Image Creator")
-        .version(crate_version!())
-        .author("Sean Cross <sean@xobs.io>")
-        .about("Create a boot image for Xous")
-        .arg(
-            Arg::with_name("kernel")
-                .short("k")
-                .long("kernel")
-                .value_name("KERNEL_ELF")
-                .takes_value(true)
-                .required(true)
-                .help("Kernel ELF image to bundle into the image"),
-        )
-        .arg(
-            Arg::with_name("init")
-                .short("i")
-                .long("init")
-                .takes_value(true)
-                .multiple(true)
-                .number_of_values(1)
-                .help("Initial program to load"),
-        )
-        .arg(
-            Arg::with_name("svd")
-                .short("s")
-                .long("svd")
-                .value_name("SOC_SVD")
-                .help("soc.csv file from litex")
-                .takes_value(true)
-                .required_unless_one(&["ram", "svd", "csv"]),
-        )
-        .arg(
-            Arg::with_name("debug")
-                .short("d")
-                .long("debug")
-                .takes_value(false)
-                .help("Reduce kernel-userspace security and enable debugging programs"),
-        )
-        .arg(
-            Arg::with_name("output")
-                .value_name("OUTPUT")
-                .required(true)
-                .help("Output file to store tag and init information"),
-        )
-        .get_matches();
 
     let mut ram_config = RamConfig {
         offset: Default::default(),
@@ -121,48 +72,46 @@ fn main() {
 
     let mut process_names = ProcessNames::new();
 
-    if let Some(soc_svd) = matches.value_of("svd") {
-        let soc_svd_file = std::fs::File::open(soc_svd).unwrap();
-        let desc = svd2utra::parse_svd(soc_svd_file).unwrap();
-        let mut map = std::collections::BTreeMap::new();
+    let soc_svd_file = include_bytes!("../../../utralib/renode/renode.svd");
+    let desc = svd2utra::parse_svd(soc_svd_file.as_slice()).unwrap();
+    let mut map = std::collections::BTreeMap::new();
 
-        let mut csr_top = 0;
-        for peripheral in desc.peripherals {
-            if peripheral.base > csr_top {
-                csr_top = peripheral.base;
-            }
+    let mut csr_top = 0;
+    for peripheral in desc.peripherals {
+        if peripheral.base > csr_top {
+            csr_top = peripheral.base;
         }
-        for region in desc.memory_regions {
-            // Ignore the "CSR" region and manually reconstruct it, because this
-            // region is largely empty and we want to avoid allocating too much space.
-            if region.name == "CSR" {
-                const PAGE_SIZE: usize = 4096;
-                // round to the nearest page, then add one page as the last entry in the csr_top
-                // is an alloatable page, and not an end-stop.
-                let length = if csr_top - region.base & (PAGE_SIZE - 1) == 0 {
-                    csr_top - region.base
-                } else {
-                    ((csr_top - region.base) & !(PAGE_SIZE - 1)) + PAGE_SIZE
-                } + PAGE_SIZE;
-                map.insert(
-                    region.name.to_lowercase(),
-                    tools::utils::CsrMemoryRegion {
-                        start: region.base.try_into().unwrap(),
-                        length: length.try_into().unwrap(),
-                    },
-                );
-            } else {
-                map.insert(
-                    region.name.to_lowercase(),
-                    tools::utils::CsrMemoryRegion {
-                        start: region.base.try_into().unwrap(),
-                        length: region.size.try_into().unwrap(),
-                    },
-                );
-            }
-        }
-        csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);
     }
+    for region in desc.memory_regions {
+        // Ignore the "CSR" region and manually reconstruct it, because this
+        // region is largely empty and we want to avoid allocating too much space.
+        if region.name == "CSR" {
+            const PAGE_SIZE: usize = 4096;
+            // round to the nearest page, then add one page as the last entry in the csr_top
+            // is an alloatable page, and not an end-stop.
+            let length = if csr_top - region.base & (PAGE_SIZE - 1) == 0 {
+                csr_top - region.base
+            } else {
+                ((csr_top - region.base) & !(PAGE_SIZE - 1)) + PAGE_SIZE
+            } + PAGE_SIZE;
+            map.insert(
+                region.name.to_lowercase(),
+                tools::utils::CsrMemoryRegion {
+                    start: region.base.try_into().unwrap(),
+                    length: length.try_into().unwrap(),
+                },
+            );
+        } else {
+            map.insert(
+                region.name.to_lowercase(),
+                tools::utils::CsrMemoryRegion {
+                    start: region.base.try_into().unwrap(),
+                    length: region.size.try_into().unwrap(),
+                },
+            );
+        }
+    }
+    csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);
 
     let mut args = XousArguments::new(ram_config.offset, ram_config.size, ram_config.name);
 
@@ -170,34 +119,59 @@ fn main() {
         args.add(ram_config.regions);
     }
 
-    if matches.is_present("debug") {
-        args.add(Bflg::new().debug());
-    }
-
-    let kernel = read_program(
-        matches
-            .value_of("kernel")
-            .expect("kernel was somehow missing"),
-    )
+    let kernel = process_program(include_bytes!(
+        "../../../target/riscv32imac-unknown-xous-elf/release/xous-kernel"
+    ))
     .expect("unable to read kernel");
-
     process_names.set(1, "kernel");
-    if let Some(init_paths) = matches.values_of("init") {
-        let mut pid = 2;
-        for init_path in init_paths {
-            let program_name = std::path::Path::new(init_path);
-            process_names.set(
-                pid,
-                program_name
-                    .file_stem()
-                    .expect("program had no name")
-                    .to_str()
-                    .expect("program name is not valid utf-8"),
-            );
-            pid += 1;
-            let init = read_minielf(init_path).expect("couldn't parse init file");
-            args.add(IniE::new(init.entry_point, init.sections, init.program));
-        }
+
+    let pid = 2;
+    let init = process_minielf(include_bytes!(
+        "../../../target/riscv32imac-unknown-xous-elf/release/xous-ticktimer"
+    ))
+    .expect("couldn't parse init file");
+    args.add(IniE::new(init.entry_point, init.sections, init.program));
+    process_names.set(pid, "xous-ticktimer");
+
+    let pid = pid + 1;
+    let init = process_minielf(include_bytes!(
+        "../../../target/riscv32imac-unknown-xous-elf/release/xous-log"
+    ))
+    .expect("couldn't parse init file");
+    args.add(IniE::new(init.entry_point, init.sections, init.program));
+    process_names.set(pid, "xous-log");
+
+    let pid = pid + 1;
+    let init = process_minielf(include_bytes!(
+        "../../../target/riscv32imac-unknown-xous-elf/release/xous-names"
+    ))
+    .expect("couldn't parse init file");
+    args.add(IniE::new(init.entry_point, init.sections, init.program));
+    process_names.set(pid, "xous-names");
+
+    let pid = pid + 1;
+    let init = process_minielf(include_bytes!(
+        "../../../target/riscv32imac-unknown-xous-elf/release/xous-susres"
+    ))
+    .expect("couldn't parse init file");
+    args.add(IniE::new(init.entry_point, init.sections, init.program));
+    process_names.set(pid, "xous-susres");
+
+    let mut pid = pid + 1;
+    for init_path in init_programs {
+        let program_name = std::path::Path::new(&init_path);
+        println!("Adding {} to output", program_name.display());
+        process_names.set(
+            pid,
+            program_name
+                .file_stem()
+                .expect("program had no name")
+                .to_str()
+                .expect("program name is not valid utf-8"),
+        );
+        let init = read_minielf(init_path).expect("couldn't parse init file");
+        args.add(IniE::new(init.entry_point, init.sections, init.program));
+        pid += 1;
     }
 
     let xkrn = XousKernel::new(
@@ -216,13 +190,8 @@ fn main() {
     // Add tags for init and kernel.  These point to the actual data, which should
     // immediately follow the tags.  Therefore, we must know the length of the tags
     // before we create them.
-
-    let output_filename = matches
-        .value_of("output")
-        .expect("output filename not present");
-    let f = File::create(output_filename)
-        .unwrap_or_else(|_| panic!("Couldn't create output file {}", output_filename));
-    args.write(&f).expect("Couldn't write to args");
+    let mut f = vec![];
+    args.write(&mut f).expect("Couldn't write to args");
 
     println!("Arguments: {}", args);
 
@@ -230,5 +199,40 @@ fn main() {
         "Runtime will require {} bytes to track memory allocations",
         ram_config.memory_required
     );
-    println!("Image created in file {}", output_filename);
+    Ok(f)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut args: VecDeque<String> = std::env::args().collect();
+    println!("Args: {:?}", args);
+    let program = args.pop_front().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::Other, "program name not present")
+    })?;
+    let output_filename = args.pop_front().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::Other, "output filename not present")
+    })?;
+    args.make_contiguous();
+
+    if args.len() == 0 {
+        return Err("no init programs specified".into());
+    }
+    println!("Program: {}", program);
+    println!("Output file: {}", output_filename);
+    println!("Init args: {:?}", args);
+    let xous_presign_img = create_image(args.as_slices().0)?;
+
+    let xous_pkey = pem::parse(include_bytes!("../../../devkey/dev.key"))?;
+    if xous_pkey.tag != "PRIVATE KEY" {
+        println!("Xous image key was a {}, not a PRIVATE KEY", xous_pkey.tag);
+        return Err("invalid xous image private key type".into());
+    }
+    println!("Signing output image");
+    let xous_img = sign_image(&xous_presign_img, &xous_pkey, false, &None, Some([0u8; 16]))?;
+
+    let mut output_file = File::create(&output_filename)?;
+    output_file.write_all(&xous_img)?;
+
+    println!("Successfully wrote {}", output_filename);
+
+    Ok(())
 }

@@ -28,6 +28,9 @@ name = "copy-object"
 name = "create-image"
 
 [[bin]]
+name = "make-renode-boot"
+
+[[bin]]
 name = "make-tags"
 
 [[bin]]
