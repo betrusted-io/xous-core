@@ -407,6 +407,12 @@ use rkyv::{
 use core::mem::size_of;
 use core::ops::Deref;
 
+//--------------------------------
+
+//--------------------------------
+
+
+
 #[cfg(feature="perfcounter")]
 const FILE_ID_SERVICES_PDDB_SRC_MAIN: u32 = 0;
 #[cfg(feature="perfcounter")]
@@ -1405,13 +1411,16 @@ fn wrapped_main() -> ! {
             }
 
             // Optimized bulk data read handler. See lib.rs for documentation.
-            // TO INVESTIGATE: probably serialization can be made a lot more efficient by
-            // using a `BufferSerializer` instead of a WriteSeriaizer. I think we can also
-            // stack multiple records into the buffer without having to re-allocate the serializer,
-            // but it's not clear to me how the deserialization would work in that case. The main
-            // problem of using the BufferSerializer is the interior mutability problem of re-using the
-            // allocated slice across multiple iterations of the loop, especially with the property where
-            // if the record doesn't fit we want to stash it elsewhere for use on the next iteration.
+            // Note: it would be tempting to use a `BufferSerializer` instead of a WriteSeriaizer.
+            // This would prevent the extra allocation and copy into the buffer. The problem is that
+            // the BufferSerializer can return you the `pos` of the archive, but it won't tell you
+            // the length of the data that's been archived. Thus, when you call `into_inner()` you get
+            // back the original buffer (which is great -- we could split that and pass it on to future
+            // iterations) but we don't know how much data was put in there. Maybe later versions of rkyv
+            // have a call for that, but the current version we are using doesn't seem to be written to
+            // allow for multiple rkyv objects to be packed into a single packet. I think the assumption
+            // is rather that you're writing rkyv objects into a single file and the files are then packed
+            // into disk by the filesystem.
             Opcode::DictBulkRead => {
                 const BULKREAD_TIMEOUT_MS: u64 = 5000;
                 let range = msg.body.memory_message_mut().unwrap();
@@ -1475,6 +1484,7 @@ fn wrapped_main() -> ! {
                     };
                     bulkread_state = Some(state);
                 }
+                let mut finished = false;
                 // handle data packing into the structure
                 if let Some(state) = &mut bulkread_state {
                     // check that the token matches, if this isn't a first call to the function
@@ -1491,8 +1501,7 @@ fn wrapped_main() -> ! {
                     header.token = state.token;
 
                     // now loop through and pack data into the slice
-                    let (header_buf, buf) = buf.split_at_mut(size_of::<BulkReadHeader>());
-                    let mut finished = false;
+                    let (header_buf, mut buf) = buf.split_at_mut(size_of::<BulkReadHeader>());
                     enum SerializeResult<'a> {
                         Success(usize, &'a mut [u8], String, &'a mut [u8]),
                         Failure(String)
@@ -1549,7 +1558,7 @@ fn wrapped_main() -> ! {
                                         }
                                     }
                                 } else {
-                                    // log::info!("hit size limit: limit {} total {}", state.read_limit, state.read_total);
+                                    log::info!("hit size limit: limit {} total {}", state.read_limit, state.read_total);
                                     // report the key, but with no data
                                     let rec = PddbKeyRecord {
                                         name: key_name.to_string(),
@@ -1578,20 +1587,23 @@ fn wrapped_main() -> ! {
                         // pointer to, to stack the next archived result. The other option would be to use the .write()
                         // method but then we'd need to...make a serializer for the structure. which is agains the whole point of it...
                         match ser_result {
-                            SerializeResult::Success(pos, buf, key_name, pre_buf) => {
-                                log::info!("packing message of {}({})", buf.len(), pos);
+                            SerializeResult::Success(pos, sbuf, _key_name, pre_buf) => {
+                                log::info!("packing message of {}({})", sbuf.len(), pos);
                                 // data can fit, copy it into the buffer.
                                 state.buf_starting_key_index += 1;
                                 header.len += 1;
                                 // read length increment was handled when the data was copied into the serialization buffer.
                                 pre_buf[..4].copy_from_slice(
-                                    &(buf.len() as u32).to_le_bytes()
+                                    //&(sbuf.len() as u32).to_le_bytes()
+                                    &(pos as u32).to_le_bytes()
                                 );
                                 pre_buf[4..8].copy_from_slice(
                                     &(pos as u32).to_le_bytes()
                                 );
+                                (_, buf) = sbuf.split_at_mut(pos);
                             }
                             SerializeResult::Failure(key_name) => {
+                                log::info!("ran out of space filling buffer, pushing {} back into the queue", key_name);
                                 // data didn't fit, quit with finished = false;
                                 state.key_list.push(key_name);
                                 break;
@@ -1610,6 +1622,9 @@ fn wrapped_main() -> ! {
                     state.last_time = tt.elapsed_ms();
                 } else {
                     log::warn!("This should be unreachable, the state should always be initialized by this point");
+                }
+                if finished {
+                    bulkread_state = None;
                 }
             }
 
