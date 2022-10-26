@@ -400,7 +400,7 @@ use locales::t;
 
 use rkyv::{
     de::deserializers::AllocDeserializer,
-    ser::{Serializer, serializers::WriteSerializer},
+    ser::{Serializer, serializers::WriteSerializer, serializers::BufferSerializer},
     AlignedVec,
     Deserialize,
 };
@@ -1470,7 +1470,6 @@ fn wrapped_main() -> ! {
                         key_list,
                         buf_starting_key_index: 0,
                         last_time: tt.elapsed_ms(),
-                        serialized: None,
                         read_limit: bulk_descriptor.bulk_limit.expect("bulk limit must be specified for bulk read calls"),
                         read_total: 0,
                     };
@@ -1492,13 +1491,14 @@ fn wrapped_main() -> ! {
                     header.token = state.token;
 
                     // now loop through and pack data into the slice
-                    let mut index = size_of::<BulkReadHeader>();
+                    let (header_buf, buf) = buf.split_at_mut(size_of::<BulkReadHeader>());
                     let mut finished = false;
+                    enum SerializeResult<'a> {
+                        Success(usize, &'a mut [u8], String, &'a mut [u8]),
+                        Failure(String)
+                    }
                     loop {
-                        let (pos, sbuf) = if let Some((pos, sbuf)) = state.serialized.take() {
-                            (pos, sbuf)
-                        } else {
-                            // no data was serialized, create it.
+                        let ser_result: SerializeResult =
                             if let Some(key_name) = state.key_list.pop() {
                                 let attr = basis_cache.key_attributes(&mut pddb_os,
                                     &state.dict,
@@ -1528,7 +1528,7 @@ fn wrapped_main() -> ! {
                                         Ok(readlen) => {
                                             assert!(readlen == attr.len, "Bulk read key length did not match expected length");
                                             let rec = PddbKeyRecord {
-                                                name: key_name,
+                                                name: key_name.to_string(),
                                                 len: attr.len,
                                                 reserved: attr.reserved,
                                                 age: attr.age,
@@ -1537,9 +1537,12 @@ fn wrapped_main() -> ! {
                                                 data: Some(d)
                                             };
                                             state.read_total += attr.len; // commit the read length early
-                                            let mut serializer = WriteSerializer::new(AlignedVec::new());
-                                            let pos = serializer.serialize_value(&rec).unwrap();
-                                            (pos, serializer.into_inner())
+                                            let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
+                                            let mut serializer = BufferSerializer::new(buf);
+                                            match serializer.serialize_value(&rec) {
+                                                Ok(pos) => SerializeResult::Success(pos, serializer.into_inner(), key_name, prebuf),
+                                                Err(_) => SerializeResult::Failure(key_name)
+                                            }
                                         }
                                         Err(e) => {
                                             panic!("Error reading previously attributed key {}: {:?}", &key_name, e);
@@ -1549,7 +1552,7 @@ fn wrapped_main() -> ! {
                                     // log::info!("hit size limit: limit {} total {}", state.read_limit, state.read_total);
                                     // report the key, but with no data
                                     let rec = PddbKeyRecord {
-                                        name: key_name,
+                                        name: key_name.to_string(),
                                         len: attr.len,
                                         reserved: attr.reserved,
                                         age: attr.age,
@@ -1557,47 +1560,42 @@ fn wrapped_main() -> ! {
                                         basis: attr.basis,
                                         data: None,
                                     };
-                                    let mut serializer = WriteSerializer::new(AlignedVec::new());
-                                    let pos = serializer.serialize_value(&rec).unwrap();
-                                    (pos, serializer.into_inner())
+                                    let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
+                                    let mut serializer = BufferSerializer::new(buf);
+                                    match serializer.serialize_value(&rec) {
+                                        Ok(pos) => SerializeResult::Success(pos, serializer.into_inner(), key_name, prebuf),
+                                        Err(_) => SerializeResult::Failure(key_name)
+                                    }
                                 }
                             } else {
                                 // no more keys; we're done.
                                 finished = true;
                                 break;
+                            };
+
+                        // HERE'S THE PROBLEM: the `buf` returned is the inner of the allocated buf. the overall length
+                        // of the record serialized isn't exposed anywhere. So we can't know where to advance the buffer
+                        // pointer to, to stack the next archived result. The other option would be to use the .write()
+                        // method but then we'd need to...make a serializer for the structure. which is agains the whole point of it...
+                        match ser_result {
+                            SerializeResult::Success(pos, buf, key_name, pre_buf) => {
+                                log::info!("packing message of {}({})", buf.len(), pos);
+                                // data can fit, copy it into the buffer.
+                                state.buf_starting_key_index += 1;
+                                header.len += 1;
+                                // read length increment was handled when the data was copied into the serialization buffer.
+                                pre_buf[..4].copy_from_slice(
+                                    &(buf.len() as u32).to_le_bytes()
+                                );
+                                pre_buf[4..8].copy_from_slice(
+                                    &(pos as u32).to_le_bytes()
+                                );
                             }
-                        };
-                        // sbuf now contains some serialized data. will it fit? Need 2x`u32` as recordkeeeping overhead.
-                        assert!(sbuf.len() == sbuf.as_slice().len(), "remove this assert if it doesn't fail on first run");
-                        if sbuf.len() + size_of::<u32>() * 2 <= buf.len() - index {
-                            log::info!("packing message of {}({})", sbuf.len(), pos);
-                            // data can fit, copy it into the buffer.
-                            state.buf_starting_key_index += 1;
-                            header.len += 1;
-                            // read length increment was handled when the data was copied into the serialization buffer.
-                            buf[index..index + 4].copy_from_slice(
-                                &(sbuf.len() as u32).to_le_bytes()
-                            );
-                            index += size_of::<u32>();
-                            buf[index..index + 4].copy_from_slice(
-                                &(pos as u32).to_le_bytes()
-                            );
-                            index += size_of::<u32>();
-                            buf[index..index + sbuf.len()].copy_from_slice(
-                                sbuf.as_slice()
-                            );
-                            index += sbuf.len();
-                        } else {
-                            // log::info!("{} <= {}", sbuf.len() + size_of::<u32>() * 2, buf.len());
-                            assert!(
-                                sbuf.len() + size_of::<u32>() * 2 <= buf.len(),
-                                // the remediation for this is to fix the "will it fit even in a single buffer?" test above
-                                "Edge case not handled correctly: we have a serialized record that can never fit in a buffer"
-                            );
-                            // save the data for the next round, when we have an empty buffer
-                            state.serialized = Some((pos, sbuf));
-                            // data didn't fit, quit with finished = false;
-                            break;
+                            SerializeResult::Failure(key_name) => {
+                                // data didn't fit, quit with finished = false;
+                                state.key_list.push(key_name);
+                                break;
+                            }
                         }
                     }
                     if finished {
@@ -1605,7 +1603,7 @@ fn wrapped_main() -> ! {
                     } else {
                         header.code = PddbBulkReadCode::Streaming as u32;
                     }
-                    buf[..size_of::<BulkReadHeader>()].copy_from_slice(
+                    header_buf.copy_from_slice(
                         header.deref()
                     );
                     // update the last access time
@@ -2176,6 +2174,4 @@ struct BulkReadState {
     read_total: usize,
     /// last interaction time, so we can timeout the state in the case that the client is misbehaved
     last_time: u64,
-    /// the proposed data to send. Can be aborted if it is too big to fit in the remaining space.
-    serialized: Option<(usize, AlignedVec)>,
 }
