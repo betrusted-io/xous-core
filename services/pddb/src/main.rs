@@ -1578,7 +1578,7 @@ fn wrapped_main() -> ! {
                                 (_, buf) = sbuf.split_at_mut(len + pos);
                             }
                             SerializeResult::Failure(key_name) => {
-                                log::info!("ran out of space filling buffer, pushing {} back into the queue", key_name);
+                                log::debug!("ran out of space filling buffer, pushing {} back into the queue", key_name);
                                 // data didn't fit, quit with finished = false;
                                 state.key_list.push(key_name);
                                 break;

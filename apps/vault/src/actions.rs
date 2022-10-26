@@ -688,6 +688,7 @@ impl<'a> ActionManager<'a> {
                 match self.pddb.borrow().read_dict(VAULT_PASSWORD_DICT, None, Some(256 * 1024)) {
                     Ok(keys) => {
                         let mut oom_keys = 0;
+                        il.reserve(keys.len());
                         for key in keys {
                             if let Some(data) = key.data {
                                 if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
@@ -727,7 +728,9 @@ impl<'a> ActionManager<'a> {
                         }
                     },
                 }
-                /*
+                /* DELETEME: kept around for quick debugging without having to look through commit history
+                once we have confidence in the new method, we can drop this code right away.
+
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
                 let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
