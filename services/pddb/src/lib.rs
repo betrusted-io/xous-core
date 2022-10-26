@@ -898,7 +898,7 @@ impl Pddb {
                         log::error!("local key index did not match remote key index: {}, {}", check_key_index, header.starting_key_index);
                     }
                     let mut key_count = 0;
-                    log::info!("header: {:?}", header);
+                    log::debug!("header: {:?}", header);
                     while key_count < header.len {
                         if index + size_of::<u32>() * 2 > msg_mem.len() {
                             // quit if we don't have enough space to decode at least another two indices
@@ -908,18 +908,30 @@ impl Pddb {
                         index += size_of::<u32>();
                         let pos = u32::from_le_bytes(msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap());
                         index += size_of::<u32>();
-                        log::info!("unpacking message at {}({})", size, pos);
+                        log::debug!("unpacking message at {}({})", size, pos);
                         if size != 0 && pos != 0 {
+                            //log::info!("extract archive: {}, {}, {}, {}", index, size, pos, msg_mem.len());
+                            //log::info!("{:x?}", &msg_mem.as_slice::<u8>()[index..index + (size as usize)]);
                             let archived = unsafe {
                                 archived_value::<PddbKeyRecord>(&msg_mem.as_slice()[index..index + (size as usize)], pos as usize)
                             };
+                            //log::info!("increment index");
                             index += size as usize;
-                            let key = archived.deserialize(&mut AllocDeserializer).unwrap();
+                            //log::info!("new index: {}", index);
+                            let key = match archived.deserialize(&mut AllocDeserializer) {
+                                Ok(r) => r,
+                                Err(e) => {
+                                    log::error!("deserialization error: {:?}", e);
+                                    panic!("deserializer error");
+                                },
+                            };
+                            //log::info!("pushing result");
                             ret.push(key);
                             key_count += 1;
                             check_key_index += 1;
                         } else {
                             // we encountered a nil field, stop decoding
+                            log::info!("nil field");
                             break;
                         }
                     }

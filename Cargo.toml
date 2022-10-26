@@ -148,9 +148,6 @@ git="https://github.com/betrusted-io/ring-xous"
 rev="09207048c393d524a34f63cf65c85a973012a21d" # use the commitref because we're still updating the branch
 #branch="0.16.20-cleanup"
 
-[patch.crates-io.rkyv]
-path = "../rkyv/rkyv"
-
 ######################################################
 ### PATCHES TO DEV/TEST XOUS KERNEL CODE
 ###

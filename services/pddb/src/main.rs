@@ -400,8 +400,7 @@ use locales::t;
 
 use rkyv::{
     de::deserializers::AllocDeserializer,
-    ser::{Serializer, serializers::WriteSerializer, serializers::BufferSerializer},
-    AlignedVec,
+    ser::{Serializer, serializers::BufferSerializer},
     Deserialize,
 };
 use core::mem::size_of;
@@ -1405,16 +1404,6 @@ fn wrapped_main() -> ! {
             }
 
             // Optimized bulk data read handler. See lib.rs for documentation.
-            // Note: it would be tempting to use a `BufferSerializer` instead of a WriteSeriaizer.
-            // This would prevent the extra allocation and copy into the buffer. The problem is that
-            // the BufferSerializer can return you the `pos` of the archive, but it won't tell you
-            // the length of the data that's been archived. Thus, when you call `into_inner()` you get
-            // back the original buffer (which is great -- we could split that and pass it on to future
-            // iterations) but we don't know how much data was put in there. Maybe later versions of rkyv
-            // have a call for that, but the current version we are using doesn't seem to be written to
-            // allow for multiple rkyv objects to be packed into a single packet. I think the assumption
-            // is rather that you're writing rkyv objects into a single file and the files are then packed
-            // into disk by the filesystem.
             Opcode::DictBulkRead => {
                 const BULKREAD_TIMEOUT_MS: u64 = 5000;
                 let range = msg.body.memory_message_mut().unwrap();
@@ -1508,17 +1497,7 @@ fn wrapped_main() -> ! {
                                     &key_name,
                                     if state.is_basis_specified{Some(&state.basis)} else {None}
                                 ).expect("Key went missing during bulk read"); // could be a concurrent process mutating. We don't handle this; flag with a panic.
-                                if attr.len < state.read_limit - state.read_total && // will it fit in the remaining read limit?
-                                // will it fit even in a single buffer?
-                                // computed as: 2x u32 for pos/len overhead
-                                // size of the base key record, archived
-                                // maximum length strings for basis name and key name
-                                // plus header size
-                                // 32 bytes "slop" to make sure we never fail to properly compute this limit
-                                attr.len <
-                                    buf.len()
-                                    - (size_of::<u32>() * 2 + size_of::<ArchivedPddbKeyRecord>() + BASIS_NAME_LEN + KEY_NAME_LEN + size_of::<BulkReadHeader>() + 32)
-                                {
+                                if attr.len < state.read_limit - state.read_total {
                                     let mut d = vec![0u8; attr.len];
                                     match basis_cache.key_read(
                                         &mut pddb_os,
@@ -1540,10 +1519,11 @@ fn wrapped_main() -> ! {
                                                 data: Some(d)
                                             };
                                             state.read_total += attr.len; // commit the read length early
-                                            let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
-                                            let mut serializer = BufferSerializer::new(buf);
-                                            match serializer.serialize_value_len(&rec) {
-                                                Ok((pos, len)) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
+                                            let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>()*2);
+                                            let mut serializer = BufferSerializer::new(sbuf);
+                                            let len = size_of::<ArchivedPddbKeyRecord>();
+                                            match serializer.serialize_value(&rec) {
+                                                Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
                                                 Err(_) => SerializeResult::Failure(key_name)
                                             }
                                         }
@@ -1565,8 +1545,9 @@ fn wrapped_main() -> ! {
                                     };
                                     let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
                                     let mut serializer = BufferSerializer::new(buf);
-                                    match serializer.serialize_value_len(&rec) {
-                                        Ok((pos, len)) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
+                                    let len = size_of::<ArchivedPddbKeyRecord>();
+                                    match serializer.serialize_value(&rec) {
+                                        Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
                                         Err(_) => SerializeResult::Failure(key_name)
                                     }
                                 }
@@ -1582,19 +1563,19 @@ fn wrapped_main() -> ! {
                         // method but then we'd need to...make a serializer for the structure. which is agains the whole point of it...
                         match ser_result {
                             SerializeResult::Success(pos, len, sbuf, _key_name, pre_buf) => {
-                                log::info!("packing message of {}({})", len, pos);
+                                log::debug!("packing message of {}({})", len + pos, pos);
                                 // data can fit, copy it into the buffer.
                                 state.buf_starting_key_index += 1;
                                 header.len += 1;
                                 // read length increment was handled when the data was copied into the serialization buffer.
                                 pre_buf[..4].copy_from_slice(
                                     //&(sbuf.len() as u32).to_le_bytes()
-                                    &(len as u32).to_le_bytes()
+                                    &((len + pos) as u32).to_le_bytes()
                                 );
                                 pre_buf[4..8].copy_from_slice(
                                     &(pos as u32).to_le_bytes()
                                 );
-                                (_, buf) = sbuf.split_at_mut(pos);
+                                (_, buf) = sbuf.split_at_mut(len + pos);
                             }
                             SerializeResult::Failure(key_name) => {
                                 log::info!("ran out of space filling buffer, pushing {} back into the queue", key_name);
