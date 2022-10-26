@@ -407,12 +407,6 @@ use rkyv::{
 use core::mem::size_of;
 use core::ops::Deref;
 
-//--------------------------------
-
-//--------------------------------
-
-
-
 #[cfg(feature="perfcounter")]
 const FILE_ID_SERVICES_PDDB_SRC_MAIN: u32 = 0;
 #[cfg(feature="perfcounter")]
@@ -1503,7 +1497,7 @@ fn wrapped_main() -> ! {
                     // now loop through and pack data into the slice
                     let (header_buf, mut buf) = buf.split_at_mut(size_of::<BulkReadHeader>());
                     enum SerializeResult<'a> {
-                        Success(usize, &'a mut [u8], String, &'a mut [u8]),
+                        Success(usize, usize, &'a mut [u8], String, &'a mut [u8]),
                         Failure(String)
                     }
                     loop {
@@ -1548,8 +1542,8 @@ fn wrapped_main() -> ! {
                                             state.read_total += attr.len; // commit the read length early
                                             let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
                                             let mut serializer = BufferSerializer::new(buf);
-                                            match serializer.serialize_value(&rec) {
-                                                Ok(pos) => SerializeResult::Success(pos, serializer.into_inner(), key_name, prebuf),
+                                            match serializer.serialize_value_len(&rec) {
+                                                Ok((pos, len)) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
                                                 Err(_) => SerializeResult::Failure(key_name)
                                             }
                                         }
@@ -1571,8 +1565,8 @@ fn wrapped_main() -> ! {
                                     };
                                     let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
                                     let mut serializer = BufferSerializer::new(buf);
-                                    match serializer.serialize_value(&rec) {
-                                        Ok(pos) => SerializeResult::Success(pos, serializer.into_inner(), key_name, prebuf),
+                                    match serializer.serialize_value_len(&rec) {
+                                        Ok((pos, len)) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
                                         Err(_) => SerializeResult::Failure(key_name)
                                     }
                                 }
@@ -1587,15 +1581,15 @@ fn wrapped_main() -> ! {
                         // pointer to, to stack the next archived result. The other option would be to use the .write()
                         // method but then we'd need to...make a serializer for the structure. which is agains the whole point of it...
                         match ser_result {
-                            SerializeResult::Success(pos, sbuf, _key_name, pre_buf) => {
-                                log::info!("packing message of {}({})", sbuf.len(), pos);
+                            SerializeResult::Success(pos, len, sbuf, _key_name, pre_buf) => {
+                                log::info!("packing message of {}({})", len, pos);
                                 // data can fit, copy it into the buffer.
                                 state.buf_starting_key_index += 1;
                                 header.len += 1;
                                 // read length increment was handled when the data was copied into the serialization buffer.
                                 pre_buf[..4].copy_from_slice(
                                     //&(sbuf.len() as u32).to_le_bytes()
-                                    &(pos as u32).to_le_bytes()
+                                    &(len as u32).to_le_bytes()
                                 );
                                 pre_buf[4..8].copy_from_slice(
                                     &(pos as u32).to_le_bytes()
