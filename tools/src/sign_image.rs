@@ -84,6 +84,8 @@ pub fn sign_image(
         source[16778] ^= 0x1 // flip one bit at some random offset
     }
 
+    dest_file.write_all(&source)?;
+
     Ok(dest_file)
 }
 

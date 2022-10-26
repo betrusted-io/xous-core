@@ -1,12 +1,8 @@
 use clap::{crate_version, App, Arg};
-use std::io::{Error, ErrorKind, Read, Write};
-use std::path::Path;
+use std::io::{Error, ErrorKind};
 use tools::sign_image::{load_pem, sign_file};
 
-use ring::signature::Ed25519KeyPair;
-
 const DEVKEY_PATH: &str = "devkey/dev.key";
-const LOADER_VERSION: u32 = 1;
 
 use xous_semver::SemVer;
 
