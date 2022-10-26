@@ -1405,6 +1405,13 @@ fn wrapped_main() -> ! {
             }
 
             // Optimized bulk data read handler. See lib.rs for documentation.
+            // TO INVESTIGATE: probably serialization can be made a lot more efficient by
+            // using a `BufferSerializer` instead of a WriteSeriaizer. I think we can also
+            // stack multiple records into the buffer without having to re-allocate the serializer,
+            // but it's not clear to me how the deserialization would work in that case. The main
+            // problem of using the BufferSerializer is the interior mutability problem of re-using the
+            // allocated slice across multiple iterations of the loop, especially with the property where
+            // if the record doesn't fit we want to stash it elsewhere for use on the next iteration.
             Opcode::DictBulkRead => {
                 const BULKREAD_TIMEOUT_MS: u64 = 5000;
                 let range = msg.body.memory_message_mut().unwrap();
