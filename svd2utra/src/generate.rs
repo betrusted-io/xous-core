@@ -134,14 +134,24 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                     "bitRange" => {
                         let range = extract_contents(reader)?;
                         if !range.starts_with("[") || !range.ends_with("]") {
-                            return Err(ParseError::UnexpectedValue)
+                            return Err(ParseError::UnexpectedValue);
                         }
 
                         let mut parts = range[1..range.len() - 1].split(':');
-                        msb = Some(parts.next().ok_or_else(|| ParseError::UnexpectedValue)?
-                            .parse::<usize>().or_else(|_| Err(ParseError::ParseIntError))?);
-                        lsb = Some(parts.next().ok_or_else(|| ParseError::UnexpectedValue)?
-                            .parse::<usize>().or_else(|_| Err(ParseError::ParseIntError))?);
+                        msb = Some(
+                            parts
+                                .next()
+                                .ok_or_else(|| ParseError::UnexpectedValue)?
+                                .parse::<usize>()
+                                .or_else(|_| Err(ParseError::ParseIntError))?,
+                        );
+                        lsb = Some(
+                            parts
+                                .next()
+                                .ok_or_else(|| ParseError::UnexpectedValue)?
+                                .parse::<usize>()
+                                .or_else(|_| Err(ParseError::ParseIntError))?,
+                        );
                     }
                     _ => (),
                 }
@@ -298,7 +308,10 @@ fn derive_peripheral(base: &Peripheral, child_name: &str, child_base: usize) -> 
     }
 }
 
-fn generate_peripheral<T: BufRead>(base_peripheral: Option<&Peripheral>, reader: &mut Reader<T>) -> Result<Peripheral, ParseError> {
+fn generate_peripheral<T: BufRead>(
+    base_peripheral: Option<&Peripheral>,
+    reader: &mut Reader<T>,
+) -> Result<Peripheral, ParseError> {
     let mut buf = Vec::new();
     let mut name = None;
     let mut base = None;
@@ -338,7 +351,7 @@ fn generate_peripheral<T: BufRead>(base_peripheral: Option<&Peripheral>, reader:
 
     // Derive from the base peripheral if specified
     if let Some(base_peripheral) = base_peripheral {
-        return Ok(derive_peripheral(base_peripheral, &name, base))
+        return Ok(derive_peripheral(base_peripheral, &name, base));
     } else {
         Ok(Peripheral {
             name,
@@ -363,9 +376,12 @@ fn generate_peripherals<T: BufRead>(reader: &mut Reader<T>) -> Result<Vec<Periph
                             let base_peripheral_name = String::from_utf8(value.to_vec())
                                 .or_else(|_| Err(ParseError::NonUTF8))?;
 
-                            let base = peripherals.iter()
+                            let base = peripherals
+                                .iter()
                                 .find(|p| p.name == base_peripheral_name)
-                                .ok_or_else(|| ParseError::MissingBasePeripheral(base_peripheral_name))?;
+                                .ok_or_else(|| {
+                                    ParseError::MissingBasePeripheral(base_peripheral_name)
+                                })?;
 
                             Some(base)
                         }
@@ -373,7 +389,7 @@ fn generate_peripherals<T: BufRead>(reader: &mut Reader<T>) -> Result<Vec<Periph
                     };
 
                     peripherals.push(generate_peripheral(base_peripheral, reader)?);
-                },
+                }
                 _ => panic!("unexpected tag in <peripherals>: {:?}", e),
             },
             Ok(Event::End(ref e)) => match e.name() {
@@ -946,11 +962,16 @@ mod tests {
         let mod_name = peripheral.name.to_lowercase();
         let per_name = peripheral.name.to_lowercase() + "_csr";
 
-        write!(out, r####"
+        write!(
+            out,
+            r####"
     #[test]
     #[ignore]
     fn compile_check_{}() {{
-        use super::*;"####, per_name)?;
+        use super::*;
+"####,
+            per_name
+        )?;
 
         writeln!(
             out,
