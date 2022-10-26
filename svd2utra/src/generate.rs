@@ -133,7 +133,7 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                     "msb" => msb = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "bitRange" => {
                         let range = extract_contents(reader)?;
-                        if !range.starts_with("[") || !range.ends_with("]") {
+                        if !range.starts_with('[') || !range.ends_with(']') {
                             return Err(ParseError::UnexpectedValue);
                         }
 
@@ -141,16 +141,16 @@ fn generate_field<T: BufRead>(reader: &mut Reader<T>) -> Result<Field, ParseErro
                         msb = Some(
                             parts
                                 .next()
-                                .ok_or_else(|| ParseError::UnexpectedValue)?
+                                .ok_or(ParseError::UnexpectedValue)?
                                 .parse::<usize>()
-                                .or_else(|_| Err(ParseError::ParseIntError))?,
+                                .map_err(|_| ParseError::ParseIntError)?,
                         );
                         lsb = Some(
                             parts
                                 .next()
-                                .ok_or_else(|| ParseError::UnexpectedValue)?
+                                .ok_or(ParseError::UnexpectedValue)?
                                 .parse::<usize>()
-                                .or_else(|_| Err(ParseError::ParseIntError))?,
+                                .map_err(|_| ParseError::ParseIntError)?,
                         );
                     }
                     _ => (),
@@ -351,7 +351,7 @@ fn generate_peripheral<T: BufRead>(
 
     // Derive from the base peripheral if specified
     if let Some(base_peripheral) = base_peripheral {
-        return Ok(derive_peripheral(base_peripheral, &name, base));
+        Ok(derive_peripheral(base_peripheral, &name, base))
     } else {
         Ok(Peripheral {
             name,
@@ -374,14 +374,12 @@ fn generate_peripherals<T: BufRead>(reader: &mut Reader<T>) -> Result<Vec<Periph
                     let base_peripheral = match e.attributes().next() {
                         Some(Ok(Attribute { key, value })) if key == b"derivedFrom" => {
                             let base_peripheral_name = String::from_utf8(value.to_vec())
-                                .or_else(|_| Err(ParseError::NonUTF8))?;
+                                .map_err(|_| ParseError::NonUTF8)?;
 
                             let base = peripherals
                                 .iter()
                                 .find(|p| p.name == base_peripheral_name)
-                                .ok_or_else(|| {
-                                    ParseError::MissingBasePeripheral(base_peripheral_name)
-                                })?;
+                                .ok_or(ParseError::MissingBasePeripheral(base_peripheral_name))?;
 
                             Some(base)
                         }
