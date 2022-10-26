@@ -15,11 +15,6 @@ pub fn load_pem(src: &str) -> Result<pem::Pem, Box<dyn std::error::Error>> {
     Ok(pem::parse(input)?)
 }
 
-fn semver_to_u8() -> Result<[u8; 16], &'static str> {
-    let a = SemVer::from_git()?;
-    Ok(a.into())
-}
-
 pub fn sign_image(
     source: &[u8],
     private_key: &pem::Pem,
@@ -37,9 +32,13 @@ pub fn sign_image(
     } else {
         [0u8; 16]
     };
-    let semver: [u8; 16] = semver
-        .ok_or_else(|| semver_to_u8())
-        .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?;
+    let semver: [u8; 16] = match semver {
+        Some(semver) => semver,
+        None => SemVer::from_git()
+            .map_err(|_| Error::new(ErrorKind::Other, "error parsing current Git rev"))?
+            .into(),
+    };
+
     // extra data appended here needs to be reflected in two places in Xous:
     // 1. root-keys/src/implementation.rs @ sign-loader()
     // 2. graphics-server/src/main.rs @ Some(Opcode::BulkReadfonts)
