@@ -101,10 +101,15 @@ impl CommonEnv {
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
-        // log::info!("set '{}' = '{}'", key, value);
+        log::info!("set '{}' = '{}'", key, value);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(&keypath)?;
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict '{}' exists", MTXCLI_DICT);
+        } else {
+            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+            std::fs::create_dir_all(&keypath)?;
+        }
         keypath.push(key);
         File::create(keypath)?.write_all(value.as_bytes())?;
         match key { // special case side effects
@@ -114,6 +119,19 @@ impl CommonEnv {
             _ => { }
         }
         Ok(())
+    }
+
+    // will log on error (vs. panic)
+    pub fn set_debug(&mut self, key: &str, value: &str) -> bool {
+        match self.set(key, value) {
+            Ok(()) => {
+                true
+            },
+            Err(e) => {
+                log::error!("error setting key {}: {:?}", key, e);
+                false
+            }
+        }
     }
 
     pub fn set_user(&mut self, value: &str) {
@@ -135,40 +153,65 @@ impl CommonEnv {
         }
         self.user = value.to_string();
         log::debug!("# user = '{}' username = '{}' server = '{}'", self.user, self.username, self.server);
-        self.set(USERNAME_KEY, &self.username.clone()).unwrap();
-        self.set(SERVER_KEY, &self.server.clone()).unwrap();
-        self.unset(TOKEN_KEY).unwrap();
+        self.set_debug(USERNAME_KEY, &self.username.clone());
+        self.set_debug(SERVER_KEY, &self.server.clone());
+        self.unset_debug(TOKEN_KEY);
         self.token = EMPTY.to_string();
     }
 
     pub fn set_password(&mut self) {
         log::debug!("# PASSWORD_KEY set '{}' => clearing TOKEN_KEY", PASSWORD_KEY);
-        self.unset(TOKEN_KEY).unwrap();
+        self.unset_debug(TOKEN_KEY);
     }
 
     pub fn set_room(&mut self) {
         log::debug!("# ROOM_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY", ROOM_KEY);
-        self.unset(ROOM_ID_KEY).unwrap();
-        self.unset(SINCE_KEY).unwrap();
-        self.unset(FILTER_KEY).unwrap();
+        self.unset_debug(ROOM_ID_KEY);
+        self.unset_debug(SINCE_KEY);
+        self.unset_debug(FILTER_KEY);
     }
 
     pub fn unset(&mut self, key: &str) -> Result<(), Error> {
         // log::info!("unset '{}'", key);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(&keypath)?;
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict '{}' exists", MTXCLI_DICT);
+        } else {
+            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+            std::fs::create_dir_all(&keypath)?;
+        }
         keypath.push(key);
         if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCLI_DICT, key);
+
             std::fs::remove_file(keypath)?;
         }
         Ok(())
     }
 
+    // will log on error (vs. panic)
+    pub fn unset_debug(&mut self, key: &str) -> bool {
+        match self.unset(key) {
+            Ok(()) => {
+                true
+            },
+            Err(e) => {
+                log::error!("error unsetting key {}: {:?}", key, e);
+                false
+            }
+        }
+    }
+
     pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(&keypath)?;
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict '{}' exists", MTXCLI_DICT);
+        } else {
+            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+            std::fs::create_dir_all(&keypath)?;
+        }
         keypath.push(key);
         if let Ok(mut file)= File::open(keypath) {
             let mut value = String::new();
@@ -254,7 +297,7 @@ impl CommonEnv {
                     self.prompt(ret, t!("mtxcli.please.set.password", xous::LANG));
                 } else {
                     if let Some(new_token) = web::authenticate_user(&self.server, &user, &password) {
-                        self.set(TOKEN_KEY, &new_token).unwrap();
+                        self.set_debug(TOKEN_KEY, &new_token);
                         self.token = new_token;
                         self.logged_in = true;
                     } else {
@@ -272,7 +315,7 @@ impl CommonEnv {
     }
 
     pub fn logout(&mut self, ret: &mut XousString::<1024>) {
-        self.unset(TOKEN_KEY).unwrap();
+        self.unset_debug(TOKEN_KEY);
         self.prompt(ret, t!("mtxcli.logged.out", xous::LANG));
         self.logged_in = false;
     }
@@ -311,7 +354,7 @@ impl CommonEnv {
                 } else {
                     room_server.push_str(&server[i..]);
                     if let Some(new_room_id) = web::get_room_id(&self.server, &room_server, &self.token) {
-                        self.set(ROOM_ID_KEY, &new_room_id).unwrap();
+                        self.set_debug(ROOM_ID_KEY, &new_room_id);
                         self.room_id = new_room_id;
                         true
                     } else {
@@ -329,7 +372,7 @@ impl CommonEnv {
             true
         } else {
             if let Some(new_filter) = web::get_filter(&self.user, &self.server, &self.token) {
-                self.set(FILTER_KEY, &new_filter).unwrap();
+                self.set_debug(FILTER_KEY, &new_filter);
                 self.filter = new_filter;
                 true
             } else {
@@ -345,7 +388,7 @@ impl CommonEnv {
         if let Some((since, messages)) = web::client_sync(&self.server, &self.filter,
                                                           &self.since, MTX_TIMEOUT,
                                                           &self.room_id, &self.token) {
-            self.set(SINCE_KEY, &since).unwrap();
+            self.set_debug(SINCE_KEY, &since);
             self.since = since;
             if messages.len() > 0 {
                 if self.first_line {

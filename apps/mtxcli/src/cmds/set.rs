@@ -34,7 +34,7 @@ impl<'a> ShellCmdApi<'a> for Set {
                             _ => {
                                 match env.set(key, value) {
                                     Ok(()) => {
-                                        // write!(ret, "set {} = {}", key, value).unwrap();
+                                        write!(ret, "set {}", key).unwrap();
                                     },
                                     Err(e) => {
                                         // write!(ret, "error setting key {}: {:?}", key, e).unwrap();
