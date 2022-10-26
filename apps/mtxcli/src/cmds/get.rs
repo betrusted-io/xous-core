@@ -34,7 +34,6 @@ impl<'a> ShellCmdApi<'a> for Get {
                             write!(ret, "{}", value).unwrap();
                         }
                         Err(e) => {
-                            write!(ret, "error getting key {}: {:?}", key, e).unwrap();
                             log::error!("error getting key {}: {:?}", key, e);
                         }
                     }

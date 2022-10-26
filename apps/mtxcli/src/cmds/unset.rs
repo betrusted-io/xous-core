@@ -31,8 +31,9 @@ impl<'a> ShellCmdApi<'a> for Unset {
                             write!(ret, "unset {}", key).unwrap();
                         },
                         Err(e) => {
-                            write!(ret, "error unsetting key {}: {:?}",
-                                   key, e).unwrap();
+                            // NOTE: we current expect this error
+                            // when unsetting a non existant key
+                            write!(ret, "unset {} (did not exist)", key).unwrap();
                             log::error!("error unsetting key {}: {:?}", key, e);
                         }
                     }
