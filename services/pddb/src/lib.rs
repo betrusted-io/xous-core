@@ -767,7 +767,7 @@ impl Pddb {
     /// Defaults to a size limit of up to 32k of bulk data returned, if it is not explicitly specified.
     pub fn read_dict(&self, dict: &str, basis: Option<&str>, size_limit: Option<usize>) -> Result<Vec::<PddbKeyRecord>> {
         // about the biggest we can move around in Precursor and not break heap.
-        const MAX_BUFLEN: usize = 128 * 1024;
+        const MAX_BUFLEN: usize = 32 * 1024;
         // compromise between memory zeroing time and latency to send a message
         const DEFAULT_LIMIT: usize = 32 * 1024;
         /*
@@ -939,7 +939,7 @@ impl Pddb {
         if check_total_keys != check_key_index {
             log::error!("Number of keys read does not match expected value: {}, {}", check_total_keys, check_key_index);
         }
-
+        xous::unmap_memory(msg_mem).unwrap();
         Ok(ret)
     }
 

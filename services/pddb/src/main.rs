@@ -1405,13 +1405,16 @@ fn wrapped_main() -> ! {
             }
 
             // Optimized bulk data read handler. See lib.rs for documentation.
-            // TO INVESTIGATE: probably serialization can be made a lot more efficient by
-            // using a `BufferSerializer` instead of a WriteSeriaizer. I think we can also
-            // stack multiple records into the buffer without having to re-allocate the serializer,
-            // but it's not clear to me how the deserialization would work in that case. The main
-            // problem of using the BufferSerializer is the interior mutability problem of re-using the
-            // allocated slice across multiple iterations of the loop, especially with the property where
-            // if the record doesn't fit we want to stash it elsewhere for use on the next iteration.
+            // Note: it would be tempting to use a `BufferSerializer` instead of a WriteSeriaizer.
+            // This would prevent the extra allocation and copy into the buffer. The problem is that
+            // the BufferSerializer can return you the `pos` of the archive, but it won't tell you
+            // the length of the data that's been archived. Thus, when you call `into_inner()` you get
+            // back the original buffer (which is great -- we could split that and pass it on to future
+            // iterations) but we don't know how much data was put in there. Maybe later versions of rkyv
+            // have a call for that, but the current version we are using doesn't seem to be written to
+            // allow for multiple rkyv objects to be packed into a single packet. I think the assumption
+            // is rather that you're writing rkyv objects into a single file and the files are then packed
+            // into disk by the filesystem.
             Opcode::DictBulkRead => {
                 const BULKREAD_TIMEOUT_MS: u64 = 5000;
                 let range = msg.body.memory_message_mut().unwrap();
@@ -1476,6 +1479,7 @@ fn wrapped_main() -> ! {
                     };
                     bulkread_state = Some(state);
                 }
+                let mut finished = false;
                 // handle data packing into the structure
                 if let Some(state) = &mut bulkread_state {
                     // check that the token matches, if this isn't a first call to the function
@@ -1493,7 +1497,6 @@ fn wrapped_main() -> ! {
 
                     // now loop through and pack data into the slice
                     let mut index = size_of::<BulkReadHeader>();
-                    let mut finished = false;
                     loop {
                         let (pos, sbuf) = if let Some((pos, sbuf)) = state.serialized.take() {
                             (pos, sbuf)
@@ -1568,9 +1571,8 @@ fn wrapped_main() -> ! {
                             }
                         };
                         // sbuf now contains some serialized data. will it fit? Need 2x`u32` as recordkeeeping overhead.
-                        assert!(sbuf.len() == sbuf.as_slice().len(), "remove this assert if it doesn't fail on first run");
                         if sbuf.len() + size_of::<u32>() * 2 <= buf.len() - index {
-                            log::info!("packing message of {}({})", sbuf.len(), pos);
+                            log::debug!("packing message of {}({})", sbuf.len(), pos);
                             // data can fit, copy it into the buffer.
                             state.buf_starting_key_index += 1;
                             header.len += 1;
@@ -1587,6 +1589,7 @@ fn wrapped_main() -> ! {
                                 sbuf.as_slice()
                             );
                             index += sbuf.len();
+                            drop(sbuf);
                         } else {
                             // log::info!("{} <= {}", sbuf.len() + size_of::<u32>() * 2, buf.len());
                             assert!(
@@ -1612,6 +1615,9 @@ fn wrapped_main() -> ! {
                     state.last_time = tt.elapsed_ms();
                 } else {
                     log::warn!("This should be unreachable, the state should always be initialized by this point");
+                }
+                if finished {
+                    bulkread_state = None;
                 }
             }
 
