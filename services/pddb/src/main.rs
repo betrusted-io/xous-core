@@ -1539,6 +1539,7 @@ fn wrapped_main() -> ! {
                                         }
                                     }
                                 } else {
+                                    // log::info!("hit size limit: limit {} total {}", state.read_limit, state.read_total);
                                     // report the key, but with no data
                                     let rec = PddbKeyRecord {
                                         name: key_name,
@@ -1562,6 +1563,7 @@ fn wrapped_main() -> ! {
                         // sbuf now contains some serialized data. will it fit? Need 2x`u32` as recordkeeeping overhead.
                         assert!(sbuf.len() == sbuf.as_slice().len(), "remove this assert if it doesn't fail on first run");
                         if sbuf.len() + size_of::<u32>() * 2 <= buf.len() - index {
+                            log::info!("packing message of {}({})", sbuf.len(), pos);
                             // data can fit, copy it into the buffer.
                             state.buf_starting_key_index += 1;
                             header.len += 1;
@@ -1579,8 +1581,9 @@ fn wrapped_main() -> ! {
                             );
                             index += sbuf.len();
                         } else {
+                            // log::info!("{} <= {}", sbuf.len() + size_of::<u32>() * 2, buf.len());
                             assert!(
-                                sbuf.len() + size_of::<u32>() * 2 > buf.len(),
+                                sbuf.len() + size_of::<u32>() * 2 <= buf.len(),
                                 // the remediation for this is to fix the "will it fit even in a single buffer?" test above
                                 "Edge case not handled correctly: we have a serialized record that can never fit in a buffer"
                             );

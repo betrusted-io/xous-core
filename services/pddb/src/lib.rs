@@ -826,7 +826,7 @@ impl Pddb {
                     MAX_BUFLEN
                 } else {
                     // rounds *down* to the nearest page size, since it is a "guaranteed not to exceed" limit
-                    size_limit & (4096 - 1)
+                    size_limit & !(4096 - 1)
                 }
             }
         } else {
@@ -881,6 +881,7 @@ impl Pddb {
             header.deref_mut().copy_from_slice(
                 &msg_mem.as_slice()[index..index + size_of::<BulkReadHeader>()]
             );
+            index += size_of::<BulkReadHeader>();
             match FromPrimitive::from_u32(header.code).unwrap_or(PddbBulkReadCode::InternalError) {
                 PddbBulkReadCode::NotFound => {
                     return Err(Error::new(ErrorKind::NotFound, format!("Bulk Read: dictionary '{}' not found", dict)))
@@ -897,6 +898,7 @@ impl Pddb {
                         log::error!("local key index did not match remote key index: {}, {}", check_key_index, header.starting_key_index);
                     }
                     let mut key_count = 0;
+                    // log::info!("header: {:?}", header);
                     while key_count < header.len {
                         if index + size_of::<u32>() * 2 > msg_mem.len() {
                             // quit if we don't have enough space to decode at least another two indices
@@ -906,6 +908,7 @@ impl Pddb {
                         index += size_of::<u32>();
                         let pos = u32::from_le_bytes(msg_mem.as_slice()[index..index + size_of::<u32>()].try_into().unwrap());
                         index += size_of::<u32>();
+                        // log::info!("unpacking message at {}({})", size, pos);
                         if size != 0 && pos != 0 {
                             let archived = unsafe {
                                 archived_value::<PddbKeyRecord>(&msg_mem.as_slice()[index..index + (size as usize)], pos as usize)

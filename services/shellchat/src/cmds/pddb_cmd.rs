@@ -974,7 +974,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                 }
                 #[cfg(not(target_os = "xous"))]
                 "bulktest" => {
-                    let bulk_read = self.pddb.read_dict(TEST_DICT, None, None).unwrap();
+                    let bulk_read = self.pddb.read_dict(TEST_DICT, None, Some(131072)).unwrap();
                     log::info!("read {} records", bulk_read.len());
                     for record in bulk_read {
                         log::info!("{:?}", record);
