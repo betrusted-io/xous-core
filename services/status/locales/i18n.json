@@ -421,7 +421,10 @@
         "en-tts": "NTP query failed, please enter time manually."
     },
     "rtc.set_time_modal": {
-        "en": "Enter time"
+        "en": "Enter time",
+        "ja": "Enter time *EN*",
+        "zh": "Enter time *EN*",
+        "en-tts": "Enter time *EN*"
     },
     "rtc.month": {
         "en": "Month (1-12)",
