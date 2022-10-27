@@ -12,6 +12,7 @@ mod app_autogen;
 mod time;
 mod ecup;
 mod wifi;
+mod preferences;
 
 use com::api::*;
 use root_keys::api::{BackupOp, BackupKeyboardLayout};
@@ -92,6 +93,9 @@ pub(crate) enum StatusOpcode {
 
     /// Raise the wifi menu
     WifiMenu,
+
+    /// Raise the preferences menu
+    Preferences,
     Quit,
 }
 
@@ -365,6 +369,7 @@ fn wrapped_main() -> ! {
     let thread_conn = xous::connect(status_sid).unwrap();
 
     wifi::start_background_thread();
+    preferences::start_background_thread();
     
     // load system preferences
     let prefs = Arc::new(Mutex::new(userprefs::Manager::new()));
@@ -401,14 +406,14 @@ fn wrapped_main() -> ! {
             }.unwrap_or_else(|error| {
                 log::error!("cannot set radio status: {:?}", error)
             });
-        
+
             match all_prefs.connect_known_networks_on_boot {
                 true => netmgr.connection_manager_run(),
                 false => netmgr.connection_manager_stop(),
             }.unwrap_or_else(|error| {
                 log::error!("cannot start connection manager: {:?}", error)
             });
-            
+
             match all_prefs.autobacklight_on_boot {
                 true => send_message(status_cid, Message::new_scalar(
                     StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
@@ -861,6 +866,10 @@ fn wrapped_main() -> ! {
             Some(StatusOpcode::WifiMenu) => {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
+            },
+            Some(StatusOpcode::Preferences) => {
+                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
+                gam.raise_menu(gam::PREFERENCES_MENU_NAME).unwrap();
             },
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
