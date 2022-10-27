@@ -41,6 +41,9 @@ class Main(object):
         self.args.xousdir = os.path.normpath(os.path.dirname(self.args.pdir))
         self.args.program = os.path.basename(self.args.program)
         self.errfile = sys.stderr
+        # if end of string matches ' *EN*' (or some other lang)
+        self.temp_regex = re.compile('^.* \*[a-zA-Z]{2}\*$')
+        self.mt_regex = re.compile('^.* \*MT\*$')
 
     def out(self, *objects):
         print(*objects)
@@ -88,7 +91,7 @@ class Main(object):
                 if top == 'apps':
                     manifest = os.path.join(topdir, 'manifest.json')
                     if os.path.exists(manifest):
-                        self.i18n_files.append(manifest)
+                        self.i18n_files.append(manifest[len(self.args.xousdir)+1:])
                 for thing in os.listdir(topdir):
                     thingdir = os.path.join(topdir, thing)
                     if os.path.isdir(thingdir):
@@ -132,7 +135,9 @@ class Main(object):
                     # print('%s\t%s\t%s' % (i18n, lang_path, t))
                     if t == '🔇':
                         status = 'MISSING'
-                    elif self.regex.fullmatch(t):
+                    elif self.mt_regex.fullmatch(t):
+                        status = 'MACHINE_TRANSLATION'
+                    elif self.temp_regex.fullmatch(t):
                         status = 'TEMPORARY'
                 else:
                     status = 'ABSENT'
@@ -146,19 +151,52 @@ class Main(object):
         if self.get_i18n_files() != 0:
             return 1
         self.verr('-- missing --')
-        # if end of string matches ' *EN*' (or some other lang)
-        self.regex = re.compile('^.* \*[a-zA-Z]{2}\*$')
         for i18n in self.i18n_files:
             is_manifest = os.path.basename(i18n) == 'manifest.json'
             if self.show_missing(i18n, is_manifest) != 0:
                 return 1
         return 0
 
+    # keys for
+    #   manifest APP, menu_name, appmenu.APP
+    #   other    TAG
+    def add_new_lang(self, i18n, is_manifest):
+        i18n_path = os.path.join(self.args.xousdir, i18n)
+        i18n_path_orig = i18n_path + '.orig'
+        if not os.path.exists(i18n_path_orig):
+            os.rename(i18n_path, i18n_path_orig)
+        self.verr('adding "%s" to %s' % (self.args.new_lang, i18n))
+        orig_file = open(i18n_path_orig,)
+        obj = json.load(orig_file)
+        orig_file.close()
+        new_file = open(i18n_path,'w')
+        translation = None
+        for tag in obj.keys():
+            if is_manifest:
+                appmenu = 'appmenu.' + tag
+                translation = obj[tag]['menu_name'][appmenu]
+            else:
+                translation = obj[tag]
+            t_from = translation[self.args.from_lang]
+            t_new = t_from
+            if t_from != '🔇':
+                t_new += self.from_hint
+            translation[self.args.new_lang] = t_new
+        json.dump(obj, new_file, ensure_ascii=False, check_circular=False,
+                  sort_keys=True, indent=4)
+        new_file.close()
+        return 0
+
     def new_lang(self):
+        if self.get_i18n_files() != 0:
+            return 1
         self.from_hint = ' *%s*' % self.args.from_lang.upper()
-        self.verr('adding new lang "%s" from "%s" by appending "%s"' % (self.args.new_lang, self.args.from_lang, self.from_hint))
-        self.err('NOT IMPLEMENTED YET')
-        return 1
+        self.verr('-- adding new lang "%s" from "%s" by appending "%s" --' % (self.args.new_lang, self.args.from_lang, self.from_hint))
+        for i18n in self.i18n_files:
+            is_manifest = os.path.basename(i18n) == 'manifest.json'
+            if self.add_new_lang(i18n, is_manifest) != 0:
+                return 1
+        return 0
 
     def run(self):
         rc = 0

@@ -1,14 +1,16 @@
 {
     "shellchat.input-tts": {
         "en": "",
+        "en-tts": "got ",
+        "fr": "",
         "ja": "",
-        "zh": "",
-        "en-tts": "got "
+        "zh": ""
     },
     "shellchat.output-tts": {
         "en": "",
+        "en-tts": "response ",
+        "fr": "",
         "ja": "",
-        "zh": "",
-        "en-tts": "response "
+        "zh": ""
     }
 }

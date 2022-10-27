@@ -1,110 +1,128 @@
 {
-    "radio.select_and_close": {
-        "en": "[ Okay ]",
-        "ja": "[ OK ]",
-        "zh": "[ 确定 ]",
-        "en-tts": "Accept and close radio box"
-    },
-    "radio.selection_tts": {
-        "en": "",
-        "ja": "",
-        "zh": "",
-        "en-tts": "Set selection to: "
-    },
-    "radio.select_and_close_tts": {
-        "en": "",
-        "ja": "",
-        "zh": "",
-        "en-tts": "Close radio box with selection of "
-    },
-    "radio.selected_tts": {
-        "en": "",
-        "ja": "",
-        "zh": "",
-        "en-tts": "Selected: "
-    },
-    "checkbox.select_and_close_tts": {
-        "en": "",
-        "ja": "",
-        "zh": "",
-        "en-tts": "Close checkbox with these items selected "
-    },
-    "checkbox.uncheck": {
-        "en": "",
-        "ja": "",
-        "zh": "",
-        "en-tts": "Unchecked "
-    },
-    "checkbox.check": {
-        "en": "",
-        "ja": "",
-        "zh": "",
-        "en-tts": "Checked "
-    },
-    "bip39.invalid_word": {
-        "en": "Invalid word!",
-        "ja": "無効な単語",
-        "zh": "无效词",
-        "en-tts": "Invalid word!"
-    },
-    "bip39.waiting": {
-        "en": "Waiting for input...",
-        "ja": "入力を待っています...",
-        "zh": "等待输入...",
-        "en-tts": "Waiting for input..."
+    "bip39.abort_help": {
+        "en": "Press F4 to abort entry",
+        "en-tts": "Press F4 to abort entry",
+        "fr": "Appuyez sur F4 pour annuler l’entrée",
+        "ja": "F4を押して入力を中止します",
+        "zh": "按 F4 中止输入"
     },
     "bip39.enter_to_complete": {
         "en": "Press enter to accept current phrase, or keep typing...",
+        "en-tts": "Press enter to accept current phrase, or keep typing...",
+        "fr": "Appuyez sur Entrée pour accepter la phrase courante, ou continuez à taper...",
         "ja": "Enterキーを押して現在のフレーズを受け入れるか、入力を続けます...",
-        "zh": "按 Enter 接受当前短语，或继续输入...",
-        "en-tts": "Press enter to accept current phrase, or keep typing..."
-    },
-    "bip39.start_typing": {
-        "en": "Start typing...",
-        "ja": "入力を開始します...",
-        "zh": "开始打字……",
-        "en-tts": "Start typing..."
-    },
-    "bip39.invalid_phrase": {
-        "en": "\tPhrase is not valid",
-        "ja": "\tフレーズが無効です",
-        "zh": "\t短语无效",
-        "en-tts": "\tPhrase is not valid"
-    },
-    "bip39.abort_help": {
-        "en": "Press F4 to abort entry",
-        "ja": "F4を押して入力を中止します",
-        "zh": "按 F4 中止输入",
-        "en-tts": "Press F4 to abort entry"
-    },
-    "bip39.valid_phrase": {
-        "en": "Valid input:",
-        "ja": "有効な入力：",
-        "zh": "有效输入：",
-        "en-tts": "Valid input:"
+        "zh": "按 Enter 接受当前短语，或继续输入..."
     },
     "bip39.invalid_bytes": {
         "en": "Invalid BIP39 data length",
+        "en-tts": "Invalid BIP39 data length",
+        "fr": "Longueur de données BIP39 non valide",
         "ja": "無効なBIP39データ長",
-        "zh": "BIP39 数据长度无效",
-        "en-tts": "Invalid BIP39 data length"
+        "zh": "BIP39 数据长度无效"
     },
-    "progress.increment": {
+    "bip39.invalid_phrase": {
+        "en": "\tPhrase is not valid",
+        "en-tts": "\tPhrase is not valid",
+        "fr": "\tPhrase non valide",
+        "ja": "\tフレーズが無効です",
+        "zh": "\t短语无效"
+    },
+    "bip39.invalid_word": {
+        "en": "Invalid word!",
+        "en-tts": "Invalid word!",
+        "fr": "Mot invalide!",
+        "ja": "無効な単語",
+        "zh": "无效词"
+    },
+    "bip39.start_typing": {
+        "en": "Start typing...",
+        "en-tts": "Start typing...",
+        "fr": "Commencez à taper...",
+        "ja": "入力を開始します...",
+        "zh": "开始打字……"
+    },
+    "bip39.valid_phrase": {
+        "en": "Valid input:",
+        "en-tts": "Valid input:",
+        "fr": "Saisie valide:",
+        "ja": "有効な入力：",
+        "zh": "有效输入："
+    },
+    "bip39.waiting": {
+        "en": "Waiting for input...",
+        "en-tts": "Waiting for input...",
+        "fr": "En attente de saisie...",
+        "ja": "入力を待っています...",
+        "zh": "等待输入..."
+    },
+    "checkbox.check": {
         "en": "",
+        "en-tts": "Checked ",
+        "fr": "",
         "ja": "",
-        "zh": "",
-        "en-tts": "tick"
+        "zh": ""
+    },
+    "checkbox.select_and_close_tts": {
+        "en": "",
+        "en-tts": "Close checkbox with these items selected ",
+        "fr": "",
+        "ja": "",
+        "zh": ""
+    },
+    "checkbox.uncheck": {
+        "en": "",
+        "en-tts": "Unchecked ",
+        "fr": "",
+        "ja": "",
+        "zh": ""
     },
     "notification.dismiss": {
         "en": "[ Press any key ]",
+        "en-tts": "Press any key",
+        "fr": "[ Appuyez sur une touche ]",
         "ja": "[  何かのキーを押してください。]",
-        "zh": "[ 按任意键 ]",
-        "en-tts": "Press any key"
+        "zh": "[ 按任意键 ]"
     },
     "notification.qrcode.error": {
         "en": "Error: data does not fit in QR code",
+        "en-tts": "Error: data does not fit in QR code",
+        "fr": "Erreur: les données ne tiennent pas au code QR",
         "ja": "QRコードエラー：データが多すぎます",
-        "zh": "错误：数据不适合QR码",
-        "en-tts": "Error: data does not fit in QR code"
+        "zh": "错误：数据不适合QR码"
+    },
+    "progress.increment": {
+        "en": "",
+        "en-tts": "tick",
+        "fr": "",
+        "ja": "",
+        "zh": ""
+    },
+    "radio.select_and_close": {
+        "en": "[ Okay ]",
+        "en-tts": "Accept and close radio box",
+        "fr": "[ D'accord ]",
+        "ja": "[ OK ]",
+        "zh": "[ 确定 ]"
+    },
+    "radio.select_and_close_tts": {
+        "en": "",
+        "en-tts": "Close radio box with selection of ",
+        "fr": "",
+        "ja": "",
+        "zh": ""
+    },
+    "radio.selected_tts": {
+        "en": "",
+        "en-tts": "Selected: ",
+        "fr": "",
+        "ja": "",
+        "zh": ""
+    },
+    "radio.selection_tts": {
+        "en": "",
+        "en-tts": "Set selection to: ",
+        "fr": "",
+        "ja": "",
+        "zh": ""
     }
 }

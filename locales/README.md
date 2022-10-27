@@ -115,7 +115,7 @@ en-tts
 $
 ```
 
-The `--list-languages` function will show the disposition of the translations
+The `--missing` function will show the disposition of the translations
 (add `--show-ok` to see the complete translation status). The output
 is "FILE tab JQ-LIKE-PATH tab STATUS" which makes it easy to spot
 situations like completely absent translations that might cause a panic:
@@ -127,6 +127,13 @@ services/status/locales/i18n.json	rtc.set_time_modal.zh	ABSENT
 services/status/locales/i18n.json	rtc.set_time_modal.en-tts	ABSENT
 $
 ```
+Possible statuses include:
+* **OK** (if `--show-ok` flag is turned on)
+* **MISSING** the entry has the special unicode character: 🔇
+* **MACHINE_TRANSLATION** the entry ends with ` *MT*` to show that it was done by machine translation and requires human review.
+* **TEMPORARY** a temporary solution, borrowed from another language like English (e.g. ends in `  *EN*`)
+* **ABSENT** this translation key is _not present_ and could cause a panic!
+
 
 The `--new-lang` function will add a new lang by copying an
 existing lang and adding the suffix `" *EN*"` to the new translation
@@ -138,6 +145,26 @@ $ ./tools/i18n_helper.py --verbose --from-lang en --new-lang fr
 verbose mode
 -- get languages --
 adding new lang "fr" from "en" by appending " *EN*"
-NOT IMPLEMENTED YET
+
 $
 ```
+
+Each file will be backed up with the suffix `.orig` appended.
+Once you are satisfied with the translations you can remove these
+backup files like this:
+
+```
+$ find . -name '*.json.orig' | xargs rm
+```
+
+If you need to re-run the helper and an `.orig` version of the file
+is present it will be treated as the original version.
+
+_NOTE:_ You may want to add the new lang to the other tools
+that know about available languages:
+
+* https://github.com/betrusted-io/xous-core/blob/main/tools/updater/precursorupdater/precursorupdater.py#L154
+* https://github.com/betrusted-io/xous-core/blob/main/tools/backup.py#L420
+* https://github.com/betrusted-io/xous-core/blob/main/tools/restore.py#L541
+* https://github.com/betrusted-io/xous-core/blob/main/tools/legacy/update_ci.sh#L14
+* https://github.com/betrusted-io/xous-core/blob/main/tools/legacy/factory_reset.sh#L14

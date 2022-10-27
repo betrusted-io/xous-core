@@ -36,3 +36,6 @@ LICENSE text eol=lf
 
 # System description files
 *.svd eol=lf
+
+# JSON
+*.json eol=lf

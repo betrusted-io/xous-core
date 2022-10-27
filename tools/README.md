@@ -76,7 +76,7 @@ $
 
 ## Internationalization Helper
 
-For more about `i18n_helper.py` please see the locales [README](../locales/README.md)
+For more about `i18n_helper.py` please see the locales [README](../locales/README.md#internationalization-helper)
 
 ## Testing
 
