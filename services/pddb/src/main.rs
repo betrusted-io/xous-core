@@ -1500,6 +1500,10 @@ fn wrapped_main() -> ! {
                         Failure(String)
                     }
                     loop {
+                        if buf.len() < size_of::<u32>() * 2 {
+                            // not enough space to hold our header records, break and get a new buf
+                            break;
+                        }
                         #[cfg(feature="perfcounter")]
                         pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 6, std::line!());
                         let ser_result: SerializeResult =
