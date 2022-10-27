@@ -380,6 +380,14 @@ fn wrapped_main() -> ! {
         let prefs = prefs_thread_clone.lock().unwrap();
         let netmgr = net::NetManager::new();
 
+        let all_prefs = match prefs.all() {
+            Ok(p) => p,
+            Err(error) => {
+                log::error!("cannot read preference store: {:?}", error);
+                return;
+            }
+        };
+
         loop {
             if !pddb_poller.is_mounted_nonblocking() {
                 continue
@@ -387,46 +395,24 @@ fn wrapped_main() -> ! {
             
             log::debug!("pddb ready, loading preferences now!");
             
-            match prefs.radio_on_on_boot_or_default() {
-                Ok(value) => if let true = value {
-                    netmgr.connection_manager_wifi_off_and_stop()
-                } else {
-                    netmgr.connection_manager_wifi_on()
-                },
-                Err(error) => {
-                    log::error!("cannot read preference value for radio_on_on_boot: {:?}", error);
-                    Ok(())
-                }
+            match all_prefs.radio_on_on_boot {
+                true => netmgr.connection_manager_wifi_off_and_stop(),
+                false => netmgr.connection_manager_wifi_on(),
             }.unwrap_or_else(|error| {
                 log::error!("cannot set radio status: {:?}", error)
             });
         
-            match prefs.connect_known_networks_on_boot_or_default() {
-                Ok(value) => if let true = value {
-                    netmgr.connection_manager_run()
-                } else {
-                    netmgr.connection_manager_stop()
-                },
-                Err(error) => {
-                    log::error!("cannot read preference value for connect_known_networks_on_boot: {:?}", error);
-                    Ok(())
-                }
+            match all_prefs.connect_known_networks_on_boot {
+                true => netmgr.connection_manager_run(),
+                false => netmgr.connection_manager_stop(),
             }.unwrap_or_else(|error| {
-                log::error!("cannot set radio status: {:?}", error)
+                log::error!("cannot start connection manager: {:?}", error)
             });
             
-            match prefs.autobacklight_on_boot_or_default() {
-                Ok(value) => if let true = value {
-                    send_message(status_cid, Message::new_scalar(
-                        StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
-                } else {
-                    send_message(status_cid, Message::new_scalar(
-                        StatusOpcode::DisableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0))
-                },
-                Err(error) => {
-                    log::error!("cannot read preference value for autobacklight_on_boot: {:?}", error);
-                    Ok(xous::Result::Ok)
-                }
+            match all_prefs.autobacklight_on_boot {
+                true => send_message(status_cid, Message::new_scalar(
+                    StatusOpcode::EnableAutomaticBacklight.to_usize().unwrap(), 0,0,0,0)),
+                false => Ok(xous::Result::Ok),
             }.unwrap_or_else(|error| {
                 log::error!("cannot set autobacklight status: {:?}", error);
                 xous::Result::Ok
