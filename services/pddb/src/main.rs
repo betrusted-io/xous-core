@@ -1406,16 +1406,22 @@ fn wrapped_main() -> ! {
             // Optimized bulk data read handler. See lib.rs for documentation.
             Opcode::DictBulkRead => {
                 const BULKREAD_TIMEOUT_MS: u64 = 5000;
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 5, std::line!());
                 let range = msg.body.memory_message_mut().unwrap();
                 let buf = unsafe { core::slice::from_raw_parts_mut(
                     range.buf.as_mut_ptr(),
                     range.buf.len(),
                 )};
                 // unpack the descriptor
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
                 let pos = range.offset.map(|o| o.get()).unwrap_or_default();
                 let r = unsafe { rkyv::archived_value::<PddbDictRequest>(buf, pos) };
                 let bulk_descriptor = r.deserialize(&mut AllocDeserializer).unwrap();
                 // check for a timeout; retire state if we did timeout
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
                 let mut timed_out = false;
                 if let Some(state) = &bulkread_state {
                     if tt.elapsed_ms() - state.last_time > BULKREAD_TIMEOUT_MS {
@@ -1426,6 +1432,8 @@ fn wrapped_main() -> ! {
                     bulkread_state = None;
                 }
                 // handle state initialization, if no call was previously initiated
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
                 let mut first_call = false;
                 if bulkread_state.is_none() {
                     first_call = true;
@@ -1470,6 +1478,8 @@ fn wrapped_main() -> ! {
                 let mut finished = false;
                 // handle data packing into the structure
                 if let Some(state) = &mut bulkread_state {
+                    #[cfg(feature="perfcounter")]
+                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
                     // check that the token matches, if this isn't a first call to the function
                     if !first_call {
                         if state.token != bulk_descriptor.token {
@@ -1490,6 +1500,8 @@ fn wrapped_main() -> ! {
                         Failure(String)
                     }
                     loop {
+                        #[cfg(feature="perfcounter")]
+                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 6, std::line!());
                         let ser_result: SerializeResult =
                             if let Some(key_name) = state.key_list.pop() {
                                 let attr = basis_cache.key_attributes(&mut pddb_os,
@@ -1508,6 +1520,8 @@ fn wrapped_main() -> ! {
                                         Some(&attr.basis),
                                     ) {
                                         Ok(readlen) => {
+                                            #[cfg(feature="perfcounter")]
+                                            pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 6, std::line!());
                                             assert!(readlen == attr.len, "Bulk read key length did not match expected length");
                                             let rec = PddbKeyRecord {
                                                 name: key_name.to_string(),
@@ -1557,10 +1571,8 @@ fn wrapped_main() -> ! {
                                 break;
                             };
 
-                        // HERE'S THE PROBLEM: the `buf` returned is the inner of the allocated buf. the overall length
-                        // of the record serialized isn't exposed anywhere. So we can't know where to advance the buffer
-                        // pointer to, to stack the next archived result. The other option would be to use the .write()
-                        // method but then we'd need to...make a serializer for the structure. which is agains the whole point of it...
+                        #[cfg(feature="perfcounter")]
+                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 6, std::line!());
                         match ser_result {
                             SerializeResult::Success(pos, len, sbuf, _key_name, pre_buf) => {
                                 log::debug!("packing message of {}({})", len + pos, pos);
@@ -1584,6 +1596,8 @@ fn wrapped_main() -> ! {
                                 break;
                             }
                         }
+                        #[cfg(feature="perfcounter")]
+                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 6, std::line!());
                     }
                     if finished {
                         header.code = PddbBulkReadCode::Last as u32;
@@ -1601,6 +1615,8 @@ fn wrapped_main() -> ! {
                 if finished {
                     bulkread_state = None;
                 }
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 5, std::line!());
             }
 
             Opcode::SeekKeyStd => {
