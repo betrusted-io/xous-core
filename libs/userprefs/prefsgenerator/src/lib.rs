@@ -1,4 +1,5 @@
 use proc_macro::{self, TokenStream};
+use proc_macro2::Ident;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, DeriveInput, FieldsNamed};
@@ -57,6 +58,28 @@ pub fn getter_setter(input: TokenStream) -> TokenStream {
 
                     rw_methods.extend(read);
                 }
+
+                let ident_map: Vec<Ident> = named.iter().map(|field| {
+                    field.ident.as_ref().unwrap().clone()
+                }).collect();
+
+                let ident_fn_calls: Vec<Ident> = named.iter().map(|field| {
+                    format_ident!("{}_or_default", field.ident.as_ref().unwrap().clone())
+                }).collect();
+
+                // create the "all" method
+                let all = quote! {
+                    impl Manager {
+                        pub fn all(&self) -> Result<UserPrefs, Error> {
+                            
+                            Ok(UserPrefs {
+                                #( #ident_map:self.#ident_fn_calls()? ),*
+                            })
+                        }
+                    }
+                };
+
+                rw_methods.extend(all);
             }
             _ => (),
         },
