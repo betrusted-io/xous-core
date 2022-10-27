@@ -2,9 +2,9 @@
 pub mod dns;
 #[cfg(any(feature="precursor", feature="renode"))]
 pub use dns::*;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 pub mod dns_hosted;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 pub use dns_hosted::*;
 
 pub mod ping;

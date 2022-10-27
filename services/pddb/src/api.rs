@@ -3,6 +3,7 @@ pub use rkyv_enum::*;
 
 use bitfield::bitfield;
 use std::num::NonZeroU32;
+use core::ops::{Deref, DerefMut};
 
 // on the "[allow(dead_code)]" directives: these constants are used to define the PDDB, and are
 // sometimes used by both `bin` (main.rs) and `lib` (lib.rs) views, but also, sometimes used
@@ -157,7 +158,7 @@ pub(crate) enum Opcode {
     /// quit the server
     Quit = 24,
     /// Write debug dump (only available in hosted mode)
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     DangerousDebug = 25,
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     BasisTesting = 26,
@@ -232,6 +233,9 @@ pub(crate) enum Opcode {
     /// in prepration for a system shutdown or backup event.
     PddbHalt = 51,
 
+    /// Bulk read of a dictionary
+    DictBulkRead = 52,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
@@ -266,6 +270,7 @@ pub enum PddbRequestCode {
     AccessDenied = 9,
     Uninit = 10,
     DuplicateEntry = 11,
+    BulkRead = 12,
 }
 // enum def is in rkyv_enum module
 impl BasisRetentionPolicy {
@@ -292,6 +297,8 @@ pub struct PddbDictRequest {
     pub index: u32,
     pub token: [u32; 4],
     pub code: PddbRequestCode,
+    /// used only to specify a readback size limit for bulk-return requests
+    pub bulk_limit: Option<usize>,
 }
 
 /// A structure for requesting a token to access a particular key/value pair
@@ -349,6 +356,69 @@ pub(crate) struct PddbBuf {
     /// point in the key stream. 64-bit for future-compatibility; but, can't be larger than 32 bits on a 32-bit target.
     pub(crate) position: u64,
     pub(crate) data: [u8; PDDB_BUF_DATA_LEN],
+}
+
+/// Returns key name, data, and attributes in a single record. For bulk reads.
+/// The `dict` field is not specified, because, this had to be defined for the bulk read.
+/// The `basis` field, however, must be specified because a dictionary can be composed of
+/// data from multiple Bases.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+pub struct PddbKeyRecord {
+    pub name: String,
+    pub len: usize,
+    pub reserved: usize,
+    pub age: usize,
+    pub index: NonZeroU32,
+    pub basis: String,
+    /// If this is None, it means that the data read exceeded the bulk read limit
+    /// and the record must be explicitly re-read with a non-bulk call to fetch its data.
+    /// If the key is actually zero-length, a zero-length Some(Vec) is returned.
+    pub data: Option<Vec::<u8>>,
+}
+
+/// Return codes for Read/Write API calls to the main server
+#[repr(u32)]
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum PddbBulkReadCode {
+    /// Uninitialized value
+    Uninit = 0,
+    /// call already in progress or timed out (e.g. token does not match what's on record)
+    Busy = 1,
+    /// last return data structure
+    Last = 2,
+    /// return data structure, with more data to come
+    Streaming = 3,
+    /// dictionary not found
+    NotFound = 4,
+    /// PDDB internal error
+    InternalError = 5,
+}
+
+#[derive(Default, Debug)]
+#[repr(C)]
+pub struct BulkReadHeader {
+    pub code: u32,
+    pub starting_key_index: u32,
+    pub len: u32,
+    pub total: u32,
+    pub token: [u32; 4],
+}
+impl Deref for BulkReadHeader {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const BulkReadHeader as *const u8, core::mem::size_of::<BulkReadHeader>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for BulkReadHeader {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut BulkReadHeader as *mut u8, core::mem::size_of::<BulkReadHeader>())
+                as &mut [u8]
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -448,13 +518,13 @@ impl PddbKeyAttrIpc {
 }
 
 /// Debugging commands, available only in hosted mode
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PddbDangerousDebug {
     pub request: DebugRequest,
     pub dump_name: xous_ipc::String::<128>,
 }
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum DebugRequest {
     Dump = 0,

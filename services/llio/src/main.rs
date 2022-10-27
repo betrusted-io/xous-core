@@ -9,9 +9,9 @@ mod llio_hw;
 #[cfg(any(feature="precursor", feature="renode"))]
 use llio_hw::*;
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod llio_hosted;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 use llio_hosted::*;
 
 use num_traits::*;
@@ -127,7 +127,7 @@ fn main() -> ! {
     // I2C can be used to set time, which can have security implications; we are more strict on counting who can have access to this resource.
     #[cfg(any(feature="precursor", feature="renode"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(3)).expect("can't register I2C thread");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(1)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let _ = thread::spawn({
@@ -366,7 +366,7 @@ fn main() -> ! {
                     // log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
                     xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
                 }
-                #[cfg(any(feature="hosted"))] // fake an activity
+                #[cfg(not(target_os = "xous"))] // fake an activity
                 {
                     let period = 12_000;
                     xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
@@ -450,7 +450,7 @@ fn main() -> ! {
                     (total_secs & 0xFFFF_FFFF) as usize,
                 ).expect("couldn't return to caller");
             }),
-            #[cfg(any(feature="hosted"))]
+            #[cfg(not(target_os = "xous"))]
             Some(Opcode::GetRtcValue) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 use chrono::prelude::*;
                 let now = Local::now();

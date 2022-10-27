@@ -661,7 +661,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod implementation {
     use crate::*;
 
@@ -742,7 +742,7 @@ fn main() -> ! {
     //  - USB (for getting layout)
     #[cfg(any(feature="precursor", feature="renode"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 

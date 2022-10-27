@@ -5,18 +5,11 @@
 // This file is licensed under the MIT License.
 // Full license text is available in 'licenses/MIT.txt'.
 //
-using System;
-using System.Threading;
-using System.Text;
-using System.Linq;
-using System.Globalization;
-using System.Numerics;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
-using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.Bus;
 
-namespace Antmicro.Renode.Peripherals.Miscellaneous
+namespace Antmicro.Renode.Peripherals.Miscellaneous.Betrusted
 {
 
     public class SpinorSoftInt : IDoubleWordPeripheral, IProvidesRegisterCollection<DoubleWordRegisterCollection>, IKnownSize

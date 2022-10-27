@@ -12,7 +12,7 @@ using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.Bus;
 
-namespace Antmicro.Renode.Peripherals.Input
+namespace Antmicro.Renode.Peripherals.Input.Betrusted
 {
     class KeyMap
     {

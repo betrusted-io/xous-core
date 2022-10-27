@@ -6,18 +6,15 @@
 //
 
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
-using Antmicro.Renode.Exceptions;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.Bus;
 using Antmicro.Renode.Sound;
 using Antmicro.Renode.Utilities;
 
-namespace Antmicro.Renode.Peripherals.Sound
+namespace Antmicro.Renode.Peripherals.Sound.Betrusted
 {
     public class AudioRam : IBytePeripheral, IDoubleWordPeripheral, IWordPeripheral, IKnownSize
     {

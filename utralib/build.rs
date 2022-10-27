@@ -67,7 +67,22 @@ macro_rules! allow_single_gitrev_feature {
 
 fn main() {
     // ------ check that the feature flags are sane -----
-
+    // note on selecting "hosted" mode. An explicit "hosted" flag is provided to clarify
+    // the build system's intent. However, in general, most packages prefer to use this idiom:
+    //
+    // #[cfg(not(target_os = "xous"))]
+    //
+    // This flag is synonymous with feature = "hosted", and it also makes "hosted" mode the
+    // "default" package in the case that the code is being built in CI or in external
+    // packages that don't know to configure the "hosted" feature flag.
+    //
+    // This idiom breaks if Xous ever gets to the point of compiling and running code on
+    // its own platform; but generally, if the target binary is running on e.g. windows/linux/non-xous
+    // target triples, the user's intent was "hosted" mode.
+    //
+    // This script retains the use of an explicit "hosted" flag because we want to catch
+    // unintentional build system misconfigurations that meant to build for a target other
+    // than "hosted", rather than just falling back silently to defaults.
     allow_single_target_feature!("precursor", "hosted", "renode");
 
     #[cfg(feature = "precursor")]

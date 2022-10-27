@@ -3,7 +3,7 @@
 
 #[cfg(any(feature="precursor", feature="renode"))]
 mod main_hw;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod main_hosted;
 
 mod api;
@@ -21,9 +21,9 @@ use packed_struct::PackedStructSlice;
 #[cfg(any(feature="precursor", feature="renode"))]
 use spinal_udc::*;
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod hosted;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 use hosted::*;
 
 use std::collections::BTreeMap;
@@ -33,7 +33,7 @@ use num_traits::*;
 fn main() -> ! {
     #[cfg(any(feature="precursor", feature="renode"))]
     main_hw::main_hw();
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     main_hosted::main_hosted();
 }
 

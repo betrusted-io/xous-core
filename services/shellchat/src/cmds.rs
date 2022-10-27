@@ -1,7 +1,7 @@
 use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
-#[cfg(feature="perfcounter")]
+#[cfg(feature="shellperf")]
 use utralib::generated::*;
 
 use std::collections::HashMap;
@@ -48,12 +48,13 @@ pub struct CommonEnv {
     cb_registrations: HashMap::<u32, String::<256>>,
     trng: Trng,
     netmgr: net::NetManager,
+    #[allow(dead_code)]
     xns: xous_names::XousNames,
     boot_instant: std::time::Instant,
     /// make this communal so any number of commands can trigger or reset the performance counter, and/or perform logging
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature="shellperf")]
     perf_csr: AtomicCsr<u32>,
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature="shellperf")]
     event_csr: AtomicCsr::<u32>,
 }
 impl CommonEnv {
@@ -86,7 +87,6 @@ impl CommonEnv {
 
 ///// 1. add your module here, and pull its namespace into the local crate
 mod echo;     use echo::*;
-mod test;     use test::*;
 mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
 // mod callback; use callback::*;
@@ -110,6 +110,11 @@ mod jtag_cmd; use jtag_cmd::*;
 mod net_cmd;  use net_cmd::*;
 mod pddb_cmd; use pddb_cmd::*;
 mod usb; use usb::*;
+
+#[cfg(not(feature="no-codec"))]
+mod test;
+#[cfg(not(feature="no-codec"))]
+use test::*;
 
 #[cfg(feature="tts")]
 mod tts;
@@ -135,7 +140,6 @@ pub struct CmdEnv {
     common_env: CommonEnv,
     lastverb: String::<256>,
     ///// 2. declare storage for your command here.
-    test_cmd: Test,
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
     //callback_cmd: CallBack,
@@ -154,6 +158,9 @@ pub struct CmdEnv {
     wlan_cmd: Wlan,
     usb_cmd: Usb,
 
+    #[cfg(not(feature="no-codec"))]
+    test_cmd: Test,
+
     #[cfg(feature="tts")]
     tts_cmd: Tts,
 
@@ -168,7 +175,7 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature="shellperf")]
         let perf_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::perfcounter::HW_PERFCOUNTER_BASE),
             None,
@@ -176,7 +183,7 @@ impl CmdEnv {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map perfcounter CSR range");
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature="shellperf")]
         let event1_csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::event_source1::HW_EVENT_SOURCE1_BASE),
             None,
@@ -195,9 +202,9 @@ impl CmdEnv {
             xns: xous_names::XousNames::new().unwrap(),
             netmgr: net::NetManager::new(),
             boot_instant: std::time::Instant::now(),
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature="shellperf")]
             perf_csr: AtomicCsr::new(perf_csr.as_mut_ptr() as *mut u32),
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature="shellperf")]
             event_csr: AtomicCsr::new(event1_csr.as_mut_ptr() as *mut u32),
         };
         //let fcc = Fcc::new(&mut common);
@@ -226,7 +233,6 @@ impl CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
-            test_cmd: Test::new(&xns),
             sleep_cmd: Sleep::new(&xns),
             sensors_cmd: Sensors::new(),
             //callback_cmd: CallBack::new(),
@@ -244,6 +250,9 @@ impl CmdEnv {
             pddb_cmd: PddbCmd::new(&xns),
             wlan_cmd: Wlan::new(),
             usb_cmd: Usb::new(),
+
+            #[cfg(not(feature="no-codec"))]
+            test_cmd: Test::new(&xns),
 
             #[cfg(feature="tts")]
             tts_cmd: Tts::new(&xns),
@@ -269,7 +278,6 @@ impl CmdEnv {
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
-            &mut self.test_cmd,
             &mut self.sleep_cmd,
             &mut self.sensors_cmd,
             //&mut self.callback_cmd,
@@ -291,6 +299,9 @@ impl CmdEnv {
             &mut self.net_cmd,
             &mut self.pddb_cmd,
             &mut self.usb_cmd,
+
+            #[cfg(not(feature="no-codec"))]
+            &mut self.test_cmd,
 
             #[cfg(feature="tts")]
             &mut self.tts_cmd,

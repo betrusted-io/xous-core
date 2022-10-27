@@ -7,23 +7,23 @@ uart: UART.LiteX_UART @ {
     }
     -> cpu@1001
 
-timer0: Timers.LiteX_Timer_32 @ {
+timer0: Timers.LiteX_Timer_CSR32 @ {
         sysbus 0xe0001000
     }
     frequency: 100000000
     -> cpu@1000
 
-i2c: I2C.BetrustedEcI2C @ sysbus 0xE0004800
+i2c: I2C.Betrusted.BetrustedEcI2C @ sysbus 0xE0004800
     -> cpu @ 1002
 
-ticktimer: Timers.TickTimer @ sysbus 0xe0005000
+ticktimer: Timers.Betrusted.TickTimer @ sysbus 0xe0005000
     -> cpu @ 1003
 
-com: SPI.BetrustedEcCom @ sysbus 0xe0005800
+com: SPI.Betrusted.BetrustedEcCom @ sysbus 0xe0005800
     memAddr: 0xD0000000
     memSize: 0x1000
 
-wifi: SPI.EcWifi @ sysbus 0xe0006000
+wifi: SPI.Betrusted.EcWifi @ sysbus 0xe0006000
 
 sram: Memory.MappedMemory @ {
         sysbus 0x10000000;
@@ -31,7 +31,7 @@ sram: Memory.MappedMemory @ {
     }
     size: 0x00020000
 
-power: Miscellaneous.EcPower @ sysbus 0xE0002800
+power: Miscellaneous.Betrusted.EcPower @ sysbus 0xE0002800
 
 rom: Memory.MappedMemory @ {
         sysbus 0x00000000;
@@ -45,12 +45,12 @@ flash_mem: Memory.MappedMemory @ {
     }
     size: 0x00200000
 
-lm3509: Mocks.LM3509 @ i2c 0x36
-tusb320lai: Mocks.TUSB320LAI @ i2c 0x47
-bq27421: Sensors.BQ27421 @ i2c 0x55
-bq24157: Mocks.BQ24157 @ i2c 0x6a
-lsm6ds3: Mocks.LSM6DS3 @ i2c 0x6b
-wf200: Network.WF200 @ wifi
+lm3509: Mocks.Betrusted.LM3509 @ i2c 0x36
+tusb320lai: Mocks.Betrusted.TUSB320LAI @ i2c 0x47
+bq27421: Sensors.Betrusted.BQ27421 @ i2c 0x55
+bq24157: Mocks.Betrusted.BQ24157 @ i2c 0x6a
+lsm6ds3: Mocks.Betrusted.LSM6DS3 @ i2c 0x6b
+wf200: Network.Betrusted.WF200 @ wifi
 
 sysbus:
     init:

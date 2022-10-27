@@ -16,7 +16,7 @@ using Antmicro.Renode.Logging;
 using Antmicro.Renode.Network;
 using Antmicro.Renode.Utilities;
 
-namespace Antmicro.Renode.Peripherals.Network
+namespace Antmicro.Renode.Peripherals.Network.Betrusted
 {
     public class WF200 : ISPIPeripheral, IMACInterface, IProvidesRegisterCollection<DoubleWordRegisterCollection>
     {

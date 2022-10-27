@@ -4,16 +4,14 @@
 // This file is licensed under the MIT License.
 // Full license text is available in 'licenses/MIT.txt'.
 //
-using System;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
-using Antmicro.Renode.Utilities;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Time;
 using Antmicro.Renode.Peripherals.Bus;
 using System.Threading;
 
-namespace Antmicro.Renode.Peripherals.Timers
+namespace Antmicro.Renode.Peripherals.Timers.Betrusted
 {
     // this is a model of LiteX timer in the Betrusted configuration:
     // * width: 32 bits

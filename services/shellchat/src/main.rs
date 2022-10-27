@@ -43,6 +43,7 @@ use xous_ipc::Buffer;
 mod cmds;
 use cmds::*;
 
+#[cfg(not(feature="no-codec"))]
 mod oqc_test;
 
 #[cfg(feature="nettest")]

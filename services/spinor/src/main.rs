@@ -527,12 +527,18 @@ mod implementation {
         /// Not sure why :-/, but, I stopped caring because ".word 0x500F" works!
         #[inline]
         fn flush_dcache(&self, _start: u32, _len: u32) {
-            // This instruction seems to be causing instability, omit it...
-            #[cfg(not(feature="extra_flush"))]
             unsafe {
                 core::arch::asm!(
                     ".word 0x500F",
+                    "nop",
+                    "nop",
+                    "nop",
+                    "nop",
                     "fence",
+                    "nop",
+                    "nop",
+                    "nop",
+                    "nop",
                 );
             }
             // augment with manual flushing, because the above instruction didn't seem to do the trick??
@@ -644,7 +650,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 mod implementation {
     use crate::api::*;
     pub struct Spinor {
@@ -737,7 +743,7 @@ fn main() -> ! {
     */
     #[cfg(any(feature="precursor", feature="renode"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(5)).expect("can't register server");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 

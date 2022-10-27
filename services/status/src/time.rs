@@ -449,7 +449,7 @@ pub fn start_time_server() {
         }
     });
 
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     thread::spawn({
         let rtc_checked = rtc_checked.clone();
         move || {

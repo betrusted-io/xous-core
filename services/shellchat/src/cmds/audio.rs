@@ -32,7 +32,7 @@ impl Audio {
             0x1c4_0000, // 0x8_0000 is length of short sample, 0x1C4_0000 is the long sample
             xous::MemoryFlags::R,
         ).expect("couldn't map in the audio sample");
-        #[cfg(any(feature="hosted"))] // just make a dummy mapping to keep things from crashing in hosted mode
+        #[cfg(not(target_os = "xous"))] // just make a dummy mapping to keep things from crashing in hosted mode
         let sample = xous::syscall::map_memory(
             None,
             None,

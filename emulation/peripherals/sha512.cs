@@ -9,7 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Antmicro.Renode.Peripherals.Miscellaneous
+namespace Antmicro.Renode.Peripherals.Miscellaneous.Betrusted
 {
     using System;
     using System.Security.Cryptography;

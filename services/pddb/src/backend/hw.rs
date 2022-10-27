@@ -36,6 +36,11 @@ use digest::Digest;
 #[cfg(feature="migration1")]
 use crate::backend::migration1to2::*;
 
+#[cfg(feature="perfcounter")]
+use perflib::*;
+#[cfg(feature="perfcounter")]
+use utralib::AtomicCsr;
+
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 pub(crate) const MBBB_PAGES: usize = 10;
 pub(crate) const FSCB_PAGES: usize = 16;
@@ -118,9 +123,9 @@ struct MigrationCiphers {
 }
 
 // emulated
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 type EmuMemoryRange = EmuStorage;
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 type EmuSpinor = HostedSpinor;
 
 // native hardware
@@ -170,6 +175,14 @@ pub(crate) struct PddbOs {
     failed_logins: u64,
     #[cfg(all(feature="pddbtest", feature="autobasis"))]
     testnames: HashSet::<String>,
+    /// Performance counter elements
+    #[cfg(feature="perfcounter")]
+    perfclient: PerfClient,
+    #[cfg(feature="perfcounter")]
+    pc_id: u32,
+    #[cfg(feature="perfcounter")]
+    /// used to toggle performance profiling on or off
+    use_perf: bool,
 }
 
 impl PddbOs {
@@ -196,6 +209,21 @@ impl PddbOs {
 
         let llio = llio::Llio::new(&xns);
         let dna = llio.soc_dna().unwrap();
+
+        // performance counter infrastructure, if selected
+        #[cfg(feature="perfcounter")]
+        let event2_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utralib::generated::utra::event_source2::HW_EVENT_SOURCE2_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map event2 CSR range");
+        #[cfg(feature="perfcounter")]
+        let perfclient = PerfClient::new(AtomicCsr::new(event2_csr.as_mut_ptr() as *mut u32));
+        #[cfg(feature="perfcounter")]
+        let pc_id = xous::process::id() as u32;
+
         // native hardware
         #[cfg(any(feature="precursor", feature="renode"))]
         let ret = PddbOs {
@@ -223,9 +251,15 @@ impl PddbOs {
             failed_logins: 0,
             #[cfg(all(feature="pddbtest", feature="autobasis"))]
             testnames: HashSet::new(),
+            #[cfg(feature="perfcounter")]
+            perfclient,
+            #[cfg(feature="perfcounter")]
+            pc_id,
+            #[cfg(feature="perfcounter")]
+            use_perf: true,
         };
         // emulated
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         let ret = {
             PddbOs {
                 spinor: HostedSpinor::new(),
@@ -257,7 +291,7 @@ impl PddbOs {
         ret
     }
 
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     pub fn dbg_dump(&self, name: Option<String>, extra_keys: Option<&Vec::<KeyExport>>) {
         self.pddb_mr.dump_fs(&name);
         let mut export = Vec::<KeyExport>::new();
@@ -288,7 +322,20 @@ impl PddbOs {
         // placeholder
     }
     #[allow(dead_code)]
-    #[cfg(any(feature="hosted"))]
+    #[cfg(feature="perfcounter")]
+    pub fn set_use_perf(&mut self, use_perf: bool) {
+        self.use_perf = use_perf;
+    }
+    #[allow(dead_code)]
+    #[cfg(feature="perfcounter")]
+    pub fn perf_entry(&mut self, file_id: u32, meta: u32, index: u32, line: u32) {
+        if self.use_perf {
+            let entry = perf_entry!(self.pc_id, file_id, meta, index, line);
+            self.perfclient.log_event_unchecked(entry);
+        }
+    }
+    #[allow(dead_code)]
+    #[cfg(not(target_os = "xous"))]
     /// used to reset the hardware structure for repeated runs of testing within a single invocation
     pub fn test_reset(&mut self) {
         self.fspace_cache = FspaceSet::new();
@@ -1887,7 +1934,7 @@ impl PddbOs {
         }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         self.tt.sleep_ms(500).unwrap(); // delay for UX to catch up in emulation
 
         // step 4. mbbb handling
@@ -1919,7 +1966,7 @@ impl PddbOs {
             self.tt.sleep_ms(100).unwrap();
         }
 
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         self.tt.sleep_ms(500).unwrap();
 
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress report" of some kind...
@@ -2887,7 +2934,7 @@ impl PddbOs {
         log::info!("v1 PDDB detected. Attempting to migrate from v1->v2.");
         log::info!("old SCD block: {:x?}", &scd.deref()[..128]); // this is not hazardous because the keys were wrapped
 
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         let mut export = Vec::<KeyExport>::new(); // export any basis keys for verification in hosted mode
 
         // derive a v1 key
@@ -3028,7 +3075,7 @@ impl PddbOs {
                                                 &basis_data_cipher_2,
                                                 &mut used_pages,
                                             ) {
-                                                #[cfg(any(feature="hosted"))]
+                                                #[cfg(not(target_os = "xous"))]
                                                 {
                                                     let mut name = [0 as u8; 64];
                                                     for (&src, dst) in bname.first().as_str().as_bytes().iter().zip(name.iter_mut()) {
@@ -3102,7 +3149,7 @@ impl PddbOs {
                 }
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-                #[cfg(any(feature="hosted"))]
+                #[cfg(not(target_os = "xous"))]
                 self.dbg_dump(Some("migration".to_string()), Some(&export));
 
                 // indicate the migration worked

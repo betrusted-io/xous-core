@@ -16,13 +16,13 @@ ime-plugin-shell = {path = "../ime-plugin-shell"}
 ime-plugin-tts = {path = "../ime-plugin-tts"}
 llio = {path = "../llio"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.12"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.11"}
-xous = "0.9.18"
-xous-ipc = "0.9.18"
-xous-names = {package = "xous-api-names", version = "0.9.13"}
+log-server = {package = "xous-api-log", version = "0.1.15"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.14"}
+xous = "0.9.21"
+xous-ipc = "0.9.21"
+xous-names = {package = "xous-api-names", version = "0.9.16"}
 keyboard = {path = "../keyboard"}
-susres = {package = "xous-api-susres", version = "0.9.11"}
+susres = {package = "xous-api-susres", version = "0.9.14"}
 codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}
@@ -38,7 +38,7 @@ dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
 usb-device-xous = {path="../usb-device-xous"}
-utralib = {version = "0.1.6", optional = true, default-features = false }
+utralib = {version = "0.1.8", optional = true, default-features = false }
 
 tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}
@@ -80,7 +80,10 @@ webpki-roots = {version = "0.22.4", optional = true}
 ring = {version = "0.16.20", optional = true} # for testing ring math functions  # note requirement for patch to xous-ring in workspace Cargo.toml
 tungstenite = {version = "0.17.3", optional = true, features = ["rustls-tls-webpki-roots"]}
 url = {version = "2.2.2", optional = true}
+
+# for performance testing
 perflib = {path="../../tools/perflib", optional = true}
+random-pick = {version = "1.2.15", optional = true}
 
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
@@ -103,9 +106,9 @@ default-features = false
 features = ["u32_backend", "rand"]
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
-hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+precursor = ["utralib/precursor"]
+hosted = ["utralib/hosted", "random-pick"]
+renode = ["utralib/renode"]
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.
 benchmarks = [] # adds the benchmark routines. Left off normally to free up code and memory space.
@@ -118,7 +121,8 @@ ditherpunk = ["png"]
 tracking-alloc = ["tracking-allocator", "tracing", "tracing-subscriber"]
 dbg-ecupdate = [] # for issuing manual commands to initiate an EC update (vs UX). Also need to enable this feature in the status crate. Intended for debug only.
 test-rekey = []
+no-codec = []
 nettest = [] # batch network tests
 tls = ["rustls", "webpki-roots", "ring", "tungstenite", "url"]
-perfcounter = ["ring", "perflib", "xous/v2p"]
+shellperf = ["ring", "perflib", "xous/v2p", "random-pick"] # this also needs the project-wide "perfcounter" feature to be selected. shellchat is the exclusive manager of the performance counter, do not use with e.g. "vaultperf" feature
 default = [] # "debugprint"

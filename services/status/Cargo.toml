@@ -10,17 +10,17 @@ version = "0.1.0"
 com = {path = "../com"}
 content-plugin-api = {path = "../content-plugin-api"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.12"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.11"}
+log-server = {package = "xous-api-log", version = "0.1.15"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.14"}
 trng = {path = "../trng"}
 llio = {path = "../llio"}
-xous = "0.9.18"
-xous-ipc = "0.9.18"
-xous-names = {package = "xous-api-names", version = "0.9.13"}
+xous = "0.9.21"
+xous-ipc = "0.9.21"
+xous-names = {package = "xous-api-names", version = "0.9.16"}
 graphics-server = {path = "../graphics-server"}
 gam = {path = "../gam"}
 locales = {path = "../../locales"}
-susres = {package = "xous-api-susres", version = "0.9.11"}
+susres = {package = "xous-api-susres", version = "0.9.14"}
 root-keys = {path = "../root-keys"}
 modals = {path = "../modals"}
 pddb = {path = "../pddb"}
@@ -42,7 +42,7 @@ digest = "0.9.0"
 xous-semver = "0.1.2"
 com_rs-ref = {path = "../../imports/com_rs-ref"}
 
-utralib = {version = "0.1.6", optional = true, default-features = false }
+utralib = {version = "0.1.8", optional = true, default-features = false }
 crossbeam-utils = "0.8.12"
 
 # short circuit the datetime call on hosted mode
@@ -50,9 +50,9 @@ crossbeam-utils = "0.8.12"
 chrono = "0.4.19"
 
 [features]
-precursor = ["utralib/precursor", "xous/precursor"]
+precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
-renode = ["utralib/renode", "xous/renode"]
+renode = ["utralib/renode"]
 debugprint = []
 braille = [] # used for braille mode, so console isn't overwhelmed with status
 tts = []

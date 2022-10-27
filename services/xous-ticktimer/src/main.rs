@@ -284,8 +284,8 @@ mod implementation {
     }
 }
 
-#[cfg(any(feature="hosted",
-  not(any(feature="precursor", feature="renode", feature="hosted"))
+#[cfg(any(not(target_os = "xous"),
+  not(any(feature="precursor", feature="renode", not(target_os = "xous")))
 ))]
 mod implementation {
     use crate::RequestKind;

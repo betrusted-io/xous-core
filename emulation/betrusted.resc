@@ -18,17 +18,16 @@ i @peripherals/BQ24157.cs
 i @peripherals/BQ27421.cs
 i @peripherals/BtEvents.cs
 i @peripherals/ComConnector.cs
-EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.IComPeripheral"
-EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.IComController"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComPeripheral"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComController"
 i @peripherals/ComEc.cs
 i @peripherals/ComSoC.cs
-i @peripherals/ec_power.cs
+i @peripherals/EcPower.cs
 i @peripherals/EcWifi.cs
 i @peripherals/engine.cs
 i @peripherals/Jtag.cs
 i @peripherals/keyboard.cs
 i @peripherals/keyrom.cs
-i @peripherals/LiteX_Timer_32.cs
 i @peripherals/LM3509.cs
 i @peripherals/LSM6DS3.cs
 i @peripherals/memlcd.cs
@@ -46,7 +45,7 @@ i @peripherals/wfi.cs
 EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
 i @peripherals/vexriscv-aes.cs
 
-EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.TickTimer"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.Betrusted.TickTimer"
 i @peripherals/susres.cs
 
 # Create the COM SPI bus

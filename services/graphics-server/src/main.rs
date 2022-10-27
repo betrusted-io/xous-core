@@ -36,7 +36,7 @@ use std::sync::Arc;
 use crate::wordwrap::*;
 use core::ops::Add;
 
-#[cfg(feature = "testing")]
+#[cfg(feature = "gfx-testing")]
 mod testing;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
@@ -83,7 +83,7 @@ fn map_fonts() -> MemoryRange {
     fontregion
 }
 
-#[cfg(any(feature="hosted"))]
+#[cfg(not(target_os = "xous"))]
 fn map_fonts() -> MemoryRange {
     // does nothing
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
@@ -134,7 +134,7 @@ fn wrapped_main() -> ! {
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
         .expect("can't register server");
-    #[cfg(any(feature="hosted"))]
+    #[cfg(not(target_os = "xous"))]
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(1))
         .expect("can't register server");
@@ -154,7 +154,7 @@ fn wrapped_main() -> ! {
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
 
-    #[cfg(feature = "testing")]
+    #[cfg(feature = "gfx-testing")]
     testing::tests();
     loop {
         if !is_panic.load(Ordering::Relaxed) { // non-panic graphics operations if we are in a panic situation

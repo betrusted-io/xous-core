@@ -22,7 +22,7 @@ use gam::DecodePng;
 use std::convert::TryInto;
 #[cfg(feature="tls")]
 use tungstenite::{WebSocket, stream::MaybeTlsStream};
-#[cfg(feature="perfcounter")]
+#[cfg(feature="shellperf")]
 use perflib::*;
 pub struct NetCmd {
     callback_id: Option<u32>,
@@ -32,12 +32,12 @@ pub struct NetCmd {
     ping: Option<net::Ping>,
     #[cfg(feature="tls")]
     ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
-    #[cfg(feature="perfcounter")]
+    #[cfg(feature="shellperf")]
     perfbuf: xous::MemoryRange,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        #[cfg(feature="perfcounter")]
+        #[cfg(feature="shellperf")]
         let perfbuf = xous::syscall::map_memory(
             None,
             None,
@@ -53,7 +53,7 @@ impl NetCmd {
             ping: None,
             #[cfg(feature="tls")]
             ws: None,
-            #[cfg(feature="perfcounter")]
+            #[cfg(feature="shellperf")]
             perfbuf,
         }
     }
@@ -80,7 +80,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         #[cfg(any(feature="precursor", feature="renode"))]
         let helpstring = "net [udp [rx socket] [tx dest socket]] [ping [host] [count]] [tcpget host/path]";
         // no ping in hosted mode -- why would you need it? we're using the host's network connection.
-        #[cfg(any(feature="hosted"))]
+        #[cfg(not(target_os = "xous"))]
         let helpstring = "net [udp [port]] [count]] [tcpget host/path]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -511,7 +511,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     log::info!("{}", std::str::from_utf8(&plaintext).unwrap_or("utf-error"));
                     log::set_max_level(log::LevelFilter::Info);
                 }
-                // note: to use the `perfcounter` option, you need to load a version of the SOC that has the performance counters built in.
+                // note: to use the `shellperf` option, you need to load a version of the SOC that has the performance counters built in.
                 // this can be generated using the command `python3 .\betrusted_soc.py -e .\dummy.nky --perfcounter` in the betrusted-soc repo.
                 //
                 // to read out performance monitoring data, use the `usb_update.py` script as follows:
@@ -521,7 +521,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 // the command below can generate this page table; it must be manually copy/pasted from the console
                 // into the `v2p.txt` file. Note that it will change on every boot, but it is stable throughout each boot,
                 // even across multiple runs of the command.
-                #[cfg(feature="perfcounter")]
+                #[cfg(feature="shellperf")]
                 "v2p" => {
                     // don't generate a new object since it clears the data, just do a raw dump
                     log::info!("Buf vmem loc: {:x}", self.perfbuf.as_ptr() as u32);
@@ -535,7 +535,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         );
                     }
                 }
-                #[cfg(feature="perfcounter")]
+                #[cfg(feature="shellperf")]
                 "cta1" => {
                     log::info!("constant time RISC-V HW AES test");
 
@@ -583,7 +583,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                     // pm.print_page_table();
                 }
-                #[cfg(feature="perfcounter")]
+                #[cfg(feature="shellperf")]
                 "cta2" => {
                     let pm = PerfMgr::new(
                         self.perfbuf.as_mut_ptr(),
