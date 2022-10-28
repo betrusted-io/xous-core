@@ -11,7 +11,7 @@ pub fn check_project_consistency() -> Result<(), DynError> {
     let check_pkgs = [
         // this set updates with kernel API changes
         "xous@0.9.23",
-        "xous-kernel@0.9.16",
+        "xous-kernel@0.9.17",
         "xous-ipc@0.9.23",
         "xous-api-log@0.1.17",
         "xous-api-names@0.9.18",
