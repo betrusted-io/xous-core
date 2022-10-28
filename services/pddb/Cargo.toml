@@ -8,15 +8,15 @@ description = "Plausibly Deniable Database"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 bitflags = {version = "1"}
-xous = "0.9.22"
-xous-ipc = "0.9.22"
-log-server = { package = "xous-api-log", version = "0.1.16" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.15" }
-xous-names = { package = "xous-api-names", version = "0.9.17" }
+xous = "0.9.23"
+xous-ipc = "0.9.23"
+log-server = { package = "xous-api-log", version = "0.1.17" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.16" }
+xous-names = { package = "xous-api-names", version = "0.9.18" }
+susres = {package = "xous-api-susres", version = "0.9.16"}
 log = "0.4.14"
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
-susres = {package = "xous-api-susres", version = "0.9.14"}
 rkyv = {version = "0.4.3", features = ["const_generics"]}
 trng = {path = "../trng"}
 spinor = {path = "../spinor"}
@@ -45,7 +45,7 @@ gam = {path="../gam"}
 locales = {path = "../../locales"}
 modals = {path="../modals"}
 
-utralib = { version = "0.1.8", optional = true, default-features = false }
+utralib = { version = "0.1.9", optional = true, default-features = false }
 
 # performance profiling
 perflib = {path="../../tools/perflib", optional = true}
