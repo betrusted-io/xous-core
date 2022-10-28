@@ -117,12 +117,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // packages located on crates.io. For testing non-local build configs that are less
     // concerned about software supply chain and more focused on developer convenience.
     let base_pkgs_remote = [
-        "xous-log@0.1.12",         // "well known" service: debug logging
-        "xous-names@0.9.20",      // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.16",     // ticktimer registers with susres to coordinate time continuity across sleeps
-        "xous-ticktimer@0.1.15",   // "well known" service: thread scheduling
+        "xous-log@0.1.13",         // "well known" service: debug logging
+        "xous-names@0.9.21",      // "well known" service: manage inter-server connection lookup
+        "xous-susres@0.1.17",     // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-ticktimer@0.1.16",   // "well known" service: thread scheduling
     ].to_vec();
-    let xous_kernel_remote = "xous-kernel@0.9.14";
+    let xous_kernel_remote = "xous-kernel@0.9.15";
 
     // ---- extract position independent args ----
     let lkey = get_flag("--lkey")?;

@@ -1,528 +1,619 @@
 {
-    "suspend.fail": {
-        "ja": "中断不可能な操作が保留中です。 数秒後にスリープ リクエストを再試行してください。",
-        "en": "Uninterruptible operation pending. Please retry the sleep request in a couple seconds.",
-        "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。",
-        "en-tts": "Uninterruptible operation pending. Please retry the sleep request in a couple seconds."
-    },
-    "socup.candidate": {
-        "ja": "ゲートウェアの更新候補が見つかりました。\n\n適用する必要がありますか？",
-        "en": "An update candidate for the SoC was found.\n\nShould we apply it?\n\nNOTE: if you just installed an update, try rebooting using a paperclip in the hole in the lower right hand corner. This forces the latest image to load.",
-        "zh": "找到了网关软件的更新候选者。\n\n我们应该应用它吗？",
-        "en-tts": "An update candidate for the SoC was found.\n\nShould we apply it?\n\nNOTE: if you just installed an update, try rebooting using a paperclip in the hole in the lower right hand corner. This forces the latest image to load."
-    },
-    "rekey.fail": {
-        "ja": "キーの再生成に失敗しました。再起動して再試行してください。\n理由：",
-        "en": "Rekey operation failed, please reboot and try again.\n Reason: ",
-        "zh": "重新生成密钥操作失败，请重新启动并重试。\n原因：",
-        "en-tts": "Rekey operation failed, please reboot and try again.\nReason: "
-    },
-    "login.fail": {
-        "ja": "⚠ログインに {fails} 回失敗した後、システムが中断されました",
-        "en": "⚠System was suspended after {fails} failed login attempts.",
-        "zh": "⚠{fails}次登录尝试失败后系统被挂起",
-        "en-tts": "⚠System was suspended after {fails} failed login attempts."
-    },
-    "socup.ignore": {
-        "ja": "この更新を無視する",
-        "en": "Ignore this update",
-        "zh": "忽略此更新",
-        "en-tts": "Ignore this update"
-    },
-    "socup.unmount_fail": {
-        "ja": "PDDB をアンマウントできませんでした。\n操作は中止されました!",
-        "en": "Couldn't unmount PDDB.\nOperation aborted!",
-        "zh": "无法卸载 PDDB。\n操作中止！",
-        "en-tts": "Couldn't unmount PDDB.\nOperation aborted!"
+    "appmenu.shellchat": {
+        "en": "Shellchat",
+        "en-tts": "Shellchat",
+        "fr": "Shellchat",
+        "ja": "Shellchat",
+        "zh": "外壳聊天"
     },
     "backup.confirm": {
-        "ja": "PDDB とルート キーのバックアップの準備をしますか?\n\nプロセスは、いったん開始すると中止できません。",
         "en": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
-        "zh": "准备 PDDB 和根密钥备份吗？\n\n进程一旦启动就不能中止。",
-        "en-tts": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started."
-    },
-    "ecup.invalid": {
-        "ja": "ECファームウェアパッケージが破損しているか無効です: ",
-        "en": "EC firmware package is corrupted or invalid: ",
-        "zh": "固件包已损坏或无效: ",
-        "en-tts": "EC firmware package is corrupted or invalid: "
+        "en-tts": "Prepare for PDDB and root key backup?\n\nThe process cannot be aborted once started.",
+        "fr": "Préparez-vous pour la sauvegarde de PDDB et de la clé racine?\n\nLe processus ne peut pas être abandonné une fois lancé.",
+        "ja": "PDDB とルート キーのバックアップの準備をしますか?\n\nプロセスは、いったん開始すると中止できません。",
+        "zh": "准备 PDDB 和根密钥备份吗？\n\n进程一旦启动就不能中止。"
     },
     "ecup.abort": {
-        "ja": "エラーのため更新が中止されました！ (EC)",
         "en": "EC update aborted due to error!",
-        "zh": "更新因错误而中止！(EC)",
-        "en-tts": "EC update aborted due to error!"
+        "en-tts": "EC update aborted due to error!",
+        "fr": "Mise à jour EC annulée en raison d’une erreur!",
+        "ja": "エラーのため更新が中止されました！ (EC)",
+        "zh": "更新因错误而中止！(EC)"
     },
     "ecup.erasing": {
-        "ja": "消去...",
         "en": "EC Autoupdate\n\nErasing",
-        "zh": "擦除...",
-        "en-tts": "EC Autoupdate\n\nErasing"
+        "en-tts": "EC Autoupdate\n\nErasing",
+        "fr": "EC mise à jour automatique\n\nEffacement",
+        "ja": "消去...",
+        "zh": "擦除..."
     },
-    "ecup.writing": {
-        "ja": "書き込み...",
-        "en": "EC Autoupdate\n\nWriting",
-        "zh": "写作...",
-        "en-tts": "EC Autoupdate\n\nWriting"
-    },
-    "ecup.update_applied": {
-        "ja": "USBロードのアップデートが適用されました.",
-        "en": "An EC update was successfully applied!",
-        "zh": "已应用 USB 加载更新.",
-        "en-tts": "An EC update was successfully applied!"
+    "ecup.invalid": {
+        "en": "EC firmware package is corrupted or invalid: ",
+        "en-tts": "EC firmware package is corrupted or invalid: ",
+        "fr": "Le firmware d’EC est corrompu ou invalide: ",
+        "ja": "ECファームウェアパッケージが破損しているか無効です: ",
+        "zh": "固件包已损坏或无效: "
     },
     "ecup.resetting": {
-        "ja": "ECのリセット",
         "en": "Resetting EC...",
-        "zh": "重置 EC",
-        "en-tts": "Resetting EC..."
+        "en-tts": "Resetting EC...",
+        "fr": "Réinitialisation EC...",
+        "ja": "ECのリセット",
+        "zh": "重置 EC"
     },
-    "stats.measuring": {
-        "ja": "測定...",
-        "en": "Measuring...",
-        "zh": "进行测量...",
-        "en-tts": "Measuring..."
+    "ecup.update_applied": {
+        "en": "An EC update was successfully applied!",
+        "en-tts": "An EC update was successfully applied!",
+        "fr": "Une mise à jour d’EC a été appliquée avec succès!",
+        "ja": "USBロードのアップデートが適用されました.",
+        "zh": "已应用 USB 加载更新."
     },
-    "stats.disconnected": {
-        "ja": "接続不可",
-        "en": "Not connected",
-        "zh": "没有连接",
-        "en-tts": "Not connected"
+    "ecup.writing": {
+        "en": "EC Autoupdate\n\nWriting",
+        "en-tts": "EC Autoupdate\n\nWriting",
+        "fr": "EC mise à jour automatique\n\nÉcriture",
+        "ja": "書き込み...",
+        "zh": "写作..."
     },
-    "stats.wifi_off": {
-        "ja": "WiFiオフ",
-        "en": "WiFi off",
-        "zh": "WiFi关闭",
-        "en-tts": "WiFi off"
+    "login.fail": {
+        "en": "⚠System was suspended after {fails} failed login attempts.",
+        "en-tts": "⚠System was suspended after {fails} failed login attempts.",
+        "fr": "⚠Le système a été suspendu après que {fails} tentatives d’authentication.",
+        "ja": "⚠ログインに {fails} 回失敗した後、システムが中断されました",
+        "zh": "⚠{fails}次登录尝试失败后系统被挂起"
     },
-    "stats.uptime": {
-        "translator-note": "This needs to be a very short string, 2 chars max. Trailing space is necessary for English due to proportional font.",
-        "ja": "稼働",
-        "en": "Up ",
-        "zh": "运行",
-        "en-tts": "Up"
+    "mainmenu.app": {
+        "en": "Switch to App...",
+        "en-tts": "Switch to app submenu",
+        "fr": "Passer à l’application...",
+        "ja": "アプリに切り替わる...",
+        "zh": "APP子菜单"
     },
-    "stats.set_time": {
-        "ja": "設定時間",
-        "en": "Set Time",
-        "zh": "设置时间",
-        "en-tts": "Set Time"
+    "mainmenu.autobacklightoff": {
+        "en": "Disable automatic backlight",
+        "en-tts": "🔇",
+        "fr": "Désactiver le rétroéclairage automatique",
+        "ja": "自動バックライトを無効にする",
+        "zh": "禁用自动背光"
     },
-    "stats.mount_pddb": {
-        "ja": " ",
-        "en": " ",
-        "zh": " ",
-        "en-tts": " "
+    "mainmenu.autobacklighton": {
+        "en": "Enable automatic backlight",
+        "en-tts": "🔇",
+        "fr": "Activer le rétroéclairage automatique",
+        "ja": "自動バックライトを有効にする",
+        "zh": "启用自动背光"
     },
-    "stats.please_mount": {
-        "ja": "PDDBをマウントして、再試行してください。",
-        "en": "Please mount the PDDB and try again.",
-        "zh": "请挂载 PDDB 并重试。",
-        "en-tts": "Please mount the PDDB and try again."
+    "mainmenu.backlightoff": {
+        "en": "Backlight off",
+        "en-tts": "🔇",
+        "fr": "Rétroéclairage éteint",
+        "ja": "バックライト消灯",
+        "zh": "背光关闭"
     },
-    "secnote.zero_key": {
-        "en": " Backup key not set",
-        "ja": "Backupキーはゼロです",
-        "zh": "Backup 密钥为零",
-        "en-tts": "Backup key not set"
+    "mainmenu.backlighton": {
+        "en": "Backlight on",
+        "en-tts": "🔇",
+        "fr": "Rétroéclairage allumée",
+        "ja": "バックライト点灯",
+        "zh": "背光开启"
     },
-    "secnote.usb_unlock": {
-        "en": " USB unlocked",
-        "ja": "USBロック解除",
-        "zh": "USB解锁",
-        "en-tts": "USB unlocked"
+    "mainmenu.battery_disconnect": {
+        "en": "Shutdown",
+        "en-tts": "Shutdown",
+        "fr": "Arrêt",
+        "ja": "シャットダウン",
+        "zh": "关闭"
     },
-    "secnote.gateware_fail": {
-        "en": " Gateware selfsig fail",
-        "ja": "Gateware selfsig 失敗",
-        "zh": "比特流签名失败",
-        "en-tts": "Gateware self signature failure"
+    "mainmenu.cant_sleep": {
+        "en": "Can't power off while charging",
+        "en-tts": "Can't power off while charging",
+        "fr": "Impossible d’éteindre pendant la charge",
+        "ja": "充電中は眠れません",
+        "zh": "充电时睡不着"
     },
-    "secnote.state_fail": {
-        "en": " Invalid key state",
-        "ja": "無効なキー状態",
-        "zh": "无效的根密钥",
-        "en-tts": "Invalid key state"
+    "mainmenu.closemenu": {
+        "en": "Close menu",
+        "en-tts": "Close menu",
+        "fr": "Fermer le menu",
+        "ja": "メニューを閉じる",
+        "zh": "关闭功能表"
     },
-    "secnote.no_keys": {
-        "en": " No device keys",
-        "ja": "ルートキーは未初期化",
-        "zh": "密钥未初始化",
-        "en-tts": "No device keys"
+    "mainmenu.init_keys": {
+        "en": "Setup passwords...",
+        "en-tts": "Setup passwords...",
+        "fr": "Configurer les mots de passe...",
+        "ja": "ルートキーの初期化",
+        "zh": "设置根密码"
     },
-    "secnote.allclear": {
-        "en": " No security warnings",
-        "ja": "セキュリティ警告なし",
-        "zh": "没有警告",
-        "en-tts": "🔇"
+    "mainmenu.kbd": {
+        "en": "Keyboard layout...",
+        "en-tts": "Keyboard layout submenu",
+        "fr": "Disposition du clavier...",
+        "ja": "キーボード・レイアウト...",
+        "zh": "键盘布局..."
     },
-    "secnote.startup": {
-        "en": " Starting up...",
-        "ja": "起動中...",
-        "zh": "现在开始...",
-        "en-tts": "🔇"
+    "mainmenu.lockdevice": {
+        "en": "Lock device",
+        "en-tts": "Lock device",
+        "fr": "Verrouiller l'appareil",
+        "ja": "ロック装置",
+        "zh": "锁定装置"
+    },
+    "mainmenu.pddb": {
+        "en": "PDDB submenu...",
+        "en-tts": "PDDB submenu...",
+        "fr": "Sous-menu PDDB...",
+        "ja": "PDDBサブメニュー",
+        "zh": "PDDB子菜单"
+    },
+    "mainmenu.prep_backup": {
+        "en": "Prepare for backup...",
+        "en-tts": "Prepare for backup...",
+        "fr": "Préparer la sauvegarde...",
+        "ja": "バックアップの準備...",
+        "zh": "准备备份..."
+    },
+    "mainmenu.provision_gateware": {
+        "en": "Install gateware update",
+        "en-tts": "Install gateware update",
+        "fr": "Installer la mise à jour du gateware",
+        "ja": "ゲートウェアアップデートをインストールする",
+        "zh": "安装比特流更新"
+    },
+    "mainmenu.reboot": {
+        "en": "Reboot",
+        "en-tts": "Reboot",
+        "fr": "Redémarrer",
+        "ja": "リブート",
+        "zh": "重启"
+    },
+    "mainmenu.selfsign": {
+        "en": "Sign Xous update",
+        "en-tts": "Sign Xous update",
+        "fr": "Signer la mise à jour de Xous",
+        "ja": "サインXousアップデート",
+        "zh": "数字签名Xous"
+    },
+    "mainmenu.set_rtc": {
+        "en": "Set time",
+        "en-tts": "Set time",
+        "fr": "Régler l’heure",
+        "ja": "時間設定",
+        "zh": "设置时间"
+    },
+    "mainmenu.set_tz": {
+        "en": "Set timezone",
+        "en-tts": "Set timezone",
+        "fr": "Régler le fuseau horaire",
+        "ja": "タイムゾーンを設定",
+        "zh": "设置本地时区"
+    },
+    "mainmenu.shutdown_confirm": {
+        "en": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
+        "en-tts": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
+        "fr": "Confirmez l’arrêt:\n🔌L’appareil s’éteindra jusqu’à ce qu’un câble de charge soit branché. Continuez?",
+        "ja": "シャットダウンの確認:\n🔌充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
+        "zh": "确认关机：\n🔌设备将保持关闭状态，直到插入充电线。继续？"
     },
     "mainmenu.sleep": {
         "en": "Sleep now",
+        "en-tts": "Sleep now",
+        "fr": "Dormir maintenant",
         "ja": "今睡眠",
-        "zh": "睡眠模式",
-        "en-tts": "Sleep now"
+        "zh": "睡眠模式"
     },
     "mainmenu.wifimenu": {
         "en": "WiFi submenu...",
         "en-tts": "WiFi submenu...",
+        "fr": "Sous-menu WiFi...",
         "ja": "WiFiメニュー...",
         "zh": "无线网络菜单..."
     },
-    "mainmenu.backlighton": {
-        "en": "Backlight on",
-        "ja": "バックライト点灯",
-        "zh": "背光开启",
-        "en-tts": "🔇"
-    },
-    "mainmenu.backlightoff": {
-        "en": "Backlight off",
-        "ja": "バックライト消灯",
-        "zh": "背光关闭",
-        "en-tts": "🔇"
-    },
-    "mainmenu.autobacklighton": {
-        "en": "Enable automatic backlight",
-        "ja": "自動バックライトを有効にする",
-        "zh": "启用自动背光",
-        "en-tts": "🔇"
-    },
-    "mainmenu.autobacklightoff": {
-        "en": "Disable automatic backlight",
-        "ja": "自動バックライトを無効にする",
-        "zh": "禁用自动背光",
-        "en-tts": "🔇"
-    },
-    "mainmenu.init_keys": {
-        "en": "Setup passwords...",
-        "ja": "ルートキーの初期化",
-        "zh": "设置根密码",
-        "en-tts": "Setup passwords..."
-    },
-    "mainmenu.provision_gateware": {
-        "en": "Install gateware update",
-        "ja": "ゲートウェアアップデートをインストールする",
-        "zh": "安装比特流更新",
-        "en-tts": "Install gateware update"
-    },
-    "mainmenu.selfsign": {
-        "en": "Sign Xous update",
-        "ja": "サインXousアップデート",
-        "zh": "数字签名Xous",
-        "en-tts": "Sign Xous update"
-    },
-    "mainmenu.set_rtc": {
-        "en": "Set time",
-        "ja": "時間設定",
-        "zh": "设置时间",
-        "en-tts": "Set time"
-    },
-    "mainmenu.set_tz": {
-        "en": "Set timezone",
-        "ja": "タイムゾーンを設定",
-        "zh": "设置本地时区",
-        "en-tts": "Set timezone"
-    },
-    "mainmenu.pddb": {
-        "en": "PDDB submenu...",
-        "ja": "PDDBサブメニュー",
-        "zh": "PDDB子菜单",
-        "en-tts": "PDDB submenu..."
-    },
-    "mainmenu.app": {
-        "en": "Switch to App...",
-        "ja": "アプリに切り替わる...",
-        "zh": "APP子菜单",
-        "en-tts": "Switch to app submenu"
-    },
-    "mainmenu.kbd": {
-        "en": "Keyboard layout...",
-        "ja": "キーボード・レイアウト...",
-        "zh": "键盘布局...",
-        "en-tts": "Keyboard layout submenu"
-    },
-    "mainmenu.battery_disconnect": {
-        "en": "Shutdown",
-        "ja": "シャットダウン",
-        "zh": "关闭",
-        "en-tts": "Shutdown"
-    },
-    "mainmenu.shutdown_confirm": {
-        "en": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?",
-        "ja": "シャットダウンの確認:\n🔌充電ケーブルが差し込まれるまで、デバイスはオフのままになります。続行しますか?",
-        "zh": "确认关机：\n🔌设备将保持关闭状态，直到插入充电线。继续？",
-        "en-tts": "Confirm shutdown:\n🔌Device will reamin off until a charging cable is plugged in. Proceed?"
-    },
-    "mainmenu.reboot": {
-        "en": "Reboot",
-        "ja": "リブート",
-        "zh": "重启",
-        "en-tts": "Reboot"
-    },
-    "mainmenu.lockdevice": {
-        "en": "Lock device",
-        "ja": "ロック装置",
-        "zh": "锁定装置",
-        "en-tts": "Lock device"
-    },
-    "mainmenu.prep_backup": {
-        "en": "Prepare for backup...",
-        "ja": "バックアップの準備...",
-        "zh": "准备备份...",
-        "en-tts": "Prepare for backup..."
-    },
-    "mainmenu.closemenu": {
-        "en": "Close menu",
-        "ja": "メニューを閉じる",
-        "zh": "关闭功能表",
-        "en-tts": "Close menu"
-    },
-    "mainmenu.cant_sleep": {
-        "en": "Can't power off while charging",
-        "ja": "充電中は眠れません",
-        "zh": "充电时睡不着",
-        "en-tts": "Can't power off while charging"
-    },
-    "appmenu.shellchat": {
-        "en": "Shellchat",
-        "ja": "Shellchat",
-        "zh": "外壳聊天",
-        "en-tts": "Shellchat"
-    },
-    "wlan.turnon": {
-        "en": "Turn WiFi on",
-        "ja": "Wi-Fiをオンにする",
-        "zh": "打开wifi",
-        "en-tts": "Turn WiFi on"
-    },
-    "wlan.turnoff": {
-        "en": "Turn WiFi off",
-        "ja": "Wi-Fiをオフにする",
-        "zh": "关闭无线网络",
-        "en-tts": "Turn WiFi off"
-    },
-    "wlan.manual_add": {
-        "en": "Manually add a network",
-        "ja": "ネットワークを手動で追加する",
-        "zh": "手动添加网络",
-        "en-tts": "Manually add a network"
-    },
-    "wlan.scan": {
-        "en": "Scan for networks",
-        "ja": "ネットワークのスキャン",
-        "zh": "扫描网络",
-        "en-tts": "Scan for networks"
-    },
-    "wlan.status": {
-        "en": "Network status",
-        "ja": "ネットワークの状態",
-        "zh": "网络状态",
-        "en-tts": "Network status"
-    },
-    "wlan.delete": {
-        "en": "Delete network",
-        "ja": "ネットワークを削除",
-        "zh": "删除网络",
-        "en-tts": "Delete network"
-    },
-    "wlan.list_known": {
-        "en": "List known networks",
-        "ja": "既知のネットワークを一覧表示する",
-        "zh": "列出已知网络",
-        "en-tts": "List known networks"
-    },
-    "wlan.ssid_entry": {
-        "en": "Fill in SSID and password:",
-        "ja": "SSID とパスワードを入力します:",
-        "zh": "填写SSID和密码：",
-        "en-tts": "Fill in SSID and password:"
-    },
-    "wlan.ssid": {
-        "en": "[ SSID ]",
-        "ja": "[ SSID ]",
-        "zh": "[ SSID ]",
-        "en-tts": "[ SSID ]"
-    },
-    "wlan.password": {
-        "en": "[ password ]",
-        "ja": "[ パスワード ]",
-        "zh": "[ 密码 ]",
-        "en-tts": "[ password ]"
-    },
-    "wlan.no_networks": {
-        "en": "No networks available.",
-        "ja": "利用可能なネットワークがありません。",
-        "zh": "没有可用的网络。",
-        "en-tts": "No networks available."
-    },
-    "wlan.ssid_choose": {
-        "en": "Choose a network:",
-        "ja": "ネットワークを選択してください:",
-        "zh": "选择网络：",
-        "en-tts": "Choose a network:"
-    },
-    "wlan.ssid_password": {
-        "en": "Please enter the password for {ssid}:",
-        "ja": "{ssid} のパスワードを入力してください:",
-        "zh": "请输入 {ssid} 的密码：",
-        "en-tts": "Please enter the password for {ssid}:"
-    },
-    "wlan.password_empty": {
-        "en": "Password field cannot be empty",
-        "ja": "パスワードを空にすることはできません",
-        "zh": "密码不能为空",
-        "en-tts": "Password field cannot be empty"
-    },
-    "wlan.no_known_networks": {
-        "en": "No known networks.",
-        "ja": "既知のネットワークはありません。",
-        "zh": "没有已知的网络。",
-        "en-tts": "No known networks."
-    },
-    "wlan.known_networks": {
-        "en": "Known networks:\n",
-        "ja": "既知のネットワーク:\n",
-        "zh": "已知网络：\n",
-        "en-tts": "Known networks:\n"
-    },
-    "wlan.cancel": {
-        "en": "❌ Cancel request ❌",
-        "ja": "❌ キャンセル ❌",
-        "zh": "❌ 取消请求 ❌",
-        "en-tts": "Cancel the requested action"
-    },
-    "wlan.choose_delete": {
-        "en": "Choose a network to delete:",
-        "ja": "削除するネットワークを選択してください:",
-        "zh": "选择要删除的网络：",
-        "en-tts": "Choose a network to delete:"
-    },
-    "wlan.error": {
-        "en": "Error",
-        "ja": "エラー",
-        "zh": "错误",
-        "en-tts": "Error"
-    },
-    "rtc.try_ntp": {
-        "en": "Attempt to automatically set time with NTP?",
-        "ja": "NTPで時間を設定しようとしますか?",
-        "zh": "尝试用 NTP 设置时间?",
-        "en-tts": "Attempt to automatically set time with NTP?"
-    },
-    "rtc.ntp_fail": {
-        "en": "NTP query failed, please enter time manually.",
-        "ja": "NTPクエリが失敗しました。時間を手動で入力してください。",
-        "zh": "NTP 查询失败，请手动输入时间。",
-        "en-tts": "NTP query failed, please enter time manually."
-    },
-    "rtc.set_time_modal": {
-        "en": "Enter time"
-    },
-    "rtc.month": {
-        "en": "Month (1-12)",
-        "ja": "月（1-12）を入力してください。",
-        "zh": "输入月份 (1-12)",
-        "en-tts": "Enter month one through twelve"
+    "rekey.fail": {
+        "en": "Rekey operation failed, please reboot and try again.\n Reason: ",
+        "en-tts": "Rekey operation failed, please reboot and try again.\nReason: ",
+        "fr": "Échec de l’opération de remise de clé, veuillez redémarrer et réessayer.\nRaison: ",
+        "ja": "キーの再生成に失敗しました。再起動して再試行してください。\n理由：",
+        "zh": "重新生成密钥操作失败，请重新启动并重试。\n原因："
     },
     "rtc.day": {
         "en": "Day (1-31)",
+        "en-tts": "Enter day one through 31",
+        "fr": "Jour (1-31)",
         "ja": "日数 (1-31) を入力してください。",
-        "zh": "输入日期 (1-31)",
-        "en-tts": "Enter day one through 31"
-    },
-    "rtc.year": {
-        "en": "Last two digits of year",
-        "ja": "西暦の下2桁を入力してください。",
-        "zh": "输入年份 (最后两位数)",
-        "en-tts": "Enter last two digits of year"
-    },
-    "rtc.hour": {
-        "en": "Hours in local timezone (0-23)",
-        "ja": "時間（0-23）を入力してください。",
-        "zh": "输入小时 (0-23)",
-        "en-tts": "Enter hours for local timezone as 24 hour format"
-    },
-    "rtc.minute": {
-        "en": "Minutes (0-59)",
-        "ja": "分（0-59）を入力してください。",
-        "zh": "输入分钟 (0-59)",
-        "en-tts": "Enter minutes"
-    },
-    "rtc.seconds": {
-        "en": "Seconds (0-59)",
-        "ja": "秒 (0-59) を入力してください。",
-        "zh": "输入秒数 (0-59)",
-        "en-tts": "Enter seconds"
+        "zh": "输入日期 (1-31)"
     },
     "rtc.day_of_week": {
         "en": "Select the day of week",
+        "en-tts": "Select the day of week",
+        "fr": "Sélectionnez le jour de la semaine",
         "ja": "曜日を選択してください。",
-        "zh": "[星期几]清单框",
-        "en-tts": "Select the day of week"
-    },
-    "rtc.monday": {
-        "en": "Monday",
-        "ja": "月曜日",
-        "zh": "星期一",
-        "en-tts": "Monday"
-    },
-    "rtc.tuesday": {
-        "en": "Tuesday",
-        "ja": "火曜日",
-        "zh": "星期二",
-        "en-tts": "Tuesday"
-    },
-    "rtc.wednesday": {
-        "en": "Wednesday",
-        "ja": "水曜日",
-        "zh": "星期三",
-        "en-tts": "Wednesday"
-    },
-    "rtc.thursday": {
-        "en": "Thursday",
-        "ja": "木曜日",
-        "zh": "星期四",
-        "en-tts": "Thursday"
+        "zh": "[星期几]清单框"
     },
     "rtc.friday": {
         "en": "Friday",
+        "en-tts": "Friday",
+        "fr": "Vendredi",
         "ja": "金曜日",
-        "zh": "星期五",
-        "en-tts": "Friday"
+        "zh": "星期五"
     },
-    "rtc.saturday": {
-        "en": "Saturday",
-        "ja": "土曜日",
-        "zh": "星期六",
-        "en-tts": "Saturday"
-    },
-    "rtc.sunday": {
-        "en": "Sunday",
-        "ja": "日曜日",
-        "zh": "星期日",
-        "en-tts": "Sunday"
-    },
-    "rtc.timezone": {
-        "en": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours).\nNote: Precursor does not yet track daylight savings.",
-        "ja": "UTCからのローカルオフセットを時間単位で入力してください（-12.0〜 + 14.0時間)：",
-        "zh": "请以小时为单位输入您与 UTC 的本地偏移量（-12.0 到 +14.0 小时):",
-        "en-tts": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours):"
+    "rtc.hour": {
+        "en": "Hours in local timezone (0-23)",
+        "en-tts": "Enter hours for local timezone as 24 hour format",
+        "fr": "Heures dans le fuseau horaire local (0-23)",
+        "ja": "時間（0-23）を入力してください。",
+        "zh": "输入小时 (0-23)"
     },
     "rtc.integer_err": {
         "en": "Error: entry was not numeric",
+        "en-tts": "Error: entry was not numeric",
+        "fr": "Erreur : l’entrée n’était pas numérique",
         "ja": "エラー:エントリは数値ではありませんでした。",
-        "zh": "错误：输入不是数字",
-        "en-tts": "Error: entry was not numeric"
+        "zh": "错误：输入不是数字"
+    },
+    "rtc.minute": {
+        "en": "Minutes (0-59)",
+        "en-tts": "Enter minutes",
+        "fr": "Minutes (0-59)",
+        "ja": "分（0-59）を入力してください。",
+        "zh": "输入分钟 (0-59)"
+    },
+    "rtc.monday": {
+        "en": "Monday",
+        "en-tts": "Monday",
+        "fr": "Lundi",
+        "ja": "月曜日",
+        "zh": "星期一"
+    },
+    "rtc.month": {
+        "en": "Month (1-12)",
+        "en-tts": "Enter month one through twelve",
+        "fr": "Mois (1-12)",
+        "ja": "月（1-12）を入力してください。",
+        "zh": "输入月份 (1-12)"
+    },
+    "rtc.ntp_fail": {
+        "en": "NTP query failed, please enter time manually.",
+        "en-tts": "NTP query failed, please enter time manually.",
+        "fr": "La requête NTP a échoué, veuillez entrer l’heure manuellement.",
+        "ja": "NTPクエリが失敗しました。時間を手動で入力してください。",
+        "zh": "NTP 查询失败，请手动输入时间。"
     },
     "rtc.range_err": {
         "en": "Error: input out of range",
+        "en-tts": "Error: input out of range",
+        "fr": "Erreur: saisir hors plage",
         "ja": "エラー:入力が範囲外です。",
-        "zh": "错误：输入超出范围",
-        "en-tts": "Error: input out of range"
+        "zh": "错误：输入超出范围"
+    },
+    "rtc.saturday": {
+        "en": "Saturday",
+        "en-tts": "Saturday",
+        "fr": "Samedi",
+        "ja": "土曜日",
+        "zh": "星期六"
+    },
+    "rtc.seconds": {
+        "en": "Seconds (0-59)",
+        "en-tts": "Enter seconds",
+        "fr": "Seconds (0-59)",
+        "ja": "秒 (0-59) を入力してください。",
+        "zh": "输入秒数 (0-59)"
+    },
+    "rtc.set_time_modal": {
+        "en": "Enter time",
+        "en-tts": "Enter time",
+        "fr": "Entrez l’heure",
+        "ja": "Enter time *EN*",
+        "zh": "Enter time *EN*"
+    },
+    "rtc.sunday": {
+        "en": "Sunday",
+        "en-tts": "Sunday",
+        "fr": "Dimanche",
+        "ja": "日曜日",
+        "zh": "星期日"
+    },
+    "rtc.thursday": {
+        "en": "Thursday",
+        "en-tts": "Thursday",
+        "fr": "Jeudi",
+        "ja": "木曜日",
+        "zh": "星期四"
+    },
+    "rtc.timezone": {
+        "en": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours).\nNote: Precursor does not yet track daylight savings.",
+        "en-tts": "Please enter your local offset from UTC in hours (-12.0 to +14.0 hours):",
+        "fr": "Veuillez entrer votre décalage local en UTC en heures (-12,0 à +14,0 heures).\nRemarque: Precursor ne suit pas encore l’heure d'été.",
+        "ja": "UTCからのローカルオフセットを時間単位で入力してください（-12.0〜 + 14.0時間)：",
+        "zh": "请以小时为单位输入您与 UTC 的本地偏移量（-12.0 到 +14.0 小时):"
+    },
+    "rtc.try_ntp": {
+        "en": "Attempt to automatically set time with NTP?",
+        "en-tts": "Attempt to automatically set time with NTP?",
+        "fr": "Tentez-vous de régler automatiquement l’heure avec NTP?",
+        "ja": "NTPで時間を設定しようとしますか?",
+        "zh": "尝试用 NTP 设置时间?"
+    },
+    "rtc.tuesday": {
+        "en": "Tuesday",
+        "en-tts": "Tuesday",
+        "fr": "Mardi",
+        "ja": "火曜日",
+        "zh": "星期二"
+    },
+    "rtc.wednesday": {
+        "en": "Wednesday",
+        "en-tts": "Wednesday",
+        "fr": "Mercredi",
+        "ja": "水曜日",
+        "zh": "星期三"
+    },
+    "rtc.year": {
+        "en": "Last two digits of year",
+        "en-tts": "Enter last two digits of year",
+        "fr": "Deux derniers chiffres de l’année",
+        "ja": "西暦の下2桁を入力してください。",
+        "zh": "输入年份 (最后两位数)"
+    },
+    "secnote.allclear": {
+        "en": " No security warnings",
+        "en-tts": "🔇",
+        "fr": " Aucun avertissement de sécurité",
+        "ja": "セキュリティ警告なし",
+        "zh": "没有警告"
+    },
+    "secnote.gateware_fail": {
+        "en": " Gateware selfsig fail",
+        "en-tts": "Gateware self signature failure",
+        "fr": " Échec d’auto-signature de gateware",
+        "ja": "Gateware selfsig 失敗",
+        "zh": "比特流签名失败"
+    },
+    "secnote.no_keys": {
+        "en": " No device keys",
+        "en-tts": "No device keys",
+        "fr": " Pas de clés d'appareil",
+        "ja": "ルートキーは未初期化",
+        "zh": "密钥未初始化"
+    },
+    "secnote.startup": {
+        "en": " Starting up...",
+        "en-tts": "🔇",
+        "fr": " Démarrage...",
+        "ja": "起動中...",
+        "zh": "现在开始..."
+    },
+    "secnote.state_fail": {
+        "en": " Invalid key state",
+        "en-tts": "Invalid key state",
+        "fr": " État de la clé non valide",
+        "ja": "無効なキー状態",
+        "zh": "无效的根密钥"
+    },
+    "secnote.usb_unlock": {
+        "en": " USB unlocked",
+        "en-tts": "USB unlocked",
+        "fr": " USB déverrouillé",
+        "ja": "USBロック解除",
+        "zh": "USB解锁"
+    },
+    "secnote.zero_key": {
+        "en": " Backup key not set",
+        "en-tts": "Backup key not set",
+        "fr": " Clé de sauvegarde non définie",
+        "ja": "Backupキーはゼロです",
+        "zh": "Backup 密钥为零"
+    },
+    "socup.candidate": {
+        "en": "An update candidate for the SoC was found.\n\nShould we apply it?\n\nNOTE: if you just installed an update, try rebooting using a paperclip in the hole in the lower right hand corner. This forces the latest image to load.",
+        "en-tts": "An update candidate for the SoC was found.\n\nShould we apply it?\n\nNOTE: if you just installed an update, try rebooting using a paperclip in the hole in the lower right hand corner. This forces the latest image to load.",
+        "fr": "On a trouvé un candidat à la mise à jour de la SoC.\n\nVoulez-vous l’appliquer?\n\nRemarque: si vous venez d’installer une mise à jour, essayez de redémarrer à l’aide d’un trombone dans le trou en bas à droite. Cela force le chargement de la dernière image.",
+        "ja": "ゲートウェアの更新候補が見つかりました。\n\n適用する必要がありますか？",
+        "zh": "找到了网关软件的更新候选者。\n\n我们应该应用它吗？"
+    },
+    "socup.ignore": {
+        "en": "Ignore this update",
+        "en-tts": "Ignore this update",
+        "fr": "Ignorer cette mise à jour",
+        "ja": "この更新を無視する",
+        "zh": "忽略此更新"
+    },
+    "socup.unmount_fail": {
+        "en": "Couldn't unmount PDDB.\nOperation aborted!",
+        "en-tts": "Couldn't unmount PDDB.\nOperation aborted!",
+        "fr": "Impossible de démonter le PDDB.\nOpération abandonnée!",
+        "ja": "PDDB をアンマウントできませんでした。\n操作は中止されました!",
+        "zh": "无法卸载 PDDB。\n操作中止！"
+    },
+    "stats.disconnected": {
+        "en": "Not connected",
+        "en-tts": "Not connected",
+        "fr": "Pas connecté",
+        "ja": "接続不可",
+        "zh": "没有连接"
+    },
+    "stats.measuring": {
+        "en": "Measuring...",
+        "en-tts": "Measuring...",
+        "fr": "Mesure...",
+        "ja": "測定...",
+        "zh": "进行测量..."
+    },
+    "stats.mount_pddb": {
+        "en": " ",
+        "en-tts": " ",
+        "fr": "",
+        "ja": " ",
+        "zh": " "
+    },
+    "stats.please_mount": {
+        "en": "Please mount the PDDB and try again.",
+        "en-tts": "Please mount the PDDB and try again.",
+        "fr": "Veuillez monter le PDDB et réessayer.",
+        "ja": "PDDBをマウントして、再試行してください。",
+        "zh": "请挂载 PDDB 并重试。"
+    },
+    "stats.set_time": {
+        "en": "Set Time",
+        "en-tts": "Set Time",
+        "fr": "Régler l’heure",
+        "ja": "設定時間",
+        "zh": "设置时间"
+    },
+    "stats.uptime": {
+        "en": "Up ",
+        "en-tts": "Up",
+        "fr": "Haut ",
+        "ja": "稼働",
+        "translator-note": "This needs to be a very short string, 2 chars max. Trailing space is necessary for English due to proportional font.",
+        "zh": "运行"
+    },
+    "stats.wifi_off": {
+        "en": "WiFi off",
+        "en-tts": "WiFi off",
+        "fr": "WiFi éteint",
+        "ja": "WiFiオフ",
+        "zh": "WiFi关闭"
+    },
+    "suspend.fail": {
+        "en": "Uninterruptible operation pending. Please retry the sleep request in a couple seconds.",
+        "en-tts": "Uninterruptible operation pending. Please retry the sleep request in a couple seconds.",
+        "fr": "Fonctionnement ininterrompu en attente. Veuillez réessayer la demande de sommeil dans quelques secondes.",
+        "ja": "中断不可能な操作が保留中です。 数秒後にスリープ リクエストを再試行してください。",
+        "zh": "不间断操作挂起。 请在几秒钟后重试睡眠请求。"
+    },
+    "wlan.cancel": {
+        "en": "❌ Cancel request ❌",
+        "en-tts": "Cancel the requested action",
+        "fr": "❌ Annulation de demande ❌",
+        "ja": "❌ キャンセル ❌",
+        "zh": "❌ 取消请求 ❌"
+    },
+    "wlan.choose_delete": {
+        "en": "Choose a network to delete:",
+        "en-tts": "Choose a network to delete:",
+        "fr": "Choisissez un réseau à supprimer:",
+        "ja": "削除するネットワークを選択してください:",
+        "zh": "选择要删除的网络："
+    },
+    "wlan.delete": {
+        "en": "Delete network",
+        "en-tts": "Delete network",
+        "fr": "Supprimer réseau",
+        "ja": "ネットワークを削除",
+        "zh": "删除网络"
+    },
+    "wlan.error": {
+        "en": "Error",
+        "en-tts": "Error",
+        "fr": "Erreur",
+        "ja": "エラー",
+        "zh": "错误"
+    },
+    "wlan.known_networks": {
+        "en": "Known networks:\n",
+        "en-tts": "Known networks:\n",
+        "fr": "Réseaux connus:\n",
+        "ja": "既知のネットワーク:\n",
+        "zh": "已知网络：\n"
+    },
+    "wlan.list_known": {
+        "en": "List known networks",
+        "en-tts": "List known networks",
+        "fr": "Lister les réseaux connus",
+        "ja": "既知のネットワークを一覧表示する",
+        "zh": "列出已知网络"
+    },
+    "wlan.manual_add": {
+        "en": "Manually add a network",
+        "en-tts": "Manually add a network",
+        "fr": "Ajouter manuellement un réseau",
+        "ja": "ネットワークを手動で追加する",
+        "zh": "手动添加网络"
+    },
+    "wlan.no_known_networks": {
+        "en": "No known networks.",
+        "en-tts": "No known networks.",
+        "fr": "Aucun réseau connu",
+        "ja": "既知のネットワークはありません。",
+        "zh": "没有已知的网络。"
+    },
+    "wlan.no_networks": {
+        "en": "No networks available.",
+        "en-tts": "No networks available.",
+        "fr": "Aucun réseau disponible",
+        "ja": "利用可能なネットワークがありません。",
+        "zh": "没有可用的网络。"
+    },
+    "wlan.password": {
+        "en": "[ password ]",
+        "en-tts": "[ password ]",
+        "fr": "[ mot de passe ]",
+        "ja": "[ パスワード ]",
+        "zh": "[ 密码 ]"
+    },
+    "wlan.password_empty": {
+        "en": "Password field cannot be empty",
+        "en-tts": "Password field cannot be empty",
+        "fr": "Le champ mot de passe ne peut pas être vide",
+        "ja": "パスワードを空にすることはできません",
+        "zh": "密码不能为空"
+    },
+    "wlan.scan": {
+        "en": "Scan for networks",
+        "en-tts": "Scan for networks",
+        "fr": "Recherche de réseaux",
+        "ja": "ネットワークのスキャン",
+        "zh": "扫描网络"
+    },
+    "wlan.ssid": {
+        "en": "[ SSID ]",
+        "en-tts": "[ SSID ]",
+        "fr": "[ SSID ]",
+        "ja": "[ SSID ]",
+        "zh": "[ SSID ]"
+    },
+    "wlan.ssid_choose": {
+        "en": "Choose a network:",
+        "en-tts": "Choose a network:",
+        "fr": "Choisissez un réseau:",
+        "ja": "ネットワークを選択してください:",
+        "zh": "选择网络："
+    },
+    "wlan.ssid_entry": {
+        "en": "Fill in SSID and password:",
+        "en-tts": "Fill in SSID and password:",
+        "fr": "Remplissez le SSID et le mot de passe:",
+        "ja": "SSID とパスワードを入力します:",
+        "zh": "填写SSID和密码："
+    },
+    "wlan.ssid_password": {
+        "en": "Please enter the password for {ssid}:",
+        "en-tts": "Please enter the password for {ssid}:",
+        "fr": "Veuillez entrer le mot de passe de {ssid}:",
+        "ja": "{ssid} のパスワードを入力してください:",
+        "zh": "请输入 {ssid} 的密码："
+    },
+    "wlan.status": {
+        "en": "Network status",
+        "en-tts": "Network status",
+        "fr": "État du réseau",
+        "ja": "ネットワークの状態",
+        "zh": "网络状态"
+    },
+    "wlan.turnoff": {
+        "en": "Turn WiFi off",
+        "en-tts": "Turn WiFi off",
+        "fr": "Désactiver le WiFi",
+        "ja": "Wi-Fiをオフにする",
+        "zh": "关闭无线网络"
+    },
+    "wlan.turnon": {
+        "en": "Turn WiFi on",
+        "en-tts": "Turn WiFi on",
+        "fr": "Activer le WiFi",
+        "ja": "Wi-Fiをオンにする",
+        "zh": "打开wifi"
     }
 }

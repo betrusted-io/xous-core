@@ -74,6 +74,10 @@ Found Xous Args Size at offset 8, setting total_words to 208
 $
 ```
 
+## Internationalization Helper
+
+For more about `i18n_helper.py` please see the locales [README](../locales/README.md#internationalization-helper)
+
 ## Testing
 
 _TBD_
