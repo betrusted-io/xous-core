@@ -49,6 +49,7 @@ tools/ct_data/v2p.txt
 # don't record weirdnesses dealing with vscode
 /.vscode/
 /.vs/
+**/.vscode/*
 
 # don't commit local modifications to the Renode filesystem template
 emulation/linux-server-rootfs.jffs2
