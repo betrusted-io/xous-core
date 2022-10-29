@@ -2,6 +2,12 @@
 
 This is a simple Matrix chat application.
 
+Here you see **mtxcli** running in hosted mode:
+
+```
+cargo xtask run mtxcli
+```
+
 ![screenshot](mtxcli-emulator.gif)
 
 ## Background
