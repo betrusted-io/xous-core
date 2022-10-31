@@ -16,6 +16,9 @@ def main():
     parser.add_argument(
         "--dump", required=False, help="Only dump the image, skip the automated CI checks", action="store_true"
     )
+    parser.add_argument(
+        "--renode", required=False, help="Override flex-size settings and read a Renode bin file", action="store_true"
+    )
     args = parser.parse_args()
 
     if args.name == None:
@@ -64,6 +67,8 @@ def main():
 
     with open(imagefile, 'rb') as img_f:
         raw_img = img_f.read()
+        if args.renode:
+            raw_img = raw_img[0x01D80000:0x07F80000]
         pddb_len = len(raw_img)
         pddb_size_pages = pddb_len // PAGE_SIZE
         logging.info("Disk size: 0x{:x}".format(pddb_len))
