@@ -765,7 +765,7 @@ def get_key(index, keyrom, length):
 #   - basis_credentials is a list of the secret Bases
 # Returns:
 #   - A dictionary of keys, by Basis name
-def extract_keys(keyrom, pddb, boot_pw, basis_credentials=None):
+def extract_keys(keyrom, pddb, boot_pw, basis_credentials={}):
     user_key_enc = get_key(40, keyrom, 32)
     pepper = get_key(248, keyrom, 16)
     pepper[0] = pepper[0] ^ 1 # encodes the "boot" password type into the pepper
