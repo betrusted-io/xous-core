@@ -25,13 +25,21 @@ def main():
     parser.add_argument(
         "-p", "--pin", help="Unlock PIN", type=str, default='a'
     )
+    parser.add_argument(
+        "--ci", help="Run in CI test mode. Requires all keys to have a specific checksum structure for automated checking.", action="store_true"
+    )
     args = parser.parse_args()
 
     numeric_level = getattr(logging, args.loglevel.upper(), None)
+    if args.dump:
+        numeric_level = getattr(logging, 'DEBUG', None)
+    else:
+        numeric_level = getattr(logging, args.loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % args.loglevel)
     logging.basicConfig(level=numeric_level)
 
+    set_ci_tests_flag(args.ci)
 
     if args.renode is True:
         keyfile = "./emulation/renode-keybox.bin"
@@ -167,7 +175,7 @@ def main():
                     #logging.info("listing {} keys".format(len(d2.keys)))
                     #for key in d2.keys:
                     #    logging.info("{}".format(key))
-                    if args.dump == False:
+                    if args.ci == True:
                         logging.info("CI checks:")
                         for bdict in basis_dicts.values():
                             bdict.ci_check()
