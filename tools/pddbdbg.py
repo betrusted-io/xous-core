@@ -22,6 +22,9 @@ def main():
     parser.add_argument(
         "--basis", type=str, help="Extra Bases to unlock, as `name:pass`. Each additional basis requires another --basis separator. Note that : is not legal to use in a Basis name.", action="append", nargs="+"
     )
+    parser.add_argument(
+        "-p", "--pin", help="Unlock PIN", type=str, default='a'
+    )
     args = parser.parse_args()
 
     numeric_level = getattr(logging, args.loglevel.upper(), None)
@@ -47,7 +50,7 @@ def main():
             with open(imagefile, 'rb') as img_f:
                 raw_img = img_f.read()
                 raw_img = raw_img[0x01D80000:0x07F80000]
-                keys = extract_keys(keyrom, raw_img, 'a', basis_credentials)
+                keys = extract_keys(keyrom, raw_img, args.pin, basis_credentials)
     else:
         if args.name == None:
             keyfile = './tools/pddb-images/pddb.key'
