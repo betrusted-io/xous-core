@@ -4241,6 +4241,7 @@ name = "userprefs"
 version = "0.1.0"
 dependencies = [
  "bincode 2.0.0-rc.2",
+ "keyboard",
  "pddb",
  "prefsgenerator",
  "xous-api-names",
