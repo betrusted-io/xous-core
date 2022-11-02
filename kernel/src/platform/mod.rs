@@ -4,6 +4,8 @@
 #[cfg(any(feature="precursor", feature="renode"))]
 pub mod precursor;
 
+pub mod rand;
+
 /// Platform specific initialization.
 #[cfg(not(any(unix, windows)))]
 pub fn init() {

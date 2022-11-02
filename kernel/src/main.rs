@@ -69,8 +69,8 @@ pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, r
     println!("KMAIN (clean boot): Supervisor mode started...");
 
     // rand::init() already clears the initial pipe, but pump the TRNG a little more out of no other reason than sheer paranoia
-    arch::rand::get_u32();
-    arch::rand::get_u32();
+    platform::rand::get_u32();
+    platform::rand::get_u32();
 }
 
 /// Loop through the SystemServices list to determine the next PID to be run.

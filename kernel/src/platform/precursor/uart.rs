@@ -85,10 +85,10 @@ pub fn init() {
             .expect("unable to map serial port")
     });
 
-    unsafe {
-        let mut uart = Uart::new(UART_ADDR, process_characters);
-        uart.init();
+    let mut uart = Uart::new(UART_ADDR, process_characters);
+    uart.init();
 
+    unsafe {
         UART = Some(uart);
         crate::debug::shell::init(UART.as_mut().unwrap());
 
