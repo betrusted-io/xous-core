@@ -740,10 +740,11 @@ fn main() -> ! {
     //  - oqc (for factory test)
     //  - status sub system (for setting the layout, autobacklight feature)
     //  - USB (for getting layout)
+    //  - Preference manager
     #[cfg(any(feature="precursor", feature="renode"))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(5)).expect("can't register server");
     #[cfg(not(target_os = "xous"))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(4)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(5)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 
     // Create a new kbd object
