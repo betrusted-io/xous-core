@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub const SERVER_NAME_KBD: &str      = "_Matrix keyboard driver_";
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -45,6 +47,19 @@ impl From<KeyMap> for usize {
             KeyMap::Dvorak => 3,
             KeyMap::Braille => 4,
             KeyMap::Undefined => 255,
+        }
+    }
+}
+
+impl Display for KeyMap {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Azerty => write!(f, "AZERTY"),
+            Self::Qwerty => write!(f, "QWERTY"),
+            Self::Qwertz => write!(f, "QWERTZ"),
+            Self::Dvorak => write!(f, "Dvorak"),
+            Self::Braille => write!(f, "Braille"),
+            Self::Undefined => write!(f, "Undefined"),
         }
     }
 }
