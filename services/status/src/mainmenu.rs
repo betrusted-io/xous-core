@@ -124,15 +124,7 @@ pub fn create_main_menu(keys: Arc<Mutex<RootKeys>>, menu_management_sid: xous::S
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
         close_on_select: true,
     });
-
-    menuitems.push(MenuItem {
-        name: String::from_str(t!("mainmenu.kbd", xous::LANG)),
-        action_conn: Some(status_conn),
-        action_opcode: StatusOpcode::SubmenuKbd.to_u32().unwrap(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    });
-
+    
     menuitems.push(MenuItem {
         name: String::from_str(t!("mainmenu.preferences", xous::LANG)),
         action_conn: Some(status_conn),
