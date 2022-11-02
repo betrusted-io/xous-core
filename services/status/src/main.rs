@@ -368,7 +368,6 @@ fn wrapped_main() -> ! {
     let autobacklight_thread_already_running = Arc::new(Mutex::new(false));
     let thread_conn = xous::connect(status_sid).unwrap();
 
-    wifi::start_background_thread();
     preferences::start_background_thread();
     
     // load system preferences
@@ -732,8 +731,6 @@ fn wrapped_main() -> ! {
             }
         }
     });
-
-    wifi::start_background_thread();
     
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
