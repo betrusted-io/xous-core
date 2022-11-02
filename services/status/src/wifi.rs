@@ -1,20 +1,18 @@
+use crate::preferences::PrefHandler;
 use core::fmt::Display;
-
+use locales::t;
 use num_traits::*;
-
 use std::io::Write;
 
-use locales::t;
-
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
-enum WlanManOp {
-    ScanForNetworks = 3,
+pub enum WlanManOp {
+    ScanForNetworks = 50,
     Status,
     AddNetworkManually,
     KnownNetworks,
     DeleteNetwork,
     TurnWlanOn,
-    TurnWlanOff = 9,
+    TurnWlanOff,
 }
 
 impl Display for WlanManOp {
@@ -70,15 +68,55 @@ impl From<std::io::Error> for WLANError {
     }
 }
 
-struct WLANMan {
+pub struct WLANMan {
     com: com::Com,
     netmgr: net::NetManager,
     modals: modals::Modals,
     pddb: pddb::Pddb,
 }
 
+impl PrefHandler for WLANMan {
+    fn handle(&mut self, op: usize) -> bool {
+        match FromPrimitive::from_usize(op) {
+            Some(other) => {
+                self.consume_menu_action(other);
+
+                true
+            }
+            _ => {
+                log::error!("Got unknown message");
+                false
+            }
+        }
+    }
+
+    fn claim_menumatic_menu(&self, cid: xous::CID) {
+        let mut menus = self
+            .actions()
+            .iter()
+            .map(|action| gam::MenuItem {
+                name: xous_ipc::String::from_str(&action.to_string()),
+                action_conn: Some(cid),
+                action_opcode: action.to_u32().unwrap(),
+                action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+                close_on_select: true,
+            })
+            .collect::<Vec<gam::MenuItem>>();
+
+        menus.push(gam::MenuItem {
+            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
+            action_conn: None,
+            action_opcode: 0,
+            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        });
+
+        gam::menu_matic(menus, gam::WIFI_MENU_NAME, None);
+    }
+}
+
 impl WLANMan {
-    fn new(xns: &xous_names::XousNames) -> Self {
+    pub fn new(xns: &xous_names::XousNames) -> Self {
         Self {
             com: com::Com::new(&xns).unwrap(),
             netmgr: net::NetManager::new(),
@@ -87,7 +125,7 @@ impl WLANMan {
         }
     }
 
-    fn actions(&self) -> Vec<WlanManOp> {
+    pub fn actions(&self) -> Vec<WlanManOp> {
         use WlanManOp::*;
 
         vec![
@@ -204,10 +242,13 @@ impl WLANMan {
 
         self.modals.add_list(networks).unwrap();
 
-        let ssid = self.modals.get_radiobutton(t!("wlan.ssid_choose", xous::LANG)).unwrap();
+        let ssid = self
+            .modals
+            .get_radiobutton(t!("wlan.ssid_choose", xous::LANG))
+            .unwrap();
 
         if ssid == t!("wlan.cancel", xous::LANG) {
-            return Ok(())
+            return Ok(());
         }
 
         self.fill_password_for_ssid(&ssid)
@@ -221,7 +262,10 @@ impl WLANMan {
                 Some(t!("wlan.password", xous::LANG).to_string()),
                 Some(|text| {
                     if text.as_str().is_empty() {
-                        return Some(xous_ipc::String::from_str(t!("wlan.password_empty", xous::LANG)));
+                        return Some(xous_ipc::String::from_str(t!(
+                            "wlan.password_empty",
+                            xous::LANG
+                        )));
                     }
 
                     None
@@ -321,35 +365,11 @@ impl WLANMan {
             return Ok(());
         }
 
-        self
-                .pddb
-                .delete_key(net::AP_DICT_NAME, &ssid_to_be_deleted, None).map_err(|e| WLANError::PDDBIoError(e))?;
+        self.pddb
+            .delete_key(net::AP_DICT_NAME, &ssid_to_be_deleted, None)
+            .map_err(|e| WLANError::PDDBIoError(e))?;
 
         self.pddb.sync().map_err(|e| WLANError::PDDBIoError(e))
-    }
-
-    fn claim_menumatic_menu(&self, cid: xous::CID) {
-        let mut menus = self
-            .actions()
-            .iter()
-            .map(|action| gam::MenuItem {
-                name: xous_ipc::String::from_str(&action.to_string()),
-                action_conn: Some(cid),
-                action_opcode: action.to_u32().unwrap(),
-                action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-                close_on_select: true,
-            })
-            .collect::<Vec<gam::MenuItem>>();
-
-        menus.push(gam::MenuItem {
-            name: xous_ipc::String::from_str(t!("mainmenu.closemenu", xous::LANG)),
-            action_conn: None,
-            action_opcode: 0,
-            action_payload: gam::MenuPayload::Scalar([0, 0, 0, 0]),
-            close_on_select: true,
-        });
-
-        gam::menu_matic(menus, gam::WIFI_MENU_NAME, None);
     }
 
     fn consume_menu_action(&mut self, action: WlanManOp) {
@@ -368,7 +388,10 @@ impl WLANMan {
 
     fn show_error_modal(&self, e: WLANError) {
         self.modals
-            .show_notification(format!("{}: {}", t!("wlan.error", xous::LANG), e).as_str(), None)
+            .show_notification(
+                format!("{}: {}", t!("wlan.error", xous::LANG), e).as_str(),
+                None,
+            )
             .unwrap()
     }
 }
@@ -378,39 +401,4 @@ fn format_ip(src: [u8; 4]) -> String {
         .map(|&id| id.to_string())
         .collect::<Vec<String>>()
         .join(".")
-}
-
-pub fn start_background_thread() {
-    std::thread::spawn(|| run_menu_thread());
-}
-
-fn run_menu_thread() {
-    let xns = xous_names::XousNames::new().unwrap();
-
-    let sid = xous::create_server().unwrap();
-
-    let mut hello = WLANMan::new(&xns);
-
-    let menu_conn = xous::connect(sid).unwrap();
-    hello.claim_menumatic_menu(menu_conn);
-
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        log::debug!("Got message: {:?}", msg);
-
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(other) => {
-                if other >= WlanManOp::ScanForNetworks && other <= WlanManOp::TurnWlanOff {
-                    hello.consume_menu_action(other);
-                    continue;
-                } else {
-                    log::warn!("Received out of range opcode. Did WlanManOp get re-ordered, but the bounds check was not updated as well?");
-                }
-            }
-
-            _ => {
-                log::error!("Got unknown message");
-            }
-        }
-    }
 }

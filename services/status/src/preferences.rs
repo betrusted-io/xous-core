@@ -1,72 +1,75 @@
-use core::{convert::TryFrom, fmt::Display};
-
-use num_traits::*;
-use userprefs::{Manager, UserPrefs};
-
-use std::io::Write;
-
+use crate::wifi;
 use locales::t;
+use num_traits::*;
+use std::fmt::Display;
+use userprefs::Manager;
+
+pub trait PrefHandler {
+    // If handle() returns true, it has handled the operation.
+    fn handle(&mut self, op: usize) -> bool;
+
+    fn claim_menumatic_menu(&self, cid: xous::CID);
+}
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, PartialOrd)]
-enum PrefsManOp {
+enum DevicePrefsOp {
     RadioOnOnBoot,
     ConnectKnownNetworksOnBoot,
     AutobacklightOnBoot,
     AutobacklightTimeout,
+    WLANMenu,
 }
 
-impl Display for PrefsManOp {
+impl Display for DevicePrefsOp {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::AutobacklightOnBoot => write!(f, "Autobacklight enabled on boot"),
             Self::AutobacklightTimeout => write!(f, "Autobacklight timeout"),
             Self::ConnectKnownNetworksOnBoot => write!(f, "Connect to known networks on boot"),
             Self::RadioOnOnBoot => write!(f, "Enable WiFi on boot"),
+            Self::WLANMenu => write!(f, "WLAN settings"),
         }
     }
 }
 
 #[derive(Debug)]
-enum PrefsManError {
+enum DevicePrefsError {
     PrefsError(userprefs::Error),
 }
 
-impl From<userprefs::Error> for PrefsManError {
+impl From<userprefs::Error> for DevicePrefsError {
     fn from(e: userprefs::Error) -> Self {
         Self::PrefsError(e)
     }
 }
 
-impl Display for PrefsManError {
+impl Display for DevicePrefsError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            PrefsManError::PrefsError(e) => write!(f, "Preferences engine error: {:?}", e),
+            DevicePrefsError::PrefsError(e) => write!(f, "Preferences engine error: {:?}", e),
         }
     }
 }
 
-struct PrefsMan {
+struct DevicePrefs {
     up: Manager,
     modals: modals::Modals,
+    gam: gam::Gam,
 }
 
-impl PrefsMan {
-    fn new(xns: &xous_names::XousNames) -> Self {
-        Self {
-            up: Manager::new(),
-            modals: modals::Modals::new(&xns).unwrap(),
+impl PrefHandler for DevicePrefs {
+    fn handle(&mut self, op: usize) -> bool {
+        match FromPrimitive::from_usize(op) {
+            Some(other) => {
+                self.consume_menu_action(other);
+
+                true
+            }
+            _ => {
+                log::error!("Got unknown message");
+                false
+            }
         }
-    }
-
-    fn actions(&self) -> Vec<PrefsManOp> {
-        use PrefsManOp::*;
-
-        vec![
-            RadioOnOnBoot,
-            ConnectKnownNetworksOnBoot,
-            AutobacklightOnBoot,
-            AutobacklightTimeout,
-        ]
     }
 
     fn claim_menumatic_menu(&self, cid: xous::CID) {
@@ -92,19 +95,42 @@ impl PrefsMan {
 
         gam::menu_matic(menus, gam::PREFERENCES_MENU_NAME, None);
     }
+}
 
-    fn consume_menu_action(&mut self, action: PrefsManOp) {
+impl DevicePrefs {
+    fn new(xns: &xous_names::XousNames) -> Self {
+        Self {
+            up: Manager::new(),
+            modals: modals::Modals::new(&xns).unwrap(),
+            gam: gam::Gam::new(&xns).unwrap(),
+        }
+    }
+
+    fn actions(&self) -> Vec<DevicePrefsOp> {
+        use DevicePrefsOp::*;
+
+        vec![
+            RadioOnOnBoot,
+            ConnectKnownNetworksOnBoot,
+            AutobacklightOnBoot,
+            AutobacklightTimeout,
+            WLANMenu,
+        ]
+    }
+
+    fn consume_menu_action(&mut self, action: DevicePrefsOp) {
         let resp = match action {
-            PrefsManOp::AutobacklightOnBoot => self.autobacklight_on_boot(),
-            PrefsManOp::RadioOnOnBoot => self.radio_on_on_boot(),
-            PrefsManOp::ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),
-            PrefsManOp::AutobacklightTimeout => self.autobacklight_timeout(),
+            DevicePrefsOp::AutobacklightOnBoot => self.autobacklight_on_boot(),
+            DevicePrefsOp::RadioOnOnBoot => self.radio_on_on_boot(),
+            DevicePrefsOp::ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),
+            DevicePrefsOp::AutobacklightTimeout => self.autobacklight_timeout(),
+            DevicePrefsOp::WLANMenu => self.wlan_menu(),
         };
 
         resp.unwrap_or_else(|error| self.show_error_modal(error));
     }
 
-    fn show_error_modal(&self, e: PrefsManError) {
+    fn show_error_modal(&self, e: DevicePrefsError) {
         self.modals
             .show_notification(
                 format!("{}: {}", t!("wlan.error", xous::LANG), e).as_str(),
@@ -114,8 +140,8 @@ impl PrefsMan {
     }
 }
 
-impl PrefsMan {
-    fn autobacklight_on_boot(&mut self) -> Result<(), PrefsManError> {
+impl DevicePrefs {
+    fn autobacklight_on_boot(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.autobacklight_on_boot_or_default()?;
 
         self.modals.add_list(vec!["Yes", "No"]).unwrap();
@@ -130,7 +156,7 @@ impl PrefsMan {
         Ok(self.up.set_autobacklight_on_boot(new_result)?)
     }
 
-    fn autobacklight_timeout(&self) -> Result<(), PrefsManError> {
+    fn autobacklight_timeout(&self) -> Result<(), DevicePrefsError> {
         let cv = {
             let mut res = self.up.autobacklight_timeout_or_default()?;
 
@@ -165,7 +191,7 @@ impl PrefsMan {
         Ok(self.up.set_autobacklight_timeout(new_timeout)?)
     }
 
-    fn radio_on_on_boot(&mut self) -> Result<(), PrefsManError>{
+    fn radio_on_on_boot(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.radio_on_on_boot_or_default()?;
 
         self.modals.add_list(vec!["Yes", "No"]).unwrap();
@@ -180,7 +206,7 @@ impl PrefsMan {
         Ok(self.up.set_radio_on_on_boot(new_result)?)
     }
 
-    fn connect_known_networks_on_boot(&mut self) -> Result<(), PrefsManError>{
+    fn connect_known_networks_on_boot(&mut self) -> Result<(), DevicePrefsError> {
         let cv = self.up.connect_known_networks_on_boot_or_default()?;
 
         self.modals.add_list(vec!["Yes", "No"]).unwrap();
@@ -193,6 +219,14 @@ impl PrefsMan {
         );
 
         Ok(self.up.set_connect_known_networks_on_boot(new_result)?)
+    }
+
+    fn wlan_menu(&self) -> Result<(), DevicePrefsError> {
+        log::info!("wlan menu invoked");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        self.gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
+
+        Ok(())
     }
 }
 
@@ -219,23 +253,31 @@ fn run_menu_thread() {
     let xns = xous_names::XousNames::new().unwrap();
 
     let sid = xous::create_server().unwrap();
-
-    let mut hello = PrefsMan::new(&xns);
-
     let menu_conn = xous::connect(sid).unwrap();
-    hello.claim_menumatic_menu(menu_conn);
+
+    let mut handlers: Vec<Box<dyn PrefHandler>> = vec![
+        Box::new(DevicePrefs::new(&xns)),
+        Box::new(wifi::WLANMan::new(&xns)),
+    ];
+
+    // claim menumatic's on all prefhandlers for this thread
+    for handler in handlers.iter_mut() {
+        handler.claim_menumatic_menu(menu_conn);
+    }
 
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("Got message: {:?}", msg);
 
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(other) => {
-                hello.consume_menu_action(other);
+        let op = msg.body.id();
+
+        for handler in handlers.iter_mut() {
+            if handler.handle(op) {
+                log::debug!("handler found!");
+                break;
             }
-            _ => {
-                log::error!("Got unknown message");
-            }
+
+            log::debug!("handler not found, iterating...");
         }
     }
 }
