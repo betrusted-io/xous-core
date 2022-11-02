@@ -4809,7 +4809,7 @@ dependencies = [
 
 [[package]]
 name = "xous-kernel"
-version = "0.9.13"
+version = "0.9.18"
 dependencies = [
  "bitflags",
  "crossbeam-channel",
