@@ -18,9 +18,11 @@ mod arch;
 
 #[macro_use]
 mod args;
+mod io;
 mod irq;
 mod macros;
 mod mem;
+mod platform;
 mod server;
 mod services;
 mod syscall;
@@ -59,45 +61,12 @@ pub unsafe extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, r
         system_services.init_from_memory(init_offset, &args)
     });
 
-    // Now that the memory manager is set up, perform any arch-specific initializations.
+    // Now that the memory manager is set up, perform any architecture and
+    // platform specific initializations.
     arch::init();
+    platform::init();
 
-    // Either map memory using a syscall, or if we're debugging the syscall
-    // handler then directly map it.
-    #[cfg(any(feature = "debug-print", feature = "print-panics"))]
-    {
-        use utralib::generated::*;
-        xous_kernel::claim_interrupt(
-            utra::uart::UART_IRQ,
-            debug::irq,
-            core::ptr::null_mut::<usize>(),
-        )
-        .expect("Couldn't claim debug interrupt");
-        // Map the serial port so println!() works as expected.
-        mem::MemoryManager::with_mut(|memory_manager| {
-            memory_manager
-                .map_range(
-                    utra::uart::HW_UART_BASE as *mut u8,
-                    ((debug::SUPERVISOR_UART_ADDR as u32) & !4095) as *mut u8,
-                    4096,
-                    PID::new(1).unwrap(),
-                    MemoryFlags::R | MemoryFlags::W,
-                    MemoryType::Default,
-                )
-                .expect("unable to map serial port")
-        });
-        debug::Uart {}.init();
-        println!("KMAIN (clean boot): Supervisor mode started...");
-        println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
-        print!("}} ");
-
-        // Print the processed kernel arguments
-        let args = args::KernelArguments::get();
-        println!("Kernel arguments:");
-        for arg in args.iter() {
-            println!("    {}", arg);
-        }
-    }
+    println!("KMAIN (clean boot): Supervisor mode started...");
 
     // rand::init() already clears the initial pipe, but pump the TRNG a little more out of no other reason than sheer paranoia
     arch::rand::get_u32();
