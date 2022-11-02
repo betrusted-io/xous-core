@@ -1,7 +1,7 @@
 use crate::wifi;
 use locales::t;
 use num_traits::*;
-use std::{fmt::Display, collections::HashMap};
+use std::fmt::Display;
 use userprefs::Manager;
 
 pub trait PrefHandler {
@@ -238,15 +238,15 @@ impl DevicePrefs {
     fn keyboard_layout(&mut self) -> Result<(), DevicePrefsError> {
         let kl = self.up.keyboard_layout_or_default()?;
 
-        let mut mappings = HashMap::new();
-
-        mappings.insert("QWERTY", 0 as usize);
-        mappings.insert("AZERTY", 1);
-        mappings.insert("QWERTZ", 2);
-        mappings.insert("Dvorak", 3);
+        let mappings = vec![
+            "QWERTY",
+            "AZERTY",
+            "QWERTZ",
+            "Dvorak",
+        ];
 
         self.modals
-            .add_list(mappings.keys().cloned().collect())
+            .add_list(mappings.clone())
             .unwrap();
 
         let new_result = self
@@ -254,7 +254,10 @@ impl DevicePrefs {
             .get_radiobutton(&format!("Current layout: {}", keyboard::KeyMap::from(kl)))
             .unwrap();
         
-        let new_result = mappings[new_result.as_str()];
+        let new_result = match mappings.iter().position(|&elem| elem == new_result.as_str()) {
+            Some(val) => val,
+            None => 0,
+        };
 
         self.up.set_keyboard_layout(new_result)?;
 
