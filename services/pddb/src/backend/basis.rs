@@ -305,11 +305,13 @@ impl BasisCache {
             // allocate a vpage offset for the dictionary
             let dict_index = basis.dict_get_free_offset(hw);
             let dict_offset = VirtAddr::new(dict_index as u64 * DICT_VSIZE).unwrap();
+            log::debug!("dict_add at VA 0x{:x?}", dict_offset);
             let pp = basis.v2p_map.entry(dict_offset).or_insert_with(|| {
                 let mut ap = hw.try_fast_space_alloc().expect("No free space to allocate dict");
                 ap.set_valid(true);
                 ap
             });
+            log::debug!("dict_add at PA 0x {:x?}", pp);
             assert!(pp.valid(), "v2p returned an invalid page");
 
             // create the cache entry
