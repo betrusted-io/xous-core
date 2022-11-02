@@ -77,3 +77,94 @@ needs to have some prompts for the user in order to unlock the filesystem in the
 Nothing prevents a more sophisticated application-level server later on that operates
 in `std` from pulling in a more featureful, dynamic localization framework; but it's an
 explicit goal to keep the kernel small, simple, and fast.
+
+## Internationalization Helper
+
+In the tools directory you find `i18n_helper.py` that can be
+very useful for managing and adding localizations:
+
+```
+$ ./tools/i18n_helper.py -h
+usage: i18n_helper.py [-h] [-v] [-l] [-i] [-m] [-o] [-n NEW_LANG] [-f FROM_LANG]
+
+Xous i18n Helper
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Prints details of each action
+  -l, --list-languages  Lists current translations
+  -i, --list-i18n-files
+                        Lists i18n files
+  -m, --missing         Shows missing translations
+  -o, --show-ok         Shows OK translations
+  -n NEW_LANG, --new-lang NEW_LANG
+                        Add support for a new lang
+  -f FROM_LANG, --from-lang FROM_LANG
+                        Copy this existing lang for the new lang
+$
+```
+
+The `--list-languages` function will show the currently supported langs:
+
+```
+$ ./tools/i18n_helper.py --list-languages
+en
+ja
+zh
+en-tts
+$
+```
+
+The `--missing` function will show the disposition of the translations
+(add `--show-ok` to see the complete translation status). The output
+is "FILE tab JQ-LIKE-PATH tab STATUS" which makes it easy to spot
+situations like completely absent translations that might cause a panic:
+
+```
+$ ./tools/i18n_helper.py --missing | grep ABSENT
+services/status/locales/i18n.json	rtc.set_time_modal.ja	ABSENT
+services/status/locales/i18n.json	rtc.set_time_modal.zh	ABSENT
+services/status/locales/i18n.json	rtc.set_time_modal.en-tts	ABSENT
+$
+```
+Possible statuses include:
+* **OK** (if `--show-ok` flag is turned on)
+* **MISSING** the entry has the special unicode character: 🔇
+* **MACHINE_TRANSLATION** the entry ends with ` *MT*` to show that it was done by machine translation and requires human review.
+* **TEMPORARY** a temporary solution, borrowed from another language like English (e.g. ends in `  *EN*`)
+* **ABSENT** this translation key is _not present_ and could cause a panic!
+
+
+The `--new-lang` function will add a new lang by copying an
+existing lang and adding the suffix `" *EN*"` to the new translation
+(example if the `--from-lang` is `en`):
+
+
+```
+$ ./tools/i18n_helper.py --verbose --from-lang en --new-lang fr
+verbose mode
+-- get languages --
+adding new lang "fr" from "en" by appending " *EN*"
+
+$
+```
+
+Each file will be backed up with the suffix `.orig` appended.
+Once you are satisfied with the translations you can remove these
+backup files like this:
+
+```
+$ find . -name '*.json.orig' | xargs rm
+```
+
+If you need to re-run the helper and an `.orig` version of the file
+is present it will be treated as the original version.
+
+_NOTE:_ You may want to add the new lang to the other tools
+that know about available languages:
+
+* https://github.com/betrusted-io/xous-core/blob/main/tools/updater/precursorupdater/precursorupdater.py#L154
+* https://github.com/betrusted-io/xous-core/blob/main/tools/backup.py#L420
+* https://github.com/betrusted-io/xous-core/blob/main/tools/restore.py#L541
+* https://github.com/betrusted-io/xous-core/blob/main/tools/legacy/update_ci.sh#L14
+* https://github.com/betrusted-io/xous-core/blob/main/tools/legacy/factory_reset.sh#L14

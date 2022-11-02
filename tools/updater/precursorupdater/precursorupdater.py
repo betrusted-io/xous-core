@@ -125,7 +125,7 @@ def main():
         "-b", "--bleeding-edge", required=False, help="Update to bleeding-edge CI build", action='store_true'
     )
     parser.add_argument(
-        "-l", "--language", help="Select Xous language [en|ja|zh|en-tts]", required=False, type=str, default="en"
+        "-l", "--language", help="Select Xous language [en|ja|zh|fr|en-tts]", required=False, type=str, default="en"
     )
     parser.add_argument(
         "--factory-reset", required=False, help="Delete passwords and do a factory reset", action='store_true'
@@ -156,6 +156,7 @@ def main():
         "en-tts",
         "ja",
         "zh",
+        "fr",
     }
     language = args.language.lower()
     if language not in VALID_LANGUAGES:

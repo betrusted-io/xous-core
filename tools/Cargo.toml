@@ -17,7 +17,7 @@ ring = "0.16.20"
 env_logger = "0.7.1"
 log = "0.4.14"
 pem = "0.8.3"
-svd2utra = "0.1.5"
+svd2utra = "0.1.7"
 xmas-elf = "0.7.0"
 xous-semver = "0.1.2"
 
@@ -26,6 +26,9 @@ name = "copy-object"
 
 [[bin]]
 name = "create-image"
+
+[[bin]]
+name = "make-renode-boot"
 
 [[bin]]
 name = "make-tags"

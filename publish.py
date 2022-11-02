@@ -318,8 +318,12 @@ def main():
         for [crate, path] in cratelist:
             print("Publishing {} in {}".format(crate, path))
             try:
-                subprocess.run(cmd, cwd=path, check=True)
-            except subprocess.CalledProcessError:
+                subprocess.run(cmd, cwd=path, check=True, capture_output=True, encoding='utf-8')
+            except subprocess.CalledProcessError as err:
+                if 'already uploaded' in err.stderr:
+                    print("  Already uploaded, skipping to next module...")
+                    continue
+
                 print("Process failed, waiting for crates.io to update and retrying...")
                 time.sleep(20)
                 # just try running it again

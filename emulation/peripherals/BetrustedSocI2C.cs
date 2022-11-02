@@ -162,7 +162,7 @@ namespace Antmicro.Renode.Peripherals.I2C.Betrusted
 
         private void FinishTransaction()
         {
-            machine.ClockSource.RemoveClockEntry(FinishTransaction);
+            machine.ClockSource.TryRemoveClockEntry(FinishTransaction);
             if (shouldSendTxRxIrq)
             {
                 shouldSendTxRxIrq = false;

@@ -16,13 +16,13 @@ ime-plugin-shell = {path = "../ime-plugin-shell"}
 ime-plugin-tts = {path = "../ime-plugin-tts"}
 llio = {path = "../llio"}
 log = "0.4.14"
-log-server = {package = "xous-api-log", version = "0.1.14"}
-ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.13"}
-xous = "0.9.20"
-xous-ipc = "0.9.20"
-xous-names = {package = "xous-api-names", version = "0.9.15"}
+log-server = {package = "xous-api-log", version = "0.1.17"}
+ticktimer-server = {package = "xous-api-ticktimer", version = "0.9.16"}
+xous = "0.9.23"
+xous-ipc = "0.9.23"
+xous-names = {package = "xous-api-names", version = "0.9.18"}
 keyboard = {path = "../keyboard"}
-susres = {package = "xous-api-susres", version = "0.9.13"}
+susres = {package = "xous-api-susres", version = "0.9.16"}
 codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}
@@ -38,7 +38,7 @@ dns = {path="../dns"}
 pddb = {path="../pddb"}
 modals = {path="../modals"}
 usb-device-xous = {path="../usb-device-xous"}
-utralib = {version = "0.1.7", optional = true, default-features = false }
+utralib = {version = "0.1.9", optional = true, default-features = false }
 
 tts-frontend = {path="../tts"}
 locales = {path = "../../locales"}
@@ -107,7 +107,7 @@ features = ["u32_backend", "rand"]
 
 [features]
 precursor = ["utralib/precursor"]
-hosted = ["utralib/hosted"]
+hosted = ["utralib/hosted", "random-pick"]
 renode = ["utralib/renode"]
 debugprint = []
 spinortest = [] # for spinor testing. contra-indicated with PDDB, as it steals memory from the PDDB.

@@ -6,11 +6,11 @@ use xous_ipc::String;
 use std::io::{Write, Read, Seek, SeekFrom};
 use core::fmt::Write as FmtWrite;
 
-#[cfg(feature="shellperf")]
+#[cfg(any(feature="shellperf", not(target_os = "xous")))]
 const TEST_DICT: &'static str = "perftest";
 #[cfg(feature="shellperf")]
 use perflib::*;
-#[cfg(feature="shellperf")]
+#[cfg(any(feature="shellperf", not(target_os = "xous")))]
 use sha2::Digest;
 #[cfg(feature="shellperf")]
 const FILE_ID_SERVICES_SHELLCHAT_SRC_CMDS_PDDB_CMD: u32 = 2;
@@ -927,6 +927,59 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
+                #[cfg(not(target_os = "xous"))]
+                "rkyvtest" => {
+                    use rkyv::{
+                        archived_value,
+                        de::deserializers::AllocDeserializer,
+                        ser::{Serializer, serializers::WriteSerializer},
+                        AlignedVec,
+                        Deserialize,
+                    };
+                    let test = pddb::PddbKeyRecord {
+                        name: "test".to_string(),
+                        len: 64,
+                        reserved: 128,
+                        age: 0,
+                        index: core::num::NonZeroU32::new(1).unwrap(),
+                        basis: ".System".to_string(),
+                        data: Some(vec![0; 64]),
+                    };
+                    let mut serializer = WriteSerializer::new(AlignedVec::new());
+                    let pos = serializer.serialize_value(&test).unwrap();
+                    let buf = serializer.into_inner();
+                    log::info!("serialized test len: {}", buf.len());
+                    log::info!("more buf props: {}, {}", buf.as_slice().len(), pos);
+                    let archived = unsafe { archived_value::<pddb::PddbKeyRecord>(buf.as_slice(), pos) };
+                    let deserialized = archived.deserialize(&mut AllocDeserializer).unwrap();
+                    log::info!("deserialized: {:?}", deserialized);
+
+                    let test2 = pddb::PddbKeyRecord {
+                        name: "test test test".to_string(),
+                        len: 5000,
+                        reserved: 128,
+                        age: 0,
+                        index: core::num::NonZeroU32::new(1).unwrap(),
+                        basis: ".System".to_string(),
+                        data: Some(vec![0; 5000]),
+                    };
+                    let mut serializer = WriteSerializer::new(AlignedVec::new());
+                    let pos = serializer.serialize_value(&test2).unwrap();
+                    let buf = serializer.into_inner();
+                    log::info!("serialized test2 len: {}", buf.len());
+                    log::info!("more buf props: {}, {}", buf.as_slice().len(), pos);
+                    let archived = unsafe { archived_value::<pddb::PddbKeyRecord>(buf.as_slice(), pos) };
+                    let deserialized = archived.deserialize(&mut AllocDeserializer).unwrap();
+                    log::info!("deserialized: {:?}", deserialized);
+                }
+                #[cfg(not(target_os = "xous"))]
+                "bulktest" => {
+                    let bulk_read = self.pddb.read_dict(TEST_DICT, None, Some(131072)).unwrap();
+                    log::info!("read {} records", bulk_read.len());
+                    for record in bulk_read {
+                        log::info!("{:?}", record);
+                    }
+                }
                 #[cfg(feature="shellperf")]
                 "v2p" => {
                     // don't generate a new object since it clears the data, just do a raw dump
@@ -981,7 +1034,7 @@ impl<'a> ShellCmdApi<'a> for PddbCmd {
                         }
                     }
                 }
-                #[cfg(feature="shellperf")]
+                #[cfg(any(feature="shellperf", not(target_os = "xous")))]
                 "perfprep" => {
                     log::info!("Preparing test set for performance profiling");
                     let words = [
@@ -1116,7 +1169,7 @@ fn join_tokens<'a>(buf: &mut String<1024>, tokens: impl Iterator<Item = &'a str>
     }
 }
 
-#[cfg(feature="perflib")]
+#[cfg(any(feature="shellperf", not(target_os = "xous")))]
 fn hex(data: Vec<u8>) -> std::string::String {
     use std::fmt::Write;
     let mut s = std::string::String::with_capacity(2 * data.len());

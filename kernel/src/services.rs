@@ -265,6 +265,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
 }));
 
 #[cfg(baremetal)]
+#[no_mangle]
 static mut SYSTEM_SERVICES: SystemServices = SystemServices {
     processes: [Process {
         state: ProcessState::Free,

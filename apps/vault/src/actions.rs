@@ -686,6 +686,62 @@ impl<'a> ActionManager<'a> {
                 let start = self.tt.elapsed_ms();
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
+                let mut klen = 0;
+                match self.pddb.borrow().read_dict(VAULT_PASSWORD_DICT, None, Some(256 * 1024)) {
+                    Ok(keys) => {
+                        #[cfg(feature="vaultperf")]
+                        self.perfentry(&self.pm, PERFMETA_NONE, 1, std::line!());
+                        let mut oom_keys = 0;
+                        il.reserve(keys.len());
+                        for key in keys {
+                            #[cfg(feature="vaultperf")]
+                            self.perfentry(&self.pm, PERFMETA_NONE, 1, std::line!());
+                            if let Some(data) = key.data {
+                                if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
+                                    let extra = format!("{}; {}{}",
+                                        crate::ux::atime_to_str(pw.atime),
+                                        t!("vault.u2f.appinfo.authcount", xous::LANG),
+                                        pw.count,
+                                    );
+                                    let desc = format!("{}/{}", pw.description, pw.username);
+                                    let li = ListItem {
+                                        name: desc,
+                                        extra,
+                                        dirty: true,
+                                        guid: key.name,
+                                    };
+                                    klen += 1;
+                                    il.push(li);
+                                }
+                            } else {
+                                oom_keys += 1;
+                            }
+                        }
+                        if oom_keys != 0 {
+                            log::warn!("Ran out of cache space handling password keys. {} keys are not loaded.", oom_keys);
+                            self.report_err(&format!("Ran out of cache space handling passwords. {} passwords not loaded", oom_keys), None::<crate::storage::Error>);
+                        }
+                    }
+                    Err(e) => {
+                        match e.kind() {
+                            ErrorKind::NotFound => {
+                                // this is fine, it just means no passwords have been entered yet
+                            },
+                            _ => {
+                                log::error!("Error opening password dictionary");
+                                self.report_err("Error opening password dictionary", Some(e))
+                            }
+                        }
+                    },
+                }
+                #[cfg(feature="vaultperf")]
+                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
+
+                /* DELETEME: kept around for quick debugging without having to look through commit history
+                once we have confidence in the new method, we can drop this code right away.
+
+                #[cfg(feature="vaultperf")]
+                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
                 let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
                     Ok(keylist) => keylist,
                     Err(e) => {
@@ -771,6 +827,7 @@ impl<'a> ActionManager<'a> {
                 }
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
+                */
                 log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
             }
             VaultMode::Fido => {

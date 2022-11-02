@@ -33,6 +33,12 @@ impl<'a> ShellCmdApi<'a> for Help {
                 "help" => {
                     write!(ret, "{}", t!("mtxcli.help.help", xous::LANG)).unwrap();
                 }
+                "login" => {
+                    write!(ret, "{}", t!("mtxcli.login.help", xous::LANG)).unwrap();
+                }
+                "logout" => {
+                    write!(ret, "{}", t!("mtxcli.logout.help", xous::LANG)).unwrap();
+                }
                 "set" => {
                     write!(ret, "{}", t!("mtxcli.set.help", xous::LANG)).unwrap();
                 }
@@ -46,6 +52,8 @@ impl<'a> ShellCmdApi<'a> for Help {
                     write!(ret, "{}\n", t!("mtxcli.help.overview", xous::LANG)).unwrap();
                     write!(ret, "{}\n", t!("mtxcli.get.help", xous::LANG)).unwrap();
                     write!(ret, "{}\n", t!("mtxcli.help.help", xous::LANG)).unwrap();
+                    write!(ret, "{}\n", t!("mtxcli.login.help", xous::LANG)).unwrap();
+                    write!(ret, "{}\n", t!("mtxcli.logout.help", xous::LANG)).unwrap();
                     write!(ret, "{}\n", t!("mtxcli.set.help", xous::LANG)).unwrap();
                     write!(ret, "{}\n", t!("mtxcli.status.help", xous::LANG)).unwrap();
                     write!(ret, "{}", t!("mtxcli.unset.help", xous::LANG)).unwrap();

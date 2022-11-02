@@ -1,14 +1,37 @@
 use xous::{MessageEnvelope};
 use xous_ipc::String as XousString;
 use core::fmt::Write;
+use locales::t;
 
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write as StdWrite, Error};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH}; // to help gen_txn_id
+
+mod url;
+mod web;
+
+const APP: &str = "mtxcli";
 
 /// PDDB Dict for mtxcli keys
 const MTXCLI_DICT: &str = "mtxcli";
+
+const FILTER_KEY: &str = "_filter";
+const PASSWORD_KEY: &str = "password";
+const ROOM_ID_KEY: &str = "_room_id";
+const ROOM_KEY: &str = "room";
+const SINCE_KEY: &str = "_since";
+const SERVER_KEY: &str = "server";
+const TOKEN_KEY: &str = "_token";
+const USER_KEY: &str = "user";
+const USERNAME_KEY: &str = "username";
+
+const HTTPS: &str = "https://";
+const SERVER_MATRIX: &str = "https://matrix.org";
+
+const EMPTY: &str = "";
+const MTX_TIMEOUT: i32 = 300; // ms
 
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
@@ -56,43 +79,330 @@ pub struct CommonEnv {
     cb_registrations: HashMap::<u32, XousString::<256>>,
     trng: Trng,
     xns: xous_names::XousNames,
+    user: String,
+    username: String,
+    server: String,
+    token: String,
+    logged_in: bool,
+    room_id: String,
+    filter: String,
+    since: String,
+    first_line: bool,
 }
 impl CommonEnv {
+
+    pub fn gen_txn_id(&mut self) -> String {
+        let mut txn_id = self.trng.get_u32()
+            .expect("unable to generate random u32");
+        log::info!("trng.get_u32() = {}", txn_id);
+        txn_id += SystemTime::now().duration_since(UNIX_EPOCH)
+            .expect("Time went backwards").subsec_nanos();
+        txn_id.to_string()
+    }
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), Error> {
         log::info!("set '{}' = '{}'", key, value);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(&keypath)?;
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict '{}' exists", MTXCLI_DICT);
+        } else {
+            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+            std::fs::create_dir_all(&keypath)?;
+        }
         keypath.push(key);
         File::create(keypath)?.write_all(value.as_bytes())?;
+        match key { // special case side effects
+            USER_KEY => { self.set_user(value); }
+            PASSWORD_KEY => { self.set_password(); }
+            ROOM_KEY => { self.set_room(); }
+            _ => { }
+        }
         Ok(())
     }
 
+    // will log on error (vs. panic)
+    pub fn set_debug(&mut self, key: &str, value: &str) -> bool {
+        match self.set(key, value) {
+            Ok(()) => {
+                true
+            },
+            Err(e) => {
+                log::error!("error setting key {}: {:?}", key, e);
+                false
+            }
+        }
+    }
+
+    pub fn set_user(&mut self, value: &str) {
+        log::debug!("# USER_KEY set '{}' = '{}'", USER_KEY, value);
+        let i = match value.find('@') {
+            Some(index) => { index + 1 },
+            None => { 0 },
+        };
+        let j = match value.find(':') {
+            Some(index) => { index },
+            None => { value.len() },
+        };
+        self.username = (&value[i..j]).to_string();
+        if j < value.len() {
+            self.server = String::from(HTTPS);
+            self.server.push_str(&value[j + 1..]);
+        } else {
+            self.server = SERVER_MATRIX.to_string();
+        }
+        self.user = value.to_string();
+        log::debug!("# user = '{}' username = '{}' server = '{}'", self.user, self.username, self.server);
+        self.set_debug(USERNAME_KEY, &self.username.clone());
+        self.set_debug(SERVER_KEY, &self.server.clone());
+        self.unset_debug(TOKEN_KEY);
+        self.token = EMPTY.to_string();
+    }
+
+    pub fn set_password(&mut self) {
+        log::debug!("# PASSWORD_KEY set '{}' => clearing TOKEN_KEY", PASSWORD_KEY);
+        self.unset_debug(TOKEN_KEY);
+    }
+
+    pub fn set_room(&mut self) {
+        log::debug!("# ROOM_KEY set '{}' => clearing ROOM_ID_KEY, SINCE_KEY, FILTER_KEY", ROOM_KEY);
+        self.unset_debug(ROOM_ID_KEY);
+        self.unset_debug(SINCE_KEY);
+        self.unset_debug(FILTER_KEY);
+    }
+
     pub fn unset(&mut self, key: &str) -> Result<(), Error> {
-        log::info!("unset '{}'", key);
+        // log::info!("unset '{}'", key);
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(&keypath)?;
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict '{}' exists", MTXCLI_DICT);
+        } else {
+            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+            std::fs::create_dir_all(&keypath)?;
+        }
         keypath.push(key);
         if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict:key = '{}:{}' exists.. deleting it", MTXCLI_DICT, key);
+
             std::fs::remove_file(keypath)?;
         }
         Ok(())
     }
 
+    // will log on error (vs. panic)
+    pub fn unset_debug(&mut self, key: &str) -> bool {
+        match self.unset(key) {
+            Ok(()) => {
+                true
+            },
+            Err(e) => {
+                log::error!("error unsetting key {}: {:?}", key, e);
+                false
+            }
+        }
+    }
+
     pub fn get(&mut self, key: &str) -> Result<Option<String>, Error> {
         let mut keypath = PathBuf::new();
         keypath.push(MTXCLI_DICT);
-        std::fs::create_dir_all(&keypath)?;
+        if std::fs::metadata(&keypath).is_ok() { // keypath exists
+            log::info!("dict '{}' exists", MTXCLI_DICT);
+        } else {
+            log::info!("dict '{}' does NOT exist.. creating it", MTXCLI_DICT);
+            std::fs::create_dir_all(&keypath)?;
+        }
         keypath.push(key);
         if let Ok(mut file)= File::open(keypath) {
             let mut value = String::new();
             file.read_to_string(&mut value)?;
-            log::info!("get '{}' = '{}'", key, value);
+            // log::info!("get '{}' = '{}'", key, value);
             Ok(Some(value))
         } else {
             Ok(None)
+        }
+    }
+
+    pub fn get_default(&mut self, key: &str, default: &str) -> String {
+        match self.get(key) {
+            Ok(None) => {
+                default.to_string()
+            },
+            Ok(Some(value)) => {
+                value.to_string()
+            }
+            Err(e) => {
+                log::error!("error getting key {}: {:?}", key, e);
+                default.to_string()
+            }
+        }
+    }
+
+    pub fn prompt(&mut self, ret: &mut XousString::<1024>, text: &str) {
+        if self.first_line {
+            write!(ret, "{}> {}", APP, text).unwrap();
+            self.first_line = false;
+        } else {
+            write!(ret, "\n{}> {}", APP, text).unwrap();
+        }
+    }
+
+    pub fn user_says(&mut self, ret: &mut XousString::<1024>, text: &str) {
+        if ! self.logged_in {
+            if ! self.login(ret) {
+                return;
+            }
+        }
+        if self.room_id.len() == 0 {
+            if ! self.get_room_id(ret) {
+                return;
+            }
+        }
+        if self.filter.len() == 0 {
+            if ! self.get_filter(ret) {
+                return;
+            }
+        }
+        self.read_messages(ret);
+        // The following is not required, because we will get what
+        // the user said when we read_messages the second time
+        // write!(ret, "{}> {}", self.username, text).unwrap();
+
+        let txn_id = self.gen_txn_id();
+        log::info!("txn_id = {}", txn_id);
+        if web::send_message(&self.server, &self.room_id, &text, &txn_id, &self.token) {
+            log::info!("SENT: {}", text);
+            self.read_messages(ret); // update since to include what user said
+        } else {
+            log::info!("FAILED TO SEND");
+            write!(ret, "{}", t!("mtxcli.send.failed", xous::LANG)).unwrap();
+        }
+    }
+
+    pub fn login(&mut self, ret: &mut XousString::<1024>) -> bool {
+        self.prompt(ret, t!("mtxcli.logging.in", xous::LANG));
+        self.token = self.get_default(TOKEN_KEY, EMPTY);
+        self.logged_in = false;
+        if self.token.len() > 0 {
+            if web::whoami(&self.server, &self.token) {
+                self.logged_in = true;
+            }
+        }
+        if ! self.logged_in {
+            if web::get_login_type(&self.server) {
+                let user = self.get_default(USER_KEY, USER_KEY);
+                let password = self.get_default(PASSWORD_KEY, EMPTY);
+                if password.len() == 0 {
+                    self.prompt(ret, t!("mtxcli.please.set.user", xous::LANG));
+                    self.prompt(ret, t!("mtxcli.please.set.password", xous::LANG));
+                } else {
+                    if let Some(new_token) = web::authenticate_user(&self.server, &user, &password) {
+                        self.set_debug(TOKEN_KEY, &new_token);
+                        self.token = new_token;
+                        self.logged_in = true;
+                    } else {
+                       log::error!("Error: cannnot login with type: {}", web::MTX_LOGIN_PASSWORD);
+                    }
+                }
+            }
+        }
+        if self.logged_in {
+            self.prompt(ret, t!("mtxcli.logged.in", xous::LANG));
+        } else {
+            self.prompt(ret, t!("mtxcli.login.failed", xous::LANG));
+        }
+        self.logged_in
+    }
+
+    pub fn logout(&mut self, ret: &mut XousString::<1024>) {
+        self.unset_debug(TOKEN_KEY);
+        self.prompt(ret, t!("mtxcli.logged.out", xous::LANG));
+        self.logged_in = false;
+    }
+
+    // assume logged in, token is valid
+    pub fn get_room_id(&mut self, ret: &mut XousString::<1024>) -> bool {
+        if self.room_id.len() > 0 {
+            true
+        } else {
+            let room = self.get_default(ROOM_KEY, EMPTY);
+            let server = self.get_default(SERVER_KEY, EMPTY);
+            if room.len() == 0 {
+                self.prompt(ret, t!("mtxcli.please.set.room", xous::LANG));
+                false
+            } else if server.len() == 0 {
+                self.prompt(ret, t!("mtxcli.please.set.server", xous::LANG));
+                false
+            } else {
+                let mut room_server = String::new();
+                if ! room.starts_with("#") {
+                    room_server.push_str("#");
+                }
+                room_server.push_str(&room);
+                room_server.push_str(":");
+                let i = match server.find(HTTPS) {
+                    Some(index) => {
+                        index + HTTPS.len()
+                    },
+                    None => {
+                        server.len()
+                    },
+                };
+                if i >= server.len() {
+                    self.prompt(ret, t!("mtxcli.please.set.server", xous::LANG));
+                    false
+                } else {
+                    room_server.push_str(&server[i..]);
+                    if let Some(new_room_id) = web::get_room_id(&self.server, &room_server, &self.token) {
+                        self.set_debug(ROOM_ID_KEY, &new_room_id);
+                        self.room_id = new_room_id;
+                        true
+                    } else {
+                        self.prompt(ret, t!("mtxcli.roomid.failed", xous::LANG));
+                        false
+                    }
+                }
+            }
+        }
+    }
+
+    // assume logged in, token is valid, room_id is valid, user is valid
+    pub fn get_filter(&mut self, ret: &mut XousString::<1024>) -> bool {
+        if self.filter.len() > 0 {
+            true
+        } else {
+            if let Some(new_filter) = web::get_filter(&self.user, &self.server, &self.token) {
+                self.set_debug(FILTER_KEY, &new_filter);
+                self.filter = new_filter;
+                true
+            } else {
+                self.prompt(ret, t!("mtxcli.filter.failed", xous::LANG));
+                false
+            }
+        }
+    }
+
+    // assume logged in, token is valid, room_id is valid, user is valid,
+    // and filter is valid
+    pub fn read_messages(&mut self, ret: &mut XousString::<1024>) -> bool {
+        if let Some((since, messages)) = web::client_sync(&self.server, &self.filter,
+                                                          &self.since, MTX_TIMEOUT,
+                                                          &self.room_id, &self.token) {
+            self.set_debug(SINCE_KEY, &since);
+            self.since = since;
+            if messages.len() > 0 {
+                if self.first_line {
+                    write!(ret, "{}", messages).unwrap();
+                    self.first_line = false;
+                } else {
+                    write!(ret, "\n{}", messages).unwrap();
+                }
+                true
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 
@@ -113,6 +423,8 @@ impl CommonEnv {
 ///// 1. add your module here, and pull its namespace into the local crate
 mod get;       use get::*;
 mod help;      use help::*;
+mod login;     use login::*;
+mod logout;    use logout::*;
 mod set;       use set::*;
 mod status;    use status::*;
 mod unset;     use unset::*;
@@ -123,6 +435,8 @@ pub struct CmdEnv {
     ///// 2. declare storage for your command here.
     get_cmd: Get,
     help_cmd: Help,
+    login_cmd: Login,
+    logout_cmd: Logout,
     set_cmd: Set,
     status_cmd: Status,
     unset_cmd: Unset,
@@ -140,6 +454,16 @@ impl CmdEnv {
             cb_registrations: HashMap::new(),
             trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
+            user: EMPTY.to_string(),
+            username: EMPTY.to_string(),
+
+            server: SERVER_MATRIX.to_string(),
+            token: EMPTY.to_string(),
+            logged_in: false,
+            room_id: EMPTY.to_string(),
+            filter: EMPTY.to_string(),
+            since: EMPTY.to_string(),
+            first_line: true
         };
         log::info!("done creating CommonEnv");
         CmdEnv {
@@ -148,6 +472,8 @@ impl CmdEnv {
             ///// 3. initialize your storage, by calling new()
             get_cmd: Get::new(&xns),
             help_cmd: Help::new(&xns),
+            login_cmd: Login::new(&xns),
+            logout_cmd: Logout::new(&xns),
             set_cmd: Set::new(&xns),
             status_cmd: Status::new(&xns),
             unset_cmd: Unset::new(&xns),
@@ -156,15 +482,27 @@ impl CmdEnv {
 
     pub fn dispatch(&mut self, maybe_cmdline: Option<&mut XousString::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<XousString::<1024>>, xous::Error> {
         let mut ret = XousString::<1024>::new();
+        self.common_env.first_line = true;
 
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut self.get_cmd,
             &mut self.help_cmd,
+            &mut self.login_cmd,
+            &mut self.logout_cmd,
             &mut self.set_cmd,
             &mut self.status_cmd,
             &mut self.unset_cmd,
         ];
+
+        if self.common_env.username.len() == 0 { // first time initialization
+            self.common_env.user = self.common_env.get_default(USER_KEY, EMPTY);
+            self.common_env.username = self.common_env.get_default(USERNAME_KEY, USERNAME_KEY);
+            self.common_env.server = self.common_env.get_default(SERVER_KEY, SERVER_MATRIX);
+            self.common_env.room_id = self.common_env.get_default(ROOM_ID_KEY, EMPTY);
+            self.common_env.filter = self.common_env.get_default(FILTER_KEY, EMPTY);
+            self.common_env.since = self.common_env.get_default(SINCE_KEY, EMPTY);
+        }
 
         if let Some(cmdline) = maybe_cmdline {
             let maybe_verb = tokenize(cmdline);
@@ -205,11 +543,19 @@ impl CmdEnv {
                         cmd_ret
                     }
                 } else { // chat
-                    write!(ret, "SAY: {} {}", verb, cmdline.to_str()).unwrap();
+                    let mut text = String::from(verb);
+                    text.push_str(" ");
+                    text.push_str(cmdline.to_str());
+                    self.common_env.user_says(&mut ret, &text);
                     Ok(Some(ret))
                 }
             } else {
-                Ok(None)
+                log::info!("NO INPUT");
+                if self.common_env.read_messages(&mut ret) {
+                    Ok(Some(ret))
+                } else {
+                    Ok(None)
+                }
             }
         } else if let Some(callback) = maybe_callback {
             let mut cmd_ret: Result<Option<XousString::<1024>>, xous::Error> = Ok(None);

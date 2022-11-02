@@ -398,6 +398,14 @@ use std::sync::Arc;
 
 use locales::t;
 
+use rkyv::{
+    de::deserializers::AllocDeserializer,
+    ser::{Serializer, serializers::BufferSerializer},
+    Deserialize,
+};
+use core::mem::size_of;
+use core::ops::Deref;
+
 #[cfg(feature="perfcounter")]
 const FILE_ID_SERVICES_PDDB_SRC_MAIN: u32 = 0;
 #[cfg(feature="perfcounter")]
@@ -574,6 +582,7 @@ fn wrapped_main() -> ! {
     let mut key_token: Option<[u32; 4]> = None;
     let mut dict_list = Vec::<String>::new(); // storage for dict lists
     let mut dict_token: Option<[u32; 4]> = None;
+    let mut bulkread_state: Option<BulkReadState> = None;
 
     // the PDDB resets the hardware RTC to a new random starting point every time it is reformatted
     // it is the only server capable of doing this.
@@ -1394,6 +1403,226 @@ fn wrapped_main() -> ! {
                 pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 4, std::line!());
             }
 
+            // Optimized bulk data read handler. See lib.rs for documentation.
+            Opcode::DictBulkRead => {
+                const BULKREAD_TIMEOUT_MS: u64 = 5000;
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 5, std::line!());
+                let range = msg.body.memory_message_mut().unwrap();
+                let buf = unsafe { core::slice::from_raw_parts_mut(
+                    range.buf.as_mut_ptr(),
+                    range.buf.len(),
+                )};
+                // unpack the descriptor
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
+                let pos = range.offset.map(|o| o.get()).unwrap_or_default();
+                let r = unsafe { rkyv::archived_value::<PddbDictRequest>(buf, pos) };
+                let bulk_descriptor = r.deserialize(&mut AllocDeserializer).unwrap();
+                // check for a timeout; retire state if we did timeout
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
+                let mut timed_out = false;
+                if let Some(state) = &bulkread_state {
+                    if tt.elapsed_ms() - state.last_time > BULKREAD_TIMEOUT_MS {
+                        timed_out = true;
+                    }
+                }
+                if timed_out {
+                    bulkread_state = None;
+                }
+                // handle state initialization, if no call was previously initiated
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
+                let mut first_call = false;
+                if bulkread_state.is_none() {
+                    first_call = true;
+                    // confirm data exists; setup the tracking state
+                    let key_list: Vec<String> = match basis_cache.key_list(
+                        &mut pddb_os,
+                        bulk_descriptor.dict.as_str().unwrap(),
+                        if bulk_descriptor.basis_specified {
+                            Some(bulk_descriptor.basis.as_str().unwrap())
+                        } else {
+                            None
+                        }
+                    ) {
+                        Ok(list) => list.into_iter().rev().collect(), // reverse order so Vec can just pop and get "first" item
+                        Err(e) => {
+                            match e.kind() {
+                                std::io::ErrorKind::NotFound => {
+                                    buf[..4].copy_from_slice(&(PddbBulkReadCode::NotFound as u32).to_le_bytes())
+                                }
+                                _ => {
+                                    buf[..4].copy_from_slice(&(PddbBulkReadCode::InternalError as u32).to_le_bytes())
+                                }
+                            }
+                            // this will cause the return record to just have the error code copied to it. The rest is invalid.
+                            continue;
+                        }
+                    };
+                    let state = BulkReadState {
+                        token: [pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32(), pddb_os.trng_u32()],
+                        is_basis_specified: bulk_descriptor.basis_specified,
+                        basis: if bulk_descriptor.basis_specified{ bulk_descriptor.basis.to_string() } else { String::new() },
+                        dict: bulk_descriptor.dict.to_string(),
+                        total_keys: key_list.len(),
+                        key_list,
+                        buf_starting_key_index: 0,
+                        last_time: tt.elapsed_ms(),
+                        read_limit: bulk_descriptor.bulk_limit.expect("bulk limit must be specified for bulk read calls"),
+                        read_total: 0,
+                    };
+                    bulkread_state = Some(state);
+                }
+                let mut finished = false;
+                // handle data packing into the structure
+                if let Some(state) = &mut bulkread_state {
+                    #[cfg(feature="perfcounter")]
+                    pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 5, std::line!());
+                    // check that the token matches, if this isn't a first call to the function
+                    if !first_call {
+                        if state.token != bulk_descriptor.token {
+                            buf[..4].copy_from_slice(&(PddbBulkReadCode::Busy as u32).to_le_bytes());
+                            continue;
+                        }
+                    }
+                    // start filling in the return structure
+                    let mut header = BulkReadHeader::default();
+                    header.total = state.total_keys as u32;
+                    header.starting_key_index = state.buf_starting_key_index as u32;
+                    header.token = state.token;
+
+                    // now loop through and pack data into the slice
+                    let (header_buf, mut buf) = buf.split_at_mut(size_of::<BulkReadHeader>());
+                    enum SerializeResult<'a> {
+                        Success(usize, usize, &'a mut [u8], String, &'a mut [u8]),
+                        Failure(String)
+                    }
+                    loop {
+                        if buf.len() < size_of::<u32>() * 2 {
+                            // not enough space to hold our header records, break and get a new buf
+                            break;
+                        }
+                        #[cfg(feature="perfcounter")]
+                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 6, std::line!());
+                        let ser_result: SerializeResult =
+                            if let Some(key_name) = state.key_list.pop() {
+                                let attr = basis_cache.key_attributes(&mut pddb_os,
+                                    &state.dict,
+                                    &key_name,
+                                    if state.is_basis_specified{Some(&state.basis)} else {None}
+                                ).expect("Key went missing during bulk read"); // could be a concurrent process mutating. We don't handle this; flag with a panic.
+                                if attr.len < state.read_limit - state.read_total {
+                                    let mut d = vec![0u8; attr.len];
+                                    match basis_cache.key_read(
+                                        &mut pddb_os,
+                                        &state.dict,
+                                        &key_name,
+                                        &mut d,
+                                        None,
+                                        Some(&attr.basis),
+                                    ) {
+                                        Ok(readlen) => {
+                                            #[cfg(feature="perfcounter")]
+                                            pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 6, std::line!());
+                                            assert!(readlen == attr.len, "Bulk read key length did not match expected length");
+                                            let rec = PddbKeyRecord {
+                                                name: key_name.to_string(),
+                                                len: attr.len,
+                                                reserved: attr.reserved,
+                                                age: attr.age,
+                                                index: attr.index,
+                                                basis: attr.basis,
+                                                data: Some(d)
+                                            };
+                                            state.read_total += attr.len; // commit the read length early
+                                            let (prebuf, sbuf) = buf.split_at_mut(size_of::<u32>()*2);
+                                            let mut serializer = BufferSerializer::new(sbuf);
+                                            let len = size_of::<ArchivedPddbKeyRecord>();
+                                            match serializer.serialize_value(&rec) {
+                                                Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
+                                                Err(_) => SerializeResult::Failure(key_name)
+                                            }
+                                        }
+                                        Err(e) => {
+                                            panic!("Error reading previously attributed key {}: {:?}", &key_name, e);
+                                        }
+                                    }
+                                } else {
+                                    log::info!("hit size limit: limit {} total {}", state.read_limit, state.read_total);
+                                    // report the key, but with no data
+                                    let rec = PddbKeyRecord {
+                                        name: key_name.to_string(),
+                                        len: attr.len,
+                                        reserved: attr.reserved,
+                                        age: attr.age,
+                                        index: attr.index,
+                                        basis: attr.basis,
+                                        data: None,
+                                    };
+                                    let (prebuf, buf) = buf.split_at_mut(size_of::<u32>()*2);
+                                    let mut serializer = BufferSerializer::new(buf);
+                                    let len = size_of::<ArchivedPddbKeyRecord>();
+                                    match serializer.serialize_value(&rec) {
+                                        Ok(pos) => SerializeResult::Success(pos, len, serializer.into_inner(), key_name, prebuf),
+                                        Err(_) => SerializeResult::Failure(key_name)
+                                    }
+                                }
+                            } else {
+                                // no more keys; we're done.
+                                finished = true;
+                                break;
+                            };
+
+                        #[cfg(feature="perfcounter")]
+                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_NONE, 6, std::line!());
+                        match ser_result {
+                            SerializeResult::Success(pos, len, sbuf, _key_name, pre_buf) => {
+                                log::debug!("packing message of {}({})", len + pos, pos);
+                                // data can fit, copy it into the buffer.
+                                state.buf_starting_key_index += 1;
+                                header.len += 1;
+                                // read length increment was handled when the data was copied into the serialization buffer.
+                                pre_buf[..4].copy_from_slice(
+                                    //&(sbuf.len() as u32).to_le_bytes()
+                                    &((len + pos) as u32).to_le_bytes()
+                                );
+                                pre_buf[4..8].copy_from_slice(
+                                    &(pos as u32).to_le_bytes()
+                                );
+                                (_, buf) = sbuf.split_at_mut(len + pos);
+                            }
+                            SerializeResult::Failure(key_name) => {
+                                log::debug!("ran out of space filling buffer, pushing {} back into the queue", key_name);
+                                // data didn't fit, quit with finished = false;
+                                state.key_list.push(key_name);
+                                break;
+                            }
+                        }
+                        #[cfg(feature="perfcounter")]
+                        pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 6, std::line!());
+                    }
+                    if finished {
+                        header.code = PddbBulkReadCode::Last as u32;
+                    } else {
+                        header.code = PddbBulkReadCode::Streaming as u32;
+                    }
+                    header_buf.copy_from_slice(
+                        header.deref()
+                    );
+                    // update the last access time
+                    state.last_time = tt.elapsed_ms();
+                } else {
+                    log::warn!("This should be unreachable, the state should always be initialized by this point");
+                }
+                if finished {
+                    bulkread_state = None;
+                }
+                #[cfg(feature="perfcounter")]
+                pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_ENDBLOCK, 5, std::line!());
+            }
+
             Opcode::SeekKeyStd => {
                 let fd = (msg.body.id() >> 16) & 0xffff;
                 if let Some(scalar) = msg.body.scalar_message() {
@@ -1930,4 +2159,29 @@ pub(crate) fn heap_usage() -> usize {
             0
          },
     }
+}
+
+struct BulkReadState {
+    /// API token
+    token: [u32; 4],
+    /// determines if the basis was specified
+    is_basis_specified: bool,
+    /// the current basis, if specified
+    basis: String,
+    /// the dictionary to read
+    dict: String,
+    /// list of keys in the dictionary. Entries are removed as they are serialized.
+    key_list: Vec::<String>,
+    /// total number of keys to send (e.g. initial key_list.len())
+    total_keys: usize,
+    /// Each buffer can hold multiple keys; a single buffer may be re-used several
+    /// times to send a large dictionary with many keys. This tracks the starting index
+    /// of the current buffer's set of keys.
+    buf_starting_key_index: usize,
+    /// Total limit of bulk read data to return
+    read_limit: usize,
+    /// Amount of data read so far
+    read_total: usize,
+    /// last interaction time, so we can timeout the state in the case that the client is misbehaved
+    last_time: u64,
 }
