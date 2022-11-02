@@ -57,6 +57,7 @@ struct DevicePrefs {
     up: Manager,
     modals: modals::Modals,
     gam: gam::Gam,
+    kbd: keyboard::Keyboard,
 }
 
 impl PrefHandler for DevicePrefs {
@@ -105,6 +106,7 @@ impl DevicePrefs {
             up: Manager::new(),
             modals: modals::Modals::new(&xns).unwrap(),
             gam: gam::Gam::new(&xns).unwrap(),
+            kbd: keyboard::Keyboard::new(&xns).unwrap(),
         }
     }
 
@@ -254,7 +256,11 @@ impl DevicePrefs {
         
         let new_result = mappings[new_result.as_str()];
 
-        Ok(self.up.set_keyboard_layout(new_result)?)
+        self.up.set_keyboard_layout(new_result)?;
+
+        self.kbd.set_keymap(keyboard::KeyMap::from(new_result)).unwrap();
+
+        Ok(())
     }
 }
 
