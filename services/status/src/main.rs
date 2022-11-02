@@ -83,10 +83,7 @@ pub(crate) enum StatusOpcode {
     BatteryDisconnect,
     /// for returning wifi stats
     WifiStats,
-
-    /// Raise the wifi menu
-    WifiMenu,
-
+    
     /// Raise the preferences menu
     Preferences,
     Quit,
@@ -857,10 +854,6 @@ fn wrapped_main() -> ! {
                     xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
                 };
                 wifi_status = WlanStatus::from_ipc(buffer.to_original::<com::WlanStatusIpc, _>().unwrap());
-            },
-            Some(StatusOpcode::WifiMenu) => {
-                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
-                gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
             },
             Some(StatusOpcode::Preferences) => {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
