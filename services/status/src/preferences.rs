@@ -1,7 +1,7 @@
 use crate::wifi;
 use locales::t;
 use num_traits::*;
-use std::fmt::Display;
+use std::{fmt::Display, collections::HashMap};
 use userprefs::Manager;
 
 pub trait PrefHandler {
@@ -17,6 +17,7 @@ enum DevicePrefsOp {
     ConnectKnownNetworksOnBoot,
     AutobacklightOnBoot,
     AutobacklightTimeout,
+    KeyboardLayout,
     WLANMenu,
 }
 
@@ -27,6 +28,7 @@ impl Display for DevicePrefsOp {
             Self::AutobacklightTimeout => write!(f, "Autobacklight timeout"),
             Self::ConnectKnownNetworksOnBoot => write!(f, "Connect to known networks on boot"),
             Self::RadioOnOnBoot => write!(f, "Enable WiFi on boot"),
+            Self::KeyboardLayout => write!(f, "Keyboard layout"),
             Self::WLANMenu => write!(f, "WLAN settings"),
         }
     }
@@ -114,6 +116,7 @@ impl DevicePrefs {
             ConnectKnownNetworksOnBoot,
             AutobacklightOnBoot,
             AutobacklightTimeout,
+            KeyboardLayout,
             WLANMenu,
         ]
     }
@@ -124,6 +127,7 @@ impl DevicePrefs {
             DevicePrefsOp::RadioOnOnBoot => self.radio_on_on_boot(),
             DevicePrefsOp::ConnectKnownNetworksOnBoot => self.connect_known_networks_on_boot(),
             DevicePrefsOp::AutobacklightTimeout => self.autobacklight_timeout(),
+            DevicePrefsOp::KeyboardLayout => self.keyboard_layout(),
             DevicePrefsOp::WLANMenu => self.wlan_menu(),
         };
 
@@ -227,6 +231,30 @@ impl DevicePrefs {
         self.gam.raise_menu(gam::WIFI_MENU_NAME).unwrap();
 
         Ok(())
+    }
+
+    fn keyboard_layout(&mut self) -> Result<(), DevicePrefsError> {
+        let kl = self.up.keyboard_layout_or_default()?;
+
+        let mut mappings = HashMap::new();
+
+        mappings.insert("QWERTY", 0 as usize);
+        mappings.insert("AZERTY", 1);
+        mappings.insert("QWERTZ", 2);
+        mappings.insert("Dvorak", 3);
+
+        self.modals
+            .add_list(mappings.keys().cloned().collect())
+            .unwrap();
+
+        let new_result = self
+            .modals
+            .get_radiobutton(&format!("Current layout: {}", keyboard::KeyMap::from(kl)))
+            .unwrap();
+        
+        let new_result = mappings[new_result.as_str()];
+
+        Ok(self.up.set_keyboard_layout(new_result)?)
     }
 }
 
