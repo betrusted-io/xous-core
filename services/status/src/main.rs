@@ -6,8 +6,6 @@ use keyboard::KeyMap;
 use mainmenu::*;
 mod appmenu;
 use appmenu::*;
-mod kbdmenu;
-use kbdmenu::*;
 mod app_autogen;
 mod time;
 mod ecup;
@@ -58,16 +56,11 @@ pub(crate) enum StatusOpcode {
     SubmenuPddb,
     /// Raise the App menu
     SubmenuApp,
-    /// Raise the Keyboard layout menu
-    SubmenuKbd,
 
     /// Raise the Shellchat app
     SwitchToShellchat,
     /// Switch to an app
     SwitchToApp,
-
-    /// Set the keyboard map
-    SetKeyboard,
 
     /// Prepare for a backup
     PrepareBackup,
@@ -346,14 +339,12 @@ fn wrapped_main() -> ! {
     let status_cid = xous::connect(status_sid).unwrap();
     let menu_manager = create_main_menu(keys.clone(), main_menu_sid, status_cid, &com, time_cid);
     create_app_menu(xous::connect(status_sid).unwrap());
-    let kbd_mgr = xous::create_server().unwrap();
-    let kbd_menumatic = create_kbd_menu(xous::connect(status_sid).unwrap(), kbd_mgr);
-    let kbd = keyboard::Keyboard::new(&xns).unwrap();
+    let kbd = Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap()));
 
     // ---------------------------- Background processes that claim contexts
     // must be upstream of the update check, because we need to occupy the keyboard
     // server slot to prevent e.g. a keyboard logger from taking our passwords!
-    kbd.register_observer(
+    kbd.lock().unwrap().register_observer(
         SERVER_NAME_STATUS,
         StatusOpcode::Keypress.to_u32().unwrap() as usize,
     );
@@ -377,12 +368,12 @@ fn wrapped_main() -> ! {
     It'll wait until PDDB is ready to load stuff off the preference
     dictionary.
     */
+
+    let prefs_restore_kbd = kbd.clone();
     std::thread::spawn(move || {
-        let xns = xous_names::XousNames::new().unwrap();
         let pddb_poller = pddb::PddbMountPoller::new();
         let prefs = prefs_thread_clone.lock().unwrap();
         let netmgr = net::NetManager::new();
-        let kbd = keyboard::Keyboard::new(&xns).unwrap();
 
         loop {
             if !pddb_poller.is_mounted_nonblocking() {
@@ -424,7 +415,7 @@ fn wrapped_main() -> ! {
 
             let stored_keymap = keyboard::KeyMap::from(all_prefs.keyboard_layout);
 
-            match kbd.set_keymap(stored_keymap) {
+            match prefs_restore_kbd.lock().unwrap().set_keymap(stored_keymap) {
                 Err(error) => log::error!("cannot set keymap {:?}: {:?}", stored_keymap, error),
                 Ok(()) => (),
             };
@@ -498,7 +489,7 @@ fn wrapped_main() -> ! {
                     let map_deserialize: BackupKeyboardLayout = header.kbd_layout.into();
                     let map: KeyMap = map_deserialize.into();
                     log::info!("Keyboard layout set to {:?} by restore process.", map);
-                    kbd.set_keymap(map).ok();
+                    kbd.lock().unwrap().set_keymap(map).ok();
 
                     let backup_dna = u64::from_le_bytes(header.dna);
                     if backup_dna != llio.soc_dna().unwrap() {
@@ -1054,19 +1045,6 @@ fn wrapped_main() -> ! {
                 ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
                 gam.raise_menu(gam::APP_MENU_NAME).expect("couldn't raise App submenu");
             },
-            Some(StatusOpcode::SubmenuKbd) => {
-                log::debug!("getting keyboard map");
-                let map = kbd.get_keymap().expect("couldn't get key mapping");
-                log::info!("setting keymap index to {:?}", map);
-                kbd_menumatic.set_index(map.into());
-                log::debug!("raising keyboard menu");
-                ticktimer.sleep_ms(100).ok(); // yield for a moment to allow the previous menu to close
-                gam.raise_menu(gam::KBD_MENU_NAME).expect("couldn't raise keyboard layout submenu");
-            },
-            Some(StatusOpcode::SetKeyboard) => msg_scalar_unpack!(msg, code, _, _, _, {
-                let map = keyboard::KeyMap::from(code);
-                kbd.set_keymap(map).expect("couldn't set keyboard mapping");
-            }),
             Some(StatusOpcode::SwitchToShellchat) => {
                 ticktimer.sleep_ms(100).ok();
                 sec_notes.lock().unwrap().remove(&"current_app".to_string());
@@ -1250,7 +1228,7 @@ fn wrapped_main() -> ! {
                 metadata.ec_ver = com.get_ec_sw_tag().unwrap().into();
                 metadata.op = BackupOp::Backup;
                 metadata.dna = llio.soc_dna().unwrap().to_le_bytes();
-                let map = kbd.get_keymap().expect("couldn't get key mapping");
+                let map = kbd.lock().unwrap().get_keymap().expect("couldn't get key mapping");
                 let map_serialize: BackupKeyboardLayout = map.into();
                 metadata.kbd_layout = map_serialize.into();
                 // the backup process is coded to accept the option of no checksums, but the UX currently
