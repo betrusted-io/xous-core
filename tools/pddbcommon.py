@@ -282,7 +282,7 @@ class BasisDicts:
             pp = v2p[dict_header_vaddr]
             self.keys = {}
             try:
-                logging.debug('dict decrypt @ pp {:x}, nonce: {}'.format(pp, disk[pp:pp+12].hex()))
+                logging.debug('dict decrypt @ pp {:x} va {:x}, nonce: {}'.format(pp, dict_header_vaddr, disk[pp:pp+12].hex()))
                 cipher = AES_GCM_SIV(key, disk[pp:pp+12])
                 pt_data = cipher.decrypt(disk[pp+12:pp+PAGE_SIZE], basis_aad(name, dna=dna))
                 # print('raw pt_data: {}'.format(pt_data[:127].hex()))
