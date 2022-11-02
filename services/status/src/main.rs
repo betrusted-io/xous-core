@@ -223,8 +223,6 @@ fn wrapped_main() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut netmgr = net::NetManager::new();
-    
-    
 
     // screensize is controlled by the GAM, it's set in main.rs near the top
     let screensize = gam
@@ -380,22 +378,24 @@ fn wrapped_main() -> ! {
     dictionary.
     */
     std::thread::spawn(move || {
+        let xns = xous_names::XousNames::new().unwrap();
         let pddb_poller = pddb::PddbMountPoller::new();
         let prefs = prefs_thread_clone.lock().unwrap();
         let netmgr = net::NetManager::new();
-
-        let all_prefs = match prefs.all() {
-            Ok(p) => p,
-            Err(error) => {
-                log::error!("cannot read preference store: {:?}", error);
-                return;
-            }
-        };
+        let kbd = keyboard::Keyboard::new(&xns).unwrap();
 
         loop {
             if !pddb_poller.is_mounted_nonblocking() {
                 continue
             }
+
+            let all_prefs = match prefs.all() {
+                Ok(p) => p,
+                Err(error) => {
+                    log::error!("cannot read preference store: {:?}", error);
+                    return;
+                }
+            };
             
             log::debug!("pddb ready, loading preferences now!");
             
@@ -421,6 +421,13 @@ fn wrapped_main() -> ! {
                 log::error!("cannot set autobacklight status: {:?}", error);
                 xous::Result::Ok
             });
+
+            let stored_keymap = keyboard::KeyMap::from(all_prefs.keyboard_layout);
+
+            match kbd.set_keymap(stored_keymap) {
+                Err(error) => log::error!("cannot set keymap {:?}: {:?}", stored_keymap, error),
+                Ok(()) => (),
+            };
             
             break
         }
