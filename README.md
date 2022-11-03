@@ -105,10 +105,13 @@ Generally, one can create an image for hardware using the following command:
 cargo xtask app-image
 ```
 
-And it will pull from the default soc.svd configuration. The default config
-can be seen in the [utralib/Cargo.tom](./utralib/Cargo.toml) file, in the
-`default = [...]` arguments seen at the bottom of the file. If you have
-built your own custom soc.svd file, the most convenient way to update
+And it will pull from the default soc.svd configuration.
+
+The currently selected config is set by the constant `PRECURSOR_SOC_VERSION`
+in [xtask/src/main.rs](./xtask/src/main.rs); it is one of the first constants
+near the top.
+
+If you have built your own custom soc.svd file, the most convenient way to update
 to this is to simply replace the file referenced in the default with yours,
 and then run `cargo build` inside the `utralib` directory (not in the Xous
 root -- the `build` command must happen inside the directory to force a
@@ -117,6 +120,10 @@ in a complaint when you run `xtask` that your local tree does not match what
 is checked into `git`; if you are building from your own configuration,
 that is correct, and thus you should add `--no-verify` to your `xtask` command
 to suppress the check.
+
+Note that adding a full extra custom gitrev is more involved, it involves
+editing the [utralib/Cargo.toml](./utralib/Cargo.toml) and [utralib/build.rs](./utralib/build.rs)
+to reference your new artifact as a brand new feature flag.
 
 The resulting images are in your target directory (typically `target/riscv32imac-unknown-xous-elf/release/`)
 with the names `xous.img` (for the kernel) and `loader.bin` (for its bootloader). The corresponding

@@ -285,6 +285,11 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Fix bug in device auto-shutdown; COM/LLIO method deprecated as susres method does the correct sequencing. This should help with some of the "insert paperclip" scenarios after updating SoC, hopefully.
 - Updated VexRiscv core to the latest version. STATIC branch prediction enabled and slightly faster I$ gives a small performance bump. Also fixes a bug with cache flushing that was causing coherence problems with the PDDB.
 - Fix tricky loader bug that was causing subtle issues with various build configurations
+- Suppress main menu from popping up before the PDDB is mounted (resolves race conditions based on PDDB-stored keys)
+- Optimize PDDB bulk key listing performance
+- Add French language locale (thanks @tmarble!)
+- Add `mtxcli` application, a basic Matrix chat interface (currently just https-secured, not E2EE). Thanks again @tmarble for the contribution!
+- Several infrastructure changes/improvements to how utralib and crating works
 
 ## Roadmap
 - Lots of testing and bug fixes
