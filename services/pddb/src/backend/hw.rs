@@ -373,6 +373,7 @@ impl PddbOs {
     /// exactly to the first entry in the page table
     pub(crate) fn patch_data(&self, data: &[u8], offset: u32) {
         log::trace!("patch offset: {:x} len: {:x}", offset, data.len());
+        // log::trace!("patch bef: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize + self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
         assert!(data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(), "attempt to store past disk boundary");
         self.spinor.patch(
             self.pddb_mr.as_slice(),
@@ -380,6 +381,8 @@ impl PddbOs {
             &data,
             offset + self.data_phys_base.as_u32(),
         ).expect("couldn't write to data region in the PDDB");
+        //log::trace!("patch aft: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize + self.data_phys_base.as_usize()..offset as usize + self.data_phys_base.as_usize() + 48]);
+        //log::trace!("patch end: {:x?}", &self.pddb_mr.as_slice::<u8>()[offset as usize + self.data_phys_base.as_usize() + 4048..offset as usize + self.data_phys_base.as_usize() + 4096])
     }
     fn patch_pagetable(&self, data: &[u8], offset: u32) {
         if cfg!(feature = "mbbb") {
@@ -1620,6 +1623,7 @@ impl PddbOs {
                 msg: &data,
             }
         ).expect("couldn't encrypt data");
+        // log::trace!("calling patch. nonce {:x?}, ct {:x?}, data {:x?}", nonce.as_slice(), &ciphertext[..32], &data[..32]);
         self.patch_data(&[nonce.as_slice(), &ciphertext].concat(), pp.page_number() * PAGE_SIZE as u32);
     }
 

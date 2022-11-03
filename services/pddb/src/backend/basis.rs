@@ -1570,6 +1570,7 @@ impl BasisCacheEntry {
                         }
                     }
                     // generate nonce and write out
+                    log::debug!("patching pp {:x?} with aad {:x?}, data {:x?}", pp, self.aad, &page[..256]);
                     hw.data_encrypt_and_patch_page(&self.cipher, &self.aad, &mut page, &pp);
 
                     // 4. Check for dirty keys, if there are still some, update vpage_num to target them; otherwise
@@ -1594,6 +1595,7 @@ impl BasisCacheEntry {
             }
             Ok(())
         } else {
+            log::error!("dict sync could not happen, dictionary name invalid!");
             Err(Error::new(ErrorKind::NotFound, "dict_sync called with an invalid dictionary name"))
         }
     }
