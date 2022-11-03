@@ -59,7 +59,7 @@ impl Manager {
         match self.pddb_handle.get(
             PREFS_DICT,
             key,
-            Some(".System"),
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS),
             true,
             true,
             None,
@@ -77,7 +77,7 @@ impl Manager {
         match self.pddb_handle.get(
             PREFS_DICT,
             key,
-            Some(".System"),
+            Some(pddb::PDDB_DEFAULT_SYSTEM_BASIS),
             true,
             true,
             None,
