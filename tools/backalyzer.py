@@ -37,7 +37,7 @@ def main():
     KEY_PAGES = 1
     global PAGE_SIZE
     global VPAGE_SIZE
-    MAX_DICTS = 16384
+    MAX_DICTS = 16383
     # this is for an older set of CI tests from the pddbg.py script, that are not set up for this implementation
     set_ci_tests_flag(False)
 

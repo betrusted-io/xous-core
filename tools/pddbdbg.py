@@ -97,7 +97,7 @@ def main():
     KEY_PAGES = 1
     global PAGE_SIZE
     global VPAGE_SIZE
-    MAX_DICTS = 16384
+    MAX_DICTS = 16383
 
     with open(imagefile, 'rb') as img_f:
         raw_img = img_f.read()
