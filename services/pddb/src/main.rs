@@ -662,6 +662,9 @@ fn wrapped_main() -> ! {
                     if !pddb_os.rootkeys_initialized() {
                         // can't mount if we have no root keys
                         log::info!("{}PDDB.SKIPMOUNT,{}", xous::BOOKEND_START, xous::BOOKEND_END);
+                        // allow the main menu to be used in this case
+                        let gam = gam::Gam::new(&xns).unwrap();
+                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
                         xous::return_scalar2(msg.sender, 1, 0).expect("could't return scalar");
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
