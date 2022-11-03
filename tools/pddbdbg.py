@@ -20,6 +20,9 @@ def main():
         "--renode", required=False, help="Override flex-size settings and read a Renode bin file", action="store_true"
     )
     parser.add_argument(
+        "--smalldb", required=False, help="Override default size of PDDB and set it to 4MiB (for images built to that size only)", action="store_true"
+    )
+    parser.add_argument(
         "--basis", type=str, help="Extra Bases to unlock, as `name:pass`. Each additional basis requires another --basis separator. Note that : is not legal to use in a Basis name.", action="append", nargs="+"
     )
     parser.add_argument(
@@ -57,7 +60,10 @@ def main():
             keyrom = key_f.read()
             with open(imagefile, 'rb') as img_f:
                 raw_img = img_f.read()
-                raw_img = raw_img[0x01D80000:0x07F80000]
+                if args.smalldb:
+                    raw_img = raw_img[0x01D80000:0x1D8_0000 + 1024 * 1024 * 4]
+                else:
+                    raw_img = raw_img[0x01D80000:0x07F80000]
                 keys = extract_keys(keyrom, raw_img, args.pin, basis_credentials)
     else:
         if args.name == None:
@@ -102,7 +108,10 @@ def main():
     with open(imagefile, 'rb') as img_f:
         raw_img = img_f.read()
         if args.renode:
-            raw_img = raw_img[0x01D80000:0x07F80000]
+            if args.smalldb:
+                raw_img = raw_img[0x01D80000:0x1D8_0000 + 1024 * 1024 * 4]
+            else:
+                raw_img = raw_img[0x01D80000:0x07F80000]
         pddb_len = len(raw_img)
         pddb_size_pages = pddb_len // PAGE_SIZE
         logging.info("Disk size: 0x{:x}".format(pddb_len))

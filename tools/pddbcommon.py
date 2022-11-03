@@ -305,8 +305,8 @@ class BasisDicts:
             except ValueError:
                 logging.error("\n") # make some whitespace so this stands out in the logs
                 logging.error("**** basisdicts: encountered an invalid dict root record. Data loss may have occurred!")
-                logging.error("**** couldn't decrypt vpage @ {:x} ppage @ {:x} in basis {}, dna {}".format(dict_header_vaddr, v2p[dict_header_vaddr], name, dna))
-                logging.error("******  partial dump: {}\n".format(disk[pp:pp + 64].hex()))
+                logging.error("**** couldn't decrypt vpage @ {:x} ppage @ {:x} in basis {}, aad {}".format(dict_header_vaddr, v2p[dict_header_vaddr], name, basis_aad(name, dna=dna).hex()))
+                logging.error("******  partial dump: {}...{} len {}\n".format(disk[pp:pp + 48].hex(), disk[pp + 4048:pp + 4096].hex(), len(disk[pp:pp + 4096])))
                 self.valid = False
 
             if self.num_keys > 0:
