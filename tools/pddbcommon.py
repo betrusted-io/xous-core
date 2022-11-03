@@ -277,6 +277,7 @@ class BasisDicts:
         dict_header_vaddr = self.DICT_VSTRIDE * (index + 1)
         self.index = index
         self.vaddr = dict_header_vaddr
+        self.num_keys = 0
         if dict_header_vaddr in v2p:
             self.valid = True
             pp = v2p[dict_header_vaddr]
@@ -302,7 +303,11 @@ class BasisDicts:
                 logging.info("decrypt dict '{}' with {} keys and {} free_key_index".format(self.name, self.num_keys, self.free_key_index))
                 logging.debug("dict header len: {}".format(i-4)) # subtract 4 because of the journal
             except ValueError:
-                logging.error("basisdicts: couldn't decrypt vpage @ {:x} ppage @ {:x}".format(dict_header_vaddr, v2p[dict_header_vaddr]))
+                logging.error("\n") # make some whitespace so this stands out in the logs
+                logging.error("**** basisdicts: encountered an invalid dict root record. Data loss may have occurred!")
+                logging.error("**** couldn't decrypt vpage @ {:x} ppage @ {:x} in basis {}, dna {}".format(dict_header_vaddr, v2p[dict_header_vaddr], name, dna))
+                logging.error("******  partial dump: {}\n".format(disk[pp:pp + 64].hex()))
+                self.valid = False
 
             if self.num_keys > 0:
                 keys_found = 0
@@ -708,17 +713,23 @@ def decode_fscb(img, keys, FSCB_LEN_PAGES=2, dna=DNA):
         fscb_start = None
         pg = 0
         for page in pages:
+            logging.debug("FSCB page {}: {}".format(pg, page[:40].hex()))
             if bytearray(page[:32]) == bytearray([0xff] * 32):
+                logging.debug("  ...page is blank")
                 # page is blank
                 pass
             elif bytearray(page[:16]) == bytearray([0xff] * 16):
+                logging.debug("  ...page is spaceupdate")
                 space_update.append(page[16:])
             else:
                 if fscb_start == None:
+                    logging.debug("  ...page is start of FSCB")
                     fscb_start = pg
+                else:
+                    logging.debug("  ...page is more FSCB data")
             pg += 1
 
-        if fscb_start:
+        if fscb_start is not None:
             logging.debug("Found FSCB at {:x}".format(fscb_start))
             fscb_enc = img[fscb_start * 4096 : (fscb_start + FSCB_LEN_PAGES) * 4096]
             # print("data: {}".format(fscb_enc.hex()))
