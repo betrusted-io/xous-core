@@ -680,13 +680,13 @@ fn wrapped_main() -> ! {
                             },
                             PasswordState::Uninit => {
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
-                                    is_mounted.store(true, Ordering::SeqCst);
                                     for requester in mount_notifications.drain(..) {
                                         xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                                     }
                                     assert!(mount_notifications.len() == 0, "apparently I don't understand what drain() does");
                                     log::info!("{}PDDB.MOUNTED,{}", xous::BOOKEND_START, xous::BOOKEND_END);
                                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                                    is_mounted.store(true, Ordering::SeqCst);
                                 } else {
                                     xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                                 }
