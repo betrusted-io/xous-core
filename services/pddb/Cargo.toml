@@ -88,4 +88,6 @@ hwtest = []
 # routines to help with performance profiling of the PDDB in hosted mode
 pddb-flamegraph = ["hex"]
 perfcounter = ["perflib"]
+# make the PDDB very small (4MiB). Note that booting a device with an incompatible `smalldb` setting will break the PDDB image. Use with caution.
+smalldb = []
 default = ["mbbb"]
