@@ -701,6 +701,10 @@ fn wrapped_main() -> ! {
                                     failcount.min(u32::MAX as u64) as usize
                                 ).expect("couldn't return scalar"),
                         }
+                        // get a handle to the GAM and inform it that main menu should be allowed. The handle is dropped when this routine finishes.
+                        let gam = gam::Gam::new(&xns).unwrap();
+                        gam.allow_mainmenu().expect("coudln't allow main menu activation");
+                        // setup the heap
                         initial_heap = heap_usage();
                         latest_heap = initial_heap;
                         latest_cache = basis_cache.cache_size();

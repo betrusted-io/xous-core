@@ -100,6 +100,8 @@ pub(crate) struct ContextManager {
     /// for internal generation of deface states
     pub trng: trng::Trng,
     tt: ticktimer_server::Ticktimer,
+    /// used to suppress the main menu from activating until the boot PIN has been requested
+    allow_mainmenu: bool,
 }
 impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -122,6 +124,7 @@ impl ContextManager {
             main_menu_app_token: None,
             trng: trng::Trng::new(&xns).expect("couldn't connect to trng"),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
+            allow_mainmenu: false,
         }
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
@@ -582,6 +585,9 @@ impl ContextManager {
         }
         Err(xous::Error::ServerNotFound)
     }
+    pub(crate) fn allow_mainmenu(&mut self) {
+        self.allow_mainmenu = true;
+    }
     pub(crate) fn key_event(&mut self, keys: [char; 4],
         gfx: &graphics_server::Gfx,
         canvases: &mut HashMap<Gid, Canvas>,
@@ -591,13 +597,19 @@ impl ContextManager {
         if keys[0] == '∴' {
             if let Some(context) = self.get_context_by_token(self.focused_context.unwrap()) {
                 if context.layout.behavior() == LayoutBehavior::App {
-                    if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
-                        // set the menu to the active context
-                        match self.activate(gfx, canvases, menu_token, false) {
-                            Ok(_) => (),
-                            Err(_) => log::warn!("Couldn't raise menu, user will have to try again."),
+                    log::info!("allow_mainmenu: {:?}", self.allow_mainmenu);
+                    if self.allow_mainmenu {
+                        if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
+                            // set the menu to the active context
+                            match self.activate(gfx, canvases, menu_token, false) {
+                                Ok(_) => (),
+                                Err(_) => log::warn!("Couldn't raise menu, user will have to try again."),
+                            }
+                            // don't pass the initial key hit back to the menu app, just eat it and return
+                            return;
                         }
-                        // don't pass the initial key hit back to the menu app, just eat it and return
+                    } else {
+                        // eat the key and return if it is hit before the boot PIN was entered
                         return;
                     }
                 }

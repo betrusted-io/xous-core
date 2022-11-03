@@ -102,6 +102,13 @@ impl Gam {
         ).map(|_|())
     }
 
+    /// Inform the GAM that the main menu can be activated. This blocks until the message has been delivered to the GAM.
+    pub fn allow_mainmenu(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AllowMainMenu.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_|())
+    }
+
     pub fn powerdown_request(&self) -> Result<bool, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::PowerDownRequest.to_usize().unwrap(), 0, 0, 0, 0))?;
