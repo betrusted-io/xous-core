@@ -692,6 +692,7 @@ namespace Antmicro.Renode.Peripherals.SPI.Betrusted
                 tmp_byte[0] = val;
                 InternalBackingFile.Seek(position, SeekOrigin.Begin);
                 InternalBackingFile.Write(tmp_byte, 0, 1);
+                InternalBackingFile.Flush();
             }
         }
 
