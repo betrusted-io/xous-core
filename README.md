@@ -23,6 +23,15 @@ from source.  It consists of the following projects:
 - Some system packages are needed, which can be installed with `sudo apt install libssl-dev libxkbcommon-dev` or similar
 - If you receive an error about `feature resolver is required`, try installing a newer version of `rustc` and `cargo` via [rustup](https://rustup.rs)
 
+## Local-vs-crates.io Verification
+By default the `xtask` resolver runs a check to confirm that your local files
+match the ones referenced in `crates.io`. For a handful of core crates, the
+build preferentially runs from what is on `crates.io`, so local changes have
+no effect until they are pushed as an update to an existing crate. If you see
+an error complaining about local source files not being published, make sure
+you have the correct patches in place in your top level `Cargo.toml` file,
+and bypass the check with `--no-verify`.
+
 ## Quickstart using Hosted Mode
 
 You can try out Xous in a "hosted mode" wherein programs are compiled
@@ -84,15 +93,32 @@ Betrusted core. These addresses will change as hardware is modified,
 so if you distribute a modified Betrusted core, you should be sure
 to distribute the `.svd` file.
 
-We have included a reference version of the gateware and its SVD
-file in the `precursors` directory, so you can compile a gateware
-for the reference image using this command:
+The [UTRA](./utralib/README.md) abstracts the details of the register
+locations, by wrapping them in logical names that don't change.
+For Precursor, the SVD files are tracked inside `utralib/precursor/soc-<gitref>.svd`.
+Since each soc.svd can potentially change with a git reference, a gitref
+is coded into the filename by convention.
+
+Generally, one can create an image for hardware using the following command:
 
 ```sh
-cargo xtask hw-image precursors/soc.svd
+cargo xtask app-image
 ```
+
+And it will pull from the default soc.svd configuration. The default config
+can be seen in the [utralib/Cargo.tom](./utralib/Cargo.toml) file, in the
+`default = [...]` arguments seen at the bottom of the file. If you have
+built your own custom soc.svd file, the most convenient way to update
+to this is to simply replace the file referenced in the default with yours,
+and then run `cargo build` inside the `utralib` directory (not in the Xous
+root -- the `build` command must happen inside the directory to force a
+regeneration of the generated UTRA bindings). This will likely result
+in a complaint when you run `xtask` that your local tree does not match what
+is checked into `git`; if you are building from your own configuration,
+that is correct, and thus you should add `--no-verify` to your `xtask` command
+to suppress the check.
 
 The resulting images are in your target directory (typically `target/riscv32imac-unknown-xous-elf/release/`)
 with the names `xous.img` (for the kernel) and `loader.bin` (for its bootloader). The corresponding
-gateware is in `precursors/soc_csr.bin`. These can be written to your
+gateware is in `precursors/soc_csr-<gitref>.bin`. These can be written to your
 device by following the [update guide](https://github.com/betrusted-io/betrusted-wiki/wiki/Updating-Your-Device).
