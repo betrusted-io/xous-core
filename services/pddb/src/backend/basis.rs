@@ -741,7 +741,9 @@ impl BasisCache {
                             index: kcache.descriptor_index,
                         })
                     } else {
-                        return Err(Error::new(ErrorKind::NotFound, "key not found"));
+                        // this is not a hard error, it just means that the key wasn't in this basis.
+                        // that's alright, it could be in one of the other ones!
+                        continue;
                     }
                 }
             }
