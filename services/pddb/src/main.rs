@@ -1515,11 +1515,24 @@ fn wrapped_main() -> ! {
                         pddb_os.perf_entry(FILE_ID_SERVICES_PDDB_SRC_MAIN, perflib::PERFMETA_STARTBLOCK, 6, std::line!());
                         let ser_result: SerializeResult =
                             if let Some(key_name) = state.key_list.pop() {
-                                let attr = basis_cache.key_attributes(&mut pddb_os,
+                                let attr = match basis_cache.key_attributes(&mut pddb_os,
                                     &state.dict,
                                     &key_name,
                                     if state.is_basis_specified{Some(&state.basis)} else {None}
-                                ).expect("Key went missing during bulk read"); // could be a concurrent process mutating. We don't handle this; flag with a panic.
+                                ) {
+                                    Ok(attr) => attr,
+                                    Err(e) => {
+                                        modals.show_notification(
+                                            &format!("Error: key not found during bulk read:\n{:?}\n{:?}:{}:{}",
+                                                e,
+                                                if state.is_basis_specified{Some(&state.basis)} else {None},
+                                                &state.dict,
+                                                &key_name,
+                                                ),
+                                            None).ok();
+                                        continue;
+                                    }
+                                };
                                 if attr.len < state.read_limit - state.read_total {
                                     let mut d = vec![0u8; attr.len];
                                     match basis_cache.key_read(
