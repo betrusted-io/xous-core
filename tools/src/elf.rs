@@ -209,7 +209,7 @@ pub fn process_program(b: &[u8]) -> Result<ProgramDescription, ElfReadError> {
                 s.address()
             );
             continue;
-        } else if text_offset == 0 && s.size() != 0 {
+        } else if text_offset == 0 && (s.address() != 0 || s.size() != 0) {
             text_offset = s.address() as u32;
             text_size += s.size() as u32;
         } else {
