@@ -633,41 +633,6 @@ fn wrapped_main() -> ! {
     #[cfg(any(feature="precursor", feature="renode"))]
     llio.clear_wakeup_alarm().unwrap(); // this is here to clear any wake-up alarms that were set by a prior coldboot command
 
-    // spawn a thread to auto-mount the PDDB
-    let _ = thread::spawn({
-        move || {
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            tt.sleep_ms(2000).unwrap(); // a brief pause, to allow the other startup bits to finish running
-            loop {
-                let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
-                if no_retry_failure {
-                    // this includes both successfully mounted, and user abort of mount attempt
-                    break;
-                } else {
-                    // this indicates system was guttered due to a retry failure
-                    let xns = xous_names::XousNames::new().unwrap();
-                    let susres = susres::Susres::new_without_hook(&xns).unwrap();
-                    let llio = llio::Llio::new(&xns);
-                    if ((llio.adc_vbus().unwrap() as u32) * 503) < 150_000 {
-                        // try to force suspend if possible, so that users who are just playing around with
-                        // the device don't run the battery down accidentally.
-                        susres.initiate_suspend().ok();
-                        tt.sleep_ms(1000).unwrap();
-                        let modals = modals::Modals::new(&xns).unwrap();
-                        modals.show_notification(
-                            &t!("login.fail", xous::LANG).replace("{fails}", &count.to_string()),
-                            None
-                        ).ok();
-                    } else {
-                        // otherwise force a reboot cycle to slow down guessers
-                        susres.reboot(true).expect("Couldn't reboot after too many failed password attempts");
-                        tt.sleep_ms(5000).unwrap();
-                    }
-                }
-            }
-        }
-    });
-
     pump_run.store(true, Ordering::Relaxed); // start status thread updating
     loop {
         let msg = xous::receive_message(status_sid).unwrap();

@@ -8,7 +8,7 @@ use graphics_server::*;
 use crate::{LayoutApi, LayoutBehavior};
 
 use crate::contexts::MISC_CONTEXT_DEFAULT_TRUST;
-const TRUST_OFFSET: u8 = 1;
+const TRUST_OFFSET: u8 = 16;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct ModalLayout {

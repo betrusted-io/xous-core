@@ -13,6 +13,13 @@
         "ja": "パスワードを認証失敗でした。\n\nもう一度実行しください。",
         "zh": "密码错误。"
     },
+    "pddb.waitmount": {
+        "en": "Mounting PDDB, please wait...",
+        "en-tts": "Mounting PDDB, please wait...",
+        "fr": "Montage de PDDB, veuillez patienter...*MT*",
+        "ja": "PDDB をマウントしています。お待ちください...",
+        "zh": "正在挂载 PDDB，请稍候..."
+    },
     "pddb.basisname": {
         "en": "Basis Name:",
         "en-tts": "Enter name of Basis",

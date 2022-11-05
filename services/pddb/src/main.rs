@@ -1940,11 +1940,14 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
 fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState, time_resetter: xous::CID) -> bool {
     log::info!("Attempting to mount the PDDB");
     if pw_state == PasswordState::Correct {
+        modals.dynamic_notification(Some(t!("pddb.waitmount", xous::LANG)), None).unwrap();
         if let Some(sys_basis) = pddb_os.pddb_mount() {
             log::info!("PDDB mount operation finished successfully");
             basis_cache.basis_add(sys_basis);
+            modals.dynamic_notification_close().unwrap();
             return true
         }
+        modals.dynamic_notification_close().unwrap();
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
@@ -2001,12 +2004,14 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                         0, 0, 0, 0
                     )
                 ).expect("couldn't reset time");
-
+                modals.dynamic_notification(Some(t!("pddb.waitmount", xous::LANG)), None).unwrap();
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
                     basis_cache.basis_add(sys_basis);
+                    modals.dynamic_notification_close().unwrap();
                     true
                 } else {
+                    modals.dynamic_notification_close().unwrap();
                     log::error!("Despite formatting, no PDDB was found!");
                     let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                     err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
