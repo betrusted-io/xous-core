@@ -394,7 +394,7 @@ use std::collections::{HashMap, BTreeSet};
 use std::io::ErrorKind;
 use core::fmt::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use locales::t;
 
@@ -489,34 +489,6 @@ fn wrapped_main() -> ! {
             )
         }
     });
-
-    let hide_startingup_notif = Arc::new(Mutex::new(false));
-    let hide_startingup_notif_clone = hide_startingup_notif.clone();
-
-    std::thread::spawn(move || {
-        // For some weird reason spawning a dynamic notification without waiting 800ms in a separate thread 
-        // makes it impossible to read, because it gets covered by hundreds of those modal security lines (???).
-        // This thread waits on hide_startingup_notif to become true, then disimsses the dynamic notification that it created
-        // previously.
-        // To allow other threads to do work, yield to kernel every time the variable is read as false.
-
-        let xns = xous_names::XousNames::new().unwrap();
-        let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
-
-        std::thread::sleep(std::time::Duration::from_millis(1000));
-
-        modals.dynamic_notification(Some("Starting up..."), Some("Precursor is booting up, please wait.")).unwrap();
-
-        loop {
-            if *hide_startingup_notif_clone.lock().unwrap() {
-                modals.dynamic_notification_close().unwrap();
-                break;
-            }
-
-            xous::yield_slice();
-        };
-    });
-
 
     // OS-specific PDDB driver
     let mut pddb_os = PddbOs::new(Rc::clone(&entropy), pw_cid);
@@ -684,8 +656,6 @@ fn wrapped_main() -> ! {
             //    - code = 2 -> mount failed, because too many PINs were retried. `count` is the number of retries.
             // If we need more nuance out of this routine, consider creating a custom public enum type to help marshall this.
             Opcode::TryMount => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                *hide_startingup_notif.lock().unwrap() = true;
-
                 if basis_cache.basis_count() > 0 {
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
@@ -699,8 +669,6 @@ fn wrapped_main() -> ! {
                     } else {
                         match ensure_password(&modals, &mut pddb_os, pw_cid) {
                             PasswordState::Correct => {
-                                modals.dynamic_notification(Some("Starting up..."), Some("Mounting PDDB, please wait.")).unwrap();
-
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Correct, time_resetter) {
                                     is_mounted.store(true, Ordering::SeqCst);
                                     for requester in mount_notifications.drain(..) {
@@ -712,12 +680,8 @@ fn wrapped_main() -> ! {
                                 } else {
                                     xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                                 }
-
-                                modals.dynamic_notification_close().unwrap();
                             },
                             PasswordState::Uninit => {
-                                modals.dynamic_notification(Some("Starting up..."), Some("Mounting PDDB, please wait.")).unwrap();
-
                                 if try_mount_or_format(&modals, &mut pddb_os, &mut basis_cache, PasswordState::Uninit, time_resetter) {
                                     for requester in mount_notifications.drain(..) {
                                         xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
@@ -729,8 +693,6 @@ fn wrapped_main() -> ! {
                                 } else {
                                     xous::return_scalar2(msg.sender, 1, 0).expect("couldn't return scalar");
                                 }
-
-                                modals.dynamic_notification_close().unwrap();
                             },
                             PasswordState::ForcedAbort(failcount) => {
                                 xous::return_scalar2(msg.sender, 2,
@@ -1965,11 +1927,14 @@ fn ensure_password(modals: &modals::Modals, pddb_os: &mut PddbOs, _pw_cid: xous:
 fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cache: &mut BasisCache, pw_state: PasswordState, time_resetter: xous::CID) -> bool {
     log::info!("Attempting to mount the PDDB");
     if pw_state == PasswordState::Correct {
+        modals.dynamic_notification(Some(t!("pddb.waitmount", xous::LANG)), None).unwrap();
         if let Some(sys_basis) = pddb_os.pddb_mount() {
             log::info!("PDDB mount operation finished successfully");
             basis_cache.basis_add(sys_basis);
+            modals.dynamic_notification_close().unwrap();
             return true
         }
+        modals.dynamic_notification_close().unwrap();
     }
     // correct password but no mount -> offer to format; uninit -> offer to format
     if pw_state == PasswordState::Correct || pw_state == PasswordState::Uninit {
@@ -2026,12 +1991,14 @@ fn try_mount_or_format(modals: &modals::Modals, pddb_os: &mut PddbOs, basis_cach
                         0, 0, 0, 0
                     )
                 ).expect("couldn't reset time");
-
+                modals.dynamic_notification(Some(t!("pddb.waitmount", xous::LANG)), None).unwrap();
                 if let Some(sys_basis) = pddb_os.pddb_mount() {
                     log::info!("PDDB mount operation finished successfully");
                     basis_cache.basis_add(sys_basis);
+                    modals.dynamic_notification_close().unwrap();
                     true
                 } else {
+                    modals.dynamic_notification_close().unwrap();
                     log::error!("Despite formatting, no PDDB was found!");
                     let mut err = String::from(t!("pddb.internalerror", xous::LANG));
                     err.push_str(" #1"); // punt and leave an error code, because this "should" be rare
