@@ -290,6 +290,7 @@ perform the Xous firmware upgrade. This requires running manual update commands,
 - Add French language locale (thanks @tmarble!)
 - Add `mtxcli` application, a basic Matrix chat interface (currently just https-secured, not E2EE). Thanks again @tmarble for the contribution!
 - Several infrastructure changes/improvements to how utralib and crating works
+- Add some UX cues on boot asking the user to wait for various operations. Moved auto-mounting thread from status to the initial app, in this case, shellchat. If shellchat is no longer the initial app, whatever the new initial app is will need to have its own startup and sanity check routine.
 
 ## Roadmap
 - Lots of testing and bug fixes
