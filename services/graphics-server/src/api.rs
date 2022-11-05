@@ -119,6 +119,9 @@ pub(crate) enum Opcode {
     /// SuspendResume callback
     SuspendResume,
 
+    /// draw the boot logo (for continuity as apps initialize)
+    DrawBootLogo,
+
     Quit,
 }
 
