@@ -40,7 +40,6 @@ use graphics_server::api::GlyphStyle;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
 
-use locales::t;
 use std::thread;
 use std::sync::Arc;
 
@@ -54,7 +53,6 @@ mod oqc_test;
 #[cfg(feature="nettest")]
 mod nettests;
 
-#[cfg(feature="tts")]
 use locales::t;
 #[cfg(feature="tts")]
 use tts_frontend::*;
