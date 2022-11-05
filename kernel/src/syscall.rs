@@ -538,6 +538,84 @@ fn return_scalar2(
     })
 }
 
+fn return_scalar5(
+    server_pid: PID,
+    server_tid: TID,
+    in_irq: bool,
+    sender: MessageSender,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+    arg5: usize,
+) -> SysCallResult {
+    SystemServices::with_mut(|ss| {
+        let sender = SenderID::from(sender);
+
+        let server = ss
+            .server_from_sidx_mut(sender.sidx)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
+        // .expect("Couldn't get server from SIDX");
+        if server.pid != server_pid {
+            return Err(xous_kernel::Error::ServerNotFound);
+        }
+        let result = server.take_waiting_message(sender.idx, None)?;
+        let (client_pid, client_tid) = match result {
+            WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
+            WaitingMessage::ForgetMemory(_) => {
+                println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
+                );
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::MovedMemory => {
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
+                );
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::None => {
+                println!("WARNING: Tried to wait on a message that didn't exist");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+        };
+
+        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+
+        if !cfg!(baremetal) || in_irq || !client_is_runnable {
+            // In a hosted environment, `switch_to_thread()` doesn't continue
+            // execution from the new thread. Instead it continues in the old
+            // thread. Therefore, we need to instruct the client to resume, and
+            // return to the server.
+            // In a baremetal environment, the opposite is true -- we instruct
+            // the server to resume and return to the client.
+            ss.set_thread_result(
+                client_pid,
+                client_tid,
+                xous_kernel::Result::Scalar5(arg1, arg2, arg3, arg4, arg5),
+            )?;
+            if cfg!(baremetal) {
+                ss.ready_thread(client_pid, client_tid)?;
+            }
+            Ok(xous_kernel::Result::Ok)
+        } else {
+            // Switch away from the server, but leave it as Runnable
+            ss.unschedule_thread(server_pid, server_tid)?;
+            ss.ready_thread(server_pid, server_tid)?;
+            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
+
+            // Switch to the client
+            ss.ready_thread(client_pid, client_tid)?;
+            ss.switch_to_thread(client_pid, Some(client_tid))?;
+            Ok(xous_kernel::Result::Scalar5(arg1, arg2, arg3, arg4, arg5))
+        }
+    })
+}
+
 fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         assert!(
@@ -855,6 +933,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::ReturnScalar2(sender, arg1, arg2) => {
             return_scalar2(pid, tid, in_irq, sender, arg1, arg2)
         }
+        SysCall::ReturnScalar5(sender, arg1, arg2, arg3, arg4, arg5) => {
+            return_scalar5(pid, tid, in_irq, sender, arg1, arg2, arg3, arg4, arg5)
+        }
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess(_ret) => SystemServices::with_mut(|ss| {
             ss.unschedule_thread(pid, tid)?;
@@ -936,7 +1017,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             }),
             _ => Err(xous_kernel::Error::InvalidLimit),
         },
-        #[cfg(feature="v2p")]
+        #[cfg(feature = "v2p")]
         SysCall::VirtToPhys(vaddr) => {
             let phys_addr = crate::arch::mem::virt_to_phys(vaddr as usize);
             match phys_addr {
