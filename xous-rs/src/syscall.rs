@@ -327,6 +327,7 @@ pub enum SysCall {
     /// * **Ok**: The Scalar / Send message was successfully sent, or the Borrow has finished
     /// * **Scalar1**: The Server returned a `Scalar1` value
     /// * **Scalar2**: The Server returned a `Scalar2` value
+    /// * **Scalar5**: The Server returned a `Scalar5` value
     /// * **BlockedProcess**: In Hosted mode, the target process is now blocked
     ///
     /// # Errors
@@ -342,6 +343,7 @@ pub enum SysCall {
     /// * **Ok**: The Scalar / Send message was successfully sent, or the Borrow has finished
     /// * **Scalar1**: The Server returned a `Scalar1` value
     /// * **Scalar2**: The Server returned a `Scalar2` value
+    /// * **Scalar5**: The Server returned a `Scalar5` value
     /// * **BlockedProcess**: In Hosted mode, the target process is now blocked
     ///
     /// # Errors
@@ -1210,6 +1212,7 @@ impl SysCall {
             SysCall::TryConnect(_)
                 | SysCall::TryReceiveMessage(_)
                 | SysCall::ReturnToParent(_, _)
+                | SysCall::ReturnScalar5(_, _, _, _, _, _)
                 | SysCall::ReturnScalar2(_, _, _)
                 | SysCall::ReturnScalar1(_, _)
                 | SysCall::ReturnMemory(_, _, _, _)
@@ -1343,6 +1346,25 @@ pub fn return_scalar2(
     val2: usize,
 ) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ReturnScalar2(sender, val1, val2))?;
+    if let crate::Result::Ok = result {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Return 5 scalars to the provided message.
+pub fn return_scalar5(
+    sender: MessageSender,
+    val1: usize,
+    val2: usize,
+    val3: usize,
+    val4: usize,
+    val5: usize,
+) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnScalar5(sender, val1, val2, val3, val4, val5))?;
     if let crate::Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -1539,6 +1561,7 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
         Ok(Result::Ok) => Ok(Result::Ok),
         Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Ok(Result::Scalar5(a, b, c, d, e)) => Ok(Result::Scalar5(a, b, c, d, e)),
         Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
@@ -1581,6 +1604,7 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
         Ok(Result::Ok) => Ok(Result::Ok),
         Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Ok(Result::Scalar5(a, b, c, d, e)) => Ok(Result::Scalar5(a, b, c, d, e)),
         Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
