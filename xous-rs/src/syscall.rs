@@ -467,10 +467,11 @@ pub enum SysCall {
     ///
     /// ## Errors
     ///     * **BadAddress**: The mapping does not exist
-    #[cfg(feature="v2p")]
-    VirtToPhys(
-        usize, /* virtual address */
-    ),
+    #[cfg(feature = "v2p")]
+    VirtToPhys(usize /* virtual address */),
+
+    /// Return five scalars to the sender
+    ReturnScalar5(MessageSender, usize, usize, usize, usize, usize),
 
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
@@ -516,8 +517,9 @@ pub enum SysCallNumber {
     JoinThread = 36,
     SetExceptionHandler = 37,
     AdjustProcessLimit = 38,
-    #[cfg(feature="v2p")]
+    #[cfg(feature = "v2p")]
     VirtToPhys = 39,
+    ReturnScalar5 = 40,
     Invalid,
 }
 
@@ -562,8 +564,9 @@ impl SysCallNumber {
             36 => JoinThread,
             37 => SetExceptionHandler,
             38 => AdjustProcessLimit,
-            #[cfg(feature="v2p")]
+            #[cfg(feature = "v2p")]
             39 => VirtToPhys,
+            40 => ReturnScalar5,
             _ => Invalid,
         }
     }
@@ -928,15 +931,18 @@ impl SysCall {
                 0,
                 0,
             ],
-            #[cfg(feature="v2p")]
-            SysCall::VirtToPhys(vaddr) => [
-                SysCallNumber::VirtToPhys as usize,
-                *vaddr,
-                0,
-                0,
-                0,
-                0,
-                0,
+            #[cfg(feature = "v2p")]
+            SysCall::VirtToPhys(vaddr) => {
+                [SysCallNumber::VirtToPhys as usize, *vaddr, 0, 0, 0, 0, 0, 0]
+            }
+            SysCall::ReturnScalar5(sender, arg1, arg2, arg3, arg4, arg5) => [
+                SysCallNumber::ReturnScalar5 as usize,
+                sender.to_usize(),
+                *arg1,
+                *arg2,
+                *arg3,
+                *arg4,
+                *arg5,
                 0,
             ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
@@ -1103,8 +1109,11 @@ impl SysCall {
             SysCallNumber::JoinThread => SysCall::JoinThread(a1 as _),
             SysCallNumber::SetExceptionHandler => SysCall::SetExceptionHandler(a1 as _, a2 as _),
             SysCallNumber::AdjustProcessLimit => SysCall::AdjustProcessLimit(a1, a2, a3),
-            #[cfg(feature="v2p")]
+            #[cfg(feature = "v2p")]
             SysCallNumber::VirtToPhys => SysCall::VirtToPhys(a1 as _),
+            SysCallNumber::ReturnScalar5 => {
+                SysCall::ReturnScalar5(MessageSender::from_usize(a1), a2, a3, a4, a5, a6)
+            }
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1872,7 +1881,7 @@ pub fn set_exception_handler(
 */
 
 /// Translate a virtual address to a physical address
-#[cfg(feature="v2p")]
+#[cfg(feature = "v2p")]
 pub fn virt_to_phys(va: usize) -> core::result::Result<usize, Error> {
     rsyscall(SysCall::VirtToPhys(va)).and_then(|result| {
         if let Result::Scalar1(pa) = result {
