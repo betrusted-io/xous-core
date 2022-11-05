@@ -426,7 +426,11 @@ fn wrapped_main() -> ! {
         let main_conn = xous::connect(shch_sid).unwrap();
         move || {
             let tt = ticktimer_server::Ticktimer::new().unwrap();
-            tt.sleep_ms(500).ok(); // give some time for the system to finish booting
+            let xns = xous_names::XousNames::new().unwrap();
+            let gam = gam::Gam::new(&xns).unwrap();
+            while !gam.trusted_init_done().unwrap() {
+                tt.sleep_ms(50).ok();
+            }
             loop {
                 let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
                 pddb_init_done.store(true, Ordering::SeqCst);
