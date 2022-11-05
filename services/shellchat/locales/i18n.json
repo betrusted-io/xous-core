@@ -12,5 +12,12 @@
         "fr": "",
         "ja": "",
         "zh": ""
+    },
+    "shellchat.bootwait": {
+        "en": "Please wait...",
+        "en-tts": "Please wait...",
+        "fr": "S'il vous plaît, attendez*MT*",
+        "ja": "お待ちください...",
+        "zh": "请稍等..."
     }
 }
