@@ -330,6 +330,7 @@ impl ContextManager {
         token: [u32; 4],
         clear: bool,
     ) -> Result<(), xous::Error> {
+        //log::set_max_level(log::LevelFilter::Trace);
         self.notify_app_switch(token).ok();
 
         let mut leaving_visibility: bool = false;
@@ -483,6 +484,7 @@ impl ContextManager {
                 self.redraw().expect("couldn't redraw the currently focused app");
             }
         }
+        //log::set_max_level(log::LevelFilter::Info);
         Ok(())
     }
     pub(crate) fn set_pred_api_token(&mut self, at: ApiToken) {

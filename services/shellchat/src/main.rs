@@ -32,12 +32,17 @@ Check for more detailed docs under Modules/cmds "Shell Chat" below
 use log::info;
 
 use core::fmt::Write;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use gam::UxRegistration;
 use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, PixelColor};
 use graphics_server::api::GlyphStyle;
 use xous::MessageEnvelope;
 use xous_ipc::Buffer;
+
+use locales::t;
+use std::thread;
+use std::sync::Arc;
 
 #[doc = include_str!("../README.md")]
 mod cmds;
@@ -202,7 +207,7 @@ impl Repl{
     }
 
     /// update the loop, in response to various inputs
-    fn update(&mut self, was_callback: bool) -> Result<(), xous::Error> {
+    fn update(&mut self, was_callback: bool, init_done: bool) -> Result<(), xous::Error> {
         let debug1 = false;
         // if we had an input string, do something
         if let Some(local) = &self.input {
@@ -219,7 +224,7 @@ impl Repl{
 
         // redraw UI once upon accepting all input
         if !was_callback { // don't need to redraw on a callback, save some cycles
-            self.redraw().expect("can't redraw");
+            self.redraw(init_done).expect("can't redraw");
         }
 
         let mut dirty = true;
@@ -265,7 +270,7 @@ impl Repl{
         self.msg = None;
         // redraw UI now that we've responded
         if dirty {
-            self.redraw().expect("can't redraw");
+            self.redraw(init_done).expect("can't redraw");
         }
 
         if debug1 {
@@ -286,9 +291,27 @@ impl Repl{
             }
         )).expect("can't clear content area");
     }
-    fn redraw(&mut self) -> Result<(), xous::Error> {
+    fn redraw(&mut self, init_done: bool) -> Result<(), xous::Error> {
         log::trace!("going into redraw");
         self.clear_area();
+
+        if !init_done {
+            let mut init_tv = TextView::new(
+                self.content,
+                TextBounds::CenteredTop(
+                    Rectangle::new(
+                        Point::new(0, self.screensize.y / 3 - 64),
+                        Point::new(self.screensize.x, self.screensize.y / 3)
+                    )
+                )
+            );
+            init_tv.style = GlyphStyle::Bold;
+            init_tv.draw_border = false;
+            write!(init_tv.text, "{}", t!("shellchat.bootwait", xous::LANG)).ok();
+            self.gam.post_textview(&mut init_tv).expect("couldn't render wait text");
+            self.gam.redraw().expect("couldn't redraw screen");
+            return Ok(())
+        }
 
         // this defines the bottom border of the text bubbles as they stack up wards
         let mut bubble_baseline = self.screensize.y - self.margin.y;
@@ -393,8 +416,57 @@ fn wrapped_main() -> ! {
     let mut was_callback = false;
 
     let mut allow_redraw = true;
-    log::trace!("starting main loop");
+    let pddb_init_done = Arc::new(AtomicBool::new(false));
 
+    // spawn a thread to auto-mount the PDDB. It's important that this spawn happens after
+    // our GAM context has been registered (which happened in the `Repl::new()` call above)
+    repl.redraw(false).ok();
+    let _ = thread::spawn({
+        let pddb_init_done = pddb_init_done.clone();
+        let main_conn = xous::connect(shch_sid).unwrap();
+        move || {
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            let xns = xous_names::XousNames::new().unwrap();
+            let gam = gam::Gam::new(&xns).unwrap();
+            while !gam.trusted_init_done().unwrap() {
+                tt.sleep_ms(50).ok();
+            }
+            loop {
+                let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
+                pddb_init_done.store(true, Ordering::SeqCst);
+                if no_retry_failure {
+                    // this includes both successfully mounted, and user abort of mount attempt
+                    break;
+                } else {
+                    // this indicates system was guttered due to a retry failure
+                    let xns = xous_names::XousNames::new().unwrap();
+                    let susres = susres::Susres::new_without_hook(&xns).unwrap();
+                    let llio = llio::Llio::new(&xns);
+                    if ((llio.adc_vbus().unwrap() as u32) * 503) < 150_000 {
+                        // try to force suspend if possible, so that users who are just playing around with
+                        // the device don't run the battery down accidentally.
+                        susres.initiate_suspend().ok();
+                        tt.sleep_ms(1000).unwrap();
+                        let modals = modals::Modals::new(&xns).unwrap();
+                        modals.show_notification(
+                            &t!("login.fail", xous::LANG).replace("{fails}", &count.to_string()),
+                            None
+                        ).ok();
+                    } else {
+                        // otherwise force a reboot cycle to slow down guessers
+                        susres.reboot(true).expect("Couldn't reboot after too many failed password attempts");
+                        tt.sleep_ms(5000).unwrap();
+                    }
+                }
+            }
+            tt.sleep_ms(100).ok(); // this allows the shellchat context to foreground before calling the redraw
+            xous::send_message(main_conn,
+                xous::Message::new_scalar(ShellOpcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+            ).ok();
+        }
+    });
+
+    log::trace!("starting main loop");
     #[cfg(feature = "autobasis-ci")]
     {
         log::info!("starting autobasis CI launcher");
@@ -420,7 +492,7 @@ fn wrapped_main() -> ! {
             }
             Some(ShellOpcode::Redraw) => {
                 if allow_redraw {
-                    repl.redraw().expect("REPL couldn't redraw");
+                    repl.redraw(pddb_init_done.load(Ordering::SeqCst)).expect("REPL couldn't redraw");
                 }
             }
             Some(ShellOpcode::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
@@ -446,7 +518,7 @@ fn wrapped_main() -> ! {
             }
         }
         if update_repl {
-            repl.update(was_callback).expect("REPL had problems updating");
+            repl.update(was_callback, pddb_init_done.load(Ordering::SeqCst)).expect("REPL had problems updating");
             update_repl = false;
         }
         log::trace!("reached bottom of main loop");
