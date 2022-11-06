@@ -67,7 +67,7 @@ use std::alloc::System;
 #[global_allocator]
 static GLOBAL: Allocator<System> = Allocator::system();
 #[cfg(feature="tracking-alloc")]
-use core::sync::atomic::{AtomicIsize, Ordering};
+use core::sync::atomic::AtomicIsize;
 #[cfg(feature="tracking-alloc")]
 struct StdoutTracker {
     pub total: AtomicIsize,
@@ -308,7 +308,6 @@ impl Repl{
             write!(init_tv.text, "{}", t!("shellchat.bootwait", xous::LANG)).ok();
             self.gam.post_textview(&mut init_tv).expect("couldn't render wait text");
             self.gam.redraw().expect("couldn't redraw screen");
-            return Ok(())
         }
 
         // this defines the bottom border of the text bubbles as they stack up wards
@@ -417,54 +416,17 @@ fn wrapped_main() -> ! {
 
     let mut allow_redraw = true;
     let pddb_init_done = Arc::new(AtomicBool::new(false));
-
-    // spawn a thread to auto-mount the PDDB. It's important that this spawn happens after
-    // our GAM context has been registered (which happened in the `Repl::new()` call above)
-    repl.redraw(false).ok();
-    let _ = thread::spawn({
+    repl.redraw(pddb_init_done.load(Ordering::SeqCst)).ok();
+    thread::spawn({
         let pddb_init_done = pddb_init_done.clone();
         let main_conn = xous::connect(shch_sid).unwrap();
         move || {
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            let xns = xous_names::XousNames::new().unwrap();
-            let gam = gam::Gam::new(&xns).unwrap();
-            while !gam.trusted_init_done().unwrap() {
-                tt.sleep_ms(50).ok();
-            }
-            loop {
-                // Force the "please wait" message to disappear *prior* to the context switch out to the PDDB login box
-                // this is necessary because if the mounting process is extremely fast, the subsequent redraw message
-                // to clear the please wait message will get missed on the return.
-                xous::send_message(main_conn,
-                    xous::Message::new_blocking_scalar(ShellOpcode::ForceRedraw.to_usize().unwrap(), 0, 0, 0, 0)
-                ).ok();
-                let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
-                pddb_init_done.store(true, Ordering::SeqCst);
-                if no_retry_failure {
-                    // this includes both successfully mounted, and user abort of mount attempt
-                    break;
-                } else {
-                    // this indicates system was guttered due to a retry failure
-                    let xns = xous_names::XousNames::new().unwrap();
-                    let susres = susres::Susres::new_without_hook(&xns).unwrap();
-                    let llio = llio::Llio::new(&xns);
-                    if ((llio.adc_vbus().unwrap() as u32) * 503) < 150_000 {
-                        // try to force suspend if possible, so that users who are just playing around with
-                        // the device don't run the battery down accidentally.
-                        susres.initiate_suspend().ok();
-                        tt.sleep_ms(1000).unwrap();
-                        let modals = modals::Modals::new(&xns).unwrap();
-                        modals.show_notification(
-                            &t!("login.fail", xous::LANG).replace("{fails}", &count.to_string()),
-                            None
-                        ).ok();
-                    } else {
-                        // otherwise force a reboot cycle to slow down guessers
-                        susres.reboot(true).expect("Couldn't reboot after too many failed password attempts");
-                        tt.sleep_ms(5000).unwrap();
-                    }
-                }
-            }
+            let pddb = pddb::Pddb::new();
+            pddb.mount_attempted_blocking();
+            pddb_init_done.store(true, Ordering::SeqCst);
+            xous::send_message(main_conn,
+                xous::Message::new_scalar(ShellOpcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+            ).ok();
         }
     });
 
