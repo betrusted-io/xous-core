@@ -457,7 +457,6 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
-            tt.sleep_ms(100).ok(); // this allows the shellchat context to foreground before calling the redraw
             xous::send_message(main_conn,
                 xous::Message::new_scalar(ShellOpcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
             ).ok();

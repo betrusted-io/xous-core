@@ -334,12 +334,15 @@ impl Modals {
         Ok(())
     }
 
-    /// close the progress bar, regardless of the current state
+    /// Close the progress bar, regardless of the current state
+    /// This is a blocking call, because you want the GAM to revert focus back to your context before you
+    /// continue with any drawing operations. Otherwise, they could be missed as the modal is still covering
+    /// your window.
     pub fn finish_progress(&self) -> Result<(), xous::Error> {
         self.lock();
         send_message(
             self.conn,
-            Message::new_scalar(
+            Message::new_blocking_scalar(
                 Opcode::StopProgress.to_usize().unwrap(),
                 self.token[0] as usize,
                 self.token[1] as usize,
