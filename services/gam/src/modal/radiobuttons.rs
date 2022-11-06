@@ -17,6 +17,7 @@ pub struct RadioButtons {
     pub action_payload: RadioButtonPayload, // the current "radio button" selection
     pub select_index: i16, // the current candidate to be selected
     pub is_password: bool,
+    gam: crate::Gam,
     #[cfg(feature = "tts")]
     pub tts: TtsFrontend,
 }
@@ -31,6 +32,7 @@ impl RadioButtons {
             action_payload: RadioButtonPayload::new(""),
             select_index: 0,
             is_password: false,
+            gam: crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap(),
             #[cfg(feature="tts")]
             tts,
         }
@@ -152,7 +154,7 @@ impl ActionApi for RadioButtons {
             DrawStyle::new(color, color, 1))
             ).expect("couldn't draw entry line");
     }
-    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         match k {
             '←' | '→' => {
@@ -177,9 +179,13 @@ impl ActionApi for RadioButtons {
                         self.tts.tts_simple(self.items[self.select_index as usize].as_str()).unwrap();
                     }
                 } else {  // the OK button select
+                    // relinquish focus before returning the result
+                    self.gam.relinquish_focus().unwrap();
+                    xous::yield_slice();
+
                     let buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
                     buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
-                    return (None, true)
+                    return None;
                 }
             }
             '\u{0}' => {
@@ -189,6 +195,6 @@ impl ActionApi for RadioButtons {
                 // ignore text entry
             }
         }
-        (None, false)
+        None
     }
 }

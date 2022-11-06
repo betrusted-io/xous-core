@@ -4,6 +4,10 @@ use graphics_server::api::*;
 
 use core::fmt::Write;
 
+// This structure needs to be "shallow copy capable" so we can use it with
+// the enum_actions API to update the progress state in an efficient manner.
+// Thus it does not include its own GAM reference; instead we create one on
+// the fly when needed.
 #[derive(Debug, Copy, Clone)]
 pub struct Slider {
     pub min: u32,
@@ -163,7 +167,7 @@ impl ActionApi for Slider {
         draw_list.push(GamObjectType::Rect(inner_rect)).unwrap();
         modal.gam.draw_list(draw_list).expect("couldn't execute draw list");
     }
-    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         if !self.is_progressbar {
             match k {
@@ -185,20 +189,30 @@ impl ActionApi for Slider {
                     // ignore null messages
                 }
                 '∴' | '\u{d}' => {
+                    // relinquish focus before returning the result
+                    let gam = crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap();
+                    gam.relinquish_focus().unwrap();
+                    xous::yield_slice();
+
                     send_message(self.action_conn,
                         xous::Message::new_scalar(self.action_opcode as usize, self.action_payload as usize, 0, 0, 0)).expect("couldn't pass on action payload");
-                    return(None, true)
+                    return None;
                 }
                 _ => {
                     // ignore all other messages
                 }
             }
-            (None, false)
+            None
         } else {
             if k == '🛑' { // use the "stop" emoji as a signal that we should close the progress bar
-                (None, true)
+                // relinquish focus on stop
+                let gam = crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap();
+                gam.relinquish_focus().unwrap();
+                xous::yield_slice();
+
+                None
             } else {
-                (None, false)
+                None
             }
         }
     }

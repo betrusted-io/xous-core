@@ -298,7 +298,7 @@ impl ActionApi for Bip39Entry {
         modal.gam.post_textview(&mut tv).expect("couldn't post tv");
     }
 
-    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         let can_move_downwards = !(self.suggestion_index.get() + 1 == NUM_RECCOS);
         let can_move_upwards =  !(self.suggestion_index.get() - 1 < 0);
 
@@ -310,9 +310,13 @@ impl ActionApi for Bip39Entry {
                         let mut ret = Bip39EntryPayload::default();
                         ret.data[..data.len()].copy_from_slice(&data);
                         ret.len = data.len() as u32;
+
+                        // relinquish focus before returning the result
+                        self.gam.relinquish_focus().unwrap();
+                        xous::yield_slice();
+
                         let buf = Buffer::into_buf(ret).expect("couldn't convert message to payload");
                         buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
-                        return (None, true)
                     }
                 } else {
                     if self.suggested_words.len() > 0 {
@@ -345,10 +349,14 @@ impl ActionApi for Bip39Entry {
                 // ignore null messages
             }
             '\u{14}' => { // F4
+                // relinquish focus before returning the result
+                self.gam.relinquish_focus().unwrap();
+                xous::yield_slice();
+
                 let ret = Bip39EntryPayload::default(); // return a 0-length entry
                 let buf = Buffer::into_buf(ret).expect("couldn't convert message to payload");
                 buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
-                return (None, true)
+                return None;
             }
             '\u{8}' => { // backspace
                 #[cfg(feature="tts")]
@@ -397,6 +405,6 @@ impl ActionApi for Bip39Entry {
                 }
             }
         }
-        (None, false)
+        None
     }
 }

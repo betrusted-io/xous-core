@@ -16,6 +16,7 @@ pub struct CheckBoxes {
     pub action_opcode: u32,
     pub action_payload: CheckBoxPayload,
     pub select_index: i16,
+    gam: crate::Gam,
     #[cfg(feature = "tts")]
     pub tts: TtsFrontend,
 }
@@ -29,6 +30,7 @@ impl CheckBoxes {
             action_opcode,
             action_payload: CheckBoxPayload::new(),
             select_index: 0,
+            gam: crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap(),
             #[cfg(feature="tts")]
             tts,
         }
@@ -141,7 +143,7 @@ impl ActionApi for CheckBoxes {
             DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
             ).expect("couldn't draw entry line");
     }
-    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         log::trace!("key_action: {}", k);
         match k {
             '←' | '→' => {
@@ -180,9 +182,13 @@ impl ActionApi for CheckBoxes {
                         }
                     }
                 } else {  // the OK button select
+                    // relinquish focus before returning the result
+                    self.gam.relinquish_focus().unwrap();
+                    xous::yield_slice();
+
                     let buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
                     buf.send(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
-                    return (None, true)
+                    return None;
                 }
             }
             '\u{0}' => {
@@ -192,6 +198,6 @@ impl ActionApi for CheckBoxes {
                 // ignore text entry
             }
         }
-        (None, false)
+        None
     }
 }

@@ -55,6 +55,7 @@ pub struct TextEntry {
     /// track if keys were hit since initialized: this allows us to clear the default text,
     /// instead of having it re-appear every time the text area is cleared
     keys_hit: [bool; MAX_FIELDS as usize],
+    // gam: crate::Gam, // no GAM field because this needs to be a clone-capable structure. We create a GAM handle when we need it.
 }
 
 impl Default for TextEntry {
@@ -358,7 +359,7 @@ impl ActionApi for TextEntry {
             current_height += self.field_height.get();
         }
     }
-    fn key_action(&mut self, k: char) -> (Option<ValidatorErr>, bool) {
+    fn key_action(&mut self, k: char) -> Option<ValidatorErr> {
         // needs to be a reference, otherwise we're operating on a copy of the payload!
         let payload = &mut self.action_payloads[self.selected_field as usize];
 
@@ -415,7 +416,7 @@ impl ActionApi for TextEntry {
                 if let Some(validator) = self.validator {
                     if let Some(err_msg) = validator(*payload, self.action_opcode) {
                         payload.content.clear(); // reset the input field
-                        return (Some(err_msg), false);
+                        return Some(err_msg);
                     }
                 }
 
@@ -427,6 +428,11 @@ impl ActionApi for TextEntry {
                         }
                     }
                 }
+                // relinquish focus before returning the result
+                let gam = crate::Gam::new(&xous_names::XousNames::new().unwrap()).unwrap();
+                gam.relinquish_focus().unwrap();
+                xous::yield_slice();
+
                 let mut payloads: TextEntryPayloads = Default::default();
                 payloads.1 = self.max_field_amount as usize;
                 payloads.0[..self.max_field_amount as usize].copy_from_slice(&self.action_payloads[..self.max_field_amount as usize]);
@@ -438,7 +444,7 @@ impl ActionApi for TextEntry {
                 }
                 self.keys_hit[self.selected_field as usize] = false;
 
-                return (None, true)
+                return None;
             }
             '↑' => {
                 if can_move_upwards {
@@ -492,6 +498,6 @@ impl ActionApi for TextEntry {
 
             }
         }
-        (None, false)
+        None
     }
 }
