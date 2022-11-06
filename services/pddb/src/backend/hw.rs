@@ -1824,6 +1824,8 @@ impl PddbOs {
                     t!("pddb.erase", xous::LANG),
                     xous::PDDB_LOC, xous::PDDB_LOC + PDDB_A_LEN as u32, xous::PDDB_LOC)
                     .expect("couldn't raise progress bar");
+                // retain this delay, because the next section is so compute-intensive, it may take a
+                // while for the GAM to catch up.
                 self.tt.sleep_ms(100).unwrap();
             }
             for offset in (xous::PDDB_LOC..(xous::PDDB_LOC + PDDB_A_LEN as u32)).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
@@ -1849,6 +1851,7 @@ impl PddbOs {
             if let Some(modals) = progress {
                 modals.update_progress(xous::PDDB_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
                 modals.finish_progress().expect("couldn't dismiss progress bar");
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(100).unwrap();
             }
         }
@@ -1881,6 +1884,7 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
@@ -1891,6 +1895,7 @@ impl PddbOs {
         //}
         if let Some(modals) = progress {
             modals.start_progress(t!("pddb.key", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         assert!(size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
@@ -1914,6 +1919,7 @@ impl PddbOs {
         crypto_keys.version = SCD_VERSION; // should already be set by `default()` but let's be sure.
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         // copy the encrypted key into the data structure for commit to Flash
@@ -1932,8 +1938,10 @@ impl PddbOs {
         self.patch_keys(crypto_keys.deref(), 0);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
@@ -1960,13 +1968,16 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         self.fast_space_write(&fast_space);
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
@@ -1979,6 +1990,7 @@ impl PddbOs {
         if let Some(modals) = progress {
             modals.start_progress(t!("pddb.randomize", xous::LANG),
             self.data_phys_base.as_u32(), PDDB_A_LEN as u32, self.data_phys_base.as_u32()).expect("couldn't raise progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         let blank = [0xffu8; aes::BLOCK_SIZE];
@@ -2018,14 +2030,17 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
         // step 6. create the system basis root structure
         if let Some(modals) = progress {
             modals.start_progress(t!("pddb.structure", xous::LANG), 0, 100, 0).expect("couldn't raise progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         let basis_root = BasisRoot {
@@ -2040,6 +2055,7 @@ impl PddbOs {
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
         if let Some(modals) = progress {
             modals.update_progress(33).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
@@ -2075,6 +2091,7 @@ impl PddbOs {
         self.system_basis_key = Some(syskey); // put the key back
         if let Some(modals) = progress {
             modals.update_progress(66).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
 
@@ -2086,8 +2103,10 @@ impl PddbOs {
         }
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
             modals.finish_progress().expect("couldn't dismiss progress bar");
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(100).unwrap();
         }
         Ok(())
@@ -2384,6 +2403,7 @@ impl PddbOs {
     /// at the conclusion of the sweep, but their page use can be accounted for.
     #[cfg(not(all(feature="pddbtest", feature="autobasis")))]
     pub(crate) fn pddb_get_all_keys(&self, cache: &Vec::<BasisCacheEntry>) -> Option<Vec<(BasisKeys, String)>> {
+        #[cfg(feature="ux-swap-delay")]
         const SWAP_DELAY_MS: usize = 300;
         // populate the "known" entries
         let mut ret = Vec::<(BasisKeys, String)>::new();
@@ -2420,6 +2440,7 @@ impl PddbOs {
                 DnaMode::Churn => t!("pddb.churn.request", xous::LANG),
             },
             None).ok();
+        #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 0.5 display the Bases that we know
@@ -2429,10 +2450,12 @@ impl PddbOs {
             blist.push_str(name);
         }
         modals.show_notification(&blist, None).ok();
+        #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
         // 1. prompt user to enter any name/password combos for other basis we want to keep
         while self.yes_no_approval(&modals, t!("pddb.freespace.enumerate_another", xous::LANG)) {
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
 
             match modals
@@ -2478,11 +2501,13 @@ impl PddbOs {
                         ret.push((basis_key, name));
                     } else {
                         modals.show_notification(t!("pddb.freespace.badpass", xous::LANG), None).ok();
+                        #[cfg(feature="ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     }
                 },
                 _ => return None,
             };
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
             // 4. repeat summary print-out
             let mut blist = String::from(t!("pddb.freespace.currentlist", xous::LANG));
@@ -2491,6 +2516,7 @@ impl PddbOs {
                 blist.push_str(name);
             }
             modals.show_notification(&blist, None).ok();
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         }
         // done!

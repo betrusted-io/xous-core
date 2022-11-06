@@ -88,6 +88,8 @@ hwtest = []
 # routines to help with performance profiling of the PDDB in hosted mode
 pddb-flamegraph = ["hex"]
 perfcounter = ["perflib"]
+# introduce a slight delay after UX boxes swap, in case of race conditions. Shouldn't be necessary anymore, but kept around in case there's a new edge case we missed.
+ux-swap-delay = []
 # make the PDDB very small (4MiB). Note that booting a device with an incompatible `smalldb` setting will break the PDDB image. Use with caution.
 smalldb = []
 default = ["mbbb"]
