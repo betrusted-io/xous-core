@@ -71,5 +71,7 @@ autotest = []
 multireset = [] # allows credential reset more than once per boot
 vaultperf = ["perflib", "xous/v2p", "utralib", "utralib/precursor"] # vault is the performance logging manager. Do not use concurrently with "shellperf", as there can only be one manager.
 vault-testing = ["random-pick"]
+# introduce a slight delay after UX boxes swap, in case of race conditions. Shouldn't be necessary anymore, but kept around in case there's a new edge case we missed.
+ux-swap-delay = []
 
 default = ["with_ctap1", "with_ctap2_1"] # testing removed for release tag

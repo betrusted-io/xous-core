@@ -29,6 +29,7 @@ pub(crate) const VAULT_ALLOC_HINT: usize = 256;
 const VAULT_PASSWORD_REC_VERSION: u32 = 1;
 const VAULT_TOTP_REC_VERSION: u32 = 1;
 /// time allowed between dialog box swaps for background operations to redraw
+#[cfg(feature="ux-swap-delay")]
 const SWAP_DELAY_MS: usize = 300;
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -202,6 +203,7 @@ impl<'a> ActionManager<'a> {
             (*self.mode.lock().unwrap()).clone()
         };
         self.action_active.store(true, Ordering::SeqCst);
+        #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap(); // allow calling menu to close
     }
     pub(crate) fn deactivate(&self) {
@@ -226,6 +228,7 @@ impl<'a> ActionManager<'a> {
                     },
                     _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let username = match self.modals
                     .alert_builder(t!("vault.newitem.username", xous::LANG))
@@ -235,6 +238,7 @@ impl<'a> ActionManager<'a> {
                     Ok(text) => text.content()[0].content.as_str().unwrap_or("UTF-8 error").to_string(),
                     _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let mut approved = false;
                 // Security note about PasswordGenerator. This is a 3rd party crate. It relies on `rand`'s implementation
@@ -294,6 +298,7 @@ impl<'a> ActionManager<'a> {
                         },
                         _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                     };
+                    #[cfg(feature="ux-swap-delay")]
                     self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     password = if maybe_password.len() == 0 {
                         let length = match self.modals
@@ -304,6 +309,7 @@ impl<'a> ActionManager<'a> {
                             Ok(entry) => entry.content()[0].content.as_str().unwrap().parse::<u32>().unwrap(),
                             _ => {log::error!("Length entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                         };
+                        #[cfg(feature="ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let mut upper = false;
                         let mut number = false;
@@ -324,6 +330,7 @@ impl<'a> ActionManager<'a> {
                             }
                             _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
                         }
+                        #[cfg(feature="ux-swap-delay")]
                         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                         let pg2 = PasswordGenerator {
                             length: length as usize,
@@ -376,6 +383,7 @@ impl<'a> ActionManager<'a> {
                     _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
 
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 self.modals
                     .add_list(vec![
@@ -394,6 +402,7 @@ impl<'a> ActionManager<'a> {
                     _ => {log::error!("Modal selection error"); self.action_active.store(false, Ordering::SeqCst); return}
                 }
 
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let secret = match self.modals
                     .alert_builder(t!("vault.newitem.totp_ss", xous::LANG))
@@ -405,6 +414,7 @@ impl<'a> ActionManager<'a> {
                     },
                     _ => {log::error!("TOTP ss entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
                 };
+                #[cfg(feature="ux-swap-delay")]
                 self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                 let ss = secret.to_uppercase();
                 let ss_vec = if let Some(ss) = base32::decode(base32::Alphabet::RFC4648 { padding: false }, &ss) {
@@ -425,6 +435,7 @@ impl<'a> ActionManager<'a> {
 
                 let timestep = if !is_totp {
                     // get the initial count if it's an HOTP record
+                    #[cfg(feature="ux-swap-delay")]
                     self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
                     match self.modals
                         .alert_builder(t!("vault.hotp.count", xous::LANG))
@@ -1032,6 +1043,7 @@ impl<'a> ActionManager<'a> {
             },
             _ => {log::error!("Name entry failed"); self.action_active.store(false, Ordering::SeqCst); return}
         };
+        #[cfg(feature="ux-swap-delay")]
         self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
         match self.pddb.borrow().unlock_basis(&name, Some(BasisRetentionPolicy::Persist)) {
             Ok(_) => log::debug!("Basis {} unlocked", name),
@@ -1076,6 +1088,7 @@ impl<'a> ActionManager<'a> {
                 },
                 Err(e) => {self.report_err(t!("vault.error.internal_error", xous::LANG), Some(e)); return}
             };
+            #[cfg(feature="ux-swap-delay")]
             self.tt.sleep_ms(SWAP_DELAY_MS).unwrap();
             match self.pddb.borrow().create_basis(&name) {
                 Ok(_) => {
