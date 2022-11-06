@@ -373,6 +373,8 @@ enum ShellOpcode {
     Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
     /// redraw our UI
     Redraw,
+    /// Used by the automounter to clear the "please wait..." message
+    ForceRedraw,
     /// change focus
     ChangeFocus,
     /// exit the application
@@ -430,8 +432,14 @@ fn wrapped_main() -> ! {
                 tt.sleep_ms(50).ok();
             }
             loop {
+                // Force the "please wait" message to disappear *prior* to the context switch out to the PDDB login box
+                // this is necessary because if the mounting process is extremely fast, the subsequent redraw message
+                // to clear the please wait message will get missed on the return.
+                xous::send_message(main_conn,
+                    xous::Message::new_blocking_scalar(ShellOpcode::ForceRedraw.to_usize().unwrap(), 0, 0, 0, 0)
+                ).ok();
                 let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
-                pddb_init_done.store(true, Ordering::SeqCst);
+                pddb_init_done.store(false, Ordering::SeqCst);
                 if no_retry_failure {
                     // this includes both successfully mounted, and user abort of mount attempt
                     break;
@@ -457,9 +465,6 @@ fn wrapped_main() -> ! {
                     }
                 }
             }
-            xous::send_message(main_conn,
-                xous::Message::new_scalar(ShellOpcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
-            ).ok();
         }
     });
 
@@ -491,6 +496,11 @@ fn wrapped_main() -> ! {
                 if allow_redraw {
                     repl.redraw(pddb_init_done.load(Ordering::SeqCst)).expect("REPL couldn't redraw");
                 }
+            }
+            // Force a redraw without the "please wait" note.
+            Some(ShellOpcode::ForceRedraw) => {
+                repl.redraw(true).expect("REPL couldn't redraw");
+                xous::return_scalar(msg.sender, 0).ok();
             }
             Some(ShellOpcode::ChangeFocus) => xous::msg_scalar_unpack!(msg, new_state_code, _, _, _, {
                 let new_state = gam::FocusState::convert_focus_change(new_state_code);
