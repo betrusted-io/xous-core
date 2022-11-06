@@ -17,7 +17,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "ecup [gw] [fw] [wf200] [reset] [auto]";
+        let helpstring = "ecup [gw] [fw] [wf200] [auto]";
 
         log::debug!("ecup handling {}", args.as_str().unwrap());
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -26,41 +26,45 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "fw" => {
-                    xous::send_message(ecup_conn,
+                    let result = xous::send_message(ecup_conn,
                         xous::Message::new_blocking_scalar(
                             1, // hard coded to match UpdateOp
                             0, 0, 0, 0
                         )
                     ).unwrap();
-                    write!(ret, "Starting EC firmware update").unwrap();
+                    env.ticktimer.sleep_ms(200).unwrap();
+                    write!(ret, "EC firmware update: {:?}", result).unwrap();
                 }
                 "gw" => {
-                    xous::send_message(ecup_conn,
+                    let result = xous::send_message(ecup_conn,
                         xous::Message::new_blocking_scalar(
                             0, // hard coded to match UpdateOp
                             0, 0, 0, 0
                         )
                     ).unwrap();
-                    write!(ret, "Starting EC gateware update").unwrap();
+                    env.ticktimer.sleep_ms(200).unwrap();
+                    write!(ret, "EC gateware update: {:?}", result).unwrap();
                 }
                 // note: "reset" has been moved to `ver ecreset`
                 "wf200" => {
-                    xous::send_message(ecup_conn,
+                    let result = xous::send_message(ecup_conn,
                         xous::Message::new_blocking_scalar(
                             2, // hard coded to match UpdateOp
                             0, 0, 0, 0
                         )
                     ).unwrap();
-                    write!(ret, "Starting EC wf200 update").unwrap();
+                    env.ticktimer.sleep_ms(200).unwrap();
+                    write!(ret, "EC wf200 update: {:?}", result).unwrap();
                 }
                 "auto" => {
-                    xous::send_message(ecup_conn,
+                    let result = xous::send_message(ecup_conn,
                         xous::Message::new_blocking_scalar(
                             3, // hard coded to match UpdateOp
                             0, 0, 0, 0
                         )
                     ).unwrap();
-                    write!(ret, "Starting full EC firmware update").unwrap();
+                    env.ticktimer.sleep_ms(200).unwrap();
+                    write!(ret, "Full EC firmware update: {:?}", result).unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
