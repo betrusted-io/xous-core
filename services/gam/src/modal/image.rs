@@ -66,7 +66,7 @@ impl ActionApi for Image {
                     xous::Message::new_scalar(self.action_opcode as usize, 0, 0, 0, 0),
                 )
                 .expect("couldn't pass on dismissal");
-                None
+                return None;
             }
         }
         None
