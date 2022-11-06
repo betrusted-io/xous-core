@@ -439,7 +439,7 @@ fn wrapped_main() -> ! {
                     xous::Message::new_blocking_scalar(ShellOpcode::ForceRedraw.to_usize().unwrap(), 0, 0, 0, 0)
                 ).ok();
                 let (no_retry_failure, count) = pddb::Pddb::new().try_mount();
-                pddb_init_done.store(false, Ordering::SeqCst);
+                pddb_init_done.store(true, Ordering::SeqCst);
                 if no_retry_failure {
                     // this includes both successfully mounted, and user abort of mount attempt
                     break;
