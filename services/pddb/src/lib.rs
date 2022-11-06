@@ -164,6 +164,20 @@ impl Pddb {
             }
         }
     }
+    pub fn mount_attempted_blocking(&self) {
+        loop {
+            let ret = send_message(self.conn, Message::new_blocking_scalar(
+                Opcode::MountAttempted.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't execute IsMounted query");
+            match ret {
+                xous::Result::Scalar2(code, _count) => {
+                    if code == 0 { // mounted successfully
+                        break;
+                    }
+                },
+                _ => panic!("Internal error"),
+            }
+        }
+    }
     /// Attempts to mount the system basis. Returns `true` on success, `false` on failure.
     /// This call may cause a password request box to pop up, in the case that the boot PIN is not currently cached.
     ///

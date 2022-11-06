@@ -590,6 +590,7 @@ fn wrapped_main() -> ! {
 
     // track processes that want a notification of a mount event
     let mut mount_notifications = Vec::<xous::MessageSender>::new();
+    let mut attempt_notifications = Vec::<xous::MessageSender>::new();
 
     // track heap usage
     let mut initial_heap: usize = 0;
@@ -647,6 +648,17 @@ fn wrapped_main() -> ! {
                     xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
                 } else {
                     mount_notifications.push(msg.sender); // defer response until later
+                }
+            }),
+            Opcode::MountAttempted => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                #[cfg(not(target_os = "xous"))] // hosted mode always passes
+                xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+
+                #[cfg(target_os = "xous")]
+                if basis_cache.basis_count() > 0 { // if there's anything in the cache, we're mounted; by definition it was attempted
+                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return scalar");
+                } else {
+                    attempt_notifications.push(msg.sender); // defer response until later
                 }
             }),
             // The return code from this is a scalar2 with the following meanings:
@@ -716,6 +728,11 @@ fn wrapped_main() -> ! {
                         #[cfg(feature="pddb-flamegraph")]
                         profiling::do_query_work();
                     }
+                }
+                // this is so that the UX can drop the initial "waiting for boot" message
+                // the attempt is credited even if it was aborted or failed.
+                for requester in attempt_notifications.drain(..) {
+                    xous::return_scalar2(requester, 0, 0).expect("couldn't return scalar");
                 }
             }),
             Opcode::PeriodicScrub => {

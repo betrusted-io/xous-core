@@ -236,6 +236,9 @@ pub(crate) enum Opcode {
     /// Bulk read of a dictionary
     DictBulkRead = 52,
 
+    /// Mount was attempted
+    MountAttempted = 53,
+
     /// This key type could not be decoded
     InvalidOpcode = u32::MAX as _,
 }
