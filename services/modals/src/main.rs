@@ -339,7 +339,7 @@ fn wrapped_main() -> ! {
                 }
                 send_message(
                     renderer_cid,
-                    Message::new_scalar(Opcode::FinishProgress.to_usize().unwrap(), msg.sender as usize, 0, 0, 0),
+                    Message::new_scalar(Opcode::FinishProgress.to_usize().unwrap(), msg.sender.to_usize(), 0, 0, 0),
                 )
                 .expect("couldn't update progress bar");
             }),
@@ -700,7 +700,7 @@ fn wrapped_main() -> ! {
                 renderer_modal.gam.relinquish_focus().unwrap();
                 op = RendererState::None;
                 // unblock the caller, which was forwarded on as the first argument
-                xous::return_scalar(caller as Sender, 0).ok();
+                xous::return_scalar(xous::sender::Sender::from_usize(caller), 0).ok();
                 token_lock = next_lock(&mut work_queue);
                 /*
                 if work_queue.len() > 0 {
