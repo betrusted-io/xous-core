@@ -9,10 +9,10 @@ description = "Curve25519 Engine"
 [dependencies]
 xous = "0.9.24"
 log-server = { package = "xous-api-log", version = "0.1.18" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.17" }
-xous-names = { package = "xous-api-names", version = "0.9.19" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.18" }
+xous-names = { package = "xous-api-names", version = "0.9.20" }
 log = "0.4.14"
-susres = {package = "xous-api-susres", version = "0.9.17"}
+susres = {package = "xous-api-susres", version = "0.9.18"}
 llio =  {path = "../llio"} # temporary for testing some power stuff
 utralib = { version = "0.1.9", optional = true, default-features = false }
 

@@ -1,6 +1,6 @@
 [package]
 name = "xous-susres"
-version = "0.1.19"
+version = "0.1.20"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Manager of suspend/resume operations implementation"
@@ -10,8 +10,8 @@ homepage = "https://betrusted.io/xous-book/"
 
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
-xous-api-susres = "0.9.17"
-xous-names = { package = "xous-api-names", version = "0.9.19" }
+xous-api-susres = "0.9.18"
+xous-names = { package = "xous-api-names", version = "0.9.20" }
 log-server = { package = "xous-api-log", version = "0.1.18" }
 xous = "0.9.24"
 xous-ipc = "0.9.24"

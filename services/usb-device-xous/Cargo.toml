@@ -10,14 +10,14 @@ description = "Xous USB device drivers"
 xous = "0.9.24"
 xous-ipc = "0.9.24"
 log-server = { package = "xous-api-log", version = "0.1.18" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.17" }
-xous-names = { package = "xous-api-names", version = "0.9.19" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.18" }
+xous-names = { package = "xous-api-names", version = "0.9.20" }
 log = "0.4.14"
 llio = {path="../llio"}
 num-derive = {version = "0.3.3", default-features = false}
 num-traits = {version = "0.2.14", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
-susres = {package = "xous-api-susres", version = "0.9.17"}
+susres = {package = "xous-api-susres", version = "0.9.18"}
 modals = {path = "../modals"}
 keyboard = {path = "../keyboard"}
 bitfield = "0.13.2"

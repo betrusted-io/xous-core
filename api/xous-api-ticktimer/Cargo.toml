@@ -3,7 +3,7 @@ authors = ["bunnie <bunnie@kosagi.com>", "Sean Cross <sean@xobs.io>"]
 description = "Provide high-resolution, non-rollover system time"
 edition = "2018"
 name = "xous-api-ticktimer"
-version = "0.9.17"
+version = "0.9.18"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/xous-book/"
@@ -13,8 +13,8 @@ homepage = "https://betrusted.io/xous-book/"
 xous = "0.9.24"
 xous-ipc = "0.9.24"
 log-server = {package = "xous-api-log", version = "0.1.18"}
-susres = {package = "xous-api-susres", version = "0.9.17"}
-xous-names = {package = "xous-api-names", version = "0.9.19"}
+susres = {package = "xous-api-susres", version = "0.9.18"}
+xous-names = {package = "xous-api-names", version = "0.9.20"}
 log = "0.4.14"
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 num-derive = {version = "0.3.3", default-features = false}
