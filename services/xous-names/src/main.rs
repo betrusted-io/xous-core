@@ -26,6 +26,9 @@ enum ConnectError {
 
     /// The message was not a mutable memory message
     InvalidMessageType = 4,
+
+    /// The server does not currently exist, and a blocking request was made
+    ServerNotFound = 5,
 }
 
 #[derive(PartialEq)]
@@ -464,7 +467,7 @@ fn main() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
-            Some(api::Opcode::BlockingConnect) => {
+            Some(api::Opcode::BlockingConnect) | Some(api::Opcode::TryConnect) => {
                 if !msg.body.is_blocking() {
                     continue;
                 }
@@ -479,9 +482,13 @@ fn main() -> ! {
                         respond_connect_success(msg, cid, disc)
                     }
                     Ok(ConnectSuccess::Wait) => {
-                        // Push waiting connections here, which will prevent it from getting
-                        // dropped and responded to.
-                        waiting_connections.push(msg);
+                        if msg.body.id() == api::Opcode::TryConnect as usize {
+                            respond_connect_error(msg, ConnectError::ServerNotFound);
+                        } else {
+                            // Push waiting connections here, which will prevent it from getting
+                            // dropped and responded to.
+                            waiting_connections.push(msg);
+                        }
                     }
                 }
             }
