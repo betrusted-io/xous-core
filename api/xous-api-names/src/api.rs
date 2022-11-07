@@ -52,6 +52,34 @@ pub enum Opcode {
     /// }
     /// ```
     BlockingConnect = 6,
+
+    /// Connect to a Server, returning the connection ID or an authentication request if
+    /// it exists, and returning ServerNotFound if it does not exist.
+    ///
+    /// # Message Types
+    ///
+    ///     * MutableLend
+    ///
+    /// # Arguments
+    ///
+    /// The memory being pointed to should be a &str, and the length of the string should
+    /// be specified in the `valid` field.
+    ///
+    /// # Return Values
+    ///
+    /// Memory is overwritten to contain a return value.  This return value can be defined
+    /// as the following enum:
+    ///
+    /// ```rust
+    /// #[repr(C)]
+    /// #[non_exhaustive]
+    /// enum ConnectResult {
+    ///     Success(xous::CID /* connection ID */, [u32; 4] /* Disconnection token */),
+    ///     Error(u32 /* error code */),
+    ///     Unhandled, /* Catchall for future Results */
+    /// }
+    /// ```
+    TryConnect = 7,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
