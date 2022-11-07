@@ -118,9 +118,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // concerned about software supply chain and more focused on developer convenience.
     let base_pkgs_remote = [
         "xous-log@0.1.15",         // "well known" service: debug logging
-        "xous-names@0.9.23",      // "well known" service: manage inter-server connection lookup
-        "xous-susres@0.1.19",     // ticktimer registers with susres to coordinate time continuity across sleeps
-        "xous-ticktimer@0.1.18",   // "well known" service: thread scheduling
+        "xous-names@0.9.24",      // "well known" service: manage inter-server connection lookup
+        "xous-susres@0.1.20",     // ticktimer registers with susres to coordinate time continuity across sleeps
+        "xous-ticktimer@0.1.19",   // "well known" service: thread scheduling
     ].to_vec();
     let xous_kernel_remote = "xous-kernel@0.9.20";
 
