@@ -194,8 +194,10 @@ impl ActionApi for Notification {
             }
             _ => {
                 // relinquish focus before returning the result
-                self.gam.relinquish_focus().unwrap();
-                xous::yield_slice();
+                if self.manual_dismiss {
+                    self.gam.relinquish_focus().unwrap();
+                    xous::yield_slice();
+                }
 
                 send_message(
                     self.action_conn,
