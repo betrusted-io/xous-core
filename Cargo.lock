@@ -3050,7 +3050,7 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.16.20"
-source = "git+https://github.com/betrusted-io/ring-xous?rev=de340765b9569eb9fa5339fad7528c6e356e1c57#de340765b9569eb9fa5339fad7528c6e356e1c57"
+source = "git+https://github.com/betrusted-io/ring-xous?rev=4296c2e7904898766cf7d8d589759a129794783b#4296c2e7904898766cf7d8d589759a129794783b"
 dependencies = [
  "cc",
  "libc",
