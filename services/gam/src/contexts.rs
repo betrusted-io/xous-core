@@ -364,6 +364,7 @@ impl ContextManager {
                         } else if // app covering an app
                         (context.layout.behavior()                 == LayoutBehavior::App) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                            log::debug!("resolved: app covering app");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
                             self.context_stack.pop();
@@ -371,16 +372,25 @@ impl ContextManager {
                         } else if // alert covering an app
                         (context.layout.behavior()                 == LayoutBehavior::Alert) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                            log::debug!("resolved: alert covering app");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = true;
                             self.context_stack.push(token);
                         } else if // app covering an alert
                         (context.layout.behavior()                 == LayoutBehavior::App) &&
                         (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                            log::debug!("resolved: app covering alert");
                             context.layout.set_visibility_state(true, canvases);
                             leaving_visibility = false;
                             self.context_stack.pop();
                         }
+                    } else {
+                        log::warn!("resolved: staying in same context. This is not an expected case.");
+                        // this path "shouldn't" happen because the discipline is that every pop-up must
+                        // return control back to the main thread (you can't chain pop-ups).
+                        // thus, kick out a warning if this happens, but also, try to do something reasonable.
+                        self.redraw().expect("couldn't redraw the currently focused app");
+                        return Ok(());
                     }
                 } else {
                     // there was no current focus, just make the activation visible

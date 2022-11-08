@@ -156,6 +156,7 @@ fn wrapped_main() -> ! {
     let mut work_queue = Vec::<(xous::MessageSender, [u32; 4])>::new();
 
     let mut dynamic_notification_listener: Option<xous::MessageSender> = None;
+    let mut dynamic_notification_active: bool = false;
 
     loop {
         let mut msg = xous::receive_message(modals_sid).unwrap();
@@ -660,6 +661,10 @@ fn wrapped_main() -> ! {
                         renderer_modal.activate();
                     }
                     RendererState::RunDynamicNotification(config) => {
+                        if dynamic_notification_active {
+                            log::error!("Dynamic notification already active! Double-calls lead to unpredictable results");
+                        }
+                        dynamic_notification_active = true;
                         let mut top_text = String::new();
                         if let Some(title) = config.title {
                             #[cfg(feature = "tts")]
@@ -687,6 +692,7 @@ fn wrapped_main() -> ! {
                             Some(DEFAULT_STYLE),
                         );
                         renderer_modal.activate();
+                        xous::yield_slice();
                     }
                     RendererState::None => {
                         log::error!(
@@ -744,6 +750,7 @@ fn wrapped_main() -> ! {
             },
             Some(Opcode::DoCloseDynamicNotification) => {
                 renderer_modal.gam.relinquish_focus().unwrap();
+                dynamic_notification_active = false;
                 op = RendererState::None;
                 if let Some(sender) = dynamic_notification_listener.take() {
                     // unblock the listener with no key hit response
