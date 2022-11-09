@@ -752,165 +752,156 @@ impl<'a> ActionManager<'a> {
             VaultMode::Fido => {
                 // first assemble U2F records
                 log::debug!("listing in {}", U2F_APP_DICT);
-                let keylist = match self.pddb.borrow().list_keys(U2F_APP_DICT, None) {
-                    Ok(keylist) => keylist,
+                match self.pddb.borrow().read_dict(U2F_APP_DICT, None, Some(256 * 1024)) {
+                    Ok(keys) => {
+                        let mut oom_keys = 0;
+                        il.reserve(keys.len());
+                        for key in keys {
+                            if let Some(data) = key.data {
+                                if let Some(ai) = deserialize_app_info(data) {
+                                    let extra = format!("{}; {}{}",
+                                        crate::ux::atime_to_str(ai.atime),
+                                        t!("vault.u2f.appinfo.authcount", xous::LANG),
+                                        ai.count,
+                                    );
+                                    let desc = format!("{}", ai.name);
+                                    let li = ListItem {
+                                        name: desc,
+                                        extra,
+                                        dirty: true,
+                                        guid: key.name,
+                                    };
+                                    il.push(li);
+                                } else {
+                                    let err = format!("{}:{}:{}: ({})[moved data]...",
+                                        key.basis, U2F_APP_DICT, key.name, key.len
+                                    );
+                                    self.report_err("Couldn't deserialize U2F key:", Some(err));
+                                }
+                            } else {
+                                oom_keys += 1;
+                            }
+                        }
+                        if oom_keys != 0 {
+                            log::warn!("Ran out of cache space handling U2F tokens. {} tokens are not loaded.", oom_keys);
+                            self.report_err(&format!("Ran out of cache space handling U2F entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
+                        }
+                    }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("U2F dictionary not yet created");
+                            ErrorKind::NotFound => {
+                                // this is fine, it just means no entries have been entered yet
+                            },
+                            _ => {
+                                log::error!("Error opening U2F dictionary");
+                                self.report_err("Error opening U2F dictionary", Some(e))
                             }
-                            _ => self.report_err("Dictionary error accessing U2F database", Some(e)),
                         }
-                        Vec::new()
-                    }
-                };
-                log::debug!("list: {:?}", keylist);
-                for key in keylist {
-                    match self.pddb.borrow().get(
-                        U2F_APP_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    if let Some(ai) = deserialize_app_info(data) {
-                                        let extra = format!("{}; {}{}",
-                                            crate::ux::atime_to_str(ai.atime),
-                                            t!("vault.u2f.appinfo.authcount", xous::LANG),
-                                            ai.count,
-                                        );
-                                        let desc = format!("{}", ai.name);
+                    },
+                }
+
+                log::debug!("listing in {}", FIDO_CRED_DICT);
+                match self.pddb.borrow().read_dict(FIDO_CRED_DICT, None, Some(256 * 1024)) {
+                    Ok(keys) => {
+                        let mut oom_keys = 0;
+                        il.reserve(keys.len());
+                        for key in keys {
+                            if let Some(data) = key.data {
+                                match crate::ctap::storage::deserialize_credential(&data) {
+                                    Some(result) => {
+                                        let name = if let Some(display_name) = result.user_display_name {
+                                            display_name
+                                        } else {
+                                            String::from_utf8(result.user_handle).unwrap_or("".to_string())
+                                        };
+                                        let desc = format!("{} / {}", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
+                                        let extra = format!("FIDO2 {}", name);
                                         let li = ListItem {
                                             name: desc,
                                             extra,
                                             dirty: true,
-                                            guid: key,
+                                            guid: key.name,
                                         };
                                         il.push(li);
-                                    } else {
-                                        self.report_err("Couldn't deserialize U2F:", Some(key));
                                     }
+                                    None => {
+                                        let err = format!("{}:{}:{}: ({}){:x?}...",
+                                            key.basis, FIDO_CRED_DICT, key.name, key.len, &data[..16]
+                                        );
+                                        self.report_err("Couldn't deserialize FIDO2:", Some(err))
+                                    },
                                 }
-                                Err(e) => self.report_err("Couldn't access U2F key", Some(e)),
+                            } else {
+                                oom_keys += 1;
                             }
                         }
-                        Err(e) => self.report_err("Couldn't access U2F key", Some(e)),
+                        if oom_keys != 0 {
+                            log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
+                            self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
+                        }
                     }
-                }
-                log::debug!("listing in {}", FIDO_CRED_DICT);
-                let keylist = match self.pddb.borrow().list_keys(FIDO_CRED_DICT, None) {
-                    Ok(keylist) => keylist,
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("FIDO2 dictionary not yet created");
-                            }
-                            _ => self.report_err("Dictionary error accessing FIDO2 database", Some(e)),
-                        }
-                        Vec::new()
-                    }
-                };
-                log::debug!("keylist: {:?}", keylist);
-                // now merge in the FIDO2 records
-                for key in keylist {
-                    match self.pddb.borrow().get(
-                        FIDO_CRED_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    match crate::ctap::storage::deserialize_credential(&data) {
-                                        Some(result) => {
-                                            let name = if let Some(display_name) = result.user_display_name {
-                                                display_name
-                                            } else {
-                                                String::from_utf8(result.user_handle).unwrap_or("".to_string())
-                                            };
-                                            let desc = format!("{} / {}", result.rp_id, String::from_utf8(result.credential_id).unwrap_or("---".to_string()));
-                                            let extra = format!("FIDO2 {}", name);
-                                            let li = ListItem {
-                                                name: desc,
-                                                extra,
-                                                dirty: true,
-                                                guid: key,
-                                            };
-                                            il.push(li);
-                                        }
-                                        None => self.report_err("Couldn't deserialize FIDO2:", Some(key)),
-                                    }
-                                }
-                                Err(e) => self.report_err("Couldn't access FIDO2 key", Some(e)),
+                            ErrorKind::NotFound => {
+                                // this is fine, it just means no entries have been entered yet
+                            },
+                            _ => {
+                                log::error!("Error opening FIDO2 dictionary");
+                                self.report_err("Error opening FIDO2 dictionary", Some(e))
                             }
                         }
-                        Err(e) => self.report_err("Couldn't access FIDO2 key", Some(e)),
-                    }
+                    },
                 }
             }
             VaultMode::Totp => {
-                let keylist = match self.pddb.borrow().list_keys(VAULT_TOTP_DICT, None) {
-                    Ok(keylist) => keylist,
+                match self.pddb.borrow().read_dict(VAULT_TOTP_DICT, None, Some(256 * 1024)) {
+                    Ok(keys) => {
+                        let mut oom_keys = 0;
+                        il.reserve(keys.len());
+                        for key in keys {
+                            if let Some(data) = key.data {
+                                if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
+                                    let extra = format!("{}:{}:{}:{}:{}",
+                                        totp.secret,
+                                        totp.digits,
+                                        totp.timestep,
+                                        totp.algorithm,
+                                        if totp.is_hotp {"HOTP"} else {"TOTP"}
+                                    );
+                                    let desc = format!("{}", totp.name);
+                                    let li = ListItem {
+                                        name: desc,
+                                        extra,
+                                        dirty: true,
+                                        guid: key.name,
+                                    };
+                                    il.push(li);
+                                } else {
+                                    let err = format!("{}:{}:{}: ({})[moved data]...",
+                                        key.basis, VAULT_TOTP_DICT, key.name, key.len
+                                    );
+                                    self.report_err("Couldn't deserialize TOTP:", Some(err));
+                                }
+                            } else {
+                                oom_keys += 1;
+                            }
+                        }
+                        if oom_keys != 0 {
+                            log::warn!("Ran out of cache space handling FIDO2 tokens. {} tokens are not loaded.", oom_keys);
+                            self.report_err(&format!("Ran out of cache space handling FIDO2 entries. {} tokens not loaded", oom_keys), None::<crate::storage::Error>);
+                        }
+                    }
                     Err(e) => {
                         match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("TOTP dictionary not yet created");
-                            }
-                            _ => self.report_err("Dictionary error accessing TOTP database", Some(e)),
-                        }
-                        Vec::new()
-                    }
-                };
-                for key in keylist {
-                    match self.pddb.borrow().get(
-                        VAULT_TOTP_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    if let Some(totp) = storage::TotpRecord::try_from(data).ok() {
-                                        let extra = format!("{}:{}:{}:{}:{}",
-                                            totp.secret,
-                                            totp.digits,
-                                            totp.timestep,
-                                            totp.algorithm,
-                                            if totp.is_hotp {"HOTP"} else {"TOTP"}
-                                        );
-                                        let desc = format!("{}", totp.name);
-                                        let li = ListItem {
-                                            name: desc,
-                                            extra,
-                                            dirty: true,
-                                            guid: key,
-                                        };
-                                        il.push(li);
-                                    } else {
-                                        self.report_err("Couldn't deserialize TOTP:", Some(key));
-                                    }
-                                }
-                                Err(e) => self.report_err("Couldn't access TOTP key", Some(e)),
+                            ErrorKind::NotFound => {
+                                // this is fine, it just means no entries have been entered yet
+                            },
+                            _ => {
+                                log::error!("Error opening FIDO2 dictionary");
+                                self.report_err("Error opening FIDO2 dictionary", Some(e))
                             }
                         }
-                        Err(e) => self.report_err("Couldn't access TOTP key", Some(e)),
-                    }
+                    },
                 }
             }
         }
@@ -1102,8 +1093,8 @@ impl<'a> ActionManager<'a> {
                     name,
                     id,
                     notes,
-                    ctime: 0,
-                    atime: 0,
+                    ctime: 1, // zero ctime is disallowed
+                    atime: 1,
                     count: 0,
                 };
                 let ser = serialize_app_info(&record);
