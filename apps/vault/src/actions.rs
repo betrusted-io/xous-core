@@ -747,98 +747,6 @@ impl<'a> ActionManager<'a> {
                 }
                 #[cfg(feature="vaultperf")]
                 self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
-
-                /* DELETEME: kept around for quick debugging without having to look through commit history
-                once we have confidence in the new method, we can drop this code right away.
-
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 1, std::line!());
-                let keylist = match self.pddb.borrow().list_keys(VAULT_PASSWORD_DICT, None) {
-                    Ok(keylist) => keylist,
-                    Err(e) => {
-                        match e.kind() {
-                            std::io::ErrorKind::NotFound => {
-                                log::debug!("Password dictionary not yet created");
-                            }
-                            _ => {
-                                log::error!("Dictionary error accessing password database");
-                                self.report_err("Dictionary error accessing password database", Some(e))
-                            },
-                        }
-                        Vec::new()
-                    }
-                };
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 1, std::line!());
-                log::info!("listing took {} ms", self.tt.elapsed_ms() - start);
-                let start = self.tt.elapsed_ms();
-                let klen = keylist.len();
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 2, std::line!());
-                let pddb = self.pddb.borrow();
-                for key in keylist {
-                    #[cfg(feature="vaultperf")]
-                    self.perfentry(&self.pm, PERFMETA_STARTBLOCK, 3, std::line!());
-                    match pddb.get(
-                        VAULT_PASSWORD_DICT,
-                        &key,
-                        None,
-                        false, false, None,
-                        Some(crate::basis_change)
-                    ) {
-                        Ok(mut record) => {
-                            // determine the exact length of the record and read it in one go.
-                            // read_to_end() performs ~5x read calls to do the same thing, because it
-                            // has to "guess" the total record length starting with a 32-byte increment
-                            let len = record.attributes().unwrap().len;
-                            let mut data = Vec::<u8>::with_capacity(len);
-                            data.resize(len, 0);
-                            #[cfg(feature="vaultperf")]
-                            self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                            match record.read_exact(&mut data) {
-                                Ok(_len) => {
-                                    if let Some(pw) = storage::PasswordRecord::try_from(data).ok() {
-                                        #[cfg(feature="vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                        let extra = format!("{}; {}{}",
-                                            crate::ux::atime_to_str(pw.atime),
-                                            t!("vault.u2f.appinfo.authcount", xous::LANG),
-                                            pw.count,
-                                        );
-                                        let desc = format!("{}/{}", pw.description, pw.username);
-                                        let li = ListItem {
-                                            name: desc,
-                                            extra,
-                                            dirty: true,
-                                            guid: key,
-                                        };
-                                        il.push(li);
-                                        #[cfg(feature="vaultperf")]
-                                        self.perfentry(&self.pm, PERFMETA_NONE, 3, std::line!());
-                                    } else {
-                                        log::error!("Couldn't deserialize password");
-                                        self.report_err("Couldn't deserialize password:", Some(key));
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("Couldn't access password key");
-                                    self.report_err("Couldn't access password key", Some(e))
-                                },
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("Couldn't access password key");
-                            self.report_err("Couldn't access password key", Some(e))
-                        },
-                    }
-                    #[cfg(feature="vaultperf")]
-                    self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 3, std::line!());
-                    #[cfg(feature="vaultperf")]
-                    self.pm.flush().ok();
-                }
-                #[cfg(feature="vaultperf")]
-                self.perfentry(&self.pm, PERFMETA_ENDBLOCK, 2, std::line!());
-                */
                 log::info!("readout took {} ms for {} elements", self.tt.elapsed_ms() - start, klen);
             }
             VaultMode::Fido => {
@@ -1130,9 +1038,10 @@ impl<'a> ActionManager<'a> {
         self.modals.dynamic_notification(Some("Creating test entries..."), None).ok();
         let words = [
             "bunnie", "foo", "turtle.net", "Fox.ng", "Bear", "dog food", "Cat.com", "FUzzy", "1off", "www_test_site_com/long_name/stupid/foo.htm",
-            "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel"];
+            "._weird~yy%\":'test", "//WHYwhyWHY", "Xyz|zy", "foo:bar", "f🍕🍔🍟🌭d", "💎🙌", "some ノート", "笔录4u", "@u", "sane text", "Käsesoßenrührlöffel",
+            "entropy", "👀", "mysite.com", "hax", "1336", "yo", "b", "mando", "Grogu", "zebra", "aws"];
         let weights = [1; 21];
-        const TARGET_ENTRIES: usize = 15;
+        const TARGET_ENTRIES: usize = 12;
         const TARGET_ENTRIES_PW: usize = 200;
         // for each database, populate up to TARGET_ENTRIES
         // as this is testing code, it's written a bit more fragile in terms of error handling (fail-panic, rather than fail-dialog)
