@@ -5,6 +5,13 @@ use std::io::Write;
 
 static PREFS_DICT: &str = "UserPrefsDict";
 
+// Time-related consts
+
+/// This is the UTC offset from the current hardware RTC reading. This should be fixed once time is set.
+const TIME_SERVER_UTC_OFFSET: &'static str = "utc_offset";
+/// This is the offset from UTC to the display time zone. This can vary when the user changes time zones.
+const TIME_SERVER_TZ_OFFSET: &'static str = "tz_offset";
+
 #[derive(Debug)]
 pub enum Error {
     EncodeError(EncodeError),
@@ -90,6 +97,50 @@ impl Manager {
             }
             Err(e) => return Err(e.into()),
         }
+    }
+
+    pub fn store_i64(&self, value: i64, key: &str) -> Result<(), Error> {
+        let offset_bytes = value.to_le_bytes();
+
+        self.pddb_store_key(key, &offset_bytes)
+    }
+}
+
+// This impl block is here because some toggles/data (like date/time stuff) needs particular
+// serialization/deserialization routines.
+impl Manager {
+    pub fn timezone_offset(&self) -> Result<Option<i64>, Error> {
+        let tz_set_key = self.pddb_get_key(TIME_SERVER_TZ_OFFSET)?;
+
+        if tz_set_key.len() != 8 {
+            return Ok(None);
+        }
+
+        let sl = &tz_set_key[..];
+        let sl: [u8; 8] = sl.try_into().unwrap();
+
+        return Ok(Some(i64::from_le_bytes(sl)));
+    }
+
+    pub fn set_timezone_offset(&self, offset: i64) -> Result<(), Error> {
+        self.store_i64(offset, TIME_SERVER_TZ_OFFSET)
+    }
+
+    pub fn utc_offset(&self) -> Result<i64, Error> {
+        let utc_set_key = self.pddb_get_key(TIME_SERVER_UTC_OFFSET)?;
+
+        if utc_set_key.len() != 8 {
+            return Ok(0);
+        }
+
+        let sl = &utc_set_key[..];
+        let sl: [u8; 8] = sl.try_into().unwrap();
+
+        return Ok(i64::from_le_bytes(sl));
+    }
+
+    pub fn set_utc_offset(&self, offset: i64) -> Result<(), Error> {
+        self.store_i64(offset, TIME_SERVER_UTC_OFFSET)
     }
 }
 
